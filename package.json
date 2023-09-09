@@ -105,7 +105,6 @@
         "bignumber.js": "^9.0.2",
         "capacitor-voice-recorder": "^5.0.0",
         "check-password-strength": "2.0.7",
-        "chokidar": "3.5.1",
         "chrono-node": "2.2.4",
         "codemirror": "5.65.13",
         "d3-force": "3.0.0",

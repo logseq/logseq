@@ -10,7 +10,7 @@
   (readdir [this dir]
     "Read directory and return list of files. Won't read file out.
      Used by initial watcher, version files of Logseq Sync.
-     
+
      => [string]")
   (unlink! [this repo path opts])
   ;; FIXME(andelf): remove this API? since the only usage is plugin API
@@ -26,12 +26,13 @@
   (open-dir [this dir]
     "Open a directory and return the files in it.
      Used by open a new graph.
-     
+
      => {:path string :files [{...}]}")
   (get-files [this dir]
     "Almost the same as `open-dir`. For returning files.
      Used by re-index/refresh.
-     
+
      => [{:path string :content string}] (absolute path)")
-  (watch-dir! [this dir options])
-  (unwatch-dir! [this dir]))
+  (watch-dir! [this dir])
+  (unwatch-dir! [this dir])
+  (watch-file! [this path]))

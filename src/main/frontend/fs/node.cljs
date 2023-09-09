@@ -133,8 +133,11 @@
         (p/then (fn [result]
                   (:files (bean/->clj result))))))
 
-  (watch-dir! [_this dir options]
-    (ipc/ipc "addDirWatcher" dir options))
+  (watch-dir! [_this dir]
+    (ipc/ipc "addDirWatcher" dir))
 
   (unwatch-dir! [_this dir]
-    (ipc/ipc "unwatchDir" dir)))
+    (ipc/ipc "unwatchDir" dir))
+
+  (watch-file! [_this fpath]
+    (ipc/ipc "addFileWatcher" fpath)))

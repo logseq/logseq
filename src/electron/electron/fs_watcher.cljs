@@ -1,10 +1,8 @@
 (ns electron.fs-watcher
-  "This ns is a wrapper around the chokidar file watcher,
-
+  "This ns is a wrapper around the @parcel/watcher.
 
   File watcher events are sent to the `file-watcher` ipc channel"
   (:require ["@parcel/watcher" :as parcel-watcher]
-            ["chokidar" :as watcher]
             ["electron" :refer [app]]
             ["fs" :as fs]
             ["fs/promises" :as fsp]
@@ -12,14 +10,10 @@
             [electron.logger :as logger]
             [electron.utils :as utils]
             [electron.window :as window]
-            [logseq.common.graph :as common-graph]
             [promesa.core :as p]
             [logseq.common.path :as path]))
 
-(defonce polling-interval 10000)
-;; dir -> Watcher
-(defonce *file-watcher (atom {})) ;; val: [watcher watcher-del-f]
-
+;; dir -> {:unsubscribe-fn}
 (defonce *parcel-watcher (atom {}))
 
 (defonce file-watcher-chan "file-watcher")
@@ -30,14 +24,10 @@
                         (send file-watcher-chan
                               (bean/->js {:type type :payload payload})))
                     true))
-        wins (if (:global-dir payload)
+        wins (if (nil? dir) ;; global file
                (window/get-all-windows)
                (window/get-graph-all-windows dir))]
-    (if (or (contains? #{"unlinkDir" "addDir"} type)
-            ;; Only change events to a global dir are emitted to all windows.
-            ;; Add* events are not emitted to all since each client adds
-            ;; files at different times.
-            (and (:global-dir payload) (= "change" type)))
+    (if (nil? dir)
       ;; notify every windows
       (doseq [win wins] (send-fn win))
 
@@ -48,45 +38,47 @@
                                      "unhandled file event will cause uncatched file modifications!. target:" dir))))))
 
 (defn- publish-file-event!
-  [dir path event options]
-  (let [dir-path? (= dir path)
-        content (when (and (not= event "unlink")
-                           (not dir-path?)
-                           (utils/should-read-content? path))
-                  (utils/read-file path))
-        stat (when (and (not= event "unlink")
-                        (not dir-path?))
-               (fs/statSync path))]
-    (send-file-watcher! dir event (merge {:dir (utils/fix-win-path! dir)
-                                          :path (utils/fix-win-path! path)
-                                          :content content
-                                          :stat stat}
-                                         (select-keys options [:global-dir])))))
+  ([dir path event stat content]
+   (send-file-watcher! dir event {:dir (utils/fix-win-path! dir)
+                                  :path (utils/fix-win-path! path)
+                                  :content content
+                                  :stat stat}))
+  ([dir path event stat]
+  (send-file-watcher! dir event {:dir (utils/fix-win-path! dir)
+                                 :path (utils/fix-win-path! path)
+                                 ;; :content ""
+                                 :stat stat}))
+  ([dir path event]
+   (send-file-watcher! dir event {:dir (utils/fix-win-path! dir)
+                                  :path (utils/fix-win-path! path)
+                                  :stat nil})))
 (defn- create-dir-watcher
-  [dir options]
+  [dir]
   (p/let [_ (prn :watcher @*parcel-watcher)
           handle-event (fn [event]
-                         (prn ::handle-evt event)
                          (let [path (.-path event)
                                type (.-type event)
                                rpath (path/trim-dir-prefix dir path)]
                            (prn :event :dir dir :path rpath :type type)
                            (p/let [^js stat (-> (fsp/stat path)
-                                            (p/catch (fn [] nil)))]
+                                                (p/catch (fn [] nil)))]
                              (cond
                                (= type "delete")
-                               (p/let [^js stat (-> (p/delay 500)
-                                                (p/then (fn [] (fsp/stat path)))
-                                                (p/catch (fn [] nil)))]
+                               (p/let [^js stat (-> (p/delay 800)
+                                                    (p/then (fn [] (fsp/stat path)))
+                                                    (p/catch (constantly nil)))]
                                  (cond (and (= dir path)
                                             (nil? stat))
-                                       (prn "top dir gone")
+                                       (do (prn "top dir gone")
+                                           (publish-file-event! dir dir "top-dir-gone"))
 
                                        stat ;; deleted then appeared, ignore this event
                                        nil
 
                                        rpath
-                                       (prn "file gone" rpath)))
+                                       (do
+                                         (prn "file/dir gone" rpath)
+                                         (publish-file-event! dir rpath "unlink"))))
 
 
                                (nil? stat)
@@ -94,8 +86,7 @@
 
                                (.isDirectory stat)
                                (when (= dir path)
-                                 (prn "top dir event" :top-dir-gone {:dir dir})
-                                 )
+                                 (prn "top dir event" :top-dir-gone {:dir dir}))
 
                                ;; file updated or created
                                (or (contains? #{"create" "update"} type)
@@ -103,21 +94,24 @@
                                (let [size (.-size stat)
                                      mtime (.-mtimeMs stat)
                                      ctime (.-birthtimeMs stat)
+                                     type (condp = type
+                                            "update" "change"
+                                            "create" "add")
                                      stat {:size size
                                            :mtime mtime
                                            :ctime ctime}]
-                                 (prn "create/update event" type stat))
+                                 (prn "create/update event" type rpath stat)
+                                 (publish-file-event! dir rpath type stat))
 
                                :else
-                               (prn "change/add event")))))
+                               (prn "change/add event" event)))))
           subscription (.subscribe parcel-watcher
                                    dir
                                    (fn [err #^js events]
                                      (prn ::watcher err events)
                                      (doseq [event events]
                                        (handle-event event)))
-                                   (clj->js {
-                                             :ignore ["**/.*"
+                                   (clj->js {:ignore ["**/.*"
                                                       "**/.*/**"
                                                       "**/node_modules"
                                                       "**/node_modules/**"
@@ -128,74 +122,45 @@
                                                       "logseq/metadata.edn"
                                                       "logseq/pages-metadata.edn"
                                                       "logseq/graphs-txid.edn"]}))]
-    (swap! *parcel-watcher assoc dir subscription))
-  (let [watcher-opts (clj->js
-                      {:ignored (fn [path]
-                                  (common-graph/ignored-path? dir path))
-                       :ignoreInitial true
-                       :ignorePermissionErrors true
-                       :interval polling-interval
-                       :binaryInterval polling-interval
-                       :persistent true
-                       :disableGlobbing true
-                       :usePolling false
-                       :awaitWriteFinish true})
-        dir-watcher (.watch watcher dir watcher-opts)]
-    ;; TODO: batch sender
-    (.on dir-watcher "unlinkDir"
-         (fn [path]
-           (logger/warn ::on-unlink-dir {:path path})
-           (when (= dir path)
-             (publish-file-event! dir dir "unlinkDir" options))))
-    (.on dir-watcher "addDir"
-         (fn [path]
-           (when (= dir path)
-             (publish-file-event! dir dir "addDir" options))))
-    (.on dir-watcher "add"
-         (fn [path]
-           (publish-file-event! dir path "add" options)))
-    (.on dir-watcher "change"
-         (fn [path]
-           (publish-file-event! dir path "change" options)))
-    (.on dir-watcher "unlink"
-         ;; delay 500ms for syncing disks
-         (fn [path]
-           (logger/debug ::on-unlink {:path path})
-           (js/setTimeout #(when (not (fs/existsSync path))
-                             (publish-file-event! dir path "unlink" options))
-                          500)))
-    (.on dir-watcher "error"
-         (fn [path]
-           (logger/warn ::on-error "Watch error happened:" {:path path})))
+    (swap! *parcel-watcher assoc dir subscription)
+    subscription))
 
-    dir-watcher))
 
-(defn- seed-client-with-initial-global-dir-data
-  "Ensures that secondary clients initialize their databases efficiently and in
-  the same way as the primary client. This fn achieves this by creating a
-  temporary watcher whose sole purpose is to seed the db and then close  when
-  its done seeding a.k.a. ready event fires."
-  [dir options]
-  (let [dir-watcher (create-dir-watcher dir options)]
-    (.on dir-watcher "ready" (fn []
-                               (.close dir-watcher)))))
+(.on app "quit" (fn []
+                  (doseq [sub (vals @*parcel-watcher)]
+                    (when-let [unsub-f (.-unsubscribe sub)]
+                      (prn ::unsub... unsub-f)
+                      (unsub-f)))))
 
-(defn- create-and-save-watcher
-  [dir options]
-  (let [dir-watcher (create-dir-watcher dir options)
-        watcher-del-f #(.close dir-watcher)]
-    (swap! *file-watcher assoc dir [dir-watcher watcher-del-f])
-    ;; electron app extends `EventEmitter`
-    ;; TODO check: duplicated with the logic in "window-all-closed" ?
-    (.on app "quit" watcher-del-f)))
 
-(defn- watch-global-dir!
-  "Only one watcher exists per global dir so only create the watcher for the
-  primary client. Secondary clients only seed their client database."
-  [dir options]
-  (if (get @*file-watcher dir)
-    (seed-client-with-initial-global-dir-data dir options)
-    (create-and-save-watcher dir options)))
+(defn watch-file!
+  "Watch a file and emit file events.
+
+   @parcel/watcher does not support file watching, so we use dir watching instead"
+  [fpath]
+  (let [dir (path/dirname fpath)
+        fname (path/filename fpath)]
+    (when-not (get @*parcel-watcher fpath)
+      (p/let [subscription (.subscribe parcel-watcher
+                                       dir
+                                       (fn [err #^js events]
+                                         (when-not err
+                                           (doseq [event events]
+                                             (let [path (.-path event)
+                                                   type (.-type event)
+                                                   rpath (path/trim-dir-prefix dir path)]
+                                               (when (= rpath fname)
+                                                 (condp contains? type
+                                                   #{"update" "create"}
+                                                   (p/let [stat (fsp/stat path)
+                                                           content (fsp/readFile path #js {:encoding "utf8"})
+                                                           stat {:size (.-size stat)
+                                                                 :mtime (.-mtimeMs stat)
+                                                                 :ctime (.-birthtimeMs stat)}]
+                                                     (publish-file-event! nil fpath "change" stat content))
+                                                   #{"delete"}
+                                                   (publish-file-event! nil fpath "unlink"))))))))]
+        (swap! *parcel-watcher assoc fpath subscription)))))
 
 (defn watch-dir!
   "Watches a directory and emits file events. In addition to file
@@ -209,27 +174,29 @@
   type of directory has different behavior then a normal watcher as it
   broadcasts its change events to all clients. This option needs to be passed to
   clients in order for them to identify the correct db"
-  [dir options]
-  (if (:global-dir options)
-    (watch-global-dir! dir options)
-    (when-not (get @*file-watcher dir)
-      (if (fs/existsSync dir)
-        (create-and-save-watcher dir options)
-        ;; retry if the `dir` not exists, which is useful when a graph's folder is
-        ;; back after refreshing the window
-        (js/setTimeout #(watch-dir! dir options) 5000)))))
+  [dir]
+  (when-not (get @*parcel-watcher dir)
+    (if (fs/existsSync dir)
+      (create-dir-watcher dir)
+      ;; retry if the `dir` not exists, which is useful when a graph's folder is
+      ;; back after refreshing the window
+      (js/setTimeout #(watch-dir! dir) 5000))))
+
 
 (defn close-watcher!
   "If no `dir` provided, close all watchers;
    Otherwise, close the specific watcher if exists"
   ([]
-   (doseq [[watcher watcher-del-f] (vals @*file-watcher)]
-     (.close watcher)
-     (.removeListener app "quit" watcher-del-f))
-   (reset! *file-watcher {}))
+   (doseq [sub (vals @*parcel-watcher)]
+     (prn ::xxx sub)
+     (let [unsub-f (some-> sub .-unsubscribe)]
+       (unsub-f)))
+   (reset! *parcel-watcher {}))
   ([dir]
-   (let [[watcher watcher-del-f] (get @*file-watcher dir)]
-     (when watcher
-       (.close watcher)
-       (.removeListener app "quit" watcher-del-f)
-       (swap! *file-watcher dissoc dir)))))
+
+   (let [sub (get @*parcel-watcher dir)
+         unsub-f (some-> sub .-unsubscribe)]
+     (when sub
+       (prn :unsub-f)
+       (unsub-f)
+       (swap! *parcel-watcher dissoc dir)))))

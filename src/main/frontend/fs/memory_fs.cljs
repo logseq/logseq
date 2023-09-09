@@ -95,7 +95,7 @@
     nil)
   (get-files [_this _path-or-handle]
     nil)
-  (watch-dir! [_this _dir _options]
+  (watch-dir! [_this _dir]
     nil)
   (unwatch-dir! [_this _dir]
     nil))

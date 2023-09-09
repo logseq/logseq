@@ -22,7 +22,9 @@
             [logseq.common.path :as path]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.fs :as fs]
+            [clojure.string :as string]))
 
 (defn- safe-api-call
   "Force the callback result to be nil, otherwise, ipc calls could lead to
@@ -48,14 +50,43 @@
   []
   ;; TODO: move "file-watcher" to electron.ipc.channels
   (safe-api-call "file-watcher"
-                     (fn [data]
-                       (let [{:keys [type payload]} (bean/->clj data)
-                             path (gp-util/path-normalize (:path payload))
-                             dir (:dir payload)
-                             payload (assoc payload :path (path/relative-path dir path))]
-                         (watcher-handler/handle-changed! type payload)
-                         (when (file-sync-handler/enable-sync?)
-                           (sync/file-watch-handler type payload)))))
+                 (fn [data]
+                   ;; add
+                   ;; change
+                   ;; unlink
+                   (prn ::fff data)
+                   (let [{:keys [type payload]} (bean/->clj data)
+                         path (gp-util/path-normalize (:path payload))
+                         dir (:dir payload)]
+                     (cond
+                       (nil? dir) ;; global file content already read-out
+                       (watcher-handler/handle-changed! type payload)
+
+                       (contains? #{"change" "add"} type)
+                       (p/let [content (if (let [ext (string/lower-case (path/file-ext path))]
+                                             (contains? #{"md" "markdown" "org" "js" "edn" "css"} ext))
+                                         (-> (fs/read-file dir path)
+                                             (p/catch (constantly nil)))
+                                         (p/resolved nil))
+                               payload (assoc payload :content content)]
+                         (prn ::event type payload)
+                         (watcher-handler/handle-changed! type payload))
+
+                       ;; recursive dir deletion, electron backend doesn't has recursive file events
+                       (and (= "unlink" type) (not (path/file-ext path)))
+                       (if-let [rpaths (db/get-files-in path)]
+                         (doseq [rpath rpaths]
+                           (watcher-handler/handle-changed! "unlink" {:dir dir :path rpath}))
+
+                         (watcher-handler/handle-changed! type payload))
+
+                       :else
+                       (do (prn ::un-handle-event type payload)
+                           (watcher-handler/handle-changed! type payload)))
+
+                     (when (and (file-sync-handler/enable-sync?)
+                                (some? dir))
+                       (sync/file-watch-handler type payload)))))
 
   (safe-api-call "file-sync-progress"
                  (fn [data]
@@ -114,8 +145,8 @@
                        block-id
                        (if-let [block (db-model/get-block-by-uuid block-id)]
                          (if (gp-whiteboard/shape-block? block)
-                          (route-handler/redirect-to-whiteboard! (get-in block [:block/page :block/name]) {:block-id block-id})
-                          (route-handler/redirect-to-page! block-id))
+                           (route-handler/redirect-to-whiteboard! (get-in block [:block/page :block/name]) {:block-id block-id})
+                           (route-handler/redirect-to-page! block-id))
                          (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false))
 
                        file

@@ -21,7 +21,6 @@
   },
   "dependencies": {
     "better-sqlite3": "8.0.1",
-    "chokidar": "^3.5.1",
     "dugite": "2.5.0",
     "electron-dl": "3.3.0",
     "electron-log": "4.3.1",

@@ -359,7 +359,7 @@
             files (get-files-and-reload-all-handles dir handle)]
       files))
 
-  (watch-dir! [_this _dir _options]
+  (watch-dir! [_this _dir]
     nil)
 
   (unwatch-dir! [_this _dir]

@@ -52,14 +52,25 @@
     (set-missing-block-ids! content)
     (db/set-file-last-modified-at! repo path mtime)))
 
+(defn- handle-global-file-change!
+  [type {:keys [path content] :as _payload}]
+  (when (= path (global-config-handler/global-config-path))
+    (cond
+      (contains? #{"change" "add"} type)
+      (file-handler/alter-global-file
+       (global-config-handler/global-config-path) content {:from-disk? true})
+
+      (= "unlink" type)
+      (file-handler/alter-global-file
+       (global-config-handler/global-config-path) "" {:from-disk? true})))
+  nil)
+
 (defn handle-changed!
-  [type {:keys [dir path content stat global-dir] :as payload}]
-  (when dir
-    (let [;; Global directory events don't know their originating repo so we rely
-          ;; on the client to correctly identify it
-          repo (cond
-                 global-dir (state/get-current-repo)
-                 ;; FIXME(andelf): hack for demo graph, demo graph does not bind to local directory
+  [type {:keys [dir path content stat] :as payload}]
+  (if (nil? dir)
+    (handle-global-file-change! type payload)
+    (let [repo (cond
+                 ;; Hack for demo graph, demo graph does not bind to local directory
                  (string/starts-with? dir "memory://") "local"
                  :else (config/get-local-repo dir))
           repo-dir (config/get-local-dir repo)
@@ -95,7 +106,7 @@
                          (string/trim (or (state/get-default-journal-template) "")))
                       (= (string/trim content) "-")
                       (= (string/trim content) "*")))
-            (handle-add-and-change! repo path content db-content mtime (not global-dir))) ;; no backup for global dir
+            (handle-add-and-change! repo path content db-content mtime true))
 
           (and (= "unlink" type)
                exists-in-db?)
@@ -104,13 +115,6 @@
               (when-let [page-name (db/get-file-page path)]
                 (println "Delete page: " page-name ", file path: " path ".")
                 (page-handler/delete! page-name #() :delete-file? false))))
-
-          ;; global config handling
-          (and (= "change" type)
-               (= dir (global-config-handler/global-config-dir)))
-          (when (= path "config.edn")
-            (file-handler/alter-global-file
-             (global-config-handler/global-config-path) content {:from-disk? true}))
 
           (and (= "change" type)
                (not exists-in-db?))

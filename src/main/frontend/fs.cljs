@@ -199,12 +199,15 @@
         {:path dir :files files}))))
 
 (defn watch-dir!
-  ([dir] (watch-dir! dir {}))
-  ([dir options] (protocol/watch-dir! (get-fs dir) dir options)))
+  [dir] (protocol/watch-dir! (get-fs dir) dir))
 
 (defn unwatch-dir!
   [dir]
   (protocol/unwatch-dir! (get-fs dir) dir))
+
+(defn watch-file!
+  [fpath]
+  (protocol/watch-file! (get-fs fpath) fpath))
 
 ;; FIXME: counterintuitive return value
 (defn create-if-not-exists

@@ -571,7 +571,7 @@
         windows (win/get-graph-all-windows dir)]
     (> (count windows) 1)))
 
-(defmethod handle :addDirWatcher [^js _window [_ dir options]]
+(defmethod handle :addDirWatcher [^js _window [_ dir]]
   ;; receive dir path (not repo / graph) from frontend
   ;; Windows on same dir share the same watcher
   ;; Only close file watcher when:
@@ -579,13 +579,18 @@
   ;;    2. reset file watcher to resend `add` event on window refreshing
   (when dir
     (logger/debug ::watch-dir {:path dir})
-    (watcher/watch-dir! dir options)
+    (watcher/watch-dir! dir)
     nil))
 
 (defmethod handle :unwatchDir [^js _window [_ dir]]
   (when dir
     (logger/debug ::unwatch-dir {:path dir})
     (watcher/close-watcher! dir)
+    nil))
+
+(defmethod handle :addFileWatcher [^js _window [_ fpath]]
+  (when fpath
+    (watcher/watch-file! fpath)
     nil))
 
 (defn open-new-window!
