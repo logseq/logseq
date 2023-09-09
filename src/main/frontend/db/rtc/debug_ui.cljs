@@ -13,8 +13,9 @@
             [frontend.util :as util]
             [frontend.handler.notification :as notification]))
 
-(def ^:private debug-state (atom nil))
+(defonce ^:private debug-state (atom nil))
 (def debug-graph-uuid "6478874f-20a7-4335-9379-4cfb1cfa1b25")
+
 
 (defn- <start
   []

@@ -56,3 +56,7 @@
 (defn <get-graph-uuid
   [repo]
   (op-store/<get-graph-uuid repo))
+
+(defn <get-local-tx
+  [repo]
+  (op-store/<get-local-tx repo))

@@ -66,3 +66,8 @@
   [repo]
   (p/let [store (ensure-store repo)]
     (idb-keyval/get "graph-uuid" store)))
+
+(defn <get-local-tx
+  [repo]
+  (p/let [store (ensure-store repo)]
+    (idb-keyval/get "local-tx" store)))
