@@ -152,7 +152,7 @@
                                                (when (= rpath fname)
                                                  (condp contains? type
                                                    #{"update" "create"}
-                                                   (p/let [stat (fsp/stat path)
+                                                   (p/let [^js stat (fsp/stat path)
                                                            content (fsp/readFile path #js {:encoding "utf8"})
                                                            stat {:size (.-size stat)
                                                                  :mtime (.-mtimeMs stat)

@@ -9,7 +9,7 @@
 
 (deftest split-ext
   (is (= ["some-song" "mp3"] (path/split-ext "some-song.MP3")))
-  (is (= ["some-song" ""] (path/split-ext "some-song")))
+  (is (= ["some-song" nil] (path/split-ext "some-song")))
   (is (= ["some-file.edn" "txt"] (path/split-ext "some-file.edn.txt"))))
 
 (deftest safe-file-name?
