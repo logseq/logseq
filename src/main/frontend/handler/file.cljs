@@ -254,5 +254,5 @@
   []
   (when-let [repo (state/get-current-repo)]
     (when-let [dir (config/get-repo-dir repo)]
-      ;; initial graph scaning is not handled by fs-watcher
+      ;; initial graph scanning is not handled by fs-watcher
       (fs/watch-dir! dir))))
