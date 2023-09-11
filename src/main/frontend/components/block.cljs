@@ -3433,9 +3433,11 @@
 (rum/defcs block-item < rum/reactive
   {:init (fn [state]
            (let [id (random-uuid)
+                 editing-block (state/get-edit-block)
+                 current-block (second (:rum/args state))
                  disable-lazy? (:disable-lazy-load? (first (:rum/args state)))
                  *ref (atom nil)
-                 *hidden? (if disable-lazy?
+                 *hidden? (if (or disable-lazy? (= (:block/uuid editing-block) (:block/uuid current-block)))
                             (atom false)
                             (get-hidden-atom id *ref {:initial-value true}))]
              (assoc state ::sub-id id ::ref *ref ::hidden? *hidden?)))
