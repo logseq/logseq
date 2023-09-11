@@ -448,19 +448,30 @@
                                   remove-built-in-properties
                                   (remove (fn [[id _]] ((set classes-properties) id)))
                                   (sort-by first))
-        property-hide-f (fn [property-id]
-                          (let [eid (if (uuid? property-id) [:block/uuid property-id] property-id)]
-                            (boolean (:hide? (:block/schema (db/entity eid))))))
+        ;; This section produces own-properties and full-hidden-properties
+        hide-with-property-id (fn [property-id]
+                                (let [eid (if (uuid? property-id) [:block/uuid property-id] property-id)]
+                                  (boolean (:hide? (:block/schema (db/entity eid))))))
+        property-hide-f (if config/publishing?
+                          (fn [[property-id property-value]]
+                            ;; Publishing is read only so hide all blank properties as they
+                            ;; won't be edited and distract from properties that have values
+                            (or (nil? property-value)
+                                (hide-with-property-id property-id)))
+                          (comp hide-with-property-id first))
         {block-hidden-properties' true
-         block-own-properties' false} (group-by (fn [[id _]] (property-hide-f id)) block-own-properties)
+         block-own-properties' false} (group-by property-hide-f block-own-properties)
         block-hidden-properties (map first block-hidden-properties')
         own-properties (cond-> block-own-properties'
                          one-class?
-                         (concat (map (fn [id] [id (get properties id)])
-                                      (remove property-hide-f classes-properties))))
-        classes-hidden-properties (filter property-hide-f classes-properties)
+                         (concat (remove property-hide-f
+                                         (map (fn [id] [id (get properties id)]) classes-properties))))
+        classes-hidden-properties (map first
+                                       (filter property-hide-f
+                                               (map (fn [id] [id (get properties id)]) classes-properties)))
         full-hidden-properties (->> (distinct (concat block-hidden-properties classes-hidden-properties))
                                     (map (fn [id] [id nil])))
+
         new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
         class->properties (loop [classes all-classes
                                  properties #{}
@@ -468,7 +479,7 @@
                             (if-let [class (first classes)]
                               (let [cur-properties (->> (:properties (:block/schema class))
                                                         (remove properties)
-                                                        (remove property-hide-f))]
+                                                        (remove hide-with-property-id))]
                                 (recur (rest classes)
                                        (set/union properties (set cur-properties))
                                        (conj result [class cur-properties])))
@@ -484,7 +495,7 @@
                                  (assoc :class "select-none"))
        (properties-section block (if class-schema? properties own-properties) opts)
 
-       (when (and (seq full-hidden-properties) (not class-schema?))
+       (when (and (seq full-hidden-properties) (not class-schema?) (not config/publishing?))
          (hidden-properties block full-hidden-properties opts))
 
        (when (or new-property? (not in-block-container?))
