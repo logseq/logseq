@@ -126,9 +126,11 @@
     (page-handler/on-chosen-handler input id q pos format)))
 
 (rum/defcs page-search < rum/reactive
-  {:will-unmount (fn [state]
+  {:init (fn [state]
+           (reset! (:editor/create-object? @state/state) true)
+           state)
+   :will-unmount (fn [state]
                    (reset! commands/*current-command nil)
-                   ;; (reset! (:editor/create-object? @state/state) true)
                    state)}
   "Embedded page searching popup"
   [state id format]
@@ -705,7 +707,7 @@
            (assoc state
                   ::id (str (random-uuid))))
    :will-unmount (fn [state]
-                   (reset! (:editor/create-object? @state/state) true)
+                   (reset! (:editor/create-object? @state/state) false)
                    state)
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))

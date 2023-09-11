@@ -170,7 +170,7 @@
                                        :block/refs []
                                        :block/link [:block/uuid (:block/uuid page-m)]}]
                                      merge-tx))))))
-    (reset! (:editor/create-object? @state/state) true)))
+    (reset! (:editor/create-object? @state/state) false)))
 
 (defn rebuild-block-refs
   [block new-properties & {:keys [skip-content-parsing?]}]
