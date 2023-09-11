@@ -1,11 +1,7 @@
 (ns frontend.db.rtc.core
   (:require-macros
    [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
-  (:require [datascript.core :as d]
-            [frontend.db.conn :as conn]
-            [frontend.util :as util]
-            [frontend.config :as config]
-            [cljs.core.async :as async :refer [<! >! chan go go-loop offer!
+  (:require [cljs.core.async :as async :refer [<! >! chan go go-loop offer!
                                                poll! timeout]]
             [cljs.core.async.interop :refer [p->c]]
             [malli.core :as m]
@@ -318,12 +314,8 @@
                     remove-page-uuids (conj remove-page-uuids block-uuid)]
                 (recur other-ops remove-block-uuids update-block-uuids move-block-uuids update-page-uuids remove-page-uuids))
               (throw (ex-info "unknown op type" op)))))
-        {_move-ops "move" remove-ops "remove" _update-ops "update"} (group-by first ops)
         move-block-uuids (seq move-block-uuids-set)
-        remove-block-uuids-groups (->> remove-ops
-                                       (keep (fn [op]
-                                               (let [block-uuids (set (:block-uuids (second op)))]
-                                                 (seq (set/intersection remove-block-uuids-set block-uuids))))))
+        remove-block-uuids (seq remove-block-uuids-set)
         update-block-uuids (seq update-block-uuids-set)
         update-page-uuids (seq update-page-uuids-set)
         remove-page-uuids (seq remove-page-uuids-set)
@@ -336,14 +328,8 @@
                            ["move"
                             {:block-uuid block-uuid :target-uuid left-uuid :sibling? (not= left-uuid parent-uuid)}]))))
                    move-block-uuids)
-        remove-ops* (->> remove-block-uuids-groups
-                         (keep
-                          (fn [block-uuids]
-                            (when-let [block-uuids*
-                                       (seq (filter
-                                             (fn [block-uuid] (not (db/entity repo [:block/uuid (uuid block-uuid)])))
-                                             block-uuids))]
-                              ["remove" {:block-uuids block-uuids*}]))))
+        remove-block-uuids* (filter (fn [block-uuid] (nil? (db/entity repo [:block/uuid (uuid block-uuid)]))) remove-block-uuids)
+        remove-ops* [["remove" {:block-uuids remove-block-uuids*}]]
         update-ops* (->> update-block-uuids
                          (keep (fn [block-uuid]
                                  (when-let [b (db/entity repo [:block/uuid (uuid block-uuid)])]
