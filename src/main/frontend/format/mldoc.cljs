@@ -10,7 +10,8 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.block :as gp-block]
-            [clojure.walk :as walk]))
+            [clojure.walk :as walk]
+            [frontend.util :as util]))
 
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
 (defonce parseOPML (gobj/get Mldoc "parseOPML"))
@@ -155,3 +156,15 @@
     (->> @*result
          (remove string/blank?)
          (distinct))))
+
+(defn content-without-tags
+  "Remove tags from content"
+  [content tags]
+  (->
+   (reduce
+    (fn [content tag]
+      (let [tag' (str "#" tag)]
+        (string/replace content tag' "")))
+    content
+    tags)
+   (string/trim)))

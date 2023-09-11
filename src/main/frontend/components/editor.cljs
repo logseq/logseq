@@ -107,7 +107,7 @@
 (defn- page-on-chosen-handler
   [embed? input id q pos format]
   (if embed?
-    (fn [chosen-item]
+    (fn [chosen-item _e]
       (let [value (.-value input)
             value' (str (gp-util/safe-subs value 0 q)
                         (gp-util/safe-subs value (+ (count q) 4 pos)))]
@@ -125,15 +125,18 @@
                                                  :other-attrs {:block/link (:db/id (db/entity [:block/name page-name]))}}))))
     (page-handler/on-chosen-handler input id q pos format)))
 
-(rum/defc page-search < rum/reactive
+(rum/defcs page-search < rum/reactive
   {:will-unmount (fn [state]
                    (reset! commands/*current-command nil)
+                   ;; (reset! (:editor/create-object? @state/state) true)
                    state)}
   "Embedded page searching popup"
-  [id format]
+  [state id format]
   (let [action (state/sub :editor/action)
         db? (config/db-based-graph? (state/get-current-repo))
-        embed? (and db? (= @commands/*current-command "Page embed"))]
+        embed? (and db? (= @commands/*current-command "Page embed"))
+        tag? (= action :page-search-hashtag)
+        create-object? (state/sub :editor/create-object?)]
     (when (contains? #{:page-search :page-search-hashtag} action)
       (let [pos (state/get-editor-last-pos)
             input (gdom/getElement id)]
@@ -174,27 +177,35 @@
                                     (cons (first matched-pages)
                                           (cons q (rest matched-pages)))
                                     (cons q matched-pages))))]
-            (ui/auto-complete
-             matched-pages
-             {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
-              :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
-              :item-render (fn [page-name chosen?]
-                             [:div.preview-trigger-wrapper
-                              (block/page-preview-trigger
-                               {:children
-                                [:div.flex
-                                 (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
-                                 [:div.flex.space-x-1
-                                  [:div (when-not (db/page-exists? page-name) (t :new-page))]
-                                  (highlight/highlight-exact-query page-name q)]]
-                                :open?           chosen?
-                                :manual?         true
-                                :fixed-position? true
-                                :tippy-distance  24
-                                :tippy-position  (if sidebar? "left" "right")}
-                               page-name)])
-              :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
-              :class       "black"})))))))
+            [:div
+             (when tag?
+               [:div.flex.flex-row.items-center.px-4.py-1.text-sm.opacity-70.gap-2
+                "Create object:"
+                (ui/toggle create-object?
+                           (fn [_e]
+                             (swap! (:editor/create-object? @state/state) not))
+                           true)])
+             (ui/auto-complete
+              matched-pages
+              {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
+               :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
+               :item-render (fn [page-name chosen?]
+                              [:div.preview-trigger-wrapper
+                               (block/page-preview-trigger
+                                {:children
+                                 [:div.flex
+                                  (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
+                                  [:div.flex.space-x-1
+                                   [:div (when-not (db/page-exists? page-name) (t :new-page))]
+                                   (highlight/highlight-exact-query page-name q)]]
+                                 :open?           chosen?
+                                 :manual?         true
+                                 :fixed-position? true
+                                 :tippy-distance  24
+                                 :tippy-position  (if sidebar? "left" "right")}
+                                page-name)])
+               :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
+               :class       "black"})]))))))
 
 (defn- search-blocks!
   [state result]
@@ -693,6 +704,9 @@
   {:init (fn [state]
            (assoc state
                   ::id (str (random-uuid))))
+   :will-unmount (fn [state]
+                   (reset! (:editor/create-object? @state/state) true)
+                   state)
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))
                 state)}

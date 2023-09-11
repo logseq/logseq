@@ -140,35 +140,37 @@
 
 (declare move-blocks)
 (defn- assoc-linked-block-when-save
-  [txs-state block-entity m]
-  (let [linked-page (some-> (state/get-edit-content) mldoc/extract-plain)
-        sanity-linked-page (some-> linked-page util/page-name-sanity-lc)]
-    (when-not (string/blank? sanity-linked-page)
-      (let [existing-ref-id (some (fn [r]
-                                    (when (= sanity-linked-page (:block/name r))
-                                      (:block/uuid r)))
-                                  (:block/refs m))
-            page-m (block/page-name->map linked-page (or existing-ref-id true))
-            _ (when-not (db/entity [:block/uuid (:block/uuid page-m)])
-                (db/transact! [page-m]))
-            merge-tx (let [children (:block/_parent block-entity)]
-                       (let [page (db/entity [:block/uuid (:block/uuid page-m)])
-                             [target sibling?] (get-last-child-or-self page)]
-                         (when (seq children)
-                           (:tx-data
-                            (move-blocks children target
-                                         {:sibling? sibling?
-                                          :outliner-op :move-blocks})))))]
-        (swap! txs-state (fn [txs]
-                           (concat txs
-                                   [(assoc page-m
-                                           :block/tags (:block/tags m)
-                                           :block/type "object")
-                                    {:db/id (:db/id block-entity)
-                                     :block/content ""
-                                     :block/refs []
-                                     :block/link [:block/uuid (:block/uuid page-m)]}]
-                                   merge-tx)))))))
+  [txs-state block-entity m structured-tags?]
+  (if structured-tags?
+    (let [linked-page (some-> (state/get-edit-content) mldoc/extract-plain)
+          sanity-linked-page (some-> linked-page util/page-name-sanity-lc)]
+      (when-not (string/blank? sanity-linked-page)
+        (let [existing-ref-id (some (fn [r]
+                                      (when (= sanity-linked-page (:block/name r))
+                                        (:block/uuid r)))
+                                    (:block/refs m))
+              page-m (block/page-name->map linked-page (or existing-ref-id true))
+              _ (when-not (db/entity [:block/uuid (:block/uuid page-m)])
+                  (db/transact! [page-m]))
+              merge-tx (let [children (:block/_parent block-entity)]
+                         (let [page (db/entity [:block/uuid (:block/uuid page-m)])
+                               [target sibling?] (get-last-child-or-self page)]
+                           (when (seq children)
+                             (:tx-data
+                              (move-blocks children target
+                                           {:sibling? sibling?
+                                            :outliner-op :move-blocks})))))]
+          (swap! txs-state (fn [txs]
+                             (concat txs
+                                     [(assoc page-m
+                                             :block/tags (:block/tags m)
+                                             :block/type "object")
+                                      {:db/id (:db/id block-entity)
+                                       :block/content ""
+                                       :block/refs []
+                                       :block/link [:block/uuid (:block/uuid page-m)]}]
+                                     merge-tx))))))
+    (reset! (:editor/create-object? @state/state) true)))
 
 (defn rebuild-block-refs
   [block new-properties & {:keys [skip-content-parsing?]}]
@@ -283,7 +285,8 @@
           block-entity (db/entity id)
           structured-tags? (and (config/db-based-graph? (state/get-current-repo))
                                 (:block/page block-entity)
-                                (seq (:block/tags m)))]
+                                (seq (:block/tags m))
+                                @(:editor/create-object? @state/state))]
       (when id
         ;; Retract attributes to prepare for tx which rewrites block attributes
         (let [retract-attributes (if db-based?
@@ -311,8 +314,7 @@
                  structured-tags?
                  (dissoc :block/tags :block/refs))))
 
-      (when structured-tags?
-        (assoc-linked-block-when-save txs-state block-entity m))
+      (assoc-linked-block-when-save txs-state block-entity m structured-tags?)
 
       (rebuild-refs txs-state block-entity m)
 

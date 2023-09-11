@@ -546,14 +546,15 @@
                    :on-mouse-move  #(reset! *current-idx idx)}
                   (let [chosen? (= @*current-idx idx)]
                     (menu-link
-                      {:id            (str "ac-" idx)
-                       :class         (when chosen? "chosen")
-                       :on-mouse-down (fn [e]
-                                        (util/stop e)
-                                        (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                          (on-shift-chosen item)
-                                          (on-chosen item)))}
-                      (if item-render (item-render item chosen?) item)))]]
+                     {:id            (str "ac-" idx)
+                      :tab-index     "0"
+                      :class         (when chosen? "chosen")
+                      :on-mouse-down (fn [e]
+                                       (util/stop e)
+                                       (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                         (on-shift-chosen item)
+                                         (on-chosen item e)))}
+                     (if item-render (item-render item chosen?) item)))]]
 
              (if get-group-name
                (if-let [group-name (get-group-name item)]
@@ -572,7 +573,11 @@
   ([on? on-click] (toggle on? on-click false))
   ([on? on-click small?]
    [:a.ui__toggle {:on-click on-click
-                   :class (if small? "is-small" "")}
+                   :class (if small? "is-small" "")
+                   :tab-index "0"
+                   :on-key-down (fn [e] (when (and e (= (.-key e) "Enter"))
+                                          (util/stop e)
+                                          (on-click e)))}
     [:span.wrapper.transition-colors.ease-in-out.duration-200
      {:aria-checked (if on? "true" "false"), :tab-index "0", :role "checkbox"
       :class        (if on? "bg-indigo-600" "bg-gray-300")}
