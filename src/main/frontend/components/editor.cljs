@@ -180,7 +180,7 @@
                                           (cons q (rest matched-pages)))
                                     (cons q matched-pages))))]
             [:div
-             (when tag?
+             (when (and db? tag?)
                [:div.flex.flex-row.items-center.px-4.py-1.text-sm.opacity-70.gap-2
                 "Create object:"
                 (ui/toggle create-object?
