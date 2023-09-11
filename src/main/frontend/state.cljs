@@ -142,6 +142,8 @@
 
       :editor/code-block-context             {}
 
+      :editor/create-object?                 (atom true)
+
       :db/properties-changed-pages           {}
       :db/last-transact-time                 (atom {})
       ;; whether database is persisted

@@ -217,7 +217,7 @@
     (if (and (seq matched)
              (> (count matched)
                 @current-idx))
-      (on-chosen (nth matched @current-idx) false)
+      (on-chosen (nth matched @current-idx) e)
       (and on-enter (on-enter state)))))
 
 (defn auto-complete-shift-complete

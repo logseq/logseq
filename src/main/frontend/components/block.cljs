@@ -546,12 +546,16 @@
         *hover? (::hover? state)
         tag? (:tag? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
-        untitled? (model/untitled-page? page-name)]
+        untitled? (model/untitled-page? page-name)
+        display-close-button? (not (:hide-close-button? config))]
     [:a.relative
      {:tabIndex "0"
-      :class (cond-> (if tag? "tag" "page-ref")
+      :class (cond->
+               (if tag? "tag" "page-ref")
                (:property? config) (str " page-property-key block-property")
-               untitled? (str " opacity-50"))
+               untitled? (str " opacity-50")
+               (not display-close-button?) (str " pl-0")
+               (and tag? display-close-button?) (str " pl-4"))
       :data-ref page-name
       :draggable true
       :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name-in-block e))
@@ -606,7 +610,8 @@
            block-id (:block/uuid config)
            block (when block-id (db/entity [:block/uuid block-id]))
            tags-id (:block/uuid (db/entity [:block/name "tags"]))]
-       (when (and block tag? @*hover? (config/db-based-graph? repo))
+       (when (and block tag? @*hover? (config/db-based-graph? repo)
+                  display-close-button?)
          [:a.close.fade-in
           {:class "absolute left-0"
            :style {:top "0.15rem"}
@@ -1573,7 +1578,9 @@
          ["Tag" _]
          (when-let [s (gp-block/get-tag item)]
            (let [s (text/page-ref-un-brackets! s)]
-             (page-cp (assoc config :tag? true) {:block/name s})))
+             (page-cp (assoc config
+                             :tag? true
+                             :hide-close-button? true) {:block/name s})))
 
          ["Emphasis" [[kind] data]]
          (emphasis-cp config kind data)
@@ -2355,7 +2362,7 @@
                :else
                nil)
 
-             (when (seq block-tags)
+             (when (and (seq block-tags) (some? (:block/name block)))
                (tags config block))]]))
 
        (clock-summary-cp block body)]

@@ -682,7 +682,6 @@ a.tag {
   cursor: pointer;
   color: var(--ls-tag-text-color, #045591);
   opacity: var(--ls-tag-text-opacity, 0.8);
-  padding-left: 1.125rem;
 }
 
 a.tag:hover {
