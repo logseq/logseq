@@ -421,14 +421,14 @@
         (when (and config/dev? (state/sub [:ui/developer-mode?]))
           [:div.text-sm
            [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                                       (state/sidebar-add-block! repo "history" :history))}
-            (t :right-side-bar/history)]])
+                                                                       (state/sidebar-add-block! repo "rtc" :rtc))}
+            "(Dev) RTC"]])
 
         (when (and config/dev? (state/sub [:ui/developer-mode?]))
           [:div.text-sm
            [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                                       (state/sidebar-add-block! repo "rtc" :rtc))}
-            "(Dev) RTC"]])
+                                                                       (state/sidebar-add-block! repo "history" :history))}
+            (t :right-side-bar/history)]])
         ]]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.ml-2.pr-3
