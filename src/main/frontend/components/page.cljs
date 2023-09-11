@@ -364,8 +364,7 @@
        (when (and @*hover?
                   db-based?
                   (not built-in-property?)
-                  (not @*edit?)
-                  (not config/publishing?))
+                  (not @*edit?))
          [:div.absolute.bottom-2.left-0
           [:div.flex.flex-row.items-center.flex-wrap.ml-2
            [:a.fade-link.flex.flex-row.items-center
@@ -429,7 +428,8 @@
     (ui/select options
                (fn [_e value]
                  (on-select value))
-               {:on-mouse-down
+               {:disabled config/publishing?
+                :on-mouse-down
                 (fn [e]
                   (when (util/meta-key? e)
                     (if-let [page-name (:block/name (db/entity [:block/uuid (some-> (util/evalue e) uuid)]))]
@@ -454,6 +454,7 @@
           [:div.col-span-1 "Is it a class?"]
           [:div.col-span-3
            (ui/checkbox {:checked class?
+                         :disabled config/publishing?
                          :on-change (fn []
                                       (if class?
                                         (db/transact! [[:db/retract (:db/id page) :block/type]])
@@ -498,7 +499,8 @@
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
-  (rum/local false ::configure-show?)
+  ;; Make class pages reader friendly by default in publishing as they are usually blank
+  (rum/local (if config/publishing? true false) ::configure-show?)
   [state {:keys [repo page-name preview? sidebar?] :as option}]
   (when-let [path-page-name (get-path-page-name state page-name)]
     (let [current-repo (state/sub :git/current-repo)
