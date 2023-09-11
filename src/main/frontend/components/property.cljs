@@ -459,18 +459,15 @@
                             (or (nil? property-value)
                                 (hide-with-property-id property-id)))
                           (comp hide-with-property-id first))
-        {block-hidden-properties' true
+        {block-hidden-properties true
          block-own-properties' false} (group-by property-hide-f block-own-properties)
-        block-hidden-properties (map first block-hidden-properties')
+        {class-hidden-properties true
+         class-own-properties false} (group-by property-hide-f
+                                               (map (fn [id] [id (get properties id)]) classes-properties))
         own-properties (cond-> block-own-properties'
                          one-class?
-                         (concat (remove property-hide-f
-                                         (map (fn [id] [id (get properties id)]) classes-properties))))
-        classes-hidden-properties (map first
-                                       (filter property-hide-f
-                                               (map (fn [id] [id (get properties id)]) classes-properties)))
-        full-hidden-properties (->> (distinct (concat block-hidden-properties classes-hidden-properties))
-                                    (map (fn [id] [id nil])))
+                         (concat class-own-properties))
+        full-hidden-properties (concat block-hidden-properties class-hidden-properties)
 
         new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
         class->properties (loop [classes all-classes
