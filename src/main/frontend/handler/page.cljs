@@ -1036,7 +1036,8 @@
                                           format
                                           {:last-pattern last-pattern
                                            :end-pattern (when wrapped? page-ref/right-brackets)
-                                           :command :page-ref})))
+                                           :command :page-ref})
+          (when input (.focus input))))
       (fn [chosen _e]
         (state/clear-editor-action!)
         (let [page-ref-text (get-page-ref-text chosen)]
