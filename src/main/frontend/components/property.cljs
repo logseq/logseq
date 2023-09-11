@@ -19,7 +19,8 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.db.property :as db-property]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.handler.route :as route-handler]))
 
 (rum/defc icon
   [block {:keys [_type id]}]            ; only :emoji supported yet
@@ -334,18 +335,22 @@
       {:modal-class (util/hiccup->class
                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
      (ui/dropdown
+      (if config/publishing?
+        (fn [_opts]
+          [:a.property-k
+           {:on-click #(route-handler/redirect-to-page! (:block/name property))}
+           [:div.ml-1 (:block/original-name property)]])
+        (fn [{:keys [toggle-fn]}]
+          [:a.property-k
+             {:data-propertyid (:block/uuid property)
+              :data-blockid (:block/uuid block)
+              :data-class-schema (boolean class-schema?)
+              :title (str "Configure property: " (:block/original-name property))
+              :on-click toggle-fn}
+             [:div.ml-1 (:block/original-name property)]]))
       (fn [{:keys [toggle-fn]}]
-        [:a.property-k
-         {:data-propertyid (:block/uuid property)
-          :data-blockid (:block/uuid block)
-          :data-class-schema (boolean class-schema?)
-          :title (str "Configure property: " (:block/original-name property))
-          :on-click toggle-fn}
-         [:div.ml-1 (:block/original-name property)]])
-      (fn [{:keys [toggle-fn]}]
-        (when (not config/publishing?)
-          [:div.p-8
-           (property-config repo property {:toggle-fn toggle-fn})]))
+        [:div.p-8
+         (property-config repo property {:toggle-fn toggle-fn})])
       {:modal-class (util/hiccup->class
                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg")})]))
 
