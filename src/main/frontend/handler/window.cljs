@@ -1,4 +1,5 @@
 (ns frontend.handler.window
+  "Window management ns"
   (:require [electron.ipc :as ipc]))
 
 (defn minimize!
