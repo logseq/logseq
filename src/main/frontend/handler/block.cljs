@@ -378,9 +378,7 @@
           edit-input-id (if (uuid? id)
                           (get-edit-input-id-with-block-id id direction retry-times nil)
                           (let [id (str (subs id 0 (- (count id) 36)) block-id)]
-                            (if (gdom/getElement id)
-                              (string/replace id "ls-block" "edit-block")
-                              (get-edit-input-id-with-block-id block-id direction retry-times id))))]
+                            (string/replace id "ls-block" "edit-block")))]
       (if edit-input-id
         (do
           (state/set-editing! edit-input-id content block text-range)
