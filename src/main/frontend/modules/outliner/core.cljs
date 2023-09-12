@@ -170,7 +170,7 @@
                                        :block/refs []
                                        :block/link [:block/uuid (:block/uuid page-m)]}]
                                      merge-tx))))))
-    (reset! (:editor/create-object? @state/state) false)))
+    (reset! (:editor/create-page? @state/state) false)))
 
 (defn rebuild-block-refs
   [block new-properties & {:keys [skip-content-parsing?]}]
@@ -286,7 +286,7 @@
           structured-tags? (and (config/db-based-graph? (state/get-current-repo))
                                 (:block/page block-entity)
                                 (seq (:block/tags m))
-                                @(:editor/create-object? @state/state))]
+                                @(:editor/create-page? @state/state))]
       (when id
         ;; Retract attributes to prepare for tx which rewrites block attributes
         (let [retract-attributes (if db-based?
