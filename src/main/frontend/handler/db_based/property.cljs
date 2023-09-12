@@ -26,12 +26,6 @@
   (and (uuid? id)
        (some? (db/entity [:block/uuid id]))))
 
-(defn- logseq-object?
-  [id]
-  (and (uuid? id)
-       (when-let [e (db/entity [:block/uuid id])]
-         (seq (:block/tags e)))))
-
 (def builtin-schema-types
   {:default  string?                     ; refs/tags will not be extracted
    :number   number?
@@ -48,10 +42,6 @@
    :block    [:fn
               {:error/message "should be a block"}
               logseq-block?]
-   :object    [:fn
-               {:error/message "should be an object"}
-               logseq-object?]
-
    ;; internal usage
    :keyword  keyword?
    :map      map?
@@ -60,7 +50,7 @@
    :any      some?})
 
 (def internal-builtin-schema-types #{:keyword :map :coll :any})
-(def user-face-builtin-schema-types [:default :number :date :checkbox :url :page :block :object])
+(def user-face-builtin-schema-types [:default :number :date :checkbox :url :page :block])
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
@@ -71,7 +61,7 @@
     (cond
       (parse-long v-str) :number
       (parse-double v-str) :number
-      (util/uuid-string? v-str) :object
+      (util/uuid-string? v-str) :page
       (gp-util/url? v-str) :url
       (contains? #{"true" "false"} (string/lower-case v-str)) :boolean
       :else :default)
@@ -96,9 +86,6 @@
       (uuid v-str)
 
       :block
-      (uuid v-str)
-
-      :object
       (uuid v-str)
 
       :date
