@@ -23,6 +23,7 @@
             [frontend.components.whiteboard :as whiteboard]
             [frontend.components.user.login :as login]
             [frontend.components.repo :as repo]
+            [frontend.components.page :as page]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -891,6 +892,12 @@
    repo/new-db-graph
    {:id :new-db-graph
     :label "graph-setup"}))
+
+(defmethod handle :class/configure [[_ page opts]]
+  (state/set-modal!
+   #(page/configure page opts)
+   {:id :page-configure
+    :label "page-configure"}))
 
 (defmethod handle :file/alter [[_ repo path content]]
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]

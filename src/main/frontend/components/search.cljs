@@ -117,6 +117,12 @@
     :new-page
     (page-handler/create! search-q {:redirect? true})
 
+    :new-class
+    (let [search-q' (subs search-q 1)]
+      (page-handler/create! search-q' {:class? true
+                                       :redirect? false})
+      (state/pub-event! [:class/configure (db/entity [:block/name (util/page-name-sanity-lc search-q')]) {}]))
+
     :new-whiteboard
     (whiteboard-handler/create-new-whiteboard-and-redirect! search-q)
 
@@ -206,6 +212,10 @@
     :new-page
     (page-handler/create! search-q)
 
+    :new-class
+    (page-handler/create! search-q {:class? true
+                                    :redirect? false})
+
     :file
     (route-handler/redirect! {:to :file
                       :path-params {:path data}})
@@ -233,6 +243,10 @@
 
        :new-page
        (create-item-render "new-page" (t :new-page) (str "\"" (string/trim search-q) "\""))
+
+       :new-class
+       ;; TODO: Add icon for new-class
+       (create-item-render "new-page" (t :new-class) (str "\"" (string/trim (subs search-q 1)) "\""))
 
        :new-whiteboard
        (create-item-render "new-whiteboard" (t :new-whiteboard) (str "\"" (string/trim search-q) "\""))
@@ -311,16 +325,19 @@
         blocks (map (fn [block] {:type :block :data block}) blocks)
         pages-content (map (fn [pages-content] {:type :page-content :data pages-content}) pages-content)
         search-mode (state/sub :search/mode)
+        tag-search? (= \# (first search-q))
         new-page (if (or
                       (some? engine)
-                      (and (seq pages)
-                           (= (util/safe-page-name-sanity-lc search-q)
-                              (util/safe-page-name-sanity-lc (:data (first pages)))))
+                      (let [search-q' (util/safe-page-name-sanity-lc search-q)
+                            first-matched-item (util/safe-page-name-sanity-lc (:data (first pages)))]
+                        (and (seq pages)
+                             (or (= search-q' first-matched-item)
+                                 (and tag-search? (= search-q' (str "#" first-matched-item))))))
                       (nil? result)
                       all?)
                    []
                    (if (state/enable-whiteboards?)
-                     [{:type :new-page} {:type :new-whiteboard}]
+                     [{:type (if tag-search? :new-class :new-page)} {:type :new-whiteboard}]
                      [{:type :new-page}]))
         result (cond
                  config/publishing?
