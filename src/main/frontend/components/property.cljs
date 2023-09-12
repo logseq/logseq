@@ -423,11 +423,11 @@
   [state target-block edit-input-id {:keys [in-block-container?] :as opts}]
   (let [block (resolve-linked-block-if-exists target-block)
         class-schema? (and (:class-schema? opts) (:block/schema block))
+        block-properties (:block/properties block)
         properties (if class-schema?
                      (let [properties (:properties (:block/schema block))]
                        (map (fn [k] [k nil]) properties))
-                     (->> (:block/properties block)
-                          (sort-by first)))
+                     (sort-by first block-properties))
         alias (set (map :block/uuid (:block/alias block)))
         tags (set (map :block/uuid (:block/tags block)))
         alias-properties (when (seq alias)
@@ -471,12 +471,11 @@
          block-own-properties' false} (group-by property-hide-f block-own-properties)
         {class-hidden-properties true
          class-own-properties false} (group-by property-hide-f
-                                               (map (fn [id] [id (get properties id)]) classes-properties))
-        own-properties (cond-> block-own-properties'
-                         one-class?
-                         (concat class-own-properties))
+                                               (map (fn [id] [id (get block-properties id)]) classes-properties))
+        own-properties (if one-class?
+                         (concat block-own-properties' class-own-properties)
+                         block-own-properties')
         full-hidden-properties (concat block-hidden-properties class-hidden-properties)
-
         new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
         class->properties (loop [classes all-classes
                                  properties #{}
@@ -512,7 +511,7 @@
             (for [[class class-properties] class->properties]
               (let [id-properties (->> class-properties
                                        remove-built-in-properties
-                                       (map (fn [id] [id (get properties id)])))]
+                                       (map (fn [id] [id (get block-properties id)])))]
                 (when (seq id-properties)
                   [:div
                    (when page-cp

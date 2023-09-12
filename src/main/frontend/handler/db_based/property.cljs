@@ -168,10 +168,6 @@
                                   new-value)
                       block-properties (assoc properties property-uuid new-value)
                       refs (outliner-core/rebuild-block-refs block block-properties)]
-                  (util/pprint [[:db/retract (:db/id block) :block/refs]
-                                 {:block/uuid (:block/uuid block)
-                                  :block/properties block-properties
-                                  :block/refs refs}])
                   (db/transact! repo
                                 [[:db/retract (:db/id block) :block/refs]
                                  {:block/uuid (:block/uuid block)
