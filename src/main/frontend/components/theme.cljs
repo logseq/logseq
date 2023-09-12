@@ -1,5 +1,6 @@
 (ns frontend.components.theme
-  (:require [frontend.extensions.pdf.core :as pdf]
+  (:require [electron.ipc :as ipc]
+            [frontend.extensions.pdf.core :as pdf]
             [frontend.config :as config]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
@@ -33,7 +34,8 @@
 
     (rum/use-effect!
      #(let [doc js/document.documentElement]
-        (.setAttribute doc "lang" preferred-language)))
+        (.setAttribute doc "lang" preferred-language)
+        (js/setTimeout (fn [] (ipc/ipc "theme-loaded")) 100))) ; Wait for the theme to be applied
 
     (rum/use-effect!
      #(when (and restored-sidebar?
