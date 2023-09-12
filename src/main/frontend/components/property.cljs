@@ -236,7 +236,7 @@
       (when-let [property (get-property-from-db @*property-key)]
         [:div.ls-property-add.grid.grid-cols-4.gap-1.flex.flex-row.items-center
          [:div.col-span-1 @*property-key]
-         [:div.col-span-3.flex.flex-row.pl-6
+         [:div.col-span-3.flex.flex-row
           (when (not class-schema?)
             (if @*show-new-property-config?
               (ui/dropdown
@@ -320,7 +320,8 @@
             (when (= :emoji (:type icon))
               [:em-emoji {:id id}]))
           ;; default property icon
-          (ui/icon "point" {:size 16}))])
+          (ui/icon "point" {:size 16
+                            :class "opacity-50"}))])
       (fn [{:keys [toggle-fn]}]
         (ui/emoji-picker
          {:auto-focus true
@@ -390,7 +391,9 @@
       (when (uuid? k)
         (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid k])))]
           (let [block? (= :block (get-in property [:block/schema :type]))]
-            [:div.property-pair (cond-> {} (not block?) (assoc :class "items-center"))
+            [:div {:class (if block?
+                            "flex flex-1 flex-col gap-1"
+                            "property-pair items-center")}
              [:div.property-key
               {:class (if (:class-schema? opts) "col-span-2" "col-span-1")}
               (property-key block property (select-keys opts [:class-schema?]))]
@@ -398,8 +401,9 @@
                [:div.property-description.text-sm.opacity-70
                 {:class (if (:class-schema? opts) "col-span-2" "col-span-3")}
                 (get-in property [:block/schema :description])]
-               [:div.property-value.col-span-3.inline-grid.pl-6 (when block?
-                                                                  {:style {:margin-left -20}})
+               [:div.property-value {:class (if block?
+                                              "col-span-4 ml-8 pl-1"
+                                              "col-span-3 inline-grid")}
                 (pv/property-value block property v opts)])]))))))
 
 (rum/defcs hidden-properties < (rum/local true ::hide?)

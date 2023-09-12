@@ -16,6 +16,10 @@
 /*     background: var(--ls-secondary-background-color); */
 /* } */
 
+.ls-block .ls-properties-area {
+    padding-left: 0.3rem;
+}
+
 .ls-properties-area {
     @apply grid gap-1;
 
