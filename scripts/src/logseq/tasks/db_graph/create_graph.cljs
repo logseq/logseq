@@ -128,7 +128,6 @@
  * Only top level blocks can be easily defined. Other level blocks can be
    defined but they require explicit setting of attributes like :block/left and :block/parent
  * Block content containing page refs or tags is not supported yet
- * Property type :date isn't supported yet
 
    The EDN map has the following keys:
 
