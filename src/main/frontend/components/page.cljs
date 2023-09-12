@@ -420,7 +420,7 @@
         options (cons (if class
                         {:label "Choose parent class"
                          :value ""}
-                        {:label "Choose parent page"
+                        {:label "Choose parent class"
                          :disabled true
                          :selected true
                          :value ""})
@@ -428,8 +428,7 @@
     (ui/select options
                (fn [_e value]
                  (on-select value))
-               {:disabled config/publishing?
-                :on-mouse-down
+               {:on-mouse-down
                 (fn [e]
                   (when (util/meta-key? e)
                     (if-let [page-name (:block/name (db/entity [:block/uuid (some-> (util/evalue e) uuid)]))]
@@ -464,18 +463,26 @@
        (when class?
          [:div.grid.grid-cols-4.gap-1.items-center.class-parent
           [:div.col-span-1 "Parent class:"]
-          [:div.col-span-3
-           (let [namespace (some-> (:db/id (:block/namespace page))
-                                   db/entity
-                                   :block/uuid)]
-             [:div.w-60
-              (class-select page namespace (fn [value]
-                                             (if (seq value)
-                                               (db/transact!
-                                                [{:db/id (:db/id page)
-                                                  :block/namespace [:block/uuid (uuid value)]}])
-                                               (db/transact!
-                                                [[:db.fn/retractAttribute (:db/id page) :block/namespace]]))))])]])
+          (if config/publishing?
+            [:div.col-span-3
+             (if-let [parent-class (some-> (:db/id (:block/namespace page))
+                                        db/entity
+                                        :block/original-name)]
+               [:a {:on-click #(route-handler/redirect-to-page! parent-class)}
+                parent-class]
+               "None")]
+            [:div.col-span-3
+             (let [namespace (some-> (:db/id (:block/namespace page))
+                                     db/entity
+                                     :block/uuid)]
+               [:div.w-60
+                (class-select page namespace (fn [value]
+                                               (if (seq value)
+                                                 (db/transact!
+                                                  [{:db/id (:db/id page)
+                                                    :block/namespace [:block/uuid (uuid value)]}])
+                                                 (db/transact!
+                                                  [[:db.fn/retractAttribute (:db/id page) :block/namespace]]))))])])])
 
        (let [edit-input-id (str "edit-block-" (:block/uuid page))]
          [:div
