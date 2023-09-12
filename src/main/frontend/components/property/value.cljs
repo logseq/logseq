@@ -338,7 +338,7 @@
                           :block)
                         type)]
              (if (string/blank? value)
-               [:div.opacity-70
+               [:div.opacity-50.pointer.text-sm
                 (case type
                   :page
                   (if multiple-values? "Choose pages" "Choose page")
@@ -438,7 +438,7 @@
                                 :*add-new-item? *add-new-item?}))
 
        (empty? items)
-       [:div.opacity-70.pointer {:on-click #(reset! *add-new-item? true)}
+       [:div.opacity-50.pointer.text-sm {:on-click #(reset! *add-new-item? true)}
         "Empty"]
 
        (and @*show-add? row? (not config/publishing?))
