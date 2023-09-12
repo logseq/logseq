@@ -776,7 +776,7 @@
                                           (delete-block-aux! block delete-children?)
                                           (save-block! repo prev-block' new-content {:editor/op :delete}))
                                         (delete-block-aux! block delete-children?)))
-               (move-fn)))))))
+               (when (fn? move-fn) (move-fn))))))))
    (state/set-editor-op! nil)))
 
 (defn delete-blocks!

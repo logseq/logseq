@@ -208,7 +208,8 @@
      (let [enter? (= (util/ekey e) "Enter")
            esc? (= (util/ekey e) "Escape")
            backspace? (= (util/ekey e) "Backspace")
-           new-value (util/evalue e)]
+           new-value (util/evalue e)
+           new-property? (some? (:ui/new-property-input-id @state/state))]
        (when (and (or enter? esc? backspace?)
                   (not (state/get-editor-action)))
          (when-not backspace? (util/stop e))
@@ -216,10 +217,14 @@
            esc?
            (save-text! repo block property value editor-id e)
 
+           (and enter? new-property?)
+           (save-text! repo block property value editor-id e)
+
            enter?
-           (if (string/blank? value)
-             (save-text! repo block property value editor-id e)
-             (create-new-block! block property new-value))))))})
+           (create-new-block! block property new-value)
+
+           :else
+           nil))))})
 
 (defn- select
   [block property opts]
@@ -250,22 +255,17 @@
                                        nil))})})))
 
 (rum/defc property-block-value < rum/reactive
-  [parent block-cp editor-box opts]
-  (when parent
-    (let [children (:block/_parent (db/sub-block (:db/id parent)))]
-      (when (empty? children)
-        (let [repo (state/get-current-repo)
-              pid (:block/uuid (db/entity [:block/name "created-in-property"]))
-              child-1-id (db/new-block-id)
-              child-1 (-> {:block/uuid child-1-id
-                           :block/format :markdown
-                           :block/content ""
-                           :block/page (:db/id (:block/page parent))
-                           :block/parent (:db/id parent)
-                           :block/left (:db/id parent)
-                           :block/properties {pid true}}
-                          outliner-core/block-with-timestamps)]
-          (db/transact! repo [child-1] {:outliner-op :insert-blocks})))
+  [repo block property value block-cp editor-box opts]
+  (let [parent (db/entity [:block/uuid value])
+        parent (db/sub-block (:db/id parent))
+        children (:block/_parent parent)
+        children-count (count (:block/_parent parent))
+        empty-block? (or (nil? parent) (zero? children-count))]
+    (when empty-block?
+      (when parent
+        (db/transact! repo [[:db/retractEntity (:db/id parent)]]))
+      (property-handler/delete-property-value! repo block (:block/uuid property) value))
+    (when (seq children)
       [:div.property-block-container.w-full
        (block-cp children {:id (str (:block/uuid parent))
                            :blocks-container-id (:blocks-container-id opts)
@@ -314,9 +314,6 @@
                                                         :classes (:classes schema)
                                                         :multiple? multiple-values?))]
 
-           :block
-           nil
-
            (let [config {:editor-opts (new-text-editor-opts repo block property value editor-id)}]
              [:div
               (editor-box editor-args editor-id (cond-> config
@@ -328,15 +325,15 @@
                  :class class
                  :style {:min-height 24}
                  :on-click (fn []
-                             (let [ref? (contains? #{:page :block} type)]
+                             (let [ref? (contains? #{:page} type)]
                                (when (or (not ref?)
                                          (and (string/blank? value) ref?))
-                                 (when-not (and (= type :block) (string/blank? value))
+                                 (when-not (and (= type :default) (uuid? value)) ; block
                                    (set-editing! property editor-id dom-id value)))))}
            (let [type (if (and (= type :default) (uuid? value))
                         (if-let [e (db/entity [:block/uuid value])]
                           (if (:block/name e) :page :block)
-                          type)
+                          :block)
                         type)]
              (if (string/blank? value)
                [:div.opacity-70
@@ -350,16 +347,7 @@
                    (page-cp {:disable-preview? true} page))
 
                  :block
-                 (if-let [parent (db/entity [:block/uuid value])]
-                   (property-block-value parent block-cp editor-box opts)
-                   (do
-                     (if multiple-values?
-                       (property-handler/delete-property-value! repo block (:block/uuid property) value)
-                       (property-handler/remove-block-property! repo
-                                                                (:block/uuid block)
-                                                                (:block/uuid property)))
-                     (exit-edit-property)
-                     nil))
+                 (property-block-value repo block property value block-cp editor-box opts)
 
                  (inline-text {} :markdown (str value)))))])))))
 
