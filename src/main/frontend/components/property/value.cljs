@@ -198,6 +198,23 @@
     (add-property! block (:block/original-name property) parent-id)
     (editor-handler/edit-block! (db/entity [:block/uuid child-2-id]) 0 child-2-id)))
 
+(defn create-new-block-from-template!
+  [block property template]
+  (let [repo (state/get-current-repo)
+        pid (:block/uuid (db/entity [:block/name "created-in-property"]))
+        page-id (or (:db/id (:block/page block)) (:db/id block))
+        block-id (db/new-block-id)
+        value-block (-> {:block/uuid block-id
+                         :block/format :markdown
+                         :block/content ""
+                         :block/tags #{(:db/id template)}
+                         :block/page {:db/id page-id}
+                         :block/properties {pid true}}
+                        outliner-core/block-with-timestamps)
+        tx-data [value-block]]
+    (db/transact! repo tx-data {:outliner-op :insert-blocks})
+    (add-property! block (:block/original-name property) block-id)))
+
 (defn- new-text-editor-opts
   [repo block property value editor-id]
   {:style {:padding 0
@@ -274,6 +291,15 @@
                            :editor-box editor-box
                            :in-property? true})])))
 
+(rum/defc property-template-value < rum/reactive
+  [config value opts]
+  (let [e (db/entity [:block/uuid value])
+        entity (db/sub-block (:db/id e))
+        properties-cp (:properties-cp opts)]
+    (when (and entity properties-cp)
+      [:div.property-block-container.w-full
+       (properties-cp config entity (:editor-id config) (merge opts {:in-block-container? true}))])))
+
 (rum/defc property-scalar-value < rum/reactive db-mixins/query
   [block property value {:keys [inline-text page-cp block-cp
                                 editor-id dom-id row?
@@ -284,7 +310,7 @@
   (let [property (model/sub-block (:db/id property))
         repo (state/get-current-repo)
         schema (:block/schema property)
-        type (:type schema)
+        type (get schema :type :default)
         multiple-values? (= :many (:cardinality schema))
         editor-id (or editor-id (str "ls-property-" blocks-container-id "-" (:db/id block) "-" (:db/id property)))
         editing? (or editing? (state/sub-editing? editor-id))
@@ -330,23 +356,41 @@
                              (let [ref? (contains? #{:page} type)]
                                (when (or (not ref?)
                                          (and (string/blank? value) ref?))
-                                 (when-not (and (= type :default) (uuid? value)) ; block
+                                 (when-not (and (contains? #{:default :template} type) (uuid? value)) ; block
                                    (set-editing! property editor-id dom-id value)))))}
-           (let [type (if (and (= type :default) (uuid? value))
-                        (if-let [e (db/entity [:block/uuid value])]
-                          (if (:block/name e) :page :block)
-                          :block)
-                        type)]
+           (let [type (or
+                       (if (and (= type :default) (uuid? value))
+                         (if-let [e (db/entity [:block/uuid value])]
+                           (if (:block/name e) :page :block)
+                           :block)
+                         type)
+                       :default)]
              (if (string/blank? value)
-               [:div.opacity-50.pointer.text-sm
-                (case type
-                  :page
-                  (if multiple-values? "Choose pages" "Choose page")
-                  "Empty")]
+               (if (= :template type)
+                 (let [id (first (:classes schema))
+                       template (when id (db/entity [:block/uuid id]))]
+                   (when template
+                     [:a.fade-link.pointer.text-sm
+                      {:on-click (fn [e]
+                                   (util/stop e)
+                                   (create-new-block-from-template! block property template))}
+                      (str "Use template #" (:block/original-name template))]))
+                 [:div.opacity-50.pointer.text-sm
+                  (case type
+                    :page
+                    (if multiple-values? "Choose pages" "Choose page")
+
+                    "Empty")])
                (case type
                  :page
                  (when-let [page (db/entity [:block/uuid value])]
                    (page-cp {:disable-preview? true} page))
+
+                 :template
+                 (property-template-value {:blocks-container-id blocks-container-id
+                                           :editor-id editor-id}
+                                          value
+                                          opts)
 
                  :block
                  (property-block-value repo block property value block-cp editor-box opts)
@@ -395,7 +439,7 @@
   [state block property v opts dom-id schema editor-id editor-args]
   (let [*show-add? (::show-add? state)
         *add-new-item? (::add-new-item? state)
-        type (:type schema)
+        type (get schema :type :default)
         row? (contains? #{:page :date :number :url} type)
         items (if (coll? v) v (when v [v]))]
     [:div.relative
@@ -450,7 +494,7 @@
   (let [dom-id (str "ls-property-" (:blocks-container-id opts) "-" (:db/id property))
         editor-id (str dom-id "-editor")
         schema (:block/schema property)
-        type (:type schema)
+        type (get schema :type :default)
         multiple-values? (= :many (:cardinality schema))
         editor-args {:block property
                      :parent-block block

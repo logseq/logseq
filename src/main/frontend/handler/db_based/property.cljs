@@ -21,6 +21,12 @@
        (when-let [e (db/entity [:block/uuid id])]
          (nil? (:block/page e)))))
 
+;; FIXME: template instance check
+(defn- logseq-template?
+  [id]
+  (and (uuid? id)
+       (some? (db/entity [:block/uuid id]))))
+
 (defn- text-or-uuid?
   [value]
   (or (string? value) (uuid? value)))
@@ -40,6 +46,9 @@
    :page     [:fn
               {:error/message "should be a page"}
               logseq-page?]
+   :template [:fn
+              {:error/message "should has #template"}
+              logseq-template?]
    ;; internal usage
    :keyword  keyword?
    :map      map?
@@ -48,7 +57,7 @@
    :any      some?})
 
 (def internal-builtin-schema-types #{:keyword :map :coll :any})
-(def user-face-builtin-schema-types [:default :number :date :checkbox :url :page])
+(def user-face-builtin-schema-types [:default :number :date :checkbox :url :page :template])
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
