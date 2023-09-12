@@ -44,25 +44,13 @@
 
 (defn will-unmount
   [state]
-  (let [{:keys [block value node]} (get-state)
-        property? (= "property" (:block/type block))
-        repo (state/get-current-repo)]
+  (let [{:keys [block value]} (get-state)]
     (editor-handler/clear-when-saved!)
     (when (and
            (not (contains? #{:insert :indent-outdent :auto-save :undo :redo :delete} (state/get-editor-op)))
            ;; Don't trigger auto-save if the latest op is undo or redo
            (not (contains? #{:undo :redo} (state/get-editor-latest-op))))
-      (if property?
-        ;; click outside property value to save it
-        (let [parent-block (when-let [id (d/attr node "parentblockid")]
-                             (when (util/uuid-string? id)
-                               (db/entity [:block/uuid (uuid id)])))
-              property (:block/name block)
-              old-value (:property-value (last (state/get-editor-args)))]
-          (when (and parent-block property)
-            (property-handler/set-block-property! repo (:block/uuid parent-block) property value
-                                                  :old-value old-value)))
-        (editor-handler/save-block! (get-state) value))))
+      (editor-handler/save-block! (get-state) value)))
   state)
 
 (def lifecycle

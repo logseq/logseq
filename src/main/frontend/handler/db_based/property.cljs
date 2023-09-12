@@ -21,13 +21,14 @@
        (when-let [e (db/entity [:block/uuid id])]
          (nil? (:block/page e)))))
 
-(defn- logseq-block?
-  [id]
-  (and (uuid? id)
-       (some? (db/entity [:block/uuid id]))))
+(defn- text-or-uuid?
+  [value]
+  (or (string? value) (uuid? value)))
 
 (def builtin-schema-types
-  {:default  string?                     ; refs/tags will not be extracted
+  {:default  [:fn
+              {:error/message "should be a text or UUID"}
+              text-or-uuid?]                     ; refs/tags will not be extracted
    :number   number?
    :date     [:fn
               {:error/message "should be a journal date"}
@@ -39,9 +40,6 @@
    :page     [:fn
               {:error/message "should be a page"}
               logseq-page?]
-   :block    [:fn
-              {:error/message "should be a block"}
-              logseq-block?]
    ;; internal usage
    :keyword  keyword?
    :map      map?
@@ -50,7 +48,7 @@
    :any      some?})
 
 (def internal-builtin-schema-types #{:keyword :map :coll :any})
-(def user-face-builtin-schema-types [:default :number :date :checkbox :url :page :block])
+(def user-face-builtin-schema-types [:default :number :date :checkbox :url :page])
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
@@ -74,7 +72,7 @@
     v-str
     (case schema-type
       (:default :any :url)
-      v-str
+      (if (util/uuid-string? v-str) (uuid v-str) v-str)
 
       :number
       (edn/read-string v-str)
@@ -83,9 +81,6 @@
       (edn/read-string (string/lower-case v-str))
 
       :page
-      (uuid v-str)
-
-      :block
       (uuid v-str)
 
       :date
@@ -173,7 +168,10 @@
                                   new-value)
                       block-properties (assoc properties property-uuid new-value)
                       refs (outliner-core/rebuild-block-refs block block-properties)]
-                  ;; TODO: fix block/properties-order
+                  (util/pprint [[:db/retract (:db/id block) :block/refs]
+                                 {:block/uuid (:block/uuid block)
+                                  :block/properties block-properties
+                                  :block/refs refs}])
                   (db/transact! repo
                                 [[:db/retract (:db/id block) :block/refs]
                                  {:block/uuid (:block/uuid block)
