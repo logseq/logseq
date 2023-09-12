@@ -62,14 +62,14 @@
       :on-click on-click}
      (ui/icon "menu-2" {:size ui/icon-size})]))
 
-(def bug-report-url
+(defn bug-report-url []
   (let [ua (.-userAgent js/navigator)
         safe-ua (string/replace ua #"[^_/a-zA-Z0-9\.\(\)]+" " ")
         platform (str "App Version: " version "\n"
                       "Git Revision: " config/REVISION "\n"
                       "Platform: " safe-ua "\n"
                       "Language: " (.-language js/navigator) "\n"
-                      "Plugins: " (str (keys (:plugin/installed-plugins @state/state))))]
+                      "Plugins: " (string/join ", " (map name (keys (:plugin/installed-plugins @state/state)))))]
     (str "https://github.com/logseq/logseq/issues/new?"
          "title=&"
          "template=bug_report.yaml&"
