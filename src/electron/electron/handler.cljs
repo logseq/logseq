@@ -244,7 +244,7 @@
                                   (.toString (.readFileSync fs txid-path)))]
           (reader/read-string sync-meta))))
     (catch :default e
-      (js/console.debug "[read txid meta] #" root (.-message e)))))
+      (logger/error "[read txid meta] #" root (.-message e)))))
 
 (defmethod handle :inflateGraphsInfo [_win [_ graphs]]
   (if (seq graphs)
