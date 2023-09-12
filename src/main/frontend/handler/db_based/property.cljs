@@ -96,7 +96,7 @@
   [repo k-name schema {:keys [property-uuid]}]
   (let [property (db/entity [:block/name (gp-util/page-name-sanity-lc k-name)])
         k-name (name k-name)
-        property-uuid (or (:block/uuid property) property-uuid (random-uuid))]
+        property-uuid (or (:block/uuid property) property-uuid (db/new-block-id))]
     (when (and property (nil? (:block/type property)))
       (db/transact! repo [(outliner-core/block-with-updated-at
                            {:block/schema schema
@@ -119,7 +119,7 @@
         property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
         v (if property v (or v ""))]
     (when (some? v)
-      (let [property-uuid (or (:block/uuid property) (random-uuid))
+      (let [property-uuid (or (:block/uuid property) (db/new-block-id))
             {:keys [type cardinality]} (:block/schema property)
             multiple-values? (= cardinality :many)
             infer-schema (when-not type (infer-schema-from-input-string v))
@@ -220,7 +220,7 @@
   (when (= "class" (:block/type class))
     (let [k-name (name k-name)
           property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
-          property-uuid (or (:block/uuid property) (random-uuid))
+          property-uuid (or (:block/uuid property) (db/new-block-id))
           property-type (get-in property [:block/schema :type] :default)
           {:keys [properties] :as class-schema} (:block/schema class)
           _ (upsert-property! repo k-name {:type property-type}
@@ -249,7 +249,7 @@
   [repo block-ids k-name v]
   (let [k-name (name k-name)
         property (db/entity repo [:block/name (gp-util/page-name-sanity-lc k-name)])
-        property-uuid (or (:block/uuid property) (random-uuid))
+        property-uuid (or (:block/uuid property) (db/new-block-id))
         type (:type (:block/schema property))
         infer-schema (when-not type (infer-schema-from-input-string v))
         property-type (or type infer-schema :default)

@@ -121,7 +121,7 @@
                                (remove property-handler/internal-builtin-schema-types)
                                (map (comp string/capitalize name))
                                (map (fn [type]
-                                      {:label type
+                                      {:label (if (= type "Default") "Text" type)
                                        :disabled built-in-property?
                                        :value type
                                        :selected (= (keyword (string/lower-case type))
@@ -427,7 +427,8 @@
         properties (if class-schema?
                      (let [properties (:properties (:block/schema block))]
                        (map (fn [k] [k nil]) properties))
-                     (:block/properties block))
+                     (->> (:block/properties block)
+                          (sort-by first)))
         alias (set (map :block/uuid (:block/alias block)))
         tags (set (map :block/uuid (:block/tags block)))
         alias-properties (when (seq alias)
@@ -455,8 +456,7 @@
                                           (seq alias-properties)
                                           (seq properties))
                                   remove-built-in-properties
-                                  (remove (fn [[id _]] ((set classes-properties) id)))
-                                  (sort-by first))
+                                  (remove (fn [[id _]] ((set classes-properties) id))))
         ;; This section produces own-properties and full-hidden-properties
         hide-with-property-id (fn [property-id]
                                 (let [eid (if (uuid? property-id) [:block/uuid property-id] property-id)]
