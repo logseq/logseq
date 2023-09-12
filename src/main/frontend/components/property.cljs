@@ -132,7 +132,7 @@
                        (let [type (keyword (string/lower-case v))]
                          (swap! *property-schema assoc :type type))))])]
 
-      (when (= :object (:type @*property-schema))
+      (when (= :page (:type @*property-schema))
         [:div.grid.grid-cols-4.gap-1.leading-8
          [:label "Specify classes:"]
          (class-select *property-schema (:classes @*property-schema) opts)])

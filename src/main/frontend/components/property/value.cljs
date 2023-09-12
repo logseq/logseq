@@ -100,8 +100,8 @@
         opts {:items options
               :dropdown? true
               :input-default-placeholder (if multiple-values?
-                                           (str "Choose " (if (= type :object) "objects" "pages"))
-                                           (str "Choose " (if (= type :object) "object" "page")))
+                                           "Choose pages"
+                                           "Choose page")
               :on-chosen (fn [chosen]
                            (let [page (string/trim (if (string? chosen) chosen (:value chosen)))
                                  id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))
@@ -339,13 +339,10 @@
            (list :number :url)
            [:div.h-6 (select block property select-opts)]
 
-           :object
+           :page
            [:div.h-6 (select-page block property (assoc select-opts
                                                         :classes (:classes schema)
                                                         :multiple? multiple-values?))]
-
-           :page
-           [:div.h-6 (select-page block property select-opts)]
 
            :block
            nil
@@ -361,7 +358,7 @@
                  :class class
                  :style {:min-height 24}
                  :on-click (fn []
-                             (let [ref? (contains? #{:page :block :object} type)]
+                             (let [ref? (contains? #{:page :block} type)]
                                (when (or (not ref?)
                                          (and (string/blank? value) ref?))
                                  (when-not (and (= type :block) (string/blank? value))
@@ -374,16 +371,10 @@
              (if (string/blank? value)
                [:div.opacity-70.text-sm
                 (case type
-                  :object
-                  (if multiple-values? "Choose objects" "Choose object")
                   :page
                   (if multiple-values? "Choose pages" "Choose page")
                   "Input something")]
                (case type
-                 :object
-                 (when-let [object (db/entity [:block/uuid value])]
-                   (page-cp {:disable-preview? true} object))
-
                  :page
                  (when-let [page (db/entity [:block/uuid value])]
                    (page-cp {:disable-preview? true} page))
@@ -472,7 +463,7 @@
         type (:type schema)
         block? (= type :block)
         default? (= type :default)
-        row? (contains? #{:page :object} type)
+        row? (contains? #{:page} type)
         items (if (coll? v) v (when v [v]))]
     [:div.relative
      {:class (cond
@@ -546,7 +537,7 @@
       multiple-values?
       (multiple-values block property v opts dom-id schema editor-id editor-args)
 
-      (contains? #{:page :object} type)
+      (contains? #{:page} type)
       [:div.flex.flex-1.items-center.property-value-content
        (item-with-close block property v
                         (merge
