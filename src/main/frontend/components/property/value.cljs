@@ -47,7 +47,7 @@
        (exit-edit-property)))))
 
 (rum/defc date-picker
-  [block property value]
+  [block property value *add-new-item?]
   (let [title (when (uuid? value)
                 (:block/original-name (db/entity [:block/uuid value])))
         value (if title
@@ -77,10 +77,12 @@
                                                (property-handler/set-block-property! repo (:block/uuid block)
                                                                                      (:block/name property)
                                                                                      (:block/uuid page)))
+                                             (reset! *add-new-item? false)
                                              (exit-edit-property)
                                              (toggle-fn)))}))
      {:modal-class (util/hiccup->class
-                    "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})))
+                    "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")
+      :initial-open? (when *add-new-item? @*add-new-item?)})))
 
 (defn- select-page
   [block property {:keys [classes multiple-values?] :as opts}]
@@ -291,7 +293,7 @@
                                   (when *add-new-item? (reset! *add-new-item? false)))}]
     (case type
       :date
-      (date-picker block property value)
+      (date-picker block property value *add-new-item?)
 
       :checkbox
       (let [add-property! (fn []
@@ -394,7 +396,7 @@
   (let [*show-add? (::show-add? state)
         *add-new-item? (::add-new-item? state)
         type (:type schema)
-        row? (contains? #{:page} type)
+        row? (contains? #{:page :date :number :url} type)
         items (if (coll? v) v (when v [v]))]
     [:div.relative
      {:class (cond
