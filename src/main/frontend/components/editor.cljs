@@ -127,7 +127,7 @@
 
 (rum/defcs page-search < rum/reactive
   {:init (fn [state]
-           (reset! (:editor/create-object? @state/state) true)
+           (reset! (:editor/create-page? @state/state) true)
            state)
    :will-unmount (fn [state]
                    (reset! commands/*current-command nil)
@@ -138,7 +138,7 @@
         db? (config/db-based-graph? (state/get-current-repo))
         embed? (and db? (= @commands/*current-command "Page embed"))
         tag? (= action :page-search-hashtag)
-        create-object? (state/sub :editor/create-object?)]
+        create-page? (state/sub :editor/create-page?)]
     (when (contains? #{:page-search :page-search-hashtag} action)
       (let [pos (state/get-editor-last-pos)
             input (gdom/getElement id)]
@@ -182,10 +182,10 @@
             [:div
              (when (and db? tag?)
                [:div.flex.flex-row.items-center.px-4.py-1.text-sm.opacity-70.gap-2
-                "Create object:"
-                (ui/toggle create-object?
+                "Create page:"
+                (ui/toggle create-page?
                            (fn [_e]
-                             (swap! (:editor/create-object? @state/state) not))
+                             (swap! (:editor/create-page? @state/state) not))
                            true)])
              (ui/auto-complete
               matched-pages
@@ -707,7 +707,7 @@
            (assoc state
                   ::id (str (random-uuid))))
    :will-unmount (fn [state]
-                   (reset! (:editor/create-object? @state/state) false)
+                   (reset! (:editor/create-page? @state/state) false)
                    state)
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))
