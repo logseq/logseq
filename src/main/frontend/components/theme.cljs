@@ -34,8 +34,10 @@
 
     (rum/use-effect!
      #(let [doc js/document.documentElement]
-        (.setAttribute doc "lang" preferred-language)
-        (js/setTimeout (fn [] (ipc/ipc "theme-loaded")) 100)) ; Wait for the theme to be applied
+        (.setAttribute doc "lang" preferred-language)))
+
+    (rum/use-effect!
+     #(js/setTimeout (fn [] (ipc/ipc "theme-loaded")) 100) ; Wait for the theme to be applied
      [])
 
     (rum/use-effect!
