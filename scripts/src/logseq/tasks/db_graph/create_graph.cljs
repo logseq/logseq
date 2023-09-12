@@ -128,7 +128,7 @@
  * Only top level blocks can be easily defined. Other level blocks can be
    defined but they require explicit setting of attributes like :block/left and :block/parent
  * Block content containing page refs or tags is not supported yet
- * Property types :object and :date aren't supported yet
+ * Property type :date isn't supported yet
 
    The EDN map has the following keys:
 
@@ -144,7 +144,7 @@
    The :properties for :pages-and-blocks is a map of property names to property
    values.  Multiple property values for a many cardinality property are defined
    as a set. The following property types are supported: :default, :url,
-   :checkbox, :number, :page and :block. :checkbox and :number values are written
+   :checkbox, :number and :page. :checkbox and :number values are written
    as booleans and integers. :page and :block are references that are written as
    vectors e.g. `[:page \"PAGE NAME\"]` and `[:block \"block content\"]`"
   [{:keys [pages-and-blocks properties]}]
