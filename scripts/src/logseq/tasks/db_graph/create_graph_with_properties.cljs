@@ -20,49 +20,59 @@
                     (.toLocaleString date "en-US" #js {:month "2-digit"})
                     (.toLocaleString date "en-US" #js {:day "2-digit"}))))
 
+(defn- subtract-days
+  [date days]
+  (new js/Date (- (.getTime date) (* days 24 60 60 1000))))
+
 (defn- create-init-data
   []
-  {:pages-and-blocks
-   [{:page
-     (let [today (new js/Date)]
-       {:block/name (date-journal-title today) :block/journal? true :block/journal-day (date-journal-day today)})
-     :blocks
-     [{:block/content "[[Properties]]"}
-      {:block/content "[[Queries]]"}]}
-    {:page {:block/name "properties"}
-     :blocks
-     [{:block/content "default property block" :properties {:default "haha"}}
-      {:block/content "url property block" :properties {:url "https://logseq.com"}}
+  (let [today (new js/Date)
+        yesterday (subtract-days today 1)]
+    {:pages-and-blocks
+     [{:page
+       {:block/name (date-journal-title today) :block/journal? true :block/journal-day (date-journal-day today)}
+       :blocks
+       [{:block/content "[[Properties]]"}
+        {:block/content "[[Queries]]"}]}
+      {:page
+       {:block/name (date-journal-title yesterday) :block/journal? true :block/journal-day (date-journal-day yesterday)}}
+      {:page {:block/name "properties"}
+       :blocks
+       [{:block/content "default property block" :properties {:default "haha"}}
+        {:block/content "url property block" :properties {:url "https://logseq.com"}}
       ;; TODO: Add a default many example with blocks
-      #_{:block/content "default-many property block" :properties {:default-many #{"woo" "hoo"}}}
-      {:block/content "url-many property block" :properties {:url-many #{"https://logseq.com" "https://docs.logseq.com"}}}
-      {:block/content "checkbox property block" :properties {:checkbox true}}
-      {:block/content "number property block" :properties {:number 5}}
-      {:block/content "number-many property block" :properties {:number-many #{5 10}}}
-      {:block/content "page property block" :properties {:page [:page "page 1"]}}
-      {:block/content "page-many property block" :properties {:page-many #{[:page "page 1"] [:page "page 2"]}}}]}
-    {:page {:block/name "queries"}
-     :blocks
-     [{:block/content "{{query (property :default \"haha\")}}"}
-      {:block/content "{{query (property :url \"https://logseq.com\")}}"}
-      {:block/content "{{query (property :default-many \"woo\")}}"}
-      {:block/content "{{query (property :url-many \"https://logseq.com\")}}"}
-      {:block/content "{{query (property :checkbox true)}}"}
-      {:block/content "{{query (property :number 5)}}"}
-      {:block/content "{{query (property :number-many 10)}}"}
-      {:block/content "{{query (property :page \"Page 1\")}}"}
-      {:block/content "{{query (property :page-many \"Page 2\")}}"}]}
-    {:page {:block/name "page 1"}
-     :blocks
-     [{:block/content "yee"}
-      {:block/content "haw"}]}
-    {:page {:block/name "page 2"}}]
-   :properties
-   (->> [:default :url :checkbox :number :page]
-        (mapcat #(cond-> [[% {:block/schema {:type %}}]]
-                   (not (#{:checkbox :default} %))
-                   (conj [(keyword (str (name %) "-many")) {:block/schema {:type % :cardinality :many}}])))
-        (into {}))})
+        #_{:block/content "default-many property block" :properties {:default-many #{"woo" "hoo"}}}
+        {:block/content "url-many property block" :properties {:url-many #{"https://logseq.com" "https://docs.logseq.com"}}}
+        {:block/content "checkbox property block" :properties {:checkbox true}}
+        {:block/content "number property block" :properties {:number 5}}
+        {:block/content "number-many property block" :properties {:number-many #{5 10}}}
+        {:block/content "page property block" :properties {:page [:page "page 1"]}}
+        {:block/content "page-many property block" :properties {:page-many #{[:page "page 1"] [:page "page 2"]}}}
+        {:block/content "date property block" :properties {:date [:page (date-journal-title today)]}}
+        {:block/content "date-many property block" :properties {:date-many #{[:page (date-journal-title today)]
+                                                                             [:page (date-journal-title yesterday)]}}}]}
+      {:page {:block/name "queries"}
+       :blocks
+       [{:block/content "{{query (property :default \"haha\")}}"}
+        {:block/content "{{query (property :url \"https://logseq.com\")}}"}
+        #_{:block/content "{{query (property :default-many \"woo\")}}"}
+        {:block/content "{{query (property :url-many \"https://logseq.com\")}}"}
+        {:block/content "{{query (property :checkbox true)}}"}
+        {:block/content "{{query (property :number 5)}}"}
+        {:block/content "{{query (property :number-many 10)}}"}
+        {:block/content "{{query (property :page \"Page 1\")}}"}
+        {:block/content "{{query (property :page-many \"Page 2\")}}"}]}
+      {:page {:block/name "page 1"}
+       :blocks
+       [{:block/content "yee"}
+        {:block/content "haw"}]}
+      {:page {:block/name "page 2"}}]
+     :properties
+     (->> [:default :url :checkbox :number :page :date]
+          (mapcat #(cond-> [[% {:block/schema {:type %}}]]
+                     (not (#{:checkbox :default} %))
+                     (conj [(keyword (str (name %) "-many")) {:block/schema {:type % :cardinality :many}}])))
+          (into {}))}))
 
 (defn -main [args]
   (when (not= 1 (count args))

@@ -6,7 +6,6 @@
             [frontend.db.model :as model]
             [frontend.handler.notification :as notification]
             [frontend.modules.outliner.core :as outliner-core]
-            [frontend.state :as state]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [malli.util :as mu]
@@ -80,7 +79,7 @@
   (if (and (not (string? v-str)) (not (object? v-str)))
     v-str
     (case schema-type
-      (:default :any :url)
+      :default
       (if (util/uuid-string? v-str) (uuid v-str) v-str)
 
       :number
@@ -92,8 +91,10 @@
       :page
       (uuid v-str)
 
-      :date
-      v-str                  ; uuid
+      ;; these types don't need to be translated. :date expects uuid and other
+      ;; types usually expect text
+      (:url :date :any)
+      v-str
       )))
 
 (defn upsert-property!
