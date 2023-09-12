@@ -44,32 +44,40 @@
                             (toggle-fn))})))))
 
 (rum/defcs class-select < (rum/local false ::open?)
-  [state *property-schema schema-classes _opts]
+  [state *property-schema schema-classes {:keys [multiple-choices?]
+                                          :or {multiple-choices? true}}]
   (let [*open? (::open? state)]
     (if @*open?
       (let [classes (db-model/get-all-classes (state/get-current-repo))
             options (map (fn [[name id]] {:label name
                                           :value id})
                          classes)
-            opts {:items options
-                  :input-default-placeholder "Choose classes"
-                  :dropdown? true
-                  :multiple-choices? true
-                  :selected-choices schema-classes
-                  :extract-fn :label
-                  :extract-chosen-fn :value
-                  :on-apply (fn [choices]
-                              (swap! *property-schema assoc :classes choices)
-                              (reset! *open? false))
-                  :input-opts {:on-blur (fn [] (reset! *open? false))
-                               :on-key-down
-                               (fn [e]
-                                 (case (util/ekey e)
-                                   "Escape"
-                                   (do
-                                     (util/stop e)
-                                     (reset! *open? false))
-                                   nil))}}]
+            opts (cond->
+                  {:items options
+                   :input-default-placeholder (if multiple-choices? "Choose classes" "Choose class")
+                   :dropdown? true
+                   :multiple-choices? multiple-choices?
+                   :selected-choices schema-classes
+                   :extract-fn :label
+                   :extract-chosen-fn :value
+                   :input-opts {:on-blur (fn [] (reset! *open? false))
+                                :on-key-down
+                                (fn [e]
+                                  (case (util/ekey e)
+                                    "Escape"
+                                    (do
+                                      (util/stop e)
+                                      (reset! *open? false))
+                                    nil))}}
+                   multiple-choices?
+                   (assoc :on-apply (fn [choices]
+                                      (swap! *property-schema assoc :classes choices)
+                                      (reset! *open? false)))
+
+                   (not multiple-choices?)
+                   (assoc :on-chosen (fn [value]
+                                       (swap! *property-schema assoc :classes [value])
+                                       (reset! *open? false))))]
         (select/select opts))
       [:div.flex.flex-1.flex-row.cursor.items-center.flex-wrap.gap-2.col-span-3
        {:on-click #(reset! *open? true)}
@@ -79,7 +87,9 @@
              (let [page-name (:block/original-name page)]
                [:a.text-sm (str "#" page-name)])))
          [:div.text-sm
-          "Click to add classes"])])))
+          (if multiple-choices?
+            "Click to add classes"
+            "Click to select a class")])])))
 
 (rum/defcs property-config <
   rum/reactive
@@ -137,7 +147,13 @@
          [:label "Specify classes:"]
          (class-select *property-schema (:classes @*property-schema) opts)])
 
-      (when-not (contains? #{:checkbox :default} (:type @*property-schema))
+      (when (= :template (:type @*property-schema))
+        [:div.grid.grid-cols-4.gap-1.leading-8
+         [:label "Specify template:"]
+         (class-select *property-schema (:classes @*property-schema)
+                       (assoc opts :multiple-choices? false))])
+
+      (when-not (contains? #{:checkbox :default :template} (:type @*property-schema))
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
          [:label "Multiple values:"]
          (let [many? (boolean (= :many (:cardinality @*property-schema)))]
@@ -387,7 +403,7 @@
     (for [[k v] properties]
       (when (uuid? k)
         (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid k])))]
-          (let [block? (and (= :default (get-in property [:block/schema :type]))
+          (let [block? (and (contains? #{:default :template} (get-in property [:block/schema :type] :default))
                             (uuid? v)
                             (db/entity [:block/uuid v]))]
             [:div {:class (if block?
