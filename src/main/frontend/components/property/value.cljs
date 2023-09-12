@@ -16,7 +16,8 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [medley.core :as medley]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.handler.route :as route-handler]))
 
 (defn exit-edit-property
   []
@@ -46,6 +47,11 @@
      (when exit-edit?
        (exit-edit-property)))))
 
+(defn- navigate-to-date-page
+  [value]
+  (when value
+    (route-handler/redirect-to-page! (date/js-date->journal-title value))))
+
 (rum/defc date-picker
   [block property value *add-new-item?]
   (let [title (when (uuid? value)
@@ -59,7 +65,11 @@
      (fn [{:keys [toggle-fn]}]
        [:a.flex
         {:tabIndex "0"
-         :on-click toggle-fn
+         ;; meta-click or just click in publishing to navigate to date's page
+         :on-click (if config/publishing? #(navigate-to-date-page value) toggle-fn)
+         :on-mouse-down (fn [e]
+                          (when (util/meta-key? e)
+                            (navigate-to-date-page value)))
          :on-key-down (fn [e]
                         (when (= (util/ekey e) "Enter")
                           toggle-fn))}
