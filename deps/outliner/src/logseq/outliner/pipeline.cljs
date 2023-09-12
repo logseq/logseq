@@ -47,7 +47,7 @@
                   (assoc b :page_uuid page-uuid)
                   b)))
          (map (fn [b]
-                (let [uuid (or (:block/uuid b) (random-uuid))]
+                (let [uuid (or (:block/uuid b) (d/squuid))]
                   (assoc b :block/uuid uuid)))))))
 
 ;; non recursive query
