@@ -14,6 +14,15 @@
 
 (defonce *quitting? (atom false))
 
+;; Append a switch to disable site isolation trials
+(.appendSwitch app.commandLine "disable-site-isolation-trials")
+
+;; Set webPreferences to disable web security
+(let [web-prefs
+      {:webSecurity false}]
+  (set! (.-webPreferences electron.BrowserWindow) web-prefs))
+
+
 (def MAIN_WINDOW_ENTRY (if dev?
                          ;;"http://localhost:3001"
                          (str "file://" (node-path/join js/__dirname "index.html"))
@@ -56,6 +65,16 @@
                      linux?
                      (assoc :icon (node-path/join js/__dirname "icons/logseq.png")))
          win       (BrowserWindow. (clj->js win-opts))]
+  ;; Insert your JavaScript code here
+  (js/const cookie {:url "http://music.163.com" :name "MUSIC_U" :value "00CB6384E7488C73935F0A453866798E06119587F495AB73989B551B1A708C7FC99A348BE1F43A5A48D082F7F593A7942C9CB8BDC7C263D7555BA46C95314D91CD852B7D6213A6E61B1A9899AF0015E7E501D88DADEDA5358A12AD74AD42A24F405C73B7665B9940D2A12139CF39E8ADF09455B55AF13E8E24B3DB1945379D5D48C8FAC8272A2241A5857AFAB0A1E4A739E0E48AE1B7326D26416079D1A0CBE36B1FED9BA035EB743CAC5AF2F169DADE043283DDB5D5C291DAB8CB28F660629DF163F245A8E6E3A18372B18367D0FDA3A291DC525A26309DB7675D51596C9E57F5D8307912561DFA2BFF14F1EB2D15B7DCA48C57CBD47F9E11BC33060B36B473B1C40DBADD1546B612A7A97D1D2CAD3F4FDE1055991A5BE3F6E5A8512B23D75D598551F79917681DA1EE7664899EE6CE8CE9FDCDF4375D406DB852234CB3AB43FD8947176E330C999CC36EA81EB8E14E63"})
+  (js/.then (.set (.-cookies (.-defaultSession session)) cookie)
+           (fn [] (println "Success")))
+  (js/.catch
+  (.console.error js/console)
+  (fn [error] (.error js/console error)))
+  ))
+
+  
      (.onBeforeSendHeaders (.. session -defaultSession -webRequest)
                            (clj->js {:urls (array "*://*.youtube.com/*")})
                            (fn [^js details callback]
