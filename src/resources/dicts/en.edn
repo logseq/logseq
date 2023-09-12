@@ -490,6 +490,7 @@
  :graph-search "Search graph"
  :home "Home"
  :new-page "New page:"
+ :new-class "New class:"
  :whiteboard "Whiteboard"
  :whiteboards "Whiteboards"
  :new-whiteboard "New whiteboard:"

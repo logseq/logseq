@@ -141,7 +141,8 @@
   ([q limit]
    (when-let [repo (state/get-current-repo)]
      (let [q (util/search-normalize q (state/enable-search-remove-accents?))
-           q (clean-str q)]
+           q (clean-str q)
+           q (if (= \# (first q)) (subs q 1) q)]
        (when-not (string/blank? q)
          (let [indice (or (get-in @indices [repo :pages])
                           (search-db/make-pages-title-indice!))
@@ -149,8 +150,8 @@
                            (bean/->clj))]
            ;; TODO: add indexes for highlights
            (->> (map
-                  (fn [{:keys [item]}]
-                    (:original-name item))
+                 (fn [{:keys [item]}]
+                   (:original-name item))
                  result)
                 (remove nil?)
                 (map string/trim)
