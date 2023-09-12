@@ -68,7 +68,8 @@
         platform (str "App Version: " version "\n"
                       "Git Revision: " config/REVISION "\n"
                       "Platform: " safe-ua "\n"
-                      "Language: " (.-language js/navigator))]
+                      "Language: " (.-language js/navigator) "\n"
+                      "Plugins: " (str (keys (:plugin/installed-plugins @state/state))))]
     (str "https://github.com/logseq/logseq/issues/new?"
          "title=&"
          "template=bug_report.yaml&"
@@ -114,7 +115,7 @@
           :options {:href (rfe/href :import)}
           :icon (ui/icon "file-upload")})
 
-       (when-not config/publishing? 
+       (when-not config/publishing?
          {:title [:div.flex-row.flex.justify-between.items-center
                   [:span (t :join-community)]]
           :options {:href "https://discuss.logseq.com"
