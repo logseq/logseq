@@ -435,9 +435,12 @@
                                 :editing? true
                                 :*add-new-item? *add-new-item?}))
 
-       (and (or @*show-add? (empty? items)) row? (not config/publishing?))
-       [:a.add-button-link.flex
-        {:on-click (fn [] (reset! *add-new-item? true))}
+       (empty? items)
+       [:div.opacity-70.pointer {:on-click #(reset! *add-new-item? true)}
+        "Empty"]
+
+       (and @*show-add? row? (not config/publishing?))
+       [:a.add-button-link.flex {:on-click #(reset! *add-new-item? true)}
         (ui/icon "circle-plus")])]))
 
 (rum/defc property-value < rum/reactive
