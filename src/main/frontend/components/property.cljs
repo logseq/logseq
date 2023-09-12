@@ -90,7 +90,7 @@
                    (reset! (::property-name state) (:block/original-name property))
                    (reset! (::property-schema state) (:block/schema property))
                    state))}
-  [state repo property {:keys [toggle-fn block] :as opts}]
+  [state repo property {:keys [toggle-fn] :as opts}]
   (let [*property-name (::property-name state)
         *property-schema (::property-schema state)
         built-in-property? (contains? db-property/built-in-properties-keys-str (:block/original-name property))
@@ -137,7 +137,7 @@
          [:label "Specify classes:"]
          (class-select *property-schema (:classes @*property-schema) opts)])
 
-      (when-not (= (:type @*property-schema) :checkbox)
+      (when-not (contains? #{:checkbox :default} (:type @*property-schema))
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
          [:label "Multiple values:"]
          (let [many? (boolean (= :many (:cardinality @*property-schema)))]
@@ -168,16 +168,13 @@
          (ui/button
           "Save"
           :on-click (fn [e]
-                      (let [block? (= :block (:type @*property-schema))]
-                        (util/stop e)
-                        (property-handler/update-property!
-                         repo (:block/uuid property)
-                         {:property-name @*property-name
-                          :property-schema @*property-schema})
-                        (state/close-modal!)
-                        (when toggle-fn (toggle-fn))
-                        (when (and block? block)
-                          (pv/create-new-block! block property nil))))))]]]))
+                      (util/stop e)
+                      (property-handler/update-property!
+                       repo (:block/uuid property)
+                       {:property-name @*property-name
+                        :property-schema @*property-schema})
+                      (state/close-modal!)
+                      (when toggle-fn (toggle-fn)))))]]]))
 
 (defn- get-property-from-db [name]
   (when-not (string/blank? name)
@@ -390,7 +387,9 @@
     (for [[k v] properties]
       (when (uuid? k)
         (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid k])))]
-          (let [block? (= :block (get-in property [:block/schema :type]))]
+          (let [block? (and (= :default (get-in property [:block/schema :type]))
+                            (uuid? v)
+                            (db/entity [:block/uuid v]))]
             [:div {:class (if block?
                             "flex flex-1 flex-col gap-1"
                             "property-pair items-center")}

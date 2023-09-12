@@ -96,7 +96,6 @@
                  (model/get-all-page-original-names repo))
                distinct)
         options (map (fn [p] {:value p}) pages)
-        type (:type (:block/schema property))
         opts {:items options
               :dropdown? true
               :input-default-placeholder (if multiple-values?
@@ -133,94 +132,94 @@
                                  nil))})}]
     (select/select opts)))
 
-(defn- move-cursor
-  [up? opts]
-  (let [f (if up? dec inc)
-        id (str (:parent-dom-id opts) "-" (f (:idx opts)))
-        editor-id (str (:parent-dom-id opts) "-editor" "-" (f (:idx opts)))
-        sibling (gdom/getElement id)
-        editor (gdom/getElement editor-id)]
-    (when sibling
-      (.click sibling)
-      (state/set-state! :editor/property-triggered-by-click? {editor-id true}))
-    (when editor
-      (.focus editor))))
+;; (defn- move-cursor
+;;   [up? opts]
+;;   (let [f (if up? dec inc)
+;;         id (str (:parent-dom-id opts) "-" (f (:idx opts)))
+;;         editor-id (str (:parent-dom-id opts) "-editor" "-" (f (:idx opts)))
+;;         sibling (gdom/getElement id)
+;;         editor (gdom/getElement editor-id)]
+;;     (when sibling
+;;       (.click sibling)
+;;       (state/set-state! :editor/property-triggered-by-click? {editor-id true}))
+;;     (when editor
+;;       (.focus editor))))
+
+(defn- save-text!
+  [repo block property value editor-id e]
+  (let [new-value (util/evalue e)
+        blank? (string/blank? new-value)]
+    (when (not (state/get-editor-action))
+      (util/stop e)
+      (when-not blank?
+        (when (not= (string/trim new-value) (and value (string/trim value)))
+          (property-handler/set-block-property! repo (:block/uuid block)
+                                                (:block/original-name property)
+                                                new-value
+                                                :old-value value)))
+      (when (= js/document.activeElement (gdom/getElement editor-id))
+        (exit-edit-property)))))
+
+(defn create-new-block!
+  [block property value]
+  (let [repo (state/get-current-repo)
+        pid (:block/uuid (db/entity [:block/name "created-in-property"]))
+        page-id (or (:db/id (:block/page block)) (:db/id block))
+        parent-id (db/new-block-id)
+        parent (-> {:block/uuid parent-id
+                    :block/format :markdown
+                    :block/content ""
+                    :block/page {:db/id page-id}
+                    :block/properties {pid true}}
+                   outliner-core/block-with-timestamps)
+        child-1-id (db/new-block-id)
+        child-1 (-> {:block/uuid child-1-id
+                     :block/format :markdown
+                     :block/content value
+                     :block/page {:db/id page-id}
+                     :block/parent [:block/uuid parent-id]
+                     :block/left [:block/uuid parent-id]
+                     :block/properties {pid true}}
+                    outliner-core/block-with-timestamps
+                    (editor-handler/wrap-parse-block))
+        child-2-id (db/new-block-id)
+        child-2 (-> {:block/uuid child-2-id
+                     :block/format :markdown
+                     :block/content ""
+                     :block/page {:db/id page-id}
+                     :block/parent [:block/uuid parent-id]
+                     :block/left [:block/uuid child-1-id]
+                     :block/properties {pid true}}
+                    outliner-core/block-with-timestamps)
+        tx-data [parent child-1 child-2]]
+    (db/transact! repo tx-data {:outliner-op :insert-blocks})
+    (add-property! block (:block/original-name property) parent-id)
+    (editor-handler/edit-block! (db/entity [:block/uuid child-2-id]) 0 child-2-id)))
 
 (defn- new-text-editor-opts
-  [repo block property value type editor-id *add-new-item? opts]
+  [repo block property value editor-id]
   {:style {:padding 0
            :background "none"}
    :on-blur
    (fn [e]
-     (let [new-value (util/evalue e)
-           blank? (string/blank? new-value)]
-       (when (not (state/get-editor-action))
-         (util/stop e)
-         (when-not blank?
-           (property-handler/set-block-property! repo (:block/uuid block)
-                                                 (:block/original-name property)
-                                                 new-value
-                                                 :old-value value))
-         (when (= js/document.activeElement (gdom/getElement editor-id))
-           (exit-edit-property))
-         (when *add-new-item? (reset! *add-new-item? false)))))
+     (save-text! repo block property value editor-id e))
    :on-key-down
    (fn [e]
-     (let [new-value (util/evalue e)
-           blank? (string/blank? new-value)
-           enter? (= (util/ekey e) "Enter")
+     (let [enter? (= (util/ekey e) "Enter")
            esc? (= (util/ekey e) "Escape")
-           meta? (util/meta-key? e)
-           create-another-one? (and meta? enter?)
-           down? (= (util/ekey e) "ArrowDown")
-           up? (= (util/ekey e) "ArrowUp")
-           backspace? (= (util/ekey e) "Backspace")]
-       (when (and (or enter? esc? create-another-one? down? up? backspace?)
+           backspace? (= (util/ekey e) "Backspace")
+           new-value (util/evalue e)]
+       (when (and (or enter? esc? backspace?)
                   (not (state/get-editor-action)))
-         (when-not (or down? up? backspace?) (util/stop e))
-         (when (and (not blank?) (or enter? esc?))
-           (when (not= (string/trim new-value) (and value (string/trim value)))
-             (property-handler/set-block-property! repo (:block/uuid block)
-                                                   (:block/original-name property)
-                                                   new-value
-                                                   :old-value value)))
-
-         (when-not backspace? (exit-edit-property))
-
+         (when-not backspace? (util/stop e))
          (cond
-           (and backspace? (= new-value "") *add-new-item?  (not @*add-new-item?)) ; delete item
-           (do
-             (move-cursor true opts)
-             (property-handler/delete-property-value! repo block (:block/uuid property) value))
+           esc?
+           (save-text! repo block property value editor-id e)
 
-           (and backspace? (= new-value "") *add-new-item? @*add-new-item?)
-           (do
-             (move-cursor true opts)
-             (reset! *add-new-item? false))
-
-           backspace?
-           nil
-
-           down?
-           (move-cursor false opts)
-
-           up?
-           (move-cursor true opts)
-
-           (or
-            esc?
-            blank?
-            (and *add-new-item? (not= type :default)))
-           (when *add-new-item? (reset! *add-new-item? false))
-
-           (and *add-new-item? @*add-new-item?)
-           (some-> (gdom/getElement editor-id)
-                   (util/set-change-value ""))
-
-           (and (or enter? create-another-one?)
-                *add-new-item?
-                (not blank?))
-           (reset! *add-new-item? true)))))})
+           enter?
+           (if (string/blank? value)
+             (save-text! repo block property value editor-id e)
+             (create-new-block! block property new-value))))))})
 
 (defn- select
   [block property opts]
@@ -250,57 +249,28 @@
                                          (when-let [f (:on-chosen opts)] (f)))
                                        nil))})})))
 
-(defn create-new-block!
-  [block property {:keys [*add-new-item?]}]
-  (let [repo (state/get-current-repo)
-        pid (:block/uuid (db/entity [:block/name "created-in-property"]))
-        new-block (-> {:block/uuid (db/new-block-id)
-                       :block/format :markdown
-                       :block/content ""
-                       :block/page {:db/id
-                                    (or (:db/id (:block/page block))
-                                        (:db/id block))}
-                       :block/properties {pid true}}
-                      outliner-core/block-with-timestamps)
-        id (:block/uuid new-block)]
-    (db/transact! repo [new-block] {:outliner-op :insert-blocks})
-    (add-property! block (:block/original-name property) id)
-    (when *add-new-item? (reset! *add-new-item? false))
-    (editor-handler/edit-block! (db/entity [:block/uuid id]) 0 id)))
-
-(defn- block-editor-opts
-  [repo block property value *add-new-item? opts]
-  {:on-key-down
-   (fn [e]
-     (let [new-value (util/evalue e)
-           meta? (util/meta-key? e)
-           enter? (= (util/ekey e) "Enter")
-           create-another-one? (and meta? enter?)
-           backspace? (= (util/ekey e) "Backspace")
-           current-block (db/entity [:block/uuid value])]
-       (cond
-         create-another-one?
-         (do
-           (util/stop e)
-           (reset! *add-new-item? true)
-           (create-new-block! block property opts))
-
-         (and backspace?
-              (= new-value "")
-              ;; no children block
-              (empty? (:block/_parent current-block)))
-         (do
-           (editor-handler/keydown-up-down-handler :up {:pos :max})
-           (property-handler/delete-property-value! repo block (:block/uuid property) value)))))})
-
-(rum/defc empty-block
-  [on-click]
-  [:div.flex.flex-row.cursor-text {:on-click on-click}
-   [:div.flex.flex-row.items-center.mr-2.ml-1
-    [:span.bullet-container.cursor
-     [:span.bullet]]]
-   [:div.flex.flex-1
-    [:span.opacity-70 ""]]])
+(rum/defc property-block-value < rum/reactive
+  [parent block-cp editor-box opts]
+  (when parent
+    (let [children (:block/_parent (db/sub-block (:db/id parent)))]
+      (when (empty? children)
+        (let [repo (state/get-current-repo)
+              pid (:block/uuid (db/entity [:block/name "created-in-property"]))
+              child-1-id (db/new-block-id)
+              child-1 (-> {:block/uuid child-1-id
+                           :block/format :markdown
+                           :block/content ""
+                           :block/page (:db/id (:block/page parent))
+                           :block/parent (:db/id parent)
+                           :block/left (:db/id parent)
+                           :block/properties {pid true}}
+                          outliner-core/block-with-timestamps)]
+          (db/transact! repo [child-1] {:outliner-op :insert-blocks})))
+      [:div.property-block-container.w-full
+       (block-cp children {:id (str (:block/uuid parent))
+                           :blocks-container-id (:blocks-container-id opts)
+                           :editor-box editor-box
+                           :in-property? true})])))
 
 (rum/defc property-scalar-value < rum/reactive db-mixins/query
   [block property value {:keys [inline-text page-cp block-cp
@@ -347,7 +317,7 @@
            :block
            nil
 
-           (let [config {:editor-opts (new-text-editor-opts repo block property value type editor-id *add-new-item? opts)}]
+           (let [config {:editor-opts (new-text-editor-opts repo block property value editor-id)}]
              [:div
               (editor-box editor-args editor-id (cond-> config
                                                   multiple-values?
@@ -369,25 +339,19 @@
                           type)
                         type)]
              (if (string/blank? value)
-               [:div.opacity-70.text-sm
+               [:div.opacity-70
                 (case type
                   :page
                   (if multiple-values? "Choose pages" "Choose page")
-                  "Input something")]
+                  "Empty")]
                (case type
                  :page
                  (when-let [page (db/entity [:block/uuid value])]
                    (page-cp {:disable-preview? true} page))
 
                  :block
-                 (if-let [item-block (db/entity [:block/uuid value])]
-                   (let [editor-opts (block-editor-opts repo block property value *add-new-item? opts)]
-                     [:div.property-block-container.w-full
-                      (block-cp [item-block] {:id (str value)
-                                              :blocks-container-id (:blocks-container-id opts)
-                                              :editor-box editor-box
-                                              :editor-opts editor-opts
-                                              :in-property? true})])
+                 (if-let [parent (db/entity [:block/uuid value])]
+                   (property-block-value parent block-cp editor-box opts)
                    (do
                      (if multiple-values?
                        (property-handler/delete-property-value! repo block (:block/uuid property) value)
@@ -398,25 +362,6 @@
                      nil))
 
                  (inline-text {} :markdown (str value)))))])))))
-
-(rum/defc multiple-blocks-add-button < rum/reactive
-  [block property opts]
-  (let [editing? (state/sub :editor/editing)]
-    (when-not editing?
-      [:div.absolute.fade-in
-       {:style {:left "-1.75rem"
-                :bottom " -0.125rem"}
-        :on-click (fn []
-                    (create-new-block! block property opts))}
-       (ui/tippy {:html [:span.text-sm
-                         [:span.mr-1 "Add another block (click or "]
-                         (ui/render-keyboard-shortcut "mod+enter")
-                         [:span.ml-1 ")"]]
-                  :interactive     true
-                  :delay           [100, 100]
-                  :position        "bottom"}
-                 [:a.add-button-link.flex.p-2
-                  (ui/icon "circle-plus")])])))
 
 (rum/defc delete-value-button < rum/reactive
   [entity property item]
@@ -461,8 +406,6 @@
   (let [*show-add? (::show-add? state)
         *add-new-item? (::add-new-item? state)
         type (:type schema)
-        block? (= type :block)
-        default? (= type :default)
         row? (contains? #{:page} type)
         items (if (coll? v) v (when v [v]))]
     [:div.relative
@@ -471,8 +414,6 @@
                (cond-> "flex flex-1 flex-row items-center flex-wrap"
                  row?
                  (str " gap-2"))
-               block?
-               "grid"
                :else
                "grid gap-1")
       :on-mouse-over #(reset! *show-add? true)
@@ -506,17 +447,10 @@
                                 :editing? true
                                 :*add-new-item? *add-new-item?}))
 
-       (and (or default? block?) (empty? items))
-       [:div.rounded-sm {:on-click (fn [] (reset! *add-new-item? true))}
-        [:div.opacity-50.text-sm "Input something"]]
-
        (and (or @*show-add? (empty? items)) row? (not config/publishing?))
        [:a.add-button-link.flex
         {:on-click (fn [] (reset! *add-new-item? true))}
-        (ui/icon "circle-plus")]
-
-       (and @*show-add? block? (not config/publishing?))
-       (multiple-blocks-add-button block property opts))]))
+        (ui/icon "circle-plus")])]))
 
 (rum/defc property-value < rum/reactive
   [block property v opts]
@@ -529,11 +463,6 @@
                      :parent-block block
                      :format :markdown}]
     (cond
-      (and (= type :block) (or (string/blank? v) (empty? v)))
-      (empty-block (fn [e]
-                     (util/stop e)
-                     (create-new-block! block property {})))
-
       multiple-values?
       (multiple-values block property v opts dom-id schema editor-id editor-args)
 
