@@ -6,10 +6,10 @@
      * Some classes are renamed due to naming conflicts
    * All properties with their property type, url, description
      * Property type is determined by looking for the first range value that is
-       a subclass of https://schema.org/DataType and then falling back to :object.
+       a subclass of https://schema.org/DataType and then falling back to :page.
      * Some properties are skipped because they are superseded/deprecated or because they have a property
        type logseq doesnt' support yet
-     * schema.org assumes no cardinality. For now, only :object properties are given a :cardinality :many"
+     * schema.org assumes no cardinality. For now, only :page properties are given a :cardinality :many"
   (:require [logseq.tasks.db-graph.create-graph :as create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
             [clojure.string :as string]
@@ -83,7 +83,7 @@
 
 (defn- get-schema-type [range-includes class-map]
   (some #(or (schema->logseq-data-types %)
-             (when (class-map %) :object))
+             (when (class-map %) :page))
         range-includes))
 
 (defn- ->property-page [property-m prop-uuid class-map class-uuids {:keys [verbose]}]
@@ -96,11 +96,11 @@
         _ (assert schema-type (str "No schema found for property " (property-m "@id")))
         schema (cond-> {:type schema-type}
                  ;; This cardinality rule should be adjusted as we use schema.org more
-                 (= schema-type :object)
+                 (= schema-type :page)
                  (assoc :cardinality :many)
                  (property-m "rdfs:comment")
                  (assoc :description (property-m "rdfs:comment"))
-                 (= schema-type :object)
+                 (= schema-type :page)
                  (assoc :classes (let [invalid-classes (remove class-uuids range-includes)
                                        _ (when (seq invalid-classes)
                                            (throw (ex-info (str "No uuids found for range(s): " invalid-classes) {})))
@@ -249,7 +249,7 @@
         ;; Debug: Uncomment to generate a narrower graph of classes
         ;; select-class-ids ["schema:Person" "schema:CreativeWorkSeries"
         ;;                   "schema:Movie" "schema:CreativeWork" "schema:Thing"]
-        ;; Generate class uuids as they are needed for properties (:object) and pages
+        ;; Generate class uuids as they are needed for properties (:page) and pages
         class-uuids (->> all-classes
                          (map #(vector (% "@id") (random-uuid)))
                          (into {}))

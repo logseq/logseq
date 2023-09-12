@@ -33,16 +33,14 @@
      :blocks
      [{:block/content "default property block" :properties {:default "haha"}}
       {:block/content "url property block" :properties {:url "https://logseq.com"}}
-      {:block/content "default-many property block" :properties {:default-many #{"woo" "hoo"}}}
+      ;; TODO: Add a default many example with blocks
+      #_{:block/content "default-many property block" :properties {:default-many #{"woo" "hoo"}}}
       {:block/content "url-many property block" :properties {:url-many #{"https://logseq.com" "https://docs.logseq.com"}}}
       {:block/content "checkbox property block" :properties {:checkbox true}}
       {:block/content "number property block" :properties {:number 5}}
       {:block/content "number-many property block" :properties {:number-many #{5 10}}}
       {:block/content "page property block" :properties {:page [:page "page 1"]}}
-      {:block/content "page-many property block" :properties {:page-many #{[:page "page 1"] [:page "page 2"]}}}
-      ;; TODO: Update block examples
-      #_{:block/content "block property block" :properties {:block [:block "yee"]}}
-      #_{:block/content "block-many property block" :properties {:block-many #{[:block "yee"] [:block "haw"]}}}]}
+      {:block/content "page-many property block" :properties {:page-many #{[:page "page 1"] [:page "page 2"]}}}]}
     {:page {:block/name "queries"}
      :blocks
      [{:block/content "{{query (property :default \"haha\")}}"}
@@ -60,9 +58,9 @@
       {:block/content "haw"}]}
     {:page {:block/name "page 2"}}]
    :properties
-   (->> [:default :url :checkbox :number :page :block]
+   (->> [:default :url :checkbox :number :page]
         (mapcat #(cond-> [[% {:block/schema {:type %}}]]
-                   (not= % :checkbox)
+                   (not (#{:checkbox :default} %))
                    (conj [(keyword (str (name %) "-many")) {:block/schema {:type % :cardinality :many}}])))
         (into {}))})
 
