@@ -25,6 +25,8 @@
    :block/left   {:db/valueType :db.type/ref
                   :db/index true}
    :block/collapsed? {:db/index true}
+   :block/collapsed-properties {:db/valueType :db.type/ref
+                                :db/cardinality :db.cardinality/many}
 
    ;; :markdown, :org
    :block/format {}

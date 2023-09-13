@@ -17,21 +17,25 @@
 /*     background: var(--ls-secondary-background-color); */
 /* } */
 
-.ls-block .ls-properties-area, .block-property-value {
+.ls-block .ls-properties-area, .property-block-container {
     border-left: 1px solid;
     border-left-color: var(--ls-guideline-color, #ddd);
 }
 
-.ls-block .ls-properties-area, .property-template .ls-properties-area {
+.ls-page-properties > .ls-properties-area {
+    margin-left: -22px;
+}
+
+.ls-block .ls-properties-area {
+    margin-left: 0;
+}
+
+.property-pair, .property-block .property-value, .ls-page-properties > .ls-properties-area .ls-new-property {
     padding-left: 22px;
 }
 
 .block-property-value {
     margin-left: 7px;
-}
-
-.ls-block .block-property-value, .property-template .block-property-value {
-    padding-left: 0;
 }
 
 .ls-properties-area {
