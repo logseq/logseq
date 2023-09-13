@@ -18,9 +18,12 @@
 /* } */
 
 .ls-block .ls-properties-area, .block-property-value {
-    padding-left: 22px;
     border-left: 1px solid;
     border-left-color: var(--ls-guideline-color, #ddd);
+}
+
+.ls-block .ls-properties-area, .property-template .ls-properties-area {
+    padding-left: 22px;
 }
 
 .block-property-value {
