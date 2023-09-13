@@ -1,17 +1,19 @@
 (ns frontend.db.rtc.core
   (:require-macros
    [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
-  (:require [cljs.core.async :as async :refer [<! >! chan go go-loop offer!
-                                               poll! timeout]]
+  (:require [cljs.core.async :as async :refer [<! chan go go-loop]]
             [cljs.core.async.interop :refer [p->c]]
-            [malli.core :as m]
-            [frontend.modules.outliner.transaction :as outliner-tx]
-            [frontend.modules.outliner.core :as outliner-core]
-            [frontend.db :as db]
-            [frontend.db.rtc.ws :as ws]
             [clojure.set :as set]
+            [frontend.db :as db]
             [frontend.db.rtc.op :as op]
-            [frontend.handler.page :as page-handler]))
+            [frontend.db.rtc.ws :as ws]
+            [frontend.handler.page :as page-handler]
+            [frontend.modules.outliner.core :as outliner-core]
+            [frontend.modules.outliner.transaction :as outliner-tx]
+            [frontend.util :as util]
+            [malli.core :as m]
+            [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]))
 
 ;;; TODO:
 ;;; 1. two clients, each one has a page with same name but different block-uuid.
@@ -225,11 +227,28 @@
   {:pre [(some? @(:*repo state))]}
   (let [repo @(:*repo state)]
     (doseq [{:keys [self page-name]} update-page-ops]
-      (if-let [old-page-name (:block/name (db/entity repo [:block/uuid (uuid self)]))]
-        (when (not= old-page-name page-name)
-          (page-handler/rename! old-page-name page-name false false))
-        (page-handler/create! page-name {:redirect? false :create-first-block? false
-                                         :uuid (uuid self) :persist-op? false})))))
+      (let [old-page-name (:block/name (db/entity repo [:block/uuid (uuid self)]))
+            exist-page (db/entity repo [:block/name page-name])]
+        (cond
+          ;; same name but different uuid
+          ;; remote page has same block/name as local's, but they don't have same block/uuid.
+          ;; 1. rename local page's name to '<origin-name>-<ms-epoch>-Conflict'
+          ;; 2. create page, name=<origin-name>, uuid=remote-uuid
+          (and exist-page (not= (:block/uuid exist-page) (uuid self)))
+          (do (page-handler/rename! page-name (util/format "%s-%s-CONFLICT" page-name (tc/to-long (t/now))))
+              (page-handler/create! page-name {:redirect? false :create-first-block? false
+                                               :uuid (uuid self) :persist-op? false}))
+
+          ;; a client-page has same uuid as remote but different page-names,
+          ;; then we need to rename the client-page to remote-page-name
+          (and old-page-name (not= old-page-name page-name))
+          (page-handler/rename! old-page-name page-name false false)
+
+          ;; no such page, name=remote-page-name, OR, uuid=remote-block-uuid
+          ;; just create-page
+          :else
+          (page-handler/create! page-name {:redirect? false :create-first-block? false
+                                           :uuid (uuid self) :persist-op? false}))))))
 
 (defn apply-remote-remove-page-ops
   [state remove-page-ops]
