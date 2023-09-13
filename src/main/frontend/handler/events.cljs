@@ -55,6 +55,7 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.graph-picker :as graph-picker]
             [frontend.mobile.util :as mobile-util]
@@ -1007,6 +1008,9 @@
         (when collapsed?
           (editor-handler/set-blocks-collapsed! [block-id] false)))))
   (property-handler/editing-new-property!))
+
+(defmethod handle :editor/edit-block [[_ block pos id opts]]
+  (editor-handler/edit-block! block pos id opts))
 
 (defn run!
   []
