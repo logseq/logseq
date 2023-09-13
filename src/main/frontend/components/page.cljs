@@ -489,7 +489,7 @@
                                                     [[:db.fn/retractAttribute (:db/id page) :block/namespace]]))))])])])
          (when (and config/publishing? (= type "property"))
            (property/property-config (state/get-current-repo) page {}))
-         (when-not show-properties?
+         (when (and (not show-properties?) (not config/publishing?))
            (let [edit-input-id (str "edit-block-" (:block/uuid page))]
              [:div
               [:div.text-sm.opacity-70.font-medium.mb-2 "Properties:"]
