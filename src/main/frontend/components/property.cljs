@@ -294,7 +294,7 @@
       :node (js/document.getElementById "edit-new-property")
       :outside? false)))
   [state block edit-input-id properties new-property? opts]
-  [:div.py-1
+  [:div.ls-new-property.py-1
    (let [*property-key (::property-key state)
          *property-value (::property-value state)]
      (cond
@@ -320,11 +320,31 @@
        :else
        [:div {:style {:height 28}}]))])
 
-(rum/defcs property-key
-  [state block property {:keys [class-schema?]}]
-  (let [repo (state/get-current-repo)
+(defn- property-collapsed?
+  [block property]
+  (boolean?
+   (some (fn [p] (= (:db/id property) (:db/id p)))
+         (:block/collapsed-properties block))))
+
+(rum/defcs property-key <
+  (rum/local false ::hover?)
+  [state block property {:keys [class-schema? block? collapsed?]}]
+  (let [*hover? (::hover? state)
+        repo (state/get-current-repo)
         icon (pu/get-property property :icon)]
-    [:div.flex.flex-row.items-center
+    [:div.flex.flex-row.items-center {:on-mouse-over #(reset! *hover? true)
+                                      :on-mouse-leave #(reset! *hover? false)}
+     (when block?
+       [:a.block-control
+        {:on-click (fn [event]
+                     (util/stop event)
+                     (property-handler/collapse-expand-property! repo block property (not collapsed?)))}
+        [:span {:class (cond
+                         (or collapsed? @*hover?)
+                         "control-show cursor-pointer"
+                         :else
+                         "control-hide")}
+         (ui/rotating-arrow collapsed?)]])
      (ui/dropdown
       (fn [{:keys [toggle-fn]}]
         [:a.flex {:on-click toggle-fn}
@@ -405,21 +425,25 @@
           (let [type (get-in property [:block/schema :type] :default)
                 block? (and (contains? #{:default :template} type)
                             (uuid? v)
-                            (db/entity [:block/uuid v]))]
+                            (db/entity [:block/uuid v]))
+                collapsed? (when block? (property-collapsed? block property))]
             [:div {:class (if block?
-                            "flex flex-1 flex-col gap-1"
+                            "flex flex-1 flex-col gap-1 property-block"
                             "property-pair items-center")}
              [:div.property-key
               {:class "col-span-2"}
-              (property-key block property (select-keys opts [:class-schema?]))]
+              (property-key block property (assoc (select-keys opts [:class-schema?])
+                                                  :block? block?
+                                                  :collapsed? collapsed?))]
              (if (:class-schema? opts)
                [:div.property-description.text-sm.opacity-70
                 {:class "col-span-3"}
                 (get-in property [:block/schema :description])]
-               [:div.property-value {:class (if block?
-                                              "block-property-value"
-                                              "col-span-3 inline-grid")}
-                (pv/property-value block property v opts)])]))))))
+               (when-not collapsed?
+                 [:div.property-value {:class (if block?
+                                                "block-property-value"
+                                                "col-span-3 inline-grid")}
+                  (pv/property-value block property v opts)]))]))))))
 
 (rum/defcs hidden-properties < (rum/local true ::hide?)
   [state block hidden-properties opts]
@@ -427,10 +451,10 @@
     [:div.hidden-properties.flex.flex-col.gap-1
      (when-not @*hide?
        (properties-section block hidden-properties opts))
-     [:a.block.text-sm.fade-link {:on-click #(swap! *hide? not)}
-      [:div.flex.flex-row.items-center.gap-1
-       (ui/icon (if @*hide? "caret-right" "caret-down") {:size 16})
-       [:div "Hidden properties"]]]]))
+     [:a.block-control.text-sm.flex.flex-row.items-center
+      {:on-click #(swap! *hide? not)}
+      (ui/rotating-arrow @*hide?)
+      [:div "Hidden properties"]]]))
 
 (rum/defcs properties-area < rum/reactive
   {:init (fn [state]
@@ -510,26 +534,26 @@
                    (not new-property?)
                    (not (:page-configure? opts)))
       [:div.ls-properties-area (cond->
-                                {}
-                                 (:selected? opts)
-                                 (assoc :class "select-none"))
-       (properties-section block (if class-schema? properties own-properties) opts)
+                                 {}
+                                  (:selected? opts)
+                                  (assoc :class "select-none"))
+        (properties-section block (if class-schema? properties own-properties) opts)
 
-       (when (and (seq full-hidden-properties) (not class-schema?) (not config/publishing?))
-         (hidden-properties block full-hidden-properties opts))
+        (when (and (seq full-hidden-properties) (not class-schema?) (not config/publishing?))
+          (hidden-properties block full-hidden-properties opts))
 
-       (when (or new-property? (not in-block-container?))
-         (new-property block edit-input-id properties new-property? opts))
+        (when (or new-property? (not in-block-container?))
+          (new-property block edit-input-id properties new-property? opts))
 
-       (when (and (seq class->properties) (not one-class?))
-         (let [page-cp (:page-cp opts)]
-           [:div.parent-properties.flex.flex-1.flex-col.gap-1
-            (for [[class class-properties] class->properties]
-              (let [id-properties (->> class-properties
-                                       remove-built-in-properties
-                                       (map (fn [id] [id (get block-properties id)])))]
-                (when (seq id-properties)
-                  [:div
-                   (when page-cp
-                     [:span.text-sm (page-cp {} class)])
-                   (properties-section block id-properties opts)])))]))])))
+        (when (and (seq class->properties) (not one-class?))
+          (let [page-cp (:page-cp opts)]
+            [:div.parent-properties.flex.flex-1.flex-col.gap-1
+             (for [[class class-properties] class->properties]
+               (let [id-properties (->> class-properties
+                                        remove-built-in-properties
+                                        (map (fn [id] [id (get block-properties id)])))]
+                 (when (seq id-properties)
+                   [:div
+                    (when page-cp
+                      [:span.text-sm (page-cp {} class)])
+                    (properties-section block id-properties opts)])))]))])))

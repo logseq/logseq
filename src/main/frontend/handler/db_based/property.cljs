@@ -372,3 +372,10 @@
             property-id))
      (keys m))
    (vals m)))
+
+(defn collapse-expand-property!
+  [repo block property collapse?]
+  (let [f (if collapse? :db/add :db/retract)]
+    (db/transact! repo
+                  [[f (:db/id block) :block/collapsed-properties (:db/id property)]]
+                  {:outliner-op :save-block})))

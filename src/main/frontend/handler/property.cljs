@@ -91,3 +91,9 @@
   (if (config/db-based-graph? repo)
     (db-property-handler/replace-key-with-id! m)
     m))
+
+(defn collapse-expand-property!
+  "Notice this works only if the value itself if a block (property type should be either :default or :template)"
+  [repo block property collapse?]
+  (when (config/db-based-graph? repo)
+    (db-property-handler/collapse-expand-property! repo block property collapse?)))

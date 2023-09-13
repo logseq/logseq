@@ -438,10 +438,9 @@
                       (js/console.error "No selected option found to navigate to"))))})))
 
 (rum/defcs configure < rum/reactive
-  [state page {:keys [journal? *configure-show? show-properties?] :as opts
+  [state page {:keys [journal? show-properties?] :as opts
                :or {show-properties? true}}]
-  (when (rum/react *configure-show?)
-    (let [page-id (:db/id page)
+  (let [page-id (:db/id page)
           page (when page-id (db/sub-block page-id))
           type (:block/type page)
           properties-opts (merge {:selected? false
@@ -494,7 +493,7 @@
                {:editor-box editor/box}
                page
                edit-input-id
-               (assoc properties-opts :class-schema? class?))]))]))))
+               (assoc properties-opts :class-schema? class?))]))])))
 
 (rum/defc page-properties < rum/reactive
   [page *configure-show?]
@@ -504,7 +503,7 @@
         opts {:selected? false
               :page-configure? configure?
               :class-schema? class?}]
-    [:div {:style {:padding 2}}
+    [:div.ls-page-properties.mb-4 {:style {:padding 2}}
      (let [edit-input-id (str "edit-block-" (:block/uuid page) "-schema")
            properties-cp (component-block/db-properties-cp {:editor-box editor/box}
                                                            page edit-input-id opts)]
@@ -609,9 +608,9 @@
                   (plugins/hook-ui-slot :page-head-actions-slotted nil)
                   (plugins/hook-ui-items :pagebar)]))])
 
-          (when (and db-based? (not built-in-property?))
-            (configure page {:*configure-show? *configure-show?
-                             :journal? journal?
+          (when (and db-based? (not built-in-property?)
+                     @*configure-show?)
+            (configure page {:journal? journal?
                              :show-properties? show-properties?}))
 
           [:div

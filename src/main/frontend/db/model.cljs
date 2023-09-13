@@ -36,6 +36,7 @@
     :block/parent
     :block/left
     :block/collapsed?
+    :block/collapsed-properties
     :block/format
     :block/refs
     :block/_refs
@@ -405,7 +406,8 @@ independent of format as format specific heading characters are stripped"
                                  :alias (:block/alias e)
                                  :tags (:block/tags e)
                                  :children children
-                                 :collapsed? (:block/collapsed? e)}]))}
+                                 :collapsed? (:block/collapsed? e)
+                                 :collapsed-properties (:block/collapsed-properties e)}]))}
               nil)
      react
      first)))
