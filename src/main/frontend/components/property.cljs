@@ -247,8 +247,8 @@
                         (remove exclude-properties))]
     (if @*property-key
       (when-let [property (get-property-from-db @*property-key)]
-        [:div.ls-property-add.grid.grid-cols-4.gap-1.flex.flex-row.items-center
-         [:div.col-span-1 @*property-key]
+        [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-row.items-center
+         [:div.col-span-2 @*property-key]
          [:div.col-span-3.flex.flex-row
           (when (not class-schema?)
             (if @*show-new-property-config?
@@ -332,9 +332,8 @@
           (when-let [id (:id icon)]
             (when (= :emoji (:type icon))
               [:em-emoji {:id id}]))
-          ;; default property icon
-          (ui/icon "point" {:size 16
-                            :class "opacity-50"}))])
+          [:span.bullet-container.cursor
+           [:span.bullet]])])
       (fn [{:keys [toggle-fn]}]
         (ui/emoji-picker
          {:auto-focus true
@@ -356,12 +355,12 @@
            [:div.ml-1 (:block/original-name property)]])
         (fn [{:keys [toggle-fn]}]
           [:a.property-k
-             {:data-propertyid (:block/uuid property)
-              :data-blockid (:block/uuid block)
-              :data-class-schema (boolean class-schema?)
-              :title (str "Configure property: " (:block/original-name property))
-              :on-click toggle-fn}
-             [:div.ml-1 (:block/original-name property)]]))
+           {:data-propertyid (:block/uuid property)
+            :data-blockid (:block/uuid block)
+            :data-class-schema (boolean class-schema?)
+            :title (str "Configure property: " (:block/original-name property))
+            :on-click toggle-fn}
+           [:div.ml-1 (:block/original-name property)]]))
       (fn [{:keys [toggle-fn]}]
         [:div.p-8
          (property-config repo property {:toggle-fn toggle-fn})])
@@ -403,21 +402,22 @@
     (for [[k v] properties]
       (when (uuid? k)
         (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid k])))]
-          (let [block? (and (contains? #{:default :template} (get-in property [:block/schema :type] :default))
+          (let [type (get-in property [:block/schema :type] :default)
+                block? (and (contains? #{:default :template} type)
                             (uuid? v)
                             (db/entity [:block/uuid v]))]
             [:div {:class (if block?
                             "flex flex-1 flex-col gap-1"
                             "property-pair items-center")}
              [:div.property-key
-              {:class (if (:class-schema? opts) "col-span-2" "col-span-1")}
+              {:class "col-span-2"}
               (property-key block property (select-keys opts [:class-schema?]))]
              (if (:class-schema? opts)
                [:div.property-description.text-sm.opacity-70
-                {:class (if (:class-schema? opts) "col-span-2" "col-span-3")}
+                {:class "col-span-3"}
                 (get-in property [:block/schema :description])]
                [:div.property-value {:class (if block?
-                                              "col-span-4 ml-8 pl-1"
+                                              "block-property-value"
                                               "col-span-3 inline-grid")}
                 (pv/property-value block property v opts)])]))))))
 

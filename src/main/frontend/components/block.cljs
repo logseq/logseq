@@ -2923,16 +2923,18 @@
          (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? content))
                hide-block-refs-count? (and (:embed? config)
                                            (= (:block/uuid block) (:embed-id config)))]
-           (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count? selected?))
-         (when (and (config/db-based-graph? repo) (not collapsed?))
-           (db-properties-cp config
-                             block
-                             edit-input-id
-                             {:selected? selected?
-                              :in-block-container? true}))])
+           (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count? selected?))])
 
       (when @*show-right-menu?
         (block-right-menu config block edit?))]
+
+     (when (and (config/db-based-graph? repo) (not collapsed?))
+       [:div {:style {:padding-left 29}}
+        (db-properties-cp config
+                         block
+                         edit-input-id
+                         {:selected? selected?
+                          :in-block-container? true})])
 
      (when-not (:hide-children? config)
        (let [children (db/sort-by-left (:block/_parent block) block)

@@ -311,7 +311,7 @@
         entity (db/sub-block (:db/id e))
         properties-cp (:properties-cp opts)]
     (when (and entity properties-cp)
-      [:div.property-block-container.w-full
+      [:div.property-block-container.w-full.property-template
        (properties-cp config entity (:editor-id config) (merge opts {:in-block-container? true}))])))
 
 (rum/defc property-scalar-value < rum/reactive db-mixins/query

@@ -1,5 +1,6 @@
 .property-configure {
     min-width: 32rem;
+    padding: 2px;
 
     .form-input, .form-select {
         line-height: 1rem;
@@ -16,16 +17,26 @@
 /*     background: var(--ls-secondary-background-color); */
 /* } */
 
-.ls-block .ls-properties-area {
-    padding-left: 0.3rem;
+.ls-block .ls-properties-area, .block-property-value {
+    padding-left: 22px;
+    border-left: 1px solid;
+    border-left-color: var(--ls-guideline-color, #ddd);
+}
+
+.block-property-value {
+    margin-left: 7px;
+}
+
+.ls-block .block-property-value, .property-template .block-property-value {
+    padding-left: 0;
 }
 
 .ls-properties-area {
     @apply grid gap-1;
 
     .property-pair {
-        @apply grid grid-cols-4 gap-1;
-        grid-template-columns: repeat(auto-fit, 160px);
+        @apply grid grid-cols-5 gap-1;
+        grid-template-columns: repeat(auto-fit, 120px);
     }
 
     .add-button-link {
@@ -74,10 +85,6 @@
 
     .ls-block, .editor-wrapper {
         margin: 0;
-    }
-
-    .property-block-container {
-        margin-left: -1.5em;
     }
 
     .property-key a {
