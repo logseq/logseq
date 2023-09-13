@@ -507,12 +507,20 @@
         hide-with-property-id (fn [property-id]
                                 (let [eid (if (uuid? property-id) [:block/uuid property-id] property-id)]
                                   (boolean (:hide? (:block/schema (db/entity eid))))))
-        property-hide-f (if config/publishing?
+        property-hide-f (cond
+                          config/publishing?
+                          ;; Publishing is read only so hide all blank properties as they
+                          ;; won't be edited and distract from properties that have values
                           (fn [[property-id property-value]]
-                            ;; Publishing is read only so hide all blank properties as they
-                            ;; won't be edited and distract from properties that have values
                             (or (nil? property-value)
                                 (hide-with-property-id property-id)))
+                          (:ui/hide-empty-properties? (state/get-config))
+                          (fn [[property-id property-value]]
+                            ;; User's selection takes precedence over config
+                            (if (contains? (:block/schema (db/entity [:block/uuid property-id])) :hide?)
+                              (hide-with-property-id property-id)
+                              (nil? property-value)))
+                          :else
                           (comp hide-with-property-id first))
         {block-hidden-properties true
          block-own-properties' false} (group-by property-hide-f block-own-properties)
