@@ -290,7 +290,7 @@
   [repo block property value block-cp editor-box opts]
   (let [parent (db/entity [:block/uuid value])
         parent (db/sub-block (:db/id parent))
-        children (:block/_parent parent)
+        children (model/sort-by-left (:block/_parent parent) parent)
         children-count (count (:block/_parent parent))
         empty-block? (or (nil? parent) (zero? children-count))]
     (when empty-block?
