@@ -10,7 +10,7 @@
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
             [frontend.components.scheduled-deadlines :as scheduled]
-            [frontend.components.select :as select]
+            [frontend.components.property :as property]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -484,7 +484,8 @@
                                                       :block/namespace [:block/uuid (uuid value)]}])
                                                    (db/transact!
                                                     [[:db.fn/retractAttribute (:db/id page) :block/namespace]]))))])])])
-
+         (when (and config/publishing? (= type "property"))
+           (property/property-config (state/get-current-repo) page {}))
          (when-not show-properties?
            (let [edit-input-id (str "edit-block-" (:block/uuid page))]
              [:div
@@ -526,7 +527,7 @@
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
-  ;; Make class pages reader friendly by default in publishing as they are usually blank
+  ;; Make class + property pages reader friendly by default in publishing as they are usually blank
   (rum/local (if config/publishing? true false) ::configure-show?)
   [state {:keys [repo page-name preview? sidebar?] :as option}]
   (when-let [path-page-name (get-path-page-name state page-name)]
@@ -608,10 +609,13 @@
                   (plugins/hook-ui-slot :page-head-actions-slotted nil)
                   (plugins/hook-ui-items :pagebar)]))])
 
-          (when (and db-based? (not built-in-property?)
-                     @*configure-show?)
-            (configure page {:journal? journal?
-                             :show-properties? show-properties?}))
+          (when (and db-based? (not built-in-property?) @*configure-show?)
+            (if (and (= "property" (:block/type page)) (not config/publishing?))
+              (do
+                (state/set-modal! #(property/property-config repo page {}))
+                (swap! *configure-show? not))
+              (configure page {:journal? journal?
+                               :show-properties? show-properties?})))
 
           [:div
            (when (and block? (not sidebar?) (not whiteboard?))
