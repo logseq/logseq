@@ -23,15 +23,15 @@
             [frontend.handler.route :as route-handler]))
 
 (rum/defc icon
-  [block {:keys [_type id]}]            ; only :emoji supported yet
+  [block {:keys [_type id]} {:keys [disabled?]}]            ; only :emoji supported yet
   (let [repo (state/get-current-repo)
         icon-property-id (:block/uuid (db/entity [:block/name "icon"]))]
     (ui/dropdown
      (fn [{:keys [toggle-fn]}]
        (if id
-         [:a {:on-click toggle-fn}
+         [:a {:on-click #(when-not disabled? (toggle-fn))}
           [:em-emoji {:id id}]]
-         [:a.flex.flex-row.items-center {:on-click toggle-fn}
+         [:a.flex.flex-row.items-center {:on-click #(when-not disabled? (toggle-fn))}
           (ui/icon "point" {:size 16})
           [:div.ml-1.text-sm "Pick another icon"]]))
      (fn [{:keys [toggle-fn]}]
@@ -44,7 +44,7 @@
                             (toggle-fn))})))))
 
 (rum/defcs class-select < (rum/local false ::open?)
-  [state *property-schema schema-classes {:keys [multiple-choices?]
+  [state *property-schema schema-classes {:keys [multiple-choices? disabled?]
                                           :or {multiple-choices? true}}]
   (let [*open? (::open? state)]
     (if @*open?
@@ -80,7 +80,7 @@
                                        (reset! *open? false))))]
         (select/select opts))
       [:div.flex.flex-1.flex-row.cursor.items-center.flex-wrap.gap-2.col-span-3
-       {:on-click #(reset! *open? true)}
+       {:on-click #(when-not disabled? (reset! *open? true))}
        (if (seq schema-classes)
          (for [class schema-classes]
            (when-let [page (db/entity [:block/uuid class])]
@@ -104,11 +104,12 @@
   (let [*property-name (::property-name state)
         *property-schema (::property-schema state)
         built-in-property? (contains? db-property/built-in-properties-keys-str (:block/original-name property))
-        property (db/sub-block (:db/id property))]
+        property (db/sub-block (:db/id property))
+        disabled? (or built-in-property? config/publishing?)]
     [:div.property-configure.flex.flex-1.flex-col
      [:div.font-bold.text-xl
-      (if built-in-property?
-        "Built-in property"
+      (if disabled?
+        "Property fields"
         "Configure property")]
 
      [:div.grid.gap-2.p-1.mt-4
@@ -116,14 +117,14 @@
        [:label.col-span-1 "Name:"]
        [:input.form-input.col-span-2
         {:on-change #(reset! *property-name (util/evalue %))
-         :disabled built-in-property?
+         :disabled disabled?
          :value @*property-name}]]
 
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Icon:"]
        (let [icon-value (pu/get-property property :icon)]
          [:div.col-span-3
-          (icon property icon-value)])]
+          (icon property icon-value {:disabled? disabled?})])]
 
       [:div.grid.grid-cols-4.gap-1.leading-8
        [:label.col-span-1 "Schema type:"]
@@ -132,7 +133,7 @@
                                (map (comp string/capitalize name))
                                (map (fn [type]
                                       {:label (if (= type "Default") "Text" type)
-                                       :disabled built-in-property?
+                                       :disabled disabled?
                                        :value type
                                        :selected (= (keyword (string/lower-case type))
                                                     (:type @*property-schema))})))]
@@ -145,20 +146,20 @@
       (when (= :page (:type @*property-schema))
         [:div.grid.grid-cols-4.gap-1.leading-8
          [:label "Specify classes:"]
-         (class-select *property-schema (:classes @*property-schema) opts)])
+         (class-select *property-schema (:classes @*property-schema) (assoc opts :disabled? disabled?))])
 
       (when (= :template (:type @*property-schema))
         [:div.grid.grid-cols-4.gap-1.leading-8
          [:label "Specify template:"]
          (class-select *property-schema (:classes @*property-schema)
-                       (assoc opts :multiple-choices? false))])
+                       (assoc opts :multiple-choices? false :disabled? disabled?))])
 
       (when-not (contains? #{:checkbox :default :template} (:type @*property-schema))
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
          [:label "Multiple values:"]
          (let [many? (boolean (= :many (:cardinality @*property-schema)))]
            (ui/checkbox {:checked many?
-                         :disabled built-in-property?
+                         :disabled disabled?
                          :on-change (fn []
                                       (swap! *property-schema assoc :cardinality (if many? :one :many)))}))])
 
@@ -167,6 +168,7 @@
           [:div.grid.grid-cols-4.gap-1.items-center.leading-8
            [:label "Hide by default:"]
            (ui/checkbox {:checked hide?
+                         :disabled disabled?
                          :on-change (fn []
                                       (swap! *property-schema assoc :hide? (not hide?)))})]))
 
@@ -176,11 +178,11 @@
         (ui/ls-textarea
          {:on-change (fn [e]
                        (swap! *property-schema assoc :description (util/evalue e)))
-          :disabled built-in-property?
+          :disabled disabled?
           :value (:description @*property-schema)})]]
 
       [:div
-       (when-not built-in-property?
+       (when-not disabled?
          (ui/button
           "Save"
           :on-click (fn [e]
