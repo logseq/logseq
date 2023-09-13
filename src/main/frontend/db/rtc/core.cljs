@@ -101,14 +101,15 @@
           local-left (db/entity repo [:block/uuid (uuid remote-left-uuid-str)])
           first-remote-parent (first remote-parents)
           local-parent (db/entity repo [:block/uuid (uuid first-remote-parent)])
-          b {:block/uuid (uuid block-uuid-str)}]
+          b {:block/uuid (uuid block-uuid-str)}
+          b-ent (db/entity repo [:block/uuid (uuid block-uuid-str)])]
       (case [(some? local-parent) (some? local-left)]
         [false true]
         (outliner-tx/transact!
          {:persist-op? false}
          (if move?
            (do (outliner-core/move-blocks! [b] local-left true)
-               (when (and content (not= (:block/content b) content))
+               (when (and content (not= (:block/content b-ent) content))
                  (outliner-core/save-block! (assoc (db/pull repo '[*] [:block/uuid (uuid block-uuid-str)])
                                                    :block/content content))))
            (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content :block/format :markdown}]
@@ -120,7 +121,7 @@
            {:persist-op? false}
            (if move?
              (do (outliner-core/move-blocks! [b] local-left sibling?)
-                 (when (and content (not= (:block/content b) content))
+                 (when (and content (not= (:block/content b-ent) content))
                    (outliner-core/save-block! (assoc (db/pull repo '[*] [:block/uuid (uuid block-uuid-str)])
                                                      :block/content content))))
              (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content
@@ -132,7 +133,7 @@
          {:persist-op? false}
          (if move?
            (do (outliner-core/move-blocks! [b] local-parent false)
-               (when (and content (not= (:block/content b) content))
+               (when (and content (not= (:block/content b-ent) content))
                  (outliner-core/save-block! (assoc (db/pull repo '[*] [:block/uuid (uuid block-uuid-str)])
                                                    :block/content content))))
            (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content
