@@ -382,6 +382,10 @@
             :data-blockid (:block/uuid block)
             :data-class-schema (boolean class-schema?)
             :title (str "Configure property: " (:block/original-name property))
+            :on-mouse-down (fn [e]
+                             (when (util/meta-key? e)
+                               (route-handler/redirect-to-page! (:block/name property))
+                               (.preventDefault e)))
             :on-click toggle-fn}
            [:div.ml-1 (:block/original-name property)]]))
       (fn [{:keys [toggle-fn]}]
