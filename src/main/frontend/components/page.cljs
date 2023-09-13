@@ -293,7 +293,7 @@
   (rum/local false ::hover?)
   {:init (fn [state]
            (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
-  [state page-name icon title {:keys [fmt-journal? *configure-show? built-in-property? preview?]}]
+  [state page-name icon title {:keys [fmt-journal? *configure-show? preview?]}]
   (when title
     (let [page (when page-name (db/entity [:block/name page-name]))
           *hover? (::hover? state)
@@ -448,17 +448,21 @@
           class? (= type "class")]
       (when page
         [:div.property-configure.grid.gap-2
-         (when-not journal?
+         (when (and (not journal?) (contains? #{"property" "class" nil} type))
            [:div.grid.grid-cols-4.gap-1
-            [:div.col-span-1 "Is it a class?"]
-            [:div.col-span-3
-             (ui/checkbox {:checked class?
-                           :disabled config/publishing?
-                           :on-change (fn []
-                                        (if class?
-                                          (db/transact! [[:db/retract (:db/id page) :block/type]])
-                                          (db/transact! [{:db/id (:db/id page)
-                                                          :block/type "class"}])))})]])
+            [:div.col-span-1 "Block type:"]
+            [:div.col-span-1
+             (ui/select (->> ["" "class" "property"]
+                             (map (fn [block-type]
+                                    {:label (if (seq block-type) (string/capitalize block-type) "Choose a block type")
+                                     :selected (= block-type type)
+                                     :disabled config/publishing?
+                                     :value block-type})))
+                        (fn [_e value]
+                          (if (seq value)
+                            (db/transact! [{:db/id (:db/id page)
+                                            :block/type value}])
+                            (db/transact! [[:db/retract (:db/id page) :block/type]]))))]])
 
          (when class?
            [:div.grid.grid-cols-4.gap-1.items-center.class-parent
