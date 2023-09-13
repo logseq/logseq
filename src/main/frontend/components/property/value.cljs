@@ -203,10 +203,13 @@
                      :block/left [:block/uuid child-1-id]
                      :block/properties {pid true}}
                     outliner-core/block-with-timestamps)
-        tx-data [parent child-1 child-2]]
-    (db/transact! repo tx-data {:outliner-op :insert-blocks})
+        blocks (if (string/blank? value)
+                 [parent child-1]
+                 [parent child-1 child-2])
+        last-block-id (:block/uuid (last blocks))]
+    (db/transact! repo blocks {:outliner-op :insert-blocks})
     (add-property! block (:block/original-name property) parent-id)
-    (editor-handler/edit-block! (db/entity [:block/uuid child-2-id]) 0 child-2-id)))
+    (editor-handler/edit-block! (db/entity [:block/uuid last-block-id]) 0 last-block-id)))
 
 (defn create-new-block-from-template!
   [block property template]
