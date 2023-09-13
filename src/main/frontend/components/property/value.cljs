@@ -501,7 +501,7 @@
 
 (rum/defc property-value < rum/reactive
   [block property v opts]
-  (let [dom-id (str "ls-property-" (:blocks-container-id opts) "-" (:db/id property))
+  (let [dom-id (str "ls-property-" (:blocks-container-id opts) "-" (:db/id block) "-" (:db/id property))
         editor-id (str dom-id "-editor")
         schema (:block/schema property)
         type (get schema :type :default)
