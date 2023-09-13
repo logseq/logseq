@@ -69,7 +69,9 @@
                       "Git Revision: " config/REVISION "\n"
                       "Platform: " safe-ua "\n"
                       "Language: " (.-language js/navigator) "\n"
-                      "Plugins: " (string/join ", " (map name (keys (:plugin/installed-plugins @state/state)))))]
+                      "Plugins: " (string/join ", " (map (fn [[k v]]
+                                                           (str (name k) " (" (:version v) ")"))
+                                                         (:plugin/installed-plugins @state/state))))]
     (str "https://github.com/logseq/logseq/issues/new?"
          "title=&"
          "template=bug_report.yaml&"
