@@ -292,7 +292,8 @@
         empty-block? (or (nil? parent) (zero? children-count))]
     (when empty-block?
       (when parent
-        (db/transact! repo [[:db/retractEntity (:db/id parent)]]))
+        (db/transact! repo [[:db/retractEntity (:db/id parent)]]
+          {:outliner-op :delete-blocks}))
       (property-handler/delete-property-value! repo block (:block/uuid property) value))
     (when (seq children)
       [:div.property-block-container.w-full

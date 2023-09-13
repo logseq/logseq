@@ -339,8 +339,8 @@
                               :block/tags)]
               (when property-value-id
                 (db/transact! repo
-                  [[:db/retract (:db/id block) attribute property-value-id]]
-                  {:outliner-op :save-block})))
+                              [[:db/retract (:db/id block) attribute property-value-id]]
+                              {:outliner-op :save-block})))
             (if (= :many (:cardinality schema))
               (let [properties (:block/properties block)
                     properties' (update properties property-id
@@ -348,13 +348,17 @@
                                           (set (remove #{property-value} col))))
                     refs (outliner-core/rebuild-block-refs block properties')]
                 (db/transact! repo
-                  [[:db/retract (:db/id block) :block/refs]
-                   {:block/uuid (:block/uuid block)
-                    :block/properties properties'
-                    :block/refs refs}]
-                  {:outliner-op :save-block}))
-              ;; remove block property if cardinality is not many
-              (remove-block-property! repo (:block/uuid block) property-id))))))))
+                              [[:db/retract (:db/id block) :block/refs]
+                               {:block/uuid (:block/uuid block)
+                                :block/properties properties'
+                                :block/refs refs}]
+                              {:outliner-op :save-block}))
+              (if (= :default (get-in property [:block/schema :type]))
+                (set-block-property! repo (:block/uuid block)
+                                     (:block/original-name property)
+                                     ""
+                                     {})
+                (remove-block-property! repo (:block/uuid block) property-id)))))))))
 
 (defn replace-key-with-id!
   "Notice: properties need to be created first"
