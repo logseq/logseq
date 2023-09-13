@@ -708,11 +708,13 @@
        (outliner-core/delete-blocks! [block] {:children? children?})))))
 
 (defn- move-to-prev-block
-  [repo sibling-block format id value move?]
+  [repo sibling-block format id value]
   (when (and repo sibling-block)
     (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
       (when-let [block (db/entity [:block/uuid (uuid sibling-block-id)])]
-        (let [original-content (util/trim-safe (:block/content block))
+        (let [original-block (dom/attr sibling-block "originalblockid")
+              id (if original-block (:block/uuid block) id)
+              original-content (util/trim-safe (:block/content block))
               value' (-> (file-property/remove-built-in-properties-when-file-based repo format original-content)
                          (drawer/remove-logbook))
               value (->> value
@@ -724,17 +726,14 @@
                    (if original-content
                      (gobj/get (utf8/encode original-content) "length")
                      0)
-                   0)
-              f (fn []
-                  (edit-block! (db/pull (:db/id block))
-                               pos
-                               id
-                               {:custom-content new-value
-                                :tail-len tail-len}))]
-          (when move? (f))
+                   0)]
+          (edit-block! (db/pull (:db/id block))
+                                       pos
+                                       id
+                                       {:custom-content new-value
+                                        :tail-len tail-len})
           {:prev-block block
-           :new-content new-value
-           :move-fn f})))))
+           :new-content new-value})))))
 
 (declare save-block!)
 
@@ -765,7 +764,7 @@
                                     block-parent
                                     {:container (util/rec-get-blocks-container block-parent)})
                                    (util/get-prev-block-non-collapsed-non-embed block-parent))
-                   {:keys [prev-block new-content move-fn]} (move-to-prev-block repo sibling-block format id value false)
+                   {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)
                    concat-prev-block? (boolean (and prev-block new-content))
                    transact-opts (cond->
                                   {:outliner-op :delete-blocks}
@@ -781,8 +780,7 @@
                                                             prev-block)]
                                           (delete-block-aux! block delete-children?)
                                           (save-block! repo prev-block' new-content {:editor/op :delete}))
-                                        (delete-block-aux! block delete-children?)))
-               (when (fn? move-fn) (move-fn))))))))
+                                        (delete-block-aux! block delete-children?)))))))))
    (state/set-editor-op! nil)))
 
 (defn delete-blocks!
@@ -799,8 +797,7 @@
         (move-to-prev-block repo sibling-block
                             (:block/format block)
                             (dom/attr sibling-block "id")
-                            ""
-                            true)))))
+                            "")))))
 
 (defn- set-block-property-aux!
   [repo block-or-id key value]

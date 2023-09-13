@@ -1018,7 +1018,8 @@
            (when (> (count edit-content) current-pos)
              (gp-util/safe-subs edit-content pos current-pos)))]
     (if hashtag?
-      (fn [chosen _e]
+      (fn [chosen e]
+        (util/stop e)
         (state/clear-editor-action!)
         (let [wrapped? (= page-ref/left-brackets (gp-util/safe-subs edit-content (- pos 2) pos))
               chosen (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
@@ -1038,7 +1039,8 @@
                                            :end-pattern (when wrapped? page-ref/right-brackets)
                                            :command :page-ref})
           (when input (.focus input))))
-      (fn [chosen _e]
+      (fn [chosen e]
+        (util/stop e)
         (state/clear-editor-action!)
         (let [page-ref-text (get-page-ref-text chosen)]
           (editor-handler/insert-command! id
