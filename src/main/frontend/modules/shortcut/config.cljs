@@ -156,6 +156,12 @@
    :auto-complete/shift-complete            {:binding "shift+enter"
                                              :fn      ui-handler/auto-complete-shift-complete}
 
+   :auto-complete/meta-complete             {:binding "mod+enter"
+                                             :fn      (fn [state e]
+                                                        (when (= :page-search-hashtag (state/get-editor-action))
+                                                          (reset! (:editor/create-page? @state/state) false))
+                                                        (ui-handler/auto-complete-complete state e))}
+
    :auto-complete/open-link                 {:binding "mod+o"
                                              :fn      ui-handler/auto-complete-open-link}
 
@@ -893,6 +899,7 @@
      :auto-complete/next
      :auto-complete/complete
      :auto-complete/shift-complete
+     :auto-complete/meta-complete
      :auto-complete/open-link
      :date-picker/prev-day
      :date-picker/next-day

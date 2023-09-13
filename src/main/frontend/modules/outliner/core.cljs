@@ -169,9 +169,7 @@
                                        :block/content ""
                                        :block/refs []
                                        :block/link [:block/uuid (:block/uuid page-m)]}]
-                                     merge-tx)))
-
-          (state/pub-event! [:editor/edit-block page-m :max (:block/uuid page-m) {}]))))
+                                     merge-tx))))))
     (reset! (:editor/create-page? @state/state) false)))
 
 (defn rebuild-block-refs

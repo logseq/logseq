@@ -266,16 +266,25 @@
                                (assoc :uuid-changed {:from (:block/uuid block)
                                                      :to original-uuid})))]
 
-       (outliner-tx/transact!
-        opts'
-        (outliner-core/save-block! block')
-        ;; page properties changed
-        (when-let [page-name (and (:block/pre-block? block')
-                                  (not= original-props (:block/properties block'))
-                                  (some-> (:block/page block') :db/id (db-utils/pull) :block/name))]
-          (state/set-page-properties-changed! page-name)))
+       (let [{:keys [tx-data]}
+             (outliner-tx/transact!
+              opts'
+              (outliner-core/save-block! block')
+              ;; page properties changed
+              (when-let [page-name (and (:block/pre-block? block')
+                                        (not= original-props (:block/properties block'))
+                                        (some-> (:block/page block') :db/id (db-utils/pull) :block/name))]
+                (state/set-page-properties-changed! page-name)))
+             [original linked] (when-not (:insert-block? opts)
+                                 (let [original-block (some (fn [m] (and (map? m) (:block/link m) m)) tx-data)]
+                                   [original-block (db/entity (:db/id (:block/link original-block)))]))]
+         ;; Block has been tagged, so we need to edit the linked page now
+         (when (and linked
+                    (= (:block/uuid (state/get-edit-block))
+                       (:block/uuid original)))
+           (edit-block! linked :max (:block/uuid linked) {})))
 
-       ;; sanitized page name changed
+;; sanitized page name changed
        (when-let [title (get-in block' [:block/properties :title])]
          (if (string? title)
            (when-let [old-page-name (:block/name (db/entity (:db/id (:block/page block'))))]
@@ -351,7 +360,8 @@
                    (not has-children?))]
     (outliner-tx/transact!
      {:outliner-op :insert-blocks}
-     (save-current-block! {:current-block current-block})
+      (save-current-block! {:current-block current-block
+                            :insert-block? true})
      (outliner-core/insert-blocks! [new-block] current-block {:sibling? sibling?
                                                               :keep-uuid? keep-uuid?
                                                               :replace-empty-target? replace-empty-target?}))))
@@ -476,10 +486,7 @@
                     {:ok-handler
                      (fn insert-new-block!-ok-handler [last-block]
                        (clear-when-saved!)
-                       (edit-block! last-block 0 id)
-                       (if original-block
-                         (edit-block! last-block 0 (:block/uuid last-block))
-                         (edit-block! last-block 0 id)))}))))
+                       (edit-block! last-block 0 (if original-block (:block/uuid last-block) id)))}))))
    (state/set-editor-op! nil)))
 
 (defn api-insert-new-block!
@@ -677,19 +684,20 @@
 (defn cycle-todo!
   []
   #_:clj-kondo/ignore
-  (if-let [blocks (seq (get-selected-blocks))]
-    (cycle-todos!)
-    (when (state/get-edit-block)
-      (let [edit-input-id (state/get-edit-input-id)
-            current-input (gdom/getElement edit-input-id)
-            content (state/get-edit-content)
-            format (or (db/get-page-format (state/get-current-page))
-                       (state/get-preferred-format))
-            [new-content marker] (marker/cycle-marker content nil nil format (state/get-preferred-workflow))
-            new-pos (commands/compute-pos-delta-when-change-marker
-                     content marker (cursor/pos current-input))]
-        (state/set-edit-content! edit-input-id new-content)
-        (cursor/move-cursor-to current-input new-pos)))))
+  (when-not (state/get-editor-action)
+    (if-let [blocks (seq (get-selected-blocks))]
+      (cycle-todos!)
+      (when (state/get-edit-block)
+        (let [edit-input-id (state/get-edit-input-id)
+              current-input (gdom/getElement edit-input-id)
+              content (state/get-edit-content)
+              format (or (db/get-page-format (state/get-current-page))
+                         (state/get-preferred-format))
+              [new-content marker] (marker/cycle-marker content nil nil format (state/get-preferred-workflow))
+              new-pos (commands/compute-pos-delta-when-change-marker
+                       content marker (cursor/pos current-input))]
+          (state/set-edit-content! edit-input-id new-content)
+          (cursor/move-cursor-to current-input new-pos))))))
 
 (defn set-priority
   [{:block/keys [priority content] :as block} new-priority]
