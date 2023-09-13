@@ -284,7 +284,7 @@
                        (:block/uuid original)))
            (edit-block! linked :max (:block/uuid linked) {})))
 
-;; sanitized page name changed
+       ;; sanitized page name changed
        (when-let [title (get-in block' [:block/properties :title])]
          (if (string? title)
            (when-let [old-page-name (:block/name (db/entity (:db/id (:block/page block'))))]
