@@ -733,7 +733,7 @@
 
                true
                (merge (:editor-opts config)))]
-    [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
+    [:div.editor-inner.flex.flex-1 {:class (if block "block-editor" "non-block-editor")}
 
      (ui/ls-textarea opts)
 
