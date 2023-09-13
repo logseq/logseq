@@ -363,7 +363,6 @@
                   :else title))]]]
        (when (and @*hover?
                   db-based?
-                  (not built-in-property?)
                   (not @*edit?))
          [:div.absolute.bottom-2.left-0
           [:div.flex.flex-row.items-center.flex-wrap.ml-2
@@ -609,7 +608,7 @@
                   (plugins/hook-ui-slot :page-head-actions-slotted nil)
                   (plugins/hook-ui-items :pagebar)]))])
 
-          (when (and db-based? (not built-in-property?) @*configure-show?)
+          (when (and db-based? @*configure-show?)
             (if (and (= "property" (:block/type page)) (not config/publishing?))
               (do
                 (state/set-modal! #(property/property-config repo page {}))
