@@ -182,7 +182,7 @@
             [:div
              (when (and db? tag?)
                [:div.flex.flex-row.items-center.px-4.py-1.text-sm.opacity-70.gap-2
-                "Create page:"
+                "Turn this block into a page:"
                 (ui/toggle create-page?
                            (fn [_e]
                              (swap! (:editor/create-page? @state/state) not))
