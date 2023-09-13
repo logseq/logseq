@@ -28,6 +28,7 @@
     (pipelines/invoke-hooks tx-report)
 
     (when (or (:outliner/transact? tx-meta)
+              (:outliner-op tx-meta)
               (:whiteboard/transact? tx-meta))
       (undo-redo/listen-db-changes! tx-report))
 
