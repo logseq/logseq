@@ -453,12 +453,15 @@
              [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
              insert-above? (and (string/blank? fst-block-text) (not (string/blank? snd-block-text)))
              block' (or (db/pull [:block/uuid block-id]) block)
+             original-block (:original-block config)
              block'' (or
-                      (when-let [b (:original-block config)]
-                        (cond
-                          insert-above? b
-                          (:block/collapsed? block') b
-                          :else block'))
+                      (when original-block
+                        (let [e (db/entity (:db/id block'))]
+                          (if (and (some? (first (:block/_parent e)))
+                                   (not (:block/collapsed? e)))
+                          ;; object has children and not collapsed
+                          block'
+                          original-block)))
                       block')
              insert-fn (cond
                          block-self?
@@ -473,7 +476,10 @@
                     {:ok-handler
                      (fn insert-new-block!-ok-handler [last-block]
                        (clear-when-saved!)
-                       (edit-block! last-block 0 id))}))))
+                       (edit-block! last-block 0 id)
+                       (if original-block
+                         (edit-block! last-block 0 (:block/uuid last-block))
+                         (edit-block! last-block 0 id)))}))))
    (state/set-editor-op! nil)))
 
 (defn api-insert-new-block!
