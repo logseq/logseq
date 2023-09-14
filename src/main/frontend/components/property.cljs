@@ -456,12 +456,12 @@
   [state block hidden-properties opts]
   (let [*hide? (::hide? state)]
     [:div.hidden-properties.flex.flex-col.gap-1
-     (when-not @*hide?
-       (properties-section block hidden-properties opts))
      [:a.block-control.text-sm.flex.flex-row.items-center
       {:on-click #(swap! *hide? not)}
       (ui/rotating-arrow @*hide?)
-      [:div "Hidden properties"]]]))
+      [:div "Hidden properties"]]
+     (when-not @*hide?
+       (properties-section block hidden-properties opts))]))
 
 (rum/defcs properties-area < rum/reactive
   {:init (fn [state]
