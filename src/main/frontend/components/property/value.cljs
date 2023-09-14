@@ -15,6 +15,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
+            [lambdaisland.glogi :as log]
             [medley.core :as medley]
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]))
@@ -114,22 +115,41 @@
                                            "Choose pages"
                                            "Choose page")
               :on-chosen (fn [chosen]
-                           (let [page (string/trim (if (string? chosen) chosen (:value chosen)))
+                           (let [page* (string/trim (if (string? chosen) chosen (:value chosen)))
+                                 [_ page inline-class] (or (seq (map string/trim (re-find #"(.*)#(.*)$" page*)))
+                                                           [nil page* nil])
                                  id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))
                                  class? (= (:block/name property) "tags")]
                              (when (nil? id)
-                               (page-handler/create! page {:redirect? false
-                                                           :create-first-block? false
-                                                           ;; TODO: Allow users to choose a preferred class
-                                                           ;; when a property supports multiple classes
-                                                           ;; Only 1 class because properties normally have one of these classes,
-                                                           ;; not all these classes
-                                                           :tags (take 1 classes)
-                                                           :class? class?}))
+                               (let [inline-class-uuid
+                                     (when inline-class
+                                       (or (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc inline-class)]))
+                                           (do (log/error :msg "Given inline class does not exist" :inline-class inline-class)
+                                               nil)))]
+                                 (page-handler/create! page {:redirect? false
+                                                             :create-first-block? false
+                                                             :tags (if inline-class-uuid
+                                                                     [inline-class-uuid]
+                                                                    ;; Only 1st class b/c page normally has
+                                                                    ;; one of and not all these classes
+                                                                     (take 1 classes))
+                                                             :class? class?})))
                              (let [id' (or id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)])))]
                                (add-property! block (:block/original-name property) id'))
                              (when-let [f (:on-chosen opts)] (f))))
               :show-new-when-not-exact-match? true
+              ;; Provides additional completion for inline classes on new pages
+              :transform-fn (fn [results input]
+                              (if-let [[_ new-page class-input] (and (empty? results) (re-find #"(.*)#(.*)$" input))]
+                                (let [repo (state/get-current-repo)
+                                      class-names (map #(:block/original-name (db/entity repo [:block/uuid %])) classes)
+                                      descendent-classes (->> class-names
+                                                              (mapcat #(db/get-namespace-pages repo %))
+                                                              (map :block/original-name))]
+                                  (->> (concat class-names descendent-classes)
+                                       (filter #(string/includes? % class-input))
+                                       (mapv #(hash-map :value (str new-page "#" %)))))
+                                results))
               :input-opts (fn [_]
                             {:on-blur (fn []
                                         (exit-edit-property)
