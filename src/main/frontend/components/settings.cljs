@@ -601,6 +601,20 @@
    {:left-label (t :settings-page/network-proxy)
     :action (user-proxy-settings agent-opts)}))
 
+(rum/defcs auto-chmod-row < rum/reactive
+  [state t]
+  (let [enabled? (if (= nil (state/sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))
+                   true
+                   (state/sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))]
+    (toggle
+     "automatic-chmod"
+     (t :settings-page/auto-chmod)
+     enabled?
+     #(do
+       (state/set-state! [:electron/user-cfgs :feature/enable-automatic-chmod?] (not enabled?))
+       (ipc/ipc :userAppCfgs :feature/enable-automatic-chmod? (not enabled?)))
+     [:span.text-sm.opacity-50 (t :settings-page/auto-chmod-desc)])))
+
 (defn filename-format-row []
   (row-with-button-action
    {:left-label (t :settings-page/filename-format)
@@ -709,6 +723,7 @@
      (usage-diagnostics-row t instrument-disabled?)
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      (when (util/electron?) (https-user-agent-row https-agent-opts))
+     (when (util/electron?) (auto-chmod-row t))
      (when (and (util/electron?) (not (config/demo-graph? current-repo))) (filename-format-row))
      (clear-cache-row t)
 
