@@ -450,7 +450,11 @@
         parent-changed? (::parent-changed? state)]
     (when page
       [:div.property-configure.grid.gap-2
-       (when (and (not journal?) (contains? #{"property" "class" nil} type))
+       (when (and (not journal?)
+                  (if config/publishing?
+                    ;; Looks weird in read-only to show blank block type
+                    (contains? #{"property" "class"} type)
+                    (contains? #{"property" "class" nil} type)))
          [:div.grid.grid-cols-4.gap-1
           [:div.col-span-1 "Block type:"]
           [:div.col-span-1
