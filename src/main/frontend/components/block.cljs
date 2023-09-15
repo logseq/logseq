@@ -2929,7 +2929,7 @@
         (block-right-menu config block edit?))]
 
      (when (and (config/db-based-graph? repo) (not collapsed?))
-       [:div {:style {:padding-left 29}}
+       [:div.mt-1 {:style {:padding-left 29}}
         (db-properties-cp config
                          block
                          edit-input-id
