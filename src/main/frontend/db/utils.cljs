@@ -126,7 +126,8 @@
   ([repo-url tx-data]
    (transact! repo-url tx-data nil))
   ([repo-url tx-data tx-meta]
-   (when-not config/publishing?
+   (when (or (not config/publishing?)
+             (and config/publishing? (= :collapse-expand-blocks (:outliner-op tx-meta))))
      (let [tx-data (gp-util/fast-remove-nils tx-data)]
        (when (seq tx-data)
          ;; (prn :debug "DB transact:")
