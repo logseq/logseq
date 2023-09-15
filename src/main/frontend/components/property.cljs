@@ -355,7 +355,7 @@
           (when-let [id (:id icon)]
             (when (= :emoji (:type icon))
               [:em-emoji {:id id}]))
-          [:span.bullet-container.cursor
+          [:span.bullet-container.cursor (when collapsed? {:class "bullet-closed"})
            [:span.bullet]])])
       (fn [{:keys [toggle-fn]}]
         (ui/emoji-picker

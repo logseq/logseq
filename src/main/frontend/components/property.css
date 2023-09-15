@@ -123,3 +123,7 @@ input.simple-input:focus {
         max-width: 720px;
     }
 }
+
+.property-key .bullet-container .bullet {
+    background-color: darkgrey;
+}
