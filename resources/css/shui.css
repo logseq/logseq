@@ -39,28 +39,28 @@
   box-shadow: none;
 }
 
-.shui__button-theme-color {
+.shui__button-theme {
   background: or(--lx-accent-09, --rx-blue-09);
 }
 
-.shui__button-theme-color:hover {
+.shui__button-theme:hover {
   background: or(--lx-accent-10, --rx-blue-10);
 }
 
-.shui__button-theme-color:active {
+.shui__button-theme:active {
   background: or(--lx-accent-08, --rx-blue-08);
 }
 
 .shui__button-theme-gray {
-  background: or(--lx-gray-05, --ls-quaternary-background-color);
+  background: or(--lx-gray-05, --ls-quaternary-background);
 }
 
 .shui__button-theme-gray:hover {
-  background: or(--lx-gray-06, --ls-quaternary-background-color);
+  background: or(--lx-gray-06, --ls-quaternary-background);
 }
 
 .shui__button-theme-gray:active {
-  background: or(--lx-gray-04, --ls-quaternary-background-color);
+  background: or(--lx-gray-04, --ls-quaternary-background);
 }
 
 .shui__button-theme-gradient {
@@ -78,43 +78,43 @@
   --depth-shadow-to: rgba(0, 0, 0, 0);
 }
 
-.shui__button-theme-gradient.shui__button-color-,
-.shui__button-theme-gradient.shui__button-color-indigo,
-.shui__button-theme-gradient.shui__button-color-blue,
-.shui__button-theme-gradient.shui__button-color-sky,
-.shui__button-theme-gradient.shui__button-color-cyan {
+.shui__button-theme-gradient.shui__button-,
+.shui__button-theme-gradient.shui__button-indigo,
+.shui__button-theme-gradient.shui__button-blue,
+.shui__button-theme-gradient.shui__button-sky,
+.shui__button-theme-gradient.shui__button-cyan {
   background: linear-gradient(37deg, var(--depth-shadow-from) 0%, var(--depth-shadow-to) 100%),
               linear-gradient(135deg, var(--rx-indigo-09) 0%, var(--rx-blue-09) 33.85%, var(--rx-sky-09) 64.06%, var(--rx-cyan-09) 100%);
 }
 
-.shui__button-theme-gradient.shui__button-color-tomato,
-.shui__button-theme-gradient.shui__button-color-red,
-.shui__button-theme-gradient.shui__button-color-crimson,
-.shui__button-theme-gradient.shui__button-color-pink,
-.shui__button-theme-gradient.shui__button-color-plum,
-.shui__button-theme-gradient.shui__button-color-purple,
-.shui__button-theme-gradient.shui__button-color-violet {
+.shui__button-theme-gradient.shui__button-tomato,
+.shui__button-theme-gradient.shui__button-red,
+.shui__button-theme-gradient.shui__button-crimson,
+.shui__button-theme-gradient.shui__button-pink,
+.shui__button-theme-gradient.shui__button-plum,
+.shui__button-theme-gradient.shui__button-purple,
+.shui__button-theme-gradient.shui__button-violet {
   background: linear-gradient(37deg, var(--depth-shadow-from) 0%, var(--depth-shadow-to) 100%),
               linear-gradient(135deg, var(--rx-tomato-09) 0%, var(--rx-red-09) 16.66%, var(--rx-crimson-09) 33.33%, var(--rx-pink-09) 50%, var(--rx-plum-09) 66.66%, var(--rx-purple-09) 83.33%, var(--rx-violet-09) 100%);
 }
 
-.shui__button-theme-gradient.shui__button-color-green,
-.shui__button-theme-gradient.shui__button-color-mint,
-.shui__button-theme-gradient.shui__button-color-teal {
+.shui__button-theme-gradient.shui__button-green,
+.shui__button-theme-gradient.shui__button-mint,
+.shui__button-theme-gradient.shui__button-teal {
   background: linear-gradient(37deg, var(--depth-shadow-from) 0%, var(--depth-shadow-to) 100%),
               linear-gradient(135deg, var(--rx-teal-09) 0%, var(--rx-mint-09) 50%, var(--rx-green-09) 100%);
 }
 
-.shui__button-theme-gradient.shui__button-color-grass,
-.shui__button-theme-gradient.shui__button-color-lime {
+.shui__button-theme-gradient.shui__button-grass,
+.shui__button-theme-gradient.shui__button-lime {
   background: linear-gradient(37deg, var(--depth-shadow-from) 0%, var(--depth-shadow-to) 100%),
               linear-gradient(135deg, var(--rx-grass-09) 0%, var(--rx-lime-09) 100%);
 }
 
-.shui__button-theme-gradient.shui__button-color-yellow,
-.shui__button-theme-gradient.shui__button-color-amber,
-.shui__button-theme-gradient.shui__button-color-orange,
-.shui__button-theme-gradient.shui__button-color-brown {
+.shui__button-theme-gradient.shui__button-yellow,
+.shui__button-theme-gradient.shui__button-amber,
+.shui__button-theme-gradient.shui__button-orange,
+.shui__button-theme-gradient.shui__button-brown {
   background: linear-gradient(37deg, var(--depth-shadow-from) 0%, var(--depth-shadow-to) 100%),
               linear-gradient(135deg, var(--rx-yellow-09) 0%, var(--rx-amber-09) 33.33%, var(--rx-orange-09) 66.66%, var(--rx-brown-09) 100%);
 }
@@ -210,3 +210,44 @@
   -webkit-mask-composite: xor;
   mask-composite: exclude;
 }
+
+.shui__button-muted {
+  transition: opacity 200 ease-in;
+  opacity: 0.4;
+}
+
+.shui__button-muted:hover {
+  opacity: 1;
+}
+
+.shui__button-theme-gray.shui__button-color-custom  { background-color: var(--ls-tertiary-background-color); color: white; }
+.shui__button-theme-color.shui__button-color-custom  { background-color: var(--color-indigo-600); color: white; }
+
+.shui__button-theme-color.shui__button-color-lime    { background-color: var(--rx-lime-09)} 
+.shui__button-theme-color.shui__button-color-orange  { background-color: var(--rx-orange-09)} 
+.shui__button-theme-color.shui__button-color-gray    { background-color: var(--rx-gray-09)} 
+.shui__button-theme-color.shui__button-color-sand    { background-color: var(--rx-sand-09)} 
+.shui__button-theme-color.shui__button-color-crimson { background-color: var(--rx-crimson-09)} 
+.shui__button-theme-color.shui__button-color-yellow  { background-color: var(--rx-yellow-09)} 
+.shui__button-theme-color.shui__button-color-green   { background-color: var(--rx-green-09)} 
+.shui__button-theme-color.shui__button-color-indigo  { background-color: var(--rx-indigo-09)} 
+.shui__button-theme-color.shui__button-color-cyan    { background-color: var(--rx-cyan-09)} 
+.shui__button-theme-color.shui__button-color-violet  { background-color: var(--rx-violet-09)} 
+.shui__button-theme-color.shui__button-color-bronze  { background-color: var(--rx-bronze-09)} 
+.shui__button-theme-color.shui__button-color-slate   { background-color: var(--rx-slate-09)} 
+.shui__button-theme-color.shui__button-color-gold    { background-color: var(--rx-gold-09)} 
+.shui__button-theme-color.shui__button-color-sage    { background-color: var(--rx-sage-09)} 
+.shui__button-theme-color.shui__button-color-mauve   { background-color: var(--rx-mauve-09)} 
+.shui__button-theme-color.shui__button-color-mint    { background-color: var(--rx-mint-09)} 
+.shui__button-theme-color.shui__button-color-red     { background-color: var(--rx-red-09)} 
+.shui__button-theme-color.shui__button-color-blue    { background-color: var(--rx-blue-09)} 
+.shui__button-theme-color.shui__button-color-grass   { background-color: var(--rx-grass-09)} 
+.shui__button-theme-color.shui__button-color-plum    { background-color: var(--rx-plum-09)} 
+.shui__button-theme-color.shui__button-color-pink    { background-color: var(--rx-pink-09)} 
+.shui__button-theme-color.shui__button-color-teal    { background-color: var(--rx-teal-09)} 
+.shui__button-theme-color.shui__button-color-amber   { background-color: var(--rx-amber-09)} 
+.shui__button-theme-color.shui__button-color-purple  { background-color: var(--rx-purple-09)} 
+.shui__button-theme-color.shui__button-color-brown   { background-color: var(--rx-brown-09)} 
+.shui__button-theme-color.shui__button-color-sky     { background-color: var(--rx-sky-09)} 
+.shui__button-theme-color.shui__button-color-olive   { background-color: var(--rx-olive-09)} 
+.shui__button-theme-color.shui__button-color-tomato  { background-color: var(--rx-tomato-09)} 

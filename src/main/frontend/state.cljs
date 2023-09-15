@@ -84,7 +84,6 @@
      :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
      :ui/wide-mode?                         (storage/get :ui/wide-mode)
      :ui/radix-color                        (storage/get :ui/radix-color)
-     :ui/radix-gradient                     (storage/get :ui/radix-gradient)
 
      ;; ui/collapsed-blocks is to separate the collapse/expand state from db for:
      ;; 1. right sidebar
@@ -2192,27 +2191,15 @@ Similar to re-frame subscriptions"
 (defn get-color-accent []
   (get @state :ui/radix-color))
 
-(defn get-color-gradient []
-  (get @state :ui/radix-gradient 1))
-
 (defn set-color-accent! [color]
   (swap! state assoc :ui/radix-color color)
   (storage/set :ui/radix-color color)
-  (colors/set-radix color (get-color-gradient)))
-
-(defn set-color-gradient! [steps]
-  (swap! state assoc :ui/radix-gradient steps)
-  (storage/set :ui/radix-gradient steps)
-  (colors/set-radix (get-color-accent) steps))
+  (colors/set-radix color))
 
 (defn unset-color-accent! []
   (swap! state assoc :ui/radix-color nil)
   (storage/remove :ui/radix-color)
   (colors/unset-radix))
-
-(defn unset-color-gradient! []
-  (swap! state assoc :ui/radix-gradient nil)
-  (storage/remove :ui/radix-gradient))
 
 (defn cycle-color! []
   (let [current-color (get-color-accent)
@@ -2222,30 +2209,6 @@ Similar to re-frame subscriptions"
     (if next-color 
       (set-color-accent! next-color) 
       (unset-color-accent!))))
-
-(defn cycle-gradient! []
-  (let [current-gradient (get-color-gradient)]
-    (case current-gradient  
-      nil (set-color-gradient! 2)
-      6 (unset-color-gradient!)
-      (set-color-gradient! (inc current-gradient)))))
-  
-
-(defn sub-color-gradient-bg-styles [step]
-  (let [color (sub :ui/radix-color)
-        stops (sub :ui/radix-gradient)]
-    {:background-image (colors/linear-gradient color step stops)
-     :background-attachment :fixed 
-     :background-position "0 0"
-     :background-size "100% 100%"}))
-     ; :transform "translate3d(0,0,0) "}))
-
-(defn sub-color-gradient-text-styles [step]
-  (assoc (sub-color-gradient-bg-styles step)
-        :background-clip "text"
-        "-webkit-background-clip" "text"
-        :color :transparent))
-  ; (sub-color-gradient-bg-styles step))
 
 (defn set-page-properties-changed!
   [page-name]

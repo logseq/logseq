@@ -213,7 +213,7 @@
   (state/set-online! js/navigator.onLine)
   (set-network-watcher!)
   (when-let [radix-color (state/get-color-accent)]
-    (colors/set-radix radix-color (state/get-color-gradient)))
+    (colors/set-radix radix-color))
 
   (util/indexeddb-check?
    (fn [_error]

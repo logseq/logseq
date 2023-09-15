@@ -236,15 +236,15 @@
                                                             (and (set? handler-ids) (contains? handler-ids handler-id'))
                                                             (and global? (contains? global-handlers handler-id'))))
                                                     (assoc r id handler-id')
-                                                    r)
-                                                  ) {} refs)]]))]
+                                                    r))
+                                                {} refs)]]))]
 
                      [k' (->> ks-bindings
                               (filterv same-leading-key?)
                               (mapv into-conflict-refs)
                               (remove #(empty? (second (second %1))))
-                              (into {}))]
-                     ))))
+                              (into {}))]))))
+                     
           (remove #(empty? (vals (second %1))))
           (into {})))))
 

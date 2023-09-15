@@ -179,14 +179,14 @@
 .cp__shortcut-conflicts-list {
   &-wrap {
     > section {
-      @apply bg-gray-3 border-[2px] mb-3 dark:bg-transparent;
+      @apply bg-gray-03 border-[2px] mb-3 dark:bg-transparent;
 
       > ul {
         @apply px-2 pb-2 m-0 list-none;
       }
 
       > h2 {
-        @apply flex items-center p-2 text-red-9 text-sm space-x-1 font-extrabold;
+        @apply flex items-center p-2 text-red-600 text-sm space-x-1 font-extrabold;
       }
     }
   }

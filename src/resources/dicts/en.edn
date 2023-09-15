@@ -810,7 +810,6 @@
   :ui/toggle-contents             "Toggle Contents in sidebar"
   :ui/cycle-color-off             "Cycle color off"
   :ui/cycle-color                 "Cycle color"
-  :ui/cycle-gradient              "Cycle gradient"
    ;;  :ui/open-new-window             "Open another window"
   :command/toggle-favorite        "Add to/remove from favorites"
   :editor/open-file-in-default-app "Open file in default app"

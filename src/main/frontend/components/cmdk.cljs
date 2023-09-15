@@ -20,10 +20,13 @@
     [frontend.util :as util]
     [frontend.util.page :as page-util]
     [goog.functions :as gfun]
-    [logseq.shui.context :refer [make-context]]
+    [frontend.shui :refer [make-shui-context]]
     [logseq.shui.core :as shui]
     [promesa.core :as p]
     [rum.core :as rum]))
+
+(def GROUP-LIMIT 5)
+(def FILTER-ROW-HEIGHT 73)
 
 ;; When CMDK opens, we have some default search actions we make avaialbe for quick access
 (def default-search-actions 
@@ -36,13 +39,16 @@
    ; {:text "Generate short answer"    :info "Ask a language model"                :icon "question-mark" :icon-theme :gradient}
 
 (def default-commands 
-  [{:text "Open settings" :icon "settings"      :icon-theme :gray}])
+  [{:text "Open settings" :icon "settings"      :icon-theme :gray}
+   {:text "Open settings" :icon "settings"      :icon-theme :gray}
+   {:text "Open settings" :icon "settings"      :icon-theme :gray}])
 
 ;; The results are separated into groups, and loaded/fetched/queried separately
 (def default-results 
-  {:search-actions {:status :success :show-more false :items default-search-actions} 
-   :commands       {:status :success :show-more false :items default-commands}
-   :history        {:status :success :show-more false :items nil}
+  {:search-actions {:status :success :show-more false :items nil} 
+   :recents        {:status :success :show-more false :items nil}
+   :commands       {:status :success :show-more false :items nil}
+   :favorites      {:status :success :show-more false :items nil}
    :current-page   {:status :success :show-more false :items nil}
    :pages          {:status :success :show-more false :items nil}
    :blocks         {:status :success :show-more false :items nil} 
@@ -51,18 +57,20 @@
 ;; Take the results, decide how many items to show, and order the results appropriately
 (defn state->results-ordered [state]
   (let [results @(::results state)
+        index (volatile! -1)
         visible-items (fn [group] 
                         (let [{:keys [items show-more]} (get results group)]
                           (if show-more items (take 5 items))))
-        results [["Search actions" :search-actions (visible-items :search-actions)]
+        results [["Recents"        :recents        (visible-items :recents)]
+                 ["Search actions" :search-actions (visible-items :search-actions)]
                  ["Current page"   :current-page   (visible-items :current-page)]
                  ["Commands"       :commands       (visible-items :commands)]
                  ["Pages"          :pages          (visible-items :pages)]
                  ["Whiteboards"    :whiteboards    (visible-items :whiteboards)]
                  ["Blocks"         :blocks         (visible-items :blocks)]]]
-    results))
-    ; (for [[group-name group-key group-items] results]
-    ;   [group-name group-key (mapv #(assoc % :item-index (vswap! index inc)) group-items)])))
+    ; results
+    (for [[group-name group-key group-items] results]
+      [group-name group-key (mapv #(assoc % :item-index (vswap! index inc)) group-items)])))
 
 ;; Take the ordered results and the highlight index and determine which item is highlighted
 ; (defn state->highlighted-item 
@@ -81,6 +89,30 @@
 ;; Each result gorup has it's own load-results function
 (defmulti load-results (fn [group state] group))
 
+;; Initially we want to load the recents into the results 
+(defmethod load-results :initial [_ state]
+  (let [!results (::results state)
+        recent-searches (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
+        recent-pages (mapv (fn [page] {:type :page :data page}) (db/get-key-value :recent/pages))
+        recent-items (->> (concat recent-searches recent-pages) 
+                          (map #(hash-map :icon (if (= :page (:type %)) "page" "history")
+                                          :icon-theme :gray 
+                                          :text (:data %)
+                                          :source-recent %)))
+        command-items (->> (cp-handler/top-commands 1000) 
+                           (map #(hash-map :icon "command" 
+                                           :icon-theme :gray 
+                                           :text (cp/translate t %)
+                                           :value-label (pr-str (:id %))
+                                           :shortcut (:shortcut %)
+                                           :source-command %)))
+        favorite-pages nil
+        favorite-items nil]
+    (reset! !results (-> default-results (assoc-in [:recents :items] recent-items)
+                                         (assoc-in [:commands :items] command-items)
+                                         (assoc-in [:favorites :items] favorite-items)))))
+    
+
 ;; The search-actions are only loaded when there is no query present. It's like a quick access to filters
 (defmethod load-results :search-actions [group state]
   (let [!input (::input state)
@@ -96,7 +128,8 @@
     (swap! !results assoc-in [group :status] :loading)
     (if (empty? @!input)
       (swap! !results assoc group {:status :success :items default-commands})
-      (->> (vals (cp-handler/get-commands-unique))
+      (->> (cp-handler/top-commands 1000)
+           (map #(assoc % :t (cp/translate t %)))
            (filter #(string/includes? (string/lower-case (pr-str %)) (string/lower-case @!input)))
            (map #(hash-map :icon "command" 
                            :icon-theme :gray 
@@ -176,15 +209,37 @@
     (p/let [files (search/file-search @!input 99)]
       (js/console.log "load-results/files" (clj->js files)))))
 
+(defmethod load-results :recents [group state]
+  (let [!input (::input state)
+        !results (::results state)
+        recent-searches (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
+        recent-pages (mapv (fn [page] {:type :page :data page}) (db/get-key-value :recent/pages))]
+    (js/console.log "recents" (clj->js recent-searches) (clj->js recent-pages))
+    (swap! !results assoc-in [group :status] :loading)
+    (let [items (->> (concat recent-searches recent-pages)
+                     (filter #(string/includes? (string/lower-case (:data %)) (string/lower-case @!input)))
+                     (map #(hash-map :icon (if (= :page (:type %)) "page" "history")
+                                     :icon-theme :gray 
+                                     ; :header (when-let [page-name])
+                                     :text (:data %)
+                                     :source-recent %)))]
+      (swap! !results assoc group {:status :success :items items}))))
+      
+    ; (swap! !results assoc group {:status :success :items recent-items})))
+
 ;; The default load-results function triggers all the other load-results function
 (defmethod load-results :default [_ state]
   (js/console.log "load-results/default" @(::input state))
-  (load-results :search-actions state)
-  (load-results :commands state)
-  (load-results :blocks state)
-  (load-results :pages state)
-  ; (load-results :whiteboards state)
-  (load-results :files state))
+  (if-not (some-> state ::input deref seq)
+    (load-results :initial state)
+    (do
+      (load-results :search-actions state)
+      (load-results :commands state)
+      (load-results :blocks state)
+      (load-results :pages state)
+      ; (load-results :whiteboards state)
+      (load-results :files state)
+      (load-results :recents state))))
 
 ; (def search [query]
 ;   (load-results :search-actions state))
@@ -263,10 +318,10 @@
                                (js/console.log 
                                  "testing-capping-the-highlighted-item"
                                  (count items)
-                                 (clj->js (drop 5 items)) 
+                                 (clj->js (drop GROUP-LIMIT items)) 
                                  (clj->js highlighted-item)
                                  (.indexOf items highlighted-item))
-                               (when (< 4 (.indexOf items highlighted-item))
+                               (when (< (dec GROUP-LIMIT) (.indexOf items highlighted-item))
                                  (reset! (::highlighted-item state) (nth items 4 nil))))] 
     [:div {:class ""}
      [:div {:class "text-xs py-1.5 px-6 flex justify-between items-center gap-2" 
@@ -280,14 +335,16 @@
          (str "99+")
          (count items))]
       [:div {:class "flex-1"}]
-      (if show-more
-        [:div {:on-click (fn [] (cap-highlighted-item) (toggle-show-more))} "Show less"]
-        [:div {:on-click (fn [] (toggle-show-more))} "Show more"])]
+      (cond 
+        (<= (count items) GROUP-LIMIT) [:div]
+        show-more [:div {:class "hover:cursor-pointer" :on-click (fn [] (cap-highlighted-item) (toggle-show-more))} "Show less"]
+        :else [:div {:class "hover:cursor-pointer" :on-click (fn [] (toggle-show-more))} "Show more"])]
 
      [:div {:class ""}
       (for [item visible-items
             :let [highlighted? (= item highlighted-item)]]
        (shui/list-item (assoc item 
+                              :query @(::input state)
                               :highlighted highlighted?
                               ;; for some reason, the highlight effect does not always trigger on a 
                               ;; boolean value change so manually pass in the dep
@@ -298,7 +355,7 @@
                                               (handle-action action state item))
                                             (reset! (::highlighted-item state) item)))
                               :on-highlight (fn [ref]  
-                                              (when (and ref (.-current ref))
+                                              (when (and ref (.-current ref) (< 2 (:item-index item)))
                                                 (.. ref -current (scrollIntoView #js {:block "center" 
                                                                                       :inline "nearest"
                                                                                       :behavior "smooth"}))) 
@@ -307,7 +364,8 @@
                                                 :commands       (reset! (::actions state) [:close :trigger])
                                                 :pages          (reset! (::actions state) [:close :copy-page-ref :open-page-right :open-page])
                                                 :blocks         (reset! (::actions state) [:close :copy-block-ref :open-block-right :open-block])
-                                                nil)))))]]))
+                                                nil)))
+                       (make-shui-context)))]]))
 
 (defn move-highlight [state n]
   (let [items (mapcat last (state->results-ordered state))
@@ -317,10 +375,27 @@
       (reset! (::highlighted-item state) next-highlighted-item)
       (reset! (::highglighted-item state) nil))))
 
+(defn handle-input-change 
+  ([state e] (handle-input-change state e (.. e -target -value)))
+  ([state _ input]
+   (let [!input (::input state)
+         !load-results-throttled (::load-results-throttled state)]
+     ;; update the input value in the UI
+     (reset! !input input) 
+
+     ;; ensure that there is a throttled version of the load-results function
+     (when-not @!load-results-throttled
+       (reset! !load-results-throttled (gfun/throttle load-results 1000)))
+
+     ;; retreive the laod-results function and update all the results
+     (when-let [load-results-throttled @!load-results-throttled]
+       (load-results-throttled :default state)))))
+
 (defonce keydown-handler
   (fn [state e]
     (let [shift? (.-shiftKey e)
           alt? (.-altKey e)]
+      (js/console.log "pressing key" @(::input state) (.-key e) (boolean (seq @(::input state))))
       (reset! (::shift? state) shift?)
       (reset! (::alt? state) alt?)
       (when (#{"ArrowDown" "ArrowUp"} (.-key e))
@@ -334,6 +409,10 @@
                     (handle-action action state @(::highlighted-item state) e))
                   (when-let [action (some #{:open-block :open-page :filter :trigger} @(::actions state))]
                     (handle-action action state @(::highlighted-item state) e)))
+        "Escape" (when (seq @(::input state))
+                   (.preventDefault e)
+                   (.stopPropagation e)
+                   (handle-input-change state nil ""))
         ; "j" (when (.-metaKey e) 
         ;       (if (.-shiftKey e)
         ;         (swap! state update :current-engine prev-engine)
@@ -348,21 +427,11 @@
           alt? (.-altKey e)]
       (reset! (::shift? state) shift?)
       (reset! (::alt? state) alt?))))
-
-(defn handle-input-change [state e]
-  (let [input (.. e -target -value)
-        !input (::input state)
-        !load-results-throttled (::load-results-throttled state)]
-    ;; update the input value in the UI
-    (reset! !input input) 
-
-    ;; ensure that there is a throttled version of the load-results function
-    (when-not @!load-results-throttled
-      (reset! !load-results-throttled (gfun/throttle load-results 1000)))
-
-    ;; retreive the laod-results function and update all the results
-    (when-let [load-results-throttled @!load-results-throttled]
-      (load-results-throttled :all state))))
+      ; (when (= "Escape" (.-key e))
+      ;   (js/console.log "escape intercepted keyup")
+      ;   (.preventDefault e)
+      ;   (.stopPropagation e)
+      ;   (reset! (::input state) nil)))))
 
 (rum/defc page-preview [state highlighted]
   (let [page-name (:source-page highlighted)]
@@ -407,10 +476,14 @@
    [:div {:class "text-xs font-bold px-6"} "Filters"]
    [:div {:class "flex items-center gap-2"}
     [:div {:class "w-4 h-1"}]
-    (when-let [group (:group filter)]
-      [:div {:class "text-xs py-0.5 px-1.5 rounded bg-blue-500/20 hover:bg-blue-500/50 hover:cursor-pointer"
-             :on-click #(swap! (::filter state) dissoc :group)}
-        (print-group-name group)])]])
+    (for [group [:recents :commands :pages :whiteboards :blocks]]
+      (if (= (:group filter) group)
+        [:div {:class "text-xs py-0.5 px-1.5 rounded bg-accent-06 hover:bg-accent-07 hover:cursor-pointer"
+               :on-click #(swap! (::filter state) dissoc :group)}
+          (print-group-name group)]
+        [:div {:class "text-xs py-0.5 px-1.5 rounded bg-gray-06 hover:bg-gray-07 hover:cursor-pointer"
+               :on-click #(swap! (::filter state) assoc :group group)}
+          (print-group-name group)]))]])
 
 (rum/defc input-row 
   [state all-items]
@@ -423,6 +496,9 @@
                        (when (= -1 (.indexOf all-items highlighted-item))
                          (reset! (::highlighted-item state) nil)))
                      [all-items])
+    (rum/use-effect! (fn [] 
+                       (load-results :default state))
+                     [])
     [:div {:class ""
            :style {:background "var(--lx-gray-02)"
                    :border-bottom "1px solid var(--lx-gray-07)"}}
@@ -445,6 +521,7 @@
   (rum/local default-results ::results)
   (rum/local nil ::load-results-throttled)
   (rum/local [:close :filter] ::actions) 
+  (rum/local nil ::scroll-container-ref)
   {:did-mount (fn [state] 
                 (let [next-keydown-handler (partial keydown-handler state)
                       next-keyup-handler (partial keyup-handler state)]
@@ -454,8 +531,8 @@
                   (when-let [prev-keyup-handler @(::keyup-handler state)]
                     (js/window.removeEventListener "keyup" prev-keyup-handler))
                   ;; add new handlers
-                  (js/window.addEventListener "keydown" next-keydown-handler)
-                  (js/window.addEventListener "keyup" next-keyup-handler)
+                  (js/window.addEventListener "keydown" next-keydown-handler true)
+                  (js/window.addEventListener "keyup" next-keyup-handler true)
                   ;; save references to functions for cleanup later
                   (reset! (::keydown-handler state) next-keydown-handler)
                   (reset! (::keyup-handler state) next-keyup-handler))
@@ -470,6 +547,12 @@
                    (reset! (::keydown-handler state) nil)
                    (reset! (::keyup-handler state) nil)
                    state)}
+  {:did-mount (fn [state] 
+                (when-let [ref @(::scroll-container-ref state)]
+                  (js/console.log "scrolling")
+                  (js/setTimeout #(set! (.-scrollTop ref) FILTER-ROW-HEIGHT)))
+                state)}
+                  ; (load-results :initial state)))}
   [state {:keys []}]
   (let [input @(::input state)
         actions @(::actions state)
@@ -483,12 +566,15 @@
         preview? (or (:source-page highlighted-item) (:source-block highlighted-item))
         shift? @(::shift? state) 
         alt? @(::alt? state)]
+    ; (rum/use-effect! #(load-results :initial state) [])
     [:div.cp__cmdk {:class "-m-8 max-w-[90dvw] max-h-[90dvh] w-[60rem] h-[30.7rem] "}
      (input-row state all-items)
-     (when filter (filter-row state filter))
      [:div {:class (str "grid" (if preview? " grid-cols-2" " grid-cols-1"))}
       [:div {:class "pt-1 overflow-y-auto h-96"
+             :id "bendy"
+             :ref #(when % (some-> state ::scroll-container-ref (reset! %))) 
              :style {:background "var(--lx-gray-02)"}}
+       (filter-row state filter)
        (for [[group-name group-key group-items] results-ordered
              :when (not-empty group-items)
              :when (if-not group-filter true (= group-filter group-key))]

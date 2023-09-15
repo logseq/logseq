@@ -1,10 +1,4 @@
-(ns logseq.shui.context
-  (:require 
-    [frontend.colors :as colors]
-    [frontend.db :as db]
-    [frontend.db.utils :as db-utils]
-    [frontend.handler.search :as search-handler]
-    [frontend.state :as state]))
+(ns logseq.shui.context)
 
 (defn inline->inline-block [inline block-config]
   (fn [_context item]
@@ -15,9 +9,9 @@
     (fn [context col]
       (map #(inline* context %) col))))
 
-(defn make-context [{:keys [block-config app-config inline int->local-time-2 blocks-container page-cp page]}]
+(defn make-context [{:keys [block-config config inline int->local-time-2 blocks-container page-cp page]}]
   {;; Shui needs access to the global configuration of the application
-   :config app-config
+   :config config
    ;; Until components are converted over, they need to fallback to the old inline function 
    ;; Wrap the old inline function to allow for interception, but fallback to the old inline function
    :inline-block (inline->inline-block inline block-config)
@@ -40,21 +34,7 @@
    ;; Some functions from logseq's application will be used in the shui components. To avoid circular dependencies,
    ;; they will be provided via the context object
    :int->local-time-2 int->local-time-2
-   ;; We need some variable from the state to carry over 
-   :color-accent (state/get-color-accent) 
-   :color-gradient (state/get-color-gradient)
-   :sub-color-gradient-bg-styles state/sub-color-gradient-bg-styles 
-   :sub-color-gradient-text-styles state/sub-color-gradient-text-styles
-   :linear-gradient colors/linear-gradient
-   :state state/state
    ;; Add search to context 
-   :search search-handler/search
-   :entity db-utils/entity
    :blocks-container blocks-container
-   :get-block-and-children db/get-block-and-children
-   :get-block-children db/get-block-children
-   :get-current-repo state/get-current-repo
-   :get-page-blocks-no-cache db/get-page-blocks-no-cache
-   :get-page db/get-page
    :page-cp page-cp
    :page page})

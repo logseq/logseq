@@ -1,5 +1,7 @@
 .cp__settings {
-  &-main {
+  &-inner {
+    @apply flex flex-col md:flex-row;
+
     > header {
       padding: 10px;
       padding-top: 0;
@@ -77,47 +79,10 @@
     }
 
     .settings-menu-link {
-      @apply px-2 py-1.5 select-none; 
-      color: or(--lx-gray-12, --ls-primary-text-color);
+      @apply px-2 py-1.5 select-none;
+      color: var(--ls-primary-text-color);
     }
 
-  }
-
-  &-inner {
-    @apply flex flex-col md:flex-row;
-
-    > aside {
-
-      ul {
-
-        > li {
-
-          > a {
-
-            > i {
-              overflow: hidden;
-              opacity: .9;
-            }
-
-            > strong {
-              font-size: 14px;
-              font-weight: normal;
-              padding-left: 5px;
-              margin-top: 2px;
-              opacity: .9;
-            }
-          }
-
-          &.active {
-            background-color: or(--lx-gray-06, --ls-quaternary-background-color);
-
-            i {
-              opacity: 1;
-            }
-          }
-        }
-      }
-    }
 
     &.no-aside {
       > article {
@@ -137,9 +102,11 @@
 
         margin-bottom: 0;
         padding-bottom: 12px;
-        align-items: center;
+        align-items: start;
 
         label {
+          height: 28px;
+          line-height: 28px;
           display: flex;
           align-items: center;
 
@@ -226,7 +193,7 @@
           cursor: inherit;
 
           > i {
-            border-color: or(--lx-accent-11, --ls-link-text-color);
+            border-color: var(--ls-link-text-color);
             border-width: 2px;
           }
         }
@@ -276,7 +243,7 @@
 
     .update-state {
       padding: 6px 10px;
-      background-color: or(--lx-gray-06, --ls-quaternary-background-color);
+      background-color: var(--ls-quaternary-background-color);
       border-radius: 4px;
       margin-top: 10px;
       width: fit-content;
@@ -334,7 +301,6 @@
       pointer-events: none;
     }
   }
-
 }
 
 .cp__assets {
@@ -345,7 +311,7 @@
       @apply m-0 list-none -mx-2;
 
       > li {
-        border-top: 1px solid or(--lx-accent-08, --ls-secondary-border-color);
+        border-top: 1px solid var(--ls-secondary-border-color);
 
         &:hover {
           .ext-label.is-plus {
@@ -362,8 +328,8 @@
     .ext-label {
       @apply rounded px-1.5 opacity-70 cursor-pointer flex items-center select-none active:opacity-50;
 
-      background-color: or(--lx-accent-08, --ls-secondary-border-color);
-      color: or(--lx-gray-11, --ls-secondary-text-color);
+      background-color: var(--ls-secondary-border-color);
+      color: var(--ls-secondary-text-color);
 
       &.is-del {
         i.ti {
@@ -387,8 +353,8 @@
       }
 
       &.is-plus {
-        background-color: or(--lx-gray-03, --ls-primary-background-color);
-        border: 1px solid or(--lx-gray-07, --ls-border-color);
+        background-color: var(--ls-primary-background-color);
+        border: 1px solid var(--ls-border-color);
       }
     }
 
@@ -415,7 +381,7 @@
         z-index: 1;
         width: 100px;
         max-height: 180px;
-        border:1px solid or(--lx-gray-07, --ls-border-color);
+        border: 1px solid var(--ls-border-color);
         border-radius: 4px;
         overflow: auto;
         overflow: overlay;
@@ -454,13 +420,13 @@
   &-alias-ext-input {
     width: 80px !important;
     padding: 1px 4px;
-    border: 2px solid or(--lx-gray-08, --ls-secondary-border-color);
+    border: 2px solid var(--ls-secondary-border-color);
     font-size: 11px;
     border-radius: 4px;
     height: 22px;
 
     &:focus {
-      border-color: var(--lx-gray-07, --ls-border-color);
+      border-color: var(--ls-border-color);
     }
   }
 }
@@ -478,6 +444,14 @@ html.is-native-iphone-without-notch {
       padding-bottom: 0;
     }
   }
+
+  .theme-row--swatch {
+    @apply w-5 h-5 rounded-full flex justify-center items-center;
+  }
+
+  .theme-row--swatch-active {
+    @apply w-5 h-5 rounded-full flex justify-center items-center;
+  }
 }
 
 svg.git {
@@ -489,61 +463,6 @@ svg.cmd {
   margin-left: -1px;
 }
 
-.cp__settings-main .theme-row--color {
-  @apply flex flex-col items-center; 
-  width: 2rem; 
-  padding-top: 1rem;
-}
-
-.cp__settings-main .theme-row--color-separator {
-  @apply relative;
-  width: 1rem;
-}
-
-.cp__settings-main .theme-row--color-separator::before {
-  @apply absolute inset-1/2 h-6 -translate-y-3 -translate-x-px;
-  content: "";
-  width: 2px;
-  background-color: or(--logseq-og-color-theme-separator, --lx-gray-09, --ls-quaternary-background-color);
-}
-
-.cp__settings-main .theme-row--color-swatch {
-  @apply rounded-full;
-  width: 2rem;
-  height: 2rem;
-  background: var(--background);
-  /* border: 4px solid var(--border); */
-  /* border: 3px solid orange; */
-}
-
-.cp__settings-main .theme-row--color-swatch:hover {
-  background: var(--background-hover);
-  border-color: var(--border-hover);
-}
-
-.cp__settings-main .selected .theme-row--color-swatch,
-.cp__settings-main .selected .theme-row--color-swatch:hover {
-  background: var(--background-active);
-  border-color: var(--border-active);
-}
-
-.cp__settings-main .theme-gradient-row--gradient-swatch {
-  @apply rounded-full;
-  width: 2rem;
-  height: 2rem;
-
-  background: var(--background);
-}
-
-.cp__settings-main .theme-gradient-row--gradient-swatch:hover {
-  background: var(--background-hover);
-}
-
-.cp__settings-main .selected.theme-gradient-row--gradient-swatch,
-.cp__settings-main .selected.theme-gradient-row--gradient-swatch:hover {
-  background: var(--background-active);
-}
- 
 body[data-settings-tab=keymap] {
   .cp__settings-inner {
     > article {

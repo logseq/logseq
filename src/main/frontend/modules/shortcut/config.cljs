@@ -528,9 +528,6 @@
    :ui/cycle-color                          {:binding "c c" 
                                              :fn      state/cycle-color!}
 
-   :ui/cycle-gradient                       {:binding "c g" 
-                                             :fn      state/cycle-gradient!}
-
    :ui/toggle-cards                         {:binding "t c"
                                              :fn      ui-handler/toggle-cards!}
 
@@ -559,7 +556,7 @@
        ::dicts/commands dicts/abbreviated-commands}]
   (assert (= (::commands keyboard-commands) (::dicts/commands keyboard-commands))
           (str "Keyboard commands must have an english label"
-               (data/diff (::commands keyboard-commands) (::commands keyboard-commands)))))
+               (data/diff (::commands keyboard-commands) (::dicts/commands keyboard-commands)))))
 
 (defn- resolve-fn
   "Converts a keyword fn to the actual fn. The fn to be resolved needs to be
@@ -727,7 +724,6 @@
            :ui/clear-all-notifications
            :ui/cycle-color
            :ui/cycle-color-off
-           :ui/cycle-gradient
            :ui/goto-plugins
            :ui/install-plugins-from-file
            :ui/select-theme-color
@@ -854,8 +850,7 @@
  :ui/toggle-settings
  :ui/toggle-contents
  :ui/cycle-color-off
- :ui/cycle-color 
- :ui/cycle-gradient]
+ :ui/cycle-color] 
 
 :shortcut.category/whiteboard
 [:editor/new-whiteboard

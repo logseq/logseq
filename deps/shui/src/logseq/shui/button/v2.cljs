@@ -6,15 +6,17 @@
     [logseq.shui.icon.v2 :as icon]
     [clojure.string :as string]))
 
-
 (rum/defc root 
-  [{:keys [theme text depth size icon interactive shortcut tiled on-click] :or {theme :color depth 1 size :md interactive true}} context]
-  (let [theme-class (str "shui__button-theme-" (name theme))
+  [{:keys [theme color text depth size icon interactive shortcut tiled on-click muted class] 
+    :or {theme :color depth 1 size :md interactive true muted false class ""}} context]
+  (let [color-string (or (some-> color name) (some-> context :state deref :ui/radix-color name) "custom")
+        theme-class (str "shui__button-theme-" (name theme))
         depth-class (when-not (= :text theme) (str "shui__button-depth-" depth)) 
-        color-class (str "shui__button-color-" (some-> context :state deref :ui/radix-color name))
+        color-class (str "shui__button-color-" color-string) 
+        muted-class (when muted "shui__button-muted")
         size-class  (str "shui__button-size-" (name size))
         tiled-class (when tiled "shui__button-tiled")]
-    [:button.shui__button {:class (str theme-class " " depth-class " " color-class " " size-class " " tiled-class) 
+    [:button.shui__button {:class (str theme-class " " depth-class " " color-class " " size-class " " tiled-class " " muted-class " " class) 
                            :on-click (when on-click on-click)}
      (if-not tiled text
        (for [[index tile] (map-indexed vector (rest (string/split text #"")))]

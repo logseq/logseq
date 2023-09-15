@@ -151,13 +151,16 @@
            :height 500}]]])
 
 (defn row-with-button-action
-  [{:keys [left-label action button-label href on-click desc -for stretch]}]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+  [{:keys [left-label description action button-label href on-click desc -for stretch]}]
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
 
    ;; left column
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for -for}
-    left-label]
+   [:div.flex.flex-col
+    [:label.block.text-sm.font-medium.leading-5.opacity-70
+     {:for -for}
+     left-label]
+    (when description 
+      [:div.text-xs.text-gray-10 description])]
 
    ;; right column
    [:div.mt-1.sm:mt-0.sm:col-span-2.flex.items-center
@@ -315,67 +318,48 @@
                              :action     pick-theme
                              :desc       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))})))
 
-(defn theme-row [t dark?]
+(defn accent-color-row [t dark?]
   (let [color-accent (state/sub :ui/radix-color)
-        pick-theme [:div.grid {:style {:grid-template-columns "repeat(17, 1fr)" 
+        pick-theme [:div.grid {:style {:grid-template-columns "repeat(5, 1fr)" 
                                        :gap "0.75rem"
-                                       :overflow-x :scroll 
                                        :width "100%"
-                                       :padding-left "0.25rem"}}
-                    [:div.theme-row--color {:on-click #(state/unset-color-accent!)
-                                            :class (when (nil? color-accent) "selected")}
-                     [:div.theme-row--color-swatch {:style {;; "--background"        "#0F2A35"
-                                                            ;; "--background-hover"  "#163542"
-                                                            ;; "--background-active" "#274E5E"
-                                                            "--background"            "#0369a1"
-                                                            "--background-hover"      "#38bdf8" ;; TODO what is the hover color?
-                                                            "--background-active"      "#0ea5e9"} ;; TODO what is the hover color?
-                                                           :border-right "1px solid rgba(255,255,255,0.4)"}] 
-                     [:div.text-xs {:style {:margin "0 -0.5rem" 
-                                            :opacity 0.5 
-                                            :height "1rem" 
-                                            :padding "0 0.5rem"}}]]
-                    [:div.theme-row--color-separator]
+                                       :max-width "16rem"}}
                     (for [color colors/color-list
-                          :let [gray (get colors/gray-pairing-map color)]]
-                      [:div.theme-row--color {:on-click #(state/set-color-accent! color) 
-                                              :class (when (= color-accent color) "selected")}
-                       [:div.theme-row--color-swatch {:style {"--background"            (str "var(--rx-" (name color) "-07)")
-                                                              "--background-hover"      (str "var(--rx-" (name color) "-10)")
-                                                              "--background-active"     (str "var(--rx-" (name color) "-09) ")}}]])]
-                                                              ; "--border-hover"     (str "var(--rx-" (name color) "-08)")}}]
-        display-theme [:button {:style {:background "var(--lx-accent-03)" 
-                                        :border "1px solid var(--lx-accent-07)"
-                                        :color "var(--lx-accent-11)"}}
-                        (if color-accent (name color-accent) "default")]]
+                          :let [gray (get colors/gray-pairing-map color)
+                                active? (= color color-accent)
+                                default-classes "w-5 h-5 rounded-full flex justify-center items-center border transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"
+                                bg (if active? (str "bg-" (name color) "-09 opacity-100") 
+                                               (str "bg-" (name color) "-09 opacity-50"))
+                                border (if active? (str "border-" (name color) "-07 opacity-100") 
+                                                   (str "border-" (name color) "-06 opacity-50"))]]
+                      [:div.flex.items-center {:style {:height 28}}
+                       [:div {;;:class (string/join " " [default-classes bg border]) 
+                              :class "w-5 h-5 rounded-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"
+                              :style {:background-color (colors/variable color :09) 
+                                      :outline-color (colors/variable color (if active? :07 :06))
+                                      :outline-width (if active? "4px" "1px")
+                                      :outline-style :solid
+                                      :opacity (if active? 1 0.5)}
+                              :on-click (fn [e] (state/set-color-accent! color))}
+                        [:div {:class "w-2 h-2 rounded-full transition ease-in duration-100" 
+                               :style {:background-color (str "var(--rx-" (name color) "-07)")
+                                       :opacity (if active? 1 0)}}]]])
+                      ; (shui/button {:text (name color) 
+                      ;               :color color 
+                      ;               :muted (not= color-accent color)}
+                      ;              (make-shui-context nil nil)))
+                    [:div.col-span-5
+                     (shui/button {:text "Use custom theme"
+                                   :theme :gray
+                                   :on-click (fn [e] (state/unset-color-accent!))}
+                                  (make-shui-context nil nil))]]] 
+                                  
     [:<>
-     (row-with-button-action {:left-label "Theme color"
+     (row-with-button-action {:left-label "Accent color"
+                              :description "Choosing an accent color will override any theme you have selected. To use a custom theme, click the button below."
                               :-for       "toggle_radix_theme"
                               :stretch    true
                               :action     pick-theme})])) 
-
-(defn theme-gradient-row [t dark? color-accent]
-  (let [color-gradient (state/sub :ui/radix-gradient)
-        pick-gradient [:div {:class "grid grid-cols-7 gap-2 overflow-x-auto"}
-                       [:div {:class (cond-> "theme-gradient-row--gradient-swatch" 
-                                       (= 1 color-gradient) (str " selected"))
-                              :style {"--background" (str "var(--rx-" (name color-accent) "-07)")
-                                      "--background-hover" (str "var(--rx-" (name color-accent) "-08)") 
-                                      "--background-active" (str "var(--rx-" (name color-accent) "-09)")}
-                              :on-click #(state/unset-color-gradient!)}]
-                       (for [n (range 2 8)
-                             :let [active? (= n color-gradient)]] 
-                        [:div {:class (cond-> "bg-white theme-gradient-row--gradient-swatch" 
-                                        active? (str " selected"))
-                               :key n 
-                               :style {"--background" (colors/linear-gradient color-accent :07 n)
-                                       "--background-hover" (colors/linear-gradient color-accent :08 n) 
-                                       "--background-active" (colors/linear-gradient color-accent :09 n)}
-                               :on-click #(state/set-color-gradient! n)}])]]
-   (row-with-button-action {:left-label "Theme gradient"
-                            :stretch true 
-                            :action pick-gradient})))
-                             
 
 (defn file-format-row [t preferred-format]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -715,8 +699,7 @@
      (language-row t preferred-language)
      (theme-modes-row t switch-theme system-theme? dark?)
      (when (and (util/electron?) (not util/mac?)) (native-titlebar-row t))
-     (when show-radix-themes? (theme-row t dark?))
-     (when (and show-radix-themes? color-accent) (theme-gradient-row t dark? color-accent))
+     (when show-radix-themes? (accent-color-row t dark?))
      (when (config/global-config-enabled?) (edit-global-config-edn))
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))

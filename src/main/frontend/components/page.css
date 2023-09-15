@@ -16,7 +16,7 @@
 
     > .it {
       display: flex;
-      justify-content: center;
+      justify-content: start;
       padding-top: 5px;
       padding-bottom: 5px;
 
