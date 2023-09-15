@@ -4,7 +4,9 @@
   rum/rum                               {:mvn/version "0.12.9"}
   datascript/datascript                 {:mvn/version "1.3.8"}
   datascript-transit/datascript-transit {:mvn/version "0.3.0"}
-  borkdude/rewrite-edn                  {:mvn/version "0.4.6"}
+  ;; TODO: use :mvn/version when released
+  borkdude/rewrite-edn                  {:git/url "https://github.com/borkdude/rewrite-edn"
+                                         :sha     "358062772093cf1e46ef53014f4edd47b34c2839"}
   funcool/promesa                       {:mvn/version "4.0.2"}
   medley/medley                         {:mvn/version "1.4.0"}
   metosin/reitit-frontend               {:mvn/version "0.3.10"}
