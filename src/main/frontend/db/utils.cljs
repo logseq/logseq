@@ -120,23 +120,33 @@
        (->> (d/pull-many db selector eids)
             (map #(update-block-content % (:db/id %))))))))
 
+(defn- actual-transact!
+  [repo-url tx-data tx-meta]
+  (let [tx-data (gp-util/fast-remove-nils tx-data)]
+    (when (seq tx-data)
+         ;; (prn :debug "DB transact:")
+         ;; (frontend.util/pprint {:tx-data tx-data
+         ;;                        :tx-meta tx-meta})
+      (when-let [conn (conn/get-db repo-url false)]
+        (if tx-meta
+          (d/transact! conn (vec tx-data) tx-meta)
+          (d/transact! conn (vec tx-data)))))))
+
+(if config/publishing?
+  (defn- transact!*
+    [repo-url tx-data tx-meta]
+    ;; :save-block is for query-table actions like sorting and choosing columns
+    (when (#{:collapse-expand-blocks :save-block} (:outliner-op tx-meta))
+      (actual-transact! repo-url tx-data tx-meta)))
+  (def transact!* actual-transact!))
+
 (defn transact!
   ([tx-data]
    (transact! (state/get-current-repo) tx-data))
   ([repo-url tx-data]
    (transact! repo-url tx-data nil))
   ([repo-url tx-data tx-meta]
-   (when (or (not config/publishing?)
-             (and config/publishing? (= :collapse-expand-blocks (:outliner-op tx-meta))))
-     (let [tx-data (gp-util/fast-remove-nils tx-data)]
-       (when (seq tx-data)
-         ;; (prn :debug "DB transact:")
-         ;; (frontend.util/pprint {:tx-data tx-data
-         ;;                        :tx-meta tx-meta})
-         (when-let [conn (conn/get-db repo-url false)]
-           (if tx-meta
-             (d/transact! conn (vec tx-data) tx-meta)
-             (d/transact! conn (vec tx-data)))))))))
+   (transact!* repo-url tx-data tx-meta)))
 
 (defn get-key-value
   ([key]

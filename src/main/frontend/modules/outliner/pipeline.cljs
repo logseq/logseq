@@ -55,14 +55,15 @@
                                         :block/tx-id tx-id})) updated-blocks)]
             (when (seq update-tx-ids)
               (db/transact! repo update-tx-ids {:replace? true}))
-            (p/let [_transact-result (persist-db/<transact-data repo upsert-blocks deleted-block-uuids)
-                    _ipc-result (comment ipc/ipc :db-transact-data repo
-                                         (pr-str
-                                          {:blocks upsert-blocks
-                                           :deleted-block-uuids deleted-block-uuids}))]
+            (when-not config/publishing?
+              (p/let [_transact-result (persist-db/<transact-data repo upsert-blocks deleted-block-uuids)
+                     _ipc-result (comment ipc/ipc :db-transact-data repo
+                                          (pr-str
+                                           {:blocks upsert-blocks
+                                            :deleted-block-uuids deleted-block-uuids}))]
               ;; TODO: disable edit when transact failed to avoid future data-loss
               ;; (prn "DB transact result: " ipc-result)
-              )))
+               ))))
 
         (when-not (:delete-files? tx-meta)
           (doseq [p (seq pages)]
