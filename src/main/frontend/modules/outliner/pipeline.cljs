@@ -25,13 +25,12 @@
 (defn- reset-editing-block-content!
   [tx-data]
   (when-let [edit-block (state/get-edit-block)]
-    (when-let [new-content (-> (filter (fn [datom]
-                                         (and (= :block/content (:a datom))
-                                              (:added datom)
-                                              (= (:e datom) (:db/id edit-block)))) tx-data)
-                               last
-                               :v)]
-      (state/set-edit-content! (state/get-input) new-content))))
+    (when-let [last-datom (-> (filter (fn [datom]
+                                        (and (= :block/content (:a datom))
+                                             (= (:e datom) (:db/id edit-block)))) tx-data)
+                              last)]
+      (when (:added last-datom)
+        (state/set-edit-content! (state/get-input) (:v last-datom))))))
 
 (defn invoke-hooks
   [tx-report]
