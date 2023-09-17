@@ -22,12 +22,26 @@
   (when (and (:outliner-op tx-meta) (react/path-refs-need-recalculated? tx-meta))
     (outliner-pipeline/compute-block-path-refs-tx tx-report blocks)))
 
+(defn- reset-editing-block-content!
+  [tx-data]
+  (when-let [edit-block (state/get-edit-block)]
+    (when-let [new-content (-> (filter (fn [datom]
+                                         (and (= :block/content (:a datom))
+                                              (:added datom)
+                                              (= (:e datom) (:db/id edit-block)))) tx-data)
+                               last
+                               :v)]
+      (state/set-edit-content! (state/get-input) new-content))))
+
 (defn invoke-hooks
   [tx-report]
   (let [tx-meta (:tx-meta tx-report)]
     (when (and (not (:from-disk? tx-meta))
                (not (:new-graph? tx-meta))
                (not (:replace? tx-meta)))
+
+      (reset-editing-block-content! (:tx-data tx-report))
+
       (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
             repo (state/get-current-repo)
             tx (util/profile
