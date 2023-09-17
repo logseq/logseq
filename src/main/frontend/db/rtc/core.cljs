@@ -122,10 +122,10 @@
           (outliner-tx/transact!
            {:persist-op? false}
            (if move?
-             (do (outliner-core/move-blocks! [b] local-left sibling?)
-                 (when (and content (not= (:block/content b-ent) content))
+             (do (when (and content (not= (:block/content b-ent) content))
                    (outliner-core/save-block! (assoc (db/pull repo '[*] [:block/uuid (uuid block-uuid-str)])
-                                                     :block/content content))))
+                                                     :block/content content)))
+                 (outliner-core/move-blocks! [b] local-left sibling?))
              (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content
                                              :block/format :markdown}]
                                            local-left {:sibling? sibling? :keep-uuid? true}))))
@@ -280,16 +280,11 @@
               update-ops (vals update-ops-map)
               update-page-ops (vals update-page-ops-map)
               remove-page-ops (vals remove-page-ops-map)]
-          (prn :start-apply-remote-update-page-ops)
-          (apply-remote-update-page-ops state update-page-ops)
-          (prn :start-apply-remote-remove-ops)
-          (apply-remote-remove-ops state remove-ops)
-          (prn :start-apply-remote-move-ops)
-          (apply-remote-move-ops state sorted-move-ops)
-          (prn :start-apply-remote-update-ops)
-          (apply-remote-update-ops state update-ops)
-          (prn :start-apply-remote-remove-page-ops)
-          (apply-remote-remove-page-ops state remove-page-ops)
+          (util/profile ::apply-remote-update-page-ops (apply-remote-update-page-ops state update-page-ops))
+          (util/profile ::apply-remote-remove-ops (apply-remote-remove-ops state remove-ops))
+          (util/profile ::apply-remote-move-ops (apply-remote-move-ops state sorted-move-ops))
+          (util/profile ::apply-remote-update-ops (apply-remote-update-ops state update-ops))
+          (util/profile ::apply-remote-remove-page-ops (apply-remote-remove-page-ops state remove-page-ops))
           (<! (p->c (op/<update-local-tx! repo remote-t))))))))
 
 (defn- <push-data-from-ws-handler
@@ -358,7 +353,9 @@
                                      (when (and left-uuid parent-uuid)
                                        ["update" {:block-uuid block-uuid
                                                   :target-uuid left-uuid :sibling? (not= left-uuid parent-uuid)
-                                                  :content (:block/content b "")}]))))))
+                                                  :content (:block/content b "")
+                                                  :updated-at (:block/updated-at b)
+                                                  :created-at (:block/created-at b)}]))))))
         update-page-ops* (->> update-page-uuids
                               (keep (fn [block-uuid]
                                       (when-let [page-name (:block/name (db/entity repo [:block/uuid (uuid block-uuid)]))]
