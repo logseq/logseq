@@ -12,6 +12,7 @@
             [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.util :as util]
             [malli.core :as m]
+            [malli.util :as mu]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]))
 
@@ -44,42 +45,53 @@
    [:*stop-rtc-loop-chan :any]
    [:*ws :any]
    [:*rtc-state :any]])
-(def state-validator (m/validator state-schema))
+(def state-validator (fn [data] (if ((m/validator state-schema) data)
+                                  true
+                                  (prn (mu/explain-data state-schema data)))))
 
 (def rtc-state-schema
   [:enum :open :closed])
 (def rtc-state-validator (m/validator rtc-state-schema))
 
 (def data-from-ws-schema
-  [:map
-   [:req-id :string]
-   [:t {:optional true} :int]
-   [:affected-blocks {:optional true}
-    [:map-of :keyword
-     [:or
-      [:map
-       [:op [:= "move"]]
-       [:parents [:sequential :string]]
-       [:left [:maybe :string]]
-       [:self :string]
-       [:content {:optional true} :string]]
-      [:map
-       [:op [:= "remove"]]
-       [:block-uuid :string]]
-      [:map
-       [:op [:= "update-attrs"]]
-       [:parents [:sequential :string]]
-       [:left [:maybe :string]]
-       [:self :string]
-       [:content {:optional true} :string]]
-      [:map
-       [:op [:= "update-page"]]
-       [:self :string]
-       [:page-name :string]]
-      [:map
-       [:op [:= "remove-page"]]
-       [:block-uuid :string]]]]]])
-(def data-from-ws-validator (m/validator data-from-ws-schema))
+  (mu/closed-schema
+   [:map
+    [:req-id :string]
+    [:t {:optional true} :int]
+    [:affected-blocks {:optional true}
+     [:map-of :keyword
+      [:or
+       [:map
+        [:op [:= "move"]]
+        [:parents [:sequential :string]]
+        [:left [:maybe :string]]
+        [:self :string]
+        [:content {:optional true} :string]
+        [:updated-at {:optional true} :int]
+        [:created-at {:optional true} :int]]
+       [:map
+        [:op [:= "remove"]]
+        [:block-uuid :string]]
+       [:map
+        [:op [:= "update-attrs"]]
+        [:parents [:sequential :string]]
+        [:left [:maybe :string]]
+        [:self :string]
+        [:content {:optional true} :string]
+        [:updated-at {:optional true} :int]
+        [:created-at {:optional true} :int]]
+       [:map
+        [:op [:= "update-page"]]
+        [:self :string]
+        [:page-name :string]]
+       [:map
+        [:op [:= "remove-page"]]
+        [:block-uuid :string]]]]]]))
+(def data-from-ws-validator (fn [data] (if ((m/validator data-from-ws-schema) data)
+                                         true
+                                         (prn (mu/explain-data data-from-ws-schema data)))))
+
+
 
 
 
@@ -96,7 +108,7 @@
         (prn :apply-remote-remove-ops (:block-uuid op))))))
 
 (defn- insert-or-move-block
-  [state block-uuid-str remote-parents remote-left-uuid-str content move?]
+  [state block-uuid-str remote-parents remote-left-uuid-str move?]
   {:pre [(some? @(:*repo state))]}
   (when (and (seq remote-parents) remote-left-uuid-str)
     (let [repo @(:*repo state)
@@ -104,17 +116,16 @@
           first-remote-parent (first remote-parents)
           local-parent (db/entity repo [:block/uuid (uuid first-remote-parent)])
           b {:block/uuid (uuid block-uuid-str)}
-          b-ent (db/entity repo [:block/uuid (uuid block-uuid-str)])]
+          ;; b-ent (db/entity repo [:block/uuid (uuid block-uuid-str)])
+          ]
       (case [(some? local-parent) (some? local-left)]
         [false true]
         (outliner-tx/transact!
          {:persist-op? false}
          (if move?
-           (do (outliner-core/move-blocks! [b] local-left true)
-               (when (and content (not= (:block/content b-ent) content))
-                 (outliner-core/save-block! (assoc (db/pull repo '[*] [:block/uuid (uuid block-uuid-str)])
-                                                   :block/content content))))
-           (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content :block/format :markdown}]
+           (outliner-core/move-blocks! [b] local-left true)
+           (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content ""
+                                           :block/format :markdown}]
                                          local-left {:sibling? true :keep-uuid? true})))
 
         [true true]
@@ -122,11 +133,8 @@
           (outliner-tx/transact!
            {:persist-op? false}
            (if move?
-             (do (when (and content (not= (:block/content b-ent) content))
-                   (outliner-core/save-block! (assoc (db/pull repo '[*] [:block/uuid (uuid block-uuid-str)])
-                                                     :block/content content)))
-                 (outliner-core/move-blocks! [b] local-left sibling?))
-             (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content
+             (outliner-core/move-blocks! [b] local-left sibling?)
+             (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content ""
                                              :block/format :markdown}]
                                            local-left {:sibling? sibling? :keep-uuid? true}))))
 
@@ -134,11 +142,8 @@
         (outliner-tx/transact!
          {:persist-op? false}
          (if move?
-           (do (outliner-core/move-blocks! [b] local-parent false)
-               (when (and content (not= (:block/content b-ent) content))
-                 (outliner-core/save-block! (assoc (db/pull repo '[*] [:block/uuid (uuid block-uuid-str)])
-                                                   :block/content content))))
-           (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content content
+           (outliner-core/move-blocks! [b] local-parent false)
+           (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content ""
                                            :block/format :markdown}]
                                          local-parent {:sibling? false :keep-uuid? true})))
 
@@ -183,18 +188,33 @@
       :wrong-pos
       :else nil)))
 
+(defn- update-block-attrs
+  [repo block-uuid content updated-at created-at]
+  (when (or content updated-at created-at)
+    (let [b-ent (db/entity repo [:block/uuid block-uuid])
+          new-block
+          (cond-> (db/pull repo '[*] (:db/id b-ent))
+            updated-at (assoc :block/updated-at updated-at)
+            created-at (assoc :block/created-at created-at)
+            (and content (not= content (:block/content b-ent))) (assoc :block/content content))]
+      (outliner-tx/transact!
+       {:persist-op? false}
+       (outliner-core/save-block! new-block)))))
+
 (defn apply-remote-move-ops
   [state sorted-move-ops]
+  {:pre [(some? @(:*repo state))]}
   (prn :sorted-move-ops sorted-move-ops)
-  (doseq [{:keys [parents left self content]} sorted-move-ops]
+  (doseq [{:keys [parents left self content updated-at created-at]} sorted-move-ops]
     (let [r (check-block-pos state self parents left)]
       (case r
         :not-exist
-        (insert-or-move-block state self parents left content false)
+        (insert-or-move-block state self parents left false)
         :wrong-pos
-        (insert-or-move-block state self parents left content true)
-        nil                               ; do nothing
+        (insert-or-move-block state self parents left true)
+        nil                             ; do nothing
         nil)
+      (update-block-attrs @(:*repo state) (uuid self) content updated-at created-at)
       (prn :apply-remote-move-ops self r parents left))))
 
 
@@ -203,23 +223,15 @@
   {:pre [(some? @(:*repo state))]}
   (let [repo @(:*repo state)]
     (prn :update-ops update-ops)
-    (doseq [{:keys [parents left self content]}
-            update-ops]
+    (doseq [{:keys [parents left self content created-at updated-at]} update-ops]
       (let [r (check-block-pos state self parents left)]
         (case r
           :not-exist
-          (insert-or-move-block state self parents left content false)
+          (insert-or-move-block state self parents left false)
           :wrong-pos
-          (insert-or-move-block state self parents left content true)
-          nil
-          (when content
-            (outliner-tx/transact!
-             {:persist-op? false}
-             (outliner-core/save-block! (merge (db/pull repo '[*] [:block/uuid (uuid self)])
-                                               {:block/uuid (uuid self)
-                                                :block/content content
-                                                :block/format :markdown})))))
-
+          (insert-or-move-block state self parents left true)
+          nil)
+        (update-block-attrs repo (uuid self) content updated-at created-at)
         (prn :apply-remote-update-ops r self)))))
 
 (defn apply-remote-update-page-ops
