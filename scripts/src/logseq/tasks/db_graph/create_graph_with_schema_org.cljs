@@ -54,7 +54,10 @@
              :block/type "class"
              :block/uuid (get-class-uuid class-uuids (class-m "@id"))
              :db/id (get-class-db-id class-db-ids (class-m "@id"))
-             :properties {:url (string/replace-first (class-m "@id") "schema:" "https://schema.org/")}}
+             :properties (cond->
+                          {:url (string/replace-first (class-m "@id") "schema:" "https://schema.org/")}
+                           (class-m "rdfs:comment")
+                           (assoc :description (class-m "rdfs:comment")))}
       parent-class
       (assoc :block/namespace {:db/id (get-class-db-id class-db-ids parent-class)})
       (seq properties)
