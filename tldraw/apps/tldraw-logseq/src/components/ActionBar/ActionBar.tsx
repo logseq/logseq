@@ -17,10 +17,6 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
     handlers: { t },
   } = React.useContext(LogseqContext)
 
-  const {
-    handlers: { isMobile },
-  } = React.useContext(LogseqContext)
-
   const undo = React.useCallback(() => {
     app.api.undo()
   }, [app])
