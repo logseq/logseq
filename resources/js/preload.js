@@ -24,8 +24,8 @@ function getFilePathFromClipboard () {
  * @returns Buffer containing the contents of the clipboard for the specified format, or null if not available.
  */
 function getClipboardData (format) {
-  if (clipboard.has(mime, "clipboard")) {
-    return clipboard.readBuffer(mime)
+  if (clipboard.has(format, "clipboard")) {
+    return clipboard.readBuffer(format)
   }
   else {
     return null;
