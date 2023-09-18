@@ -16,12 +16,6 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]))
 
-;;; TODO:
-;;; 1. two clients, each one has a page with same name but different block-uuid.
-;;;    happens when generating journal page everyday automatically.
-
-
-
 
 (def state-schema
   "
