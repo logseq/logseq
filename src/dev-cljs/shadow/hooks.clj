@@ -39,6 +39,6 @@
     (prn ::git-revision-hook revision)
     (-> build-state
         (assoc-in [:shadow.build/config :closure-defines]
-                  (assoc defines-in-config 'frontend.config/REVISION revision))
+                  (assoc defines-in-config 'frontend.compile-config/REVISION revision))
         (assoc-in [:compiler-options :closure-defines]
-                  (assoc defines-in-options 'frontend.config/REVISION revision)))))
+                  (assoc defines-in-options 'frontend.compile-config/REVISION revision)))))

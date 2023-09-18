@@ -7,6 +7,7 @@
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
+            [frontend.compile-config :as cconfig]
             [frontend.context.i18n :refer [t]]
             [frontend.handler :as handler]
             [frontend.components.file-sync :as fs-sync]
@@ -65,7 +66,7 @@
   (let [ua (.-userAgent js/navigator)
         safe-ua (string/replace ua #"[^_/a-zA-Z0-9\.\(\)]+" " ")
         platform (str "App Version: " version "\n"
-                      "Git Revision: " config/REVISION "\n"
+                      "Git Revision: " cconfig/REVISION "\n"
                       "Platform: " safe-ua "\n"
                       "Language: " (.-language js/navigator) "\n"
                       "Plugins: " (string/join ", " (map (fn [[k v]]

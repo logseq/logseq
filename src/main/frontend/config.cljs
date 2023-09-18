@@ -5,6 +5,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.compile-config :as cconfig]
             [logseq.common.path :as path]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
@@ -12,30 +13,22 @@
             [goog.crypt.Md5]
             [goog.crypt :as crypt]))
 
-(goog-define DEV-RELEASE false)
-(defonce dev-release? DEV-RELEASE)
+(defonce dev-release? cconfig/DEV-RELEASE)
 (defonce dev? ^boolean (or dev-release? goog.DEBUG))
 
-(goog-define PUBLISHING false)
-(defonce publishing? PUBLISHING)
+(defonce publishing? cconfig/PUBLISHING)
 
-(goog-define REVISION "unknown")
-(defonce revision REVISION)
+(defonce revision cconfig/REVISION)
 
 (reset! state/publishing? publishing?)
 
-(goog-define TEST false)
-(def test? TEST)
-
-(goog-define ENABLE-FILE-SYNC-FEATURE true)
-
-(goog-define ENABLE-FILE-SYNC-PRODUCTION false)
+(def test? cconfig/TEST)
 
 ;; this is a feature flag to enable the account tab
 ;; when it launches (when pro plan launches) it should be removed
 (def ENABLE-SETTINGS-ACCOUNT-TAB false)
 
-(if ENABLE-FILE-SYNC-PRODUCTION
+(if cconfig/ENABLE-FILE-SYNC-PRODUCTION
   (do (def FILE-SYNC-PROD? true)
       (def LOGIN-URL
         "https://logseq-prod.auth.us-east-1.amazoncognito.com/login?client_id=3c7np6bjtb4r1k1bi9i049ops5&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
@@ -66,8 +59,7 @@
 ;; Feature flags
 ;; =============
 
-(goog-define ENABLE-PLUGINS true)
-(defonce feature-plugin-system-on? ENABLE-PLUGINS)
+(defonce feature-plugin-system-on? cconfig/ENABLE-PLUGINS)
 
 ;; Desktop only as other platforms requires better understanding of their
 ;; multi-graph workflows and optimal place for a "global" dir

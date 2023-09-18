@@ -7,7 +7,7 @@
             [clojure.string :as string]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
-            [frontend.config :as config]
+            [frontend.compile-config :as cconfig]
             [frontend.mobile.util :as mobile-util]
             [frontend.spec.storage :as storage-spec]
             [frontend.storage :as storage]
@@ -608,7 +608,7 @@ Similar to re-frame subscriptions"
 
 (defn enable-sync?
   []
-  (and config/ENABLE-FILE-SYNC-FEATURE
+  (and cconfig/ENABLE-FILE-SYNC-FEATURE
        (sub :feature/enable-sync?)))
 
 (defn enable-sync-diff-merge?

@@ -22,7 +22,7 @@
                         :tldraw
                         {:entries    [frontend.extensions.tldraw]
                          :depends-on #{:main}}}
-                        
+
         :output-dir       "./static/js"
         :asset-path       "/static/js"
         :release          {:asset-path "https://asset.logseq.com/static/js"}
@@ -37,11 +37,11 @@
         :closure-defines  {goog.debug.LOGGING_ENABLED       true
                            frontend.modules.instrumentation.sentry/SENTRY-DSN #shadow/env "LOGSEQ_SENTRY_DSN"
                            frontend.modules.instrumentation.posthog/POSTHOG-TOKEN #shadow/env "LOGSEQ_POSTHOG_TOKEN"
-                           frontend.config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS" :as :bool :default true]
+                           frontend.compile-config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS" :as :bool :default true]
                            ;; Set to switch file sync server to dev, set this to false in `yarn watch`
-                           frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
-                           frontend.config/TEST #shadow/env ["LOGSEQ_CI" :as :bool :default false]
-                           frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]} ;; set by git-revision-hook
+                           frontend.compile-config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
+                           frontend.compile-config/TEST #shadow/env ["LOGSEQ_CI" :as :bool :default false]
+                           frontend.compile-config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]} ;; set by git-revision-hook
 
         ;; NOTE: electron, browser/mobile-app use different asset-paths.
         ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
@@ -97,10 +97,10 @@
                                :tldraw
                                {:entries    [frontend.extensions.tldraw]
                                 :depends-on #{:main}}}
-                               
+
                :output-dir       "./static/js/publishing"
                :asset-path       "static/js"
-               :closure-defines  {frontend.config/PUBLISHING true
+               :closure-defines  {frontend.compile-config/PUBLISHING true
                                   goog.debug.LOGGING_ENABLED true}
                :compiler-options {:infer-externs      :auto
                                   :output-feature-set :es-next
@@ -111,4 +111,3 @@
                :devtools         {:before-load frontend.core/stop
                                   :after-load  frontend.core/start
                                   :preloads    [devtools.preload]}}}}
-  
