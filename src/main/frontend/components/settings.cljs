@@ -1,10 +1,12 @@
 (ns frontend.components.settings
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
+            [frontend.compile-config :as cconfig]
             [frontend.components.assets :as assets]
             [frontend.components.conversion :as conversion-component]
             [frontend.components.file-sync :as fs]
             [frontend.components.plugins :as plugins]
+            [frontend.components.shortcut2 :as shortcut2]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -23,7 +25,6 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
-            [frontend.components.shortcut2 :as shortcut2]
             [frontend.spec.storage :as storage-spec]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -1019,8 +1020,9 @@
          [:label.flex.font-medium.leading-5.self-start.mt-1
           (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
         [:div.flex.flex-col.gap-4
-         {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-         (sync-switcher-row enable-sync?)
+         {:class (when-not (user-handler/alpha-or-beta-user?) "opacity-50 pointer-events-none cursor-not-allowed")}
+         (when cconfig/ENABLE-FILE-SYNC-FEATURE
+           (sync-switcher-row enable-sync?))
          (when enable-sync?
            (sync-diff-merge-switcher-row enable-sync-diff-merge?))
          [:div.text-sm

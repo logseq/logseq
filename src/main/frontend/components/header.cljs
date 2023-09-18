@@ -235,7 +235,8 @@
               (ui/icon "search" {:size ui/icon-size})])))]]
 
      [:div.r.flex.drag-region
-      (when (and current-repo
+      (when (and sync-enabled?
+                 current-repo
                  (not (config/demo-graph? current-repo))
                  (user-handler/alpha-or-beta-user?))
         (fs-sync/indicator))
