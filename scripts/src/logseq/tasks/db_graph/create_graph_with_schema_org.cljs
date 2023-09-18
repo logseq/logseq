@@ -32,6 +32,12 @@
   (or (class-uuids class-id)
       (throw (ex-info (str "No :block/uuid for " class-id) {}))))
 
+(defn- get-comment-string
+  [rdfs-comment]
+  (if (map? rdfs-comment)
+    (get rdfs-comment "@value")
+    rdfs-comment))
+
 (defn- ->class-page [class-m class-db-ids class-uuids class-properties property-uuids {:keys [verbose]}]
   (let [parent-class* (class-m "rdfs:subClassOf")
         parent-class (cond
@@ -57,7 +63,7 @@
              :properties (cond->
                           {:url (string/replace-first (class-m "@id") "schema:" "https://schema.org/")}
                            (class-m "rdfs:comment")
-                           (assoc :description (class-m "rdfs:comment")))}
+                           (assoc :description (get-comment-string (class-m "rdfs:comment"))))}
       parent-class
       (assoc :block/namespace {:db/id (get-class-db-id class-db-ids parent-class)})
       (seq properties)
@@ -102,7 +108,7 @@
                  (= schema-type :page)
                  (assoc :cardinality :many)
                  (property-m "rdfs:comment")
-                 (assoc :description (property-m "rdfs:comment"))
+                 (assoc :description (get-comment-string (property-m "rdfs:comment")))
                  (= schema-type :page)
                  (assoc :classes (let [invalid-classes (remove class-uuids range-includes)
                                        _ (when (seq invalid-classes)
