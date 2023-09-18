@@ -438,14 +438,10 @@
 
 (rum/defcs configure < rum/reactive
   (rum/local false ::parent-changed?)
-  [state page {:keys [journal? show-properties?] :as opts
-               :or {show-properties? true}}]
+  [state page {:keys [journal?]}]
   (let [page-id (:db/id page)
         page (when page-id (db/sub-block page-id))
         type (:block/type page)
-        properties-opts (merge {:selected? false
-                                :page-configure? true}
-                               opts)
         class? (= type "class")
         parent-changed? (::parent-changed? state)]
     (when page
@@ -510,16 +506,7 @@
                                  [:a {:on-click #(route-handler/redirect-to-page! class-name)} class-name]))
                              class-ancestors)))]])
        (when (and config/publishing? (= type "property"))
-         (property/property-config (state/get-current-repo) page {}))
-       (when (and (not show-properties?) (not config/publishing?))
-         (let [edit-input-id (str "edit-block-" (:block/uuid page))]
-           [:div
-            [:div.text-sm.opacity-70.font-medium.mb-2 (if class? "Class Properties:" "Properties:")]
-            (component-block/db-properties-cp
-             {:editor-box editor/box}
-             page
-             edit-input-id
-             (assoc properties-opts :class-schema? class?))]))])))
+         (property/property-config (state/get-current-repo) page {}))])))
 
 (rum/defc page-properties < rum/reactive
   [page *configure-show?]
@@ -602,14 +589,7 @@
           *all-collapsed? (::all-collapsed? state)
           *current-block-page (::current-page state)
           block-or-whiteboard? (or block? whiteboard?)
-          home? (= :home (state/get-current-route))
-          show-properties? (and
-                            (config/db-based-graph? repo)
-                            (not block?)
-                            (not whiteboard?)
-                            (or (seq (:block/properties page))
-                                (seq (:block/alias page))
-                                (seq (:block/tags page))))]
+          home? (= :home (state/get-current-route))]
       [:div.flex-1.page.relative
        (merge (if (seq (:block/tags page))
                 (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
@@ -649,8 +629,7 @@
               (do
                 (state/set-modal! #(property/property-config repo page {}))
                 (swap! *configure-show? not))
-              (configure page {:journal? journal?
-                               :show-properties? show-properties?})))
+              (configure page {:journal? journal?})))
 
           [:div
            (when (and block? (not sidebar?) (not whiteboard?))
@@ -659,8 +638,7 @@
                [:div.mb-4
                 (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
-           (when show-properties?
-            (page-properties page *configure-show?))
+           (page-properties page *configure-show?)
 
            ;; blocks
            (let [_ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
