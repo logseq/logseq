@@ -231,7 +231,7 @@
 (rum/defcs property-input < rum/reactive
   (rum/local false ::show-new-property-config?)
   shortcut/disable-all-shortcuts
-  [state entity *property-key *property-value {:keys [class-schema?]
+  [state entity *property-key *property-value {:keys [class-schema? page-configure?]
                                                :as opts}]
   (let [repo (state/get-current-repo)
         *show-new-property-config? (::show-new-property-config? state)
@@ -253,7 +253,7 @@
         [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-row.items-center
          [:div.col-span-2 @*property-key]
          [:div.col-span-3.flex.flex-row
-          (when (not class-schema?)
+          (when (not (and class-schema? page-configure?))
             (if @*show-new-property-config?
               (ui/dropdown
                (fn [_opts]
@@ -442,7 +442,7 @@
               (property-key block property (assoc (select-keys opts [:class-schema?])
                                                   :block? block?
                                                   :collapsed? collapsed?))]
-             (if (:class-schema? opts)
+             (if (and (:class-schema? opts) (:page-configure? opts))
                [:div.property-description.text-sm.opacity-70
                 {:class "col-span-3"}
                 (get-in property [:block/schema :description])]
@@ -467,11 +467,11 @@
   {:init (fn [state]
            (assoc state ::blocks-container-id (or (:blocks-container-id (last (:rum/args state)))
                                                   (state/next-blocks-container-id))))}
-  [state target-block edit-input-id {:keys [in-block-container?] :as opts}]
+  [state target-block edit-input-id {:keys [in-block-container? page-configure?] :as opts}]
   (let [block (resolve-linked-block-if-exists target-block)
         class-schema? (and (:class-schema? opts) (:block/schema block))
         block-properties (:block/properties block)
-        properties (if class-schema?
+        properties (if (and class-schema? page-configure?)
                      (let [properties (:properties (:block/schema block))]
                        (map (fn [k] [k nil]) properties))
                      (sort-by first block-properties))

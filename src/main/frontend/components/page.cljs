@@ -514,7 +514,7 @@
        (when (and (not show-properties?) (not config/publishing?))
          (let [edit-input-id (str "edit-block-" (:block/uuid page))]
            [:div
-            [:div.text-sm.opacity-70.font-medium.mb-2 "Properties:"]
+            [:div.text-sm.opacity-70.font-medium.mb-2 (if class? "Class Properties:" "Properties:")]
             (component-block/db-properties-cp
              {:editor-box editor/box}
              page
@@ -527,17 +527,27 @@
         class? (= type "class")
         configure? (rum/react *configure-show?)
         opts {:selected? false
-              :page-configure? configure?
-              :class-schema? class?}]
+              :page-configure? configure?}]
     [:div.ls-page-properties.mb-4 {:style {:padding 2}}
-     (let [edit-input-id (str "edit-block-" (:block/uuid page) "-schema")
-           properties-cp (component-block/db-properties-cp {:editor-box editor/box}
-                                                           page edit-input-id opts)]
+     (let [edit-input-id-prefix (str "edit-block-" (:block/uuid page))]
        (if (and configure? class?)
          [:div
           [:div.text-sm.opacity-70.font-medium.mb-2 "Properties:"]
-          properties-cp]
-         properties-cp))]))
+          (component-block/db-properties-cp {:editor-box editor/box}
+                                            page
+                                            (str edit-input-id-prefix "-page")
+                                            (assoc opts :class-schema? false))
+          [:div.text-sm.opacity-70.font-medium.mb-2 "Class Properties:"]
+          (component-block/db-properties-cp {:editor-box editor/box}
+                                            page
+                                            (str edit-input-id-prefix "-schema")
+                                            (assoc opts :class-schema? true))]
+         (component-block/db-properties-cp {:editor-box editor/box}
+                                           page
+                                           (str edit-input-id-prefix "-page")
+                                           ;; class page properties are wrongly identified without
+                                           ;; class? and configure?
+                                           (assoc opts :class-schema? (and class? configure?)))))]))
 
 (defn- get-path-page-name
   [state page-name]
