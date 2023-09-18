@@ -9,7 +9,6 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.handler :as handler]
-            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.components.file-sync :as fs-sync]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
@@ -41,7 +40,7 @@
   []
   (let [_ (state/sub :auth/id-token)
         loading? (state/sub [:ui/loading? :login])
-        sync-enabled? (file-sync-handler/enable-sync?)
+        sync-enabled? (state/enable-sync?)
         logged? (user-handler/logged-in?)]
     (when-not (or config/publishing?
                   logged?
@@ -199,7 +198,7 @@
                                                   (not (:ui/left-sidebar-open? @state/state))))})
         custom-home-page? (and (state/custom-home-page?)
                                (= (state/sub-default-home-page) (state/get-current-page)))
-        sync-enabled? (file-sync-handler/enable-sync?)]
+        sync-enabled? (state/enable-sync?)]
     [:div.cp__header.drag-region#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)

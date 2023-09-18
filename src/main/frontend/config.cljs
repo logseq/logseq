@@ -27,6 +27,8 @@
 (goog-define TEST false)
 (def test? TEST)
 
+(goog-define ENABLE-FILE-SYNC-FEATURE true)
+
 (goog-define ENABLE-FILE-SYNC-PRODUCTION false)
 
 ;; this is a feature flag to enable the account tab

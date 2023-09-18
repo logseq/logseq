@@ -3506,7 +3506,6 @@
 
                :else
                nil)))
-
 (defonce auth-id-token-cursor (rum/cursor state/state :auth/id-token))
 (add-watch auth-id-token-cursor "sync-manage"
            (fn [_k _r _o n]
@@ -3520,6 +3519,7 @@
     (println "trying to restart sync..." (tc/to-string (t/now)))
     (<sync-start))
   (recur))
+
 
 
 ;;; ### some sync events handler

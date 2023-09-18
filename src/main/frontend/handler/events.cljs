@@ -618,7 +618,7 @@
   (let [type (.-event event)
         payload (js->clj event :keywordize-keys true)]
     (fs-watcher/handle-changed! type payload)
-    (when (file-sync-handler/enable-sync?)
+    (when (state/enable-sync?)
      (sync/file-watch-handler type payload))))
 
 (defmethod handle :rebuild-slash-commands-list [[_]]

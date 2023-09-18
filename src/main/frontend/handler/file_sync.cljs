@@ -27,11 +27,6 @@
 (defn get-current-graph-uuid []
   (state/get-current-file-sync-graph-uuid))
 
-(defn enable-sync?
-  []
-  (or (state/enable-sync?)
-      config/dev?))
-
 (defn current-graph-sync-on?
   []
   (when-let [sync-state (state/sub-file-sync-state (state/get-current-file-sync-graph-uuid))]

@@ -10,7 +10,6 @@
             [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as watcher-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
@@ -54,7 +53,7 @@
                              dir (:dir payload)
                              payload (assoc payload :path (path/relative-path dir path))]
                          (watcher-handler/handle-changed! type payload)
-                         (when (file-sync-handler/enable-sync?)
+                         (when (state/enable-sync?)
                            (sync/file-watch-handler type payload)))))
 
   (safe-api-call "file-sync-progress"
