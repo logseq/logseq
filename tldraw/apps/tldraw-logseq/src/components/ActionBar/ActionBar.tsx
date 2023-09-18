@@ -52,7 +52,7 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
   return (
     <div className="tl-action-bar" data-html2canvas-ignore="true">
       {!app.readOnly && (
-        <div className="tl-toolbar tl-history-bar mr-4 mb-2">
+        <div className="tl-toolbar tl-history-bar mr-2 mb-2">
           <Button tooltip={t('whiteboard/undo')} onClick={undo}>
             <TablerIcon name="arrow-back-up" />
           </Button>
@@ -62,7 +62,7 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
         </div>
       )}
 
-      <div className={'tl-toolbar tl-zoom-bar mr-4 mb-2'}>
+      <div className={'tl-toolbar tl-zoom-bar mr-2 mb-2'}>
         <Button tooltip={t('whiteboard/zoom-in')} onClick={zoomIn} id="tl-zoom-in">
           <TablerIcon name="plus" />
         </Button>
@@ -73,7 +73,7 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
         <ZoomMenu />
       </div>
 
-      <div className={'tl-toolbar tl-grid-bar mr-4 mb-2'}>
+      <div className={'tl-toolbar tl-grid-bar mr-2 mb-2'}>
         <ToggleInput
             tooltip={t('whiteboard/toggle-grid')}
             className="tl-button"
