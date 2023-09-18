@@ -55,7 +55,7 @@
     [:req-id :string]
     [:t {:optional true} :int]
     [:affected-blocks {:optional true}
-     [:map-of :keyword
+     [:map-of :string
       [:or
        [:map
         [:op [:enum :move]]
@@ -275,7 +275,7 @@
          (some? @(:*repo state))]}
   (go
     (let [repo @(:*repo state)
-          affected-blocks-map (update-keys (:affected-blocks data-from-ws) name)
+          affected-blocks-map (:affected-blocks data-from-ws)
           remote-t (:t data-from-ws)
           local-t (<! (p->c (op/<get-ops&local-tx repo)))]
       (if (<= remote-t local-t)
