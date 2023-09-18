@@ -1,4 +1,5 @@
 (ns frontend.db.rtc.core
+  "Main ns for rtc related fns"
   (:require-macros
    [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [cljs.core.async :as async :refer [<! chan go go-loop]]
@@ -13,6 +14,7 @@
             [frontend.util :as util]
             [malli.core :as m]
             [malli.util :as mu]
+            [malli.transform :as mt]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]))
 
@@ -56,7 +58,7 @@
      [:map-of :keyword
       [:or
        [:map
-        [:op [:= "move"]]
+        [:op [:enum :move]]
         [:parents [:sequential :string]]
         [:left [:maybe :string]]
         [:self :string]
@@ -64,10 +66,10 @@
         [:updated-at {:optional true} :int]
         [:created-at {:optional true} :int]]
        [:map
-        [:op [:= "remove"]]
+        [:op [:enum :remove]]
         [:block-uuid :string]]
        [:map
-        [:op [:= "update-attrs"]]
+        [:op [:enum :update-attrs]]
         [:parents [:sequential :string]]
         [:left [:maybe :string]]
         [:self :string]
@@ -75,12 +77,14 @@
         [:updated-at {:optional true} :int]
         [:created-at {:optional true} :int]]
        [:map
-        [:op [:= "update-page"]]
+        [:op [:enum :update-page]]
         [:self :string]
         [:page-name :string]]
        [:map
-        [:op [:= "remove-page"]]
+        [:op [:enum :remove-page]]
         [:block-uuid :string]]]]]]))
+(def data-from-ws-decoder (m/decoder data-from-ws-schema mt/string-transformer))
+
 (def data-from-ws-validator (fn [data] (if ((m/validator data-from-ws-schema) data)
                                          true
                                          (prn (mu/explain-data data-from-ws-schema data)))))
@@ -275,9 +279,9 @@
           remote-t (:t data-from-ws)
           local-t (<! (p->c (op/<get-ops&local-tx repo)))]
       (if (<= remote-t local-t)
-        (prn :skip :remote-t remote-t :local-t local-t)
-        (let [{remove-ops-map "remove" move-ops-map "move" update-ops-map "update-attrs"
-               update-page-ops-map "update-page" remove-page-ops-map "remove-page"}
+        (prn ::skip :remote-t remote-t :local-t local-t)
+        (let [{remove-ops-map :remove move-ops-map :move update-ops-map :update-attrs
+               update-page-ops-map :update-page remove-page-ops-map :remove-page}
               (update-vals
                (group-by (fn [[_ env]] (get env :op)) affected-blocks-map)
                (partial into {}))
@@ -346,32 +350,32 @@
                        (let [left-uuid (some-> block :block/left :block/uuid str)
                              parent-uuid (some-> block :block/parent :block/uuid str)]
                          (when (and left-uuid parent-uuid)
-                           ["move"
+                           [:move
                             {:block-uuid block-uuid :target-uuid left-uuid :sibling? (not= left-uuid parent-uuid)}]))))
                    move-block-uuids)
         remove-block-uuids* (filter (fn [block-uuid] (nil? (db/entity repo [:block/uuid (uuid block-uuid)]))) remove-block-uuids)
-        remove-ops* [["remove" {:block-uuids remove-block-uuids*}]]
+        remove-ops* [[:remove {:block-uuids remove-block-uuids*}]]
         update-ops* (->> update-block-uuids
                          (keep (fn [block-uuid]
                                  (when-let [b (db/entity repo [:block/uuid (uuid block-uuid)])]
                                    (let [left-uuid (some-> b :block/left :block/uuid str)
                                          parent-uuid (some-> b :block/parent :block/uuid str)]
                                      (when (and left-uuid parent-uuid)
-                                       ["update" {:block-uuid block-uuid
-                                                  :target-uuid left-uuid :sibling? (not= left-uuid parent-uuid)
-                                                  :content (:block/content b "")
-                                                  :updated-at (:block/updated-at b)
-                                                  :created-at (:block/created-at b)}]))))))
+                                       [:update {:block-uuid block-uuid
+                                                 :target-uuid left-uuid :sibling? (not= left-uuid parent-uuid)
+                                                 :content (:block/content b "")
+                                                 :updated-at (:block/updated-at b)
+                                                 :created-at (:block/created-at b)}]))))))
         update-page-ops* (->> update-page-uuids
                               (keep (fn [block-uuid]
                                       (when-let [page-name (:block/name (db/entity repo [:block/uuid (uuid block-uuid)]))]
-                                        ["update-page" {:block-uuid block-uuid
-                                                        :page-name page-name}]))))
+                                        [:update-page {:block-uuid block-uuid
+                                                       :page-name page-name}]))))
         remove-page-ops* (->> remove-page-uuids
                               (keep (fn [block-uuid]
                                       (let [b (db/entity repo [:block/uuid (uuid block-uuid)])]
                                         (when-not b
-                                          ["remove-page" {:block-uuid block-uuid}])))))]
+                                          [:remove-page {:block-uuid block-uuid}])))))]
     [update-page-ops* remove-ops* move-ops* update-ops* remove-page-ops*]))
 
 
@@ -403,9 +407,9 @@
           (do (prn :graph-lock-missing)
               nil)
           ;; else
-          (throw (ex-info "Unavailable" {})))
+          (throw (ex-info "Unavailable" {:remote-ex remote-ex})))
         (do (<! (p->c (op/<clean-ops repo op-keys)))
-            (<! (<apply-remote-data state r))
+            (<! (<apply-remote-data state (data-from-ws-decoder r)))
             (prn :<client-op-update-handler r))))))
 
 (defn <loop-for-rtc
@@ -417,7 +421,7 @@
     (reset! (:*graph-uuid state) graph-uuid)
     (reset! (:*repo state) repo)
     (let [{:keys [data-from-ws-pub client-op-update-chan]} state
-          push-data-from-ws-ch (chan (async/sliding-buffer 100))
+          push-data-from-ws-ch (chan (async/sliding-buffer 100) (map data-from-ws-decoder))
           stop-rtc-loop-chan (chan)]
       (reset! (:*stop-rtc-loop-chan state) stop-rtc-loop-chan)
       (with-sub-data-from-ws state
@@ -474,5 +478,4 @@
   (go
     (def global-state (<! (<init))))
   (reset! (:*graph-uuid global-state) debug-graph-uuid)
-  (reset! (:*repo global-state) (state/get-current-repo))
-  )
+  (reset! (:*repo global-state) (state/get-current-repo)))
