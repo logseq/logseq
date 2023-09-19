@@ -354,7 +354,7 @@
                             {:block-uuid block-uuid :target-uuid left-uuid :sibling? (not= left-uuid parent-uuid)}]))))
                    move-block-uuids)
         remove-block-uuids* (filter (fn [block-uuid] (nil? (db/entity repo [:block/uuid (uuid block-uuid)]))) remove-block-uuids)
-        remove-ops* [[:remove {:block-uuids remove-block-uuids*}]]
+        remove-ops* (when (seq remove-block-uuids*) [[:remove {:block-uuids remove-block-uuids*}]])
         update-ops* (->> update-block-uuids
                          (keep (fn [block-uuid]
                                  (when-let [b (db/entity repo [:block/uuid (uuid block-uuid)])]
