@@ -25,7 +25,11 @@
          (keep (fn [datoms]
                  (when (seq datoms)
                    (reduce
-                    (fn [r datom] (assoc r (:a datom) (:v datom)))
+                    (fn [r datom]
+                      (when (and (contains? #{:block/parent :block/left} (:a datom))
+                                 (not (pos-int? (:v datom))))
+                        (throw (ex-info "invalid block data" {:datom datom})))
+                      (assoc r (:a datom) (:v datom)))
                     {:db/id (:e (first datoms))}
                     datoms)))))))
 
