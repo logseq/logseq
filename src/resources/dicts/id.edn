@@ -308,8 +308,6 @@
  :settings-page/enable-tooltip "Tooltip"
  :settings-page/enable-journals "Jurnal"
  :settings-page/enable-all-pages-public "Semua halaman menjadi publik saat dipublikasikan"
- :settings-page/customize-shortcuts "Pintasan keyboard"
- :settings-page/shortcut-settings "Sesuaikan pintasan"
  :settings-page/home-default-page "Atur halaman beranda default"
  :settings-page/enable-block-time "Waktu blok"
  :settings-page/clear-cache "Hapus cache"

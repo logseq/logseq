@@ -316,8 +316,6 @@
  :settings-page/enable-tooltip "Tooltips"
  :settings-page/enable-journals "Journals"
  :settings-page/enable-all-pages-public "All pages public when publishing"
- :settings-page/customize-shortcuts "Keyboard shortcuts"
- :settings-page/shortcut-settings "Customize shortcuts"
  :settings-page/home-default-page "Set the default home page"
  :settings-page/enable-block-time "Block timestamps"
  :settings-page/clear-cache "Clear cache"
@@ -361,6 +359,8 @@
  :settings-page/update-error-2 " Please check out the "
  :settings-permission/start-granting "Grant"
 
+ :settings-page/auto-chmod "Automatically change file permissions"
+ :settings-page/auto-chmod-desc "Disable to allow editing by multiple users with permissions granted by group membership."
  :yes "Yes"
 
  :submit "Submit"
@@ -831,4 +831,5 @@
   :dev/show-block-data             "(Dev) Show block data"
   :dev/show-block-ast              "(Dev) Show block AST"
   :dev/show-page-data              "(Dev) Show page data"
-  :dev/show-page-ast               "(Dev) Show page AST"}}
+  :dev/show-page-ast               "(Dev) Show page AST"
+  :window/close                    "Close window"}}

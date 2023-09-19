@@ -13,6 +13,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.config :as config]
             [frontend.handler.config :as config-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
@@ -449,17 +450,23 @@
 
 (def ^:export push_state
   (fn [^js k ^js params ^js query]
-    (rfe/push-state
-      (keyword k)
-      (bean/->clj params)
-      (bean/->clj query))))
+    (let [k (keyword k)
+          page? (= k :page)
+          params (bean/->clj params)
+          query (bean/->clj query)]
+      (if-let [page-name (and page? (:name params))]
+        (route-handler/redirect-to-page! page-name {:anchor (:anchor query) :push true})
+        (rfe/push-state k params query)))))
 
 (def ^:export replace_state
   (fn [^js k ^js params ^js query]
-    (rfe/replace-state
-      (keyword k)
-      (bean/->clj params)
-      (bean/->clj query))))
+    (let [k (keyword k)
+          page? (= k :page)
+          params (bean/->clj params)
+          query (bean/->clj query)]
+      (if-let [page-name (and page? (:name params))]
+        (route-handler/redirect-to-page! page-name {:anchor (:anchor query) :push false})
+        (rfe/replace-state k params query)))))
 
 (defn ^:export get_external_plugin
   [pid]
@@ -563,8 +570,11 @@
   page-handler/rename!)
 
 (defn ^:export open_in_right_sidebar
-  [block-uuid]
-  (editor-handler/open-block-in-sidebar! (sdk-utils/uuid-or-throw-error block-uuid)))
+  [block-id-or-uuid]
+  (editor-handler/open-block-in-sidebar!
+    (if (number? block-id-or-uuid)
+      block-id-or-uuid
+      (sdk-utils/uuid-or-throw-error block-id-or-uuid))))
 
 (defn ^:export new_block_uuid []
   (str (db/new-block-id)))

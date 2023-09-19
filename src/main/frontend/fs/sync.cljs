@@ -3357,18 +3357,22 @@
   []
   (go
     (let [api-url (str "https://" config/API-DOMAIN "/logseq/version")
-          r1 (http/get api-url)
-          r2 (http/get config/CONNECTIVITY-TESTING-S3-URL)
+          r1 (http/get api-url {:with-credentials? false})
+          r2 (http/get config/CONNECTIVITY-TESTING-S3-URL {:with-credentials? false})
           r1* (<! r1)
           r2* (<! r2)
           ok? (and (= 200 (:status r1*))
                    (= 200 (:status r2*))
                    (= "OK" (:body r2*)))]
       (if ok?
-        (do (println :connectivity-testing-succ)
-            (notification/clear! :sync-connection-failed))
-        (notification/show! (str (t :file-sync/connectivity-testing-failed)
-                                 (print-str [config/CONNECTIVITY-TESTING-S3-URL api-url]))
+        (notification/clear! :sync-connection-failed)
+        (notification/show! [:div
+                             (t :file-sync/connectivity-testing-failed)
+                             [:a {:href api-url} api-url]
+                             " and "
+                             [:a
+                              {:href config/CONNECTIVITY-TESTING-S3-URL}
+                              config/CONNECTIVITY-TESTING-S3-URL]]
                             :warning
                             false
                             :sync-connection-failed))
@@ -3380,14 +3384,22 @@
   "Avoid running multiple sync instances simultaneously."
   (atom false))
 
+(defn- <should-start-sync?
+  []
+  (go
+    (and (state/enable-sync?)
+         @network-online-cursor     ;; is online
+         (user/has-refresh-token?)  ;; has refresh token, should bring up sync
+         (or (= ::stop (:state (state/get-file-sync-state))) ;; state=stopped
+             (nil? (state/get-file-sync-state)))  ;; the whole sync state not inited yet, happens when app starts without network
+         (<! (p->c (persist-var/-load graphs-txid))))))  ;; not a sync graph))
+
 (defn <sync-start
   []
   (go
     (when-not @*sync-starting
       (reset! *sync-starting true)
-      (if-not (and (state/enable-sync?)
-                   (or (nil? (state/get-file-sync-state))
-                       (= ::stop (:state (state/get-file-sync-state))))
+      (if-not (and (<! (<should-start-sync?))
                    (<! (<connectivity-testing)))
         (reset! *sync-starting false)
         (try
@@ -3504,11 +3516,8 @@
 ;; try to re-start sync when state=stopped every 1min
 (go-loop []
   (<! (timeout 60000))
-  (when (and (state/enable-sync?)
-             @network-online-cursor       ; is online
-             (or (= ::stop (:state (state/get-file-sync-state))) ;; state=stopped
-                 (nil? (state/get-file-sync-state)))) ;; the whole sync state not inited yet, happens when app starts without network
-    (println "trying to restart sync...")
+  (when (<! (<should-start-sync?))
+    (println "trying to restart sync..." (tc/to-string (t/now)))
     (<sync-start))
   (recur))
 

@@ -697,14 +697,6 @@
       }
     }
 
-    &:not(:hover) {
-      ::-webkit-scrollbar-thumb,
-      ::-webkit-scrollbar,
-      ::-webkit-scrollbar-thumb:active {
-        background-color: transparent;
-      }
-    }
-
     .initial {
       flex: 1;
     }
@@ -713,18 +705,9 @@
       @apply h-full;
 
       .button {
-        @apply hidden p-0 ml-2 flex items-center;
+        @apply p-0 ml-2 flex items-center;
 
         &:focus {
-          @apply flex;
-        }
-      }
-    }
-
-    .is-mobile &,
-    &:hover {
-      .item-actions {
-        .button {
           @apply flex;
         }
       }
