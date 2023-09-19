@@ -79,8 +79,12 @@
                                                             (= append "true"))}
                                   win))
 
+      (= action "/auth")
+      (send-to-renderer (utils/get-main-window) :authCallback
+                        {:session (js/JSON.parse (.get (.-searchParams parsed-url) "t"))})
+
       :else
-      (send-to-focused-renderer "notification" {:type "error"
+      (send-to-focused-renderer :notification {:type "error"
                                                 :payload (str "Unimplemented x-callback-url action: `"
                                                               action
                                                               "`.")} win))))

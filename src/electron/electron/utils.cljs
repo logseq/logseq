@@ -222,6 +222,8 @@
   []
   (.getFocusedWindow BrowserWindow))
 
+(defn get-main-window [] @*win)
+
 (defn get-win-from-sender
   [^js evt]
   (try

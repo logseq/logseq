@@ -200,7 +200,7 @@
           (state/pub-event! [:user/fetch-info-and-graphs])
           {:id-token id-token :access-token access-token :refresh-token refresh-token})))))
 
-(defn logout []
+(defn logout! []
   (clear-tokens)
   (state/clear-user-info!)
   (state/pub-event! [:user/logout]))

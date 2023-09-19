@@ -905,15 +905,15 @@
          [:div "Authentication"]
          [:div.col-span-2
           [:div.grid.grid-cols-2.gap-4
-           [:div (ui/button (t :logout) {:class "p-1 h-8 justify-center w-full"
+           [:div (ui/button (t :logout) {:class      "p-1 h-8 justify-center w-full"
                                          :background "gray"
-                                         :icon "logout"
-                                         :on-click user-handler/logout})]
-           [:div (ui/button "Reset password" {:class "p-1 h-8 justify-center w-full"
-                                              :disabled true
+                                         :icon       "logout"
+                                         :on-click   user-handler/logout!})]
+           [:div (ui/button "Reset password" {:class      "p-1 h-8 justify-center w-full"
+                                              :disabled   true
                                               :background "gray"
-                                              :icon "key"
-                                              :on-click user-handler/logout})]
+                                              :icon       "key"
+                                              :on-click   user-handler/logout!})]
            [:div.col-span-2 (ui/button "Delete Account" {:class "p-1 h-8 justify-center w-full"
                                                          :disabled true
                                                          :background "red"})]]]]
@@ -1002,9 +1002,9 @@
         (if logged-in?
           [:div
            (user-handler/email)
-           [:p (ui/button (t :logout) {:class "p-1"
-                                       :icon "logout"
-                                       :on-click user-handler/logout})]]
+           [:p (ui/button (t :logout) {:class    "p-1"
+                                       :icon     "logout"
+                                       :on-click user-handler/logout!})]]
           [:div
            (ui/button (t :login) {:class "p-1"
                                   :icon "login"

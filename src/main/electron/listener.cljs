@@ -158,6 +158,15 @@
                  (fn [code]
                    (user/login-callback code)))
 
+  (safe-api-call "authCallback"
+                 (fn [^js payload]
+                   (when-let [{:keys [session]} (bean/->clj payload)]
+                     (let [delay (if (user/logged-in?) (or (user/logout!) 2000) 0)]
+                       (-> (p/delay delay)
+                           (p/then
+                             (fn []
+                               (user/login-callback session))))))))
+
   (safe-api-call "quickCapture"
                  (fn [args]
                    (state/pub-event! [:editor/quick-capture args])))

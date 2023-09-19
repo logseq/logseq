@@ -138,8 +138,8 @@
 
        (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
          {:title (t :logout-user (user-handler/email))
-          :options {:on-click #(user-handler/logout)}
-          :icon  (ui/icon "logout")})]
+          :options {:on-click #(user-handler/logout!)}
+          :icon (ui/icon "logout")})]
       (concat page-menu-and-hr)
       (remove nil?))
      {})))
