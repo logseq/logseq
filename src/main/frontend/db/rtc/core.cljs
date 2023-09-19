@@ -418,15 +418,18 @@
          (some? graph-uuid)
          (some? repo)]}
   (go
-    (reset! (:*graph-uuid state) graph-uuid)
     (reset! (:*repo state) repo)
+    (reset! (:*rtc-state state) :open)
     (let [{:keys [data-from-ws-pub client-op-update-chan]} state
           push-data-from-ws-ch (chan (async/sliding-buffer 100) (map data-from-ws-decoder))
           stop-rtc-loop-chan (chan)]
       (reset! (:*stop-rtc-loop-chan state) stop-rtc-loop-chan)
+      (<! (ws/<ensure-ws-open! state))
+      (reset! (:*graph-uuid state) graph-uuid)
       (with-sub-data-from-ws state
         (<! (ws/<send! state {:action "register-graph-updates" :req-id (get-req-id) :graph-uuid graph-uuid}))
         (<! (get-result-ch)))
+
       (async/sub data-from-ws-pub "push-updates" push-data-from-ws-ch)
       (<! (go-loop []
             (let [{:keys [push-data-from-ws client-op-update stop]}
@@ -449,10 +452,10 @@
                 nil))))
       (async/unsub data-from-ws-pub "push-updates" push-data-from-ws-ch))))
 
-(defn init-state
+(defn- init-state
   [ws data-from-ws-chan user-uuid]
   (m/parse state-schema
-           {:*rtc-state (atom :open :validator rtc-state-validator)
+           {:*rtc-state (atom :closed :validator rtc-state-validator)
             :user-uuid user-uuid
             :*graph-uuid (atom nil)
             :*repo (atom nil)
@@ -462,8 +465,7 @@
             :client-op-update-chan (chan 1)
             :*ws (atom ws)}))
 
-
-(defn <init
+(defn <init-state
   []
   (go
     (let [data-from-ws-chan (chan (async/sliding-buffer 100))
@@ -476,6 +478,6 @@
 
 (comment
   (go
-    (def global-state (<! (<init))))
+    (def global-state (<! (<init-state))))
   (reset! (:*graph-uuid global-state) debug-graph-uuid)
   (reset! (:*repo global-state) (state/get-current-repo)))

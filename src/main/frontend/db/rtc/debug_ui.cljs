@@ -19,21 +19,28 @@
 (def debug-graph-uuid "c9d334d8-977a-428c-af53-25261de27db5")
 
 
-(defn- <start
-  []
-  (go
-    (let [repo (state/get-current-repo)
-          state (<! (rtc-core/<init))]
-      (if-let [graph-uuid (<! (p->c (op/<get-graph-uuid repo)))]
-        (do (reset! debug-state state)
-            (<! (rtc-core/<loop-for-rtc state graph-uuid (state/get-current-repo)))
-            state)
-        (do (notification/show! "not a rtc-graph" :error false)
-            nil)))))
+(defn- <start-rtc
+  ([]
+   (go
+     (let [state (<! (rtc-core/<init-state))]
+       (<! (<start-rtc state)))))
+  ([state]
+   (go
+     (let [repo (state/get-current-repo)]
+       (<! (<start-rtc state repo)))))
+  ([state repo]
+   (go
+     (if-let [graph-uuid (<! (p->c (op/<get-graph-uuid repo)))]
+       (do (reset! debug-state state)
+           (<! (rtc-core/<loop-for-rtc state graph-uuid repo))
+           state)
+       (do (notification/show! "not a rtc-graph" :error false)
+           nil)))))
 
-(defn- <stop
+(defn- stop
   []
-  (async/close! @(:*stop-rtc-loop-chan @debug-state)))
+  (async/close! @(:*stop-rtc-loop-chan @debug-state))
+  (reset! debug-state nil))
 
 (defn- push-pending-ops
   []
@@ -42,13 +49,13 @@
 (defn- <download-graph
   [repo graph-uuid]
   (go
-    (let [state (<! (rtc-core/<init))]
+    (let [state (<! (rtc-core/<init-state))]
       (<! (full-upload-download-graph/<download-graph state repo graph-uuid)))))
 
 (defn- <upload-graph
   []
   (go
-    (let [state (<! (rtc-core/<init))
+    (let [state (<! (rtc-core/<init-state))
           repo (state/get-current-repo)]
       (<! (full-upload-download-graph/<upload-graph state repo)))))
 
@@ -65,24 +72,32 @@
   (let [s (rum/react debug-state)
         rtc-state (and s (rum/react (:*rtc-state s)))]
     [:div
-     [:a
-      {:on-mouse-down (fn [_] (go
-                                (let [repo (state/get-current-repo)
-                                      {:keys [local-tx ops]}
-                                      (<! (p->c (op/<get-ops&local-tx repo)))
-                                      graph-uuid (<! (p->c (op/<get-graph-uuid repo)))
-                                      graph-list (when (= :open rtc-state)
-                                                   (with-sub-data-from-ws s
-                                                     (<! (ws/<send! s {:req-id (get-req-id)
-                                                                       :action "list-graphs"
-                                                                       :graph-uuid "placeholder"}))
-                                                     (:graphs (<! (get-result-ch)))))]
-                                  (reset! (::remote-graphs state) (map :graph-uuid graph-list))
-                                  (reset! (::local-tx state) local-tx)
-                                  (reset! (::ops state) (count ops))
-                                  (reset! (::graph-uuid state) graph-uuid)
-                                  (reset! (::ws-state state) (and s (ws/get-state @(:*ws s)))))))}
-      (ui/icon "refresh" {:style {:font-size 20}})]
+     [:div.flex
+      (ui/button "local-state"
+                 :class "mr-2"
+                 :icon "refresh"
+                 :on-click (fn [_]
+                             (go
+                               (let [repo (state/get-current-repo)
+                                     {:keys [local-tx ops]}
+                                     (<! (p->c (op/<get-ops&local-tx repo)))
+                                     graph-uuid (<! (p->c (op/<get-graph-uuid repo)))]
+                                 (reset! (::local-tx state) local-tx)
+                                 (reset! (::ops state) (count ops))
+                                 (reset! (::graph-uuid state) graph-uuid)
+                                 (reset! (::ws-state state) (and s (ws/get-state @(:*ws s))))))))
+      (ui/button "graph-list"
+                 :icon "refresh"
+                 :on-click (fn [_]
+                             (go
+                               (let [s (or s (<! (rtc-core/<init-state)))
+                                     graph-list (with-sub-data-from-ws s
+                                                  (<! (ws/<send! s {:req-id (get-req-id)
+                                                                    :action "list-graphs"
+                                                                    :graph-uuid "placeholder"}))
+                                                  (:graphs (<! (get-result-ch))))]
+                                 (reset! (::remote-graphs state) (map :graph-uuid graph-list))
+                                 (reset! debug-state s)))))]
 
      [:pre (-> {:graph @(::graph-uuid state)
                 :rtc-state rtc-state
@@ -95,12 +110,16 @@
      (if (or (nil? s)
              (= :closed rtc-state))
        (ui/button "start" {:class "my-2"
-                           :on-click (fn [] (<start))})
+                           :on-click (fn []
+                                       (prn :start-rtc)
+                                       (if s
+                                         (<start-rtc s)
+                                         (<start-rtc)))})
 
        [:div.my-2.flex
         [:div.mr-2 (ui/button (str "send pending ops")
                               {:on-click (fn [] (push-pending-ops))})]
-        [:div (ui/button "stop" {:on-click (fn [] (<stop))})]])
+        [:div (ui/button "stop" {:on-click (fn [] (stop))})]])
      [:hr]
      [:div.flex.flex-row
       (ui/button (str "download graph to")
