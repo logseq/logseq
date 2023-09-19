@@ -1025,12 +1025,13 @@
            (sync-switcher-row enable-sync?))
          (when enable-sync?
            (sync-diff-merge-switcher-row enable-sync-diff-merge?))
-         [:div.text-sm
-          (t :settings-page/sync-desc-1)
-          [:a.mx-1 {:href "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
-                    :target "_blank"}
-           (t :settings-page/sync-desc-2)]
-          (t :settings-page/sync-desc-3)]]])]))
+         (when enable-sync?
+           [:div.text-sm
+            (t :settings-page/sync-desc-1)
+            [:a.mx-1 {:href "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
+                      :target "_blank"}
+             (t :settings-page/sync-desc-2)]
+            (t :settings-page/sync-desc-3)])]])]))
 
      ;; (when-not web-platform?
      ;;   [:<>
