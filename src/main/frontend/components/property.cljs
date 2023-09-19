@@ -424,7 +424,7 @@
     @*namespaces))
 
 (rum/defc properties-section < rum/reactive db-mixins/query
-  [block properties opts]
+  [block properties {:keys [inline-text] :as opts}]
   (when (seq properties)
     (for [[k v] properties]
       (when (uuid? k)
@@ -445,7 +445,7 @@
              (if (and (:class-schema? opts) (:page-configure? opts))
                [:div.property-description.text-sm.opacity-70
                 {:class "col-span-3"}
-                (get-in property [:block/schema :description])]
+                (inline-text {} :markdown (get-in property [:block/schema :description]))]
                (when-not collapsed?
                  [:div.property-value {:class (if block?
                                                 "block-property-value"

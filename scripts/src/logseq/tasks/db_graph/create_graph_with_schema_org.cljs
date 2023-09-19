@@ -33,12 +33,20 @@
       (throw (ex-info (str "No :block/uuid for " class-id) {}))))
 
 (defn- get-comment-string
-  [rdfs-comment]
-  (if (map? rdfs-comment)
-    (get rdfs-comment "@value")
-    rdfs-comment))
+  [rdfs-comment renamed-classes]
+  (let [desc* (if (map? rdfs-comment)
+                (get rdfs-comment "@value")
+                rdfs-comment)
+        ;; Update refs to renamed classes
+        regex (re-pattern (str "\\[\\[(" (string/join "|" (keys renamed-classes)) ")\\]\\]"))
+        desc (string/replace desc* regex #(str "[[" (get renamed-classes (second %)) "]]"))]
+    ;; Fix links to schema website docs
+    (string/replace desc #"\(/docs" "(https://schema.org/docs")))
 
-(defn- ->class-page [class-m class-db-ids class-uuids class-properties property-uuids {:keys [verbose]}]
+(defn- strip-schema-prefix [s]
+  (string/replace-first s "schema:" ""))
+
+(defn- ->class-page [class-m class-db-ids class-uuids class-properties property-uuids {:keys [verbose renamed-classes]}]
   (let [parent-class* (class-m "rdfs:subClassOf")
         parent-class (cond
                        (map? parent-class*)
@@ -56,16 +64,16 @@
                                   "schema:DataType")
                        "schema:DataType")
         properties (sort (class-properties (class-m "@id")))
-        url (-> (class-m "@id")
-                (string/replace-first "schema:" "https://schema.org/")
-                (string/replace-first #"_Class$" ""))]
-    (cond-> {:block/original-name (string/replace-first (class-m "@id") "schema:" "")
+        inverted-renamed-classes (set/map-invert renamed-classes)
+        class-name (strip-schema-prefix (class-m "@id"))
+        url (str "https://schema.org/" (get inverted-renamed-classes class-name class-name))]
+    (cond-> {:block/original-name class-name
              :block/type "class"
              :block/uuid (get-class-uuid class-uuids (class-m "@id"))
              :db/id (get-class-db-id class-db-ids (class-m "@id"))
              :properties (cond-> {:url url}
                            (class-m "rdfs:comment")
-                           (assoc :description (get-comment-string (class-m "rdfs:comment"))))}
+                           (assoc :description (get-comment-string (class-m "rdfs:comment") renamed-classes)))}
       parent-class
       (assoc :block/namespace {:db/id (get-class-db-id class-db-ids parent-class)})
       (seq properties)
@@ -97,7 +105,7 @@
              (when (class-map %) :page))
         range-includes))
 
-(defn- ->property-page [property-m prop-uuid class-map class-uuids {:keys [verbose]}]
+(defn- ->property-page [property-m prop-uuid class-map class-uuids {:keys [verbose renamed-classes]}]
   (let [range-includes (get-range-includes property-m)
         schema-type (get-schema-type range-includes class-map)
         ;; Pick first range to determine type as only one range is supported currently
@@ -110,7 +118,7 @@
                  (= schema-type :page)
                  (assoc :cardinality :many)
                  (property-m "rdfs:comment")
-                 (assoc :description (get-comment-string (property-m "rdfs:comment")))
+                 (assoc :description (get-comment-string (property-m "rdfs:comment") renamed-classes))
                  (= schema-type :page)
                  (assoc :classes (let [invalid-classes (remove class-uuids range-includes)
                                        _ (when (seq invalid-classes)
@@ -120,7 +128,7 @@
                                            (throw (ex-info (str "property " (pr-str (property-m "@id"))
                                                                 " has DataType class values which aren't supported: " datatype-classes) {})))]
                                    (set (map class-uuids range-includes)))))]
-    {(keyword (string/replace-first (property-m "@id") "schema:" ""))
+    {(keyword (strip-schema-prefix (property-m "@id")))
      {:block/uuid prop-uuid
       :block/schema schema
       :properties {:url (string/replace-first (property-m "@id") "schema:" "https://schema.org/")}}}))
@@ -158,7 +166,7 @@
   "Properties and class names conflict in Logseq because schema.org names are
   case sensitive whereas Logseq's :block/name is case insensitive. This is dealt
   with by appending a '_Class' suffix to conflicting classes.  If this strategy
-  changes, be sure to update schema->logseq-data-types and ->class-page"
+  changes, be sure to update schema->logseq-data-types"
   [property-ids class-ids {:keys [verbose]}]
   (let [conflicts
         (->> (concat property-ids class-ids)
@@ -244,14 +252,19 @@
         all-classes (map rename-class-ids all-classes*)
         ;; Updates keys like @id, @rangeIncludes, @domainIncludes
         all-properties (map rename-class-ids all-properties*)]
-    [all-classes all-properties]))
+    {:all-classes all-classes
+     :all-properties all-properties
+     :renamed-classes (->> renamed-classes
+                           (map (fn [[k v]] [(strip-schema-prefix k) (strip-schema-prefix v)]))
+                           (into {}))}))
 
 (defn- create-init-data [options]
   (let [schema-data (-> (str (fs/readFileSync "resources/schemaorg-current-https.json"))
                         js/JSON.parse
                         (js->clj)
                         (get "@graph"))
-        [all-classes all-properties] (get-all-classes-and-properties schema-data options)
+        {:keys [all-classes all-properties renamed-classes]}
+        (get-all-classes-and-properties schema-data options)
         ;; Generate data shared across pages and properties
         class-map (->> all-classes
                        (map #(vector (% "@id") %))
@@ -273,10 +286,10 @@
         ;; Generate pages and properties
         properties (generate-properties
                     (filter #(contains? select-properties (% "@id")) all-properties)
-                    property-uuids class-map class-uuids options)
+                    property-uuids class-map class-uuids (assoc options :renamed-classes renamed-classes))
         pages (generate-pages
                (map #(class-map %) select-class-ids)
-               class-uuids class-to-properties property-uuids options)]
+               class-uuids class-to-properties property-uuids (assoc options :renamed-classes renamed-classes))]
     {:pages-and-blocks pages
      :properties properties}))
 
