@@ -55,13 +55,15 @@
                                          (if (string? type') [type'] type')))
                                   "schema:DataType")
                        "schema:DataType")
-        properties (sort (class-properties (class-m "@id")))]
+        properties (sort (class-properties (class-m "@id")))
+        url (-> (class-m "@id")
+                (string/replace-first "schema:" "https://schema.org/")
+                (string/replace-first #"_Class$" ""))]
     (cond-> {:block/original-name (string/replace-first (class-m "@id") "schema:" "")
              :block/type "class"
              :block/uuid (get-class-uuid class-uuids (class-m "@id"))
              :db/id (get-class-db-id class-db-ids (class-m "@id"))
-             :properties (cond->
-                          {:url (string/replace-first (class-m "@id") "schema:" "https://schema.org/")}
+             :properties (cond-> {:url url}
                            (class-m "rdfs:comment")
                            (assoc :description (get-comment-string (class-m "rdfs:comment"))))}
       parent-class
@@ -156,7 +158,7 @@
   "Properties and class names conflict in Logseq because schema.org names are
   case sensitive whereas Logseq's :block/name is case insensitive. This is dealt
   with by appending a '_Class' suffix to conflicting classes.  If this strategy
-  changes, be sure to update schema->logseq-data-types"
+  changes, be sure to update schema->logseq-data-types and ->class-page"
   [property-ids class-ids {:keys [verbose]}]
   (let [conflicts
         (->> (concat property-ids class-ids)
