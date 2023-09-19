@@ -2,7 +2,9 @@
   "Main ns for rtc related fns"
   (:require-macros
    [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
-  (:require [cljs.core.async :as async :refer [<! chan go go-loop]]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [cljs.core.async :as async :refer [<! chan go go-loop]]
             [cljs.core.async.interop :refer [p->c]]
             [clojure.set :as set]
             [frontend.db :as db]
@@ -13,10 +15,8 @@
             [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.util :as util]
             [malli.core :as m]
-            [malli.util :as mu]
             [malli.transform :as mt]
-            [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]))
+            [malli.util :as mu]))
 
 
 (def state-schema
