@@ -2556,7 +2556,7 @@
             :down util/get-next-block-non-collapsed)
         sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))
         {:block/keys [uuid content format]} (state/get-edit-block)]
-    (when sibling-block
+    (if sibling-block
       (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
         (let [value (state/get-edit-content)]
           (when (not= (clean-content! format content)
@@ -2568,7 +2568,10 @@
               block (db/pull repo '[*] [:block/uuid new-uuid])]
           (edit-block! block
                        [direction line-pos]
-                       new-id))))))
+                       new-id)))
+      (case direction
+        :up (cursor/move-cursor-to input 0)
+        :down (cursor/move-cursor-to-end input)))))
 
 (defn keydown-up-down-handler
   [direction]
