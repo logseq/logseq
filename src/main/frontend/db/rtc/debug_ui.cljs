@@ -97,29 +97,39 @@
        (ui/button "start" {:class "my-2"
                            :on-click (fn [] (<start))})
 
-       [:div.my-2
-        [:div.my-2 (ui/button (str "send pending ops")
+       [:div.my-2.flex
+        [:div.mr-2 (ui/button (str "send pending ops")
                               {:on-click (fn [] (push-pending-ops))})]
         [:div (ui/button "stop" {:on-click (fn [] (<stop))})]])
      [:hr]
-     [:div.flex
-      ;; [:select
-      ;;  {:on-change (fn [e]
-      ;;                (let [value (util/evalue e)]
-      ;;                  (reset! (::graph-uuid-to-download state) value)))}
-      ;;  (for [graph-uuid @(::remote-graphs state)]
-      ;;    [:option {:key graph-uuid :value graph-uuid} graph-uuid])]
+     [:div.flex.flex-row
       (ui/button (str "download graph to")
                  {:class "mr-2"
                   :on-click (fn []
                               (go
                                 (when-let [repo @(::download-graph-to-repo state)]
                                   (when-let [graph-uuid @(::graph-uuid-to-download state)]
+                                    (prn :download-graph graph-uuid :to repo)
                                     (<! (<download-graph repo graph-uuid))
                                     (notification/show! "download graph successfully")))))})
-      (ui/ls-textarea {:on-change (fn [e] (reset! (::download-graph-to-repo state) (util/evalue e)))})]
+      [:div.flex.flex-col
+       [:select
+        {:on-change (fn [e]
+                      (let [value (util/evalue e)]
+                        (reset! (::graph-uuid-to-download state) value)))}
+        (if (seq @(::remote-graphs state))
+          (cons [:option {:key "select a remote graph" :value nil} "select a remote graph"]
+                (for [graph-uuid @(::remote-graphs state)]
+                  [:option {:key graph-uuid :value graph-uuid} (str (subs graph-uuid 0 14) "...")]))
+          (list [:option {:key "refresh-first" :value nil} "refresh remote-graphs first"]))]
+       [:input.form-input.my-2
+        {:on-change (fn [e] (reset! (::download-graph-to-repo state) (util/evalue e)))
+         :on-focus (fn [e] (let [v (.-value (.-target e))]
+                             (when (= v "repo name here")
+                               (set! (.-value (.-target e)) ""))))
+         :default-value "repo name here"}]]]
      [:div.flex.my-2
-      (ui/button (str "upload graph") {:on-click (fn []
-                                                   (go
-                                                     (<! (<upload-graph))
-                                                     (notification/show! "upload graph successfully")))})]]))
+      (ui/button (str "upload current repo") {:on-click (fn []
+                                                          (go
+                                                            (<! (<upload-graph))
+                                                            (notification/show! "upload graph successfully")))})]]))
