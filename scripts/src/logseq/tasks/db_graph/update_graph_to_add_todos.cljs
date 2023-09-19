@@ -31,8 +31,7 @@
                                 (hash-map :db/id (:db/id %)
                                           :block/content (str "TODO " (:block/content %))
                                           :block/marker "TODO"
-                                          :block/refs (into [{:db/id todo-id}] (:block/refs %))
-                                          :block/path-refs (into [{:db/id todo-id}] (:block/path-refs %))))
+                                          :block/refs (into [{:db/id todo-id}] (:block/refs %))))
                              blocks-to-update))]
     (persist-graph/add-listener conn db-name)
     (d/transact! conn update-tx)

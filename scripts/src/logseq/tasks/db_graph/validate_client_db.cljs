@@ -61,4 +61,5 @@
     (println "Read graph" (str db-name " with " (count datoms) " datoms!"))
     (validate-client-db ent-maps)))
 
-(when (= nbb/*file* (:file (meta #'-main))) (-main *command-line-args*))
+(when (= nbb/*file* (:file (meta #'-main)))
+  (-main *command-line-args*))
