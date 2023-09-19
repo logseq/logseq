@@ -8,7 +8,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]
-            [frontend.persist-db :as persist-db]))
+            [frontend.persist-db :as persist-db]
+            [clojure.string :as string]))
 
 (defn updated-page-hook
   [tx-report page]
@@ -29,8 +30,11 @@
                                         (and (= :block/content (:a datom))
                                              (= (:e datom) (:db/id edit-block)))) tx-data)
                               last)]
-      (when (:added last-datom)
-        (state/set-edit-content! (state/get-input) (:v last-datom))))))
+      (when-let [input (state/get-input)]
+        (when (and (:added last-datom)
+                   (not= (string/trim (:v last-datom))
+                         (string/trim (.-value input))))
+          (state/set-edit-content! input (:v last-datom)))))))
 
 (defn invoke-hooks
   [tx-report]
