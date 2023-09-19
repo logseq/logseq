@@ -27,10 +27,13 @@
 
 (declare <send!)
 (defn <ensure-ws-open!
+  "ensure websocket in state is OPEN, if not, make a connection, and
+  call init 'register-graph-updates' message"
   [state]
   (go
     (let [ws @(:*ws state)]
-      (when (> (.-readyState ws) js/WebSocket.OPEN)
+      (when (or (nil? ws)
+                (> (.-readyState ws) js/WebSocket.OPEN))
         (let [ws-opened-ch (chan)
               ws* (ws-listen (:user-uuid state) (:data-from-ws-chan state) ws-opened-ch)]
           (<! ws-opened-ch)
