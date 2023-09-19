@@ -126,8 +126,8 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         # if scheduled, use default settings
         run: |
-          echo "ENABLE_PLUGINS=${{ github.event_name == 'schedule' || github.event.inputs.enable-plugins == 'true' }}" >> $GITHUB_ENV
-          echo "ENABLE_FILE_SYNC_PRODUCTION=${{ github.event_name == 'schedule' || github.event.inputs.enable-file-sync-production == 'true' }}" >> $GITHUB_ENV
+          echo "ENABLE_LOGSEQ_PLUGINS=${{ github.event_name == 'schedule' || github.event.inputs.enable-plugins == 'true' }}" >> $GITHUB_ENV
+          echo "LOGSEQ_SYNC_ENV_PROD=${{ github.event_name == 'schedule' || github.event.inputs.enable-file-sync-production == 'true' }}" >> $GITHUB_ENV
 
       - name: Compile CLJS
         run: yarn install && gulp build && yarn cljs:release-electron
