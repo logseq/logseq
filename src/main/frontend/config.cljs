@@ -465,16 +465,20 @@
   "Resolve all relative links in custom.css to assets:// URL"
   ;; ../assets/xxx -> {assets|file}://{current-graph-root-path}/xxx
   [source]
-  (let [protocol (and (string? source)
-                      (not (string/blank? source))
-                      (if (util/electron?) "assets://" "file://"))
-        ;; BUG: use "assets" as fake current directory
-        assets-link-fn (fn [_]
-                         (str (path/path-join protocol
-                                              (get-repo-dir (state/get-current-repo)) "assets") "/"))]
-    (when (not-empty source)
-      (string/replace source #"\.\./assets/"
-                      assets-link-fn))))
+  (when-not (string/blank? source)
+    (let [protocol (and (string? source)
+                        (not (string/blank? source))
+                        (if (util/electron?) "assets://" "file://"))
+          ;; BUG: use "assets" as fake current directory
+          assets-link-fn (fn [_]
+                           (let [graph-root (get-repo-dir (state/get-current-repo))
+                                 protocol (if (string/starts-with? graph-root "file:") "" protocol)
+                                 full-path (path/path-join protocol graph-root "assets")]
+                             (str (cond-> full-path
+                                          (mobile-util/native-platform?)
+                                          (mobile-util/convert-file-src))
+                                  "/")))]
+      (string/replace source #"\.\./assets/" assets-link-fn))))
 
 (defn get-current-repo-assets-root
   []
