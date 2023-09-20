@@ -20,8 +20,7 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.util :as gp-util]
-            [promesa.core :as p]
-            [logseq.common.path :as path]))
+            [promesa.core :as p]))
 
 (defn remove-ignore-files
   [files dir-name nfs?]
@@ -90,18 +89,10 @@
 (defn- precheck-graph-dir
   "Check graph dir, notify user if:
 
-   - Grame dir name is `logseq`, the same as app, which might cause confusion
    - Graph dir contains a nested graph, which should be avoided
    - Over 10000 files found in graph dir, which might cause performance issues"
-  [dir files]
-  (when (= (string/lower-case (path/basename dir))
-           "logseq")
-    (state/pub-event!
-     [:notification/show {:content [:div "The folder name "
-                                    [:code "logseq"]
-                                    " is not suitable for a graph name. Please unlink this graph and choose a different name."]
-                          :status :warning
-                          :clear?  false}]))
+  [_dir files]
+  ;; disable this check for now
   (when (some #(string/ends-with? (:path %) "/logseq/config.edn") files)
     (state/pub-event!
      [:notification/show {:content "It seems that you are trying to open a Logseq graph folder with nested graph. Please unlink this graph and choose a correct folder."
