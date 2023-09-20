@@ -562,7 +562,7 @@
             path-page-name (get-path-page-name state (:page-name (first (:rum/args state))))
             page-ent (some->> path-page-name util/page-name-sanity-lc (get-page-entity repo path-page-name))
             ;; Only make class + property pages reader friendly by default as they usually have no content
-            default-configure (#{"class" "property"} (:block/type page-ent))]
+            default-configure (contains? #{"class" "property"} (:block/type page-ent))]
         (assoc state ::configure-show? (atom default-configure))))
 
     (defn- page-inner-init [state]
