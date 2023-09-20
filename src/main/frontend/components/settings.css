@@ -152,6 +152,44 @@
 
             color: var(--ls-primary-text-color);
           }
+
+          .active-plan-card {
+            @apply w-full bg-gray-5 rounded-lg p-4 flex flex-col gap-4
+            dark:bg-gray-500/10;
+          }
+        }
+
+        .plan-flag {
+          @apply pl-5 relative;
+
+          &:before {
+            content: " ";
+
+            @apply w-[6px] h-[6px] bg-green-9 rounded-full overflow-hidden;
+            @apply absolute top-2 left-1;
+          }
+        }
+
+        .pro-plan-cards {
+          @apply pt-6;
+
+          .card {
+            @apply flex-1 rounded-lg p-4 pt-10 relative flex flex-col gap-4
+            dark:text-gray-3;
+
+            background-color: var(--ls-tertiary-background-color);
+
+            .flag {
+              @apply absolute top-0 left-4 uppercase px-2 py-1 rounded-b-lg font-bold text-xs;
+
+              background-color: var(--color-level-3);
+
+              &.pro {
+                background-color: #34a3d5;
+                color: white;
+              }
+            }
+          }
         }
       }
 

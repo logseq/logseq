@@ -60,32 +60,32 @@
        [:div (cond
                (mobile-util/native-android?)
                (ui/button
-                (t :settings-page/check-for-updates)
-                :class "text-sm p-1 mr-1"
-                :href "https://github.com/logseq/logseq/releases")
+                 (t :settings-page/check-for-updates)
+                 :class "text-sm p-1 mr-1"
+                 :href "https://github.com/logseq/logseq/releases")
 
                (mobile-util/native-ios?)
                (ui/button
-                (t :settings-page/check-for-updates)
-                :class "text-sm p-1 mr-1"
-                :href "https://apps.apple.com/app/logseq/id1601013908")
+                 (t :settings-page/check-for-updates)
+                 :class "text-sm p-1 mr-1"
+                 :href "https://apps.apple.com/app/logseq/id1601013908")
 
                (util/electron?)
                (ui/button
-                (if update-pending? (t :settings-page/checking) (t :settings-page/check-for-updates))
-                :class "text-sm p-1 mr-1"
-                :disabled update-pending?
-                :on-click #(js/window.apis.checkForUpdates false))
+                 (if update-pending? (t :settings-page/checking) (t :settings-page/check-for-updates))
+                 :class "text-sm p-1 mr-1"
+                 :disabled update-pending?
+                 :on-click #(js/window.apis.checkForUpdates false))
 
                :else
                nil)]
 
        [:div.text-sm.cursor
-        {:title (str (t :settings-page/revision) config/revision)
+        {:title    (str (t :settings-page/revision) config/revision)
          :on-click (fn []
                      (notification/show! [:div "Current Revision: "
                                           [:a {:target "_blank"
-                                               :href (str "https://github.com/logseq/logseq/commit/" config/revision)}
+                                               :href   (str "https://github.com/logseq/logseq/commit/" config/revision)}
                                            config/revision]]
                                          :info
                                          false))}
@@ -93,7 +93,7 @@
 
        [:a.text-sm.fade-link.underline.inline
         {:target "_blank"
-         :href "https://docs.logseq.com/#/page/changelog"}
+         :href   "https://docs.logseq.com/#/page/changelog"}
         (t :settings-page/changelog)]]]
 
      (when-not (or update-pending?
@@ -161,8 +161,8 @@
     {:style {:gap "0.5rem"}}
     [:div (if action action (ui/button
                               button-label
-                              :class    "text-sm p-1"
-                              :href     href
+                              :class "text-sm p-1"
+                              :href href
                               :on-click on-click))]
     (when-not (or (util/mobile?)
                   (mobile-util/native-platform?))
@@ -194,11 +194,11 @@
 
 (defn edit-export-css []
   (row-with-button-action
-   {:left-label   (t :settings-page/export-theme)
-    :button-label (t :settings-page/edit-export-css)
-    :href         (rfe/href :file {:path (config/get-export-css-path)})
-    :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
-    :-for         "customize_css"}))
+    {:left-label   (t :settings-page/export-theme)
+     :button-label (t :settings-page/edit-export-css)
+     :href         (rfe/href :file {:path (config/get-export-css-path)})
+     :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
+     :-for         "customize_css"}))
 
 (defn show-brackets-row [t show-brackets?]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -266,8 +266,8 @@
                                 (ipc/ipc :userAppCfgs :git/auto-commit-seconds value))
                               (when-let [elem (gobj/get event "target")]
                                 (notification/show!
-                                 [:div "Invalid value! Must be a number between 1 and 600."]
-                                 :warning true)
+                                  [:div "Invalid value! Must be a number between 1 and 600."]
+                                  :warning true)
                                 (gobj/set elem "value" secs)))))}]]]]))
 
 (rum/defc app-auto-update-row < rum/reactive [t]
@@ -540,7 +540,7 @@
          {:style {:top -18 :left 10}}
          (ui/button (t :plugin/restart)
                     :on-click #(js/logseq.api.relaunch)
-           :small? true :intent "logseq")]])]))
+                    :small? true :intent "logseq")]])]))
 
 (rum/defc http-server-enabled-switcher
   [t]
@@ -578,28 +578,28 @@
               (ui/icon "edit")]
              :class "text-sm p-1"
              :on-click #(state/set-sub-modal!
-                         (fn [_] (plugins/user-proxy-settings-panel agent-opts))
-                         {:id :https-proxy-panel :center? true})))
+                          (fn [_] (plugins/user-proxy-settings-panel agent-opts))
+                          {:id :https-proxy-panel :center? true})))
 
 (defn plugin-system-switcher-row []
   (row-with-button-action
-   {:left-label (t :settings-page/plugin-system)
-    :action (plugin-enabled-switcher t)}))
+    {:left-label (t :settings-page/plugin-system)
+     :action     (plugin-enabled-switcher t)}))
 
 (defn http-server-switcher-row []
   (row-with-button-action
-   {:left-label "HTTP APIs server"
-    :action (http-server-enabled-switcher t)}))
+    {:left-label "HTTP APIs server"
+     :action     (http-server-enabled-switcher t)}))
 
 (defn flashcards-switcher-row [enable-flashcards?]
   (row-with-button-action
-   {:left-label (t :settings-page/enable-flashcards)
-    :action (flashcards-enabled-switcher enable-flashcards?)}))
+    {:left-label (t :settings-page/enable-flashcards)
+     :action     (flashcards-enabled-switcher enable-flashcards?)}))
 
 (defn https-user-agent-row [agent-opts]
   (row-with-button-action
-   {:left-label (t :settings-page/network-proxy)
-    :action (user-proxy-settings agent-opts)}))
+    {:left-label (t :settings-page/network-proxy)
+     :action     (user-proxy-settings agent-opts)}))
 
 (rum/defcs auto-chmod-row < rum/reactive
   [state t]
@@ -607,34 +607,34 @@
                    true
                    (state/sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))]
     (toggle
-     "automatic-chmod"
-     (t :settings-page/auto-chmod)
-     enabled?
-     #(do
-       (state/set-state! [:electron/user-cfgs :feature/enable-automatic-chmod?] (not enabled?))
-       (ipc/ipc :userAppCfgs :feature/enable-automatic-chmod? (not enabled?)))
-     [:span.text-sm.opacity-50 (t :settings-page/auto-chmod-desc)])))
+      "automatic-chmod"
+      (t :settings-page/auto-chmod)
+      enabled?
+      #(do
+         (state/set-state! [:electron/user-cfgs :feature/enable-automatic-chmod?] (not enabled?))
+         (ipc/ipc :userAppCfgs :feature/enable-automatic-chmod? (not enabled?)))
+      [:span.text-sm.opacity-50 (t :settings-page/auto-chmod-desc)])))
 
 (defn filename-format-row []
   (row-with-button-action
-   {:left-label (t :settings-page/filename-format)
-    :button-label (t :settings-page/edit-setting)
-    :on-click #(state/set-sub-modal!
-                (fn [_] (conversion-component/files-breaking-changed))
-                {:id :filename-format-panel :center? true})}))
+    {:left-label   (t :settings-page/filename-format)
+     :button-label (t :settings-page/edit-setting)
+     :on-click     #(state/set-sub-modal!
+                      (fn [_] (conversion-component/files-breaking-changed))
+                      {:id :filename-format-panel :center? true})}))
 
 (rum/defcs native-titlebar-row < rum/reactive
   [state t]
   (let [enabled? (state/sub [:electron/user-cfgs :window/native-titlebar?])]
     (toggle
-     "native-titlebar"
-     (t :settings-page/native-titlebar)
-     enabled?
-     #(when (js/confirm (t :relaunch-confirm-to-work))
-        (state/set-state! [:electron/user-cfgs :window/native-titlebar?] (not enabled?))
-        (ipc/ipc :userAppCfgs :window/native-titlebar? (not enabled?))
-        (js/logseq.api.relaunch))
-     [:span.text-sm.opacity-50 (t :settings-page/native-titlebar-desc)])))
+      "native-titlebar"
+      (t :settings-page/native-titlebar)
+      enabled?
+      #(when (js/confirm (t :relaunch-confirm-to-work))
+         (state/set-state! [:electron/user-cfgs :window/native-titlebar?] (not enabled?))
+         (ipc/ipc :userAppCfgs :window/native-titlebar? (not enabled?))
+         (js/logseq.api.relaunch))
+      [:span.text-sm.opacity-50 (t :settings-page/native-titlebar-desc)])))
 
 (rum/defcs settings-general < rum/reactive
   [_state current-repo]
@@ -694,11 +694,11 @@
   [:div.panel-wrap
    [:div.text-sm.my-4
     (ui/admonition
-     :tip
-     [:p (t :settings-page/git-tip)])
+      :tip
+      [:p (t :settings-page/git-tip)])
     [:span.text-sm.opacity-50.my-4
      (t :settings-page/git-desc-1)]
-    [:br][:br]
+    [:br] [:br]
     [:span.text-sm.opacity-50.my-4
      (t :settings-page/git-desc-2)]
     [:a {:href "https://git-scm.com/" :target "_blank"}
@@ -747,20 +747,20 @@
 
 (defn sync-switcher-row [enabled?]
   (row-with-button-action
-   {:left-label (t :settings-page/sync)
-    :action (sync-enabled-switcher enabled?)}))
+    {:left-label (t :settings-page/sync)
+     :action     (sync-enabled-switcher enabled?)}))
 
 (defn sync-diff-merge-switcher-row [enabled?]
   (row-with-button-action
-   {:left-label (str (t :settings-page/sync-diff-merge) " (Experimental!)") ;; Not included in i18n to avoid outdating translations
-    :action (sync-diff-merge-enabled-switcher enabled?)
-    :desc (ui/tippy {:html        [:div
-                                   [:div (t :settings-page/sync-diff-merge-desc)]
-                                   [:div (t :settings-page/sync-diff-merge-warn)]]
-                     :class       "tippy-hover ml-2"
-                     :interactive true
-                     :disabled    false}
-                    (svg/info))}))
+    {:left-label (str (t :settings-page/sync-diff-merge) " (Experimental!)") ;; Not included in i18n to avoid outdating translations
+     :action     (sync-diff-merge-enabled-switcher enabled?)
+     :desc       (ui/tippy {:html        [:div
+                                          [:div (t :settings-page/sync-diff-merge-desc)]
+                                          [:div (t :settings-page/sync-diff-merge-warn)]]
+                            :class       "tippy-hover ml-2"
+                            :interactive true
+                            :disabled    false}
+                           (svg/info))}))
 
 (rum/defc whiteboards-enabled-switcher
   [enabled?]
@@ -772,8 +772,8 @@
 
 (defn whiteboards-switcher-row [enabled?]
   (row-with-button-action
-   {:left-label (t :settings-page/enable-whiteboards)
-    :action (whiteboards-enabled-switcher enabled?)}))
+    {:left-label (t :settings-page/enable-whiteboards)
+     :action     (whiteboards-enabled-switcher enabled?)}))
 
 (rum/defc settings-account-usage-description [pro-account? graph-usage]
   (let [count-usage (count graph-usage)
@@ -798,24 +798,24 @@
      (when pro-account?
        [:<>
         (gstring/format "%s of %s synced graphs " count-usage count-limit)
-        [:strong.text-white (gstring/format "(%s%%)" count-percent)]
+        [:strong.dark:text-white (gstring/format "(%s%%)" count-percent)]
         ", "])
      (gstring/format "%sGB of %sGB total storage " storage-usage-formatted storage-limit)
-     [:strong.text-white (gstring/format "(%s%%)" storage-percent-formatted)]]))
-     ; storage-usage-formatted "GB of " storage-limit "GB total storage"
-     ; [:strong.text-white " (" storage-percent-formatted "%)"]]))
+     [:strong.dark:text-white (gstring/format "(%s%%)" storage-percent-formatted)]]))
+; storage-usage-formatted "GB of " storage-limit "GB total storage"
+; [:strong.text-white " (" storage-percent-formatted "%)"]]))
 
 (rum/defc settings-account-usage-graphs [_pro-account? graph-usage]
   (when (< 0 (count graph-usage))
-   [:div.grid.gap-3 {:style {:grid-template-columns (str "repeat(" (count graph-usage) ", 1fr)")}}
-    (for [{:keys [name used-percent]} graph-usage
-          :let [color (if (<= 100 used-percent) "bg-red-500" "bg-blue-500")]]
-     [:div.rounded-full.w-full.h-2 {:class "bg-black/50"
-                                    :tooltip name}
-      [:div.rounded-full.h-2 {:class color
-                              :style {:width (str used-percent "%")
-                                      :min-width "0.5rem"
-                                      :max-width "100%"}}]])]))
+    [:div.grid.gap-3 {:style {:grid-template-columns (str "repeat(" (count graph-usage) ", 1fr)")}}
+     (for [{:keys [name used-percent]} graph-usage
+           :let [color (if (<= 100 used-percent) "bg-red-500" "bg-blue-500")]]
+       [:div.rounded-full.w-full.h-2 {:class   "bg-black/50"
+                                      :tooltip name}
+        [:div.rounded-full.h-2 {:class color
+                                :style {:width     (str used-percent "%")
+                                        :min-width "0.5rem"
+                                        :max-width "100%"}}]])]))
 
 (rum/defc ^:large-vars/cleanup-todo settings-account < rum/reactive
   []
@@ -830,134 +830,136 @@
         expiration-date (some-> user-info :LemonEndsAt date/parse-iso)
         renewal-date (some-> user-info :LemonRenewsAt date/parse-iso)
         has-subscribed? (some? (:LemonStatus user-info))]
-    [:div.panel-wrap.is-account.mb-8
+    [:div.panel-wrap.is-account.mb-4
      [:div.mt-1.sm:mt-0.sm:col-span-2
       (cond
         logged-in?
-        [:div.grid.grid-cols-4.gap-4.pt-2.container-wrap
+        [:div.grid.grid-cols-4.gap-x-2.gap-y-8.pt-2.container-wrap
          [:label "Current plan"]
-
          [:div.col-span-3
-          [:div {:class "w-full bg-gray-500/10 rounded-lg p-4 flex flex-col gap-4"}
-           [:div.flex.gap-4.items-center
+          [:div.active-plan-card
+           [:div.flex.gap-4.items-center.pb-2.pt-1.justify-between
             (if pro-account?
-              [:div.flex-1 "Pro"]
-              [:div.flex-1 "Free"])
-            (cond
-              has-subscribed?
-              (ui/button "Manage plan" {:class "p-1 h-8 justify-center"
-                                        :disabled true
-                                        :icon "upload"})
-                                         ; :on-click user-handler/upgrade})
-              (not pro-account?)
-              (ui/button "Upgrade plan" {:class "p-1 h-8 justify-center"
-                                         :icon "upload"
-                                         :on-click user-handler/upgrade})
-              :else nil)]
+              [:b.plan-flag "Pro"]
+              [:b.plan-flag "Free"])
+            [:span
+             {:class "relative top-[-4px]"}
+             (cond
+               has-subscribed?
+               (ui/button "Manage plan" {:class      "p-1 h-8 justify-center"
+                                         :icon       "upload"
+                                         :href       config/SITE-ACCOUNT-ENTRYPOINT
+                                         :icon-props {:size 14}})
+               ; :on-click user-handler/upgrade})
+               (not pro-account?)
+               (ui/button "Upgrade plan" {:class    "p-1 h-8 justify-center"
+                                          :icon     "upload"
+                                          :href     config/SITE-ACCOUNT-ENTRYPOINT
+                                          :on-click user-handler/upgrade})
+               :else nil)]]
+
            (settings-account-usage-graphs pro-account? graph-usage)
            (settings-account-usage-description pro-account? graph-usage)]]
 
          (when has-subscribed?
-          [:<>
-           [:label "Billing"]
-           [:div.col-span-3.flex.flex-col.gap-4
-            (cond
-              ;; If there is no expiration date, print the renewal date
-              (and renewal-date (nil? expiration-date))
-              [:div
-               [:strong.font-semibold "Next billing date: "
-                (date/get-locale-string renewal-date)]]
-              ;; If the expiration date is in the future, word it as such
-              (< (js/Date.) expiration-date)
-              [:div
-               [:strong.font-semibold "Pro plan expires on: "
-                (date/get-locale-string expiration-date)]]
-              ;; Otherwise, ind
-              :else
-              [:div
-               [:strong.font-semibold "Pro plan expired on: "
-                (date/get-locale-string expiration-date)]])
+           [:<>
+            [:label "Billing"]
 
-            [:div (ui/button "Open invoices" {:class "w-full h-8 p-1 justify-center"
-                                              :disabled true
-                                              :background "gray"
-                                              :icon "receipt"})]]])
+            [:div.col-span-3
+             [:a.flex.items-center.gap-1.dark:opacity-40.text-gray-400
+              {:href (str config/SITE-ACCOUNT-ENTRYPOINT "/subscriptions")}
+              (cond
+                ;; If there is no expiration date, print the renewal date
+                (and renewal-date (nil? expiration-date))
+                [:strong.font-normal "Next billing date: "
+                 (date/get-locale-string renewal-date)]
+
+                ;; If the expiration date is in the future, word it as such
+                (< (js/Date.) expiration-date)
+                [:strong.font-normal "Pro plan expires on: "
+                 (date/get-locale-string expiration-date)]
+
+                ;; Otherwise, ind
+                :else
+                [:strong.font-normal "Pro plan expired on: "
+                 (date/get-locale-string expiration-date)])
+              (ui/icon "external-link")]]])
 
          [:label "Profile"]
-         [:div.col-span-3.grid.grid-cols-2.gap-4
-          [:div.flex.flex-col.gap-2.box-border {:class "basis-1/2"}
-           [:label.text-sm.font-semibold "First name"]
-           [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25 w-full"}]]
-          [:div.flex.flex-col.gap-2 {:class "basis-1/2"}
-           [:label.text-sm.font-semibold "Last name"]
-           [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25 w-full"}]]
-          [:div.flex-1.flex.flex-col.gap-2.col-span-2
+         [:div.col-span-3.grid.grid-cols-3.gap-4
+          [:div.flex-1.flex.flex-col.gap-2.col-span-1
            [:label.text-sm.font-semibold "Username"]
-           [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25"
-                                                        :value (user-handler/username)
-                                                        :disabled true}]]]
-         [:label "Authentication"]
-         [:div.col-span-3
+           [:input.rounded.px-2.py-1.box-border.opacity-60
+            {:class    "bg-black/10 dark:bg-black/20"
+             :value    (user-handler/username)
+             :disabled true}]]
+
+          [:div.flex.flex-col.gap-2.col-span-2
+           [:label.text-sm.font-semibold "Email"]
+           [:input.rounded.px-2.py-1.box-border.opacity-60
+            {:class    "bg-black/10 dark:bg-black/20"
+             :disabled true
+             :value    (user-handler/email)}]]]
+
+         [:label ""]
+         [:div.col-span-3.relative
+          {:class "top-[-16px]"}
           [:div.grid.grid-cols-2.gap-4
-           [:div (ui/button (t :logout) {:class      "p-1 h-8 justify-center w-full"
-                                         :background "gray"
-                                         :icon       "logout"
-                                         :on-click   user-handler/logout!})]
-           [:div (ui/button "Reset password" {:class      "p-1 h-8 justify-center w-full"
-                                              :disabled   true
-                                              :background "gray"
-                                              :icon       "key"
-                                              :on-click   user-handler/logout!})]
-           [:div.col-span-2 (ui/button "Delete Account" {:class "p-1 h-8 justify-center w-full"
-                                                         :disabled true
-                                                         :background "red"})]]]]
+           [:div.col-span-2
+            (ui/button "Logout"
+                       {:class    "p-1 h-8 justify-center w-full opacity-40"
+                        :on-click user-handler/logout!
+                        :icon     "logout"})]
+           [:a.text-sm.flex.items-center.opacity-50.space-x-1.hover:opacity-80
+            {:href config/SITE-ACCOUNT-ENTRYPOINT :target "_blank"}
+            [:b.font-normal "Manage profile on web"]
+            (ui/icon "external-link" {:size 14})]]]]
 
         (not logged-in?)
-        [:div.grid.grid-cols-3.gap-8.pt-2.container-wrap
+        [:div.grid.grid-cols-4.gap-4.pt-2.container-wrap
          [:label "Authentication"]
-         [:div.col-span-2.flex.flex-wrap.gap-6
-          [:div.w-full.text-white "With a Logseq account, you can access cloud-based services like Logseq Sync and alpha/beta features."]
-          [:div.flex-1 (ui/button "Sign up" {:class "h-8 w-full text-center justify-center"
-                                             :on-click (fn []
-                                                         (state/close-settings!)
-                                                         (state/pub-event! [:user/login]))})]
-          [:div.flex-1 (ui/button (t :login) {:icon "login"
-                                              :class "h-8 w-full text-center justify-center"
-                                              :background "gray"
-                                              :on-click (fn []
-                                                          (state/close-settings!)
-                                                          (state/pub-event! [:user/login]))})]]
-         [:div.col-span-3.flex.flex-col.gap-4 {:class "bg-black/20 p-4 rounded-lg"}
-          [:div.flex.w-full.items-center
-           [:div {:class "w-1/2 text-lg"}
-            "Discover the power of "
-            [:strong {:class "text-white/80"} "Logseq Sync"]]
-           [:div {:class "w-1/2 bg-gradient-to-r from-white/10 to-transparent p-3 rounded-lg flex items-center gap-2 px-5 ml-5"}
-            [:div.w-3.h-3.rounded-full.bg-green-500]
-            "Synced"]]
+         [:div.col-span-3.flex.flex-wrap.gap-6
+          [:div.w-full.text-gray-600.dark:text-gray-300
+           "With a Logseq account, you can access cloud-based services like"
+           [:b.inline-block.px-1 "Logseq Sync"] "and" [:b.inline-block.px-1 "Alpha/Beta features."]]
+          [:div.flex-1 (ui/button "Create account"
+                                  {:class    "h-8 w-full text-center justify-center"
+                                   :on-click (fn []
+                                               (state/close-settings!)
+                                               (state/pub-event! [:user/login]))})]
+          [:div.flex-1 (ui/button (t :login)
+                                  {:icon     "login"
+                                   :class    "h-8 w-full text-center justify-center opacity-80"
+                                   :intent   "logseq"
+                                   :on-click (fn []
+                                               (state/close-settings!)
+                                               (state/pub-event! [:user/login]))})]]
+
+         ;; pro plans
+         [:div.col-span-4.flex.flex-col.gap-4.pro-plan-cards
           [:div.flex.w-full.gap-4
-           [:div {:class "w-1/2 bg-black/50 rounded-lg p-4 pt-10 relative flex flex-col gap-4"}
-            [:div.absolute.top-0.left-4.bg-gray-700.uppercase.px-2.py-1.rounded-b-lg.font-bold.text-xs "Free"]
-            [:div
-             [:strong.text-white.text-xl.font-normal "$0"]]
-            [:div.text-white.font-bold {:class "h-[2.5rem] "} "Get started with basic syncing"]
-            [:ul.text-xs.list-none.m-0.flex.flex-col.gap-0.5
+           [:div.card
+            [:div.flag "Free"]
+            [:div [:strong.text-xl.font-medium "$0"]]
+            [:div.font-semibold "Get started with basic syncing"]
+            [:ul.text-xs.m-0.flex.flex-col.gap-0.5.pl-3.opacity-70
              [:li "Unlimited unsynced graphs"]
              [:li "1 synced graph (up to 50MB, notes only)"]
              [:li "No asset syncing"]
              [:li "Access to core Logseq features"]]]
-           [:div {:class "w-1/2 bg-black/50 rounded-lg p-4 pt-10 relative flex flex-col gap-4"}
-            [:div.absolute.top-0.left-4.bg-blue-700.uppercase.px-2.py-1.rounded-b-lg.font-bold.text-xs "Pro"]
-            [:div
-             [:strong.text-white.text-xl.font-normal "$10"]
-             [:span.text-xs.font-base {:class "ml-0.5"} "/ month"]]
-            [:div.text-white.font-bold {:class "h-[2.5rem]"} "Unlock advanced syncing and more"]
-            [:ul.text-xs.list-none.m-0.flex.flex-col.gap-0.5
+
+           [:div.card
+            [:div.flag.pro "Pro"]
+            [:div [:strong.text-xl.font-medium "$10"]
+             [:span.text-xs.font-base {:class "ml-0.5"} "/ monthly"]]
+            [:div.font-semibold "Unlock advanced syncing and more"]
+            [:ul.text-xs.m-0.flex.flex-col.gap-0.5.pl-3.opacity-70
              [:li "Unlimited unsynced graphs"]
              [:li "10 synced graphs (up to 5GB each)"]
              [:li "Sync assets up to 100MB per file"]
              [:li "Early access to alpha/beta features"]
-             [:li "Upcoming cloud-based features, including Logseq Publish"]]]]]])]]))
+             [:li "Upcoming cloud-based features, including Logseq Publish"]]]]]
+         ])]]))
 
 (rum/defc settings-features < rum/reactive
   []
@@ -1000,8 +1002,8 @@
                                        :icon     "logout"
                                        :on-click user-handler/logout!})]]
           [:div
-           (ui/button (t :login) {:class "p-1"
-                                  :icon "login"
+           (ui/button (t :login) {:class    "p-1"
+                                  :icon     "login"
                                   :on-click (fn []
                                               (state/close-settings!)
                                               (state/pub-event! [:user/login]))})
@@ -1011,7 +1013,7 @@
        [:<>
         [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
          [:label.flex.font-medium.leading-5.self-start.mt-1
-          (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
+          (ui/icon (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
         [:div.flex.flex-col.gap-4
          {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
          (sync-switcher-row enable-sync?)
@@ -1019,20 +1021,20 @@
            (sync-diff-merge-switcher-row enable-sync-diff-merge?))
          [:div.text-sm
           (t :settings-page/sync-desc-1)
-          [:a.mx-1 {:href "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
+          [:a.mx-1 {:href   "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
                     :target "_blank"}
            (t :settings-page/sync-desc-2)]
           (t :settings-page/sync-desc-3)]]])]))
 
-     ;; (when-not web-platform?
-     ;;   [:<>
-     ;;    [:hr]
-     ;;    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-     ;;     [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]]
-     ;;    [:div.flex.flex-col.gap-4
-     ;;     {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-     ;;     ;; features
-     ;;     ]])
+;; (when-not web-platform?
+;;   [:<>
+;;    [:hr]
+;;    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+;;     [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]]
+;;    [:div.flex.flex-col.gap-4
+;;     {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
+;;     ;; features
+;;     ]])
 
 (rum/defc settings-effect
   < rum/static

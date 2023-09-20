@@ -45,6 +45,7 @@
       (def IDENTITY-POOL-ID "us-east-1:d6d3b034-1631-402b-b838-b44513e93ee0")
       (def OAUTH-DOMAIN "logseq-prod.auth.us-east-1.amazoncognito.com")
       (def CONNECTIVITY-TESTING-S3-URL "https://logseq-connectivity-testing-prod.s3.us-east-1.amazonaws.com/logseq-connectivity-testing")
+      (def SITE-ACCOUNT-ENTRYPOINT "https://logseq.com/account")
       )
 
   (do (def FILE-SYNC-PROD? false)
@@ -58,7 +59,8 @@
       (def USER-POOL-ID "us-east-2_kAqZcxIeM")
       (def IDENTITY-POOL-ID "us-east-2:cc7d2ad3-84d0-4faf-98fe-628f6b52c0a5")
       (def OAUTH-DOMAIN "logseq-test2.auth.us-east-2.amazoncognito.com")
-      (def CONNECTIVITY-TESTING-S3-URL "https://logseq-connectivity-testing-prod.s3.us-east-1.amazonaws.com/logseq-connectivity-testing")))
+      (def CONNECTIVITY-TESTING-S3-URL "https://logseq-connectivity-testing-prod.s3.us-east-1.amazonaws.com/logseq-connectivity-testing")
+      (def SITE-ACCOUNT-ENTRYPOINT "https://feat-pro.logseq-sites.pages.dev/account")))
 
 ;; Feature flags
 ;; =============
