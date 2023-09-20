@@ -86,6 +86,12 @@
         width: 600px;
       }
 
+      span[role="checkbox"] {
+        &:hover {
+          opacity: .8;
+        }
+      }
+
       > .it {
         @apply sm:grid sm:grid-cols-3 sm:gap-6;
 
@@ -139,6 +145,16 @@
         }
       }
 
+      &.is-account {
+        .container-wrap {
+          > label {
+            @apply text-sm font-medium opacity-70 pt-1;
+
+            color: var(--ls-primary-text-color);
+          }
+        }
+      }
+
       &.is-general {
         > .it {
           margin-bottom: 8px;
@@ -149,12 +165,6 @@
       &.is-advanced {
         > .it {
           margin-bottom: 8px;
-        }
-      }
-
-      span[role="checkbox"] {
-        &:hover {
-          opacity: .8;
         }
       }
     }

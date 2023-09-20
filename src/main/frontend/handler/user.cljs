@@ -64,17 +64,21 @@
   (or (almost-expired? parsed-jwt)
       (expired? parsed-jwt)))
 
+(defn get-auth-session []
+  (try
+    (some->
+      (state/get-auth-id-token)
+      parse-jwt)
+    (catch js/Error e (js/console.error e))))
+
+(defn username []
+  (:cognito:username (get-auth-session)))
+
 (defn email []
-  (some->
-   (state/get-auth-id-token)
-   parse-jwt
-   :email))
+  (:email (get-auth-session)))
 
 (defn user-uuid []
-  (some->
-   (state/get-auth-id-token)
-   parse-jwt
-   :sub))
+  (:sub (get-auth-session)))
 
 (defn logged-in? []
   (some? (state/get-auth-refresh-token)))

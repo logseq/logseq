@@ -31,7 +31,6 @@
 
 ;; this is a feature flag to enable the account tab
 ;; when it launches (when pro plan launches) it should be removed
-(def ENABLE-SETTINGS-ACCOUNT-TAB false)
 
 (if ENABLE-FILE-SYNC-PRODUCTION
   (do (def FILE-SYNC-PROD? true)

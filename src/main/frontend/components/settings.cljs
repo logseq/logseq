@@ -794,7 +794,7 @@
                            (reduce + 0))
         storage-percent (/ storage-usage storage-limit 0.01)
         storage-percent-formatted (gstring/format "%.1f" storage-percent)]
-    [:div.text-sm
+    [:div.text-xs.tracking-wide
      (when pro-account?
        [:<>
         (gstring/format "%s of %s synced graphs " count-usage count-limit)
@@ -804,7 +804,6 @@
      [:strong.text-white (gstring/format "(%s%%)" storage-percent-formatted)]]))
      ; storage-usage-formatted "GB of " storage-limit "GB total storage"
      ; [:strong.text-white " (" storage-percent-formatted "%)"]]))
-
 
 (rum/defc settings-account-usage-graphs [_pro-account? graph-usage]
   (when (< 0 (count graph-usage))
@@ -831,13 +830,14 @@
         expiration-date (some-> user-info :LemonEndsAt date/parse-iso)
         renewal-date (some-> user-info :LemonRenewsAt date/parse-iso)
         has-subscribed? (some? (:LemonStatus user-info))]
-    [:div.panel-wrap.is-features.mb-8
+    [:div.panel-wrap.is-account.mb-8
      [:div.mt-1.sm:mt-0.sm:col-span-2
       (cond
         logged-in?
-        [:div.grid.grid-cols-3.gap-8.pt-2
-         [:div "Current plan"]
-         [:div.col-span-2
+        [:div.grid.grid-cols-4.gap-4.pt-2.container-wrap
+         [:label "Current plan"]
+
+         [:div.col-span-3
           [:div {:class "w-full bg-gray-500/10 rounded-lg p-4 flex flex-col gap-4"}
            [:div.flex.gap-4.items-center
             (if pro-account?
@@ -855,20 +855,12 @@
                                          :on-click user-handler/upgrade})
               :else nil)]
            (settings-account-usage-graphs pro-account? graph-usage)
-           (settings-account-usage-description pro-account? graph-usage)
-           (if current-graph-is-remote?
-             (ui/button "Deactivate syncing" {:class "p-1 h-8 justify-center"
-                                              :disabled true
-                                              :background "gray"
-                                              :icon "cloud-off"})
-             (ui/button "Activate syncing" {:class "p-1 h-8 justify-center"
-                                            :background "blue"
-                                            :icon "cloud"
-                                            :on-click #(fs/maybe-onboarding-show :sync-initiate)}))]]
+           (settings-account-usage-description pro-account? graph-usage)]]
+
          (when has-subscribed?
           [:<>
-           [:div "Billing"]
-           [:div.col-span-2.flex.flex-col.gap-4
+           [:label "Billing"]
+           [:div.col-span-3.flex.flex-col.gap-4
             (cond
               ;; If there is no expiration date, print the renewal date
               (and renewal-date (nil? expiration-date))
@@ -890,8 +882,9 @@
                                               :disabled true
                                               :background "gray"
                                               :icon "receipt"})]]])
-         [:div "Profile"]
-         [:div.col-span-2.grid.grid-cols-2.gap-4
+
+         [:label "Profile"]
+         [:div.col-span-3.grid.grid-cols-2.gap-4
           [:div.flex.flex-col.gap-2.box-border {:class "basis-1/2"}
            [:label.text-sm.font-semibold "First name"]
            [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25 w-full"}]]
@@ -901,9 +894,10 @@
           [:div.flex-1.flex.flex-col.gap-2.col-span-2
            [:label.text-sm.font-semibold "Username"]
            [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25"
-                                                        :value (user-handler/email)}]]]
-         [:div "Authentication"]
-         [:div.col-span-2
+                                                        :value (user-handler/username)
+                                                        :disabled true}]]]
+         [:label "Authentication"]
+         [:div.col-span-3
           [:div.grid.grid-cols-2.gap-4
            [:div (ui/button (t :logout) {:class      "p-1 h-8 justify-center w-full"
                                          :background "gray"
@@ -919,9 +913,9 @@
                                                          :background "red"})]]]]
 
         (not logged-in?)
-        [:div.grid.grid-cols-3.gap-8.pt-2
-         [:div "Authentication"]
-         [:div.col-span-2.flex.flex-wrap.gap-4
+        [:div.grid.grid-cols-3.gap-8.pt-2.container-wrap
+         [:label "Authentication"]
+         [:div.col-span-2.flex.flex-wrap.gap-6
           [:div.w-full.text-white "With a Logseq account, you can access cloud-based services like Logseq Sync and alpha/beta features."]
           [:div.flex-1 (ui/button "Sign up" {:class "h-8 w-full text-center justify-center"
                                              :on-click (fn []
@@ -1040,9 +1034,6 @@
      ;;     ;; features
      ;;     ]])
 
-
-(def DEFAULT-ACTIVE-TAB-STATE (if config/ENABLE-SETTINGS-ACCOUNT-TAB [:account :account] [:general :general]))
-
 (rum/defc settings-effect
   < rum/static
   [active]
@@ -1060,7 +1051,7 @@
   [:<>])
 
 (rum/defcs settings
-  < (rum/local DEFAULT-ACTIVE-TAB-STATE ::active)
+  < (rum/local [:account :account] ::active)
     {:will-mount
      (fn [state]
        (state/load-app-user-cfgs)
@@ -1093,8 +1084,7 @@
         [:h1.cp__settings-modal-title (t :settings)]]
        [:ul.settings-menu
         (for [[label id text icon]
-              [(when config/ENABLE-SETTINGS-ACCOUNT-TAB
-                [:account "account" (t :settings-page/tab-account) (ui/icon "user-circle")])
+              [[:account "account" (t :settings-page/tab-account) (ui/icon "user-circle")]
                [:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
                [:keymap "keymap" (t :settings-page/tab-keymap) (ui/icon "keyboard")]
