@@ -171,7 +171,8 @@
 
                                   :else
                                   v*)
-                      new-value (if (coll? new-value)
+                      ;; don't modify maps
+                      new-value (if (or (sequential? new-value) (set? new-value))
                                   (if (= :coll property-type)
                                     (vec (remove string/blank? new-value))
                                     (set (remove string/blank? new-value)))
