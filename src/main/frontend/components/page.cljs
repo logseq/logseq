@@ -544,29 +544,44 @@
       (get-page-name state)
       (state/get-current-page)))
 
+(defn- get-page-entity
+  [repo path-page-name page-name]
+  (if-let [block-id (parse-uuid page-name)]
+    (let [entity (db/entity [:block/uuid block-id])]
+      entity)
+    (do
+      (when-not (db/entity repo [:block/name page-name])
+        (let [m (block/page-name->map path-page-name true)]
+          (db/transact! repo [m])))
+      (db/entity [:block/name page-name]))))
+
+(if config/publishing?
+    (defn- page-inner-init [state]
+      ;; Duplicated from component
+      (let [repo (or (:repo (first (:rum/args state))) (state/get-current-repo))
+            path-page-name (get-path-page-name state (:page-name (first (:rum/args state))))
+            page-ent (some->> path-page-name util/page-name-sanity-lc (get-page-entity repo path-page-name))
+            ;; Only make class + property pages reader friendly by default as they usually have no content
+            default-configure (#{"class" "property"} (:block/type page-ent))]
+        (assoc state ::configure-show? (atom default-configure))))
+
+    (defn- page-inner-init [state]
+      (assoc state ::configure-show? (atom false))))
+
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive db-mixins/query
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
-  ;; Make class + property pages reader friendly by default in publishing as they are usually blank
-  (rum/local (if config/publishing? true false) ::configure-show?)
+  {:init page-inner-init}
   [state {:keys [repo page-name preview? sidebar?] :as option}]
   (when-let [path-page-name (get-path-page-name state page-name)]
     (let [current-repo (state/sub :git/current-repo)
           repo (or repo current-repo)
           *configure-show? (::configure-show? state)
+          configure-show? (rum/react *configure-show?)
           page-name (util/page-name-sanity-lc path-page-name)
-          block-id (parse-uuid page-name)
-          block? (boolean block-id)
-          page (if block?
-                 (let [entity (db/entity [:block/uuid block-id])]
-                   entity)
-                 (do
-                   (when-not (db/entity repo [:block/name page-name])
-                     (let [m (block/page-name->map path-page-name true)]
-                       (db/transact! repo [m])))
-                   (db/entity [:block/name page-name])))
+          page (get-page-entity repo path-page-name page-name)
           block-id (:block/uuid page)
           block? (some? (:block/page page))
           journal? (db/journal-page? page-name)
@@ -624,7 +639,7 @@
                   (plugins/hook-ui-slot :page-head-actions-slotted nil)
                   (plugins/hook-ui-items :pagebar)]))])
 
-          (when (and db-based? @*configure-show?)
+          (when (and db-based? configure-show?)
             (if (and (= "property" (:block/type page)) (not config/publishing?))
               (do
                 (state/set-modal! #(property/property-config repo page {}))
@@ -638,7 +653,8 @@
                [:div.mb-4
                 (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
-           (page-properties page *configure-show?)
+           (when db-based?
+             (page-properties page *configure-show?))
 
            ;; blocks
            (let [_ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
