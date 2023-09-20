@@ -137,8 +137,8 @@ generated index.html string and assets used by the html"
                             val
                             (:all-pages-public? repo-config))
         [db asset-filenames'] (if all-pages-public?
-                                (db/clean-export! db*)
-                                (db/filter-only-public-pages-and-blocks db*))
+                                (db/clean-export! db* {:db-graph? db-graph?})
+                                (db/filter-only-public-pages-and-blocks db* {:db-graph? db-graph?}))
         asset-filenames (remove nil? asset-filenames')
 
         db-str (dt/write-transit-str db)

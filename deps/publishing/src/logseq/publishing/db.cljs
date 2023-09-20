@@ -37,6 +37,45 @@
         db)
        (map first)))
 
+(defn- get-db-public-pages
+  "Returns public pages and anything they are directly related to: their tags,
+  their properties and any property values that are pages.  Anything on the
+  related pages are _not_ included e.g. properties on tag or property pages"
+  [db]
+  (let [pages (->> (d/q
+                    '[:find ?p
+                      :in $ %
+                      :where (page-property ?p :public true)]
+                    db
+                    (rules/extract-rules rules/db-query-dsl-rules [:page-property]))
+                   (map first)
+                   set)
+        page-ents (map #(d/entity db %) pages)
+        tag-pages* (mapcat #(map :db/id (:block/tags %)) page-ents)
+        tag-pages (concat tag-pages*
+                          ;; built-in property needs to be public to display tags
+                          (when (seq tag-pages*)
+                            (some-> (d/entity db [:block/name "tags"]) :db/id vector)))
+        property-pages (mapcat (fn [ent]
+                                 (let [props (:block/properties ent)]
+                                   (->> (keys props)
+                                        (into (mapcat #(filter uuid? (if (coll? %) % [%]))
+                                                      (vals props)))
+                                        (map #(:db/id (d/entity db [:block/uuid %]))))))
+                               page-ents)]
+    (concat pages tag-pages property-pages)))
+
+(defn- get-db-public-false-pages
+  [db]
+  (->> (d/q
+        '[:find ?p
+          :in $ %
+          :where (page-property ?p :public false)]
+        db
+        (rules/extract-rules rules/db-query-dsl-rules [:page-property]))
+       (map first)
+       set))
+
 (defn- get-public-false-pages
   [db]
   (->> (d/q
@@ -113,11 +152,11 @@
 
 (defn clean-export!
   "Prepares a database assuming all pages are public unless a page has a 'public:: false'"
-  [db]
+  [db {:keys [db-graph?]}]
   (let [remove? #(contains? #{"recent" "file"} %)
-        non-public-pages (get-public-false-pages db)
-        non-public-datoms (get-public-false-block-ids db)
-        non-public-datom-ids (set (concat non-public-pages non-public-datoms))
+        non-public-datom-ids (if db-graph?
+                               (get-db-public-false-pages db)
+                               (set (concat (get-public-false-pages db) (get-public-false-block-ids db))))
         filtered-db (d/filter db
                               (fn [_db datom]
                                 (let [ns (namespace (:a datom))]
@@ -130,8 +169,8 @@
 
 (defn filter-only-public-pages-and-blocks
   "Prepares a database assuming all pages are private unless a page has a 'public:: true'"
-  [db]
-  (when-let [public-pages* (seq (get-public-pages db))]
+  [db {:keys [db-graph?]}]
+  (when-let [public-pages* (seq (if db-graph? (get-db-public-pages db) (get-public-pages db)))]
     (let [public-pages (set/union (set public-pages*)
                                   (get-aliases-for-page-ids db public-pages*))
           exported-namespace? #(contains? #{"block" "recent"} %)
