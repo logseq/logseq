@@ -24,7 +24,8 @@
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
             ;; add map ops to datascript Entity
-            [frontend.db.datascript.entity-plus :as entity-plus]))
+            [frontend.db.datascript.entity-plus :as entity-plus]
+            [frontend.config :as config]))
 
 ;; TODO: extract to specific models and move data transform logic to the
 ;; corresponding handlers.
@@ -271,15 +272,29 @@ independent of format as format specific heading characters are stripped"
   "Returns first block for given page name and block's route name. Block's route
   name must match the content of a page's block header"
   [repo page-name route-name]
-  (->> (d/q '[:find (pull ?b [:block/uuid])
-              :in $ ?page-name ?route-name ?content-matches
-              :where
-              [?page :block/name ?page-name]
-              [?b :block/page ?page]
-              [?b :block/properties ?prop]
-              [(get ?prop :heading) _]
-              [?b :block/content ?content]
-              [(?content-matches ?content ?route-name)]]
+  (->> (d/q (if (config/db-based-graph? repo)
+              '[:find (pull ?b [:block/uuid])
+                :in $ ?page-name ?route-name ?content-matches
+                :where
+                [?page :block/name ?page-name]
+                [?b :block/page ?page]
+                [?b :block/properties ?prop]
+                [?prop-b :block/name "heading"]
+                [?prop-b :block/type "property"]
+                [?prop-b :block/uuid ?prop-uuid]
+                [(get ?prop ?prop-uuid) _]
+                [?b :block/content ?content]
+                [(?content-matches ?content ?route-name)]]
+
+              '[:find (pull ?b [:block/uuid])
+                :in $ ?page-name ?route-name ?content-matches
+                :where
+                [?page :block/name ?page-name]
+                [?b :block/page ?page]
+                [?b :block/properties ?prop]
+                [(get ?prop :heading) _]
+                [?b :block/content ?content]
+                [(?content-matches ?content ?route-name)]])
             (conn/get-db repo)
             page-name
             route-name

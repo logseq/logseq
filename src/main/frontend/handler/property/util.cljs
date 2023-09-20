@@ -11,8 +11,7 @@
   [coll key]
   (let [repo (state/get-current-repo)]
     (if (and (config/db-based-graph? repo)
-             (keyword? key)
-             (contains? db-property/built-in-properties-keys key))
+             (keyword? key))
       (when-let [property (db/entity repo [:block/name (gp-util/page-name-sanity-lc (name key))])]
         (get coll (:block/uuid property)))
       (get coll key))))
