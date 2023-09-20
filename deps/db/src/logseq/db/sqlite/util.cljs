@@ -55,10 +55,17 @@
          ;; This fn should match pipeline/datom->av-vector
          (map (fn m->av-vector [[a v]]
                 [a v]
-                (if (contains? db-schema/ref-type-attributes a)
-                  [a
-                   [:block/uuid (str (some #(when (= (:db/id %) (:db/id v)) (:block/uuid %)) blocks))]]
-                  [a v])))
+                (cond
+                  (contains? db-schema/card-one-ref-type-attributes a)
+                  [a [:block/uuid (str (some #(when (= (:db/id %) (:db/id v)) (:block/uuid %)) blocks))]]
+
+                  (contains? db-schema/card-many-ref-type-attributes a)
+                  [a (seq
+                      (map (fn [{db-id :db/id}]
+                             [:block/uuid (some #(when (= db-id (:db/id %)) (:block/uuid %)) blocks)])
+                           v))]
+                  :else [a v]
+                  )))
          (transit/write t-writer))))
 
 (defn block-with-timestamps

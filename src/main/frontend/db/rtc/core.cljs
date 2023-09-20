@@ -64,7 +64,8 @@
         [:self :string]
         [:content {:optional true} :string]
         [:updated-at {:optional true} :int]
-        [:created-at {:optional true} :int]]
+        [:created-at {:optional true} :int]
+        [:alias {:optional true} [:maybe [:sequential :uuid]]]]
        [:map
         [:op [:enum :remove]]
         [:block-uuid :string]]
@@ -75,7 +76,8 @@
         [:self :string]
         [:content {:optional true} :string]
         [:updated-at {:optional true} :int]
-        [:created-at {:optional true} :int]]
+        [:created-at {:optional true} :int]
+        [:alias {:optional true} [:maybe [:sequential :uuid]]]]
        [:map
         [:op [:enum :update-page]]
         [:self :string]
@@ -187,14 +189,20 @@
       :else nil)))
 
 (defn- update-block-attrs
-  [repo block-uuid content updated-at created-at]
-  (when (or content updated-at created-at)
+  [repo block-uuid content updated-at created-at alias]
+  (when (or content updated-at created-at alias)
     (let [b-ent (db/entity repo [:block/uuid block-uuid])
+          alias-target-ids (some->> (seq alias)
+                                    (map (partial vector :block/uuid))
+                                    (db/pull-many repo '[:db/id])
+                                    (keep :db/id))
           new-block
           (cond-> (db/pull repo '[*] (:db/id b-ent))
             updated-at (assoc :block/updated-at updated-at)
             created-at (assoc :block/created-at created-at)
-            (and content (not= content (:block/content b-ent))) (assoc :block/content content))]
+            (and content (not= content (:block/content b-ent))) (assoc :block/content content)
+            true (assoc :block/alias alias-target-ids))]
+
       (outliner-tx/transact!
        {:persist-op? false}
        (outliner-core/save-block! new-block)))))
@@ -203,7 +211,7 @@
   [state sorted-move-ops]
   {:pre [(some? @(:*repo state))]}
   (prn :sorted-move-ops sorted-move-ops)
-  (doseq [{:keys [parents left self content updated-at created-at]} sorted-move-ops]
+  (doseq [{:keys [parents left self content updated-at created-at alias]} sorted-move-ops]
     (let [r (check-block-pos state self parents left)]
       (case r
         :not-exist
@@ -212,7 +220,7 @@
         (insert-or-move-block state self parents left true)
         nil                             ; do nothing
         nil)
-      (update-block-attrs @(:*repo state) (uuid self) content updated-at created-at)
+      (update-block-attrs @(:*repo state) (uuid self) content updated-at created-at alias)
       (prn :apply-remote-move-ops self r parents left))))
 
 
@@ -221,7 +229,7 @@
   {:pre [(some? @(:*repo state))]}
   (let [repo @(:*repo state)]
     (prn :update-ops update-ops)
-    (doseq [{:keys [parents left self content created-at updated-at]} update-ops]
+    (doseq [{:keys [parents left self content created-at updated-at alias]} update-ops]
       (let [r (check-block-pos state self parents left)]
         (case r
           :not-exist
@@ -229,7 +237,7 @@
           :wrong-pos
           (insert-or-move-block state self parents left true)
           nil)
-        (update-block-attrs repo (uuid self) content updated-at created-at)
+        (update-block-attrs repo (uuid self) content updated-at created-at alias)
         (prn :apply-remote-update-ops r self)))))
 
 (defn apply-remote-update-page-ops
@@ -359,13 +367,20 @@
                          (keep (fn [block-uuid]
                                  (when-let [b (db/entity repo [:block/uuid (uuid block-uuid)])]
                                    (let [left-uuid (some-> b :block/left :block/uuid str)
-                                         parent-uuid (some-> b :block/parent :block/uuid str)]
-                                     (when (and left-uuid parent-uuid)
-                                       [:update {:block-uuid block-uuid
-                                                 :target-uuid left-uuid :sibling? (not= left-uuid parent-uuid)
-                                                 :content (:block/content b "")
-                                                 :updated-at (:block/updated-at b)
-                                                 :created-at (:block/created-at b)}]))))))
+                                         parent-uuid (some-> b :block/parent :block/uuid str)
+                                         alias-block-uuids (some->> (seq (:block/alias b))
+                                                                    (keep :db/id)
+                                                                    (db/pull-many repo [:block/uuid])
+                                                                    (map (comp str :block/uuid)))]
+                                     (prn ::debug alias-block-uuids)
+                                     [:update
+                                      (cond-> {:block-uuid block-uuid
+                                               :alias alias-block-uuids}
+                                        (:block/updated-at b) (assoc :updated-at (:block/updated-at b))
+                                        (:block/created-at b) (assoc :updated-at (:block/created-at b))
+                                        (:block/content b) (assoc :content (:block/content b))
+                                        (and left-uuid parent-uuid) (assoc :target-uuid left-uuid
+                                                                           :sibling? (not= left-uuid parent-uuid)))])))))
         update-page-ops* (->> update-page-uuids
                               (keep (fn [block-uuid]
                                       (when-let [page-name (:block/name (db/entity repo [:block/uuid (uuid block-uuid)]))]
