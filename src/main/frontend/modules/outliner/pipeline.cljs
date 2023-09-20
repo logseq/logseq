@@ -31,10 +31,11 @@
                                              (= (:e datom) (:db/id edit-block)))) tx-data)
                               last)]
       (when-let [input (state/get-input)]
-        (when (and (:added last-datom)
-                   (not= (string/trim (:v last-datom))
-                         (string/trim (.-value input))))
-          (state/set-edit-content! input (:v last-datom)))))))
+        (when (:added last-datom)
+          (let [db-content (:block/content (db/entity (:e last-datom)))]
+            (when (not= (string/trim db-content)
+                        (string/trim (.-value input)))
+              (state/set-edit-content! input db-content))))))))
 
 (defn invoke-hooks
   [tx-report]
