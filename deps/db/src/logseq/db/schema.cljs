@@ -1,5 +1,6 @@
 (ns logseq.db.schema
-  "Main db schemas for the Logseq app")
+  "Main db schemas for the Logseq app"
+  (:require [clojure.set :as set]))
 
 (defonce version 2)
 (defonce ast-version 1)
@@ -159,16 +160,23 @@
     :block/alias
     :block/tags})
 
-;; FIXME: replace with a fn that's synced with schema
+
 (def ref-type-attributes
-  #{:block/link
-    :block/parent
-    :block/left
-    :block/page
-    :block/refs
-    :block/path-refs
-    :block/tags
-    :block/alias
-    :block/namespace
-    :block/macros
-    :block/file})
+  (into #{}
+        (keep (fn [[attr-name attr-body-map]]
+                (when (= :db.type/ref (:db/valueType attr-body-map))
+                  attr-name)))
+        schema))
+
+(def card-many-attributes
+  (into #{}
+        (keep (fn [[attr-name attr-body-map]]
+                (when (= :db.cardinality/many (:db/cardinality attr-body-map))
+                  attr-name)))
+        schema))
+
+(def card-many-ref-type-attributes
+  (set/intersection card-many-attributes ref-type-attributes))
+
+(def card-one-ref-type-attributes
+  (set/difference ref-type-attributes card-many-attributes))

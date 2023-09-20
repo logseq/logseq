@@ -13,7 +13,8 @@
             [logseq.db.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [frontend.persist-db :as persist-db]
-            [frontend.db.rtc.op :as op]))
+            [frontend.db.rtc.op :as op]
+            [logseq.outliner.pipeline :as outliner-pipeline]))
 
 
 (defn- export-as-blocks
@@ -59,10 +60,12 @@
    (fn [block]
      (let [db-id (:db/id block)
            block-parent (:db/id (:block/parent block))
-           block-left (:db/id (:block/left block))]
+           block-left (:db/id (:block/left block))
+           block-alias (map :db/id (:block/alias block))]
        (cond-> (assoc block :db/id (str db-id))
          block-parent (assoc :block/parent (str block-parent))
-         block-left (assoc :block/left (str block-left)))))
+         block-left (assoc :block/left (str block-left))
+         (seq block-alias) (assoc :block/alias (map str block-alias)))))
    blocks))
 
 (def page-of-block
@@ -100,11 +103,7 @@
       (let [db (d/db conn)
             blocks*
             (d/pull-many db '[*] (keep (fn [b] (when-let [uuid (:block/uuid b)] [:block/uuid uuid])) blocks))
-            blocks**
-            (mapv (fn [b]
-                    (cond-> (assoc b :datoms (sqlite-util/block-map->datoms-str blocks* b))
-                      (:block/parent b) (assoc :page_uuid (str (:block/uuid (d/entity db (:db/id (:block/page b))))))))
-                  blocks*)]
+            blocks** (outliner-pipeline/build-upsert-blocks blocks* nil db)]
         (<! (p->c (persist-db/<new repo)))
         (<! (persist-db/<transact-data repo blocks** nil))
         (<! (p->c (op/<update-local-tx! repo t)))))))
@@ -125,3 +124,6 @@
               all-blocks (transit/read reader body)]
           (<! (<transact-remote-all-blocks-to-sqlite all-blocks repo))
           (<! (p->c (op/<update-graph-uuid! repo graph-uuid))))))))
+
+(comment
+  )

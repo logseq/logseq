@@ -12,7 +12,12 @@
                           (and add? (contains? #{:block/left :block/parent} a))
                           (conj r :move)
 
-                          (and (not add?) (contains? #{:block/content} a))
+                          (and add? (contains? #{:block/content} a))
+                          (conj r :update)
+
+                          ;; :block/alias is card-many,
+                          ;; not matter add? is true or false, consider as update
+                          (contains? #{:block/alias} a)
                           (conj r :update)
 
                           (and (not add?) (= :block/uuid a))
@@ -69,7 +74,7 @@
             (let [ops (loop [[datom & others] same-entity-datoms]
                         (when-let [[_e a _v _t _add?] datom]
                           (cond
-                            (contains? #{:block/parent :block/left :block/content} a)
+                            (contains? #{:block/parent :block/left :block/content :block/alias} a)
                             (gen-block-ops repo same-entity-datoms)
 
                             (contains? #{:block/name} a)
