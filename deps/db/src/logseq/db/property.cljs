@@ -60,9 +60,11 @@
 
    :icon {:original-name "Icon"
           :schema {:type :map}}
-   :public {:schema {:type :checkbox}}
+   :public {:schema {:type :checkbox :hide? true}
+            :visible true}
    :filters {:schema {:type :map}}
-   :exclude-from-graph-view {:schema {:type :checkbox}}
+   :exclude-from-graph-view {:schema {:type :checkbox :hide? true}
+                             :visible true}
    :created-in-property {:schema {:type :checkbox}}})
 
 (def visible-built-in-properties
