@@ -25,17 +25,19 @@
 
 (defn- reset-editing-block-content!
   [tx-data]
-  (when-let [edit-block (state/get-edit-block)]
-    (when-let [last-datom (-> (filter (fn [datom]
-                                        (and (= :block/content (:a datom))
-                                             (= (:e datom) (:db/id edit-block)))) tx-data)
-                              last)]
-      (when-let [input (state/get-input)]
-        (when (:added last-datom)
-          (let [db-content (:block/content (db/entity (:e last-datom)))]
-            (when (not= (string/trim db-content)
-                        (string/trim (.-value input)))
-              (state/set-edit-content! input db-content))))))))
+  (let [repo (state/get-current-repo)]
+    (when (config/db-based-graph? repo)
+      (when-let [edit-block (state/get-edit-block)]
+        (when-let [last-datom (-> (filter (fn [datom]
+                                            (and (= :block/content (:a datom))
+                                                 (= (:e datom) (:db/id edit-block)))) tx-data)
+                                  last)]
+          (when-let [input (state/get-input)]
+            (when (:added last-datom)
+              (let [db-content (:block/content (db/entity (:e last-datom)))]
+                (when (not= (string/trim db-content)
+                            (string/trim (.-value input)))
+                  (state/set-edit-content! input db-content))))))))))
 
 (defn invoke-hooks
   [tx-report]
