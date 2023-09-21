@@ -124,6 +124,7 @@
                                    (not (string/ends-with? path ".js")))
                           path)))))
           ;; area image assets
+          ;; FIXME: Lookup by property uuid
           (and
            (= :block/properties (:a datom))
            (= (keyword (get (:v datom) :hl-type)) :area))

@@ -592,11 +592,10 @@
           whiteboard? (:whiteboard? option) ;; in a whiteboard portal shape?
           whiteboard-page? (model/whiteboard-page? page-name) ;; is this page a whiteboard?
           route-page-name path-page-name
-          {:keys [icon]} (:block/properties page)
+          icon (or (pu/lookup (:block/properties page) :icon) "")
           page-name (:block/name page)
           page-original-name (:block/original-name page)
           title (or page-original-name page-name)
-          icon (or icon "")
           today? (and
                   journal?
                   (= page-name (util/page-name-sanity-lc (date/journal-name))))
