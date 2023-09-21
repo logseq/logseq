@@ -820,6 +820,7 @@
 (rum/defc ^:large-vars/cleanup-todo settings-account < rum/reactive
   []
   (let [current-graph-uuid (state/sub-current-file-sync-graph-uuid)
+        refreshing? (state/sub [:ui/loading? :user-fetching?])
         graph-usage (state/get-remote-graph-usage)
         current-graph-is-remote? ((set (map :uuid graph-usage)) current-graph-uuid)
         logged-in? (user-handler/logged-in?)
@@ -843,27 +844,34 @@
               [:b.plan-flag "Pro"]
               [:b.plan-flag "Free"])
             [:span
-             {:class "relative top-[-4px]"}
+             {:class "relative top-[-4px] flex items-center gap-3"}
              (cond
                has-subscribed?
                (ui/button "Manage plan" {:class      "p-1 h-8 justify-center"
                                          :icon       "upload"
                                          :href       config/SITE-ACCOUNT-ENTRYPOINT
                                          :icon-props {:size 14}})
+
                ; :on-click user-handler/upgrade})
                (not pro-account?)
                (ui/button "Upgrade plan" {:class    "p-1 h-8 justify-center"
                                           :icon     "upload"
                                           :href     config/SITE-ACCOUNT-ENTRYPOINT
                                           :on-click user-handler/upgrade})
-               :else nil)]]
+               :else nil)
+
+             [:a.pt-2
+              {:class (when refreshing? "animate-spin")
+               :on-click #(when-not refreshing?
+                            (state/pub-event! [:user/fetch-info-and-graphs]))}
+              (ui/icon "reload")]]]
 
            (settings-account-usage-graphs pro-account? graph-usage)
            (settings-account-usage-description pro-account? graph-usage)]]
 
          (when has-subscribed?
            [:<>
-            [:label "Billing"]
+            [:label "Subscription"]
 
             [:div.col-span-3
              [:a.flex.items-center.gap-1.dark:opacity-40.text-gray-400
@@ -871,7 +879,7 @@
               (cond
                 ;; If there is no expiration date, print the renewal date
                 (and renewal-date (nil? expiration-date))
-                [:strong.font-normal "Next billing date: "
+                [:strong.font-normal "Next renew date: "
                  (date/get-locale-string renewal-date)]
 
                 ;; If the expiration date is in the future, word it as such
@@ -907,7 +915,7 @@
           [:div.grid.grid-cols-2.gap-4
            [:div.col-span-2
             (ui/button "Logout"
-                       {:class    "p-1 h-8 justify-center w-full opacity-40"
+                       {:class    "p-1 h-8 justify-center w-full opacity-60 bg-gray-400 hover:bg-gray-500 active:bg-gray-600"
                         :on-click user-handler/logout!
                         :icon     "logout"})]
            [:a.text-sm.flex.items-center.opacity-50.space-x-1.hover:opacity-80

@@ -91,6 +91,7 @@
 (defmethod handle :user/fetch-info-and-graphs [[_]]
   (state/set-state! [:ui/loading? :login] false)
   (async/go
+    (state/set-state! [:ui/loading? :user-fetching?] true)
     (let [result (async/<! (sync/<user-info sync/remoteapi))]
       (cond
         (instance? ExceptionInfo result)
@@ -112,7 +113,8 @@
                                     (util/uuid-string? (second (:sync-meta %)))) repos)
                     (sync/<sync-start)))))
             (ui-handler/re-render-root!)
-            (file-sync/maybe-onboarding-show status)))))))
+            (file-sync/maybe-onboarding-show status)))))
+    (state/set-state! [:ui/loading? :user-fetching?] false)))
 
 (defmethod handle :user/logout [[_]]
   (file-sync-handler/reset-session-graphs)
