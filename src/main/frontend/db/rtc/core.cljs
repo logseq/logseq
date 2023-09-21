@@ -59,9 +59,9 @@
       [:or
        [:map
         [:op [:enum :move]]
-        [:parents [:sequential :string]]
-        [:left [:maybe :string]]
         [:self :string]
+        [:parents [:sequential :string]]
+        [:left :string]
         [:content {:optional true} :string]
         [:updated-at {:optional true} :int]
         [:created-at {:optional true} :int]
@@ -71,9 +71,9 @@
         [:block-uuid :string]]
        [:map
         [:op [:enum :update-attrs]]
-        [:parents [:sequential :string]]
-        [:left [:maybe :string]]
         [:self :string]
+        [:parents {:optional true} [:sequential :string]]
+        [:left {:optional true} :string]
         [:content {:optional true} :string]
         [:updated-at {:optional true} :int]
         [:created-at {:optional true} :int]
@@ -230,15 +230,16 @@
   (let [repo @(:*repo state)]
     (prn :update-ops update-ops)
     (doseq [{:keys [parents left self content created-at updated-at alias]} update-ops]
-      (let [r (check-block-pos state self parents left)]
-        (case r
-          :not-exist
-          (insert-or-move-block state self parents left false)
-          :wrong-pos
-          (insert-or-move-block state self parents left true)
-          nil)
-        (update-block-attrs repo (uuid self) content updated-at created-at alias)
-        (prn :apply-remote-update-ops r self)))))
+      (when (and parents left)
+        (let [r (check-block-pos state self parents left)]
+          (case r
+            :not-exist
+            (insert-or-move-block state self parents left false)
+            :wrong-pos
+            (insert-or-move-block state self parents left true)
+            nil)))
+      (update-block-attrs repo (uuid self) content updated-at created-at alias)
+      (prn :apply-remote-update-ops self))))
 
 (defn apply-remote-update-page-ops
   [state update-page-ops]
