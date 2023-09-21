@@ -378,7 +378,7 @@
                                       (cond-> {:block-uuid block-uuid
                                                :alias alias-block-uuids}
                                         (:block/updated-at b) (assoc :updated-at (:block/updated-at b))
-                                        (:block/created-at b) (assoc :updated-at (:block/created-at b))
+                                        (:block/created-at b) (assoc :created-at (:block/created-at b))
                                         (:block/content b) (assoc :content (:block/content b))
                                         (and left-uuid parent-uuid) (assoc :target-uuid left-uuid
                                                                            :sibling? (not= left-uuid parent-uuid)))])))))
