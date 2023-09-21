@@ -267,7 +267,6 @@ independent of format as format specific heading characters are stripped"
            second
            string/lower-case))
 
-;; FIXME: replace :heading with id
 (defn get-block-by-page-name-and-block-route-name
   "Returns first block for given page name and block's route name. Block's route
   name must match the content of a page's block header"

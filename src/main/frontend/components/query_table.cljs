@@ -24,6 +24,7 @@
 ;; ========
 (defn- attach-clock-property
   [result]
+  ;; FIXME: Look up by property id if still supporting clock-time
   (let [ks [:block/properties :clock-time]
         result (map (fn [b]
                       (let [b (block/parse-title-and-body b)]
