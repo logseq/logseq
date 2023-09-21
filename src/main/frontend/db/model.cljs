@@ -272,36 +272,48 @@ independent of format as format specific heading characters are stripped"
   "Returns first block for given page name and block's route name. Block's route
   name must match the content of a page's block header"
   [repo page-name route-name]
-  (->> (d/q (if (config/db-based-graph? repo)
-              '[:find (pull ?b [:block/uuid])
-                :in $ ?page-name ?route-name ?content-matches
-                :where
-                [?page :block/name ?page-name]
-                [?b :block/page ?page]
-                [?b :block/properties ?prop]
-                [?prop-b :block/name "heading"]
-                [?prop-b :block/type "property"]
-                [?prop-b :block/uuid ?prop-uuid]
-                [(get ?prop ?prop-uuid) _]
-                [?b :block/content ?content]
-                [(?content-matches ?content ?route-name)]]
+  (let [db (conn/get-db repo)]
+    (if (config/db-based-graph? repo)
+      (->> (d/q '[:find (pull ?b [:block/uuid])
+                  :in $ ?page-name ?route-name ?content-matches
+                  :where
+                  [?page :block/name ?page-name]
+                  [?b :block/page ?page]
+                  [?b :block/properties ?prop]
+                  [?prop-b :block/name "heading"]
+                  [?prop-b :block/type "property"]
+                  [?prop-b :block/uuid ?prop-uuid]
+                  [(get ?prop ?prop-uuid) _]
+                  [?b :block/content ?content]
+                  [(?content-matches ?content ?route-name ?b)]]
+                db
+                page-name
+                route-name
+                (fn content-matches? [block-content external-content block-id]
+                  (= (as-> (:block/refs (db-utils/entity repo block-id)) block-refs
+                       (-> block-content
+                           (db-utils/special-id->page block-refs)
+                           (db-utils/special-id-ref->page block-refs)
+                           heading-content->route-name))
+                     (string/lower-case external-content))))
+           ffirst)
 
-              '[:find (pull ?b [:block/uuid])
-                :in $ ?page-name ?route-name ?content-matches
-                :where
-                [?page :block/name ?page-name]
-                [?b :block/page ?page]
-                [?b :block/properties ?prop]
-                [(get ?prop :heading) _]
-                [?b :block/content ?content]
-                [(?content-matches ?content ?route-name)]])
-            (conn/get-db repo)
-            page-name
-            route-name
-            (fn content-matches? [block-content external-content]
-              (= (heading-content->route-name block-content)
-                 (string/lower-case external-content))))
-       ffirst))
+      (->> (d/q '[:find (pull ?b [:block/uuid])
+                  :in $ ?page-name ?route-name ?content-matches
+                  :where
+                  [?page :block/name ?page-name]
+                  [?b :block/page ?page]
+                  [?b :block/properties ?prop]
+                  [(get ?prop :heading) _]
+                  [?b :block/content ?content]
+                  [(?content-matches ?content ?route-name)]]
+                db
+                page-name
+                route-name
+                (fn content-matches? [block-content external-content]
+                  (= (heading-content->route-name block-content)
+                     (string/lower-case external-content))))
+           ffirst))))
 
 (defn get-page-format
   [page-name]
