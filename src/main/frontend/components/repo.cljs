@@ -123,13 +123,12 @@
         (when (and (file-sync/enable-sync?) login?)
           [:div
            [:hr]
-           [:div.flex.align-items.justify-between
+           [:div.flex.items-center.justify-between.px-1
             [:h2.text-lg.font-medium.my-4 (t :graph/remote-graphs)]
             [:div
              (ui/button
               [:span.flex.items-center "Refresh"
-               (when remotes-loading? [:small.pl-2 (ui/loading nil)])]
-              :background "gray"
+               (when remotes-loading? [:small.pl-2.scale-75 (ui/loading nil)])]
               :disabled remotes-loading?
               :on-click #(file-sync/load-session-graphs))]]
            (repos-inner remote-graphs)])]]

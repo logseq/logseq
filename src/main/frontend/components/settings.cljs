@@ -827,7 +827,7 @@
         user-info (state/get-user-info)
         paid-user? (#{"active" "on_trial" "cancelled"} (:LemonStatus user-info))
         gift-user? (some #{"pro"} (:UserGroups user-info))
-        pro-account? (or paid-user? gift-user?)
+        pro-account? (or (:ProUser user-info) paid-user? gift-user?)
         expiration-date (some-> user-info :LemonEndsAt date/parse-iso)
         renewal-date (some-> user-info :LemonRenewsAt date/parse-iso)
         has-subscribed? (some? (:LemonStatus user-info))]
@@ -846,7 +846,7 @@
             [:span
              {:class "relative top-[-4px] flex items-center gap-3"}
              (cond
-               has-subscribed?
+               (or pro-account? has-subscribed?)
                (ui/button "Manage plan" {:class      "p-1 h-8 justify-center"
                                          :icon       "upload"
                                          :href       config/SITE-ACCOUNT-ENTRYPOINT
@@ -915,7 +915,7 @@
           [:div.grid.grid-cols-2.gap-4
            [:div.col-span-2
             (ui/button "Logout"
-                       {:class    "p-1 h-8 justify-center w-full opacity-60 bg-gray-400 hover:bg-gray-500 active:bg-gray-600"
+                       {:class    "p-1 h-8 justify-center w-full opacity-60 bg-gray-400 border-none hover:bg-red-400 active:bg-red-600"
                         :on-click user-handler/logout!
                         :icon     "logout"})]
            [:a.text-sm.flex.items-center.opacity-50.space-x-1.hover:opacity-80

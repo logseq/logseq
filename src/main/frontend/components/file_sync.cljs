@@ -330,6 +330,10 @@
   (let [_                       (state/sub :auth/id-token)
         online?                 (state/sub :network/online?)
         enabled-progress-panel? true
+        user-info               (state/sub :user/info)
+        sync-expire-time        (:ExpireTime user-info)
+        sync-expired?           (when (and (number? sync-expire-time)
+                                           (< (* sync-expire-time 1000) (js/Date.now))))
         current-repo            (state/get-current-repo)
         creating-remote-graph?  (state/sub [:ui/loading? :graph/create-remote?])
         current-graph-id        (state/sub-current-file-sync-graph-uuid)
@@ -369,7 +373,7 @@
                                        (let [graphs-txid fs-sync/graphs-txid]
                                          (async/<! (p->c (persist-var/-load graphs-txid)))
                                          (cond
-                                           @*beta-unavailable?
+                                           (true? sync-expired?)
                                            (state/pub-event! [:file-sync/onboarding-tip :unavailable])
 
                                            ;; current graph belong to other user, do nothing
