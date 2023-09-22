@@ -50,7 +50,9 @@
                  int? (some integer? vals)
                  repo (state/get-current-repo)
                  prop-key (if (config/db-based-graph? repo)
-                            (:block/uuid (db/entity repo [:block/name (gp-util/page-name-sanity-lc (name f))]))
+                            (or (:block/uuid (db/entity repo [:block/name (gp-util/page-name-sanity-lc (name f))]))
+                                ;; Fall back to the keyword for queries that set named properties through :result-transform
+                                f)
                             f)]
              `(~'fn [~'b]
                     (~'let [~'result-str (~'get-in ~'b [:block/properties ~prop-key])
