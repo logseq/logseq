@@ -37,7 +37,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="logseq" android:host="auth-callback" />
+                <data android:scheme="logseq" />
             </intent-filter>
 
         </activity>
