@@ -476,11 +476,23 @@
                        refs)]
           tx-data)))))
 
+(defn- page-unable-to-delete
+  "If a page is unable to delete, returns a map with more information. Otherwise returns nil"
+  [repo page]
+  (cond
+    (and (= "class" (:block/type page))
+         (seq (model/get-tag-blocks repo (:block/name page))))
+    {:msg "Unable to delete this page because blocks are tagged with this page"}
+    (= "property" (:block/type page))
+    {:msg "Unable to delete this page because this page is a property"}))
+
 (defn delete!
-  [page-name ok-handler & {:keys [delete-file? redirect-to-home? persist-op?]
+  "Deletes a page and then either calls the ok-handler or the error-handler if unable to delete"
+  [page-name ok-handler & {:keys [delete-file? redirect-to-home? persist-op? error-handler]
                            :or {delete-file? true
                                 redirect-to-home? true
-                                persist-op? true}}]
+                                persist-op? true
+                                error-handler (fn [{:keys [msg]}] (log/error :msg msg))}}]
   (when redirect-to-home? (route-handler/redirect-to-home!))
   (when page-name
     (when-let [repo (state/get-current-repo)]
@@ -490,33 +502,34 @@
                                      (fn [block]
                                        [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
                                      blocks)
-            page (db/entity [:block/name page-name])
-            _ (delete-file! repo page-name delete-file?)
-            ;; if other page alias this pagename,
-            ;; then just remove some attrs of this entity instead of retractEntity
-            delete-page-tx (cond
-                             (contains? #{"property" "class"} (:block/type page))
-                             nil
+            page (db/entity [:block/name page-name])]
+        (if-let [msg (and (config/db-based-graph? repo)
+                          (page-unable-to-delete repo page))]
+          (error-handler msg)
+          (let [_ (delete-file! repo page-name delete-file?)
+                ;; if other page alias this pagename,
+                ;; then just remove some attrs of this entity instead of retractEntity
+                delete-page-tx (cond
+                                 (not (:block/_namespace page))
+                                 (if (model/get-alias-source-page (state/get-current-repo) page-name)
+                                   (when-let [id (:db/id (db/entity [:block/name page-name]))]
+                                     (mapv (fn [attribute]
+                                             [:db/retract id attribute])
+                                           db-schema/retract-page-attributes))
+                                   (concat (db-refs->page repo page)
+                                           [[:db.fn/retractEntity [:block/name page-name]]]))
 
-                             (not (:block/_namespace page))
-                             (if (model/get-alias-source-page (state/get-current-repo) page-name)
-                               (when-let [id (:db/id (db/entity [:block/name page-name]))]
-                                 (mapv (fn [attribute]
-                                         [:db/retract id attribute])
-                                       db-schema/retract-page-attributes))
-                               (concat (db-refs->page repo page)
-                                       [[:db.fn/retractEntity [:block/name page-name]]]))
+                                 :else
+                                 nil)
+                _ (prn :PTX delete-page-tx)
+                _ (prn :BTX truncate-blocks-tx-data)
+                tx-data (concat truncate-blocks-tx-data delete-page-tx)]
+            (db/transact! repo tx-data {:outliner-op :delete-page :persist-op? persist-op?})
 
-                             :else
-                             nil)
-            tx-data (concat truncate-blocks-tx-data delete-page-tx)]
+            (unfavorite-page! page-name)
 
-        (db/transact! repo tx-data {:outliner-op :delete-page :persist-op? persist-op?})
-
-        (unfavorite-page! page-name)
-
-        (when (fn? ok-handler) (ok-handler))
-        (ui-handler/re-render-root!)))))
+            (when (fn? ok-handler) (ok-handler))
+            (ui-handler/re-render-root!)))))))
 
 (defn- rename-update-block-refs!
   [refs from-id to-id]

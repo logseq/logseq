@@ -26,7 +26,9 @@
   (page-handler/delete! page-name
                         (fn []
                           (notification/show! (str "Page " page-name " was deleted successfully!")
-                                              :success)))
+                                              :success))
+                        {:error-handler (fn [{:keys [msg]}]
+                                          (notification/show! msg :error))})
   (state/close-modal!)
   (route-handler/redirect-to-home!))
 

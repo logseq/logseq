@@ -75,7 +75,17 @@
            [?page :block/original-name ?original-name]
            [?page :block/name ?name]]
          (conn/get-db repo)
-      (util/page-name-sanity-lc tag-name))))
+         (util/page-name-sanity-lc tag-name))))
+
+(defn get-tag-blocks
+  [repo tag-name]
+  (d/q '[:find ?b
+         :in $ ?tag
+         :where
+         [?e :block/name ?tag]
+         [?b :block/tags ?e]]
+       (conn/get-db repo)
+       (util/page-name-sanity-lc tag-name)))
 
 (defn get-all-tagged-pages
   [repo]
