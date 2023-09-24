@@ -10,17 +10,19 @@
     [frontend.db.model :as model]
     [frontend.handler.command-palette :as cp-handler]
     [frontend.handler.editor :as editor-handler]
+    [frontend.handler.page :as page-handler]
     [frontend.handler.route :as route-handler]
     [frontend.handler.search :as search-handler]
+    [frontend.handler.whiteboard :as whiteboard-handler]
     [frontend.modules.shortcut.core :as shortcut]
     [frontend.modules.shortcut.data-helper :as shortcut-helper]
     [frontend.search :as search]
+    [frontend.shui :refer [make-shui-context]]
     [frontend.state :as state]
     [frontend.ui :as ui]
     [frontend.util :as util]
     [frontend.util.page :as page-util]
     [goog.functions :as gfun]
-    [frontend.shui :refer [make-shui-context]]
     [logseq.shui.core :as shui]
     [promesa.core :as p]
     [rum.core :as rum]))
@@ -35,8 +37,6 @@
    {:text "Search only blocks"       :info "Add filter to search" :icon-theme :gray :icon "block" :filter {:group :blocks}}
    {:text "Search only whiteboards"  :info "Add filter to search" :icon-theme :gray :icon "whiteboard" :filter {:group :whiteboards}}
    {:text "Search only files"        :info "Add filter to search" :icon-theme :gray :icon "file" :filter {:group :files}}])
-   ; {:text "Create block"             :info "Add a block to today's journal page" :icon "block"         :icon-theme :color}
-   ; {:text "Generate short answer"    :info "Ask a language model"                :icon "question-mark" :icon-theme :gradient}
 
 (def default-commands 
   [{:text "Open settings" :icon "settings"      :icon-theme :gray}
@@ -54,9 +54,16 @@
    :blocks         {:status :success :show-more false :items nil} 
    :files          {:status :success :show-more false :items nil}})        
 
+(defn create-items [q]
+  (if-not (seq q)
+    []
+    [{:text "Create page"       :icon "page"       :icon-theme :color :shortcut "cmd+shift+P" :info (str "Create page called '" q "'") :source-create :page} 
+     {:text "Create whiteboard" :icon "whiteboard" :icon-theme :color :shortcut "cmd+shift+W" :info (str "Create whiteboard called '" q "'") :source-create :whiteboard}]))
+
 ;; Take the results, decide how many items to show, and order the results appropriately
 (defn state->results-ordered [state]
   (let [results @(::results state)
+        input @(::input state)
         index (volatile! -1)
         visible-items (fn [group] 
                         (let [{:keys [items show-more]} (get results group)]
@@ -67,10 +74,17 @@
                  ["Commands"       :commands       (visible-items :commands)]
                  ["Pages"          :pages          (visible-items :pages)]
                  ["Whiteboards"    :whiteboards    (visible-items :whiteboards)]
-                 ["Blocks"         :blocks         (visible-items :blocks)]]]
+                 ["Blocks"         :blocks         (visible-items :blocks)]
+                 ["Create"         :create         (create-items input)]]]
     ; results
     (for [[group-name group-key group-items] results]
       [group-name group-key (mapv #(assoc % :item-index (vswap! index inc)) group-items)])))
+
+(defn state->highlighted-item [state]
+  (or (some-> state ::highlighted-item deref)
+      (some->> (state->results-ordered state)
+               (mapcat last)
+               (first))))
 
 ;; Take the ordered results and the highlight index and determine which item is highlighted
 ; (defn state->highlighted-item 
@@ -257,57 +271,70 @@
   (when-not (some-> state ::alt? deref)
     (state/close-modal!)))
 
-(defmulti handle-action (fn [action _state _item _event] action))
+(defmulti handle-action (fn [action _state _event] action))
 
-(defmethod handle-action :close [_ state item event]
+(defmethod handle-action :close [_ state event]
   (js/console.log :handle-action/cancel)
   (state/close-modal!))
 
-(defmethod handle-action :copy-page-ref [_ state item event]
-  (when-let [page-name (:source-page item)]
+(defmethod handle-action :copy-page-ref [_ state event]
+  (when-let [page-name (some-> state state->highlighted-item :source-page)]
     (util/copy-to-clipboard! page-name)
     (close-unless-alt! state)))
     
-(defmethod handle-action :copy-block-ref [_ state item event]
-  (when-let [block-uuid (some-> item :source-block :block/uuid uuid)]
+(defmethod handle-action :copy-block-ref [_ state event]
+  (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid uuid)]
     (editor-handler/copy-block-ref! block-uuid)
     (close-unless-alt! state)))
 
-(defmethod handle-action :open-page [_ state item event]
-  (when-let [page-name (:source-page item)]
+(defmethod handle-action :open-page [_ state event]
+  (when-let [page-name (some-> state state->highlighted-item :source-page)]
     (route-handler/redirect-to-page! page-name)
     (close-unless-alt! state)))
 
-(defmethod handle-action :open-block [_ state item event]
+(defmethod handle-action :open-block [_ state event]
   (let [get-block-page (partial model/get-block-page (state/get-current-repo))]
-    (when-let [page (some-> item :source-block :block/uuid uuid get-block-page :block/name model/get-redirect-page-name)]
+    (when-let [page (some-> state state->highlighted-item :source-block :block/uuid uuid get-block-page :block/name model/get-redirect-page-name)]
       (route-handler/redirect-to-page! page)
       (close-unless-alt! state))))
 
-(defmethod handle-action :open-page-right [_ state item event]
-  (when-let [page-uuid (some-> item :source-page model/get-page :block/uuid uuid)]
+(defmethod handle-action :open-page-right [_ state event]
+  (when-let [page-uuid (some-> state state->highlighted-item :source-page model/get-page :block/uuid uuid)]
     (js/console.log "oepn-page-right" page-uuid) 
     (editor-handler/open-block-in-sidebar! page-uuid)
     (close-unless-alt! state)))
 
-(defmethod handle-action :open-block-right [_ state item event]
-  (when-let [block-uuid (some-> item :source-block :block/uuid uuid)]
+(defmethod handle-action :open-block-right [_ state event]
+  (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid uuid)]
     (js/console.log "oepn-block-right" block-uuid) 
     (editor-handler/open-block-in-sidebar! block-uuid)
     (close-unless-alt! state)))
 
-(defmethod handle-action :trigger [_ state item event]
-  (js/console.log "handle-action/trigger" (clj->js (keys item)) (clj->js item))
-  (when-let [action (some-> item :source-command :action)]
+(defmethod handle-action :trigger [_ state event]
+  (when-let [action (some-> state state->highlighted-item :source-command :action)]
     (action)
     (close-unless-alt! state)))
 
-(defmethod handle-action :filter [_ state item event]
+(defmethod handle-action :filter [_ state event]
   (let [!filter (::filter state) 
-        filter (some-> item :filter)]
+        filter (some-> state state->highlighted-item :filter)]
     (if filter
       (reset! !filter filter)
       (reset! !filter nil))))
+
+(defmethod handle-action :create [_ state event]
+  (let [item (state->highlighted-item state)
+        create-whiteboard? (= :whiteboard (:source-create item))
+        create-page? (= :page (:source-create item))
+        alt? (some-> state ::alt deref)
+        !input (::input state)]
+    (js/console.log "handle-action/create" create-whiteboard? create-page? alt? @!input item)
+    (cond 
+      (and create-whiteboard? alt?) (whiteboard-handler/create-new-whiteboard-page! @!input)
+      (and create-whiteboard? (not alt?)) (whiteboard-handler/create-new-whiteboard-and-redirect! @!input)
+      (and create-page? alt?) (page-handler/create! @!input {:redirect? false}) 
+      (and create-page? (not alt?)) (page-handler/create! @!input {:redirect? true}))
+    (close-unless-alt! state)))
 
 (rum/defc result-group < rum/reactive 
   [state title group visible-items first-item]
@@ -324,16 +351,14 @@
                                (when (< (dec GROUP-LIMIT) (.indexOf items highlighted-item))
                                  (reset! (::highlighted-item state) (nth items 4 nil))))] 
     [:div {:class ""}
-     [:div {:class "text-xs py-1.5 px-6 flex justify-between items-center gap-2" 
-            :style {:color "var(--lx-gray-11)" 
-                    :background "var(--lx-gray-02)"}} 
-      [:div {:class "font-bold" 
-             :style {:color "var(--lx-gray-11)"}} title]
-      [:div {:class "bg-white/20 px-1.5 py-px text-white rounded-full"
-             :style {:font-size "0.6rem"}}
-       (if (<= 100 (count items))
-         (str "99+")
-         (count items))]
+     [:div {:class "text-xs py-1.5 px-6 flex justify-between items-center gap-2 text-gray-11 bg-gray-02"} 
+      [:div {:class "font-bold text-gray-11"} title]
+      (when (not= group :create)
+       [:div {:class "bg-gray-05 px-1.5 py-px text-gray-12 rounded-full"
+              :style {:font-size "0.6rem"}}
+        (if (<= 100 (count items))
+          (str "99+")
+          (count items))])
       [:div {:class "flex-1"}]
       (cond 
         (<= (count items) GROUP-LIMIT) [:div]
@@ -344,7 +369,7 @@
       (for [item visible-items
             :let [highlighted? (= item highlighted-item)]]
        (shui/list-item (assoc item 
-                              :query @(::input state)
+                              :query (when-not (= group :create) @(::input state))
                               :highlighted highlighted?
                               ;; for some reason, the highlight effect does not always trigger on a 
                               ;; boolean value change so manually pass in the dep
@@ -364,7 +389,8 @@
                                                 :commands       (reset! (::actions state) [:close :trigger])
                                                 :pages          (reset! (::actions state) [:close :copy-page-ref :open-page-right :open-page])
                                                 :blocks         (reset! (::actions state) [:close :copy-block-ref :open-block-right :open-block])
-                                                nil)))
+                                                :create         (reset! (::actions state) [:close :create])
+                                                (reset! (::actions state) [:close]))))
                        (make-shui-context)))]]))
 
 (defn move-highlight [state n]
@@ -406,9 +432,9 @@
         "ArrowUp"   (move-highlight state -1)
         "Enter" (if shift?
                   (when-let [action (some #{:open-block-right :open-page-right} @(::actions state))]
-                    (handle-action action state @(::highlighted-item state) e))
-                  (when-let [action (some #{:open-block :open-page :filter :trigger} @(::actions state))]
-                    (handle-action action state @(::highlighted-item state) e)))
+                    (handle-action action state e))
+                  (when-let [action (some #{:open-block :open-page :filter :trigger :create} @(::actions state))]
+                    (handle-action action state e)))
         "Escape" (when (seq @(::input state))
                    (.preventDefault e)
                    (.stopPropagation e)
@@ -591,8 +617,8 @@
             :style {:background "var(--lx-gray-03)"
                     :border-top "1px solid var(--lx-gray-07)"}}
       [:div {:class "flex items-stretch gap-2"}
-       (for [[tab-name tab-icon] [["Search" "search"] 
-                                  ["Capture" "square-plus"]]
+       (for [[tab-name tab-icon] [["Search" "search"]] 
+                                  ; ["Capture" "square-plus"]]
              :let [active? (= tab-name "Search")]]
         [:div {:class "flex items-center px-1.5 gap-1 relative"}
          (when active? 
@@ -602,18 +628,19 @@
          [:div {:class ""} tab-name]])]
       [:div {:class "flex items-center py-3 gap-4"}
        (for [action actions
-             :let [on-click (partial handle-action action state highlighted-item)
+             :let [on-click (partial handle-action action state)
                    str-alt #(if alt? (str % " (keep open)") %)]
              :when (if shift? 
                      (#{:open-page-right :open-block-right :trigger :filter :close} action) 
-                     (#{:open-page :open-block :copy-page-ref :copy-block-ref :trigger :filter :close} action))]
+                     (#{:open-page :open-block :copy-page-ref :copy-block-ref :trigger :filter :close :create} action))]
          (case action
-           :copy-page-ref    (shui/button {:text (str-alt "Copy")             :theme :gray  :on-click on-click :shortcut ["cmd" "c"]}) 
-           :copy-block-ref   (shui/button {:text (str-alt "Copy")             :theme :gray  :on-click on-click :shortcut ["cmd" "c"]}) 
-           :open-page-right  (shui/button {:text (str-alt "Open in sidebar")  :theme :color :on-click on-click :shortcut ["return"]})
-           :open-page        (shui/button {:text (str-alt "Open")             :theme :color :on-click on-click :shortcut ["return"]})  
-           :open-block-right (shui/button {:text (str-alt "Open in sidebar")  :theme :color :on-click on-click :shortcut ["return"]})
-           :open-block       (shui/button {:text (str-alt "Open page")        :theme :color :on-click on-click :shortcut ["return"]})  
-           :trigger          (shui/button {:text (str-alt "Trigger")          :theme :color :on-click on-click :shortcut ["return"]})  
-           :close            (shui/button {:text "Close"                      :theme :text  :on-click on-click})
-           :filter           (shui/button {:text "Filter"                     :theme :color :on-click on-click :shortcut ["return"]})))]]]))  
+           :copy-page-ref    (shui/button {:text (str-alt "Copy")             :theme :gray  :on-click on-click :shortcut ["cmd" "c"]} (make-shui-context)) 
+           :copy-block-ref   (shui/button {:text (str-alt "Copy")             :theme :gray  :on-click on-click :shortcut ["cmd" "c"]} (make-shui-context)) 
+           :open-page-right  (shui/button {:text (str-alt "Open in sidebar")  :theme :color :on-click on-click :shortcut ["return"]} (make-shui-context))
+           :open-page        (shui/button {:text (str-alt "Open")             :theme :color :on-click on-click :shortcut ["return"]} (make-shui-context))  
+           :open-block-right (shui/button {:text (str-alt "Open in sidebar")  :theme :color :on-click on-click :shortcut ["return"]} (make-shui-context))
+           :open-block       (shui/button {:text (str-alt "Open page")        :theme :color :on-click on-click :shortcut ["return"]} (make-shui-context))  
+           :trigger          (shui/button {:text (str-alt "Trigger")          :theme :color :on-click on-click :shortcut ["return"]} (make-shui-context))  
+           :create           (shui/button {:text "Create"                     :theme :color :on-click on-click :shortcut ["return"]} (make-shui-context))
+           :close            (shui/button {:text "Close"                      :theme :text  :on-click on-click} (make-shui-context))
+           :filter           (shui/button {:text "Filter"                     :theme :color :on-click on-click :shortcut ["return"]} (make-shui-context))))]]]))  

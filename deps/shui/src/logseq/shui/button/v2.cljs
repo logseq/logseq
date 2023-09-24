@@ -6,10 +6,10 @@
     [logseq.shui.icon.v2 :as icon]
     [clojure.string :as string]))
 
-(rum/defc root 
+(rum/defc root < rum/reactive
   [{:keys [theme color text depth size icon interactive shortcut tiled on-click muted class] 
     :or {theme :color depth 1 size :md interactive true muted false class ""}} context]
-  (let [color-string (or (some-> color name) (some-> context :state deref :ui/radix-color name) "custom")
+  (let [color-string (or (some-> color name) (some-> context :state rum/react :ui/radix-color name) "custom")
         theme-class (str "shui__button-theme-" (name theme))
         depth-class (when-not (= :text theme) (str "shui__button-depth-" depth)) 
         color-class (str "shui__button-color-" color-string) 
