@@ -47,7 +47,7 @@
     nil))
 
 (rum/defc page-impl
-  []
+  [props]
   (let [[ready?, set-ready?] (rum/use-state false)
         *ref-el (rum/use-ref nil)]
 
@@ -55,14 +55,15 @@
       (fn [] (setup-configure!)
         (set-ready? true)
         (when-let [^js el (rum/deref *ref-el)]
-          (js/setTimeout #(some-> (.querySelector el "input[name=username]")
+          (js/setTimeout #(some-> (.querySelectorAll el "[autocomplete=username]")
+                                  (aget 0)
                                   (.focus)) 100))) [])
 
     [:div.cp__user-login
      {:ref *ref-el}
      (when ready?
        (LSAuthenticator
-         {:termsLink "https://blog.logseq.com/terms/"}
+         (assoc props :termsLink "https://blog.logseq.com/terms/")
          (fn [^js op]
            (let [sign-out!      (.-signOut op)
                  ^js user-proxy (.-user op)
@@ -74,14 +75,15 @@
 
 (rum/defcs page <
   shortcut/disable-all-shortcuts
-  [_state]
-  (page-impl))
+  [_state props]
+  (page-impl props))
 
 (defn open-login-modal!
-  []
-  (state/set-modal!
-    (fn [_close] (page))
-    {:close-btn?      true
-     :label           "user-login"
-     :close-backdrop? false
-     :center?         true}))
+  ([] (open-login-modal! :signIn))
+  ([type]
+   (state/set-modal!
+     (fn [_close] (page {:initialState (and type (name type))}))
+     {:close-btn?      true
+      :label           "user-login"
+      :close-backdrop? false
+      :center?         true})))

@@ -122,10 +122,10 @@
   (file-sync-handler/reset-user-state!)
   (login/sign-out!))
 
-(defmethod handle :user/login [[_ host-ui?]]
+(defmethod handle :user/login [[_ type host-ui?]]
   (if (or host-ui? (not util/electron?))
     (js/window.open config/LOGIN-URL)
-    (login/open-login-modal!)))
+    (login/open-login-modal! type)))
 
 (defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
   (db/set-key-value repo :ast/version db-schema/ast-version)

@@ -1,8 +1,9 @@
 import { Authenticator, CheckboxField, useAuthenticator, AccountSettings } from '@aws-amplify/ui-react'
 
-export function LSAuthenticator({ termsLink, children }: any) {
+export function LSAuthenticator({ initialState, termsLink, children }: any) {
   return (<div>
     <Authenticator
+      initialState={ initialState || 'signIn'}
       formFields={{
         signUp: {
           email: { order: 1 },

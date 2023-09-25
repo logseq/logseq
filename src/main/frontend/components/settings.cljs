@@ -934,7 +934,7 @@
                                   {:class    "h-8 w-full text-center justify-center"
                                    :on-click (fn []
                                                (state/close-settings!)
-                                               (state/pub-event! [:user/login]))})]
+                                               (state/pub-event! [:user/login :signUp]))})]
           [:div.flex-1 (ui/button (t :login)
                                   {:icon     "login"
                                    :class    "h-8 w-full text-center justify-center opacity-80"
