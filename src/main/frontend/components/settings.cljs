@@ -809,13 +809,18 @@
   (when (< 0 (count graph-usage))
     [:div.grid.gap-3 {:style {:grid-template-columns (str "repeat(" (count graph-usage) ", 1fr)")}}
      (for [{:keys [name used-percent]} graph-usage
-           :let [color (if (<= 100 used-percent) "bg-red-500" "bg-blue-500")]]
-       [:div.rounded-full.w-full.h-2 {:class   "bg-black/50"
-                                      :tooltip name}
-        [:div.rounded-full.h-2 {:class color
-                                :style {:width     (str used-percent "%")
-                                        :min-width "0.5rem"
-                                        :max-width "100%"}}]])]))
+           :let [color (if (<= 100 used-percent) "bg-red-500" "bg-blue-500")
+                 used-percent' (if (number? used-percent) (* 100 (.toFixed used-percent 2)) 0)]]
+       (ui/tippy
+         {:html (fn [] [:small.inline-flex.px-2.py-1 (str name " (" used-percent' "%)")])
+          :arrow true}
+         [:div.rounded-full.w-full.h-2.cursor-help.overflow-hidden
+          {:class   "bg-black/50"
+           :tooltip name}
+          [:div.rounded-full.h-2
+           {:class color
+            :style {:width     (str used-percent' "%")
+                    :max-width "100%"}}]]))]))
 
 (rum/defc ^:large-vars/cleanup-todo settings-account < rum/reactive
   []
