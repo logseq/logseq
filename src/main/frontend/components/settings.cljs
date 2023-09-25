@@ -938,7 +938,7 @@
           [:div.flex-1 (ui/button (t :login)
                                   {:icon     "login"
                                    :class    "h-8 w-full text-center justify-center opacity-80"
-                                   :intent   "logseq"
+                                   :intent   "logseq-2"
                                    :on-click (fn []
                                                (state/close-settings!)
                                                (state/pub-event! [:user/login]))})]]
