@@ -37,7 +37,8 @@
         (.setAttribute doc "lang" preferred-language)))
 
     (rum/use-effect!
-     #(js/setTimeout (fn [] (ipc/ipc "theme-loaded")) 100) ; Wait for the theme to be applied
+     #(js/setTimeout
+       (fn [] (when-not config/dev? (ipc/ipc "theme-loaded"))) 100) ; Wait for the theme to be applied
      [])
 
     (rum/use-effect!
