@@ -1476,9 +1476,16 @@ Similar to re-frame subscriptions"
               :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true))))
    nil))
 
+(defn close-dropdowns!
+  []
+  (let [close-fns (vals (:modal/dropdowns @state))]
+    (doseq [f close-fns]
+      (try (f) (catch :default _e nil)))))
+
 (defn close-modal!
   []
   (when-not (editing?)
+    (close-dropdowns!)
     (if (seq (get-sub-modals))
       (close-sub-modal!)
       (swap! state assoc
@@ -1488,6 +1495,7 @@ Similar to re-frame subscriptions"
              :modal/show? false
              :modal/fullscreen? false
              :modal/panel-content nil
+             :modal/dropdowns {}
              :ui/open-select nil))))
 
 (defn get-file-write-chan

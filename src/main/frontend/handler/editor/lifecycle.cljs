@@ -1,10 +1,7 @@
 (ns ^:no-doc frontend.handler.editor.lifecycle
-  (:require [dommy.core :as d]
-            [frontend.db :as db]
-            [frontend.handler.editor :as editor-handler :refer [get-state]]
+  (:require [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.editor.keyboards :as keyboards-handler]
-            [frontend.handler.property :as property-handler]
-            [frontend.state :as state :refer [sub]]
+            [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]))
@@ -28,9 +25,7 @@
     ;; which will hide the editor so no way for editing.
     (js/setTimeout #(keyboards-handler/esc-save! state) 100)
 
-    ;; try to close all opened dropdown menu
-    (when-let [close-fns (vals (sub :modal/dropdowns))]
-      (try (doseq [f close-fns] (f)) (catch :default _e ())))
+    (state/close-dropdowns!)
 
     (when-let [element (gdom/getElement id)]
       (.focus element)
