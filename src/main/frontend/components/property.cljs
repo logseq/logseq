@@ -192,7 +192,6 @@
                        repo (:block/uuid property)
                        {:property-name @*property-name
                         :property-schema @*property-schema})
-                      (state/close-modal!)
                       (when toggle-fn (toggle-fn)))))]]]))
 
 (defn- get-property-from-db [name]
@@ -292,8 +291,7 @@
    (fn [state]
      (mixins/hide-when-esc-or-outside
       state
-      :on-hide (fn []
-                 (property-handler/set-editing-new-property! nil))
+      :on-hide (fn [] (property-handler/set-editing-new-property! nil))
       :node (js/document.getElementById "edit-new-property")
       :outside? false)))
   [state block edit-input-id properties new-property? opts]

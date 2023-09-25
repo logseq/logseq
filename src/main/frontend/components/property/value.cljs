@@ -95,11 +95,35 @@
                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")
       :initial-open? (when *add-new-item? @*add-new-item?)})))
 
+(defn- create-page-if-not-exists!
+  [property classes page]
+  (let [page* (string/trim page)
+        [_ page inline-class] (or (seq (map string/trim (re-find #"(.*)#(.*)$" page*)))
+                                  [nil page* nil])
+        id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))
+        class? (= (:block/name property) "tags")]
+    (when (nil? id)
+      (let [inline-class-uuid
+            (when inline-class
+              (or (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc inline-class)]))
+                  (do (log/error :msg "Given inline class does not exist" :inline-class inline-class)
+                      nil)))]
+        (page-handler/create! page {:redirect? false
+                                    :create-first-block? false
+                                    :tags (if inline-class-uuid
+                                            [inline-class-uuid]
+                                            ;; Only 1st class b/c page normally has
+                                            ;; one of and not all these classes
+                                            (take 1 classes))
+                                    :class? class?})))
+    [page id]))
+
 (defn- select-page
-  [block property {:keys [classes multiple-choices? dropdown?] :as opts
-                   :or {dropdown? true}}]
+  [block property {:keys [classes multiple-choices? dropdown?] :as opts}]
   (let [repo (state/get-current-repo)
-        tags-or-alias? (contains? #{"tags" "alias"} (:block/name property))
+        tags? (= "tags" (:block/name property))
+        alias? (= "alias" (:block/name property))
+        tags-or-alias? (or tags? alias?)
         selected-choices (if tags-or-alias?
                            (->> (if (= "tags" (:block/name property))
                                   (:block/tags block)
@@ -124,8 +148,14 @@
                :items options
                :selected-choices selected-choices
                :dropdown? dropdown?
-               :input-default-placeholder (if multiple-choices?
+               :input-default-placeholder (cond
+                                            tags?
+                                            "Update tags"
+                                            alias?
+                                            "Update alias"
+                                            multiple-choices?
                                             "Choose pages"
+                                            :else
                                             "Choose page")
                :show-new-when-not-exact-match? true
                :extract-chosen-fn :value
@@ -154,34 +184,21 @@
                                   nil))})}
                multiple-choices?
                (assoc :on-apply (fn [choices]
-                                  (let [values (set (map (fn [page]
-                                                           (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))) choices))]
+                                  (let [pages (->> choices
+                                                   (map #(create-page-if-not-exists! property classes %))
+                                                   (map first))
+                                        values (set (map (fn [page]
+                                                           (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))) pages))]
                                     (add-property! block (:block/original-name property) values)
                                     (when-let [f (:on-chosen opts)] (f)))))
                (not multiple-choices?)
                (assoc :on-chosen (fn [chosen]
-                                   (let [page* (string/trim (if (string? chosen) chosen (:value chosen)))
-                                         [_ page inline-class] (or (seq (map string/trim (re-find #"(.*)#(.*)$" page*)))
-                                                                   [nil page* nil])
-                                         id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))
-                                         class? (= (:block/name property) "tags")]
-                                     (when (nil? id)
-                                       (let [inline-class-uuid
-                                             (when inline-class
-                                               (or (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc inline-class)]))
-                                                   (do (log/error :msg "Given inline class does not exist" :inline-class inline-class)
-                                                       nil)))]
-                                         (page-handler/create! page {:redirect? false
-                                                                     :create-first-block? false
-                                                                     :tags (if inline-class-uuid
-                                                                             [inline-class-uuid]
-                                                                    ;; Only 1st class b/c page normally has
-                                                                    ;; one of and not all these classes
-                                                                             (take 1 classes))
-                                                                     :class? class?})))
-                                     (let [id' (or id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)])))]
-                                       (add-property! block (:block/original-name property) id'))
-                                     (when-let [f (:on-chosen opts)] (f))))))]
+                                   (let [page* (string/trim (if (string? chosen) chosen (:value chosen)))]
+                                     (when-not (string/blank? page*)
+                                       (let [[page id] (create-page-if-not-exists! property classes page*)
+                                             id' (or id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)])))]
+                                         (add-property! block (:block/original-name property) id')
+                                         (when-let [f (:on-chosen opts)] (f))))))))]
     (select/select opts)))
 
 ;; (defn- move-cursor
@@ -299,7 +316,7 @@
            nil))))})
 
 (defn- select
-  [block property {:keys [multiple-choices?] :as opts}]
+  [block property {:keys [multiple-choices? dropdown?] :as opts}]
   (let [items (->> (model/get-block-property-values (:block/uuid property))
                    (mapcat (fn [[_id value]]
                              (if (coll? value)
@@ -308,14 +325,15 @@
                    (distinct))
         add-property-f #(add-property! block (:block/original-name property) %)
         on-chosen (fn [chosen]
-                    (add-property-f (:value chosen))
+                    (add-property-f (if (map? chosen) (:value chosen) chosen))
                     (when-let [f (:on-chosen opts)] (f)))
-        selected-choices (get-in block [:block/properties (:block/uuid property)])]
+        selected-choices' (get-in block [:block/properties (:block/uuid property)])
+        selected-choices (if (coll? selected-choices') selected-choices' [selected-choices'])]
     (select/select (cond->
                     {:multiple-choices? multiple-choices?
                      :items items
                      :selected-choices selected-choices
-                     :dropdown? true
+                     :dropdown? dropdown?
                      :show-new-when-not-exact-match? true
                      :extract-chosen-fn :value
                      :input-opts (fn [_]
@@ -369,7 +387,7 @@
                                 editor-box editor-args
                                 editing? *add-new-item?
                                 blocks-container-id
-                                on-chosen]
+                                on-chosen dropdown?]
                          :as opts}]
   (let [property (model/sub-block (:db/id property))
         repo (state/get-current-repo)
@@ -401,12 +419,14 @@
          (case type
            (list :number :url)
            [:div.h-6 (select block property (assoc select-opts
-                                                   :multiple-choices? multiple-values?))]
+                                                   :multiple-choices? multiple-values?
+                                                   :dropdown? true))]
 
            :page
            [:div.h-6 (select-page block property (assoc select-opts
                                                         :classes (:classes schema)
-                                                        :multiple-choices? multiple-values?))]
+                                                        :multiple-choices? multiple-values?
+                                                        :dropdown? true))]
 
            (let [config {:editor-opts (new-text-editor-opts repo block property value editor-id)}]
              [:div
@@ -512,6 +532,7 @@
         *add-new-item? (::add-new-item? state)
         type (get schema :type :default)
         row? (contains? #{:page :date :number :url} type)
+        select-type? (contains? #{:page :number :url} type)
         items (if (coll? v) v (when v [v]))
         values-cp (for [[idx item] (medley/indexed items)]
                     (let [dom-id' (str dom-id "-" idx)
@@ -527,7 +548,7 @@
                                            :editor-args editor-args
                                            :row? row?
                                            :*add-new-item? *add-new-item?
-                                           :show-close-button? (not row?)}))
+                                           :show-close-button? (not select-type?)}))
                         dom-id')))]
     [:div.relative
      {:class (cond
@@ -539,7 +560,7 @@
       :on-mouse-out  #(reset! *show-add? false)}
 
      (when (seq items)
-       (if row?
+       (if select-type?
          (ui/dropdown
           (fn [{:keys [toggle-fn]}]
             [:div.cursor-pointer
@@ -554,13 +575,13 @@
                                             (when on-chosen (on-chosen)))}]
               [:div.property-select
                (if (= type :page)
-                (select-page block property (assoc select-opts
-                                                   :classes (:classes schema)
-                                                   :multiple-choices? true
-                                                   :dropdown? false))
-                (select block property (assoc select-opts
-                                              :multiple-choices? true
-                                              :dropdown? false)))]))
+                 (select-page block property (assoc select-opts
+                                                    :classes (:classes schema)
+                                                    :multiple-choices? true
+                                                    :dropdown? false))
+                 (select block property (assoc select-opts
+                                               :multiple-choices? true
+                                               :dropdown? false)))]))
           {:modal-class (util/hiccup->class
                          "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
          values-cp))
@@ -581,7 +602,7 @@
        [:div.opacity-50.pointer.text-sm {:on-click #(reset! *add-new-item? true)}
         "Empty"]
 
-       (and (rum/react *show-add?) row? (not config/publishing?))
+       (and (rum/react *show-add?) row? (not select-type?) (not config/publishing?))
        [:a.add-button-link.flex {:on-click #(reset! *add-new-item? true)}
         (ui/icon "circle-plus")])]))
 

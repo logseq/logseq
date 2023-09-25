@@ -237,10 +237,15 @@
   @apply rounded-sm;
 
   padding: 5px 8px;
+  padding-bottom: 1.5rem;
   margin: 0 -6px;
 
   &.title {
     margin-bottom: 12px;
+  }
+
+  h1.title {
+    margin-bottom: 0;
   }
 
   .edit-input {
@@ -267,6 +272,7 @@ a.page-title {
   transition: none;
   display: block;
   color: inherit;
+  margin-bottom: 0;
 }
 
 .page-title-sizer-wrapper {
