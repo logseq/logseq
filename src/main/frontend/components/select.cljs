@@ -81,6 +81,11 @@
                         (remove nil?))
         exact-match? (contains? (set (map (comp string/lower-case str extract-fn) search-result'))
                                 (string/lower-case @input))
+        search-result' (if multiple-choices?
+                         (sort-by (fn [item]
+                                    (not (contains? @*selected-choices (:value item))))
+                                  search-result')
+                         search-result')
         search-result (if (and show-new-when-not-exact-match?
                                (not exact-match?)
                                (not (string/blank? @input))
