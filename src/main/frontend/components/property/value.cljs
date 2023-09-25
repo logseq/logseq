@@ -96,7 +96,7 @@
       :initial-open? (when *add-new-item? @*add-new-item?)})))
 
 (defn- select-page
-  [block property {:keys [classes multiple-values?] :as opts}]
+  [block property {:keys [classes multiple-values? on-chosen] :as opts}]
   (let [repo (state/get-current-repo)
         pages (->>
                (if (seq classes)
@@ -339,7 +339,8 @@
                                 editor-id dom-id row?
                                 editor-box editor-args
                                 editing? *add-new-item?
-                                blocks-container-id]
+                                blocks-container-id
+                                on-chosen]
                          :as opts}]
   (let [property (model/sub-block (:db/id property))
         repo (state/get-current-repo)
@@ -350,7 +351,8 @@
         editing? (or editing? (state/sub-editing? editor-id))
         select-opts {:on-chosen (fn []
                                   ;; (when *configure-show? (reset! *configure-show? false))
-                                  (when *add-new-item? (reset! *add-new-item? false)))}]
+                                  (when *add-new-item? (reset! *add-new-item? false))
+                                  (when on-chosen (on-chosen)))}]
     (case type
       :date
       (date-picker block property value *add-new-item?)
@@ -467,9 +469,13 @@
                 (not @*add-new-item?))
        (delete-value-button entity property item))]))
 
-(rum/defcs multiple-values <
-  (rum/local false ::add-new-item?)
-  (rum/local false ::show-add?)
+(rum/defcs multiple-values < rum/reactive
+  {:init (fn [state]
+           (assoc state
+                  ::add-new-item?
+                  (atom (boolean (:add-new-item? (nth (:rum/args state) 3))))
+                  ::show-add?
+                  (atom (boolean (:show-add? (nth (:rum/args state) 3))))))}
   [state block property v opts dom-id schema editor-id editor-args]
   (let [*show-add? (::show-add? state)
         *add-new-item? (::add-new-item? state)
@@ -504,7 +510,7 @@
            dom-id')))
 
      (cond
-       @*add-new-item?
+       (rum/react *add-new-item?)
        (property-scalar-value block property ""
                               (merge
                                opts
@@ -519,7 +525,7 @@
        [:div.opacity-50.pointer.text-sm {:on-click #(reset! *add-new-item? true)}
         "Empty"]
 
-       (and @*show-add? row? (not config/publishing?))
+       (and (rum/react *show-add?) row? (not config/publishing?))
        [:a.add-button-link.flex {:on-click #(reset! *add-new-item? true)}
         (ui/icon "circle-plus")])]))
 
