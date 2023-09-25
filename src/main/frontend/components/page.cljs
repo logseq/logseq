@@ -532,17 +532,18 @@
     [:div.ls-page-properties.mb-4 {:style {:padding 2}}
      (let [edit-input-id-prefix (str "edit-block-" (:block/uuid page))]
        (if (and configure? class?)
-         [:div
+         [:<>
           [:div.text-sm.opacity-70.font-medium.mb-2 "Properties:"]
           (component-block/db-properties-cp {:editor-box editor/box}
                                             page
                                             (str edit-input-id-prefix "-page")
                                             (assoc opts :class-schema? false))
-          [:div.text-sm.opacity-70.font-medium.mb-2 "Class Properties:"]
-          (component-block/db-properties-cp {:editor-box editor/box}
+          [:div.text-sm.opacity-70.font-medium.mt-4.mb-2 "Class Properties:"]
+          [:div
+           (component-block/db-properties-cp {:editor-box editor/box}
                                             page
                                             (str edit-input-id-prefix "-schema")
-                                            (assoc opts :class-schema? true))]
+                                            (assoc opts :class-schema? true))]]
          (component-block/db-properties-cp {:editor-box editor/box}
                                            page
                                            (str edit-input-id-prefix "-page")

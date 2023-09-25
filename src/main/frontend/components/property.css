@@ -24,13 +24,17 @@
 
 .ls-page-properties > .ls-properties-area {
     margin-left: -22px;
+
+    .ls-new-property {
+        margin-left: 22px;
+    }
 }
 
 .ls-block .ls-properties-area {
     margin-left: 0;
 }
 
-.property-pair, .property-block .property-value, .ls-page-properties > .ls-properties-area .ls-new-property {
+.ls-block .property-pair, .property-block .property-value {
     padding-left: 22px;
 }
 
@@ -43,7 +47,7 @@
 
     .property-pair {
         @apply grid grid-cols-5 gap-1;
-        grid-template-columns: repeat(auto-fit, 120px);
+        /* grid-template-columns: repeat(auto-fit, 120px); */
     }
 
     .add-button-link {
@@ -124,7 +128,7 @@ input.simple-input:focus {
     }
 }
 
-.property-key .bullet-container .bullet {
+.property-key .bullet-container .bullet, .ls-property-input .bullet-container .bullet {
     background-color: darkgrey;
 }
 
@@ -164,6 +168,16 @@ input.simple-input:focus {
     .cp__select-input {
         @apply px-4 py-2;
     }
+}
+
+.ls-property-add {
+    .cp__select-input {
+        padding: 0;
+    }
+}
+
+.ls-property-input {
+    min-height: 1.5em;
 }
 
 .page-title .page-tags {
