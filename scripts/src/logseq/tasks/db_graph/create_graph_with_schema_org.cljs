@@ -40,8 +40,8 @@
         ;; Update refs to renamed classes
         regex (re-pattern (str "\\[\\[(" (string/join "|" (keys renamed-classes)) ")\\]\\]"))
         desc (string/replace desc* regex #(str "[[" (get renamed-classes (second %)) "]]"))]
-    ;; Fix links to schema website docs
-    (string/replace desc #"\(/docs" "(https://schema.org/docs")))
+    ;; Fix markdown and html links to schema website docs
+    (string/replace desc #"(\(|\")/docs" "$1https://schema.org/docs")))
 
 (defn- strip-schema-prefix [s]
   (string/replace-first s "schema:" ""))

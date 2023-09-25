@@ -20,7 +20,7 @@
     [:block/uuid :uuid]
     [:block/name {:optional true} :string]
     [:block/original-name {:optional true} :string]
-    [:block/type {:optional true} :any] ;;TODO
+    [:block/type {:optional true} [:enum "property" "class" "object" "whiteboard"]]
     [:block/content {:optional true} :string]
     [:block/properties {:optional true}
      [:map-of :uuid [:or
@@ -30,7 +30,9 @@
                      :uuid
                      :map
                      [:vector [:or :keyword :uuid]]
-                     [:set :uuid]]]]
+                     [:set :uuid]
+                     [:set :string]
+                     [:set :int]]]]
     [:block/created-at {:optional true} :int]
     [:block/updated-at {:optional true} :int]
     ;; refs
@@ -79,8 +81,9 @@
                                 client-db-schema)
                  client-db-schema)]
     (if-let [errors (->> ent-maps
-                        (m/explain schema)
-                        :errors)]
+                         vals
+                         (m/explain schema)
+                         :errors)]
      (do
        (println "Found" (count errors) "errors:")
        (pprint/pprint errors)
@@ -93,8 +96,7 @@
   (->> datoms
        (reduce (fn [acc m]
                  (update acc (:e m) assoc (:a m) (:v m)))
-               {})
-       vals))
+               {})))
 
 (def spec
   "Options spec"
