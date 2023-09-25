@@ -18,7 +18,7 @@
 (defn set-block-property!
   [repo block-id key v & opts]
   (if (config/db-based-graph? repo)
-    (if (nil? v)
+    (if (or (nil? v) (and (coll? v) (empty? v)))
       (db-property-handler/remove-block-property! repo block-id key)
       (db-property-handler/set-block-property! repo block-id key v opts))
     (file-property/set-block-property! block-id key v)))

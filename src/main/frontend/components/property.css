@@ -129,7 +129,7 @@ input.simple-input:focus {
 }
 
 /* TODO:  */
-.page-add-tags, .page-title {
+.page-add-tags, .page-tags, .page-title, .property-select {
     .cp__select-main {
         width: fit-content;
         margin: 0;
