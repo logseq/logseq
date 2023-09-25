@@ -1149,7 +1149,7 @@
                                              (or (boolean journal?)
                                                  (= false (boolean (:block/journal? %))))
                                              (or (boolean whiteboard?)
-                                                 (contains? (:block/type %) "whiteboard"))))
+                                                 (not (contains? (:block/type %) "whiteboard")))))
                                    (sort-pages-by sort-by-item desc?)))))
            (reset! *pages pages)))
 
