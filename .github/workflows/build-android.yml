@@ -43,7 +43,7 @@ on:
 env:
   CLOJURE_VERSION: '1.10.1.763'
   NODE_VERSION: '18'
-  JAVA_VERSION: '11'
+  JAVA_VERSION: '17'
 
 jobs:
   build-apk:
