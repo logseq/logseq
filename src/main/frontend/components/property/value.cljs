@@ -96,7 +96,8 @@
       :initial-open? (when *add-new-item? @*add-new-item?)})))
 
 (defn- select-page
-  [block property {:keys [classes multiple-choices?] :as opts}]
+  [block property {:keys [classes multiple-choices? dropdown?] :as opts
+                   :or {dropdown? true}}]
   (let [repo (state/get-current-repo)
         tags-or-alias? (contains? #{"tags" "alias"} (:block/name property))
         selected-choices (if tags-or-alias?
@@ -122,7 +123,7 @@
               {:multiple-choices? multiple-choices?
                :items options
                :selected-choices selected-choices
-               :dropdown? true
+               :dropdown? dropdown?
                :input-default-placeholder (if multiple-choices?
                                             "Choose pages"
                                             "Choose page")
@@ -142,8 +143,7 @@
                                  results))
                :input-opts (fn [_]
                              {:on-blur (fn []
-                                         (exit-edit-property)
-                                         (when-let [f (:on-chosen opts)] (f)))
+                                         (exit-edit-property))
                               :on-key-down
                               (fn [e]
                                 (case (util/ekey e)
@@ -548,18 +548,19 @@
                                (toggle-fn))
               :class "flex flex-1 flex-row items-center flex-wrap gap-2"}
              values-cp])
-          (fn [{:keys [toggle-fn]}]
+          (fn [{:keys [_toggle-fn]}]
             (let [select-opts {:on-chosen (fn []
                                             (when *add-new-item? (reset! *add-new-item? false))
-                                            (when on-chosen (on-chosen))
-                                            (toggle-fn))}]
+                                            (when on-chosen (on-chosen)))}]
               [:div.property-select
                (if (= type :page)
                 (select-page block property (assoc select-opts
                                                    :classes (:classes schema)
-                                                   :multiple-choices? true))
+                                                   :multiple-choices? true
+                                                   :dropdown? false))
                 (select block property (assoc select-opts
-                                              :multiple-choices? true)))]))
+                                              :multiple-choices? true
+                                              :dropdown? false)))]))
           {:modal-class (util/hiccup->class
                          "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
          values-cp))

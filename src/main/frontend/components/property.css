@@ -129,7 +129,7 @@ input.simple-input:focus {
 }
 
 /* TODO:  */
-.page-add-tags, .page-tags, .page-title, .property-select {
+.page-add-tags, .page-tags, .property-select {
     .cp__select-main {
         width: fit-content;
         margin: 0;
@@ -140,6 +140,10 @@ input.simple-input:focus {
             .dropdown-wrapper {
                 left: 0;
             }
+        }
+
+        .item-results-wrap {
+            max-height: calc(var(--palettle-container-height) - var(--palettle-input-height) - 66px);
         }
     }
 
@@ -159,6 +163,12 @@ input.simple-input:focus {
 
     .cp__select-input {
         padding: 0;
+    }
+}
+
+.page-tags {
+    .cp__select-input {
+        @apply px-4 py-2;
     }
 }
 
