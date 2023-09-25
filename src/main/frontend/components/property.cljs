@@ -164,14 +164,13 @@
                          :on-change (fn []
                                       (swap! *property-schema assoc :cardinality (if many? :one :many)))}))])
 
-      (when-not built-in-property?
-        (let [hide? (:hide? @*property-schema)]
-          [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-           [:label "Hide by default:"]
-           (ui/checkbox {:checked hide?
-                         :disabled disabled?
-                         :on-change (fn []
-                                      (swap! *property-schema assoc :hide? (not hide?)))})]))
+      (let [hide? (:hide? @*property-schema)]
+        [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+         [:label "Hide by default:"]
+         (ui/checkbox {:checked hide?
+                       :disabled disabled?
+                       :on-change (fn []
+                                    (swap! *property-schema assoc :hide? (not hide?)))})])
 
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label "Description:"]

@@ -10,7 +10,8 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.db :as db]
             [frontend.modules.outliner.tree :as outliner-tree]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.handler.property.util :as pu]))
 
 (defn loaded? []
   js/window.Reveal)
@@ -23,7 +24,9 @@
              (update-keys
               properties
               (fn [k]
-                (-> (str "data-" (name k))
+                (-> (str "data-" (if (config/db-based-graph? (state/get-current-repo))
+                                   (pu/get-property-name k)
+                                   (name k)))
                     (string/replace "data-data-" "data-")))))
       m)))
 

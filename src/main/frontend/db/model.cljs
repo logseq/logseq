@@ -174,13 +174,16 @@
       ;; may be a case that a user added same alias into multiple pages.
       ;; only return the first result for idiot-proof
       (when (seq pages)
-        (some (fn [page]
-                (let [aliases (->> (get-in page [:block/properties :alias])
-                                   (map util/page-name-sanity-lc)
-                                   set)]
-                  (when (contains? aliases alias)
-                    page)))
-              pages)))))
+        (if (config/db-based-graph? repo)
+          ;; Just pick first one. No need to re-confirm query
+          (first pages)
+          (some (fn [page]
+                  (let [aliases (->> (get-in page [:block/properties :alias])
+                                     (map util/page-name-sanity-lc)
+                                     set)]
+                    (when (contains? aliases alias)
+                      page)))
+                pages))))))
 
 (defn get-files
   [repo]
@@ -1130,7 +1133,7 @@ independent of format as format specific heading characters are stripped"
   [page-name]
   (:block/journal? (db-utils/entity [:block/name page-name])))
 
-;; FIXME: replace :template with id
+;; This is a file graph only feature
 (defn get-all-templates
   []
   (let [pred (fn [_db properties]
@@ -1191,6 +1194,7 @@ independent of format as format specific heading characters are stripped"
             %)
          refs)))
 
+;; FIXME: property values for db version
 (defn get-property-values
   [property]
   (let [pred (fn [_db properties text-properties]
