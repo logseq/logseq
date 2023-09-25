@@ -28,7 +28,7 @@
     [rum.core :as rum]))
 
 (def GROUP-LIMIT 5)
-(def FILTER-ROW-HEIGHT 73)
+(def FILTER-ROW-HEIGHT 81)
 
 ;; When CMDK opens, we have some default search actions we make avaialbe for quick access
 (def default-search-actions 
@@ -112,7 +112,9 @@
                           (map #(hash-map :icon (if (= :page (:type %)) "page" "history")
                                           :icon-theme :gray 
                                           :text (:data %)
-                                          :source-recent %)))
+                                          :source-recent %
+                                          :source-page (when (= :page (:type %)) (:data %))
+                                          :source-search (when (= :search (:type %)) (:data %)))))
         command-items (->> (cp-handler/top-commands 1000) 
                            (map #(hash-map :icon "command" 
                                            :icon-theme :gray 
@@ -236,7 +238,9 @@
                                      :icon-theme :gray 
                                      ; :header (when-let [page-name])
                                      :text (:data %)
-                                     :source-recent %)))]
+                                     :source-recent %
+                                     :source-page (when (= :page (:type %)) (:data %))
+                                     :source-search (when (= :search (:type %)) (:data %)))))]
       (swap! !results assoc group {:status :success :items items}))))
       
     ; (swap! !results assoc group {:status :success :items recent-items})))
@@ -310,6 +314,21 @@
     (editor-handler/open-block-in-sidebar! block-uuid)
     (close-unless-alt! state)))
 
+(defmethod handle-action :open [_ state event]
+  (js/console.log "open" (some-> state state->highlighted-item clj->js))
+  (when-let [item (some-> state state->highlighted-item)]
+    (let [shift? @(::shift? state)
+          page? (boolean (:source-page item))
+          block? (boolean (:source-block item))
+          search? (boolean (:source-search item))]
+      (js/console.log "open" page? block? search? shift?)
+      (cond 
+        (and shift? block?) (handle-action :open-block-right state event)
+        (and shift? page?) (handle-action :open-page-right state event)
+        search? (js/alert "TODO: implement search autofill")
+        block? (handle-action :open-block state event)
+        page? (handle-action :open-page state event)))))
+
 (defmethod handle-action :trigger [_ state event]
   (when-let [action (some-> state state->highlighted-item :source-command :action)]
     (action)
@@ -350,7 +369,7 @@
                                  (.indexOf items highlighted-item))
                                (when (< (dec GROUP-LIMIT) (.indexOf items highlighted-item))
                                  (reset! (::highlighted-item state) (nth items 4 nil))))] 
-    [:div {:class ""}
+    [:div {:class "border-b border-gray-07"}
      [:div {:class "text-xs py-1.5 px-6 flex justify-between items-center gap-2 text-gray-11 bg-gray-02"} 
       [:div {:class "font-bold text-gray-11"} title]
       (when (not= group :create)
@@ -390,6 +409,7 @@
                                                 :pages          (reset! (::actions state) [:close :copy-page-ref :open-page-right :open-page])
                                                 :blocks         (reset! (::actions state) [:close :copy-block-ref :open-block-right :open-block])
                                                 :create         (reset! (::actions state) [:close :create])
+                                                :recents        (reset! (::actions state) [:close :open])
                                                 (reset! (::actions state) [:close]))))
                        (make-shui-context)))]]))
 
@@ -431,9 +451,9 @@
         "ArrowDown" (move-highlight state 1)
         "ArrowUp"   (move-highlight state -1)
         "Enter" (if shift?
-                  (when-let [action (some #{:open-block-right :open-page-right} @(::actions state))]
+                  (when-let [action (some #{:open-block-right :open-page-right :open} @(::actions state))]
                     (handle-action action state e))
-                  (when-let [action (some #{:open-block :open-page :filter :trigger :create} @(::actions state))]
+                  (when-let [action (some #{:open-block :open-page :filter :trigger :create :open} @(::actions state))]
                     (handle-action action state e)))
         "Escape" (when (seq @(::input state))
                    (.preventDefault e)
@@ -496,25 +516,28 @@
     (str "Search " (name group))))
 
 (rum/defc filter-row [state filter]
-  [:div {:class "py-3 border-b flex flex-col gap-2" 
-         :style {:background "var(--lx-gray-02)" 
-                 :border-color "var(--lx-gray-07)"}}
+  [:div {:class "pt-3 border-b flex flex-col gap-2 bg-gray-02 border-gray-07" 
+         :style {:height (- FILTER-ROW-HEIGHT 4)}} 
    [:div {:class "text-xs font-bold px-6"} "Filters"]
-   [:div {:class "flex items-center gap-2"}
-    [:div {:class "w-4 h-1"}]
+   [:div {:class "flex items-center gap-2 overflow-x-auto pb-3"}
+    [:div {:class "w-4 h-1 shrink-0"}]
     (for [group [:recents :commands :pages :whiteboards :blocks]]
-      (if (= (:group filter) group)
-        [:div {:class "text-xs py-0.5 px-1.5 rounded bg-accent-06 hover:bg-accent-07 hover:cursor-pointer"
-               :on-click #(swap! (::filter state) dissoc :group)}
+      (if (or (nil? (:group filter)) (= (:group filter) group))
+        [:div {:class "text-xs py-0.5 px-1.5 rounded bg-gray-07 hover:bg-gray-08 hover:cursor-pointer shrink-0"
+               :on-click (if (= (:group filter) group) 
+                           #(swap! (::filter state) dissoc :group)
+                           #(swap! (::filter state) assoc :group group))}
           (print-group-name group)]
-        [:div {:class "text-xs py-0.5 px-1.5 rounded bg-gray-06 hover:bg-gray-07 hover:cursor-pointer"
+        [:div {:class "text-xs py-0.5 px-1.5 rounded bg-gray-06 hover:bg-gray-07 opacity-50 hover:opacity-75 hover:cursor-pointer shrink-0"
                :on-click #(swap! (::filter state) assoc :group group)}
-          (print-group-name group)]))]])
+          (print-group-name group)]))
+    [:div {:class "w-2 h-1 shrink-0"}]]])
 
 (rum/defc input-row 
   [state all-items]
   (let [highlighted-item @(::highlighted-item state)
-        input @(::input state)]
+        input @(::input state)
+        input-ref (::input-ref state)]
     ;; use-effect [results-ordered input] to check whether the highlighted item is still in the results,
     ;; if not then clear that puppy out!
     ;; This was moved to a fucntional component
@@ -525,12 +548,15 @@
     (rum/use-effect! (fn [] 
                        (load-results :default state))
                      [])
+    (rum/use-effect! (fn [] 
+                       (js/setTimeout #(when (some-> input-ref deref) (.focus @input-ref)) 0))
+                     [])
     [:div {:class ""
            :style {:background "var(--lx-gray-02)"
                    :border-bottom "1px solid var(--lx-gray-07)"}}
      [:input {:class "text-xl bg-transparent border-none w-full outline-none px-4 py-3" 
               :placeholder "What are you looking for?"
-              :ref #(when % (.focus %))
+              :ref #(reset! input-ref %)
               :on-change (partial handle-input-change state)
               :value input}]]))
 
@@ -548,6 +574,7 @@
   (rum/local nil ::load-results-throttled)
   (rum/local [:close :filter] ::actions) 
   (rum/local nil ::scroll-container-ref)
+  (rum/local nil ::input-ref)
   {:did-mount (fn [state] 
                 (let [next-keydown-handler (partial keydown-handler state)
                       next-keyup-handler (partial keyup-handler state)]
@@ -597,7 +624,6 @@
      (input-row state all-items)
      [:div {:class (str "grid" (if preview? " grid-cols-2" " grid-cols-1"))}
       [:div {:class "pt-1 overflow-y-auto h-96"
-             :id "bendy"
              :ref #(when % (some-> state ::scroll-container-ref (reset! %))) 
              :style {:background "var(--lx-gray-02)"}}
        (filter-row state filter)
@@ -606,7 +632,7 @@
              :when (if-not group-filter true (= group-filter group-key))]
          (result-group state group-name group-key group-items first-item))]
       (when preview?
-       [:div {:class "h-96 overflow-y-auto"} 
+       [:div {:class "h-96 overflow-y-auto bg-gray-01 dark:bg-gray-02 border-l border-gray-07"} 
         (cond 
          (:source-page highlighted-item)
          (page-preview state highlighted-item)
@@ -631,8 +657,8 @@
              :let [on-click (partial handle-action action state)
                    str-alt #(if alt? (str % " (keep open)") %)]
              :when (if shift? 
-                     (#{:open-page-right :open-block-right :trigger :filter :close} action) 
-                     (#{:open-page :open-block :copy-page-ref :copy-block-ref :trigger :filter :close :create} action))]
+                     (#{:open-page-right :open-block-right :trigger :filter :close :open} action) 
+                     (#{:open-page :open-block :copy-page-ref :copy-block-ref :trigger :filter :close :create :open} action))]
          (case action
            :copy-page-ref    (shui/button {:text (str-alt "Copy")             :theme :gray  :on-click on-click :shortcut ["cmd" "c"]} (make-shui-context)) 
            :copy-block-ref   (shui/button {:text (str-alt "Copy")             :theme :gray  :on-click on-click :shortcut ["cmd" "c"]} (make-shui-context)) 
@@ -640,6 +666,7 @@
            :open-page        (shui/button {:text (str-alt "Open")             :theme :color :on-click on-click :shortcut ["return"]} (make-shui-context))  
            :open-block-right (shui/button {:text (str-alt "Open in sidebar")  :theme :color :on-click on-click :shortcut ["return"]} (make-shui-context))
            :open-block       (shui/button {:text (str-alt "Open page")        :theme :color :on-click on-click :shortcut ["return"]} (make-shui-context))  
+           :open             (shui/button {:text (str-alt "Open")             :theme :color :on-click on-click :shortcut ["return"]} (make-shui-context))
            :trigger          (shui/button {:text (str-alt "Trigger")          :theme :color :on-click on-click :shortcut ["return"]} (make-shui-context))  
            :create           (shui/button {:text "Create"                     :theme :color :on-click on-click :shortcut ["return"]} (make-shui-context))
            :close            (shui/button {:text "Close"                      :theme :text  :on-click on-click} (make-shui-context))

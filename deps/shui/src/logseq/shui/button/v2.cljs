@@ -31,13 +31,13 @@
        (for [key shortcut]
          [:div.shui__button-shortcut-key
           (case key 
-            "cmd" (icon/root "command") 
-            "shift" (icon/root "arrow-big-top")
-            "return" (icon/root "arrow-back")
+            "cmd" [:div "⌘"]
+            "shift" [:div "⇧"]
+            "return" [:div "↵"]
             "esc" [:div.tracking-tightest {:style {:transform "scaleX(0.8) scaleY(1.2) " 
                                                    :font-size "0.5rem" 
                                                    :font-weight "500"}} "ESC"]
-            key)]))]))
+            (.toUpperCase key))]))]))
           
      
    
