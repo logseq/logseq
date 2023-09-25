@@ -47,7 +47,7 @@
   [repo page-db-id outliner-op]
   (let [page-block (db/pull repo '[*] page-db-id)
         page-db-id (:db/id page-block)
-        whiteboard? (= "whiteboard" (:block/type page-block))
+        whiteboard? (contains? (:block/type page-block) "whiteboard")
         blocks-count (model/get-page-blocks-count repo page-db-id)
         blocks-just-deleted? (and (zero? blocks-count)
                                   (contains? #{:delete-blocks :move-blocks} outliner-op))]

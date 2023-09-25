@@ -358,16 +358,16 @@
                      (state/set-modal! #(property/property-config repo property {})))}
         (t :context-menu/configure-property)
         nil))
-    (ui/menu-link
-     {:key "Delete this property"
-      :on-click (fn []
-                  (let [class? (= "class" (:block/type block))
-                        f (if (and class? class-schema?)
-                            property-handler/class-remove-property!
-                            property-handler/remove-block-property!)]
-                    (f repo (:block/uuid block) (:block/uuid property))))}
-     (t :context-menu/delete-property)
-     nil)]))
+     (ui/menu-link
+      {:key "Delete this property"
+       :on-click (fn []
+                   (let [class? (contains? (:block/type block) "class")
+                         f (if (and class? class-schema?)
+                             property-handler/class-remove-property!
+                             property-handler/remove-block-property!)]
+                     (f repo (:block/uuid block) (:block/uuid property))))}
+      (t :context-menu/delete-property)
+      nil)]))
 
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after

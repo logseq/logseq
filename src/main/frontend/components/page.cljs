@@ -331,7 +331,7 @@
                          (when (and (not hls-page?)
                                     (not fmt-journal?)
                                     (not config/publishing?)
-                                    (not (and (= "property" (:block/type page))
+                                    (not (and (contains? (:block/type page) "property")
                                               (contains? db-property/built-in-properties-keys-str page-name))))
                            (reset! *input-value (if untitled? "" old-name))
                            (reset! *edit? true)))))}
@@ -441,31 +441,11 @@
   [state page {:keys [journal?]}]
   (let [page-id (:db/id page)
         page (when page-id (db/sub-block page-id))
-        type (:block/type page)
-        class? (= type "class")
+        types (:block/type page)
+        class? (contains? types "class")
         parent-changed? (::parent-changed? state)]
     (when page
       [:div.property-configure.grid.gap-2
-       (when (and (not journal?)
-                  (if config/publishing?
-                    ;; Looks weird in read-only to show blank block type
-                    (contains? #{"property" "class"} type)
-                    (contains? #{"property" "class" nil} type)))
-         [:div.grid.grid-cols-4.gap-1
-          [:div.col-span-1 "Block type:"]
-          [:div.col-span-1
-           (ui/select (->> ["" "class" "property"]
-                           (map (fn [block-type]
-                                  {:label (if (seq block-type) (string/capitalize block-type) "Choose a block type")
-                                   :selected (= block-type type)
-                                   :disabled config/publishing?
-                                   :value block-type})))
-                      (fn [_e value]
-                        (if (seq value)
-                          (db/transact! [{:db/id (:db/id page)
-                                          :block/type value}])
-                          (db/transact! [[:db/retract (:db/id page) :block/type]]))))]])
-
        (when class?
          [:div.grid.grid-cols-4.gap-1.items-center.class-parent
           [:div.col-span-1 "Parent class:"]
@@ -505,13 +485,13 @@
                                  [:span class-name]
                                  [:a {:on-click #(route-handler/redirect-to-page! class-name)} class-name]))
                              class-ancestors)))]])
-       (when (and config/publishing? (= type "property"))
+       (when (and config/publishing? (contains? types "property"))
          (property/property-config (state/get-current-repo) page {}))])))
 
 (rum/defc page-properties < rum/reactive
   [page *configure-show?]
-  (let [type (:block/type page)
-        class? (= type "class")
+  (let [types (:block/type page)
+        class? (contains? types "class")
         configure? (rum/react *configure-show?)
         opts {:selected? false
               :page-configure? configure?}]
@@ -556,17 +536,17 @@
       (db/entity [:block/name page-name]))))
 
 (if config/publishing?
-    (defn- page-inner-init [state]
+  (defn- page-inner-init [state]
       ;; Duplicated from component
-      (let [repo (or (:repo (first (:rum/args state))) (state/get-current-repo))
-            path-page-name (get-path-page-name state (:page-name (first (:rum/args state))))
-            page-ent (some->> path-page-name util/page-name-sanity-lc (get-page-entity repo path-page-name))
+    (let [repo (or (:repo (first (:rum/args state))) (state/get-current-repo))
+          path-page-name (get-path-page-name state (:page-name (first (:rum/args state))))
+          page-ent (some->> path-page-name util/page-name-sanity-lc (get-page-entity repo path-page-name))
             ;; Only make class + property pages reader friendly by default as they usually have no content
-            default-configure (contains? #{"class" "property"} (:block/type page-ent))]
-        (assoc state ::configure-show? (atom default-configure))))
+          default-configure? (boolean (some #{"class" "property"} (:block/type page-ent)))]
+      (assoc state ::configure-show? (atom default-configure?))))
 
-    (defn- page-inner-init [state]
-      (assoc state ::configure-show? (atom false))))
+  (defn- page-inner-init [state]
+    (assoc state ::configure-show? (atom false))))
 
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive db-mixins/query
@@ -586,7 +566,7 @@
           block? (some? (:block/page page))
           journal? (db/journal-page? page-name)
           db-based? (config/db-based-graph? repo)
-          built-in-property? (and (= "property" (:block/type page))
+          built-in-property? (and (contains? (:block/type page) "property")
                                   (contains? db-property/built-in-properties-keys-str page-name))
           fmt-journal? (boolean (date/journal-title->int page-name))
           whiteboard? (:whiteboard? option) ;; in a whiteboard portal shape?
@@ -639,7 +619,7 @@
                   (plugins/hook-ui-items :pagebar)]))])
 
           (when (and db-based? configure-show?)
-            (if (and (= "property" (:block/type page)) (not config/publishing?))
+            (if (and (contains? (:block/type page) "property") (not config/publishing?))
               (do
                 (state/set-modal! #(property/property-config repo page {}))
                 (swap! *configure-show? not))
@@ -1168,7 +1148,7 @@
                                              (or (boolean journal?)
                                                  (= false (boolean (:block/journal? %))))
                                              (or (boolean whiteboard?)
-                                                 (not= "whiteboard" (:block/type %)))))
+                                                 (contains? (:block/type %) "whiteboard"))))
                                    (sort-pages-by sort-by-item desc?)))))
            (reset! *pages pages)))
 

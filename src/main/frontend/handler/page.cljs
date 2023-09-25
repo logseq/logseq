@@ -480,10 +480,10 @@
   "If a page is unable to delete, returns a map with more information. Otherwise returns nil"
   [repo page]
   (cond
-    (and (= "class" (:block/type page))
+    (and (contains? (:block/type page) "class")
          (seq (model/get-tag-blocks repo (:block/name page))))
     {:msg "Unable to delete this page because blocks are tagged with this page"}
-    (= "property" (:block/type page))
+    (contains? (:block/type page) "property")
     {:msg "Unable to delete this page because this page is a property"}))
 
 (defn delete!
@@ -981,7 +981,7 @@
                        (gp-config/draw? name)
                        (db/built-in-pages-names (string/upper-case name))
                        (db-property/built-in-properties-keys-str name)
-                       (contains? #{"macro"} (:block/type p))))))
+                       (contains? (:block/type p) "macro")))))
        (common-handler/fix-pages-timestamps)))
 
 (defn get-filters

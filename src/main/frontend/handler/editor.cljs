@@ -1219,7 +1219,7 @@
   [block value opts]
   (let [entity (db/entity [:block/uuid (:block/uuid block)])]
     (when (and (:db/id entity)
-               (not (contains? #{"property"} (:block/type entity))))
+               (not (contains? (:block/type entity) "property")))
       (let [value (string/trim value)]
         ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
         ;; maybe we shouldn't save the block/file in "will-unmount" event?

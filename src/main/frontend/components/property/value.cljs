@@ -40,7 +40,7 @@
   ([block property-key property-value {:keys [exit-edit? class-schema?]
                                        :or {exit-edit? true}}]
    (let [repo (state/get-current-repo)
-         class? (= (:block/type block) "class")]
+         class? (contains? (:block/type block) "class")]
      (when property-key
        (if (and class? class-schema?)
          (property-handler/class-add-property! repo (:block/uuid block) property-key)

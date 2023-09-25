@@ -145,9 +145,9 @@
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
   "uri-encoded? - if is true, apply URL decode on the file path
-   options - 
+   options -
      :extracted-block-ids - An atom that contains all block ids that have been extracted in the current page (not yet saved to db)
-     :resolve-uuid-fn - Optional fn which is called to resolve uuids of each block. Enables diff-merge 
+     :resolve-uuid-fn - Optional fn which is called to resolve uuids of each block. Enables diff-merge
        (2 ways diff) based uuid resolution upon external editing.
        returns a list of the uuids, given the receiving ast, or nil if not able to resolve.
        Implemented in file-common-handler/diff-merge-uuids for IoC
@@ -169,7 +169,7 @@
                       (vec))
           ref-pages (atom #{})
           blocks (map (fn [block]
-                        (if (contains? #{"macro"} (:block/type block))
+                        (if (contains? (:block/type block) "macro")
                           block
                           (let [block-ref-pages (seq (:block/refs block))
                                 page-lookup-ref [:block/name page-name]
