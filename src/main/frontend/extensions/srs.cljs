@@ -93,6 +93,7 @@
 ;;; ================================================================
 ;;; utils
 
+;; FIXME: All uses of properties in this namespace for db
 (defn- get-block-card-properties
   [block]
   (when-let [properties (:block/properties block)]
