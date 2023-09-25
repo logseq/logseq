@@ -377,6 +377,7 @@
                 :aria-label (t :right-side-bar/separator)
                 :aria-valuemin (* min-ratio 100)
                 :aria-valuemax (* max-ratio 100)
+                :aria-valuenow 50
                 :tabIndex "0"
                 :data-expanded sidebar-open?}]))
 
