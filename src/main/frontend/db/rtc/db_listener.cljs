@@ -59,10 +59,9 @@
                              :update-page ["update-page" {:block-uuid block-uuid}]
                              :remove-page ["remove-page" {:block-uuid (str (second op))}])))
                        ops)]
-        (prn ::ops ops* attr->datom)
         ops*))))
 
-(defn- rtc-ops-handler
+(defn- generate-rtc-ops
   [repo datoms]
   (let [same-entity-datoms-coll (->> datoms
                                      (map vec)
@@ -77,4 +76,4 @@
   (d/listen! conn :gen-ops
              (fn [{:keys [tx-data tx-meta]}]
                (when (:persist-op? tx-meta true)
-                 (rtc-ops-handler repo tx-data)))))
+                 (generate-rtc-ops repo tx-data)))))
