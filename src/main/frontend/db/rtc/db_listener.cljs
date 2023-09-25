@@ -2,87 +2,73 @@
   "listen datascript changes, infer operations from the db tx-report"
   (:require [datascript.core :as d]
             [frontend.db :as db]
-            [frontend.db.rtc.op :as op]))
+            [frontend.db.rtc.op :as op]
+            [clojure.set :as set]))
 
-(defn- gen-block-ops
-  [repo same-entity-datoms]
-  (when (seq same-entity-datoms)
-    (let [ops (reduce (fn [r [_e a v _t add?]]
-                        (cond
-                          (and add? (contains? #{:block/left :block/parent} a))
-                          (conj r :move)
 
-                          (and add? (contains? #{:block/content} a))
-                          (conj r :update)
+(defn- entity-datoms=>attr->datom
+  [entity-datoms]
+  (reduce
+   (fn [m datom]
+     (let [[_e a _v t _add?] datom]
+       (if-let [[_e _a _v old-t _old-add?] (get m a)]
+         (if (< old-t t)
+           (assoc m a datom)
+           m)
+         (assoc m a datom))))
+   {} entity-datoms))
 
-                          ;; :block/alias is card-many,
-                          ;; not matter add? is true or false, consider as update
-                          (contains? #{:block/alias} a)
-                          (conj r :update)
+(defn- entity-datoms=>ops
+  [repo entity-datoms]
+  (let [attr->datom (entity-datoms=>attr->datom entity-datoms)]
+    (when (seq attr->datom)
+      (let [updated-key-set (set (keys attr->datom))
+            e (some-> attr->datom first second first)
+            {[_e _a block-uuid _t add1?] :block/uuid
+             [_e _a _v _t add2?]  :block/name
+             [_e _a _v _t add3?]  :block/parent
+             [_e _a _v _t add4?]  :block/left
+             [_e _a _v _t _add5?] :block/alias
+             [_e _a _v _t _add6?] :block/type
+             [_e _a _v _t _add7?] :block/schema
+             [_e _a _v _t _add8?] :block/content} attr->datom
+            ops (cond
+                  (and (not add1?) block-uuid
+                       (not add2?) (contains? updated-key-set :block/name))
+                  [[:remove-page block-uuid]]
 
-                          (and (not add?) (= :block/uuid a))
-                          (reduced #{{:remove v}})
+                  (and (not add1?) block-uuid)
+                  [[:remove block-uuid]]
 
-                          :else r))
-                      #{} same-entity-datoms)]
-      (when (seq ops)
-        (if-let [removed-block-uuid (:remove (first ops))]
-          [["remove" {:block-uuids [(str removed-block-uuid)]}]]
-          (let [e (ffirst same-entity-datoms)]
-            (when-let [block-uuid (:block/uuid (db/entity repo e))]
-              (mapv (fn [op]
-                      (case op
-                        :move ["move" {:block-uuids [(str block-uuid)]}]
-                        :update ["update" {:block-uuid (str block-uuid)}])) ops))))))))
+                  :else
+                  (cond-> []
+                    (or add3? add4?)
+                    (conj [:move])
 
-(defn- gen-page-ops
-  [repo same-entity-datoms]
-  (let [r (reduce (fn [r [_e a v _t add?]]
-                    (cond
-                      (and (= a :block/uuid) add?)
-                      (reduced (assoc r :block/uuid v))
+                    (seq (set/intersection updated-key-set #{:block/alias :block/type :block/schema :block/content}))
+                    (conj [:update])
 
-                      (and (= a :block/name) add?)
-                      (assoc r :block/name v)
+                    (and (contains? updated-key-set :block/name) add2?)
+                    (conj [:update-page])))
+            ops* (keep (fn [op]
+                         (when-let [block-uuid (some-> (db/entity repo e) :block/uuid str)]
+                           (case (first op)
+                             :move ["move" {:block-uuids [block-uuid]}]
+                             :update ["update" {:block-uuid block-uuid}]
+                             :remove ["remove" {:block-uuids [(str (second op))]}]
+                             :update-page ["update-page" {:block-uuid block-uuid}]
+                             :remove-page ["remove-page" {:block-uuid (str (second op))}])))
+                       ops)]
+        (prn ::ops ops* attr->datom)
+        ops*))))
 
-                      (and (= a :block/uuid) (not add?))
-                      (assoc r :block/uuid v :remove? true)
-
-                      :else r))
-                  {:block/name nil :block/uuid nil :remove? false}
-                  same-entity-datoms)
-        block-uuid (or (:block/uuid r)
-                       (and (:block/name r)
-                            (:block/uuid (db/entity repo [:block/name (:block/name r)]))))]
-    (when block-uuid
-      (if (:remove? r)
-        [["remove-page" {:block-uuid (str block-uuid)}]]
-        [["update-page" {:block-uuid (str block-uuid)}]]
-        ))))
-
-(defn dispatch-gen-ops-handler
+(defn- rtc-ops-handler
   [repo datoms]
   (let [same-entity-datoms-coll (->> datoms
                                      (map vec)
                                      (group-by first)
                                      vals)
-        ops
-        (loop [ops-coll []
-               [same-entity-datoms & same-entity-datoms-coll*] same-entity-datoms-coll]
-          (if-not same-entity-datoms
-            (apply concat ops-coll)
-            (let [ops (loop [[datom & others] same-entity-datoms]
-                        (when-let [[_e a _v _t _add?] datom]
-                          (cond
-                            (contains? #{:block/parent :block/left :block/content :block/alias} a)
-                            (gen-block-ops repo same-entity-datoms)
-
-                            (contains? #{:block/name} a)
-                            (gen-page-ops repo same-entity-datoms)
-
-                            :else
-                            (recur others))))]
-              (recur (conj ops-coll ops) same-entity-datoms-coll*))))]
+        ops (mapcat (partial entity-datoms=>ops repo) same-entity-datoms-coll)]
     (op/<add-ops! repo ops)))
 
 
@@ -91,4 +77,4 @@
   (d/listen! conn :gen-ops
              (fn [{:keys [tx-data tx-meta]}]
                (when (:persist-op? tx-meta true)
-                 (dispatch-gen-ops-handler repo tx-data)))))
+                 (rtc-ops-handler repo tx-data)))))
