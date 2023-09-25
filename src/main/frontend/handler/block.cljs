@@ -397,7 +397,9 @@
        (let [repo (state/get-current-repo)
              db-graph? (config/db-based-graph? repo)
              block (or (db/entity [:block/uuid block-id]) block)
-             content (or custom-content (:block/content block) "")
+             content (if (and db-graph? (:block/name block))
+                       (:block/original-name block)
+                       (or custom-content (:block/content block) ""))
              content-length (count content)
              text-range (cond
                           (vector? pos)
