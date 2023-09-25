@@ -6,7 +6,7 @@
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
             ["@capacitor/status-bar" :refer [^js StatusBar Style]]
-            ["@hugotomazi/capacitor-navigation-bar" :refer [^js NavigationBar]]
+            ["@capgo/capacitor-navigation-bar" :refer [^js NavigationBar]]
             ["grapheme-splitter" :as GraphemeSplitter]
             ["remove-accents" :as removeAccents]
             ["sanitize-filename" :as sanitizeFilename]
@@ -209,7 +209,7 @@
      (p/do!
       (.setStyle StatusBar (clj->js {:style (.-Light Style)}))
       (when (mobile-util/native-android?)
-        (.setColor NavigationBar (clj->js {:color "#ffffff"}))
+        (.setNavigationBarColo NavigationBar (clj->js {:color "#ffffff"}))
         (.setBackgroundColor StatusBar (clj->js {:color "#ffffff"}))))))
 
 #?(:cljs
