@@ -11,6 +11,8 @@
             [frontend.components.svg :as svg]
             [frontend.components.scheduled-deadlines :as scheduled]
             [frontend.components.property :as property]
+            [frontend.components.property.value :as pv]
+            [frontend.handler.property.util :as pu]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -291,6 +293,7 @@
   (rum/local false ::edit?)
   (rum/local "" ::input-value)
   (rum/local false ::hover?)
+  (rum/local false ::adding-tags?)
   {:init (fn [state]
            (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
   [state page-name icon title {:keys [fmt-journal? *configure-show? preview?]}]
@@ -299,6 +302,7 @@
           *hover? (::hover? state)
           *title-value (get state ::title-value)
           *edit? (get state ::edit?)
+          *adding-tags? (::adding-tags? state)
           *input-value (get state ::input-value)
           repo (state/get-current-repo)
           hls-page? (pdf-utils/hls-file? title)
@@ -310,10 +314,12 @@
                     (date/journal-title->custom-format title)
                     title))
           old-name (or title page-name)
-          db-based? (config/db-based-graph? repo)]
+          db-based? (config/db-based-graph? repo)
+          tags-property (db/entity [:block/name "tags"])]
       [:div.ls-page-title.flex-1.flex-row.w-full.relative
        {:on-mouse-over #(reset! *hover? true)
-        :on-mouse-out #(reset! *hover? false)}
+        :on-mouse-out #(when-not @*adding-tags?
+                         (reset! *hover? false))}
        [:h1.page-title.flex.cursor-pointer.gap-1.w-full
         {:class (when-not whiteboard-page? "title")
          :on-mouse-down (fn [e]
@@ -347,32 +353,56 @@
                                :untitled? untitled?
                                :whiteboard-page? whiteboard-page?
                                :preview? preview?}))
-         [:span.title.block
-          {:on-click (fn []
-                       (when (and (state/home?) (not preview?))
-                         (route-handler/redirect-to-page! page-name)))
-           :data-value @*input-value
-           :data-ref   page-name
-           :style      {:opacity (when @*edit? 0)}}
-          (let [nested? (and (string/includes? title page-ref/left-brackets)
-                             (string/includes? title page-ref/right-brackets))]
-            (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
-                  untitled? [:span.opacity-50 (t :untitled)]
-                  nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (gp-mldoc/default-config
-                                                                                      (:block/format page))))
-                  :else title))]]]
-       (when (and @*hover?
-                  db-based?
-                  (not @*edit?)
-                  (not whiteboard-page?))
+         [:div.flex.flex-row.flex-1.flex-wrap.items-center.gap-2
+          [:span.title.block
+           {:on-click (fn []
+                        (when (and (state/home?) (not preview?))
+                          (route-handler/redirect-to-page! page-name)))
+            :data-value @*input-value
+            :data-ref   page-name
+            :style      {:opacity (when @*edit? 0)}}
+           (let [nested? (and (string/includes? title page-ref/left-brackets)
+                              (string/includes? title page-ref/right-brackets))]
+             (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
+                   untitled? [:span.opacity-50 (t :untitled)]
+                   nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (gp-mldoc/default-config
+                                                                                       (:block/format page))))
+                   :else title))]
+          (when (seq (:block/tags page))
+            [:div.page-tags
+             (pv/property-value page tags-property (map :block/uuid (:block/tags page))
+                               {:show-add? true
+                                :page-cp (fn [config page]
+                                           (component-block/page-cp (assoc config :tag? true) page))})])]]]
+       (when (and db-based? (not whiteboard-page?))
          [:div.absolute.bottom-2.left-0
-          [:div.flex.flex-row.items-center.flex-wrap.ml-2
-           [:a.fade-link.flex.flex-row.items-center
-            {:on-click #(swap! *configure-show? not)}
-            (when @*configure-show? (ui/icon "x" {:size 14}))
-            [:div.ml-1.text-sm (if @*configure-show?
-                                 "Close configure"
-                                 "Configure page")]]]])])))
+          [:div.page-add-tags.flex.flex-row.items-center.flex-wrap.gap-2.ml-2
+           (when (and (empty? (:block/tags page)) @*hover? (not @*edit?))
+             (let [toggle-fn' (fn [toggle-fn]
+                                (fn []
+                                  (toggle-fn)
+                                  (swap! *adding-tags? not)))]
+               (ui/dropdown
+                (fn [{:keys [toggle-fn]}]
+                  [:a.fade-link.flex.flex-row.items-center
+                   {:on-click (toggle-fn' toggle-fn)}
+                   [:div.ml-1.text-sm "Add tags"]])
+                (let []
+                  (fn [{:keys [toggle-fn]}]
+                    [:div.p-4.h-96.w-96
+                     [:div.font-medium.mb-2 "Add tags"]
+                     (pv/property-value page tags-property nil {:add-new-item? true
+                                                                :on-chosen (toggle-fn' toggle-fn)})]))
+                {:modal-class (util/hiccup->class
+                               "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")})))
+
+           (when (and @*hover? (not @*edit?))
+             [:a.fade-link.flex.flex-row.items-center
+              {:on-click #(swap! *configure-show? not)}
+              [:div.mr-1.text-sm (if @*configure-show?
+                                   "Close"
+                                   "Configure")]
+              (when @*configure-show? (ui/icon "x" {:size 14}))])]])])))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]

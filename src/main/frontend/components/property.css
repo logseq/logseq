@@ -127,3 +127,42 @@ input.simple-input:focus {
 .property-key .bullet-container .bullet {
     background-color: darkgrey;
 }
+
+/* TODO:  */
+.page-add-tags, .page-title {
+    .cp__select-main {
+        width: fit-content;
+        margin: 0;
+
+        .ui__dropdown-trigger {
+            position: absolute;
+
+            .dropdown-wrapper {
+                left: 0;
+            }
+        }
+    }
+
+    .cp__select .input-wrap {
+        height: auto;
+        min-width: 14em;
+    }
+
+    .cp__select .input-wrap input.cp__select-input {
+        border: none;
+    }
+
+    .cp__select .input-wrap input.cp__select-input:focus {
+        outline: none;
+        box-shadow: none;
+    }
+
+    .cp__select-input {
+        padding: 0;
+    }
+}
+
+.page-title .page-tags {
+    font-size: 1em;
+    font-weight: 400;
+}

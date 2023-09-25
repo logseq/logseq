@@ -476,11 +476,8 @@
                        (map (fn [k] [k nil]) properties))
                      (sort-by first block-properties))
         alias (set (map :block/uuid (:block/alias block)))
-        tags (set (map :block/uuid (:block/tags block)))
         alias-properties (when (seq alias)
                            [[(:block/uuid (db/entity [:block/name "alias"])) alias]])
-        tags-properties (when (and (seq tags) (not in-block-container?))
-                          [[(:block/uuid (db/entity [:block/name "tags"])) tags]])
         remove-built-in-properties (fn [properties]
                                      (remove (fn [x]
                                                (let [id (if (uuid? x) x (first x))]
@@ -498,8 +495,7 @@
         classes-properties (-> (mapcat (fn [class]
                                          (seq (:properties (:block/schema class)))) all-classes)
                                distinct)
-        block-own-properties (->> (concat (seq tags-properties)
-                                          (seq alias-properties)
+        block-own-properties (->> (concat (seq alias-properties)
                                           (seq properties))
                                   remove-built-in-properties
                                   (remove (fn [[id _]] ((set classes-properties) id))))
