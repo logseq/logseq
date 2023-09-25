@@ -20,7 +20,10 @@
           :visible true
           :schema {:type :page
                    :cardinality :many}}
-   :background-color {:schema {:type :default}}
+   :background-color {:schema {:type :default :hide? true}
+                      :visible true}
+   :background-image {:schema {:type :default :hide? true}
+                      :visible true}
    :heading {:schema {:type :any}}      ; number (1-6) or boolean for auto heading
    :query-table {:schema {:type :checkbox}}
    ;; query-properties is a coll of property uuids and keywords where keywords are special frontend keywords

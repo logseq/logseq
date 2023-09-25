@@ -228,6 +228,7 @@
   (let [id        (:block/uuid block)
         page      (db-utils/pull (:db/id (:block/page block)))
         page-name (:block/original-name page)
+        ;; FIXME: file-path property for db version
         file-path (:file-path (:block/properties page))
         hl-page   (pu/get-property block :hl-page)]
     (when-let [target-key (and page-name (subs page-name 5))]
