@@ -69,7 +69,7 @@
       (parse-double v-str) :number
       (util/uuid-string? v-str) :page
       (gp-util/url? v-str) :url
-      (contains? #{"true" "false"} (string/lower-case v-str)) :boolean
+      (contains? #{"true" "false"} (string/lower-case v-str)) :checkbox
       :else :default)
     (catch :default _e
       :default)))
@@ -85,17 +85,13 @@
       :number
       (edn/read-string v-str)
 
-      :boolean
-      (edn/read-string (string/lower-case v-str))
-
       :page
       (uuid v-str)
 
       ;; these types don't need to be translated. :date expects uuid and other
       ;; types usually expect text
       (:url :date :any)
-      v-str
-      )))
+      v-str)))
 
 (defn upsert-property!
   [repo k-name schema {:keys [property-uuid]}]
@@ -191,6 +187,7 @@
                 v* (try
                      (convert-property-input-string property-type v)
                      (catch :default e
+                       (js/console.error e)
                        (notification/show! (str e) :error false)
                        nil))
                 tags-or-alias? (and (contains? #{"tags" "alias"} (string/lower-case k-name)) (uuid? v*))]

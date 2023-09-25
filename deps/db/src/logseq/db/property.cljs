@@ -39,7 +39,7 @@
    :hl-color {:schema {:type :default}}
    :logseq.macro-name {:schema {:type :default}}
    :logseq.macro-arguments {:schema {:type :default}}
-   :logseq.order-list-type {:schema {:type :checkbox}}
+   :logseq.order-list-type {:schema {:type :default}}
    :logseq.tldraw.page {:schema {:type :map}}
    :logseq.tldraw.shape {:schema {:type :map}}
    ;; color props

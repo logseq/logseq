@@ -284,6 +284,7 @@
                        (:block/uuid original)))
            (edit-block! linked :max (:block/uuid linked) {})))
 
+       ;; file based graph only
        ;; sanitized page name changed
        (when-let [title (get-in block' [:block/properties :title])]
          (if (string? title)
