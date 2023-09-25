@@ -9,6 +9,10 @@ const config: CapacitorConfig = {
   bundledWebRuntime: false,
   webDir: 'public',
   loggingBehavior: 'debug',
+  server: {
+    // https://capacitorjs.com/docs/updating/5-0#update-androidscheme
+    androidScheme: 'http',
+  },
   plugins: {
     SplashScreen: {
       launchShowDuration: 500,
