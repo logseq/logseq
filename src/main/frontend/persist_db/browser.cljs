@@ -57,7 +57,7 @@
   (cond
     (:block/page block) 1
     (:file/content block) 3
-    (= "property" (:block/type block)) 6
+    (contains? (:block/type block) "property") 6
     (:block/name block) 2
     :else 5))
 

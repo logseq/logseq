@@ -68,7 +68,7 @@
           repo (state/sub :git/current-repo)
           page (db/entity repo [:block/name page-name])
           page-original-name (:block/original-name page)
-          whiteboard? (= "whiteboard" (:block/type page))
+          whiteboard? (contains? (:block/type page) "whiteboard")
           block? (and page (util/uuid-string? page-name) (not whiteboard?))
           contents? (= page-name "contents")
           properties (:block/properties page)
@@ -82,7 +82,7 @@
           file-sync-graph-uuid (and (user-handler/logged-in?)
                                     (file-sync-handler/enable-sync?)
                                     (file-sync-handler/get-current-graph-uuid))
-          built-in-property? (and (= "property" (:block/type page))
+          built-in-property? (and (contains? (:block/type page) "property")
                                   (contains? db-property/built-in-properties-keys-str page-name))]
       (when (and page (not block?))
         (->>

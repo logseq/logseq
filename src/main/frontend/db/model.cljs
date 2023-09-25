@@ -432,7 +432,7 @@ independent of format as format specific heading characters are stripped"
                                  children (map :db/id (sort-by-left (:block/_parent e) e))]
                              [e {:original-name (:block/original-name e)
                                  :link (:block/link e)
-                                 :type (:block/type e)
+                                 :types (:block/type e)
                                  :schema (:block/schema e)
                                  :content (:block/content e)
                                  :marker (:block/marker e)
@@ -1386,13 +1386,13 @@ independent of format as format specific heading characters are stripped"
     (string? page)
     (let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)])]
       (or
-       (= "whiteboard" (:block/type page))
+       (contains? (:block/type page) "whiteboard")
        (when-let [file (:block/file page)]
          (when-let [path (:file/path (db-utils/entity (:db/id file)))]
            (gp-config/whiteboard? path)))))
 
     (seq page)
-    (= "whiteboard" (:block/type page))
+    (contains? (:block/type page) "whiteboard")
 
     :else false))
 
@@ -1421,7 +1421,7 @@ independent of format as format specific heading characters are stripped"
                                 (not (contains? built-in-pages name))
                                 (not (whiteboard-page? page))
                                 (not (:block/_namespace page))
-                                (not (contains? #{"property"} (:block/type page)))
+                                (not (contains? (:block/type page) "property"))
                                  ;; a/b/c might be deleted but a/b/c/d still exists (for backward compatibility)
                                 (not (and (string/includes? name "/")
                                           (not (:block/journal? page))))

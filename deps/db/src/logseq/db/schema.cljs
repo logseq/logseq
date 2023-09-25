@@ -13,12 +13,13 @@
 
    :recent/pages {}
 
-   ;; :block/type is a string type of the current block
+   ;; :block/type is a string type or multiple types of the current block
    ;; "whiteboard" for whiteboards
    ;; "macros" for macro
    ;; "property" for property blocks
    ;; "class" for structured page
-   :block/type {:db/index true}
+   :block/type {:db/index true
+                :db/cardinality :db.cardinality/many}
    :block/schema {}
    :block/uuid {:db/unique :db.unique/identity}
    :block/parent {:db/valueType :db.type/ref
@@ -132,7 +133,6 @@
     :block/deadline
     :block/repeated?
     :block/pre-block?
-    :block/type
     :block/properties
     :block/properties-order
     :block/properties-text-values

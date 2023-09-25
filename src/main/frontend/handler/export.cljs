@@ -313,7 +313,7 @@
                [?b :block/name]] db)
 
         (map (fn [[{:block/keys [name] :as page}]]
-               (let [whiteboard? (= "whiteboard" (:block/type page))
+               (let [whiteboard? (contains? (:block/type page) "whiteboard")
                      blocks (db/get-page-blocks-no-cache
                              (state/get-current-repo)
                              name
@@ -321,13 +321,13 @@
                      blocks' (if whiteboard?
                                blocks
                                (map (fn [b]
-                                     (let [b' (if (seq (:block/properties b))
-                                                (update b :block/content
-                                                        (fn [content]
-                                                          (file-property/remove-properties-when-file-based
-                                                           repo (:block/format b) content)))
-                                                b)]
-                                       (safe-keywordize b'))) blocks))
+                                      (let [b' (if (seq (:block/properties b))
+                                                 (update b :block/content
+                                                         (fn [content]
+                                                           (file-property/remove-properties-when-file-based
+                                                            repo (:block/format b) content)))
+                                                 b)]
+                                        (safe-keywordize b'))) blocks))
                      children (if whiteboard?
                                 blocks'
                                 (outliner-tree/blocks->vec-tree blocks' name))

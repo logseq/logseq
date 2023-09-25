@@ -210,7 +210,7 @@
       (if (contains? db-property/hidden-built-in-properties (keyword property-name))
         (do (notification/show! "This is a built-in property that can't be used." :error)
             (pv/exit-edit-property))
-        (if (= "class" (:block/type entity))
+        (if (contains? (:block/type entity) "class")
           (pv/add-property! entity property-name "" {:class-schema? class-schema?
                                                   ;; Only enter property names from sub-modal as inputting
                                                   ;; property values is buggy in sub-modal
@@ -219,7 +219,7 @@
             (pv/set-editing! property editor-id "" ""))))
       ;; new property entered
       (if (db-property/valid-property-name? property-name)
-        (if (= "class" (:block/type entity))
+        (if (contains? (:block/type entity) "class")
           (pv/add-property! entity property-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
           (do
             (db-property-handler/upsert-property! repo property-name {:type :default} {})
@@ -410,14 +410,14 @@
 
 (defn- get-namespace-parents
   [tags]
-  (let [tags' (filter (fn [tag] (= "class" (:block/type tag))) tags)
+  (let [tags' (filter (fn [tag] (contains? (:block/type tag) "class")) tags)
         *namespaces (atom #{})]
     (doseq [tag tags']
       (when-let [ns (:block/namespace tag)]
         (loop [current-ns ns]
           (when (and
                  current-ns
-                 (= "class" (:block/type ns))
+                 (contains? (:block/type ns) "class")
                  (not (contains? @*namespaces (:db/id ns))))
             (swap! *namespaces conj current-ns)
             (recur (:block/namespace current-ns))))))
@@ -489,7 +489,7 @@
                                              properties))
         classes (->> (:block/tags block)
                      (sort-by :block/name)
-                     (filter (fn [tag] (= "class" (:block/type tag)))))
+                     (filter (fn [tag] (contains? (:block/type tag) "class"))))
         one-class? (= 1 (count classes))
         namespace-parents (get-namespace-parents classes)
         all-classes (->> (concat classes namespace-parents)
@@ -549,26 +549,26 @@
                    (not new-property?)
                    (not (:page-configure? opts)))
       [:div.ls-properties-area (cond->
-                                 {}
-                                  (:selected? opts)
-                                  (assoc :class "select-none"))
-        (properties-section block (if class-schema? properties own-properties) opts)
+                                {}
+                                 (:selected? opts)
+                                 (assoc :class "select-none"))
+       (properties-section block (if class-schema? properties own-properties) opts)
 
-        (when (and (seq full-hidden-properties) (not class-schema?) (not config/publishing?))
-          (hidden-properties block full-hidden-properties opts))
+       (when (and (seq full-hidden-properties) (not class-schema?) (not config/publishing?))
+         (hidden-properties block full-hidden-properties opts))
 
-        (when (or new-property? (not in-block-container?))
-          (new-property block edit-input-id properties new-property? opts))
+       (when (or new-property? (not in-block-container?))
+         (new-property block edit-input-id properties new-property? opts))
 
-        (when (and (seq class->properties) (not one-class?))
-          (let [page-cp (:page-cp opts)]
-            [:div.parent-properties.flex.flex-1.flex-col.gap-1
-             (for [[class class-properties] class->properties]
-               (let [id-properties (->> class-properties
-                                        remove-built-in-properties
-                                        (map (fn [id] [id (get block-properties id)])))]
-                 (when (seq id-properties)
-                   [:div
-                    (when page-cp
-                      [:span.text-sm (page-cp {} class)])
-                    (properties-section block id-properties opts)])))]))])))
+       (when (and (seq class->properties) (not one-class?))
+         (let [page-cp (:page-cp opts)]
+           [:div.parent-properties.flex.flex-1.flex-col.gap-1
+            (for [[class class-properties] class->properties]
+              (let [id-properties (->> class-properties
+                                       remove-built-in-properties
+                                       (map (fn [id] [id (get block-properties id)])))]
+                (when (seq id-properties)
+                  [:div
+                   (when page-cp
+                     [:span.text-sm (page-cp {} class)])
+                   (properties-section block id-properties opts)])))]))])))

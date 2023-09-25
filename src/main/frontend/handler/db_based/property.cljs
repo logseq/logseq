@@ -102,12 +102,12 @@
   (let [property (db/entity [:block/name (gp-util/page-name-sanity-lc k-name)])
         k-name (name k-name)
         property-uuid (or (:block/uuid property) property-uuid (db/new-block-id))]
-    (when (and property (nil? (:block/type property)))
+    (when property
       (db/transact! repo [(outliner-core/block-with-updated-at
                            {:block/schema schema
                             :block/uuid property-uuid
                             :block/type "property"})]
-        {:outliner-op :save-block}))
+                    {:outliner-op :save-block}))
     (when (nil? property) ;if property not exists yet
       (db/transact! repo [(outliner-core/block-with-timestamps
                            {:block/schema schema
@@ -115,7 +115,7 @@
                             :block/name (util/page-name-sanity-lc k-name)
                             :block/uuid property-uuid
                             :block/type "property"})]
-        {:outliner-op :insert-blocks}))))
+                    {:outliner-op :insert-blocks}))))
 
 (defn set-block-property!
   [repo block-id k-name v {:keys [old-value]}]
@@ -222,7 +222,7 @@
 
 (defn class-add-property!
   [repo class k-name]
-  (when (= "class" (:block/type class))
+  (when (contains? (:block/type class) "class")
     (let [k-name (name k-name)
           property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
           property-uuid (or (:block/uuid property) (db/new-block-id))
@@ -239,7 +239,7 @@
 
 (defn class-remove-property!
   [repo class k-uuid]
-  (when (= "class" (:block/type class))
+  (when (contains? (:block/type class) "class")
     (when-let [property (db/pull repo '[*] [:block/uuid k-uuid])]
       (let [property-uuid (:block/uuid property)
             {:keys [properties] :as class-schema} (:block/schema class)
@@ -247,7 +247,7 @@
             class-new-schema (assoc class-schema :properties new-properties)]
         (db/transact! repo [{:db/id (:db/id class)
                              :block/schema class-new-schema}]
-          {:outliner-op :save-block})))))
+                      {:outliner-op :save-block})))))
 
 (defn batch-set-property!
   "Notice that this works only for properties with cardinality equals to `one`."

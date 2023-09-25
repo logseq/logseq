@@ -20,7 +20,7 @@
     [:block/uuid :uuid]
     [:block/name {:optional true} :string]
     [:block/original-name {:optional true} :string]
-    [:block/type {:optional true} [:enum "property" "class" "object"]]
+    [:block/type {:optional true} :any] ;;TODO
     [:block/content {:optional true} :string]
     [:block/properties {:optional true}
      [:map-of :uuid [:or
