@@ -230,7 +230,7 @@
 (rum/defcs property-input < rum/reactive
   (rum/local false ::show-new-property-config?)
   shortcut/disable-all-shortcuts
-  [state entity *property-key *property-value {:keys [class-schema? page-configure?]
+  [state entity *property-key *property-value {:keys [class-schema? page-configure? in-block-container?]
                                                :as opts}]
   (let [repo (state/get-current-repo)
         *show-new-property-config? (::show-new-property-config? state)
@@ -247,42 +247,48 @@
         exclude-properties (set/union exclude-properties* (set (map string/lower-case exclude-properties*)))
         properties (->> (search/get-all-properties)
                         (remove exclude-properties))]
-    (if @*property-key
-      (when-let [property (get-property-from-db @*property-key)]
-        [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-row.items-center
-         [:div.col-span-2 @*property-key]
-         [:div.col-span-3.flex.flex-row
-          (when (not (and class-schema? page-configure?))
-            (if @*show-new-property-config?
-              (ui/dropdown
-               (fn [_opts]
-                 (pv/property-scalar-value entity property @*property-value (assoc opts :editing? true)))
-               (fn [{:keys [toggle-fn]}]
-                 [:div.p-6
-                  (property-config repo property (merge opts
-                                                        {:toggle-fn toggle-fn
-                                                         :block entity}))])
-               {:initial-open? true
-                :modal-class (util/hiccup->class
-                              "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
-              (pv/property-scalar-value entity property @*property-value (assoc opts :editing? true))))]])
+    [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
+     (if in-block-container? {:style {:padding-left 22}} {})
+     (if @*property-key
+       (when-let [property (get-property-from-db @*property-key)]
+         [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
+          [:div.flex.flex-row.items-center.col-span-2
+           [:span.bullet-container.cursor [:span.bullet]]
+           [:div.ml-1 @*property-key]]
+          [:div.col-span-3.flex.flex-row
+           (when (not (and class-schema? page-configure?))
+             (if @*show-new-property-config?
+               (ui/dropdown
+                (fn [_opts]
+                  (pv/property-scalar-value entity property @*property-value (assoc opts :editing? true)))
+                (fn [{:keys [toggle-fn]}]
+                  [:div.p-6
+                   (property-config repo property (merge opts
+                                                         {:toggle-fn toggle-fn
+                                                          :block entity}))])
+                {:initial-open? true
+                 :modal-class (util/hiccup->class
+                               "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
+               (pv/property-scalar-value entity property @*property-value (assoc opts :editing? true))))]])
 
-      [:div.ls-property-add.h-6
-       (select/select {:items (map (fn [x] {:value x}) properties)
-                       :dropdown? true
-                       :show-new-when-not-exact-match? true
-                       :exact-match-exclude-items exclude-properties
-                       :input-default-placeholder "Add a property"
-                       :on-chosen (fn [{:keys [value]}]
-                                    (reset! *property-key value)
-                                    (add-property-from-dropdown entity value (assoc opts :*show-new-property-config? *show-new-property-config?)))
-                       :input-opts {:on-blur (fn [] (pv/exit-edit-property))
-                                    :on-key-down
-                                    (fn [e]
-                                      (case (util/ekey e)
-                                        "Escape"
-                                        (pv/exit-edit-property)
-                                        nil))}})])))
+       [:div.ls-property-add.flex.flex-row.items-center
+        [:span.bullet-container.cursor [:span.bullet]]
+        [:div.ml-1 {:style {:height "1.5em"}} ; TODO: ugly
+         (select/select {:items (map (fn [x] {:value x}) properties)
+                         :dropdown? true
+                         :show-new-when-not-exact-match? true
+                         :exact-match-exclude-items exclude-properties
+                         :input-default-placeholder "Add a property"
+                         :on-chosen (fn [{:keys [value]}]
+                                      (reset! *property-key value)
+                                      (add-property-from-dropdown entity value (assoc opts :*show-new-property-config? *show-new-property-config?)))
+                         :input-opts {:on-blur (fn [] (pv/exit-edit-property))
+                                      :on-key-down
+                                      (fn [e]
+                                        (case (util/ekey e)
+                                          "Escape"
+                                          (pv/exit-edit-property)
+                                          nil))}})]])]))
 
 (rum/defcs new-property < rum/reactive
   (rum/local nil ::property-key)
@@ -295,7 +301,7 @@
       :node (js/document.getElementById "edit-new-property")
       :outside? false)))
   [state block edit-input-id properties new-property? opts]
-  [:div.ls-new-property.py-1
+  [:div.ls-new-property
    (let [*property-key (::property-key state)
          *property-value (::property-value state)]
      (cond
