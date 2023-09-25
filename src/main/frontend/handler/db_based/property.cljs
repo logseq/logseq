@@ -124,7 +124,8 @@
         property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
         values (remove nil? values)
         property-uuid (or (:block/uuid property) (db/new-block-id))
-        {:keys [type cardinality]} (:block/schema property)
+        property-schema (:block/schema property)
+        {:keys [type cardinality]} property-schema
         multiple-values? (= cardinality :many)]
     (when (and multiple-values? (seq values))
       (let [infer-schema (when-not type (infer-schema-from-input-string (first values)))
@@ -149,9 +150,6 @@
         (when (not= old-values values')
           (if tags-or-alias?
             (let [property-value-ids (map (fn [id] (:db/id (db/entity [:block/uuid id]))) values')]
-              (util/pprint [[:db/retract (:db/id block) :attribute]
-                             {:block/uuid block-id
-                              attribute property-value-ids}])
               (db/transact! repo
                             [[:db/retract (:db/id block) attribute]
                              {:block/uuid block-id
@@ -161,7 +159,7 @@
               (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                 (notification/show! msg' :warning))
               (do
-                (upsert-property! repo k-name {:type property-type}
+                (upsert-property! repo k-name (assoc property-schema :type property-type)
                                   {:property-uuid property-uuid})
                 (let [block-properties (assoc properties property-uuid values')
                       refs (outliner-core/rebuild-block-refs block block-properties)]
@@ -178,7 +176,8 @@
         k-name (name k-name)
         property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
         property-uuid (or (:block/uuid property) (db/new-block-id))
-        {:keys [type cardinality]} (:block/schema property)
+        property-schema (:block/schema property)
+        {:keys [type cardinality]} property-schema
         multiple-values? (= cardinality :many)]
     (if (and multiple-values? (coll? v))
       (reset-block-property-multiple-values! repo block-id k-name v opts)
@@ -210,7 +209,7 @@
                   (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                     (notification/show! msg' :warning))
                   (do
-                    (upsert-property! repo k-name {:type property-type}
+                    (upsert-property! repo k-name (assoc property-schema :type property-type)
                                       {:property-uuid property-uuid})
                     (let [new-value (cond
                                       (and multiple-values? old-value
@@ -285,14 +284,14 @@
           property-uuid (or (:block/uuid property) (db/new-block-id))
           property-type (get-in property [:block/schema :type] :default)
           {:keys [properties] :as class-schema} (:block/schema class)
-          _ (upsert-property! repo k-name {:type property-type}
+          _ (upsert-property! repo k-name (assoc (:block/schema property) :type property-type)
                               {:property-uuid property-uuid})
           new-properties (vec (distinct (conj properties property-uuid)))
           class-new-schema (assoc class-schema :properties new-properties)]
       (db/transact! repo
-        [{:db/id (:db/id class)
-          :block/schema class-new-schema}]
-        {:outliner-op :save-block}))))
+                    [{:db/id (:db/id class)
+                      :block/schema class-new-schema}]
+                    {:outliner-op :save-block}))))
 
 (defn class-remove-property!
   [repo class k-uuid]
@@ -316,7 +315,7 @@
         infer-schema (when-not type (infer-schema-from-input-string v))
         property-type (or type infer-schema :default)
         _ (when (nil? property)
-            (upsert-property! repo k-name {:type property-type}
+            (upsert-property! repo k-name (assoc (:block/schema property) :type property-type)
                               {:property-uuid property-uuid}))
         {:keys [cardinality]} (:block/schema property)
         txs (mapcat

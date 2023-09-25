@@ -26,7 +26,8 @@
       (when multiple-choices?
         (ui/checkbox {:checked (boolean (selected-choices (:value result)))
                       :style {:margin-right 4}
-                      :on-click (fn [e] (.preventDefault e))}))
+                      :on-click (fn [e]
+                                  (.preventDefault e))}))
       value]
      (when (and (map? result) (:id result))
        [:div.tip.flex
@@ -74,8 +75,11 @@
   (let [input (::input state)
         *toggle (::toggle state)
         *selected-choices (::selected-choices state)
+        selected-choices (rum/react *selected-choices)
+        full-choices (->> (concat (map (fn [v] {:value v}) selected-choices) items)
+                          (util/distinct-by-last-wins :value))
         search-result' (->>
-                        (cond-> (search/fuzzy-search items @input :limit limit :extract-fn extract-fn)
+                        (cond-> (search/fuzzy-search full-choices @input :limit limit :extract-fn extract-fn)
                           (fn? transform-fn)
                           (transform-fn @input))
                         (remove nil?))
@@ -83,7 +87,7 @@
                                 (string/lower-case @input))
         search-result' (if multiple-choices?
                          (sort-by (fn [item]
-                                    (not (contains? @*selected-choices (:value item))))
+                                    (not (contains? selected-choices (:value item))))
                                   search-result')
                          search-result')
         search-result (if (and show-new-when-not-exact-match?
@@ -123,13 +127,14 @@
                                                    (reset! input "")
                                                    (let [chosen (extract-chosen-fn raw-chosen)]
                                                      (if multiple-choices?
-                                                       (if (@*selected-choices chosen)
+                                                       (if (selected-choices chosen)
                                                          (swap! *selected-choices disj chosen)
                                                          (swap! *selected-choices conj chosen))
                                                        (do
-                                                         (when close-modal? (state/close-modal!))
+                                                         (when (and close-modal? (not multiple-choices?))
+                                                           (state/close-modal!))
                                                          (when on-chosen
-                                                           (on-chosen (if multiple-choices? @*selected-choices chosen)))))))
+                                                           (on-chosen (if multiple-choices? selected-choices chosen)))))))
                               :empty-placeholder (empty-placeholder t)})]
 
                            (when multiple-choices?
@@ -139,7 +144,8 @@
                                                                     (util/stop e)
                                                                     (when @*toggle (@*toggle))
                                                                     (when (fn? on-apply)
-                                                                      (on-apply @*selected-choices)))})])]]
+                                                                      (on-apply selected-choices)
+                                                                      (when close-modal? (state/close-modal!))))})])]]
     (when (fn? tap-*input-val)
       (tap-*input-val input))
     [:div.cp__select
