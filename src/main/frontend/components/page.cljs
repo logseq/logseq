@@ -363,7 +363,8 @@
                   :else title))]]]
        (when (and @*hover?
                   db-based?
-                  (not @*edit?))
+                  (not @*edit?)
+                  (not whiteboard-page?))
          [:div.absolute.bottom-2.left-0
           [:div.flex.flex-row.items-center.flex-wrap.ml-2
            [:a.fade-link.flex.flex-row.items-center

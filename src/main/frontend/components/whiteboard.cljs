@@ -277,8 +277,7 @@
                         [:span.text-lg
                          (ui/icon "whiteboard" {:extension? true})]
                         (get-page-display-name page-name)
-                        nil
-                        false)]
+                        {:*configure-show? (atom false)})]
 
       [:div.whiteboard-page-refs
        (references-count page-name
