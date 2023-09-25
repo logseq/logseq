@@ -3,7 +3,8 @@
 (def ^:private magic-str "YBTFRD")
 
 (defmacro with-sub-data-from-ws
-  "- sub :data-from-ws-pub
+  "TODO: result-ch also sub exception response (:req-id=nil in response)
+  - sub :data-from-ws-pub
   - run body, use `get-req-id` to get req-id, and `get-result-ch` to get result-ch
   - unsub :data-from-ws-pub"
   [state & body]

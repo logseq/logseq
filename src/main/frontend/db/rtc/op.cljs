@@ -4,22 +4,27 @@
             [promesa.core :as p]))
 
 (def op-schema
-  [:or
-   [:catn
-    [:op [:= "move"]]
-    [:value [:map [:block-uuids [:sequential :string]]]]]
-   [:catn
-    [:op [:= "remove"]]
-    [:value [:map [:block-uuids [:sequential :string]]]]]
-   [:catn
-    [:op [:= "update"]]
-    [:value [:map [:block-uuid :string]]]]
-   [:catn
-    [:op [:= "update-page"]]
-    [:value [:map [:block-uuid :string]]]]
-   [:catn
-    [:op [:= "remove-page"]]
-    [:value [:map [:block-uuid :string]]]]])
+  [:multi {:dispatch first}
+   ["move"
+    [:catn
+     [:op :string]
+     [:value [:map [:block-uuids [:sequential :string]]]]]]
+   ["remove"
+    [:catn
+     [:op :string]
+     [:value [:map [:block-uuids [:sequential :string]]]]]]
+   ["update"
+    [:catn
+     [:op :string]
+     [:value [:map [:block-uuid :string]]]]]
+   ["update-page"
+    [:catn
+     [:op :string]
+     [:value [:map [:block-uuid :string]]]]]
+   ["remove-page"
+    [:catn
+     [:op :string]
+     [:value [:map [:block-uuid :string]]]]]])
 
 (def op-validator (m/validator op-schema))
 
