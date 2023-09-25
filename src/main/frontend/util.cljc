@@ -209,7 +209,7 @@
      (p/do!
       (.setStyle StatusBar (clj->js {:style (.-Light Style)}))
       (when (mobile-util/native-android?)
-        (.setNavigationBarColo NavigationBar (clj->js {:color "#ffffff"}))
+        (.setNavigationBarColor NavigationBar (clj->js {:color "#ffffff"}))
         (.setBackgroundColor StatusBar (clj->js {:color "#ffffff"}))))))
 
 #?(:cljs
@@ -218,7 +218,7 @@
      (p/do!
       (.setStyle StatusBar (clj->js {:style (.-Dark Style)}))
       (when (mobile-util/native-android?)
-        (.setColor NavigationBar (clj->js {:color "#002b36"}))
+        (.setNavigationBarColor NavigationBar (clj->js {:color "#002b36"}))
         (.setBackgroundColor StatusBar (clj->js {:color "#002b36"}))))))
 
 (defn find-first
