@@ -13,7 +13,7 @@ export function useCanvasEvents() {
 
   const events = React.useMemo(() => {
     const onPointerMove: TLReactCustomEvents['pointer'] = e => {
-      if (app.settings.penMode && e.pointerType !== 'pen') {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
         return
       }
 
@@ -22,7 +22,7 @@ export function useCanvasEvents() {
     }
 
     const onPointerDown: TLReactCustomEvents['pointer'] = e => {
-      if (app.settings.penMode && e.pointerType !== 'pen') {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
         return
       }
 
@@ -49,7 +49,7 @@ export function useCanvasEvents() {
     }
 
     const onPointerUp: TLReactCustomEvents['pointer'] = e => {
-      if (app.settings.penMode && e.pointerType !== 'pen') {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
         return
       }
 
@@ -59,7 +59,7 @@ export function useCanvasEvents() {
     }
 
     const onPointerEnter: TLReactCustomEvents['pointer'] = e => {
-      if (app.settings.penMode && e.pointerType !== 'pen') {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
         return
       }
 
@@ -68,7 +68,7 @@ export function useCanvasEvents() {
     }
 
     const onPointerLeave: TLReactCustomEvents['pointer'] = e => {
-      if (app.settings.penMode && e.pointerType !== 'pen') {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
         return
       }
 

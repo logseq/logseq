@@ -14,7 +14,7 @@ export function useShapeEvents<S extends TLReactShape>(shape: S) {
 
   const events = React.useMemo(() => {
     const onPointerMove: TLReactCustomEvents['pointer'] = e => {
-      if (app.settings.penMode && e.pointerType !== 'pen') {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
         return
       }
 
@@ -24,7 +24,7 @@ export function useShapeEvents<S extends TLReactShape>(shape: S) {
     }
 
     const onPointerDown: TLReactCustomEvents['pointer'] = e => {
-      if (app.settings.penMode && e.pointerType !== 'pen') {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
         return
       }
 
@@ -35,7 +35,7 @@ export function useShapeEvents<S extends TLReactShape>(shape: S) {
     }
 
     const onPointerUp: TLReactCustomEvents['pointer'] = e => {
-      if (app.settings.penMode && e.pointerType !== 'pen') {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
         return
       }
 
@@ -56,7 +56,7 @@ export function useShapeEvents<S extends TLReactShape>(shape: S) {
     }
 
     const onPointerEnter: TLReactCustomEvents['pointer'] = e => {
-      if (app.settings.penMode && e.pointerType !== 'pen') {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
         return
       }
 
@@ -66,7 +66,7 @@ export function useShapeEvents<S extends TLReactShape>(shape: S) {
     }
 
     const onPointerLeave: TLReactCustomEvents['pointer'] = e => {
-      if (app.settings.penMode && e.pointerType !== 'pen') {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
         return
       }
 
