@@ -154,7 +154,9 @@
       [?prop-b :block/name ?prop-name-str]
       [?prop-b :block/type "property"]
       [?prop-b :block/uuid ?prop-uuid]
-      [(get ?bp ?prop-uuid)]]
+      [(get ?bp ?prop-uuid) ?v]
+      ;; Some deleted properties leave #{} which this rule shouldn't match on
+      [(not= #{} ?v)]]
 
     :page-property
     '[;; Clause 1: Match non-ref values
@@ -193,7 +195,9 @@
       [?prop-b :block/name ?prop-name-str]
       [?prop-b :block/type "property"]
       [?prop-b :block/uuid ?prop-uuid]
-      [(get ?bp ?prop-uuid)]]
+      [(get ?bp ?prop-uuid) ?v]
+      ;; Some deleted properties leave #{} which this rule shouldn't match on
+      [(not= #{} ?v)]]
 
     :property
     '[;; Clause 1: Match non-ref values
