@@ -25,8 +25,6 @@
     ;; which will hide the editor so no way for editing.
     (js/setTimeout #(keyboards-handler/esc-save! state) 100)
 
-    (state/close-dropdowns!)
-
     (when-let [element (gdom/getElement id)]
       (.focus element)
       (js/setTimeout #(util/scroll-editor-cursor element) 50)))
