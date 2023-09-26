@@ -417,23 +417,30 @@
       (if editing?
         (let [dropdown? (if-some [x dropdown?] x true)]
           [:div.flex.flex-1
-          (case type
-            (list :number :url)
-            (select block property (assoc select-opts
-                                          :multiple-choices? multiple-values?
-                                          :dropdown? dropdown?))
+           (case type
+             (list :number :url)
+             (select block property (assoc select-opts
+                                           :multiple-choices? multiple-values?
+                                           :dropdown? dropdown?))
 
-            :page
-            (select-page block property (assoc select-opts
-                                               :classes (:classes schema)
-                                               :multiple-choices? multiple-values?
-                                               :dropdown? dropdown?))
+             :page
+             (select-page block property (assoc select-opts
+                                                :classes (:classes schema)
+                                                :multiple-choices? multiple-values?
+                                                :dropdown? dropdown?))
 
-            (let [config {:editor-opts (new-text-editor-opts repo block property value editor-id)}]
-              [:div
-               (editor-box editor-args editor-id (cond-> config
-                                                   multiple-values?
-                                                   (assoc :property-value value)))]))])
+             :template
+             (let [id (first (:classes schema))
+                   template (when id (db/entity [:block/uuid id]))]
+               (when template
+                 (create-new-block-from-template! block property template)
+                 (exit-edit-property)))
+
+             (let [config {:editor-opts (new-text-editor-opts repo block property value editor-id)}]
+               [:div
+                (editor-box editor-args editor-id (cond-> config
+                                                    multiple-values?
+                                                    (assoc :property-value value)))]))])
         (let [class (str (when-not row? "flex flex-1 ")
                          (when multiple-values? "property-value-content"))]
           [:div {:id (or dom-id (random-uuid))
