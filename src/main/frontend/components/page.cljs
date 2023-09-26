@@ -511,14 +511,12 @@
 
 (rum/defcs page-parent <
   (rum/local false ::show?)
-  [state page]
+  [state page parent]
   (let [*show? (::show? state)
-        namespace (some-> (:db/id (:block/namespace page))
-                          db/entity
-                          :block/uuid)]
-    (if (or namespace @*show?)
+        parent-id (:block/uuid parent)]
+    (if (or parent-id @*show?)
       [:div.w-60
-       (class-select page namespace (fn [value]
+       (class-select page parent-id (fn [value]
                                       (if (seq value)
                                         (db/transact!
                                          [{:db/id (:db/id page)
@@ -529,13 +527,11 @@
        "Empty"])))
 
 (rum/defcs configure < rum/reactive
-  (rum/local false ::parent-changed?)
   [state page _opts]
   (let [page-id (:db/id page)
         page (when page-id (db/sub-block page-id))
         types (:block/type page)
-        class? (contains? types "class")
-        parent-changed? (::parent-changed? state)]
+        class? (contains? types "class")]
     (when page
       [:div.property-configure.grid.gap-2
        (when class?
@@ -550,18 +546,9 @@
                 parent-class]
                "None")]
             [:div.col-span-3
-             (let [namespace (some-> (:db/id (:block/namespace page))
-                                     db/entity
-                                     :block/uuid)]
-               [:div.w-60
-                (class-select page namespace (fn [value]
-                                               (if (seq value)
-                                                 (db/transact!
-                                                  [{:db/id (:db/id page)
-                                                    :block/namespace [:block/uuid (uuid value)]}])
-                                                 (db/transact!
-                                                  [[:db.fn/retractAttribute (:db/id page) :block/namespace]]))
-                                               (swap! parent-changed? not)))])])])
+             (let [parent (some-> (:db/id (:block/namespace page))
+                                  db/entity)]
+               (page-parent page parent))])])
 
        (when (and class? (:block/namespace page))
          (let [ancestor-pages (loop [namespaces [page]]
