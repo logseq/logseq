@@ -470,19 +470,36 @@
                         (.preventDefault e))
                       (js/console.error "No selected option found to navigate to"))))})))
 
+(rum/defcs page-parent <
+  (rum/local false ::show?)
+  [state page]
+  (let [*show? (::show? state)
+        namespace (some-> (:db/id (:block/namespace page))
+                          db/entity
+                          :block/uuid)]
+    (if (or namespace @*show?)
+      [:div.w-60
+       (class-select page namespace (fn [value]
+                                      (if (seq value)
+                                        (db/transact!
+                                         [{:db/id (:db/id page)
+                                           :block/namespace [:block/uuid (uuid value)]}])
+                                        (db/transact!
+                                         [[:db.fn/retractAttribute (:db/id page) :block/namespace]]))))]
+      [:div.opacity-50.pointer.text-sm.cursor-pointer {:on-click #(reset! *show? true)}
+       "Empty"])))
+
 (rum/defcs configure < rum/reactive
-  (rum/local false ::parent-changed?)
   [state page {:keys [journal?]}]
   (let [page-id (:db/id page)
         page (when page-id (db/sub-block page-id))
         types (:block/type page)
-        class? (contains? types "class")
-        parent-changed? (::parent-changed? state)]
+        class? (contains? types "class")]
     (when page
       [:div.property-configure.grid.gap-2
        (when class?
-         [:div.grid.grid-cols-4.gap-1.items-center.class-parent
-          [:div.col-span-1 "Parent class:"]
+         [:div.grid.grid-cols-5.gap-1.items-center.class-parent
+          [:div.col-span-2 "Parent class:"]
           (if config/publishing?
             [:div.col-span-3
              (if-let [parent-class (some-> (:db/id (:block/namespace page))
@@ -492,33 +509,23 @@
                 parent-class]
                "None")]
             [:div.col-span-3
-             (let [namespace (some-> (:db/id (:block/namespace page))
-                                     db/entity
-                                     :block/uuid)]
-               [:div.w-60
-                (class-select page namespace (fn [value]
-                                               (if (seq value)
-                                                 (db/transact!
-                                                  [{:db/id (:db/id page)
-                                                    :block/namespace [:block/uuid (uuid value)]}])
-                                                 (db/transact!
-                                                  [[:db.fn/retractAttribute (:db/id page) :block/namespace]]))
-                                               (swap! parent-changed? not)))])])])
+             (page-parent page)])])
        (when (and class? (:block/namespace page))
-         [:div.grid.grid-cols-4.gap-1.items-center.class-ancestors
-          [:div.col-span-1 "Ancestor classes:"]
-          [:div.col-span-3
-           (let [ancestor-pages (loop [namespaces [page]]
-                                  (if-let [parent (:block/namespace (last namespaces))]
-                                    (recur (conj namespaces parent))
-                                    namespaces))
-                 class-ancestors (map :block/original-name (reverse ancestor-pages))]
-             (interpose [:span " < "]
-                        (map (fn [class-name]
-                               (if (= class-name (:block/original-name page))
-                                 [:span class-name]
-                                 [:a {:on-click #(route-handler/redirect-to-page! class-name)} class-name]))
-                             class-ancestors)))]])
+         (let [ancestor-pages (loop [namespaces [page]]
+                                (if-let [parent (:block/namespace (last namespaces))]
+                                  (recur (conj namespaces parent))
+                                  namespaces))
+               class-ancestors (map :block/original-name (reverse ancestor-pages))]
+           (when (> (count class-ancestors) 2)
+             [:div.grid.grid-cols-5.gap-1.items-center.class-ancestors
+              [:div.col-span-2 "Ancestor classes:"]
+              [:div.col-span-3
+               (interpose [:span.opacity-50.text-sm " > "]
+                          (map (fn [class-name]
+                                 (if (= class-name (:block/original-name page))
+                                   [:span class-name]
+                                   [:a {:on-click #(route-handler/redirect-to-page! class-name)} class-name]))
+                               class-ancestors))]])))
        (when (and config/publishing? (contains? types "property"))
          (property/property-config (state/get-current-repo) page {}))])))
 
@@ -533,17 +540,25 @@
      (let [edit-input-id-prefix (str "edit-block-" (:block/uuid page))]
        (if (and configure? class?)
          [:<>
-          [:div.text-sm.opacity-70.font-medium.mb-2 "Properties:"]
-          (component-block/db-properties-cp {:editor-box editor/box}
-                                            page
-                                            (str edit-input-id-prefix "-page")
-                                            (assoc opts :class-schema? false))
-          [:div.text-sm.opacity-70.font-medium.mt-4.mb-2 "Class Properties:"]
-          [:div
-           (component-block/db-properties-cp {:editor-box editor/box}
-                                            page
-                                            (str edit-input-id-prefix "-schema")
-                                            (assoc opts :class-schema? true))]]
+          [:div.mt-2
+           (ui/foldable
+            [:div.text-sm.opacity-70.font-medium "Class Properties:"]
+            [:div
+             (component-block/db-properties-cp {:editor-box editor/box}
+                                               page
+                                               (str edit-input-id-prefix "-schema")
+                                               (assoc opts :class-schema? true))]
+            {})]
+          (when (seq (:block/properties page))
+            [:div.mt-3
+             (ui/foldable
+              [:div.text-sm.opacity-70.font-medium "Own properties:"]
+              (fn []
+                (component-block/db-properties-cp {:editor-box editor/box}
+                                                  page
+                                                  (str edit-input-id-prefix "-page")
+                                                  (assoc opts :class-schema? false)))
+              {:default-collapsed? true})])]
          (component-block/db-properties-cp {:editor-box editor/box}
                                            page
                                            (str edit-input-id-prefix "-page")
