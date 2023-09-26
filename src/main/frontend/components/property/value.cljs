@@ -415,24 +415,25 @@
                                        (add-property!)))}))
       ;; :others
       (if editing?
-        [:div.flex.flex-1
-         (case type
-           (list :number :url)
-           [:div.h-6 (select block property (assoc select-opts
-                                                   :multiple-choices? multiple-values?
-                                                   :dropdown? true))]
+        (let [dropdown? (if-some [x dropdown?] x true)]
+          [:div.flex.flex-1
+          (case type
+            (list :number :url)
+            (select block property (assoc select-opts
+                                          :multiple-choices? multiple-values?
+                                          :dropdown? dropdown?))
 
-           :page
-           [:div.h-6 (select-page block property (assoc select-opts
-                                                        :classes (:classes schema)
-                                                        :multiple-choices? multiple-values?
-                                                        :dropdown? true))]
+            :page
+            (select-page block property (assoc select-opts
+                                               :classes (:classes schema)
+                                               :multiple-choices? multiple-values?
+                                               :dropdown? dropdown?))
 
-           (let [config {:editor-opts (new-text-editor-opts repo block property value editor-id)}]
-             [:div
-              (editor-box editor-args editor-id (cond-> config
-                                                  multiple-values?
-                                                  (assoc :property-value value)))]))]
+            (let [config {:editor-opts (new-text-editor-opts repo block property value editor-id)}]
+              [:div
+               (editor-box editor-args editor-id (cond-> config
+                                                   multiple-values?
+                                                   (assoc :property-value value)))]))])
         (let [class (str (when-not row? "flex flex-1 ")
                          (when multiple-values? "property-value-content"))]
           [:div {:id (or dom-id (random-uuid))
@@ -527,7 +528,9 @@
                   (atom (boolean (:add-new-item? (nth (:rum/args state) 3))))
                   ::show-add?
                   (atom (boolean (:show-add? (nth (:rum/args state) 3))))))}
-  [state block property v {:keys [on-chosen] :as opts} dom-id schema editor-id editor-args]
+  [state block property v {:keys [on-chosen dropdown?] :as opts
+                           :or {dropdown? true}}
+   dom-id schema editor-id editor-args]
   (let [*show-add? (::show-add? state)
         *add-new-item? (::add-new-item? state)
         type (get schema :type :default)
@@ -560,31 +563,33 @@
       :on-mouse-out  #(reset! *show-add? false)}
 
      (when (seq items)
-       (if select-type?
-         (ui/dropdown
-          (fn [{:keys [toggle-fn]}]
-            [:div.cursor-pointer
-             {:on-mouse-down (fn [e]
-                               (util/stop e)
-                               (toggle-fn))
-              :class "flex flex-1 flex-row items-center flex-wrap gap-2"}
-             values-cp])
-          (fn [{:keys [_toggle-fn]}]
-            (let [select-opts {:on-chosen (fn []
-                                            (when *add-new-item? (reset! *add-new-item? false))
-                                            (when on-chosen (on-chosen)))}]
-              [:div.property-select
-               (if (= type :page)
-                 (select-page block property (assoc select-opts
-                                                    :classes (:classes schema)
-                                                    :multiple-choices? true
-                                                    :dropdown? false))
-                 (select block property (assoc select-opts
-                                               :multiple-choices? true
-                                               :dropdown? false)))]))
-          {:modal-class (util/hiccup->class
-                         "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
-         values-cp))
+       (let [select-cp (fn []
+                         (let [select-opts {:on-chosen (fn []
+                                                         (when *add-new-item? (reset! *add-new-item? false))
+                                                         (when on-chosen (on-chosen)))}]
+                           [:div.property-select
+                            (if (= type :page)
+                              (select-page block property (assoc select-opts
+                                                                 :classes (:classes schema)
+                                                                 :multiple-choices? true
+                                                                 :dropdown? false))
+                              (select block property (assoc select-opts
+                                                            :multiple-choices? true
+                                                            :dropdown? false)))]))]
+         (if select-type?
+           (ui/dropdown
+            (fn [{:keys [toggle-fn]}]
+              [:div.cursor-pointer
+               {:on-mouse-down (fn [e]
+                                 (util/stop e)
+                                 (toggle-fn))
+                :class "flex flex-1 flex-row items-center flex-wrap gap-2"}
+               values-cp])
+            (fn [{:keys [_toggle-fn]}]
+              (select-cp))
+            {:modal-class (util/hiccup->class
+                           "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
+           values-cp)))
 
      (cond
        (rum/react *add-new-item?)
