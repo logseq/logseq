@@ -151,6 +151,7 @@
         "yargs-parser": "20.2.4"
     },
     "resolutions": {
+        "**/postcss": "8.4.17",
         "pixi-graph-fork/@pixi/app": "6.2.0",
         "pixi-graph-fork/@pixi/constants": "6.2.0",
         "pixi-graph-fork/@pixi/core": "6.2.0",
