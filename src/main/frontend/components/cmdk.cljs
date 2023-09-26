@@ -54,6 +54,9 @@
    :blocks         {:status :success :show-more false :items nil} 
    :files          {:status :success :show-more false :items nil}})        
 
+(defn lower-case-str [x]
+  (.toLowerCase (str x)))
+
 (defn create-items [q]
   (if-not (seq q)
     []
@@ -146,7 +149,7 @@
       (swap! !results assoc group {:status :success :items default-commands})
       (->> (cp-handler/top-commands 1000)
            (map #(assoc % :t (cp/translate t %)))
-           (filter #(string/includes? (string/lower-case (pr-str %)) (string/lower-case @!input)))
+           (filter #(string/includes? (lower-case-str (pr-str %)) (lower-case-str @!input)))
            (map #(hash-map :icon "command" 
                            :icon-theme :gray 
                            :text (cp/translate t %)
@@ -233,7 +236,7 @@
     (js/console.log "recents" (clj->js recent-searches) (clj->js recent-pages))
     (swap! !results assoc-in [group :status] :loading)
     (let [items (->> (concat recent-searches recent-pages)
-                     (filter #(string/includes? (string/lower-case (:data %)) (string/lower-case @!input)))
+                     (filter #(string/includes? (lower-case-str (:data %)) (lower-case-str @!input)))
                      (map #(hash-map :icon (if (= :page (:type %)) "page" "history")
                                      :icon-theme :gray 
                                      ; :header (when-let [page-name])

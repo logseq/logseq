@@ -37,7 +37,7 @@
             "esc" [:div.tracking-tightest {:style {:transform "scaleX(0.8) scaleY(1.2) " 
                                                    :font-size "0.5rem" 
                                                    :font-weight "500"}} "ESC"]
-            (.toUpperCase key))]))]))
+            (cond-> key (string? key) .toUpperCase))]))]))
           
      
    
