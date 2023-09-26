@@ -290,14 +290,11 @@
                    (when untitled? (reset! *title-value "")))}]]))
 
 (rum/defc page-tags <
-  {:will-unmount (fn [state]
-                   (reset! (last (:rum/args state)) false)
-                   state)}
-  [page tags-property *adding-tags?]
+  [page tags-property *hover? *configuring?]
   (let [toggle-fn' (fn [toggle-fn]
                      (fn []
                        (toggle-fn)
-                       (swap! *adding-tags? not)))]
+                       (swap! *configuring? not)))]
     (ui/dropdown
      (fn [{:keys [toggle-fn]}]
        [:a.fade-link.flex.flex-row.items-center
@@ -313,23 +310,62 @@
                     "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")
       :on-toggle (fn [value]
                    (when (false? value)
-                     (reset! *adding-tags? false)))})))
+                     (reset! *configuring? false)
+                     (reset! *hover? false)))})))
+
+(declare configure)
+(declare page-properties)
+(rum/defc page-configure
+  [page *hover? *configuring?]
+  (when @*hover?
+    (let [toggle-fn' (fn [toggle-fn]
+                       (fn []
+                         (toggle-fn)
+                         (reset! *configuring? true)))]
+      (ui/dropdown
+       (fn [{:keys [toggle-fn]}]
+         [:a.fade-link.flex.flex-row.items-center
+          {:on-click (toggle-fn' toggle-fn)}
+          [:div.mr-1.text-sm "Configure"]])
+       (fn [{:keys [_toggle-fn]}]
+         (let [types (:block/type page)
+               class? (contains? types "class")
+               property? (contains? types "property")]
+           [:div.p-4.flex.flex-col.gap-4 {:style {:min-width 400}}
+            (when class?
+              (configure page {}))
+            (when class?
+              (page-properties page true))
+            (if property?
+              (property/property-config (state/get-current-repo) page {})
+              ;; add new property for normal pages
+              (when (and (not class?)
+                         (empty? (:block/properties page))
+                         (empty? (:block/alias page)))
+                (page-properties page true)))]))
+
+       {:modal-class (util/hiccup->class
+                      "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")
+        :on-toggle (fn [value]
+                     (when (false? value)
+                       (reset! *configuring? false)
+                       (reset! *hover? false)))}))))
 
 (rum/defcs page-title < rum/reactive
   (rum/local false ::edit?)
   (rum/local "" ::input-value)
   (rum/local false ::hover?)
-  (rum/local false ::adding-tags?)
+  (rum/local false ::configuring?)
   {:init (fn [state]
            (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
-  [state page-name icon title {:keys [fmt-journal? *configure-show? preview?]}]
+  [state page-name icon title {:keys [fmt-journal? preview?]}]
   (when title
     (let [page (when page-name (db/entity [:block/name page-name]))
           page (db/sub-block (:db/id page))
           *hover? (::hover? state)
           *title-value (get state ::title-value)
           *edit? (get state ::edit?)
-          *adding-tags? (::adding-tags? state)
+          *configuring? (::configuring? state)
           *input-value (get state ::input-value)
           repo (state/get-current-repo)
           hls-page? (pdf-utils/hls-file? title)
@@ -345,7 +381,7 @@
           tags-property (db/entity [:block/name "tags"])]
       [:div.ls-page-title.flex-1.flex-row.flex-wrap.w-full.relative
        {:on-mouse-over #(reset! *hover? true)
-        :on-mouse-out #(when-not @*adding-tags?
+        :on-mouse-out #(when-not @*configuring?
                          (reset! *hover? false))}
        [:div.flex.flex-1.flex-row.flex-wrap.items-center.gap-4
         [:h1.page-title.flex.cursor-pointer.gap-1
@@ -405,16 +441,12 @@
        (when (and db-based? (not whiteboard-page?))
          [:div.absolute.bottom-2.left-0
           [:div.page-add-tags.flex.flex-row.items-center.flex-wrap.gap-2.ml-2
-           (when (and (empty? (:block/tags page)) @*hover? (not @*edit?))
-             (page-tags page tags-property *adding-tags?))
+           (when (and (empty? (:block/tags page)) @*hover?)
+             (page-tags page tags-property *hover? *configuring?))
 
-           (when (and @*hover? (not @*edit?))
-             [:a.fade-link.flex.flex-row.items-center
-              {:on-click #(swap! *configure-show? not)}
-              [:div.mr-1.text-sm (if @*configure-show?
-                                   "Close"
-                                   "Configure")]
-              (when @*configure-show? (ui/icon "x" {:size 14}))])]])])))
+           (when (or (some #(contains? #{"class" "property"} %) (:block/type page))
+                     (and (empty? (:block/properties page)) (empty? (:block/alias page))))
+             (page-configure page *hover? *configuring?))]])])))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
@@ -499,7 +531,7 @@
        "Empty"])))
 
 (rum/defcs configure < rum/reactive
-  [state page {:keys [journal?]}]
+  [state page _opts]
   (let [page-id (:db/id page)
         page (when page-id (db/sub-block page-id))
         types (:block/type page)
@@ -519,6 +551,7 @@
                "None")]
             [:div.col-span-3
              (page-parent page)])])
+
        (when (and class? (:block/namespace page))
          (let [ancestor-pages (loop [namespaces [page]]
                                 (if-let [parent (:block/namespace (last namespaces))]
@@ -534,46 +567,42 @@
                                  (if (= class-name (:block/original-name page))
                                    [:span class-name]
                                    [:a {:on-click #(route-handler/redirect-to-page! class-name)} class-name]))
-                               class-ancestors))]])))
-       (when (and config/publishing? (contains? types "property"))
-         (property/property-config (state/get-current-repo) page {}))])))
+                            class-ancestors))]])))
+
+       ])))
 
 (rum/defc page-properties < rum/reactive
-  [page *configure-show?]
+  [page configure?]
   (let [types (:block/type page)
         class? (contains? types "class")
-        configure? (rum/react *configure-show?)
+        property? (contains? types "property")
         opts {:selected? false
               :page-configure? configure?}]
     [:div.ls-page-properties.mb-4 {:style {:padding 2}}
      (let [edit-input-id-prefix (str "edit-block-" (:block/uuid page))]
-       (if (and configure? class?)
-         [:<>
-          [:div.mt-2
-           (ui/foldable
-            [:div.text-sm.opacity-70.font-medium "Class Properties:"]
+       (if configure?
+         (cond
+           class?
+           [:div
+            [:div.mb-2 "Class Properties:"]
             [:div
              (component-block/db-properties-cp {:editor-box editor/box}
                                                page
                                                (str edit-input-id-prefix "-schema")
-                                               (assoc opts :class-schema? true))]
-            {})]
-          (when (seq (:block/properties page))
-            [:div.mt-3
-             (ui/foldable
-              [:div.text-sm.opacity-70.font-medium "Own properties:"]
-              (fn []
-                (component-block/db-properties-cp {:editor-box editor/box}
-                                                  page
-                                                  (str edit-input-id-prefix "-page")
-                                                  (assoc opts :class-schema? false)))
-              {:default-collapsed? true})])]
+                                               (assoc opts :class-schema? true))]]
+           (and (not property?)
+                (empty? (:block/properties page))
+                (empty? (:block/alias page)))
+           [:div
+            [:div.mb-2 "Page properties:"]
+            (component-block/db-properties-cp {:editor-box editor/box}
+                                              page
+                                              (str edit-input-id-prefix "-page")
+                                              (assoc opts :class-schema? false))])
          (component-block/db-properties-cp {:editor-box editor/box}
                                            page
                                            (str edit-input-id-prefix "-page")
-                                           ;; class page properties are wrongly identified without
-                                           ;; class? and configure?
-                                           (assoc opts :class-schema? (and class? configure?)))))]))
+                                           (assoc opts :class-schema? false))))]))
 
 (defn- get-path-page-name
   [state page-name]
@@ -617,8 +646,6 @@
   (when-let [path-page-name (get-path-page-name state page-name)]
     (let [current-repo (state/sub :git/current-repo)
           repo (or repo current-repo)
-          *configure-show? (::configure-show? state)
-          configure-show? (rum/react *configure-show?)
           page-name (util/page-name-sanity-lc path-page-name)
           page (get-page-entity repo path-page-name page-name)
           block-id (:block/uuid page)
@@ -668,7 +695,6 @@
              (when-not whiteboard?
                (page-title page-name icon title {:journal? journal?
                                                  :fmt-journal? fmt-journal?
-                                                 :*configure-show? *configure-show?
                                                  :built-in-property? built-in-property?
                                                  :preview? preview?}))
              (when (not config/publishing?)
@@ -677,13 +703,6 @@
                   (plugins/hook-ui-slot :page-head-actions-slotted nil)
                   (plugins/hook-ui-items :pagebar)]))])
 
-          (when (and db-based? configure-show?)
-            (if (and (contains? (:block/type page) "property") (not config/publishing?))
-              (do
-                (state/set-modal! #(property/property-config repo page {}))
-                (swap! *configure-show? not))
-              (configure page {:journal? journal?})))
-
           [:div
            (when (and block? (not sidebar?) (not whiteboard?))
              (let [config {:id "block-parent"
@@ -691,8 +710,10 @@
                [:div.mb-4
                 (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
-           (when db-based?
-             (page-properties page *configure-show?))
+           (when (and db-based?
+                      (or (seq (:block/properties page))
+                          (seq (:block/alias page))))
+             (page-properties page false))
 
            ;; blocks
            (let [_ (and block? page (reset! *current-block-page (:block/name (:block/page page))))

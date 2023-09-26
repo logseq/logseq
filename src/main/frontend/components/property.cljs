@@ -276,6 +276,7 @@
         [:div.ml-1 {:style {:height "1.5em"}} ; TODO: ugly
          (select/select {:items (map (fn [x] {:value x}) properties)
                          :dropdown? true
+                         :close-modal? false
                          :show-new-when-not-exact-match? true
                          :exact-match-exclude-items exclude-properties
                          :input-default-placeholder "Add a property"
@@ -320,7 +321,7 @@
                      (property-handler/set-editing-new-property! edit-input-id)
                      (reset! *property-key nil)
                      (reset! *property-value nil))}
-        [:div.flex.flex-row.items-center
+        [:div.flex.flex-row.items-center {:style {:padding-left 1}}
          (ui/icon "circle-plus" {:size 15})
          [:div.ml-1.text-sm "Add property"]]]
 
