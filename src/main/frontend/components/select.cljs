@@ -77,7 +77,8 @@
         *selected-choices (::selected-choices state)
         selected-choices (rum/react *selected-choices)
         full-choices (->> (concat (map (fn [v] {:value v}) selected-choices) items)
-                          (util/distinct-by-last-wins :value))
+                          (util/distinct-by-last-wins :value)
+                          (remove nil?))
         search-result' (->>
                         (cond-> (search/fuzzy-search full-choices @input :limit limit :extract-fn extract-fn)
                           (fn? transform-fn)

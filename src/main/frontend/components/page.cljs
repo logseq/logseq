@@ -301,8 +301,7 @@
         {:on-click (toggle-fn' toggle-fn)}
         [:div.ml-1.text-sm "Add tags"]])
      (fn [{:keys [toggle-fn]}]
-       (pv/property-value page tags-property nil {:add-new-item? true
-                                                  :on-chosen (toggle-fn' toggle-fn)
+       (pv/property-value page tags-property nil {:on-chosen (toggle-fn' toggle-fn)
                                                   :dropdown? false}))
      {:modal-class (util/hiccup->class
                     "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")
@@ -433,8 +432,7 @@
           [:div.page-tags.ml-4
            (pv/property-value page tags-property (map :block/uuid (:block/tags page))
                               {:page-cp (fn [config page]
-                                          (component-block/page-cp (assoc config :tag? true) page))
-                               :dropdown? false})])]
+                                          (component-block/page-cp (assoc config :tag? true) page))})])]
 
        (when (and db-based? (not whiteboard-page?))
          [:div.absolute.bottom-2.left-0
