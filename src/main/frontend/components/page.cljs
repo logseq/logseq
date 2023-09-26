@@ -705,6 +705,7 @@
                 (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
            (when (and db-based?
+                      (not block?)
                       (or (seq (:block/properties page))
                           (seq (:block/alias page))))
              (page-properties page false))
