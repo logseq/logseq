@@ -301,11 +301,9 @@
         {:on-click (toggle-fn' toggle-fn)}
         [:div.ml-1.text-sm "Add tags"]])
      (fn [{:keys [toggle-fn]}]
-         [:div.p-4.h-96.w-96
-          [:div.font-medium.mb-2 "Add tags"]
-          (pv/property-value page tags-property nil {:add-new-item? true
-                                                     :on-chosen (toggle-fn' toggle-fn)
-                                                     :dropdown? false})])
+       (pv/property-value page tags-property nil {:add-new-item? true
+                                                  :on-chosen (toggle-fn' toggle-fn)
+                                                  :dropdown? false}))
      {:modal-class (util/hiccup->class
                     "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")
       :on-toggle (fn [value]
