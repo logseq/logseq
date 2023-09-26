@@ -289,6 +289,32 @@
        :on-focus (fn []
                    (when untitled? (reset! *title-value "")))}]]))
 
+(rum/defc page-tags <
+  {:will-unmount (fn [state]
+                   (reset! (last (:rum/args state)) false)
+                   state)}
+  [page tags-property *adding-tags?]
+  (let [toggle-fn' (fn [toggle-fn]
+                     (fn []
+                       (toggle-fn)
+                       (swap! *adding-tags? not)))]
+    (ui/dropdown
+     (fn [{:keys [toggle-fn]}]
+       [:a.fade-link.flex.flex-row.items-center
+        {:on-click (toggle-fn' toggle-fn)}
+        [:div.ml-1.text-sm "Add tags"]])
+     (fn [{:keys [toggle-fn]}]
+         [:div.p-4.h-96.w-96
+          [:div.font-medium.mb-2 "Add tags"]
+          (pv/property-value page tags-property nil {:add-new-item? true
+                                                     :on-chosen (toggle-fn' toggle-fn)
+                                                     :dropdown? false})])
+     {:modal-class (util/hiccup->class
+                    "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")
+      :on-toggle (fn [value]
+                   (when (false? value)
+                     (reset! *adding-tags? false)))})))
+
 (rum/defcs page-title < rum/reactive
   (rum/local false ::edit?)
   (rum/local "" ::input-value)
@@ -380,24 +406,7 @@
          [:div.absolute.bottom-2.left-0
           [:div.page-add-tags.flex.flex-row.items-center.flex-wrap.gap-2.ml-2
            (when (and (empty? (:block/tags page)) @*hover? (not @*edit?))
-             (let [toggle-fn' (fn [toggle-fn]
-                                (fn []
-                                  (toggle-fn)
-                                  (swap! *adding-tags? not)))]
-               (ui/dropdown
-                (fn [{:keys [toggle-fn]}]
-                  [:a.fade-link.flex.flex-row.items-center
-                   {:on-click (toggle-fn' toggle-fn)}
-                   [:div.ml-1.text-sm "Add tags"]])
-                (let []
-                  (fn [{:keys [toggle-fn]}]
-                    [:div.p-4.h-96.w-96
-                     [:div.font-medium.mb-2 "Add tags"]
-                     (pv/property-value page tags-property nil {:add-new-item? true
-                                                                :on-chosen (toggle-fn' toggle-fn)
-                                                                :dropdown? false})]))
-                {:modal-class (util/hiccup->class
-                               "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")})))
+             (page-tags page tags-property *adding-tags?))
 
            (when (and @*hover? (not @*edit?))
              [:a.fade-link.flex.flex-row.items-center
