@@ -270,6 +270,7 @@
       (log/error :export-file-failed error))))
 
 
+;; FIXME: All uses of :block/properties in this ns
 (defn- dissoc-properties [m ks]
   (if (:block/properties m)
     (update m :block/properties

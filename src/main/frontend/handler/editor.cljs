@@ -1948,6 +1948,7 @@
     (merge (apply dissoc block (conj (when-not keep-uuid? [:block/_refs]) :block/pre-block? :block/meta))
            {:block/page {:db/id (:db/id page)}
             :block/format format
+            ;; FIXME: Handle db graphs
             :block/properties (apply dissoc (:block/properties block)
                                      (concat
                                       (when-not keep-uuid? [:id])
@@ -3777,6 +3778,7 @@
     (first (:block/_parent (db/entity (:db/id block)))))
    (util/collapsed? block)))
 
+;; file graph only
 (defn- set-heading-aux!
   [repo block-id heading]
   (let [block (db/pull [:block/uuid block-id])

@@ -6,7 +6,8 @@
             [logseq.db.default :as default-db]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [frontend.config :as config]))
 
 (defn- build-links
   [links]
@@ -127,7 +128,10 @@
     (when-let [repo (state/get-current-repo)]
       (let [page (util/page-name-sanity-lc page)
             page-entity (db/entity [:block/name page])
-            tags (:tags (:block/properties page-entity))
+            tags (if (config/db-based-graph? repo)
+                   (set (map #(:block/name (db/entity repo (:db/id %)))
+                             (:block/tags page-entity)))
+                   (:tags (:block/properties page-entity)))
             tags (remove #(= page %) tags)
             ref-pages (db/get-page-referenced-pages repo page)
             mentioned-pages (db/get-pages-that-mentioned-page repo page show-journal)
