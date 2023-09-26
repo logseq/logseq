@@ -158,10 +158,16 @@
                              (map vec)
                              (into {})))]
              (when (:initial-open? opts)
-               (reset! (:open? state) true)))
+               (reset! (:open? state) true))
+             (let [on-toggle (:on-toggle opts)]
+               (when (fn? on-toggle)
+                (add-watch (:open? state) ::listen-open-value
+                           (fn [_ _ _ _]
+                             (on-toggle @(:open? state)))))))
            state)}
   [state content-fn modal-content-fn
-   & [{:keys [modal-class z-index trigger-class _initial-open? *toggle-fn]
+   & [{:keys [modal-class z-index trigger-class _initial-open? *toggle-fn
+              _on-toggle]
        :or   {z-index 999}}]]
   (let [{:keys [open?]} state
         _ (when (and (util/atom? *toggle-fn)
