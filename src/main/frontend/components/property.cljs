@@ -56,6 +56,7 @@
                   {:items options
                    :input-default-placeholder (if multiple-choices? "Choose classes" "Choose class")
                    :dropdown? true
+                   :close-modal? false
                    :multiple-choices? multiple-choices?
                    :selected-choices schema-classes
                    :extract-fn :label

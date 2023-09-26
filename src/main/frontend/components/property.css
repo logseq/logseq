@@ -22,19 +22,15 @@
     border-left-color: var(--ls-guideline-color, #ddd);
 }
 
-.ls-page-properties > .ls-properties-area {
+.ls-page-properties > .ls-properties-area > .property-block {
     margin-left: -22px;
-
-    .ls-new-property {
-        margin-left: 22px;
-    }
 }
 
 .ls-block .ls-properties-area {
     margin-left: 0;
 }
 
-.ls-block .property-pair, .property-block .property-value {
+.ls-block .property-pair, .property-block .property-value, .property-template .property-pair {
     padding-left: 22px;
 }
 
@@ -43,7 +39,7 @@
 }
 
 .ls-properties-area {
-    @apply grid gap-1;
+    @apply grid gap-2 pt-2;
 
     .property-pair {
         @apply grid grid-cols-5 gap-1;
