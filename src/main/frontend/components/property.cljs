@@ -209,7 +209,8 @@
       (if (contains? db-property/hidden-built-in-properties (keyword property-name))
         (do (notification/show! "This is a built-in property that can't be used." :error)
             (pv/exit-edit-property))
-        (if (contains? (:block/type entity) "class")
+        ;; Both conditions necessary so that a class can add its own page properties
+        (if (and (contains? (:block/type entity) "class") class-schema?)
           (pv/add-property! entity property-name "" {:class-schema? class-schema?
                                                   ;; Only enter property names from sub-modal as inputting
                                                   ;; property values is buggy in sub-modal
