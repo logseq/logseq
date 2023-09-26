@@ -531,11 +531,13 @@
        "Empty"])))
 
 (rum/defcs configure < rum/reactive
+  (rum/local false ::parent-changed?)
   [state page _opts]
   (let [page-id (:db/id page)
         page (when page-id (db/sub-block page-id))
         types (:block/type page)
-        class? (contains? types "class")]
+        class? (contains? types "class")
+        parent-changed? (::parent-changed? state)]
     (when page
       [:div.property-configure.grid.gap-2
        (when class?
@@ -550,7 +552,18 @@
                 parent-class]
                "None")]
             [:div.col-span-3
-             (page-parent page)])])
+             (let [namespace (some-> (:db/id (:block/namespace page))
+                                     db/entity
+                                     :block/uuid)]
+               [:div.w-60
+                (class-select page namespace (fn [value]
+                                               (if (seq value)
+                                                 (db/transact!
+                                                  [{:db/id (:db/id page)
+                                                    :block/namespace [:block/uuid (uuid value)]}])
+                                                 (db/transact!
+                                                  [[:db.fn/retractAttribute (:db/id page) :block/namespace]]))
+                                               (swap! parent-changed? not)))])])])
 
        (when (and class? (:block/namespace page))
          (let [ancestor-pages (loop [namespaces [page]]
@@ -567,9 +580,7 @@
                                  (if (= class-name (:block/original-name page))
                                    [:span class-name]
                                    [:a {:on-click #(route-handler/redirect-to-page! class-name)} class-name]))
-                            class-ancestors))]])))
-
-       ])))
+                               class-ancestors))]])))])))
 
 (rum/defc page-properties < rum/reactive
   [page configure?]
