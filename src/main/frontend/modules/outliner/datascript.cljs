@@ -142,7 +142,7 @@
                              true
                              (dissoc :block/children :block/meta :block/top? :block/bottom? :block/anchor
                                      :block/title :block/body :block/level :block/container :db/other-tx
-                                     :block/additional-properties :block/unordered)
+                                     :block/unordered)
                              db-based?
                              (update :block/properties dissoc :id))
                            m)) txs)
