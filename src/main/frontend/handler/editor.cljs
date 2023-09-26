@@ -784,8 +784,7 @@
                                       (if concat-prev-block?
                                         (let [prev-block' (if (seq (:block/_refs block-e))
                                                             (assoc prev-block
-                                                                   :block/uuid (:block/uuid block)
-                                                                   :block.temp/additional-properties (:block/properties block))
+                                                                   :block/uuid (:block/uuid block))
                                                             prev-block)]
                                           (delete-block-aux! block delete-children?)
                                           (save-block! repo prev-block' new-content {:editor/op :delete}))
@@ -2668,8 +2667,7 @@
             repo (state/get-current-repo)
             edit-block' (if next-block-has-refs?
                           (assoc edit-block
-                                 :block/uuid (:block/uuid next-block)
-                                 :block.temp/additional-properties (dissoc (:block/properties next-block) :block/uuid))
+                                 :block/uuid (:block/uuid next-block))
                           edit-block)]
         (outliner-tx/transact!
          {:outliner-op :delete-blocks
