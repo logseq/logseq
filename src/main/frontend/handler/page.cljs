@@ -479,12 +479,22 @@
 (defn- page-unable-to-delete
   "If a page is unable to delete, returns a map with more information. Otherwise returns nil"
   [repo page]
-  (cond
-    (and (contains? (:block/type page) "class")
-         (seq (model/get-tag-blocks repo (:block/name page))))
-    {:msg "Unable to delete this page because blocks are tagged with this page"}
-    (contains? (:block/type page) "property")
-    {:msg "Unable to delete this page because this page is a property"}))
+  (try
+    (cond
+      (and (contains? (:block/type page) "class")
+           (seq (model/get-tag-blocks repo (:block/name page))))
+      {:msg "Unable to delete this page because blocks are tagged with this page"}
+      (contains? (:block/type page) "property")
+      (cond (seq (model/get-classes-with-property (:block/uuid page)))
+            {:msg "Unable to delete this page because classes use this property"}
+            (->> (model/get-block-property-values (:block/uuid page))
+                 (filter (fn [[_ v]] (if (seq? v) (seq v) (some? v))))
+                 seq)
+            {:msg "Unable to delete this page because blocks use this property"}))
+    (catch :default e
+      (log/error :exception e)
+      (state/pub-event! [:capture-error {:error e}])
+      {:msg (str "An unexpected failure while deleting: " e)})))
 
 (defn delete!
   "Deletes a page and then either calls the ok-handler or the error-handler if unable to delete"
@@ -521,8 +531,6 @@
 
                                  :else
                                  nil)
-                _ (prn :PTX delete-page-tx)
-                _ (prn :BTX truncate-blocks-tx-data)
                 tx-data (concat truncate-blocks-tx-data delete-page-tx)]
             (db/transact! repo tx-data {:outliner-op :delete-page :persist-op? persist-op?})
 

@@ -42,7 +42,9 @@
         (ui/icon "alert-triangle")]]
       [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium
-        (t :page/delete-confirmation)]]]
+        (if (config/db-based-graph? (state/get-current-repo))
+          (t :page/db-delete-confirmation)
+          (t :page/delete-confirmation))]]]
 
      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
       [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto

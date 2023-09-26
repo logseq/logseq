@@ -1223,12 +1223,26 @@ independent of format as format specific heading characters are stripped"
   "Get blocks which have this property."
   [property-uuid]
   (d/q
-    '[:find ?b ?v
+   '[:find ?b ?v
+     :in $ ?property-uuid
+     :where
+     [?b :block/properties ?p]
+     [(get ?p ?property-uuid) ?v]
+     [(some? ?v)]]
+   (conn/get-db)
+   property-uuid))
+
+(defn get-classes-with-property
+  "Get classes which have given property as a class property"
+  [property-uuid]
+  (d/q
+    '[:find ?b
       :in $ ?property-uuid
       :where
-      [?b :block/properties ?p]
-      [(get ?p ?property-uuid) ?v]
-      [(some? ?v)]]
+      [?b :block/schema ?schema]
+      [(get ?schema :properties) ?schema-properties*]
+      [(set ?schema-properties*) ?schema-properties]
+      [(contains? ?schema-properties ?property-uuid)]]
     (conn/get-db)
     property-uuid))
 
