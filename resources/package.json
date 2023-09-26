@@ -53,7 +53,7 @@
     "@electron-forge/maker-squirrel": "^6.0.4",
     "@electron-forge/maker-zip": "^6.0.4",
     "@electron/rebuild": "3.2.10",
-    "electron": "24.6.3",
+    "electron": "24.8.3",
     "electron-builder": "^22.11.7",
     "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git"
   },
