@@ -814,8 +814,11 @@
        (ui/tippy
          {:html (fn [] [:small.inline-flex.px-2.py-1 (str name " (" used-percent' "%)")])
           :arrow true}
-         [:div.rounded-full.w-full.h-2.cursor-help.overflow-hidden
+         [:div.rounded-full.w-full.h-2.cursor-pointer.overflow-hidden
           {:class   "bg-black/50"
+           :on-click (fn []
+                       (state/close-modal!)
+                       (route-handler/redirect-to-all-graphs))
            :tooltip name}
           [:div.rounded-full.h-2
            {:class color
