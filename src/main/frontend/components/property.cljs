@@ -127,7 +127,7 @@
          [:div.col-span-3
           (icon property icon-value {:disabled? disabled?})])]
 
-      [:div.grid.grid-cols-4.gap-1.leading-8
+      [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Schema type:"]
        (let [schema-types (->> (concat property-handler/user-face-builtin-schema-types
                                        (when built-in-property?
@@ -146,12 +146,12 @@
                          (swap! *property-schema assoc :type type))))])]
 
       (when (= :page (:type @*property-schema))
-        [:div.grid.grid-cols-4.gap-1.leading-8
+        [:div.grid.grid-cols-4.gap-1.items-center.leading-8
          [:label "Specify classes:"]
          (class-select *property-schema (:classes @*property-schema) (assoc opts :disabled? disabled?))])
 
       (when (= :template (:type @*property-schema))
-        [:div.grid.grid-cols-4.gap-1.leading-8
+        [:div.grid.grid-cols-4.gap-1.items-center.leading-8
          [:label "Specify template:"]
          (class-select *property-schema (:classes @*property-schema)
                        (assoc opts :multiple-choices? false :disabled? disabled?))])
@@ -173,7 +173,7 @@
                        :on-change (fn []
                                     (swap! *property-schema assoc :hide? (not hide?)))})])
 
-      [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+      [:div.grid.grid-cols-4.gap-1.items-start.leading-8
        [:label "Description:"]
        [:div.col-span-3
         (ui/ls-textarea
@@ -260,7 +260,7 @@
              (if @*show-new-property-config?
                (ui/dropdown
                 (fn [_opts]
-                  (pv/property-scalar-value entity property @*property-value (assoc opts :editing? true)))
+                  (pv/property-value entity property @*property-value (assoc opts :editing? true)))
                 (fn [{:keys [toggle-fn]}]
                   [:div.p-6
                    (property-config repo property (merge opts
@@ -269,11 +269,11 @@
                 {:initial-open? true
                  :modal-class (util/hiccup->class
                                "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
-               (pv/property-scalar-value entity property @*property-value (assoc opts :editing? true))))]])
+               (pv/property-value entity property @*property-value (assoc opts :editing? true))))]])
 
        [:div.ls-property-add.flex.flex-row.items-center
         [:span.bullet-container.cursor [:span.bullet]]
-        [:div.ml-1 {:style {:height "1.5em"}} ; TODO: ugly
+        [:div.ml-1.ls-property-key {:style {:height "1.5em"}} ; TODO: ugly
          (select/select {:items (map (fn [x] {:value x}) properties)
                          :dropdown? true
                          :close-modal? false
@@ -441,7 +441,7 @@
                 collapsed? (when block? (property-collapsed? block property))]
             [:div {:class (if block?
                             "flex flex-1 flex-col gap-1 property-block"
-                            "property-pair items-center")}
+                            "property-pair items-start")}
              [:div.property-key
               {:class "col-span-2"}
               (property-key block property (assoc (select-keys opts [:class-schema?])
