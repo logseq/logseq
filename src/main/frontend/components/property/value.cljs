@@ -88,7 +88,7 @@
                                                (property-handler/set-block-property! repo (:block/uuid block)
                                                                                      (:block/name property)
                                                                                      (:block/uuid page)))
-                                             (reset! *add-new-item? false)
+                                             (when *add-new-item?  (reset! *add-new-item? false))
                                              (exit-edit-property)
                                              (toggle-fn)))}))
      {:modal-class (util/hiccup->class
