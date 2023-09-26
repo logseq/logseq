@@ -43,7 +43,6 @@
             [rum.core :as rum]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [frontend.handler.property.util :as pu]
             [logseq.db.property :as db-property]))
 
 (defn- get-page-name
@@ -314,7 +313,7 @@
 (declare page-properties)
 (rum/defc page-configure
   [page *hover? *configuring?]
-  (when @*hover?
+  (when (or @*hover? (and config/publishing? (some #{"class" "property"} (:block/type page))))
     (let [toggle-fn' (fn [toggle-fn]
                        (fn []
                          (toggle-fn)
@@ -323,7 +322,10 @@
        (fn [{:keys [toggle-fn]}]
          [:a.fade-link.flex.flex-row.items-center
           {:on-click (toggle-fn' toggle-fn)}
-          [:div.mr-1.text-sm "Configure"]])
+          [:div.mr-1.text-sm (if-let [block-type (and config/publishing?
+                                                      (some #{"class" "property"} (:block/type page)))]
+                               (str "More info on this " block-type)
+                               "Configure")]])
        (fn [{:keys [_toggle-fn]}]
          (let [types (:block/type page)
                class? (contains? types "class")
@@ -437,7 +439,7 @@
        (when (and db-based? (not whiteboard-page?))
          [:div.absolute.bottom-2.left-0
           [:div.page-add-tags.flex.flex-row.items-center.flex-wrap.gap-2.ml-2
-           (when (and (empty? (:block/tags page)) @*hover?)
+           (when (and (empty? (:block/tags page)) @*hover? (not config/publishing?))
              (page-tags page tags-property *hover? *configuring?))
 
            (when (or (some #(contains? #{"class" "property"} %) (:block/type page))
@@ -570,38 +572,43 @@
   (let [types (:block/type page)
         class? (contains? types "class")
         property? (contains? types "property")
-        opts {:selected? false
-              :page-configure? configure?}]
+        edit-input-id-prefix (str "edit-block-" (:block/uuid page))
+        configure-opts {:selected? false
+                        :page-configure? true}]
     [:div.ls-page-properties.mb-4 {:style {:padding 2}}
-     (let [edit-input-id-prefix (str "edit-block-" (:block/uuid page))]
-       (if configure?
-         (cond
-           class?
-           [:div
-            [:div.mb-2 "Class Properties:"]
-            [:div
-             (component-block/db-properties-cp {:editor-box editor/box}
-                                               page
-                                               (str edit-input-id-prefix "-schema")
-                                               (assoc opts :class-schema? true))]]
-           (and (not property?)
-                (empty? (:block/properties page))
-                (empty? (:block/alias page)))
-           [:div
-            [:div.mb-2 "Page properties:"]
-            (component-block/db-properties-cp {:editor-box editor/box}
-                                              page
-                                              (str edit-input-id-prefix "-page")
-                                              (assoc opts :class-schema? false))])
-         (component-block/db-properties-cp {:editor-box editor/box}
-                                           page
-                                           (str edit-input-id-prefix "-page")
-                                           (assoc opts :class-schema? false))))]))
+     (if configure?
+       (cond
+         class?
+         [:div
+          [:div.mb-2 "Class Properties:"]
+          [:div
+           (component-block/db-properties-cp {:editor-box editor/box}
+                                             page
+                                             (str edit-input-id-prefix "-schema")
+                                             (assoc configure-opts :class-schema? true))]]
+         (and (not property?)
+              (empty? (:block/properties page))
+              (empty? (:block/alias page)))
+         [:div
+          [:div.mb-2 "Page properties:"]
+          (component-block/db-properties-cp {:editor-box editor/box}
+                                            page
+                                            (str edit-input-id-prefix "-page")
+                                            (assoc configure-opts :class-schema? false))])
+       (component-block/db-properties-cp {:editor-box editor/box}
+                                         page
+                                         (str edit-input-id-prefix "-page")
+                                         {:selected? false
+                                          :class-schema? false
+                                            ;; Allow class and property pages to add new property
+                                          :page-configure? (some #{"class" "property"} types)}))]))
 
 (rum/defc page-properties-react < rum/reactive
   [page* configure?]
   (let [page (db/sub-block (:db/id page*))]
-    (when (or (seq (:block/properties page)) (seq (:block/alias page)))
+    (when (or (seq (:block/properties page)) (seq (:block/alias page))
+              ;; Allow class and property pages to add new property
+              (some #{"class" "property"} (:block/type page)))
       (page-properties page configure?))))
 
 (defn- get-path-page-name
@@ -623,25 +630,11 @@
           (db/transact! repo [m])))
       (db/entity [:block/name page-name]))))
 
-(if config/publishing?
-  (defn- page-inner-init [state]
-      ;; Duplicated from component
-    (let [repo (or (:repo (first (:rum/args state))) (state/get-current-repo))
-          path-page-name (get-path-page-name state (:page-name (first (:rum/args state))))
-          page-ent (some->> path-page-name util/page-name-sanity-lc (get-page-entity repo path-page-name))
-            ;; Only make class + property pages reader friendly by default as they usually have no content
-          default-configure? (boolean (some #{"class" "property"} (:block/type page-ent)))]
-      (assoc state ::configure-show? (atom default-configure?))))
-
-  (defn- page-inner-init [state]
-    (assoc state ::configure-show? (atom false))))
-
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive db-mixins/query
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
-  {:init page-inner-init}
   [state {:keys [repo page-name preview? sidebar?] :as option}]
   (when-let [path-page-name (get-path-page-name state page-name)]
     (let [current-repo (state/sub :git/current-repo)
