@@ -145,6 +145,7 @@
     [db-name (node-path/join search-dir db-name)]))
 
 (defn open-db!
+  "Open a SQLite db for search index"
   [db-name]
   (let [[db-sanitized-name db-full-path] (get-db-full-path db-name)]
     (try (let [db (sqlite3 db-full-path nil)]
@@ -157,7 +158,13 @@
            (swap! databases assoc db-sanitized-name db))
          (catch :default e
            (logger/error (str e ": " db-name))
-           (fs/unlinkSync db-full-path)))))
+           (try
+             (fs/unlinkSync db-full-path)
+             (catch :default e
+               (logger/error "cannot unlink search db:" e)
+               (utils/send-to-renderer "notification"
+                                       {:type    "error"
+                                        :payload (str "Search index error, please manually delete “" db-full-path "”: \n" e)})))))))
 
 (defn open-dbs!
   []
@@ -177,6 +184,19 @@
   (str "(" (->> (map (fn [id] (str "'" id "'")) ids)
                 (string/join ", ")) ")"))
 
+(defn- upsert-pages-inner!
+  [repo pages]
+  (when-let [db (get-db repo)]
+      ;; TODO: what if a CONFLICT on uuid
+      ;; Should update all values on id conflict
+    (let [insert (prepare db "INSERT INTO pages (id, uuid, content) VALUES (@id, @uuid, @content) ON CONFLICT (id) DO UPDATE SET (uuid, content) = (@uuid, @content)" repo)
+          insert-many (.transaction ^object db
+                                    (fn [pages]
+                                      (doseq [page pages]
+                                        (.run ^object insert page))))]
+      (insert-many pages))))
+
+
 (defn upsert-pages!
   [repo pages]
   (if-let [db (get-db repo)]
@@ -190,7 +210,7 @@
       (insert-many pages))
     (do
       (open-db! repo)
-      (upsert-pages! repo pages))))
+      (upsert-pages-inner! repo pages))))
 
 (defn delete-pages!
   [repo ids]
@@ -198,6 +218,18 @@
     (let [sql (str "DELETE from pages WHERE id IN " (clj-list->sql ids))
           stmt (prepare db sql repo)]
       (.run ^object stmt))))
+
+(defn- upsert-blocks-inner!
+  [repo blocks]
+  (when-let [db (get-db repo)]
+      ;; TODO: what if a CONFLICT on uuid
+      ;; Should update all values on id conflict
+    (let [insert (prepare db "INSERT INTO blocks (id, uuid, content, page) VALUES (@id, @uuid, @content, @page) ON CONFLICT (id) DO UPDATE SET (uuid, content, page) = (@uuid, @content, @page)" repo)
+          insert-many (.transaction ^object db
+                                    (fn [blocks]
+                                      (doseq [block blocks]
+                                        (.run ^object insert block))))]
+      (insert-many blocks))))
 
 (defn upsert-blocks!
   [repo blocks]
@@ -212,7 +244,7 @@
       (insert-many blocks))
     (do
       (open-db! repo)
-      (upsert-blocks! repo blocks))))
+      (upsert-blocks-inner! repo blocks))))
 
 (defn delete-blocks!
   [repo ids]
