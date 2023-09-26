@@ -328,7 +328,7 @@
          (let [types (:block/type page)
                class? (contains? types "class")
                property? (contains? types "property")]
-           [:div.p-4.flex.flex-col.gap-4 {:style {:min-width 400}}
+           [:div.p-4.flex.flex-col.gap-4 {:style {:min-width 700}}
             (when class?
               (configure page {}))
             (when class?
@@ -598,6 +598,12 @@
                                            (str edit-input-id-prefix "-page")
                                            (assoc opts :class-schema? false))))]))
 
+(rum/defc page-properties-react < rum/reactive
+  [page* configure?]
+  (let [page (db/sub-block (:db/id page*))]
+    (when (or (seq (:block/properties page)) (seq (:block/alias page)))
+      (page-properties page configure?))))
+
 (defn- get-path-page-name
   [state page-name]
   (or page-name
@@ -705,10 +711,8 @@
                 (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
            (when (and db-based?
-                      (not block?)
-                      (or (seq (:block/properties page))
-                          (seq (:block/alias page))))
-             (page-properties page false))
+                      (not block?))
+             (page-properties-react page false))
 
            ;; blocks
            (let [_ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
