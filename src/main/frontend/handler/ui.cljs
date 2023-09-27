@@ -79,19 +79,13 @@
   (when-not (:srs/mode? @state/state)
     (state/toggle-settings!)))
 
-;; FIXME: re-render all embedded blocks since they will not be re-rendered automatically
-
-
 (defn re-render-root!
   ([]
    (re-render-root! {}))
-  ([{:keys [clear-all-query-state?]
-     :or {clear-all-query-state? false}}]
+  ([_opts]
    {:post [(nil? %)]}
    (when-let [component (state/get-root-component)]
-     (if clear-all-query-state?
-       (db/clear-query-state!)
-       (db/clear-query-state-without-refs-and-embeds!))
+     (db/clear-query-state!)
      (rum/request-render component))
    nil))
 
