@@ -1535,3 +1535,12 @@ Arg *stop: atom, reset to true to stop the loop"
                   js/window.mozRequestAnimationFrame
                   js/window.msRequestAnimationFrame))
          #(js/setTimeout % 16))))
+
+#?(:cljs
+   (defn move-up?
+     "Whether move upwards when dragging."
+     [e]
+     (let [delta (when-let [target (.. e -target)]
+                   (let [rect (.. target getBoundingClientRect)]
+                     (- (.. e -pageY) (.. rect -top))))]
+       (< delta 14))))

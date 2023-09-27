@@ -14,6 +14,7 @@
             [frontend.format.block :as block]
             [frontend.fs :as fs]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.reorder :as reorder-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.plugin :as plugin-handler]
@@ -889,29 +890,15 @@
      (db-based-rename! old-name new-name redirect? persist-op?)
      (file-based-rename! old-name new-name redirect?))))
 
-(defn- split-col-by-element
-  [col element]
-  (let [col (vec col)
-        idx (.indexOf col element)]
-    [(subvec col 0 (inc idx))
-     (subvec col (inc idx))]))
-
 (defn reorder-favorites!
   [{:keys [to up?]}]
-  (let [favorites (:favorites (state/get-config))
-        from (get @state/state :favorites/dragging)]
-    (when (and from to (not= from to))
-      (let [[prev next] (split-col-by-element favorites to)
-            [prev next] (mapv #(remove (fn [e] (= from e)) %) [prev next])
-            favorites (->>
-                       (if up?
-                         (concat (drop-last prev) [from (last prev)] next)
-                         (concat prev [from] next))
-                       (remove nil?)
-                       (mapv util/safe-page-name-sanity-lc)
-                       distinct
-                       vec)]
-        (config-handler/set-config! :favorites favorites)))))
+  (let [target (get @state/state :favorites/dragging)
+        favorites (->> (reorder-handler/reorder-items (:favorites (state/get-config))
+                                                      {:target target
+                                                       :to to
+                                                       :up? up?})
+                       (mapv util/safe-page-name-sanity-lc))]
+    (config-handler/set-config! :favorites favorites)))
 
 (defn has-more-journals?
   []
