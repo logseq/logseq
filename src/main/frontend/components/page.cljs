@@ -446,7 +446,7 @@
                    nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (gp-mldoc/default-config
                                                                                        (:block/format page))))
                    :else title))]]]
-        (when (seq (:block/tags page))
+        (when (and db-based? (seq (:block/tags page)))
           [:div.page-tags.ml-4
            (pv/property-value page tags-property (map :block/uuid (:block/tags page))
                               {:page-cp (fn [config page]
