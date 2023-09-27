@@ -256,7 +256,7 @@
           [:div.flex.flex-row.items-center.col-span-2
            [:span.bullet-container.cursor [:span.bullet]]
            [:div.ml-1 @*property-key]]
-          [:div.col-span-3.flex.flex-row
+          [:div.col-span-3.flex.flex-row {:on-mouse-down (fn [e] (util/stop-propagation e))}
            (when (not (and class-schema? page-configure?))
              (if @*show-new-property-config?
                (ui/dropdown
@@ -300,8 +300,7 @@
      (mixins/hide-when-esc-or-outside
       state
       :on-hide (fn [] (property-handler/set-editing-new-property! nil))
-      :node (js/document.getElementById "edit-new-property")
-      :outside? false)))
+      :node (js/document.getElementById "edit-new-property"))))
   [state block edit-input-id properties new-property? opts]
   [:div.ls-new-property
    (let [*property-key (::property-key state)
