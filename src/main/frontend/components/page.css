@@ -238,7 +238,7 @@
 
   padding: 5px 8px;
   padding-bottom: 1.5rem;
-  margin: 0 -6px;
+  margin: 0 -6px 12px -6px;
 
   &.title {
     margin-bottom: 12px;
