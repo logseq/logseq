@@ -332,8 +332,10 @@
   [block property {:keys [multiple-choices? dropdown?] :as opts}]
   (let [schema (:block/schema property)
         type (:type schema)
-        items (if (= :enum type)
-                (map (fn [v] {:value v}) (:enum-values schema))
+        enum? (= :enum type)
+        items (if enum?
+               (map (fn [[id {:keys [name]}]] {:label name
+                                               :value id}) (get-in schema [:enum-config :values]))
                 (->> (model/get-block-property-values (:block/uuid property))
                      (mapcat (fn [[_id value]]
                                (if (coll? value)
@@ -372,6 +374,8 @@
                                           (exit-edit-property)
                                           (when-let [f (:on-chosen opts)] (f)))
                                         nil))})}
+                     enum?
+                     (assoc :extract-fn :label)
                      multiple-choices?
                      (assoc :on-apply on-chosen)
                      (not multiple-choices?)
@@ -399,7 +403,7 @@
        (properties-cp config entity (:editor-id config) (merge opts {:in-block-container? true}))])))
 
 (rum/defc select-item
-  [type value {:keys [page-cp inline-text]}]
+  [property type value {:keys [page-cp inline-text]}]
   (case type
     (:page :date)
     (when-let [page (db/entity [:block/uuid value])]
@@ -408,6 +412,9 @@
 
     :number
     [:span.number (str value)]
+
+    :enum
+    (get-in (:block/schema property) [:enum-config :values value :name])
 
     (inline-text {} :markdown (str value))))
 
@@ -465,7 +472,7 @@
     (if (and select-type? (not= type :date))
       (single-value-select block property value
                            (fn []
-                             (select-item type value opts))
+                             (select-item property type value opts))
                            select-opts
                            opts)
       (case type
@@ -541,7 +548,7 @@
                     (if (seq items)
                      (concat
                       (for [item items]
-                        (select-item type item opts))
+                        (select-item property type item opts))
                       (when date?
                         [(date-picker block property nil {:toggle-fn toggle-fn})]))
                      (when-not editing? [:div.opacity-50.pointer.text-sm "Empty"])))
