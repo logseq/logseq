@@ -461,10 +461,11 @@
   [state block hidden-properties opts]
   (let [*hide? (::hide? state)]
     [:div.hidden-properties.flex.flex-col.gap-1
-     [:a.block-control.text-sm.flex.flex-row.items-center
+     [:a.text-sm.flex.flex-row.items-center.fade-link
       {:on-click #(swap! *hide? not)}
-      (ui/rotating-arrow @*hide?)
-      [:div "Hidden properties"]]
+      [:span {:style {:margin-left -1}}
+       (ui/rotating-arrow @*hide?)]
+      [:div {:style {:margin-left 3}} "Hidden properties"]]
      (when-not @*hide?
        (properties-section block hidden-properties opts))]))
 
