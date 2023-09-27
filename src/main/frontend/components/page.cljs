@@ -789,6 +789,7 @@
 (defonce *builtin-pages? (atom nil))
 (defonce *excluded-pages? (atom true))
 (defonce *show-journals-in-page-graph? (atom nil))
+(defonce *created-at-filter (atom nil))
 
 (rum/defc ^:large-vars/cleanup-todo graph-filters < rum/reactive
   [graph settings n-hops]
@@ -802,6 +803,7 @@
         orphan-pages? (if (nil? orphan-pages?') orphan-pages? orphan-pages?')
         builtin-pages? (if (nil? builtin-pages?') builtin-pages? builtin-pages?')
         excluded-pages? (if (nil? excluded-pages?') excluded-pages? excluded-pages?')
+        created-at-filter (or (rum/react *created-at-filter) (:created-at-filter settings))
         set-setting! (fn [key value]
                        (let [new-settings (assoc settings key value)]
                          (config-handler/set-config! :graph/settings new-settings)))
@@ -876,6 +878,21 @@
                                (reset! *excluded-pages? value)
                                (set-setting! :excluded-pages? value)))
                            true)]]
+              (when (config/db-based-graph? (state/get-current-repo))
+               [:div.flex.flex-col.mb-2
+                [:p "Created before"]
+                (when created-at-filter
+                  [:div (.toDateString (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))])
+                (ui/tippy {:html [:div.pr-3 (str (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))]}
+                          ;; Slider keeps track off the range from min created-at to max created-at
+                          ;; because there were bugs with setting min and max directly
+                          (ui/slider created-at-filter
+                                     {:min 0
+                                      :max (- (get-in graph [:all-pages :created-at-max])
+                                              (get-in graph [:all-pages :created-at-min]))
+                                      :on-change #(do
+                                                    (reset! *created-at-filter (int %))
+                                                    (set-setting! :created-at-filter (int %)))}))])
               (when (seq focus-nodes)
                 [:div.flex.flex-col.mb-2
                  [:p {:title "N hops from selected nodes"}
@@ -890,6 +907,8 @@
                                                       (swap! *graph-reset? not)
                                                       (reset! *focus-nodes [])
                                                       (reset! *n-hops nil)
+                                                      (reset! *created-at-filter nil)
+                                                      (set-setting! :created-at-filter nil)
                                                       (state/clear-search-filters!))}
                "Reset Graph"]]]))
          {})
@@ -994,6 +1013,8 @@
   [state]
   (let [settings (state/graph-settings)
         theme (state/sub :ui/theme)
+        ;; Needed for query to retrigger after reset
+        _reset? (rum/react *graph-reset?)
         graph (graph-handler/build-global-graph theme settings)
         search-graph-filters (state/sub :search/graph-filters)
         graph (update graph :nodes #(filter-graph-nodes % search-graph-filters))]

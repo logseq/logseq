@@ -84,7 +84,7 @@
      :links links}))
 
 (defn build-global-graph
-  [theme {:keys [journal? orphan-pages? builtin-pages? excluded-pages?]}]
+  [theme {:keys [journal? orphan-pages? builtin-pages? excluded-pages? created-at-filter]}]
   (let [dark? (= "dark" theme)
         current-page (or (:block/name (db/get-current-page)) "")]
     (when-let [repo (state/get-current-repo)]
@@ -93,34 +93,42 @@
             namespaces (db/get-all-namespace-relation repo)
             tags (set (map second tagged-pages))
             full-pages (db/get-all-pages repo)
+            full-pages-map (into {} (map (juxt :block/name identity) full-pages))
             all-pages (map db/get-original-name full-pages)
             page-name->original-name (zipmap (map :block/name full-pages) all-pages)
-            pages-after-journal-filter (if-not journal?
-                                         (remove :block/journal? full-pages)
-                                         full-pages)
+            created-ats (map :block/created-at full-pages)
 
-           pages-after-exclude-filter (cond->> pages-after-journal-filter
-                                        (not excluded-pages?)
-                                        (remove (fn [p] (true? (pu/get-property p :exclude-from-graph-view)))))
-
+            ;; build up nodes
+            full-pages'
+            (cond->> full-pages
+              created-at-filter
+              (filter #(<= (:block/created-at %) (+ (apply min created-ats) created-at-filter)))
+              (not journal?)
+              (remove :block/journal?)
+              (not excluded-pages?)
+              (remove (fn [p] (true? (pu/get-property p :exclude-from-graph-view)))))
             links (concat (seq relation)
                           (seq tagged-pages)
                           (seq namespaces))
             linked (set (flatten links))
             build-in-pages (set (map string/lower-case default-db/built-in-pages-names))
-            nodes (cond->> (map :block/name pages-after-exclude-filter)
+            nodes (cond->> (map :block/name full-pages')
                     (not builtin-pages?)
                     (remove (fn [p] (contains? build-in-pages (string/lower-case p))))
                     (not orphan-pages?)
                     (filter #(contains? linked (string/lower-case %))))
+
             page-links (reduce (fn [m [k v]] (-> (update m k inc)
                                                  (update v inc))) {} links)
             links (build-links (remove (fn [[_ to]] (nil? to)) links))
             nodes (build-nodes dark? (string/lower-case current-page) page-links tags nodes namespaces)]
-        (normalize-page-name
-         {:nodes nodes
-          :links links
-          :page-name->original-name page-name->original-name})))))
+        (-> {:nodes (map #(assoc % :block/created-at (get-in full-pages-map [(:id %) :block/created-at])) nodes)
+             :links links
+             :page-name->original-name page-name->original-name}
+            normalize-page-name
+            (assoc :all-pages
+                   {:created-at-min (apply min created-ats)
+                    :created-at-max (apply max created-ats)}))))))
 
 (defn build-page-graph
   [page theme show-journal]
