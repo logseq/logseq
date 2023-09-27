@@ -92,6 +92,34 @@
             "Click to add classes"
             "Click to select a class")])])))
 
+(rum/defcs enum-select < (rum/local false ::open?)
+  [state *property-schema values]
+  (let [items (map (fn [value] {:label value
+                                :value value})
+                   values)
+        opts {:items items
+              :input-default-placeholder "Update choices"
+              :dropdown? false
+              :close-modal? false
+              :multiple-choices? true
+              :selected-choices values
+              :extract-chosen-fn :value
+              :show-new-when-not-exact-match? true
+              :on-apply (fn [choices]
+                          (swap! *property-schema assoc :enum-values choices))}]
+    (ui/dropdown
+     (fn [{:keys [toggle-fn]}]
+       [:div.enum-values.cursor-pointer.flex.flex-col {:on-click toggle-fn}
+        (if (seq values)
+          (for [value values]
+            [:div.enum-value value])
+          [:div.text-sm
+           "Add choices"])])
+     (fn [{:keys [_toggle-fn]}]
+       (select/select opts))
+     {:modal-class (util/hiccup->class
+                    "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})))
+
 (rum/defcs property-config <
   rum/reactive
   (rum/local nil ::property-name)
@@ -145,18 +173,26 @@
                        (let [type (keyword (string/lower-case v))]
                          (swap! *property-schema assoc :type type))))])]
 
-      (when (= :page (:type @*property-schema))
+      (case (:type @*property-schema)
+        :page
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
          [:label "Specify classes:"]
-         (class-select *property-schema (:classes @*property-schema) (assoc opts :disabled? disabled?))])
+         (class-select *property-schema (:classes @*property-schema) (assoc opts :disabled? disabled?))]
 
-      (when (= :template (:type @*property-schema))
+        :template
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
          [:label "Specify template:"]
          (class-select *property-schema (:classes @*property-schema)
-                       (assoc opts :multiple-choices? false :disabled? disabled?))])
+                       (assoc opts :multiple-choices? false :disabled? disabled?))]
 
-      (when-not (contains? #{:checkbox :default :template} (:type @*property-schema))
+        :enum
+        [:div.grid.grid-cols-4.gap-1.items-start.leading-8
+         [:label "Enum choices:"]
+         (enum-select *property-schema (:enum-values @*property-schema))]
+
+        nil)
+
+      (when-not (contains? #{:checkbox :default :template :enum} (:type @*property-schema))
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
          [:label "Multiple values:"]
          (let [many? (boolean (= :many (:cardinality @*property-schema)))]
