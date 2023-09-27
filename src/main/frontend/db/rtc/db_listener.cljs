@@ -87,13 +87,14 @@
                                    (apply merge))]
                     (cond-> ops (seq update-op) (conj [:update update-op]))))
             ops* (keep (fn [op]
-                         (when-let [block-uuid (some-> (db/entity repo e) :block/uuid str)]
+                         (let [block-uuid (some-> (db/entity repo e) :block/uuid str)]
                            (case (first op)
-                             :move ["move" {:block-uuids [block-uuid]}]
-                             :update ["update" (cond-> {:block-uuid block-uuid}
-                                                 (second op) (conj [:updated-attrs (second op)]))]
-                             :remove ["remove" {:block-uuids [(str (second op))]}]
-                             :update-page ["update-page" {:block-uuid block-uuid}]
+                             :move        (when block-uuid ["move" {:block-uuids [block-uuid]}])
+                             :update      (when block-uuid
+                                            ["update" (cond-> {:block-uuid block-uuid}
+                                                        (second op) (conj [:updated-attrs (second op)]))])
+                             :update-page (when block-uuid ["update-page" {:block-uuid block-uuid}])
+                             :remove      ["remove" {:block-uuids [(str (second op))]}]
                              :remove-page ["remove-page" {:block-uuid (str (second op))}])))
                        ops)]
         ops*))))
