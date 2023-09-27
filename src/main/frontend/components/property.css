@@ -38,6 +38,10 @@
     margin-left: 7px;
 }
 
+.grid-auto-fit {
+    grid-template-columns: repeat(auto-fit, 120px);
+}
+
 .ls-properties-area {
     @apply grid gap-2 pt-1;
 

@@ -20,7 +20,16 @@
             [frontend.util :as util]
             [logseq.db.property :as db-property]
             [rum.core :as rum]
-            [frontend.handler.route :as route-handler]))
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.notification :as notification]))
+
+(defn- update-property!
+  [property property-name property-schema]
+  (property-handler/update-property!
+   (state/get-current-repo)
+   (:block/uuid property)
+   {:property-name property-name
+    :property-schema property-schema}))
 
 (rum/defc icon
   [block {:keys [_type id]} {:keys [disabled?]}]            ; only :emoji supported yet
@@ -92,33 +101,135 @@
             "Click to add classes"
             "Click to select a class")])])))
 
-(rum/defcs enum-select < (rum/local false ::open?)
-  [state *property-schema values]
-  (let [items (map (fn [value] {:label value
-                                :value value})
-                   values)
-        opts {:items items
-              :input-default-placeholder "Update choices"
-              :dropdown? false
-              :close-modal? false
-              :multiple-choices? true
-              :selected-choices values
-              :extract-chosen-fn :value
-              :show-new-when-not-exact-match? true
-              :on-apply (fn [choices]
-                          (swap! *property-schema assoc :enum-values choices))}]
-    (ui/dropdown
-     (fn [{:keys [toggle-fn]}]
-       [:div.enum-values.cursor-pointer.flex.flex-col {:on-click toggle-fn}
-        (if (seq values)
-          (for [value values]
-            [:div.enum-value value])
-          [:div.text-sm
-           "Add choices"])])
-     (fn [{:keys [_toggle-fn]}]
-       (select/select opts))
-     {:modal-class (util/hiccup->class
-                    "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})))
+(rum/defcs enum-item-config <
+  {:init (fn [state]
+           (let [{:keys [name description]} (first (:rum/args state))]
+             (assoc state
+                    ::name (atom (or name ""))
+                    ::description (atom (or description "")))))}
+  [state {:keys [id name description]} {:keys [toggle-fn on-save]}]
+  (let [*name (::name state)
+        *description (::description state)]
+    [:div.flex.flex-col.gap-4.p-4.whitespace-nowrap.w-96
+     [:div.grid.grid-cols-5.gap-1.items-center.leading-8
+      [:label.col-span-2 "Name:"]
+      [:input.form-input.col-span-3
+       {:default-value @*name
+        :on-change #(reset! *name (util/evalue %))}]]
+     [:div.grid.grid-cols-5.gap-1.items-start.leading-8
+      [:label.col-span-2 "Description:"]
+      [:div.col-span-3
+       (ui/ls-textarea
+        {:on-change #(reset! *description (util/evalue %))
+         :value @*description})]]
+     [:div
+      (ui/button
+       "Save"
+       :on-click (fn [e]
+                   (util/stop e)
+                   (when-not (string/blank? @*name)
+                     (let [result (when on-save (on-save (string/trim @*name) @*description))]
+                       (if (= :value-exists result)
+                         (notification/show! (str "Choice already exist") :warning)
+                         (when toggle-fn (toggle-fn)))))))]]))
+
+(rum/defcs enum-new-item <
+  (rum/local "" ::name)
+  (rum/local "" ::description)
+  [state {:keys [toggle-fn on-save]}]
+  (let [*name (::name state)
+        *description (::description state)]
+    [:div.flex.flex-col.gap-4.p-4.whitespace-nowrap.w-96
+     [:div.grid.grid-cols-5.gap-1.items-center.leading-8
+      [:label.col-span-2 "Name:"]
+      [:input.form-input.col-span-3
+       {:default-value ""
+        :on-change #(reset! *name (util/evalue %))}]]
+     [:div.grid.grid-cols-5.gap-1.items-start.leading-8
+      [:label.col-span-2 "Description:"]
+      [:div.col-span-3
+       (ui/ls-textarea
+        {:on-change #(reset! *description (util/evalue %))
+         :value @*description})]]
+     [:div
+      (ui/button
+       "Save"
+       :on-click (fn [e]
+                   (util/stop e)
+                   (when-not (string/blank? @*name)
+                     (let [result (when on-save (on-save (string/trim @*name) @*description))]
+                       (if (= :value-exists result)
+                         (notification/show! (str "Choice already exist") :warning)
+                         (when toggle-fn (toggle-fn)))))))]]))
+
+(rum/defcs choice-with-close <
+  (rum/local false ::hover?)
+  [state name {:keys [toggle-fn delete-choice]}]
+  (let [*hover? (::hover? state)]
+    [:div.flex.flex-1.flex-row.items-center.gap-2
+     {:on-mouse-over #(reset! *hover? true)
+      :on-mouse-out #(reset! *hover? false)}
+     [:a {:on-click toggle-fn}
+      name]
+     (when @*hover?
+       [:a.fade-link.flex {:on-click delete-choice
+                           :title "Delete this choice"}
+        (ui/icon "X")])]))
+
+(rum/defc enum-choices
+  [property *property-name *property-schema {:keys [values order] :as _config}]
+  (let [dropdown-opts {:modal-class (util/hiccup->class
+                                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}]
+    [:div.enum-choices.flex.flex-col
+     (for [id order]
+       (let [{:keys [name] :as item} (get values id)]
+         (ui/dropdown
+          (fn [opts]
+            (choice-with-close
+             name
+             (assoc opts :delete-choice
+                    (fn []
+                      (let [new-values (dissoc values id)
+                            new-order (vec (remove #{id} order))]
+                        (swap! *property-schema assoc :enum-config {:values new-values
+                                                                    :order new-order})
+                        ;; FIXME: how to handle block properties with this value?
+                        ;; 1. delete the blocks' property that has this value
+                        ;; 2. update exist values to the default value if exists
+                        ;; 3. soft delete, users can still see it in some existing blocks,
+                        ;;    but they will not see it when adding or updating this property
+                        (update-property! property @*property-name @*property-schema))))))
+          (fn [opts]
+            (enum-item-config
+             item
+             (assoc opts :on-save
+                    (fn [name description]
+                      (if (some (fn [[vid m]] (and (not= vid id) (= name (:name m)))) values)
+                        :value-exists
+                        (let [new-values (assoc values id {:name name
+                                                           :description description})]
+                          (swap! *property-schema assoc :enum-config {:values new-values
+                                                                      :order order})
+                          (update-property! property @*property-name @*property-schema)))))))
+          dropdown-opts)))
+     (ui/dropdown
+      (fn [{:keys [toggle-fn]}]
+        [:a.flex.flex-row.items-center.gap-1.text-sm.leading-8 {:on-click toggle-fn}
+         (ui/icon "plus" {:size 16})
+         "Add choice"])
+      (fn [opts]
+        (enum-new-item (assoc opts :on-save
+                              (fn [name description]
+                                (if (contains? (set (map :name (vals values))) name)
+                                  :value-exists
+                                  (let [id (random-uuid)
+                                        new-values (assoc values id {:name name
+                                                                     :description description})
+                                        new-order (vec (conj order id))]
+                                    (swap! *property-schema assoc :enum-config {:values new-values
+                                                                                :order new-order})
+                                    (update-property! property @*property-name @*property-schema)))))))
+      dropdown-opts)]))
 
 (rum/defcs property-config <
   rum/reactive
@@ -188,7 +299,7 @@
         :enum
         [:div.grid.grid-cols-4.gap-1.items-start.leading-8
          [:label "Enum choices:"]
-         (enum-select *property-schema (:enum-values @*property-schema))]
+         (enum-choices property *property-name *property-schema (:enum-config @*property-schema))]
 
         nil)
 
@@ -224,10 +335,7 @@
           "Save"
           :on-click (fn [e]
                       (util/stop e)
-                      (property-handler/update-property!
-                       repo (:block/uuid property)
-                       {:property-name @*property-name
-                        :property-schema @*property-schema})
+                      (update-property! property @*property-name @*property-schema)
                       (when toggle-fn (toggle-fn)))))]]]))
 
 (defn- get-property-from-db [name]
