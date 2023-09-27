@@ -314,9 +314,9 @@
 
 (rum/defc page-configure-inner <
   {:will-unmount (fn [state]
-                   (let [on-unmount (last (:rum/args state))]
+                   (let [on-unmount (nth (:rum/args state) 1)]
                      (on-unmount)))}
-  [page _on-unmount]
+  [page _on-unmount opts]
   (let [types (:block/type page)
         class? (contains? types "class")
         property? (contains? types "property")]
@@ -326,7 +326,7 @@
      (when class?
        (page-properties page true))
      (if property?
-       (property/property-config (state/get-current-repo) page {})
+       (property/property-config (state/get-current-repo) page opts)
               ;; add new property for normal pages
        (when (and (not class?)
                   (empty? (:block/properties page))
@@ -348,12 +348,13 @@
                                                       (some #{"class" "property"} (:block/type page)))]
                                (str "More info on this " block-type)
                                "Configure")]])
-       (fn [{:keys [_toggle-fn]}]
+       (fn [{:keys [toggle-fn]}]
          (page-configure-inner
           page
           (fn []
             (reset! *configuring? false)
-            (reset! *hover? false))))
+            (reset! *hover? false))
+          {:toggle-fn toggle-fn}))
 
        {:modal-class (util/hiccup->class
                       "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")}))))

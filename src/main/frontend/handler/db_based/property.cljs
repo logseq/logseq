@@ -48,6 +48,7 @@
    :template [:fn
               {:error/message "should has #template"}
               logseq-template?]
+   :enum     some?                      ; the value could be anything such as number, text, url, date, page, image, video, etc.
    ;; internal usage
    :keyword  keyword?
    :map      map?
@@ -56,7 +57,7 @@
    :any      some?})
 
 (def internal-builtin-schema-types #{:keyword :map :coll :any})
-(def user-face-builtin-schema-types [:default :number :date :checkbox :url :page :template])
+(def user-face-builtin-schema-types [:default :number :date :checkbox :url :page :template :enum])
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
@@ -90,7 +91,7 @@
 
       ;; these types don't need to be translated. :date expects uuid and other
       ;; types usually expect text
-      (:url :date :any)
+      (:enum :url :date :any)
       v-str)))
 
 (defn upsert-property!

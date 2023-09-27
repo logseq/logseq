@@ -21,7 +21,7 @@
 
 (defn- select-type?
   [type]
-  (contains? #{:page :number :url :date} type))
+  (contains? #{:page :number :url :date :enum} type))
 
 (defn exit-edit-property
   []
@@ -330,19 +330,22 @@
 
 (defn- select
   [block property {:keys [multiple-choices? dropdown?] :as opts}]
-  (let [date? (= :date (get-in property [:block/schema :type]))
-        items (->> (model/get-block-property-values (:block/uuid property))
-                   (mapcat (fn [[_id value]]
-                             (if (coll? value)
-                               (map (fn [v] {:value v}) value)
-                               [{:value value}])))
-                   (distinct))
-        items (->> (if date?
-                      (map (fn [m] (let [label (:block/original-name (db/entity [:block/uuid (:value m)]))]
-                                     (when label
-                                       (assoc m :label label)))) items)
-                      items)
-                    (remove nil?))
+  (let [schema (:block/schema property)
+        type (:type schema)
+        items (if (= :enum type)
+                (map (fn [v] {:value v}) (:enum-values schema))
+                (->> (model/get-block-property-values (:block/uuid property))
+                     (mapcat (fn [[_id value]]
+                               (if (coll? value)
+                                 (map (fn [v] {:value v}) value)
+                                 [{:value value}])))
+                     (distinct)))
+        items (->> (if (= :date type)
+                     (map (fn [m] (let [label (:block/original-name (db/entity [:block/uuid (:value m)]))]
+                                    (when label
+                                      (assoc m :label label)))) items)
+                     items)
+                   (remove nil?))
         add-property-f #(add-property! block (:block/original-name property) %)
         on-chosen (fn [chosen]
                     (add-property-f (if (map? chosen) (:value chosen) chosen))
@@ -354,7 +357,7 @@
                      :items items
                      :selected-choices selected-choices
                      :dropdown? dropdown?
-                     :show-new-when-not-exact-match? true
+                     :show-new-when-not-exact-match? (not (contains? #{:enum} type))
                      :input-default-placeholder "Select"
                      :extract-chosen-fn :value
                      :input-opts (fn [_]
@@ -420,7 +423,7 @@
         select-f (fn []
                    [:div.property-select (cond-> {} editing? (assoc :class "h-6"))
                     (case type
-                      (:number :url :date)
+                      (:number :url :date :enum)
                       (select block property select-opts')
 
                       :page
