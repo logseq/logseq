@@ -255,7 +255,7 @@
          [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
           [:div.flex.flex-row.items-center.col-span-2
            [:span.bullet-container.cursor [:span.bullet]]
-           [:div.ml-1 @*property-key]]
+           [:div {:style {:padding-left 6}} @*property-key]]
           [:div.col-span-3.flex.flex-row {:on-mouse-down (fn [e] (util/stop-propagation e))}
            (when (not (and class-schema? page-configure?))
              (if @*show-new-property-config?
@@ -274,7 +274,8 @@
 
        [:div.ls-property-add.flex.flex-row.items-center
         [:span.bullet-container.cursor [:span.bullet]]
-        [:div.ml-1.ls-property-key {:style {:height "1.5em"}} ; TODO: ugly
+        [:div.ls-property-key {:style {:padding-left 6
+                                       :height "1.5em"}} ; TODO: ugly
          (select/select {:items (map (fn [x] {:value x}) properties)
                          :dropdown? true
                          :close-modal? false
@@ -380,7 +381,7 @@
         (fn [_opts]
           [:a.property-k
            {:on-click #(route-handler/redirect-to-page! (:block/name property))}
-           [:div.ml-1 (:block/original-name property)]])
+           [:div {:style {:padding-left 6}} (:block/original-name property)]])
         (fn [{:keys [toggle-fn]}]
           [:a.property-k
            {:data-propertyid (:block/uuid property)
@@ -392,7 +393,7 @@
                                (route-handler/redirect-to-page! (:block/name property))
                                (.preventDefault e)))
             :on-click toggle-fn}
-           [:div.ml-1 (:block/original-name property)]]))
+           [:div {:style {:padding-left 6}} (:block/original-name property)]]))
       (fn [{:keys [toggle-fn]}]
         [:div.p-8
          (property-config repo property {:toggle-fn toggle-fn})])
@@ -461,7 +462,7 @@
   [state block hidden-properties opts]
   (let [*hide? (::hide? state)]
     [:div.hidden-properties.flex.flex-col.gap-1
-     [:a.text-sm.flex.flex-row.items-center.fade-link
+     [:a.text-sm.flex.flex-row.items-center.fade-link.select-none
       {:on-click #(swap! *hide? not)}
       [:span {:style {:margin-left -1}}
        (ui/rotating-arrow @*hide?)]
