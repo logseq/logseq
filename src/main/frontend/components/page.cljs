@@ -615,8 +615,10 @@
                                          page
                                          (str edit-input-id-prefix "-page")
                                          {:selected? false
-                                          ;; TODO: Shoule we enable adding new property for property pages?
-                                          ;; If so, we need to figure out a way to allow that without affecting the UX.
+                                          ;; Allow class and property pages to add new property
+                                          ;; when hovered over
+                                          :page-configure? (boolean (some #{"class" "property"} types))
+                                          :hidden-new-property? (boolean (some #{"class" "property"} types))
                                           :class-schema? false}))]))
 
 (rum/defc page-properties-react < rum/reactive

@@ -460,14 +460,19 @@
                 (seq (:block/alias block)))
             (not config/publishing?)
             (or (:page-configure? opts) (not (:in-block-container? opts))))
-       [:a.fade-link.flex
-        {:on-click (fn []
-                     (property-handler/set-editing-new-property! edit-input-id)
-                     (reset! *property-key nil)
-                     (reset! *property-value nil))}
-        [:div.flex.flex-row.items-center {:style {:padding-left 1}}
-         (ui/icon "circle-plus" {:size 15})
-         [:div.ml-1.text-sm "Add property"]]]
+       ;; When the :hidden-new-property? option is set, adding the
+       ;; first property is hidden and only appears when hovered over
+       (when (or (not (:hidden-new-property? opts))
+                 (seq (:block/properties block))
+                 (:hover? opts))
+         [:a.fade-link.flex
+          {:on-click (fn []
+                       (property-handler/set-editing-new-property! edit-input-id)
+                       (reset! *property-key nil)
+                       (reset! *property-value nil))}
+          [:div.flex.flex-row.items-center {:style {:padding-left 1}}
+           (ui/icon "circle-plus" {:size 15})
+           [:div.ml-1.text-sm "Add property"]]])
 
        :else
        [:div {:style {:height 28}}]))])
@@ -614,11 +619,13 @@
        (properties-section block hidden-properties opts))]))
 
 (rum/defcs properties-area < rum/reactive
+  (rum/local false ::hover?)
   {:init (fn [state]
            (assoc state ::blocks-container-id (or (:blocks-container-id (last (:rum/args state)))
                                                   (state/next-blocks-container-id))))}
   [state target-block edit-input-id {:keys [in-block-container? page-configure?] :as opts}]
-  (let [block (resolve-linked-block-if-exists target-block)
+  (let [*hover? (::hover? state)
+        block (resolve-linked-block-if-exists target-block)
         class-schema? (and (:class-schema? opts) (:block/schema block))
         block-properties (:block/properties block)
         properties (if (and class-schema? page-configure?)
@@ -689,13 +696,16 @@
                                        (set/union properties (set cur-properties))
                                        (conj result [class cur-properties])))
                               result))
-        opts (assoc opts :blocks-container-id (::blocks-container-id state))]
+        opts (assoc opts
+                    :blocks-container-id (::blocks-container-id state)
+                    :hover? @*hover?)]
     (when-not (and (empty? own-properties)
                    (empty? class->properties)
                    (not new-property?)
                    (not (:page-configure? opts)))
       [:div.ls-properties-area (cond->
-                                {}
+                                {:on-mouse-over #(reset! *hover? true)
+                                 :on-mouse-out #(reset! *hover? false)}
                                  (:selected? opts)
                                  (assoc :class "select-none"))
        (properties-section block (if class-schema? properties own-properties) opts)
