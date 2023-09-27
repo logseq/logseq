@@ -2166,7 +2166,6 @@
             shift? (gobj/get e "shiftKey")
             meta? (util/meta-key? e)
             forbidden-edit? (target-forbidden-edit? target)]
-        (when-not forbidden-edit? (.stopPropagation e))
         (if (and meta?
                  (not (state/get-edit-input-id))
                  (not (dom/has-class? target "page-ref"))
