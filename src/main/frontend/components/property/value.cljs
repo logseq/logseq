@@ -375,17 +375,10 @@
                      (assoc :on-chosen on-chosen)))))
 
 (rum/defc property-block-value < rum/reactive
-  [repo block property value block-cp editor-box opts]
+  [value block-cp editor-box opts]
   (let [parent (db/entity [:block/uuid value])
         parent (db/sub-block (:db/id parent))
-        children (model/sort-by-left (:block/_parent parent) parent)
-        children-count (count (:block/_parent parent))
-        empty-block? (or (nil? parent) (zero? children-count))]
-    (when empty-block?
-      (when parent
-        (db/transact! repo [[:db/retractEntity (:db/id parent)]]
-          {:outliner-op :delete-blocks}))
-      (property-handler/delete-property-value! repo block (:block/uuid property) value))
+        children (model/sort-by-left (:block/_parent parent) parent)]
     (when (seq children)
       [:div.property-block-container.w-full
        (block-cp children {:id (str (:block/uuid parent))
@@ -530,7 +523,7 @@
                                             opts)
 
                    :block
-                   (property-block-value repo block property value block-cp editor-box opts)
+                   (property-block-value value block-cp editor-box opts)
 
                    (inline-text {} :markdown (str value)))))]))))))
 
