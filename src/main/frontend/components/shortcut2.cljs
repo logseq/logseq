@@ -428,7 +428,9 @@
                           disabled? (or (false? user-binding)
                                         (false? (first binding)))
                           unset? (and (not disabled?)
-                                      (= user-binding []))]]
+                                      (or (= user-binding [])
+                                          (and (= binding [])
+                                               (nil? user-binding))))]]
 
                 (when (or (nil? (seq filters))
                           (when (contains? filters :Custom) custom?)
@@ -453,11 +455,11 @@
 
                      [:a.action-wrap
                       {:class    (util/classnames [{:disabled disabled?}])
-                       :on-click (when-not disabled?
+                       :on-click (when id
                                    #(open-customize-shortcut-dialog! id))}
 
                       (cond
-                        (or user-binding (false? user-binding))
+                        (or unset? user-binding (false? user-binding))
                         [:code.dark:bg-green-800.bg-green-300
                          (if unset?
                            (t :keymap/unset)
@@ -473,4 +475,5 @@
                         (for [x binding]
                           [:code.tracking-wide
                            {:key (str x)}
-                           (dh/binding-for-display id x)]))]]))))])])]]))
+                           (dh/binding-for-display id x)]))
+                      ]]))))])])]]))
