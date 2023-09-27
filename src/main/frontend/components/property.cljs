@@ -11,7 +11,9 @@
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.reorder :as reorder-handler]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.notification :as notification]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.search :as search]
@@ -21,7 +23,7 @@
             [logseq.db.property :as db-property]
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.notification :as notification]))
+            ))
 
 (defn- update-property!
   [property property-name property-schema]
@@ -166,7 +168,7 @@
   (rum/local false ::hover?)
   [state name {:keys [toggle-fn delete-choice]}]
   (let [*hover? (::hover? state)]
-    [:div.flex.flex-1.flex-row.items-center.gap-2
+    [:div.flex.flex-1.flex-row.items-center.gap-2.justify-between
      {:on-mouse-over #(reset! *hover? true)
       :on-mouse-out #(reset! *hover? false)}
      [:a {:on-click toggle-fn}
@@ -176,45 +178,85 @@
                            :title "Delete this choice"}
         (ui/icon "X")])]))
 
-(rum/defc enum-choices
-  [property *property-name *property-schema {:keys [values order] :as _config}]
-  (let [dropdown-opts {:modal-class (util/hiccup->class
-                                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}]
-    [:div.enum-choices.flex.flex-col
-     (for [id order]
-       (let [{:keys [name] :as item} (get values id)]
-         (ui/dropdown
-          (fn [opts]
-            (choice-with-close
-             name
-             (assoc opts :delete-choice
-                    (fn []
-                      (let [new-values (dissoc values id)
-                            new-order (vec (remove #{id} order))]
-                        (swap! *property-schema assoc :enum-config {:values new-values
-                                                                    :order new-order})
+(rum/defcs choice-item <
+  (rum/local nil ::up?)
+  (rum/local nil ::dragging-over)
+  [state property item values order *property-schema *property-name dropdown-opts]
+  (let [up? (get state ::up?)
+        dragging-over (get state ::dragging-over)
+        {:keys [id name]} item]
+    [:li
+     {:key name
+      :title name
+      :data-ref name
+      :draggable true
+      :on-drag-start (fn [event]
+                       (.setData (.-dataTransfer event) "id" (str id)))
+      :on-drag-over (fn [e]
+                      (util/stop e)
+                      (reset! dragging-over id)
+                      (when-not (= (str id) (.getData (.-dataTransfer e) "id"))
+                        (reset! up? (util/move-up? e))))
+      :on-drag-leave (fn [_e]
+                       (reset! dragging-over nil))
+      :on-drop (fn [e]
+                 (when-let [target (some-> (.getData (.-dataTransfer e) "id") uuid)]
+                   (let [up? (util/move-up? e)
+                         new-order (reorder-handler/reorder-items order
+                                                                  {:target target
+                                                                   :to id
+                                                                   :up? up?})]
+                     (when (seq new-order)
+                       (swap! *property-schema assoc :enum-config {:values values
+                                                                 :order new-order})
+                       (update-property! property @*property-name @*property-schema))))
+                 (reset! up? nil)
+                 (reset! dragging-over nil))}
+     (ui/dropdown
+      (fn [opts]
+        (choice-with-close
+         name
+         (assoc opts :delete-choice
+                (fn []
+                  (let [new-values (dissoc values id)
+                        new-order (vec (remove #{id} order))]
+                    (swap! *property-schema assoc :enum-config {:values new-values
+                                                                :order new-order})
                         ;; FIXME: how to handle block properties with this value?
                         ;; 1. delete the blocks' property that has this value
                         ;; 2. update exist values to the default value if exists
                         ;; 3. soft delete, users can still see it in some existing blocks,
                         ;;    but they will not see it when adding or updating this property
-                        (update-property! property @*property-name @*property-schema))))))
-          (fn [opts]
-            (enum-item-config
-             item
-             (assoc opts :on-save
-                    (fn [name description]
-                      (if (some (fn [[vid m]] (and (not= vid id) (= name (:name m)))) values)
-                        :value-exists
-                        (let [new-values (assoc values id {:name name
-                                                           :description description})]
-                          (swap! *property-schema assoc :enum-config {:values new-values
-                                                                      :order order})
-                          (update-property! property @*property-name @*property-schema)))))))
-          dropdown-opts)))
+                    (update-property! property @*property-name @*property-schema))))))
+      (fn [opts]
+        (enum-item-config
+         item
+         (assoc opts :on-save
+                (fn [name description]
+                  (if (some (fn [[vid m]] (and (not= vid id) (= name (:name m)))) values)
+                    :value-exists
+                    (let [new-values (assoc values id {:name name
+                                                       :description description})]
+                      (swap! *property-schema assoc :enum-config {:values new-values
+                                                                  :order order})
+                      (update-property! property @*property-name @*property-schema)))))))
+      dropdown-opts)]))
+
+(rum/defc enum-choices
+  [property *property-name *property-schema {:keys [values order] :as _config}]
+  (let [dropdown-opts {:modal-class (util/hiccup->class
+                                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}
+        order (if (not= (count order) (count values))
+                (vec (concat order (remove (set order) (keys values))))
+                order)]
+    [:div.enum-choices.flex.flex-col
+     [:ol
+      (for [id order]
+        (let [item (assoc (get values id) :id id)]
+          (choice-item property item values order *property-schema *property-name dropdown-opts)))]
      (ui/dropdown
       (fn [{:keys [toggle-fn]}]
-        [:a.flex.flex-row.items-center.gap-1.text-sm.leading-8 {:on-click toggle-fn}
+        [:a.fade-link.flex.flex-row.items-center.gap-1.leading-8 {:on-click toggle-fn}
          (ui/icon "plus" {:size 16})
          "Add choice"])
       (fn [opts]

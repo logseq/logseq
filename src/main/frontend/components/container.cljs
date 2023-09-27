@@ -62,17 +62,6 @@
        (ui/icon "chevron-left" {:class "more"})]
       (when child [:div.bd child])]]))
 
-(defn- delta-y
-  [e]
-  (when-let [target (.. e -target)]
-    (let [rect (.. target getBoundingClientRect)]
-      (- (.. e -pageY) (.. rect -top)))))
-
-(defn- move-up?
-  [e]
-  (let [delta (delta-y e)]
-    (< delta 14)))
-
 (rum/defc page-name
   [name icon recent?]
   (let [original-name (db-model/get-page-original-name name)
@@ -127,12 +116,12 @@
                       (util/stop e)
                       (reset! dragging-over name)
                       (when-not (= name (get @state/state :favorites/dragging))
-                        (reset! up? (move-up? e))))
+                        (reset! up? (util/move-up? e))))
       :on-drag-leave (fn [_e]
                        (reset! dragging-over nil))
       :on-drop (fn [e]
                  (page-handler/reorder-favorites! {:to name
-                                                   :up? (move-up? e)})
+                                                   :up? (util/move-up? e)})
                  (reset! up? nil)
                  (reset! dragging-over nil))}
      (page-name name icon false)]))
