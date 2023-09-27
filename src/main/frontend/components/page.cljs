@@ -364,11 +364,12 @@
   (rum/local false ::hover?)
   (rum/local false ::configuring?)
   {:init (fn [state]
-           (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
-  [state page-name icon title {:keys [fmt-journal? preview?]}]
+           (assoc state ::title-value (atom (nth (:rum/args state) 1))))}
+  [state page-name title {:keys [fmt-journal? preview?]}]
   (when title
     (let [page (when page-name (db/entity [:block/name page-name]))
           page (db/sub-block (:db/id page))
+          icon (pu/lookup (:block/properties page) :icon)
           *hover? (::hover? state)
           *title-value (get state ::title-value)
           *edit? (get state ::edit?)
@@ -386,10 +387,16 @@
           old-name (or title page-name)
           db-based? (config/db-based-graph? repo)
           tags-property (db/entity [:block/name "tags"])]
-      [:div.ls-page-title.flex-1.flex-row.flex-wrap.w-full.relative
+      [:div.ls-page-title.flex.flex-1.flex-row.flex-wrap.w-full.relative.items-center.gap-2
        {:on-mouse-over #(reset! *hover? true)
         :on-mouse-out #(when-not @*configuring?
                          (reset! *hover? false))}
+       (when icon
+         [:div.page-icon {:on-mouse-down util/stop-propagation}
+          (if (map? icon)
+            (property/icon page icon {})
+            icon)])
+
        [:div.flex.flex-1.flex-row.flex-wrap.items-center.gap-4
         [:h1.page-title.flex.cursor-pointer.gap-1
          {:class (when-not whiteboard-page? "title")
@@ -412,7 +419,7 @@
                                                (contains? db-property/built-in-properties-keys-str page-name))))
                             (reset! *input-value (if untitled? "" old-name))
                             (reset! *edit? true)))))}
-         (when (not= icon "") [:span.page-icon icon])
+
          [:div.page-title-sizer-wrapper.relative
           (when @*edit?
             (page-title-editor {:*title-value *title-value
@@ -659,7 +666,6 @@
           whiteboard? (:whiteboard? option) ;; in a whiteboard portal shape?
           whiteboard-page? (model/whiteboard-page? page-name) ;; is this page a whiteboard?
           route-page-name path-page-name
-          icon (or (pu/lookup (:block/properties page) :icon) "")
           page-name (:block/name page)
           page-original-name (:block/original-name page)
           title (or page-original-name page-name)
@@ -694,10 +700,10 @@
                                    (page-mouse-leave e *control-show?))}
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (when-not whiteboard?
-               (page-title page-name icon title {:journal? journal?
-                                                 :fmt-journal? fmt-journal?
-                                                 :built-in-property? built-in-property?
-                                                 :preview? preview?}))
+               (page-title page-name title {:journal? journal?
+                                            :fmt-journal? fmt-journal?
+                                            :built-in-property? built-in-property?
+                                            :preview? preview?}))
              (when (not config/publishing?)
                (when config/lsp-enabled?
                  [:div.flex.flex-row

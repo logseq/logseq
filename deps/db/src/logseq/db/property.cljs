@@ -62,8 +62,7 @@
                             :visible true}
 
    :icon {:original-name "Icon"
-          :schema {:type :default}
-          :visible true}
+          :schema {:type :default}}
    :public {:schema {:type :checkbox :hide? true}
             :visible true}
    :filters {:schema {:type :map}}

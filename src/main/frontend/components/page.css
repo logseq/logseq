@@ -237,7 +237,7 @@
   @apply rounded-sm;
 
   padding: 5px 8px;
-  padding-bottom: 1.5rem;
+  padding-bottom: 1.75rem;
   margin: 0 -6px 12px -6px;
 
   &.title {
@@ -246,6 +246,10 @@
 
   h1.title {
     margin-bottom: 0;
+  }
+
+  .page-icon {
+    font-size: 48px;
   }
 
   .edit-input {
