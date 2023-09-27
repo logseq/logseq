@@ -175,7 +175,7 @@
    :cards/recall                            {:binding "t"
                                              :fn      srs/recall}
 
-   :editor/escape-editing                   {:binding false
+   :editor/escape-editing                   {:binding []
                                              :fn      (fn [_ _]
                                                         (editor-handler/escape-editing))}
 
@@ -332,7 +332,7 @@
    :editor/zoom-out                         {:binding (if mac? "mod+," "alt+left")
                                              :fn      editor-handler/zoom-out!}
 
-   :editor/toggle-undo-redo-mode            {:binding false
+   :editor/toggle-undo-redo-mode            {:binding []
                                              :fn      undo-redo/toggle-undo-redo-mode!}
 
    :editor/toggle-number-list               {:binding "t n"
@@ -396,7 +396,7 @@
 
    :graph/export-as-html                    {:fn      #(export-handler/download-repo-as-html!
                                                          (state/get-current-repo))
-                                             :binding false}
+                                             :binding []}
 
    :graph/open                              {:fn      #(do
                                                          (editor-handler/escape-editing)
@@ -406,18 +406,18 @@
    :graph/remove                            {:fn      #(do
                                                          (editor-handler/escape-editing)
                                                          (state/set-state! :ui/open-select :graph-remove))
-                                             :binding false}
+                                             :binding []}
 
    :graph/add                               {:fn      (fn [] (route-handler/redirect! {:to :repo-add}))
-                                             :binding false}
+                                             :binding []}
 
    :graph/save                              {:fn      #(state/pub-event! [:graph/save])
-                                             :binding false}
+                                             :binding []}
 
    :graph/re-index                          {:fn      (fn []
                                                         (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
                                                           (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
-                                             :binding false}
+                                             :binding []}
 
    :command/run                             {:binding  "mod+shift+1"
                                              :inactive (not (util/electron?))
@@ -494,7 +494,7 @@
                                              :inactive (not (util/electron?))
                                              :fn       page-handler/copy-current-file}
 
-   :editor/copy-page-url                    {:binding  false
+   :editor/copy-page-url                    {:binding  []
                                              :inactive (not (util/electron?))
                                              :fn       #(page-handler/copy-page-url)}
 
@@ -516,7 +516,7 @@
                                              :inactive (not (config/plugin-config-enabled?))
                                              :fn       plugin-config-handler/open-replace-plugins-modal}
 
-   :ui/clear-all-notifications              {:binding false
+   :ui/clear-all-notifications              {:binding []
                                              :fn      :frontend.handler.notification/clear-all!}
 
    :editor/toggle-open-blocks               {:binding "t o"
