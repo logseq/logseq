@@ -607,9 +607,9 @@
                                          page
                                          (str edit-input-id-prefix "-page")
                                          {:selected? false
-                                          :class-schema? false
-                                            ;; Allow class and property pages to add new property
-                                          :page-configure? (some #{"class" "property"} types)}))]))
+                                          ;; TODO: Shoule we enable adding new property for property pages?
+                                          ;; If so, we need to figure out a way to allow that without affecting the UX.
+                                          :class-schema? false}))]))
 
 (rum/defc page-properties-react < rum/reactive
   [page* configure?]

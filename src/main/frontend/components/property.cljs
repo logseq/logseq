@@ -313,8 +313,7 @@
 
        (and (or (:page-configure? opts)
                 (seq properties)
-                (seq (:block/alias block))
-                (seq (:block/tags block)))
+                (seq (:block/alias block)))
             (not config/publishing?)
             (or (:page-configure? opts) (not (:in-block-container? opts))))
        [:a.fade-link.flex
