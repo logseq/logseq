@@ -49,6 +49,14 @@
   [:enum :open :closed])
 (def rtc-state-validator (m/validator rtc-state-schema))
 
+
+(def general-attrs-schema-coll
+  [[:updated-at {:optional true} :int]
+   [:created-at {:optional true} :int]
+   [:alias {:optional true} [:maybe [:sequential :uuid]]]
+   [:type {:optional true} [:maybe [:sequential :string]]]
+   [:schema {:optional true} [:maybe [:map {:closed false}]]]])
+
 (def data-from-ws-schema
   [:map {:closed true}
    [:req-id :string]
@@ -57,40 +65,36 @@
     [:map-of :string
      [:multi {:dispatch :op :decode/string #(update % :op keyword)}
       [:move
-       [:map
-        [:op :keyword]
-        [:self :string]
-        [:parents [:sequential :string]]
-        [:left :string]
-        [:content {:optional true} :string]
-        [:updated-at {:optional true} :int]
-        [:created-at {:optional true} :int]
-        [:alias {:optional true} [:maybe [:sequential :uuid]]]
-        [:type {:optional true} [:maybe [:sequential :string]]]
-        [:schema {:optional true} [:maybe [:map {:closed false}]]]]]
+       (apply conj
+              [:map {:closed true}
+               [:op :keyword]
+               [:self :string]
+               [:parents [:sequential :string]]
+               [:left :string]
+               [:content {:optional true} :string]]
+              general-attrs-schema-coll)]
       [:remove
-       [:map
+       [:map {:closed true}
         [:op :keyword]
         [:block-uuid :string]]]
       [:update-attrs
-       [:map
-        [:op :keyword]
-        [:self :string]
-        [:parents {:optional true} [:sequential :string]]
-        [:left {:optional true} :string]
-        [:content {:optional true} :string]
-        [:updated-at {:optional true} :int]
-        [:created-at {:optional true} :int]
-        [:alias {:optional true} [:maybe [:sequential :uuid]]]
-        [:type {:optional true} [:maybe [:sequential :string]]]
-        [:schema {:optional true} [:maybe [:map {:closed false}]]]]]
+       (apply conj
+              [:map {:closed true}
+               [:op :keyword]
+               [:self :string]
+               [:parents {:optional true} [:sequential :string]]
+               [:left {:optional true} :string]
+               [:content {:optional true} :string]]
+              general-attrs-schema-coll)]
       [:update-page
-       [:map
-        [:op :keyword]
-        [:self :string]
-        [:page-name :string]]]
+       (apply conj
+              [:map {:closed true}
+               [:op :keyword]
+               [:self :string]
+               [:page-name :string]]
+              general-attrs-schema-coll)]
       [:remove-page
-       [:map
+       [:map {:closed true}
         [:op :keyword]
         [:block-uuid :string]]]]]]])
 (def data-from-ws-decoder (m/decoder data-from-ws-schema mt/string-transformer))
