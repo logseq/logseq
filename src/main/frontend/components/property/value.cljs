@@ -499,7 +499,7 @@
                    :class class
                    :style {:min-height 24}
                    :on-click (fn []
-                               (when (= type :default)
+                               (when (and (= type :default) (not (uuid? value)))
                                  (set-editing! property editor-id dom-id value)))}
              (let [type (or (when (and (= type :default) (uuid? value)) :block)
                             type
