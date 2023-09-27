@@ -76,7 +76,7 @@
          ;; meta-click or just click in publishing to navigate to date's page
          :on-click (if config/publishing? #(navigate-to-date-page value) toggle-fn)
          :on-mouse-down (fn [e]
-                          (util/stop e)
+                          (.preventDefault e)
                           (when (util/meta-key? e)
                             (navigate-to-date-page value)))
          :on-key-down (fn [e]
