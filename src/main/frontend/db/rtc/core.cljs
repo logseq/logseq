@@ -104,23 +104,19 @@
 
 
 (defn apply-remote-remove-ops
-  [state remove-ops]
-  {:pre [(some? @(:*repo state))]}
-  (let [repo @(:*repo state)]
-    (prn :remove-ops remove-ops)
-    (doseq [op remove-ops]
-      (when-let [block (db/entity repo [:block/uuid (uuid (:block-uuid op))])]
-        (outliner-tx/transact!
-         {:persist-op? false}
-         (outliner-core/delete-blocks! [block] {:children? false}))
-        (prn :apply-remote-remove-ops (:block-uuid op))))))
+  [repo remove-ops]
+  (prn :remove-ops remove-ops)
+  (doseq [op remove-ops]
+    (when-let [block (db/entity repo [:block/uuid (uuid (:block-uuid op))])]
+      (outliner-tx/transact!
+       {:persist-op? false}
+       (outliner-core/delete-blocks! [block] {:children? false}))
+      (prn :apply-remote-remove-ops (:block-uuid op)))))
 
 (defn- insert-or-move-block
-  [state block-uuid-str remote-parents remote-left-uuid-str move?]
-  {:pre [(some? @(:*repo state))]}
+  [repo block-uuid-str remote-parents remote-left-uuid-str move?]
   (when (and (seq remote-parents) remote-left-uuid-str)
-    (let [repo @(:*repo state)
-          local-left (db/entity repo [:block/uuid (uuid remote-left-uuid-str)])
+    (let [local-left (db/entity repo [:block/uuid (uuid remote-left-uuid-str)])
           first-remote-parent (first remote-parents)
           local-parent (db/entity repo [:block/uuid (uuid first-remote-parent)])
           b {:block/uuid (uuid block-uuid-str)}
@@ -182,10 +178,8 @@
   (move-ops-map->sorted-move-ops move-ops-map))
 
 (defn- check-block-pos
-  [state block-uuid-str remote-parents remote-left-uuid-str]
-  {:pre [(some? @(:*repo state))]}
-  (let [repo @(:*repo state)
-        local-b (db/entity repo [:block/uuid (uuid block-uuid-str)])
+  [repo block-uuid-str remote-parents remote-left-uuid-str]
+  (let [local-b (db/entity repo [:block/uuid (uuid block-uuid-str)])
         remote-parent-uuid-str (first remote-parents)]
     (cond
       (nil? local-b)
@@ -221,82 +215,74 @@
          (outliner-core/save-block! new-block))))))
 
 (defn apply-remote-move-ops
-  [state sorted-move-ops]
-  {:pre [(some? @(:*repo state))]}
+  [repo sorted-move-ops]
   (prn :sorted-move-ops sorted-move-ops)
   (doseq [{:keys [parents left self] :as op-value} sorted-move-ops]
-    (let [r (check-block-pos state self parents left)]
+    (let [r (check-block-pos repo self parents left)]
       (case r
         :not-exist
-        (insert-or-move-block state self parents left false)
+        (insert-or-move-block repo self parents left false)
         :wrong-pos
-        (insert-or-move-block state self parents left true)
+        (insert-or-move-block repo self parents left true)
         nil                             ; do nothing
         nil)
-      (update-block-attrs @(:*repo state) (uuid self) op-value)
+      (update-block-attrs repo (uuid self) op-value)
       (prn :apply-remote-move-ops self r parents left))))
 
 
 (defn apply-remote-update-ops
-  [state update-ops]
-  {:pre [(some? @(:*repo state))]}
-  (let [repo @(:*repo state)]
-    (prn :update-ops update-ops)
-    (doseq [{:keys [parents left self] :as op-value} update-ops]
-      (when (and parents left)
-        (let [r (check-block-pos state self parents left)]
-          (case r
-            :not-exist
-            (insert-or-move-block state self parents left false)
-            :wrong-pos
-            (insert-or-move-block state self parents left true)
-            nil)))
-      (update-block-attrs repo (uuid self) op-value)
-      (prn :apply-remote-update-ops self))))
+  [repo update-ops]
+  (prn :update-ops update-ops)
+  (doseq [{:keys [parents left self] :as op-value} update-ops]
+    (when (and parents left)
+      (let [r (check-block-pos repo self parents left)]
+        (case r
+          :not-exist
+          (insert-or-move-block repo self parents left false)
+          :wrong-pos
+          (insert-or-move-block repo self parents left true)
+          nil)))
+    (update-block-attrs repo (uuid self) op-value)
+    (prn :apply-remote-update-ops self)))
 
 (defn apply-remote-update-page-ops
-  [state update-page-ops]
-  {:pre [(some? @(:*repo state))]}
-  (let [repo @(:*repo state)]
-    (doseq [{:keys [self page-name]} update-page-ops]
-      (let [old-page-name (:block/name (db/entity repo [:block/uuid (uuid self)]))
-            exist-page (db/entity repo [:block/name page-name])]
-        (cond
+  [repo update-page-ops]
+  (doseq [{:keys [self page-name]} update-page-ops]
+    (let [old-page-name (:block/name (db/entity repo [:block/uuid (uuid self)]))
+          exist-page (db/entity repo [:block/name page-name])]
+      (cond
           ;; same name but different uuid
           ;; remote page has same block/name as local's, but they don't have same block/uuid.
           ;; 1. rename local page's name to '<origin-name>-<ms-epoch>-Conflict'
           ;; 2. create page, name=<origin-name>, uuid=remote-uuid
-          (and exist-page (not= (:block/uuid exist-page) (uuid self)))
-          (do (page-handler/rename! page-name (util/format "%s-%s-CONFLICT" page-name (tc/to-long (t/now))))
-              (page-handler/create! page-name {:redirect? false :create-first-block? false
-                                               :uuid (uuid self) :persist-op? false}))
+        (and exist-page (not= (:block/uuid exist-page) (uuid self)))
+        (do (page-handler/rename! page-name (util/format "%s-%s-CONFLICT" page-name (tc/to-long (t/now))))
+            (page-handler/create! page-name {:redirect? false :create-first-block? false
+                                             :uuid (uuid self) :persist-op? false}))
 
           ;; a client-page has same uuid as remote but different page-names,
           ;; then we need to rename the client-page to remote-page-name
-          (and old-page-name (not= old-page-name page-name))
-          (page-handler/rename! old-page-name page-name false false)
+        (and old-page-name (not= old-page-name page-name))
+        (page-handler/rename! old-page-name page-name false false)
 
           ;; no such page, name=remote-page-name, OR, uuid=remote-block-uuid
           ;; just create-page
-          :else
-          (page-handler/create! page-name {:redirect? false :create-first-block? false
-                                           :uuid (uuid self) :persist-op? false}))))))
+        :else
+        (page-handler/create! page-name {:redirect? false :create-first-block? false
+                                         :uuid (uuid self) :persist-op? false})))))
 
 (defn apply-remote-remove-page-ops
-  [state remove-page-ops]
-  {:pre [(some? @(:*repo state))]}
-  (let [repo @(:*repo state)]
-    (doseq [op remove-page-ops]
-      (when-let [page-name (:block/name (db/entity repo [:block/uuid (uuid (:block-uuid op))]))]
-        (page-handler/delete! page-name nil {:redirect-to-home? false :persist-op? false})))))
+  [repo remove-page-ops]
+  (doseq [op remove-page-ops]
+    (when-let [page-name (:block/name (db/entity repo [:block/uuid (uuid (:block-uuid op))]))]
+      (page-handler/delete! page-name nil {:redirect-to-home? false :persist-op? false}))))
 
 
 (defn <apply-remote-data
-  [state data-from-ws]
-  {:pre [(data-from-ws-validator data-from-ws)
-         (some? @(:*repo state))]}
+  [repo data-from-ws]
+  {:pre [(data-from-ws-validator data-from-ws)]}
   (go
-    (let [repo @(:*repo state)
+    (let [
           affected-blocks-map (:affected-blocks data-from-ws)
           remote-t (:t data-from-ws)
           local-t (<! (p->c (op/<get-ops&local-tx repo)))]
@@ -312,16 +298,16 @@
               update-ops (vals update-ops-map)
               update-page-ops (vals update-page-ops-map)
               remove-page-ops (vals remove-page-ops-map)]
-          (util/profile ::apply-remote-update-page-ops (apply-remote-update-page-ops state update-page-ops))
-          (util/profile ::apply-remote-remove-ops (apply-remote-remove-ops state remove-ops))
-          (util/profile ::apply-remote-move-ops (apply-remote-move-ops state sorted-move-ops))
-          (util/profile ::apply-remote-update-ops (apply-remote-update-ops state update-ops))
-          (util/profile ::apply-remote-remove-page-ops (apply-remote-remove-page-ops state remove-page-ops))
+          (util/profile ::apply-remote-update-page-ops (apply-remote-update-page-ops repo update-page-ops))
+          (util/profile ::apply-remote-remove-ops (apply-remote-remove-ops repo remove-ops))
+          (util/profile ::apply-remote-move-ops (apply-remote-move-ops repo sorted-move-ops))
+          (util/profile ::apply-remote-update-ops (apply-remote-update-ops repo update-ops))
+          (util/profile ::apply-remote-remove-page-ops (apply-remote-remove-page-ops repo remove-page-ops))
           (<! (p->c (op/<update-local-tx! repo remote-t))))))))
 
 (defn- <push-data-from-ws-handler
-  [state push-data-from-ws]
-  (go (<! (<apply-remote-data state push-data-from-ws))
+  [repo push-data-from-ws]
+  (go (<! (<apply-remote-data repo push-data-from-ws))
       (prn :push-data-from-ws push-data-from-ws)))
 
 (defn- local-ops->remote-ops
@@ -416,13 +402,7 @@
                                                                          (db/pull-many repo '[:block/uuid])
                                                                          (keep :block/uuid)
                                                                          (map str))
-                                                          retract-uuids (->> retract
-                                                                             (map (fn [x] [:block/uuid x]))
-                                                                             (db/pull-many repo '[:db/id :block/uuid])
-                                                                             (keep :block/uuid)
-                                                                             set
-                                                                             (set/difference retract)
-                                                                             (map str))]
+                                                          retract-uuids (map str retract)]
                                                       {:add add-uuids :retract retract-uuids}))
                                    attr-type-map (when (contains? key-set :type)
                                                    (let [{:keys [add retract]} (:type attr-map)
@@ -475,7 +455,7 @@
           ;; else
           (throw (ex-info "Unavailable" {:remote-ex remote-ex})))
         (do (<! (p->c (op/<clean-ops repo op-keys)))
-            (<! (<apply-remote-data state (data-from-ws-decoder r)))
+            (<! (<apply-remote-data repo (data-from-ws-decoder r)))
             (prn :<client-op-update-handler r))))))
 
 (defn <loop-for-rtc
@@ -506,7 +486,7 @@
                     :priority true)]
               (cond
                 push-data-from-ws
-                (do (<push-data-from-ws-handler state push-data-from-ws)
+                (do (<push-data-from-ws-handler repo push-data-from-ws)
                     (recur))
                 client-op-update
                 (do (<! (<client-op-update-handler state))
