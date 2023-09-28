@@ -355,7 +355,7 @@
        (ui/menu-link
         {:key "Configure this property"
          :on-click (fn []
-                     (state/set-modal! #(property/property-config repo property {})))}
+                     (state/set-modal! #(property/property-config property {})))}
         (t :context-menu/configure-property)
         nil))
      (ui/menu-link

@@ -98,23 +98,28 @@
 
 (declare page)
 
-(rum/defc dummy-block
-  [page-name]
-  (let [handler-fn (fn []
-                     (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false})]
-                       (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 0)))]
-    [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
-     [:div.flex.flex-row
-      [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
-       [:span.bullet-container.cursor
-        [:span.bullet]]]
-      [:div.flex.flex-1 {:tabIndex 0
-                         :on-key-press (fn [e]
-                                         (when (= "Enter" (util/ekey e))
-                                           (handler-fn)))
-                         :on-click handler-fn}
-       [:span.opacity-70
-        "Click here to edit..."]]]]))
+(if config/publishing?
+  (rum/defc dummy-block
+    [_page-name]
+    [:div])
+
+  (rum/defc dummy-block
+    [page-name]
+    (let [handler-fn (fn []
+                       (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false})]
+                         (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 0)))]
+      [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
+       [:div.flex.flex-row
+        [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
+         [:span.bullet-container.cursor
+          [:span.bullet]]]
+        [:div.flex.flex-1 {:tabIndex 0
+                           :on-key-press (fn [e]
+                                           (when (= "Enter" (util/ekey e))
+                                             (handler-fn)))
+                           :on-click handler-fn}
+         [:span.opacity-70
+          "Click here to edit..."]]]])))
 
 (rum/defc add-button
   [args]
@@ -326,7 +331,7 @@
      (when class?
        (page-properties page true))
      (if property?
-       (property/property-config (state/get-current-repo) page opts)
+       (property/property-config page (assoc opts :inline-text component-block/inline-text))
               ;; add new property for normal pages
        (when (and (not class?)
                   (empty? (:block/properties page))

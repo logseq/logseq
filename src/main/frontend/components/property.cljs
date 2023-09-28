@@ -13,7 +13,6 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.reorder :as reorder-handler]
             [frontend.handler.property.util :as pu]
-            [frontend.handler.notification :as notification]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.search :as search]
@@ -278,11 +277,11 @@
   (rum/local nil ::property-name)
   (rum/local nil ::property-schema)
   {:will-mount (fn [state]
-                 (let [[_repo property] (:rum/args state)]
+                 (let [[property] (:rum/args state)]
                    (reset! (::property-name state) (:block/original-name property))
                    (reset! (::property-schema state) (:block/schema property))
                    state))}
-  [state repo property {:keys [toggle-fn] :as opts}]
+  [state property {:keys [toggle-fn inline-text] :as opts}]
   (let [*property-name (::property-name state)
         *property-schema (::property-schema state)
         built-in-property? (contains? db-property/built-in-properties-keys-str (:block/original-name property))
@@ -365,11 +364,13 @@
       [:div.grid.grid-cols-4.gap-1.items-start.leading-8
        [:label "Description:"]
        [:div.col-span-3
-        (ui/ls-textarea
-         {:on-change (fn [e]
-                       (swap! *property-schema assoc :description (util/evalue e)))
-          :disabled disabled?
-          :value (:description @*property-schema)})]]
+        (if (and disabled? inline-text)
+          (inline-text {} :markdown (:description @*property-schema))
+          (ui/ls-textarea
+           {:on-change (fn [e]
+                         (swap! *property-schema assoc :description (util/evalue e)))
+            :disabled disabled?
+            :value (:description @*property-schema)}))]]
 
       [:div
        (when-not disabled?
@@ -419,8 +420,7 @@
   shortcut/disable-all-shortcuts
   [state entity *property-key *property-value {:keys [class-schema? page-configure? in-block-container?]
                                                :as opts}]
-  (let [repo (state/get-current-repo)
-        *show-new-property-config? (::show-new-property-config? state)
+  (let [*show-new-property-config? (::show-new-property-config? state)
         entity-properties (->> (keys (:block/properties entity))
                                (map #(:block/original-name (db/entity [:block/uuid %])))
                                (set))
@@ -450,8 +450,7 @@
                   (pv/property-value entity property @*property-value (assoc opts :editing? true)))
                 (fn [{:keys [toggle-fn]}]
                   [:div.p-6
-                   (property-config repo property (merge opts
-                                                         {:toggle-fn toggle-fn
+                   (property-config property (merge opts {:toggle-fn toggle-fn
                                                           :block entity}))])
                 {:initial-open? true
                  :modal-class (util/hiccup->class
@@ -527,7 +526,7 @@
 
 (rum/defcs property-key <
   (rum/local false ::hover?)
-  [state block property {:keys [class-schema? block? collapsed?]}]
+  [state block property {:keys [class-schema? block? collapsed? inline-text]}]
   (let [*hover? (::hover? state)
         repo (state/get-current-repo)
         icon (pu/get-property property :icon)]
@@ -586,7 +585,7 @@
            [:div {:style {:padding-left 6}} (:block/original-name property)]]))
       (fn [{:keys [toggle-fn]}]
         [:div.p-8
-         (property-config repo property {:toggle-fn toggle-fn})])
+         (property-config property {:toggle-fn toggle-fn :inline-text inline-text})])
       {:modal-class (util/hiccup->class
                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg")})]))
 
@@ -637,7 +636,8 @@
               {:class "col-span-2"}
               (property-key block property (assoc (select-keys opts [:class-schema?])
                                                   :block? block?
-                                                  :collapsed? collapsed?))]
+                                                  :collapsed? collapsed?
+                                                  :inline-text inline-text))]
              (if (and (:class-schema? opts) (:page-configure? opts))
                [:div.property-description.text-sm.opacity-70
                 {:class "col-span-3"}
