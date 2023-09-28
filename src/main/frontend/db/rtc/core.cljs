@@ -251,7 +251,7 @@
 
 (defn apply-remote-update-page-ops
   [repo update-page-ops]
-  (doseq [{:keys [self page-name]} update-page-ops]
+  (doseq [{:keys [self page-name] :as op-value } update-page-ops]
     (let [old-page-name (:block/name (db/entity repo [:block/uuid (uuid self)]))
           exist-page (db/entity repo [:block/name page-name])]
       (cond
@@ -273,7 +273,9 @@
           ;; just create-page
         :else
         (page-handler/create! page-name {:redirect? false :create-first-block? false
-                                         :uuid (uuid self) :persist-op? false})))))
+                                         :uuid (uuid self) :persist-op? false}))
+
+      (update-block-attrs repo (uuid self) op-value))))
 
 (defn apply-remote-remove-page-ops
   [repo remove-page-ops]
