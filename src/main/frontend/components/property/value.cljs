@@ -439,19 +439,21 @@
                                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")
                        :initial-open? editing?}]
     (if editing?
-      (select-f)
-      (ui/dropdown
-       (fn [{:keys [toggle-fn]}]
-         [:div.cursor-pointer
-          {:on-mouse-down (fn [e]
-                            (util/stop e)
-                            (toggle-fn))
-           :class "flex flex-1"}
-          (if (and (string/blank? value) (not editing?))
-            [:div.opacity-50.pointer.text-sm "Empty"]
-            (value-f))])
-       select-f
-       dropdown-opts))))
+        (select-f)
+        (ui/dropdown
+         (fn [{:keys [toggle-fn]}]
+           [:div.cursor-pointer
+            {:on-mouse-down (if config/publishing?
+                              (constantly nil)
+                              (fn [e]
+                                (util/stop e)
+                                (toggle-fn)))
+             :class "flex flex-1"}
+            (if (and (string/blank? value) (not editing?))
+              [:div.opacity-50.pointer.text-sm "Empty"]
+              (value-f))])
+         select-f
+         dropdown-opts))))
 
 (rum/defc property-scalar-value < rum/reactive db-mixins/query
   [block property value {:keys [inline-text block-cp
@@ -566,9 +568,11 @@
       (ui/dropdown
        (fn [{:keys [toggle-fn]}]
          [:div.cursor-pointer
-          {:on-mouse-down (fn [e]
-                            (util/stop e)
-                            (toggle-fn))
+          {:on-mouse-down (if config/publishing?
+                            (constantly nil)
+                            (fn [e]
+                              (util/stop e)
+                              (toggle-fn)))
            :class "flex flex-1 flex-row items-center flex-wrap gap-x-4 gap-y-2 pr-4"}
           (values-cp toggle-fn)])
        (fn [{:keys [_toggle-fn]}]

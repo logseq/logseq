@@ -368,7 +368,7 @@
 (defn checkbox
   [option]
   [:input.form-checkbox.h-4.w-4.transition.duration-150.ease-in-out
-   (merge {:type "checkbox"} option)])
+   (merge {:type "checkbox" :disabled config/publishing?} option)])
 
 (defn main-node
   []
