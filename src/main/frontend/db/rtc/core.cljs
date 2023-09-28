@@ -10,6 +10,7 @@
             [frontend.db :as db]
             [frontend.db.rtc.op :as op]
             [frontend.db.rtc.ws :as ws]
+            [frontend.db.rtc.const :as rtc-const]
             [frontend.handler.page :as page-handler]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.transaction :as outliner-tx]
@@ -49,62 +50,11 @@
   [:enum :open :closed])
 (def rtc-state-validator (m/validator rtc-state-schema))
 
+(def data-from-ws-decoder (m/decoder rtc-const/data-from-ws-schema mt/string-transformer))
 
-(def general-attrs-schema-coll
-  [[:updated-at {:optional true} :int]
-   [:created-at {:optional true} :int]
-   [:alias {:optional true} [:maybe [:sequential :uuid]]]
-   [:type {:optional true} [:maybe [:sequential :string]]]
-   [:schema {:optional true} [:maybe [:map {:closed false}]]]])
-
-(def data-from-ws-schema
-  [:map {:closed true}
-   [:req-id :string]
-   [:t {:optional true} :int]
-   [:affected-blocks {:optional true}
-    [:map-of :string
-     [:multi {:dispatch :op :decode/string #(update % :op keyword)}
-      [:move
-       (apply conj
-              [:map {:closed true}
-               [:op :keyword]
-               [:self :string]
-               [:parents [:sequential :string]]
-               [:left :string]
-               [:content {:optional true} :string]]
-              general-attrs-schema-coll)]
-      [:remove
-       [:map {:closed true}
-        [:op :keyword]
-        [:block-uuid :string]]]
-      [:update-attrs
-       (apply conj
-              [:map {:closed true}
-               [:op :keyword]
-               [:self :string]
-               [:parents {:optional true} [:sequential :string]]
-               [:left {:optional true} :string]
-               [:content {:optional true} :string]]
-              general-attrs-schema-coll)]
-      [:update-page
-       (apply conj
-              [:map {:closed true}
-               [:op :keyword]
-               [:self :string]
-               [:page-name :string]]
-              general-attrs-schema-coll)]
-      [:remove-page
-       [:map {:closed true}
-        [:op :keyword]
-        [:block-uuid :string]]]]]]])
-(def data-from-ws-decoder (m/decoder data-from-ws-schema mt/string-transformer))
-
-(def data-from-ws-validator (fn [data] (if ((m/validator data-from-ws-schema) data)
+(def data-from-ws-validator (fn [data] (if ((m/validator rtc-const/data-from-ws-schema) data)
                                          true
                                          (prn data))))
-
-
-
 
 
 (defn apply-remote-remove-ops
@@ -197,7 +147,7 @@
 (defn- update-block-attrs
   [repo block-uuid op-value]
   (let [key-set (set/intersection
-                 #{:content :updated-at :created-at :alias :type :schema}
+                 (conj rtc-const/general-attr-set :content)
                  (set (keys op-value)))]
     (when (seq key-set)
       (let [b-ent (db/entity repo [:block/uuid block-uuid])
@@ -210,10 +160,14 @@
               (contains? key-set :created-at)     (assoc :block/created-at (:created-at op-value))
               (contains? key-set :alias)          (assoc :block/alias (some->> (seq (:alias op-value))
                                                                                (map (partial vector :block/uuid))
-                                                                               (db/pull-many repo '[:db/id])
+                                                                               (db/pull-many repo [:db/id])
                                                                                (keep :db/id)))
               (contains? key-set :type)           (assoc :block/type (:type op-value))
-              (contains? key-set :schema)         (assoc :block/schema (:schema op-value)))]
+              (contains? key-set :schema)         (assoc :block/schema (:schema op-value))
+              (contains? key-set :tags)           (assoc :block/tags (some->> (seq (:tags op-value))
+                                                                              (map (partial vector :block/uuid))
+                                                                              (db/pull-many repo [:db/id])
+                                                                              (keep :db/id))))]
         (outliner-tx/transact!
          {:persist-op? false}
          (outliner-core/save-block! new-block))))))
@@ -355,17 +309,27 @@
              (let [{:keys [block-uuid updated-attrs]} (second op)
                    attr-map (update-block-uuid->attrs block-uuid)
                    {{old-alias-add :add old-alias-retract :retract} :alias
+                    {old-tags-add :add old-tags-retract :retract}   :tags
                     {old-type-add :add old-type-retract :retract}   :type} attr-map
                    {{new-alias-add :add new-alias-retract :retract} :alias
+                    {new-tags-add :add new-tags-retract :retract}   :tags
                     {new-type-add :add new-type-retract :retract}   :type} updated-attrs
                    new-attr-map
                    (cond-> (merge (select-keys updated-attrs [:content :schema])
                                   (select-keys attr-map [:content :schema]))
+                     ;; alias
                      (or old-alias-add new-alias-add)
                      (assoc-in [:alias :add] (set/union old-alias-add new-alias-add))
                      (or old-alias-retract new-alias-retract)
                      (assoc-in [:alias :retract] (set/difference (set/union old-alias-retract new-alias-retract)
                                                                  old-alias-add new-alias-add))
+                     ;; tags
+                     (or old-tags-add new-tags-add)
+                     (assoc-in [:tags :add] (set/union old-tags-add new-tags-add))
+                     (or old-tags-retract new-tags-retract)
+                     (assoc-in [:tags :retract] (set/difference (set/union old-tags-retract new-tags-retract)
+                                                                old-tags-add new-tags-add))
+                     ;; type
                      (or old-type-add new-type-add)
                      (assoc-in [:type :add] (set/union old-type-add new-type-add))
                      (or old-type-retract new-type-retract)
@@ -405,7 +369,7 @@
                                                     (let [{:keys [add retract]} (:alias attr-map)
                                                           add-uuids (->> add
                                                                          (map (fn [x] [:block/uuid x]))
-                                                                         (db/pull-many repo '[:block/uuid])
+                                                                         (db/pull-many repo [:block/uuid])
                                                                          (keep :block/uuid)
                                                                          (map str))
                                                           retract-uuids (map str retract)]
@@ -415,7 +379,16 @@
                                                          current-type-value (set (:block/type b))
                                                          add (set/intersection add current-type-value)
                                                          retract (set/difference retract current-type-value)]
-                                                     {:add add :retract retract}))]
+                                                     {:add add :retract retract}))
+                                   attr-tags-map (when (contains? key-set :tags)
+                                                   (let [{:keys [add retract]} (:tags attr-map)
+                                                         add-uuids (->> add
+                                                                        (map (fn [x] [:block/uuid x]))
+                                                                        (db/pull-many repo [:block/uuid])
+                                                                        (keep :block/uuid)
+                                                                        (map str))
+                                                         retract-uuids (map str retract)]
+                                                     {:add add-uuids :retract retract-uuids}))]
                                [:update
                                 (cond-> {:block-uuid block-uuid}
                                   (:block/updated-at b)       (assoc :updated-at (:block/updated-at b))
@@ -423,6 +396,7 @@
                                   (contains? key-set :schema) (assoc :schema (:block/schema b))
                                   attr-type-map               (assoc :type attr-type-map)
                                   attr-alias-map              (assoc :alias attr-alias-map)
+                                  attr-tags-map               (assoc :tags attr-tags-map)
                                   (and (contains? key-set :content)
                                        (:block/content b))    (assoc :content (:block/content b))
                                   (and left-uuid parent-uuid) (assoc :target-uuid left-uuid
