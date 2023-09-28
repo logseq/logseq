@@ -101,8 +101,8 @@
           :block/properties-order (keys ps)})))))
 
 (defn- create-title-property?
-  [journal? page-name]
-  (and (not (config/db-based-graph? (state/get-current-repo)))
+  [repo journal? page-name]
+  (and (not (config/db-based-graph? repo))
        (not journal?)
        (= (state/get-filename-format) :legacy) ;; reduce title computation
        (fs-util/create-title-property? page-name)))
@@ -111,7 +111,7 @@
   (when (:block/uuid page)
     (let [page-entity   [:block/uuid (:block/uuid page)]
           title         (util/get-page-original-name page)
-          create-title? (create-title-property? journal? title)
+          create-title? (create-title-property? repo journal? title)
           page          (merge page
                                (when (seq properties) {:block/properties properties})
                                (when whiteboard? {:block/type "whiteboard"})
@@ -212,7 +212,7 @@
        (when create-first-block?
          (when (or
                 (db/page-empty? repo (:db/id (db/entity [:block/name page-name])))
-                (create-title-property? journal? page-name))
+                (create-title-property? repo journal? page-name))
            (editor-handler/api-insert-new-block! "" {:page page-name}))))
 
      (when redirect?
@@ -639,7 +639,8 @@
 
         (db/transact! repo page-txs)
 
-        (when (fs-util/create-title-property? new-page-name)
+        (when (and (not (config/db-based-graph? repo))
+                   (fs-util/create-title-property? new-page-name))
           (page-property/add-property! new-page-name :title new-name))
 
         (when (and file (not journal?))

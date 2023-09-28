@@ -166,6 +166,7 @@
         (page-handler/create! page-name {:redirect?        false :create-first-block? false
                                          :split-namespace? false
                                          :format           format
+                                         ;; FIXME: file and file-path properties for db version
                                          :properties       {:file      (case format
                                                                          :markdown
                                                                          (util/format "[%s](%s)" label url)
