@@ -29,6 +29,7 @@
   (js->clj obj :keywordize-keys true))
 
 (defn shape->block [shape page-name]
+  ;; FIXME: support whiteboard props for db graph
   (let [properties {:ls-type :whiteboard-shape
                     :logseq.tldraw.shape shape}
         block {:block/page {:block/name (util/page-name-sanity-lc page-name)}
@@ -76,6 +77,7 @@
         get-k #(gobj/get tldraw-page %)]
     {:block/name page-name
      :block/type "whiteboard"
+     ;; FIXME: support whiteboard props for db graph
      :block/properties {:ls-type :whiteboard-page
                         :logseq.tldraw.page {:id (get-k "id")
                                              :name (get-k "name")

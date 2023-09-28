@@ -738,6 +738,7 @@
      (state/get-current-repo)
      (sdk-utils/uuid-or-throw-error block-uuid) key)))
 
+;; FIXME: Update :block/properties for db version
 (def ^:export get_block_property
   (fn [block-uuid key]
     (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
