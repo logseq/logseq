@@ -28,7 +28,10 @@
                                           [:retract {:optional true} [:set :uuid]]]]
                 [:type {:optional true} [:map
                                          [:add {:optional true} [:set :string]]
-                                         [:retract {:optional true} [:set :string]]]]]]]]]]
+                                         [:retract {:optional true} [:set :string]]]]
+                [:tags {:optional true} [:map
+                                         [:add {:optional true} [:set :uuid]]
+                                         [:retract {:optional true} [:set :uuid]]]]]]]]]]
    ["update-page"
     [:catn
      [:op :string]

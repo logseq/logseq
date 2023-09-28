@@ -55,7 +55,7 @@
                   :else
                   (let [updated-general-attrs (seq (set/intersection
                                                     updated-key-set
-                                                    #{:block/alias :block/type :block/schema :block/content}))
+                                                    #{:block/tags :block/alias :block/type :block/schema :block/content}))
                         ops (cond-> []
                               (or add3? add4?)
                               (conj [:move])
@@ -73,16 +73,28 @@
                                         (let [diff-value (diff-value-of-set-type-attr db-before db-after e :block/alias)]
                                           (when (seq diff-value)
                                             (let [{:keys [add retract]} diff-value
-                                                  add (keep :block/uuid (d/pull-many db-after '[:block/uuid]
+                                                  add (keep :block/uuid (d/pull-many db-after [:block/uuid]
                                                                                      (map :db/id add)))
-                                                  retract (keep :block/uuid (d/pull-many db-before '[:block/uuid]
+                                                  retract (keep :block/uuid (d/pull-many db-before [:block/uuid]
                                                                                          (map :db/id retract)))]
                                               {:alias {:add add :retract retract}})))
 
                                         :block/type
                                         (let [diff-value (diff-value-of-set-type-attr db-before db-after e :block/type)]
                                           (when (seq diff-value)
-                                            {:type diff-value}))))
+                                            {:type diff-value}))
+
+                                        :block/tags
+                                        (let [diff-value (diff-value-of-set-type-attr db-before db-after e :block/tags)]
+                                          (when (seq diff-value)
+                                            (let [{:keys [add retract]} diff-value
+                                                  add (keep :block/uuid (d/pull-many db-after [:block/uuid]
+                                                                                     (map :db/id add)))
+                                                  retract (keep :block/uuid (d/pull-many db-before [:block/uuid]
+                                                                                         (map :db/id retract)))]
+                                              {:tags {:add add :retract retract}})))
+                                        ;; else
+                                        nil))
                                     updated-general-attrs)
                                    (apply merge))]
                     (cond-> ops (seq update-op) (conj [:update update-op]))))
