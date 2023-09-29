@@ -294,6 +294,7 @@
           block-entity (db/entity id)
           structured-tags? (and (config/db-based-graph? (state/get-current-repo))
                                 (:block/page block-entity)
+                                (object-with-tag? (:block/content m))
                                 (seq (:block/tags m)))]
       (when id
         ;; Retract attributes to prepare for tx which rewrites block attributes
