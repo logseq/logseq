@@ -747,6 +747,7 @@
   :editor/zoom-out                "Zoom out editing block / Backwards otherwise"
   :editor/toggle-undo-redo-mode   "Toggle undo redo mode (global or page only)"
   :editor/toggle-number-list      "Toggle number list"
+  :editor/add-property            "Add property"
   :whiteboard/select              "Select tool"
   :whiteboard/pan                 "Pan tool"
   :whiteboard/portal              "Portal tool"

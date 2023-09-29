@@ -340,6 +340,9 @@
    :editor/toggle-number-list               {:binding "t n"
                                              :fn      #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
 
+   :editor/add-property                     {:binding "mod+p"
+                                             :fn      #(state/pub-event! [:editor/new-property])}
+
    :ui/toggle-brackets                      {:binding "mod+c mod+b"
                                              :fn      config-handler/toggle-ui-show-brackets!}
 
@@ -688,7 +691,8 @@
            :sidebar/open-today-page
            :sidebar/clear
            :command/run
-           :command-palette/toggle])
+           :command-palette/toggle
+           :editor/add-property])
         (with-meta {:before m/prevent-default-behavior}))
 
     :shortcut.handler/global-non-editing-only
@@ -801,7 +805,8 @@
      :editor/open-link-in-sidebar
      :editor/move-block-up
      :editor/move-block-down
-     :editor/escape-editing]
+     :editor/escape-editing
+     :editor/add-property]
 
     :shortcut.category/block-command-editing
     [:editor/backspace
