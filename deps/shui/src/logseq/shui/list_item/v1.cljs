@@ -18,13 +18,14 @@
     ("down" "↓") "↓"
     ("left" "←") "←"
     ("right" "→") "→"
-    ("disabled") ""
+    ("disabled" "Disabled") ""
     ("backspace" "delete") ""
     ("tab") ""
     (nil) ""
     (name key)))
 
 (defn normalize-text [app-config text]
+  (js/console.log "normalize-text" text app-config)
   (cond-> (or text "") 
     (keyword? text) (name)
     :stringify (str)
