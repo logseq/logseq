@@ -130,7 +130,7 @@
             schema (get builtin-schema-types property-type)
             properties (:block/properties block)
             values' (try
-                      (map #(convert-property-input-string property-type %) values)
+                      (set (map #(convert-property-input-string property-type %) values))
                       (catch :default e
                         (notification/show! (str e) :error false)
                         nil))

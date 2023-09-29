@@ -32,6 +32,8 @@
                      :map
                      [:vector [:or :keyword :uuid]]
                      [:set :uuid]
+                     ;; TODO: Remove when bug is fixed
+                     [:sequential :uuid]
                      [:set :string]
                      [:set :int]]]]
     [:block/created-at {:optional true} :int]
@@ -51,6 +53,7 @@
     [:block/journal-day {:optional true} :int]
     [:block/format {:optional true} [:enum :markdown]]
     [:block/tx-id {:optional true} :int]
+    [:block/marker {:optional true} :string]
     [:block/schema
      {:optional true}
      [:map
@@ -94,7 +97,6 @@
                          :entity (get full-maps (-> % :in first)))
                  errors)))
          (pprint/pprint errors))
-       
        (js/process.exit 1))
      (println "Valid!"))))
 
