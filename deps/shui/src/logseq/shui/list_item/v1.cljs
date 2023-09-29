@@ -36,7 +36,7 @@
 (defn split-text-on-highlight [text query normal-text normal-query]
   (let [start-index (string/index-of normal-text normal-query)
         end-index (+ start-index (count query))
-        text-string (cond-> (or text "") (keyword? text) name str)]
+        text-string (cond-> (or text "") (keyword? text) name :always str)]
     [(subs text-string 0 start-index)
      (subs text-string start-index end-index) 
      (subs text-string end-index)]))
