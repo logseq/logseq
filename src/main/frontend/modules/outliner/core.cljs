@@ -139,12 +139,22 @@
     [target (some? last-child)]))
 
 (declare move-blocks)
+
+(defn- object-with-tag?
+  [content]
+  (and content
+       (string/starts-with? content "[[")
+       (string/includes? content "]]")
+       (string/includes? content "#")))
+
 (defn- assoc-linked-block-when-save
   [txs-state block-entity m structured-tags?]
   (if structured-tags?
-    (let [linked-page (some-> (state/get-edit-content) mldoc/extract-plain)
+    (let [content (state/get-edit-content)
+          linked-page (some-> content mldoc/extract-plain)
           sanity-linked-page (some-> linked-page util/page-name-sanity-lc)]
-      (when-not (string/blank? sanity-linked-page)
+      (when (and (not (string/blank? sanity-linked-page))
+                 (object-with-tag? content))
         (let [existing-ref-id (some (fn [r]
                                       (when (= sanity-linked-page (:block/name r))
                                         (:block/uuid r)))
@@ -169,8 +179,7 @@
                                        :block/content ""
                                        :block/refs []
                                        :block/link [:block/uuid (:block/uuid page-m)]}]
-                                     merge-tx))))))
-    (reset! (:editor/create-page? @state/state) false)))
+                                     merge-tx))))))))
 
 (defn rebuild-block-refs
   [block new-properties & {:keys [skip-content-parsing?]}]
@@ -285,8 +294,7 @@
           block-entity (db/entity id)
           structured-tags? (and (config/db-based-graph? (state/get-current-repo))
                                 (:block/page block-entity)
-                                (seq (:block/tags m))
-                                @(:editor/create-page? @state/state))]
+                                (seq (:block/tags m)))]
       (when id
         ;; Retract attributes to prepare for tx which rewrites block attributes
         (let [retract-attributes (if db-based?
