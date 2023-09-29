@@ -339,8 +339,9 @@
 
         :enum
         [:div.grid.grid-cols-4.gap-1.items-start.leading-8
-         [:label "Enum choices:"]
-         (enum-choices property *property-name *property-schema (:enum-config @*property-schema))]
+         [:label.col-span-1 "Enum choices:"]
+         [:div.col-span-3
+          (enum-choices property *property-name *property-schema (:enum-config @*property-schema))]]
 
         nil)
 
