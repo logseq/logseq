@@ -35,10 +35,11 @@
 
 (defn split-text-on-highlight [text query normal-text normal-query]
   (let [start-index (string/index-of normal-text normal-query)
-        end-index (+ start-index (count query))]
-    [(subs text 0 start-index)
-     (subs text start-index end-index) 
-     (subs text end-index)]))
+        end-index (+ start-index (count query))
+        text-string (cond-> (or text "") (keyword? text) name str)]
+    [(subs text-string 0 start-index)
+     (subs text-string start-index end-index) 
+     (subs text-string end-index)]))
 
 (defn span-with-single-highlight-token [text query normal-text normal-query]
   (let [[before-text highlighted-text after-text] (split-text-on-highlight text query normal-text normal-query)]

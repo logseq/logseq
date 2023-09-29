@@ -183,12 +183,12 @@
 }
 
 .block-children-left-border:hover {
-  background-color: var(--ls-primary-text-color);
+  background-color: or(--lx-gray-11, --ls-primary-text-color);
 }
 
 .block-children {
   border-left: 1px solid;
-  border-left-color: or(--logseq-og-guideline-color, --lx-gray-07-alpha, --ls-guideline-color, #ddd) !important;
+  border-left-color: or(--logseq-og-guideline-color, --lx-gray-04-alpha, --ls-guideline-color, #ddd) !important;
 
   padding-top: 2px;
   padding-bottom: 3px;
@@ -598,10 +598,11 @@
 
   &:hover > .bullet-container .bullet {
     transform: scale(1.4);
+    background-color: or(--lx-gray-08, inherit) !important;
   }
 
   &:hover > .bullet-container:not(.typed-list) {
-    background-color: var(--ls-block-bullet-border-color, #ced9e0);
+    background-color: or(--lx-gray-04-alpha, --ls-block-bullet-border-color, #ced9e0);
   }
 }
 
