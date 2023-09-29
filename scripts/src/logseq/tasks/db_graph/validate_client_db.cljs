@@ -11,7 +11,8 @@
             [malli.core :as m]
             [babashka.cli :as cli]
             ["path" :as node-path]
-            ["os" :as os]))
+            ["os" :as os]
+            [cljs.pprint :as pprint]))
 
 (def client-db-schema
   [:sequential
@@ -70,7 +71,7 @@
 
 (defn validate-client-db
   "Validate datascript db as a vec of entity maps"
-  [ent-maps {:keys [closed-maps]}]
+  [ent-maps {:keys [closed-maps verbose]}]
   (let [schema (if closed-maps
                  (walk/postwalk (fn [e]
                                   (if (and (vector? e)
@@ -86,7 +87,14 @@
                          :errors)]
      (do
        (println "Found" (count errors) "errors:")
-       (pprint/pprint errors)
+       (if verbose
+         (let [full-maps (vec (vals ent-maps))]
+           (pprint/pprint
+            (map #(assoc %
+                         :entity (get full-maps (-> % :in first)))
+                 errors)))
+         (pprint/pprint errors))
+       
        (js/process.exit 1))
      (println "Valid!"))))
 
@@ -102,6 +110,8 @@
   "Options spec"
   {:help {:alias :h
           :desc "Print help"}
+   :verbose {:alias :v
+             :desc "Print more info"}
    :closed-maps {:alias :c
                  :desc "Validate maps marked with closed as :closed"}})
 

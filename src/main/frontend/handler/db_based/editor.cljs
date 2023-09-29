@@ -82,6 +82,7 @@
                    (dissoc
                     :block.temp/top?
                     :block.temp/bottom?
+                    :block/properties-text-values
                     :block/pre-block?
                     :block/unordered)
                    (assoc :block/content content)
