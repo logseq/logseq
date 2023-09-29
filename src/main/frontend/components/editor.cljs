@@ -126,19 +126,14 @@
     (page-handler/on-chosen-handler input id q pos format)))
 
 (rum/defcs page-search < rum/reactive
-  {:init (fn [state]
-           (reset! (:editor/create-page? @state/state) true)
-           state)
-   :will-unmount (fn [state]
+  {:will-unmount (fn [state]
                    (reset! commands/*current-command nil)
                    state)}
   "Embedded page searching popup"
   [state id format]
   (let [action (state/sub :editor/action)
         db? (config/db-based-graph? (state/get-current-repo))
-        embed? (and db? (= @commands/*current-command "Page embed"))
-        tag? (= action :page-search-hashtag)
-        create-page? (state/sub :editor/create-page?)]
+        embed? (and db? (= @commands/*current-command "Page embed"))]
     (when (contains? #{:page-search :page-search-hashtag} action)
       (let [pos (state/get-editor-last-pos)
             input (gdom/getElement id)]
@@ -180,13 +175,6 @@
                                           (cons q (rest matched-pages)))
                                     (cons q matched-pages))))]
             [:div
-             (when (and db? tag?)
-               [:div.flex.flex-row.items-center.px-4.py-1.text-sm.opacity-70.gap-2
-                "Turn this block into a page:"
-                (ui/toggle create-page?
-                           (fn [_e]
-                             (swap! (:editor/create-page? @state/state) not))
-                           true)])
              (ui/auto-complete
               matched-pages
               {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
@@ -706,9 +694,6 @@
   {:init (fn [state]
            (assoc state
                   ::id (str (random-uuid))))
-   :will-unmount (fn [state]
-                   (reset! (:editor/create-page? @state/state) false)
-                   state)
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))
                 state)}
