@@ -37,16 +37,16 @@
   (let [start-index (string/index-of normal-text normal-query)
         end-index (+ start-index (count query))
         text-string (cond-> (or text "") (keyword? text) name :always str)]
-    [(subs text-string 0 start-index)
-     (subs text-string start-index end-index) 
-     (subs text-string end-index)]))
+    [(or (subs text-string 0 start-index) "")
+     (or (subs text-string start-index end-index) "") 
+     (or (subs text-string end-index) "")]))
 
 (defn span-with-single-highlight-token [text query normal-text normal-query]
   (let [[before-text highlighted-text after-text] (split-text-on-highlight text query normal-text normal-query)]
     [:span 
      (when-not (string/blank? before-text) [:span before-text])
-     (when-not (string/blank? highlighted-text) [:span {:class "bg-accent-06 dark:bg-accent-08-alpha"} highlighted-text])
-     (when-not (string/blank? after-text) [:span after-text])]))
+     (when-not (string/blank? after-text) [:span after-text])
+     (when-not (string/blank? highlighted-text) [:span {:class "bg-accent-06 dark:bg-accent-08-alpha"} highlighted-text])]))
 
 (defn span-with-mutliple-highlight-tokens [app-config text query normal-text normal-query]
   (loop [[query-token & more] (string/split normal-query #" ")

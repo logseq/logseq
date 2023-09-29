@@ -227,7 +227,8 @@
                                             "database") {:size (if logged-in? 12 16)
                                                          :id "database-icon"
                                                          :class (when logged-in? "p-1 rounded")
-                                                         :style {:background-color "var(--lx-gray-06-alpha, var(--color-level-5))"}})]
+                                                         :style {:background-color "var(--lx-gray-06-alpha, var(--color-level-5))" 
+                                                                 :padding 3}})]
                                 [:div.graphs
                                  [:span#repo-switch.block.pr-2.whitespace-nowrap
                                   [:span [:span#repo-name.font-medium
