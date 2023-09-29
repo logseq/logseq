@@ -26,6 +26,8 @@
 
 (defn normalize-text [app-config text]
   (cond-> (or text "") 
+    (keyword? text) (name)
+    :stringify (str)
     :lower-case (string/lower-case)
     :normalize (.normalize "NFKC")
     (:feature/enable-search-remove-accents? app-config) (remove-accents)))
