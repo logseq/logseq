@@ -139,12 +139,24 @@
     [target (some? last-child)]))
 
 (declare move-blocks)
+
+(defn object-with-tag?
+  "Is it going to create an object?"
+  [content]
+  (and content
+       (string/starts-with? content "[[")
+       (string/includes? content "]]")
+       (string/includes? content "#")))
+
 (defn- assoc-linked-block-when-save
   [txs-state block-entity m structured-tags?]
   (if structured-tags?
-    (let [linked-page (some-> (state/get-edit-content) mldoc/extract-plain)
+    (let [content (state/get-edit-content)
+          linked-page (some-> content mldoc/extract-plain)
           sanity-linked-page (some-> linked-page util/page-name-sanity-lc)]
-      (when-not (string/blank? sanity-linked-page)
+      (when (and (not (string/blank? sanity-linked-page))
+                 (or (object-with-tag? content)
+                     (:editor/create-page? @state/state)))
         (let [existing-ref-id (some (fn [r]
                                       (when (= sanity-linked-page (:block/name r))
                                         (:block/uuid r)))

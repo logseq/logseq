@@ -31,7 +31,8 @@
             [promesa.core :as p]
             [react-draggable]
             [rum.core :as rum]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.modules.outliner.core :as outliner-core]))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -127,7 +128,8 @@
 
 (rum/defcs page-search < rum/reactive
   {:init (fn [state]
-           (reset! (:editor/create-page? @state/state) true)
+           (let [create-page? (outliner-core/object-with-tag? (state/get-edit-content))]
+             (reset! (:editor/create-page? @state/state) create-page?))
            state)
    :will-unmount (fn [state]
                    (reset! commands/*current-command nil)
