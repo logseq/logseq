@@ -344,7 +344,9 @@
                                              :fn      #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
 
    :editor/add-property                     {:binding "mod+p"
-                                             :fn      #(state/pub-event! [:editor/new-property])}
+                                             :fn      (fn [e]
+                                                        (.preventDefault e)
+                                                        (state/pub-event! [:editor/new-property]))}
 
    :ui/toggle-brackets                      {:binding "mod+c mod+b"
                                              :fn      config-handler/toggle-ui-show-brackets!}
