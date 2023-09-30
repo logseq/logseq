@@ -1,73 +1,71 @@
 (ns frontend.handler.file-based.property
   "Properties handler for file graphs and file graph specific feature implementations"
-  (:require [frontend.handler.file-based.property.util :as property]
+  (:require [frontend.handler.file-based.property.util :as property-util]
             [frontend.config :as config]
-            [clojure.string :as string]
             [frontend.db :as db]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.state :as state]
-            [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [frontend.handler.block :as block-handler]))
 
 ;; Why need these XXX-when-file-based fns?
-;; there're a lot of usages of property-related fns(e.g. property/insert-property) in the whole codebase.
+;; there're a lot of usages of property-related fns(e.g. property-util/insert-property) in the whole codebase.
 ;; I want to minimize extensive modifications as much as possible when we add db-based graph support.
 
 ;; (def insert-property
-;;   (fn-when-file-based property/insert-property [format content key value & args]))
+;;   (fn-when-file-based property-util/insert-property [format content key value & args]))
 (defn insert-property
   [format content key value & args]
-  (apply property/insert-property format content key value args))
+  (apply property-util/insert-property format content key value args))
 
 (defn insert-properties-when-file-based
   [repo format content kvs]
   (if (config/db-based-graph? repo)
     content
-    (property/insert-properties format content kvs)))
+    (property-util/insert-properties format content kvs)))
 
 (defn remove-property-when-file-based
   [repo format key content & args]
   (if (config/db-based-graph? repo)
     content
-    (apply property/remove-property format key content args)))
+    (apply property-util/remove-property format key content args)))
 
 (defn remove-properties-when-file-based
   [repo format content]
   (if (config/db-based-graph? repo)
     content
-    (property/remove-properties format content)))
+    (property-util/remove-properties format content)))
 
 (defn remove-id-property
   [format content]
-  (property/remove-id-property format content))
+  (property-util/remove-id-property format content))
 
 (defn remove-built-in-properties-when-file-based
   [repo format content]
   (if (config/db-based-graph? repo)
     content
-    (property/remove-built-in-properties format content)))
+    (property-util/remove-built-in-properties format content)))
 
 (defn remove-empty-properties-when-file-based
   [repo content]
   (if (config/db-based-graph? repo)
     content
-    (property/remove-empty-properties content)))
+    (property-util/remove-empty-properties content)))
 
 (defn with-built-in-properties-when-file-based
   [repo properties content format]
   (if (config/db-based-graph? repo)
     content
-    (property/with-built-in-properties properties content format)))
+    (property-util/with-built-in-properties properties content format)))
 
 
-(def hidden-properties property/hidden-properties)
-(def built-in-properties property/built-in-properties)
-(def properties-hidden? property/properties-hidden?)
-(def property-key-exist?-when-file-based property/property-key-exist?)
-(def goto-properties-end-when-file-based property/goto-properties-end)
-(def front-matter?-when-file-based property/front-matter?)
+(def hidden-properties property-util/hidden-properties)
+(def built-in-properties property-util/built-in-properties)
+(def properties-hidden? property-util/properties-hidden?)
+(def property-key-exist?-when-file-based property-util/property-key-exist?)
+(def goto-properties-end-when-file-based property-util/goto-properties-end)
+(def front-matter?-when-file-based property-util/front-matter?)
 
 (defn batch-set-block-property-aux!
   "col: a collection of [block-id property-key property-value]."

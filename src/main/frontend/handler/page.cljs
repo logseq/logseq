@@ -17,6 +17,7 @@
             [frontend.handler.reorder :as reorder-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.file-based.editor :as file-editor-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.file-based.recent :as recent-handler]
@@ -135,7 +136,7 @@
         (and (seq properties)
              (not whiteboard?)
              (not db-based?))
-        [page (editor-handler/properties-block repo properties format page-entity)]
+        [page (file-editor-handler/properties-block repo properties format page-entity)]
 
         :else
         [page]))))

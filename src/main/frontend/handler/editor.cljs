@@ -582,24 +582,6 @@
               (not (string/blank? page-title)))
      (state/pub-event! [:page/create page-title opts]))))
 
-(defn properties-block
-  [repo properties format page]
-  (let [content (file-property/insert-properties-when-file-based repo format "" properties)
-        refs (gp-block/get-page-refs-from-properties properties
-                                                     (db/get-db (state/get-current-repo))
-                                                     (state/get-date-formatter)
-                                                     (state/get-config))]
-    {:block/pre-block? true
-     :block/uuid (db/new-block-id)
-     :block/properties properties
-     :block/properties-order (keys properties)
-     :block/refs refs
-     :block/left page
-     :block/format format
-     :block/content content
-     :block/parent page
-     :block/page page}))
-
 (defn update-timestamps-content!
   [{:block/keys [repeated? marker format] :as block} content]
   (if repeated?

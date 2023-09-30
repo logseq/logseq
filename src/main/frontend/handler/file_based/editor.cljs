@@ -12,6 +12,7 @@
             [frontend.util.marker :as marker]
             [frontend.handler.file-based.property :as file-property]
             [logseq.db.schema :as db-schema]
+            [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util.block-ref :as block-ref]))
 
@@ -123,3 +124,21 @@
         (assoc :block/content content
                :block/properties new-properties)
         (merge (if level {:block/level level} {})))))
+
+(defn properties-block
+  [repo properties format page]
+  (let [content (file-property/insert-properties-when-file-based repo format "" properties)
+        refs (gp-block/get-page-refs-from-properties properties
+                                                     (db/get-db (state/get-current-repo))
+                                                     (state/get-date-formatter)
+                                                     (state/get-config))]
+    {:block/pre-block? true
+     :block/uuid (db/new-block-id)
+     :block/properties properties
+     :block/properties-order (keys properties)
+     :block/refs refs
+     :block/left page
+     :block/format format
+     :block/content content
+     :block/parent page
+     :block/page page}))
