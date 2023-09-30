@@ -157,7 +157,10 @@
                                              :fn      ui-handler/auto-complete-shift-complete}
 
    :auto-complete/meta-complete             {:binding "mod+enter"
-                                             :fn      ui-handler/auto-complete-complete}
+                                             :fn      (fn [state e]
+                                                        (when (= :page-search-hashtag (state/get-editor-action))
+                                                          (reset! (:editor/create-page? @state/state) false))
+                                                        (ui-handler/auto-complete-complete state e))}
 
    :auto-complete/open-link                 {:binding "mod+o"
                                              :fn      ui-handler/auto-complete-open-link}
