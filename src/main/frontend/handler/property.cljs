@@ -131,10 +131,12 @@
      :classes-properties all-properties}))
 
 (defn enum-other-position?
-  [property-id]
-  (let [schema (:block/schema (db/entity [:block/uuid property-id]))]
-    (and (= :enum (:type schema))
-         (not= (:position schema) "properties"))))
+  [property-id block-properties]
+  (and
+   (some? (get block-properties property-id))
+   (let [schema (:block/schema (db/entity [:block/uuid property-id]))]
+     (and (= :enum (:type schema))
+          (not= (:position schema) "properties")))))
 
 (defn get-block-enum-other-position-properties
   [eid]
@@ -142,5 +144,5 @@
         own-properties (keys (:block/properties block))]
     (->> (:classes-properties (get-block-classes-properties eid))
          (concat own-properties)
-         (filter (fn [id] (enum-other-position? id)))
+         (filter (fn [id] (enum-other-position? id (:block/properties block))))
          (distinct))))
