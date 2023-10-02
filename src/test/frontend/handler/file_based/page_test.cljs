@@ -1,10 +1,10 @@
-(ns frontend.handler.page-test
+(ns frontend.handler.file-based.page-test
   ;; namespace local config for private function tests
   {:clj-kondo/config {:linters {:private-call {:level :off}}}}
   (:require [cljs.test :refer [deftest are]]
             [clojure.string :as string]
             [frontend.util :as util]
-            [frontend.handler.page :as page-handler]))
+            [frontend.handler.file-based.page :as file-page-handler]))
 
 (defn- replace-page-ref!
   [content old-name new-name]
@@ -36,7 +36,7 @@
   (when (and (string? content) (string? old-name) (string? new-name))
     (-> content
         (replace-page-ref! old-name new-name)
-        (page-handler/replace-tag-ref! old-name new-name))))
+        (file-page-handler/replace-tag-ref! old-name new-name))))
 
 (deftest test-replace-page-ref!
   (are [x y] (= (let [[content old-name new-name] x]
@@ -66,7 +66,7 @@
 
 (deftest test-replace-tag-ref!
   (are [x y] (= (let [[content old-name new-name] x]
-                  (page-handler/replace-tag-ref! content old-name new-name))
+                  (file-page-handler/replace-tag-ref! content old-name new-name))
                 y)
     ["#foo" "foo" "bar"] "#bar"
     ["#foo" "foo" "new bar"] "#[[new bar]]"

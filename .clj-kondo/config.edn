@@ -70,6 +70,7 @@
              frontend.handler.common.file file-common-handler
              frontend.handler.common.plugin plugin-common-handler
              frontend.handler.common.developer dev-common-handler
+             frontend.handler.common.page page-common-handler
              frontend.handler.config config-handler
              frontend.handler.editor.property editor-property
              frontend.handler.events events
@@ -77,9 +78,13 @@
              frontend.handler.ui ui-handler
              frontend.handler.notification notification
              frontend.handler.page page-handler
+             frontend.handler.db-based.editor db-editor-handler
+             frontend.handler.db-based.page db-page-handler
              frontend.handler.db-based.property db-property-handler
+             frontend.handler.file-based.page file-page-handler
              frontend.handler.file-based.property file-property
              frontend.handler.file-based.property.util property-util
+             frontend.handler.file-based.recent file-recent-handler
              frontend.handler.plugin plugin-handler
              frontend.handler.plugin-config plugin-config-handler
              frontend.handler.property.util pu
