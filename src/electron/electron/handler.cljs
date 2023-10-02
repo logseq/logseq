@@ -6,6 +6,7 @@
             ["buffer" :as buffer]
             ["diff-match-patch" :as google-diff]
             ["electron" :refer [app autoUpdater dialog ipcMain shell]]
+            ["electron-window-state" :as windowStateKeeper]
             ["fs" :as fs]
             ["fs-extra" :as fs-extra]
             ["os" :as os]
@@ -98,6 +99,12 @@
     (catch :default _e
       false)))
 
+(defn chmod-enabled?
+  []
+  (if (= nil (cfgs/get-item :feature/enable-automatic-chmod?))
+    true
+    (cfgs/get-item :feature/enable-automatic-chmod?)))
+
 (defmethod handle :copyFile [_window [_ _repo from-path to-path]]
   (logger/info ::copy-file from-path to-path)
   (fs-extra/copy from-path to-path))
@@ -108,7 +115,7 @@
                       (.from Buf content)
                       content)]
     (try
-      (when (and (fs/existsSync path) (not (writable? path)))
+      (when (and (chmod-enabled?) (fs/existsSync path) (not (writable? path)))
         (fs/chmodSync path "644"))
       (fs/writeFileSync path content)
       (fs/statSync path)
@@ -269,7 +276,7 @@
                                   (.toString (.readFileSync fs txid-path)))]
           (reader/read-string sync-meta))))
     (catch :default e
-      (js/console.debug "[read txid meta] #" root (.-message e)))))
+      (logger/error "[read txid meta] #" root (.-message e)))))
 
 (defmethod handle :inflateGraphsInfo [_win [_ graphs]]
   (if (seq graphs)
@@ -670,6 +677,10 @@
 
 (defmethod handle :window-close [^js win]
   (.close win))
+
+(defmethod handle :theme-loaded [^js win]
+  (.manage (windowStateKeeper) win)
+  (.show win))
 
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;; file-sync-rs-apis ;;

@@ -116,15 +116,21 @@ contextBridge.exposeInMainWorld('apis', {
 
     const dest = path.join(repoPathRoot, to)
     const assetsRoot = path.dirname(dest)
-    
+
     await fs.promises.mkdir(assetsRoot, { recursive: true })
 
-    from = from && decodeURIComponent(from || getFilePathFromClipboard())
+    from = from || getFilePathFromClipboard()
 
     if (from) {
-      // console.debug('copy file: ', from, dest)
-      await fs.promises.copyFile(from, dest)
-      return path.basename(from)
+      try {
+        // console.debug('copy file: ', from, dest)
+        await fs.promises.copyFile(from, dest)
+        return path.basename(from)
+      } catch (e) {
+        from = decodeURIComponent(from)
+        await fs.promises.copyFile(from, dest)
+        return path.basename(from)
+      }
     }
 
     // support image

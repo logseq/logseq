@@ -208,6 +208,10 @@
                                     {:role "about"
                                      :label "About Logseq"
                                      :click about-fn}]}))
+        ;; Enable Cmd/Ctrl+= Zoom In
+        template (conj template 
+                       {:role "zoomin"
+                        :accelerator "CommandOrControl+="})
         menu (.buildFromTemplate Menu (clj->js template))]
     (.setApplicationMenu Menu menu)))
 

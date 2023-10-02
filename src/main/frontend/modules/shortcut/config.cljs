@@ -16,6 +16,7 @@
             [frontend.handler.export :as export-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
+            [frontend.handler.window :as window-handler]
             [frontend.modules.editor.undo-redo :as undo-redo]
             [frontend.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
@@ -513,6 +514,10 @@
                                              :inactive (not (util/electron?))
                                              :fn       #(page-handler/copy-page-url)}
 
+   :window/close                            {:binding  "mod+w"
+                                             :inactive (not (util/electron?))
+                                             :fn       window-handler/close!}
+
    :ui/toggle-wide-mode                     {:binding "t w"
                                              :fn      ui-handler/toggle-wide-mode!}
 
@@ -724,6 +729,7 @@
            :editor/open-file-in-directory
            :editor/copy-current-file
            :editor/copy-page-url
+           :window/close
            :editor/new-whiteboard
            :ui/toggle-wide-mode
            :ui/select-theme-color
@@ -902,6 +908,7 @@
      :editor/open-file-in-default-app
      :editor/open-file-in-directory
      :editor/copy-page-url
+     :window/close
      :auto-complete/prev
      :auto-complete/next
      :auto-complete/complete

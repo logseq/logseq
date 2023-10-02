@@ -447,9 +447,10 @@
                                  (-> (p/let [result (ipc/ipc :testProxyUrl val opts)]
                                        (js->clj result :keywordize-keys true))
                                      (p/then (fn [{:keys [code response-ms]}]
+                                               (notification/clear! :proxy-net-check)
                                                (notification/show! (str "Success! Status " code " in " response-ms "ms.") :success)))
                                      (p/catch (fn [e]
-                                                (notification/show! (str e) :error)))
+                                                (notification/show! (str e) :error false :proxy-net-check)))
                                      (p/finally (fn [] (set-testing?! false)))))))]
 
       [:p.pt-2
