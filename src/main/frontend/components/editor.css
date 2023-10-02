@@ -10,11 +10,6 @@
   border-radius: 5px;
 }
 
-.editor-wrapper {
-  width: 100%;
-  margin: 0 auto;
-}
-
 .editor-inner {
   position: relative;
   display: flex;
@@ -83,6 +78,3 @@ pre {
     width: 135px;
   }
 }
-
-
-

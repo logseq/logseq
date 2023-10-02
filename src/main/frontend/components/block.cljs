@@ -2298,6 +2298,15 @@
                        :tag? true
                        :disable-preview? true) tag))]))
 
+(rum/defc block-enum-properties
+  [block]
+  (let [enum-properties (property-handler/get-block-enum-other-position-properties (:db/id block))]
+    (when (seq enum-properties)
+    [:div.enum-properties.flex.flex-row.items-center.gap-1.select-none
+     (for [pid enum-properties]
+       (when-let [property (db/entity [:block/uuid pid])]
+         (pv/property-value block property (get (:block/properties block) pid) {:icon? true})))])))
+
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide? selected?]
   (let [repo (state/get-current-repo)
@@ -2354,22 +2363,15 @@
          (let [block-tags (:block/tags block)]
            [:div.flex-1.w-full
             [:div.flex.flex-1.w-full.flex-row.flex-wrap.justify-between.items-center
-             (let [enum-properties (property-handler/get-block-enum-other-position-properties (:db/id block))]
-               [:div.flex.flex-1.flex-row.gap-1.items-center
-                (when (seq enum-properties)
-                  [:div.enum-properties.flex.flex-row.items-center.gap-1
-                   (for [pid enum-properties]
-                     (when-let [property (db/entity [:block/uuid pid])]
-                       (pv/property-value block property (get (:block/properties block) pid) {:icon? true})))])
-                (cond
-                  (:block/name block)
-                  (page-cp config block)
+             (cond
+               (:block/name block)
+               (page-cp config block)
 
-                  (or (seq title) (:block/marker block))
-                  (build-block-title config block)
+               (or (seq title) (:block/marker block))
+               (build-block-title config block)
 
-                  :else
-                  nil)])
+               :else
+               nil)
 
              (when (and (seq block-tags) (some? (:block/name block)))
                (tags config block))]]))
@@ -2461,67 +2463,69 @@
         named? (some? (:block/name block))
         repo (state/get-current-repo)
         db-based? (config/db-based-graph? repo)]
-    (if (and edit? editor-box)
-      [:div.editor-wrapper
-       {:id editor-id}
-       (let [editor-cp (ui/catch-error
-                        (ui/block-error "Something wrong in the editor" {})
-                        (editor-box {:block block
-                                     :block-id uuid
-                                     :block-parent-id block-id
-                                     :format format
-                                     :on-hide (fn [value event]
-                                                (when (= event :esc)
-                                                  (editor-handler/save-block! (editor-handler/get-state) value)
-                                                  (let [select? (not (string/includes? value "```"))]
-                                                    (editor-handler/escape-editing select?))))}
-                                    edit-input-id
-                                    config))]
-         (if (and named? (seq (:block/tags block)) db-based?)
-           [:div.flex.flex-1.flex-row.justify-between
-            editor-cp
-            (tags config block)]
-           editor-cp))]
-      (let [refs-count (count (:block/_refs block))]
-        [:div.flex.flex-col.block-content-wrapper
-         [:div.flex.flex-row
-          [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
-           (ui/catch-error
-            (ui/block-error "Block Render Error:"
-                            {:content (:block/content block)
-                             :section-attrs
-                             {:on-click #(let [content (or (:block/original-name block)
-                                                           (:block/content block))]
-                                           (editor-handler/clear-selection!)
-                                           (editor-handler/unhighlight-blocks!)
-                                           (state/set-editing! edit-input-id content block ""))}})
-            (block-content config block edit-input-id block-id slide? selected?))]
+    [:div.flex.flex-1.flex-row.flex-wrap.gap-1.items-start
+     (block-enum-properties block)
+     (if (and edit? editor-box)
+       [:div.editor-wrapper.flex.flex-1
+        {:id editor-id}
+        (let [editor-cp (ui/catch-error
+                         (ui/block-error "Something wrong in the editor" {})
+                         (editor-box {:block block
+                                      :block-id uuid
+                                      :block-parent-id block-id
+                                      :format format
+                                      :on-hide (fn [value event]
+                                                 (when (= event :esc)
+                                                   (editor-handler/save-block! (editor-handler/get-state) value)
+                                                   (let [select? (not (string/includes? value "```"))]
+                                                     (editor-handler/escape-editing select?))))}
+                                     edit-input-id
+                                     config))]
+          (if (and named? (seq (:block/tags block)) db-based?)
+            [:div.flex.flex-1.flex-row.justify-between
+             editor-cp
+             (tags config block)]
+            editor-cp))]
+       (let [refs-count (count (:block/_refs block))]
+         [:div.flex.flex-1.flex-col.block-content-wrapper
+          [:div.flex.flex-row
+           [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
+            (ui/catch-error
+             (ui/block-error "Block Render Error:"
+                             {:content (:block/content block)
+                              :section-attrs
+                              {:on-click #(let [content (or (:block/original-name block)
+                                                            (:block/content block))]
+                                            (editor-handler/clear-selection!)
+                                            (editor-handler/unhighlight-blocks!)
+                                            (state/set-editing! edit-input-id content block ""))}})
+             (block-content config block edit-input-id block-id slide? selected?))]
 
-          (when (and (not hide-block-refs-count?)
-                     (not named?))
-            [:div.flex.flex-row.items-center
-             (when (and (:embed? config)
-                        (:embed-parent config))
-               [:a.opacity-70.hover:opacity-100.svg-small.inline
-                {:on-mouse-down (fn [e]
-                                  (util/stop e)
-                                  (when-let [block (:embed-parent config)]
-                                    (editor-handler/edit-block! block :max (:block/uuid block))))}
-                svg/edit])
+           (when (and (not hide-block-refs-count?)
+                      (not named?))
+             [:div.flex.flex-row.items-center
+              (when (and (:embed? config)
+                         (:embed-parent config))
+                [:a.opacity-70.hover:opacity-100.svg-small.inline
+                 {:on-mouse-down (fn [e]
+                                   (util/stop e)
+                                   (when-let [block (:embed-parent config)]
+                                     (editor-handler/edit-block! block :max (:block/uuid block))))}
+                 svg/edit])
 
-             (when block-reference-only?
-               [:a.opacity-70.hover:opacity-100.svg-small.inline
-                {:on-mouse-down (fn [e]
-                                  (util/stop e)
-                                  (editor-handler/edit-block! block :max (:block/uuid block)))}
-                svg/edit])
+              (when block-reference-only?
+                [:a.opacity-70.hover:opacity-100.svg-small.inline
+                 {:on-mouse-down (fn [e]
+                                   (util/stop e)
+                                   (editor-handler/edit-block! block :max (:block/uuid block)))}
+                 svg/edit])
 
-             (block-refs-count block *hide-block-refs?)])]
+              (block-refs-count block *hide-block-refs?)])]
 
-         (when (and (not hide-block-refs?) (> refs-count 0)
-                    (not (:in-property? config)))
-           (let [refs-cp (state/get-component :block/linked-references)]
-             (refs-cp uuid)))]))))
+          (when (and (not hide-block-refs?) (> refs-count 0)
+                     (not (:in-property? config)))
+            (let [refs-cp (state/get-component :block/linked-references)]
+              (refs-cp uuid)))]))]))
 
 (rum/defcs single-block-cp-inner < rum/reactive db-mixins/query
   {:init (fn [state]
