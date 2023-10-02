@@ -127,8 +127,24 @@
     [page id]))
 
 (defn- select-aux
-  [opts]
-  (select/select opts))
+  [block property {:keys [items selected-choices multiple-choices?] :as opts}]
+  (let [clear-value (str "No " (:block/original-name property))
+        items' (if (and (seq selected-choices) (not multiple-choices?))
+                 (cons {:value clear-value
+                        :label clear-value}
+                       items)
+                 items)
+        k (if multiple-choices? :on-apply :on-chosen)
+        f (get opts k)
+        f' (fn [chosen]
+             (if (or (and (not multiple-choices?) (= chosen clear-value))
+                     (and multiple-choices? (= chosen [clear-value])))
+               (property-handler/remove-block-property! (state/get-current-repo) (:block/uuid block)
+                                                        (:block/original-name property))
+               (f chosen)))]
+    (select/select (assoc opts
+                          :items items'
+                          k f'))))
 
 (defn- select-page
   [block property {:keys [classes multiple-choices? dropdown?] :as opts}]
@@ -216,7 +232,7 @@
                                              id' (or id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)])))]
                                          (add-property! block (:block/original-name property) id')
                                          (when-let [f (:on-chosen opts)] (f))))))))]
-    (select-aux opts)))
+    (select-aux block property opts)))
 
 ;; (defn- move-cursor
 ;;   [up? opts]
@@ -358,7 +374,8 @@
                     (when-let [f (:on-chosen opts)] (f)))
         selected-choices' (get-in block [:block/properties (:block/uuid property)])
         selected-choices (if (coll? selected-choices') selected-choices' [selected-choices'])]
-    (select-aux (cond->
+    (select-aux block property
+                (cond->
                  {:multiple-choices? multiple-choices?
                   :items items
                   :selected-choices selected-choices
