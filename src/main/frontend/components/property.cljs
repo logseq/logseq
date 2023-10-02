@@ -752,7 +752,7 @@
                         (if one-class?
                           (concat block-own-properties' class-own-properties)
                           block-own-properties')
-                        (remove (fn [[id _]] (property-handler/enum-other-position? id))))
+                        (remove (fn [[id _]] (property-handler/enum-other-position? id block-properties))))
         full-hidden-properties (concat block-hidden-properties class-hidden-properties)
         new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
         class->properties (loop [classes all-classes
@@ -762,7 +762,7 @@
                               (let [cur-properties (->> (:properties (:block/schema class))
                                                         (remove properties)
                                                         (remove hide-with-property-id)
-                                                        (remove property-handler/enum-other-position?))]
+                                                        (remove (fn [id] (property-handler/enum-other-position? id block-properties))))]
                                 (recur (rest classes)
                                        (set/union properties (set cur-properties))
                                        (conj result [class cur-properties])))
