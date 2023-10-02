@@ -20,6 +20,7 @@
             [frontend.components.svg :as svg]
             [frontend.components.query :as query]
             [frontend.components.property :as property-component]
+            [frontend.components.property.value :as pv]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -2353,15 +2354,22 @@
          (let [block-tags (:block/tags block)]
            [:div.flex-1.w-full
             [:div.flex.flex-1.w-full.flex-row.flex-wrap.justify-between.items-center
-             (cond
-               (:block/name block)
-               (page-cp config block)
+             (let [enum-properties (property-handler/get-block-enum-other-position-properties (:db/id block))]
+               [:div.flex.flex-1.flex-row.gap-1.items-center
+                (when (seq enum-properties)
+                  [:div.enum-properties.flex.flex-row.items-center.gap-1
+                   (for [pid enum-properties]
+                     (when-let [property (db/entity [:block/uuid pid])]
+                       (pv/property-value block property (get (:block/properties block) pid) {})))])
+                (cond
+                  (:block/name block)
+                  (page-cp config block)
 
-               (or (seq title) (:block/marker block))
-               (build-block-title config block)
+                  (or (seq title) (:block/marker block))
+                  (build-block-title config block)
 
-               :else
-               nil)
+                  :else
+                  nil)])
 
              (when (and (seq block-tags) (some? (:block/name block)))
                (tags config block))]]))

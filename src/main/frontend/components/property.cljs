@@ -345,6 +345,26 @@
 
         nil)
 
+      (when (= :enum (:type @*property-schema))
+        (let [position (:position @*property-schema)
+              choices (map
+                       (fn [item]
+                         (assoc item :selected
+                                (or (and position (= (:value item) position))
+                                    (and (nil? position) (= (:value item) "properties")))))
+                       [{:label "Block properties"
+                         :value "properties"}
+                        {:label "Beginning of the block"
+                         :value "block-beginning"}
+                        {:label "Ending of the block"
+                         :value "block-ending"}])]
+          [:div.grid.grid-cols-4.gap-1.items-start.leading-8
+           [:label.col-span-1 "UI position:"]
+           [:div.col-span-3
+            (ui/select choices
+              (fn [_e v]
+                (swap! *property-schema assoc :position v)))]]))
+
       (when-not (contains? #{:checkbox :default :template :enum} (:type @*property-schema))
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
          [:label "Multiple values:"]
@@ -604,21 +624,6 @@
     (db/sub-block (:db/id linked-block))
     (db/sub-block (:db/id block))))
 
-(defn- get-namespace-parents
-  [tags]
-  (let [tags' (filter (fn [tag] (contains? (:block/type tag) "class")) tags)
-        *namespaces (atom #{})]
-    (doseq [tag tags']
-      (when-let [ns (:block/namespace tag)]
-        (loop [current-ns ns]
-          (when (and
-                 current-ns
-                 (contains? (:block/type ns) "class")
-                 (not (contains? @*namespaces (:db/id ns))))
-            (swap! *namespaces conj current-ns)
-            (recur (:block/namespace current-ns))))))
-    @*namespaces))
-
 (rum/defc properties-section < rum/reactive db-mixins/query
   [block properties {:keys [inline-text] :as opts}]
   (when (seq properties)
@@ -661,6 +666,8 @@
      (when-not @*hide?
        (properties-section block hidden-properties opts))]))
 
+
+
 (rum/defcs properties-area < rum/reactive
   (rum/local false ::hover?)
   {:init (fn [state]
@@ -684,17 +691,8 @@
                                                  (when (uuid? id)
                                                    (contains? db-property/hidden-built-in-properties (keyword (:block/name (db/entity [:block/uuid id])))))))
                                              properties))
-        classes (->> (:block/tags block)
-                     (sort-by :block/name)
-                     (filter (fn [tag] (contains? (:block/type tag) "class"))))
+        {:keys [classes all-classes classes-properties]} (property-handler/get-block-classes-properties (:db/id block))
         one-class? (= 1 (count classes))
-        namespace-parents (get-namespace-parents classes)
-        all-classes (->> (concat classes namespace-parents)
-                         (filter (fn [class]
-                                   (seq (:properties (:block/schema class))))))
-        classes-properties (-> (mapcat (fn [class]
-                                         (seq (:properties (:block/schema class)))) all-classes)
-                               distinct)
         block-own-properties (->> (concat (seq alias-properties)
                                           (seq properties))
                                   remove-built-in-properties
@@ -723,9 +721,11 @@
         {class-hidden-properties true
          class-own-properties false} (group-by property-hide-f
                                                (map (fn [id] [id (get block-properties id)]) classes-properties))
-        own-properties (if one-class?
-                         (concat block-own-properties' class-own-properties)
-                         block-own-properties')
+        own-properties (->>
+                        (if one-class?
+                          (concat block-own-properties' class-own-properties)
+                          block-own-properties')
+                        (remove (fn [[id _]] (property-handler/enum-other-position? id))))
         full-hidden-properties (concat block-hidden-properties class-hidden-properties)
         new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
         class->properties (loop [classes all-classes
@@ -734,7 +734,8 @@
                             (if-let [class (first classes)]
                               (let [cur-properties (->> (:properties (:block/schema class))
                                                         (remove properties)
-                                                        (remove hide-with-property-id))]
+                                                        (remove hide-with-property-id)
+                                                        (remove property-handler/enum-other-position?))]
                                 (recur (rest classes)
                                        (set/union properties (set cur-properties))
                                        (conj result [class cur-properties])))

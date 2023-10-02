@@ -139,7 +139,7 @@
                               :empty-placeholder (empty-placeholder t)})]
 
                            (when multiple-choices?
-                             [:div.p-4 (ui/button "Apply updates"
+                             [:div.p-4 (ui/button "Apply"
                                                   {:small? true
                                                    :on-mouse-down (fn [e]
                                                                     (util/stop e)

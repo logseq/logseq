@@ -97,3 +97,50 @@
   [repo block property collapse?]
   (when (config/db-based-graph? repo)
     (db-property-handler/collapse-expand-property! repo block property collapse?)))
+
+(defn- get-namespace-parents
+  [tags]
+  (let [tags' (filter (fn [tag] (contains? (:block/type tag) "class")) tags)
+        *namespaces (atom #{})]
+    (doseq [tag tags']
+      (when-let [ns (:block/namespace tag)]
+        (loop [current-ns ns]
+          (when (and
+                 current-ns
+                 (contains? (:block/type ns) "class")
+                 (not (contains? @*namespaces (:db/id ns))))
+            (swap! *namespaces conj current-ns)
+            (recur (:block/namespace current-ns))))))
+    @*namespaces))
+
+(defn get-block-classes-properties
+  [eid]
+  (let [block (db/entity eid)
+        classes (->> (:block/tags block)
+                     (sort-by :block/name)
+                     (filter (fn [tag] (contains? (:block/type tag) "class"))))
+        namespace-parents (get-namespace-parents classes)
+        all-classes (->> (concat classes namespace-parents)
+                         (filter (fn [class]
+                                   (seq (:properties (:block/schema class))))))
+        all-properties (-> (mapcat (fn [class]
+                                     (seq (:properties (:block/schema class)))) all-classes)
+                           distinct)]
+    {:classes classes
+     :all-classes all-classes           ; block own classes + parent classes
+     :classes-properties all-properties}))
+
+(defn enum-other-position?
+  [property-id]
+  (let [schema (:block/schema (db/entity [:block/uuid property-id]))]
+    (and (= :enum (:type schema))
+         (not= (:position schema) "properties"))))
+
+(defn get-block-enum-other-position-properties
+  [eid]
+  (let [block (db/entity eid)
+        own-properties (keys (:block/properties block))]
+    (->> (:classes-properties (get-block-classes-properties eid))
+         (concat own-properties)
+         (filter (fn [id] (enum-other-position? id)))
+         (distinct))))
