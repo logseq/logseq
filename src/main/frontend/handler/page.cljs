@@ -818,12 +818,12 @@
                               :push        false
                               :path-params {:name to-page-name}})))
 
-;; FIXME:
 (defn db-based-rename!
   ([old-name new-name]
    (db-based-rename! old-name new-name true true))
   ([old-name new-name redirect? persist-op?]
-   (let [old-name      (string/trim old-name)
+   (let [repo (state/get-current-repo)
+         old-name      (string/trim old-name)
          new-name      (string/trim new-name)
          old-page-name (util/page-name-sanity-lc old-name)
          page-e (db/entity [:block/name old-page-name])
@@ -835,7 +835,8 @@
               name-changed?)
        (cond
          (= old-page-name new-page-name) ; case changed
-         (db/transact! [{:db/id (:db/id page-e)
+         (db/transact! repo
+                       [{:db/id (:db/id page-e)
                          :block/original-name new-name}]
                        {:persist-op? persist-op?})
 
@@ -844,7 +845,7 @@
          (db-based-merge-pages! old-page-name new-page-name persist-op?)
 
          :else                          ; rename
-         (create! new-page-name
+         (create! new-name
                   {:rename? true
                    :uuid (:block/uuid page-e)
                    :redirect? redirect?
