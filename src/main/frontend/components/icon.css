@@ -1,0 +1,12 @@
+.emojis button:hover, .icons button:hover {
+    background-color: var(--ls-quaternary-background-color);
+    border-radius: 100%;
+}
+
+.icons .ui__icon {
+    vertical-align: middle;
+}
+
+.emojis, .icons {
+    @apply overflow-y-scroll max-h-80;
+}
