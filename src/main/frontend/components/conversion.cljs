@@ -7,7 +7,7 @@
             [frontend.util :as util]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.handler.page :as page-handler]
+            [frontend.handler.file-based.page :as file-page-handler]
             [frontend.handler.conversion :refer [supported-filename-formats write-filename-format! calc-rename-target]]
             [frontend.db :as db]
             [frontend.context.i18n :refer [t]]
@@ -138,7 +138,7 @@
             <rename-all   #(async/go
                              (doseq [{:keys [file target status]} rename-items]
                                (when (not= status :unreachable)
-                                 (async/<! (p->c (page-handler/rename-file! file target (constantly nil) true)))))
+                                 (async/<! (p->c (file-page-handler/rename-file! file target (constantly nil) true)))))
                              (<close-modal-on-done sync? rename-items))]
 
         (if (not-empty rename-items)
@@ -164,7 +164,7 @@
                      src-file-name  (gp-util/path->file-name path)
                      tgt-file-name  (str target "." (gp-util/path->file-ext path))
                      rm-item-fn     #(swap! *pages dissoc path)
-                     rename-fn      #(page-handler/rename-file! file target rm-item-fn)
+                     rename-fn      #(file-page-handler/rename-file! file target rm-item-fn)
                      rename-but     [:a {:on-click rename-fn
                                          :title (t :file-rn/apply-rename)}
                                      [:span (t :file-rn/rename src-file-name tgt-file-name)]]]

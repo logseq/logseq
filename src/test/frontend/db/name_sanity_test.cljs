@@ -2,7 +2,7 @@
   (:require [cljs.test :refer [deftest testing is are]]
             [clojure.string :as string]
             [logseq.graph-parser.util :as gp-util]
-            [frontend.handler.page :as page-handler]
+            [frontend.handler.file-based.page :as file-page-handler]
             [frontend.handler.conversion :as conversion-handler]
             [frontend.util.fs :as fs-util]))
 
@@ -46,8 +46,8 @@
   (mapv test-page-name fs-util/windows-reserved-filebodies))
 
 (deftest new-path-computation-tests
-  (is (= (#'page-handler/compute-new-file-path "/data/app/dsal dsalfjk aldsaf.jkl" "ddd") "/data/app/ddd.jkl"))
-  (is (= (#'page-handler/compute-new-file-path "c://data/a sdfpp/dsal dsalf% * _ dsaf.mnk" "c d / f") "c://data/a sdfpp/c d / f.mnk")))
+  (is (= (#'file-page-handler/compute-new-file-path "/data/app/dsal dsalfjk aldsaf.jkl" "ddd") "/data/app/ddd.jkl"))
+  (is (= (#'file-page-handler/compute-new-file-path "c://data/a sdfpp/dsal dsalf% * _ dsaf.mnk" "c d / f") "c://data/a sdfpp/c d / f.mnk")))
 
 (deftest break-change-conversion-tests
   (let [conv-legacy #(:target (#'conversion-handler/calc-previous-name :legacy :triple-lowbar %))]
