@@ -2360,7 +2360,7 @@
                   [:div.enum-properties.flex.flex-row.items-center.gap-1
                    (for [pid enum-properties]
                      (when-let [property (db/entity [:block/uuid pid])]
-                       (pv/property-value block property (get (:block/properties block) pid) {})))])
+                       (pv/property-value block property (get (:block/properties block) pid) {:icon? true})))])
                 (cond
                   (:block/name block)
                   (page-cp config block)

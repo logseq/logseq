@@ -33,33 +33,19 @@
     :property-schema property-schema}))
 
 (rum/defc icon
-  [block {:keys [type id icon]} {:keys [disabled?]}]
-  (let [repo (state/get-current-repo)
-        icon-property-id (:block/uuid (db/entity [:block/name "icon"]))]
-    (ui/dropdown
-     (fn [{:keys [toggle-fn]}]
-       (cond
-         (and (= :emoji type) id)
-         [:a {:on-click #(when-not disabled? (toggle-fn))}
-          [:em-emoji {:id id}]]
-
-         (and (= :tabler-icon type) icon)
-         [:a {:on-click #(when-not disabled? (toggle-fn))}
-          (ui/icon icon)]
-
-         :else
-         [:a.flex.flex-row.items-center {:on-click #(when-not disabled? (toggle-fn))}
-          [:span.bullet-container.cursor
-           [:span.bullet]]
-          [:div.ml-1.text-sm "Pick another icon"]]))
-     (fn [{:keys [toggle-fn]}]
-       [:div.p-4
-        (icon-component/icon-search
-         {:on-chosen
-          (fn [_e icon]
-            (when icon
-              (property-handler/update-property! repo (:block/uuid block) {:properties {icon-property-id icon}})
-              (toggle-fn)))})]))))
+  [icon {:keys [disabled? on-chosen]}]
+  (ui/dropdown
+   (fn [{:keys [toggle-fn]}]
+     [:button {:on-click #(when-not disabled? (toggle-fn))}
+      (if icon
+        (icon-component/icon icon)
+        [:span.bullet-container.cursor [:span.bullet]])])
+   (fn [{:keys [toggle-fn]}]
+     [:div.p-4
+      (icon-component/icon-search
+       {:on-chosen (fn [e icon]
+                     (on-chosen e icon)
+                     (toggle-fn))})])))
 
 (rum/defcs class-select < (rum/local false ::open?)
   [state *property-schema schema-classes {:keys [multiple-choices? disabled?]
@@ -110,14 +96,16 @@
             "Click to add classes"
             "Click to select a class")])])))
 
-(rum/defcs enum-item-config <
+(rum/defcs enum-item-config < rum/reactive
   {:init (fn [state]
-           (let [{:keys [name description]} (first (:rum/args state))]
+           (let [{:keys [name icon description]} (first (:rum/args state))]
              (assoc state
                     ::name (atom (or name ""))
+                    ::icon (atom icon)
                     ::description (atom (or description "")))))}
-  [state {:keys [id name description]} {:keys [toggle-fn on-save]}]
+  [state _item {:keys [toggle-fn on-save]}]
   (let [*name (::name state)
+        *icon (::icon state)
         *description (::description state)]
     [:div.flex.flex-col.gap-4.p-4.whitespace-nowrap.w-96
      [:div.grid.grid-cols-5.gap-1.items-center.leading-8
@@ -125,6 +113,12 @@
       [:input.form-input.col-span-3
        {:default-value @*name
         :on-change #(reset! *name (util/evalue %))}]]
+     [:div.grid.grid-cols-5.gap-1.items-center.leading-8
+      [:label.col-span-2 "Icon:"]
+      [:div.col-span-3
+       (icon (rum/react *icon)
+             {:on-chosen (fn [_e icon]
+                           (reset! *icon icon))})]]
      [:div.grid.grid-cols-5.gap-1.items-start.leading-8
       [:label.col-span-2 "Description:"]
       [:div.col-span-3
@@ -137,16 +131,18 @@
        :on-click (fn [e]
                    (util/stop e)
                    (when-not (string/blank? @*name)
-                     (let [result (when on-save (on-save (string/trim @*name) @*description))]
+                     (let [result (when on-save (on-save (string/trim @*name) @*icon @*description))]
                        (if (= :value-exists result)
                          (notification/show! (str "Choice already exist") :warning)
                          (when toggle-fn (toggle-fn)))))))]]))
 
 (rum/defcs enum-new-item <
   (rum/local "" ::name)
+  (rum/local "" ::icon)
   (rum/local "" ::description)
   [state {:keys [toggle-fn on-save]}]
   (let [*name (::name state)
+        *icon (::icon state)
         *description (::description state)]
     [:div.flex.flex-col.gap-4.p-4.whitespace-nowrap.w-96
      [:div.grid.grid-cols-5.gap-1.items-center.leading-8
@@ -154,6 +150,11 @@
       [:input.form-input.col-span-3
        {:default-value ""
         :on-change #(reset! *name (util/evalue %))}]]
+     [:div.grid.grid-cols-5.gap-1.items-center.leading-8
+      [:label.col-span-2 "Icon:"]
+      [:div.col-span-3
+       (icon nil {:on-chosen (fn [_e icon]
+                               (reset! *icon icon))})]]
      [:div.grid.grid-cols-5.gap-1.items-start.leading-8
       [:label.col-span-2 "Description:"]
       [:div.col-span-3
@@ -166,20 +167,26 @@
        :on-click (fn [e]
                    (util/stop e)
                    (when-not (string/blank? @*name)
-                     (let [result (when on-save (on-save (string/trim @*name) @*description))]
+                     (let [result (when on-save (on-save (string/trim @*name)
+                                                         @*icon
+                                                         @*description))]
                        (if (= :value-exists result)
                          (notification/show! (str "Choice already exist") :warning)
                          (when toggle-fn (toggle-fn)))))))]]))
 
 (rum/defcs choice-with-close <
   (rum/local false ::hover?)
-  [state name {:keys [toggle-fn delete-choice]}]
+  [state item name {:keys [toggle-fn delete-choice update-icon]}]
   (let [*hover? (::hover? state)]
     [:div.flex.flex-1.flex-row.items-center.gap-2.justify-between
      {:on-mouse-over #(reset! *hover? true)
       :on-mouse-out #(reset! *hover? false)}
-     [:a {:on-click toggle-fn}
-      name]
+     [:div.flex.flex-row.items-center.gap-2
+      (icon (:icon item)
+            {:on-chosen (fn [_e icon]
+                          (update-icon icon))})
+      [:a {:on-click toggle-fn}
+       name]]
      (when @*hover?
        [:a.fade-link.flex {:on-click delete-choice
                            :title "Delete this choice"}
@@ -222,8 +229,10 @@
      (ui/dropdown
       (fn [opts]
         (choice-with-close
+         item
          name
-         (assoc opts :delete-choice
+         (assoc opts
+                :delete-choice
                 (fn []
                   (let [new-values (dissoc values id)
                         new-order (vec (remove #{id} order))]
@@ -234,15 +243,22 @@
                         ;; 2. update exist values to the default value if exists
                         ;; 3. soft delete, users can still see it in some existing blocks,
                         ;;    but they will not see it when adding or updating this property
+                    (update-property! property @*property-name @*property-schema)))
+                :update-icon
+                (fn [icon]
+                  (let [new-values (assoc-in values [id :icon] icon)]
+                    (swap! *property-schema assoc :enum-config {:values new-values
+                                                                :order order})
                     (update-property! property @*property-name @*property-schema))))))
       (fn [opts]
         (enum-item-config
          item
          (assoc opts :on-save
-                (fn [name description]
+                (fn [name icon description]
                   (if (some (fn [[vid m]] (and (not= vid id) (= name (:name m)))) values)
                     :value-exists
                     (let [new-values (assoc values id {:name name
+                                                       :icon icon
                                                        :description description})]
                       (swap! *property-schema assoc :enum-config {:values new-values
                                                                   :order order})
@@ -313,7 +329,14 @@
        [:label.col-span-1 "Icon:"]
        (let [icon-value (pu/get-property property :icon)]
          [:div.col-span-3
-          (icon property icon-value {:disabled? disabled?})])]
+          (icon icon-value
+                {:disabled? disabled?
+                 :on-chosen (fn [_e icon]
+                              (let [icon-property-id (:block/uuid (db/entity [:block/name "icon"]))]
+                                (property-handler/update-property!
+                                 (state/get-current-repo)
+                                 (:block/uuid property)
+                                 {:properties {icon-property-id icon}})))})])]
 
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Schema type:"]
@@ -370,8 +393,8 @@
            [:label.col-span-1 "UI position:"]
            [:div.col-span-3
             (ui/select choices
-              (fn [_e v]
-                (swap! *property-schema assoc :position v)))]]))
+                       (fn [_e v]
+                         (swap! *property-schema assoc :position v)))]]))
 
       (when-not (contains? #{:checkbox :default :template :enum} (:type @*property-schema))
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
@@ -574,15 +597,9 @@
          (ui/rotating-arrow collapsed?)]])
      (ui/dropdown
       (fn [{:keys [toggle-fn]}]
-        [:a.flex {:on-click toggle-fn}
-         (cond
-           (and (= :emoji (:type icon)) (:id icon))
-           [:em-emoji {:id (:id icon)}]
-
-           (and (= :tabler-icon (:type icon)) (:icon icon))
-           (ui/icon (:icon icon))
-
-           :else
+        [:button.flex {:on-click toggle-fn}
+         (if icon
+           (icon-component/icon icon)
            [:span.bullet-container.cursor (when collapsed? {:class "bullet-closed"})
             [:span.bullet]])])
       (fn [{:keys [toggle-fn]}]
@@ -592,10 +609,10 @@
            (fn [_e icon]
              (let [icon-property-id (:block/uuid (db/entity [:block/name "icon"]))]
                (when icon
-                (property-handler/update-property! repo
-                                                   (:block/uuid property)
-                                                   {:properties {icon-property-id icon}})
-                (toggle-fn))))})])
+                 (property-handler/update-property! repo
+                                                    (:block/uuid property)
+                                                    {:properties {icon-property-id icon}})
+                 (toggle-fn))))})])
       {:modal-class (util/hiccup->class
                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
      (ui/dropdown
@@ -677,8 +694,6 @@
       [:div {:style {:margin-left 3}} "Hidden properties"]]
      (when-not @*hide?
        (properties-section block hidden-properties opts))]))
-
-
 
 (rum/defcs properties-area < rum/reactive
   (rum/local false ::hover?)
