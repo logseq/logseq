@@ -126,6 +126,10 @@
                                     :class? class?})))
     [page id]))
 
+(defn- select-aux
+  [opts]
+  (select/select opts))
+
 (defn- select-page
   [block property {:keys [classes multiple-choices? dropdown?] :as opts}]
   (let [repo (state/get-current-repo)
@@ -212,7 +216,7 @@
                                              id' (or id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)])))]
                                          (add-property! block (:block/original-name property) id')
                                          (when-let [f (:on-chosen opts)] (f))))))))]
-    (select/select opts)))
+    (select-aux opts)))
 
 ;; (defn- move-cursor
 ;;   [up? opts]
@@ -334,8 +338,8 @@
         type (:type schema)
         enum? (= :enum type)
         items (if enum?
-               (map (fn [[id {:keys [name]}]] {:label name
-                                               :value id}) (get-in schema [:enum-config :values]))
+                (map (fn [[id {:keys [name]}]] {:label name
+                                                :value id}) (get-in schema [:enum-config :values]))
                 (->> (model/get-block-property-values (:block/uuid property))
                      (mapcat (fn [[_id value]]
                                (if (coll? value)
@@ -354,32 +358,32 @@
                     (when-let [f (:on-chosen opts)] (f)))
         selected-choices' (get-in block [:block/properties (:block/uuid property)])
         selected-choices (if (coll? selected-choices') selected-choices' [selected-choices'])]
-    (select/select (cond->
-                    {:multiple-choices? multiple-choices?
-                     :items items
-                     :selected-choices selected-choices
-                     :dropdown? dropdown?
-                     :show-new-when-not-exact-match? (not (contains? #{:enum} type))
-                     :input-default-placeholder "Select"
-                     :extract-chosen-fn :value
-                     :input-opts (fn [_]
-                                   {:on-blur (fn []
-                                               (exit-edit-property)
-                                               (when-let [f (:on-chosen opts)] (f)))
-                                    :on-key-down
-                                    (fn [e]
-                                      (case (util/ekey e)
-                                        "Escape"
-                                        (do
-                                          (exit-edit-property)
-                                          (when-let [f (:on-chosen opts)] (f)))
-                                        nil))})}
-                     enum?
-                     (assoc :extract-fn :label)
-                     multiple-choices?
-                     (assoc :on-apply on-chosen)
-                     (not multiple-choices?)
-                     (assoc :on-chosen on-chosen)))))
+    (select-aux (cond->
+                 {:multiple-choices? multiple-choices?
+                  :items items
+                  :selected-choices selected-choices
+                  :dropdown? dropdown?
+                  :show-new-when-not-exact-match? (not (contains? #{:enum} type))
+                  :input-default-placeholder "Select"
+                  :extract-chosen-fn :value
+                  :input-opts (fn [_]
+                                {:on-blur (fn []
+                                            (exit-edit-property)
+                                            (when-let [f (:on-chosen opts)] (f)))
+                                 :on-key-down
+                                 (fn [e]
+                                   (case (util/ekey e)
+                                     "Escape"
+                                     (do
+                                       (exit-edit-property)
+                                       (when-let [f (:on-chosen opts)] (f)))
+                                     nil))})}
+                  enum?
+                  (assoc :extract-fn :label)
+                  multiple-choices?
+                  (assoc :on-apply on-chosen)
+                  (not multiple-choices?)
+                  (assoc :on-chosen on-chosen)))))
 
 (rum/defc property-block-value < rum/reactive
   [value block-cp editor-box opts]
