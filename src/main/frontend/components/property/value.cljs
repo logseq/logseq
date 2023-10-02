@@ -2,6 +2,7 @@
   (:require [cljs-time.coerce :as tc]
             [clojure.string :as string]
             [frontend.components.select :as select]
+            [frontend.components.icon :as icon-component]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -354,8 +355,13 @@
         type (:type schema)
         enum? (= :enum type)
         items (if enum?
-                (map (fn [[id {:keys [name]}]] {:label name
-                                                :value id}) (get-in schema [:enum-config :values]))
+                (map (fn [[id {:keys [name icon]}]]
+                       {:label (if icon
+                                 [:div.flex.flex-row.gap-2
+                                  (icon-component/icon icon)
+                                  name]
+                                 name)
+                        :value id}) (get-in schema [:enum-config :values]))
                 (->> (model/get-block-property-values (:block/uuid property))
                      (mapcat (fn [[_id value]]
                                (if (coll? value)
@@ -435,7 +441,10 @@
     [:span.number (str value)]
 
     :enum
-    (get-in (:block/schema property) [:enum-config :values value :name])
+    (let [value (get-in (:block/schema property) [:enum-config :values value])]
+      (if-let [icon (:icon value)]
+        (icon-component/icon icon)
+        (:name value)))
 
     (inline-text {} :markdown (str value))))
 
@@ -460,21 +469,21 @@
                                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")
                        :initial-open? editing?}]
     (if editing?
-        (select-f)
-        (ui/dropdown
-         (fn [{:keys [toggle-fn]}]
-           [:div.cursor-pointer
-            {:on-mouse-down (if config/publishing?
-                              (constantly nil)
-                              (fn [e]
-                                (util/stop e)
-                                (toggle-fn)))
-             :class "flex flex-1"}
-            (if (and (string/blank? value) (not editing?))
-              [:div.opacity-50.pointer.text-sm "Empty"]
-              (value-f))])
-         select-f
-         dropdown-opts))))
+      (select-f)
+      (ui/dropdown
+       (fn [{:keys [toggle-fn]}]
+         [:div.cursor-pointer
+          {:on-mouse-down (if config/publishing?
+                            (constantly nil)
+                            (fn [e]
+                              (util/stop e)
+                              (toggle-fn)))
+           :class "flex flex-1"}
+          (if (and (string/blank? value) (not editing?))
+            [:div.opacity-50.pointer.text-sm "Empty"]
+            (value-f))])
+       select-f
+       dropdown-opts))))
 
 (rum/defc property-scalar-value < rum/reactive db-mixins/query
   [block property value {:keys [inline-text block-cp

@@ -13,6 +13,7 @@
             [frontend.components.property :as property]
             [frontend.components.property.value :as pv]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.property :as property-handler]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -400,7 +401,12 @@
        (when icon
          [:div.page-icon {:on-mouse-down util/stop-propagation}
           (if (map? icon)
-            (property/icon page icon {})
+            (property/icon icon {:on-chosen (fn [_e icon]
+                                              (let [icon-property-id (:block/uuid (db/entity [:block/name "icon"]))]
+                                               (property-handler/update-property!
+                                                repo
+                                                (:block/uuid page)
+                                                {:properties {icon-property-id icon}})))})
             icon)])
 
        [:div.flex.flex-1.flex-row.flex-wrap.items-center.gap-4

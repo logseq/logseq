@@ -12,25 +12,40 @@
             [goog.object :as gobj]
             [goog.functions :refer [debounce]]))
 
+(defn icon
+  [icon]
+  (cond
+    (and (= :emoji (:type icon)) (:id icon))
+    [:em-emoji {:id (:id icon)}]
+
+    (and (= :tabler-icon (:type icon)) (:id icon))
+    (ui/icon (:id icon))))
+
 (defn- search-emojis
   [q]
   (p/let [result (.search SearchIndex q)]
     (bean/->clj result)))
 
-(def tabler-icons
-  (->> (keys (bean/->clj js/tablerIcons))
-       (map (fn [k]
-              (-> (string/replace (csk/->Camel_Snake_Case (name k)) "_" " ")
-                  (string/replace-first "Icon " ""))))
+(defonce *tabler-icons (atom nil))
+(defn- get-tabler-icons
+  []
+  (if @*tabler-icons
+    @*tabler-icons
+    (let [result (->> (keys (bean/->clj js/tablerIcons))
+                      (map (fn [k]
+                             (-> (string/replace (csk/->Camel_Snake_Case (name k)) "_" " ")
+                                 (string/replace-first "Icon " ""))))
        ;; FIXME: somehow those icons don't work
-       (remove #{"Ab" "Ab 2" "Ab Off"})))
+                      (remove #{"Ab" "Ab 2" "Ab Off"}))]
+      (reset! *tabler-icons result)
+      result)))
 
 (def emojis
   (vals (bean/->clj (gobj/get emoji-data "emojis"))))
 
 (defn- search-tabler-icons
   [q]
-  (search/fuzzy-search tabler-icons q :limit 100))
+  (search/fuzzy-search (get-tabler-icons) q :limit 100))
 
 (defn- search
   [q]
@@ -40,15 +55,17 @@
      :emojis emojis}))
 
 (rum/defc emoji-cp < rum/static
-  [{:keys [name skins] :as emoji} {:keys [on-chosen hover]}]
+  [{:keys [id name] :as emoji} {:keys [on-chosen hover]}]
   [:button.text-2xl.w-9.h-9.transition-opacity
    {:tabIndex "0"
     :title name
     :on-click (fn [e]
-                (on-chosen e (assoc emoji :type :emoji)))
+                (on-chosen e {:type :emoji
+                              :id id
+                              :name name}))
     :on-mouse-over #(reset! hover emoji)
     :on-mouse-out #(reset! hover nil)}
-   (:native (first skins))])
+   [:em-emoji {:id id}]])
 
 (rum/defc emojis-cp < rum/static
   [emojis opts]
@@ -64,7 +81,8 @@
     :title icon
     :on-click (fn [e]
                 (on-chosen e {:type :tabler-icon
-                              :icon icon}))
+                              :id icon
+                              :name icon}))
     :on-mouse-over #(reset! hover {:type :tabler-icon
                                    :id icon
                                    :name icon
@@ -125,7 +143,7 @@
             :on-click #(reset! *tab :icon)})]
          (if emoji-tab?
            (emojis-cp emojis opts)
-           (icons-cp tabler-icons opts))])]
+           (icons-cp (get-tabler-icons) opts))])]
 
      (if @*hover
        [:div.flex.flex-1.flex-row.items-center.gap-2
