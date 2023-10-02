@@ -472,12 +472,10 @@
       (select-f)
       (ui/dropdown
        (fn [{:keys [toggle-fn]}]
-         [:div.cursor-pointer
+         [:a.control-link
           {:on-mouse-down (if config/publishing?
                             (constantly nil)
-                            (fn [e]
-                              (util/stop e)
-                              (toggle-fn)))
+                            toggle-fn)
            :class "flex flex-1"}
           (if (and (string/blank? value) (not editing?))
             [:div.opacity-50.pointer.text-sm "Empty"]
@@ -578,12 +576,12 @@
         items (if (coll? v) v (when v [v]))
         values-cp (fn [toggle-fn]
                     (if (seq items)
-                     (concat
-                      (for [item items]
-                        (select-item property type item opts))
-                      (when date?
-                        [(date-picker block property nil {:toggle-fn toggle-fn})]))
-                     (when-not editing? [:div.opacity-50.pointer.text-sm "Empty"])))
+                      (concat
+                       (for [item items]
+                         (select-item property type item opts))
+                       (when date?
+                         [(date-picker block property nil {:toggle-fn toggle-fn})]))
+                      (when-not editing? [:div.opacity-50.pointer.text-sm "Empty"])))
         select-cp (fn []
                     (let [select-opts {:multiple-choices? true
                                        :dropdown? editing?
@@ -597,12 +595,10 @@
     (if (and dropdown? (not editing?))
       (ui/dropdown
        (fn [{:keys [toggle-fn]}]
-         [:div.cursor-pointer
+         [:a.control-link
           {:on-mouse-down (if config/publishing?
                             (constantly nil)
-                            (fn [e]
-                              (util/stop e)
-                              (toggle-fn)))
+                            toggle-fn)
            :class "flex flex-1 flex-row items-center flex-wrap gap-x-4 gap-y-2 pr-4"}
           (values-cp toggle-fn)])
        (fn [{:keys [_toggle-fn]}]
