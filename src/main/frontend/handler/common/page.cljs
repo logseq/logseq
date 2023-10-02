@@ -13,9 +13,9 @@
             [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-based.editor :as file-editor-handler]
+            [frontend.handler.file-based.page-property :as file-page-property]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.util.page-property :as page-property]
             [frontend.util.fs :as fs-util]
             [frontend.util :as util]
             [logseq.db.schema :as db-schema]
@@ -46,7 +46,7 @@
              ps (merge p properties)
              content (if db-based?
                        ""
-                       (page-property/insert-properties format "" ps))
+                       (file-page-property/insert-properties format "" ps))
              refs (gp-block/get-page-refs-from-properties properties
                                                           (db/get-db repo)
                                                           (state/get-date-formatter)

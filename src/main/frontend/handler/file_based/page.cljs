@@ -1,11 +1,11 @@
 (ns frontend.handler.file-based.page
   "Page handlers for file based graphs"
-  (:require [frontend.config :as config]
-            [frontend.db :as db]
+  (:require [frontend.db :as db]
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.db.model :as model]
             [frontend.handler.file-based.property :as file-property]
+            [frontend.handler.file-based.page-property :as file-page-property]
             [frontend.handler.file-based.recent :as file-recent-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.common.page :as page-common-handler]
@@ -15,7 +15,6 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.fs :as fs-util]
-            [frontend.util.page-property :as page-property]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]
@@ -225,9 +224,8 @@
 
         (db/transact! repo page-txs)
 
-        (when (and (not (config/db-based-graph? repo))
-                   (fs-util/create-title-property? new-page-name))
-          (page-property/add-property! new-page-name :title new-name))
+        (when (fs-util/create-title-property? new-page-name)
+          (file-page-property/add-property! new-page-name :title new-name))
 
         (when (and file (not journal?))
           (rename-file! file new-file-name-body (fn [] nil)))
