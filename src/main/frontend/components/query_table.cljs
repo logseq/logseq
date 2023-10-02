@@ -67,14 +67,14 @@
   "Return current sort direction and column being sorted, respectively
   :sort-desc? and :sort-by-column. :sort-by-column is nil if no sorting is to be
   done"
-  [current-block]
+  [current-block {:keys [db-graph?]}]
   (let [properties (:block/properties current-block)
         p-desc? (pu/lookup properties :query-sort-desc)
         desc? (if (some? p-desc?) p-desc? true)
         properties (:block/properties current-block)
         query-sort-by (pu/lookup properties :query-sort-by)
         ;; Starting with #6105, we started putting properties under namespaces.
-        nlp-date? (pu/lookup properties :logseq.query/nlp-date)
+        nlp-date? (and (not db-graph?) (pu/lookup properties :logseq.query/nlp-date))
         sort-by-column (or (if (uuid? query-sort-by) query-sort-by (keyword query-sort-by))
                            (if (query-dsl/query-contains-filter? (:block/content current-block) "sort-by")
                              nil
@@ -289,9 +289,10 @@
   (when current-block
     (let [result' (if page? result (attach-clock-property result))
           columns (get-columns current-block result' {:page? page?})
+          db-graph? (config/db-based-graph? (state/get-current-repo))
           ;; Sort state needs to be in sync between final result and sortable title
           ;; as user needs to know if there result is sorted
-          sort-state (get-sort-state current-block)
+          sort-state (get-sort-state current-block {:db-graph? db-graph?})
           sort-result (sort-result result (assoc sort-state :page? page?))
           table-version (get-shui-component-version :table config)]
       (case table-version

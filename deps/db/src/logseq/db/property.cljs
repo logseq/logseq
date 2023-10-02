@@ -31,7 +31,6 @@
    ;; query-sort-by is either a property uuid or a keyword where keyword is a special frontend keyword
    :query-sort-by {:schema {:type :any}}
    :query-sort-desc {:schema {:type :checkbox}}
-   :logseq.query/nlp-date {:schema {:type :checkbox}}
    :ls-type {:schema {:type :keyword}}
    :hl-type {:schema {:type :keyword}}
    :hl-page {:schema {:type :number}}
