@@ -22,7 +22,7 @@
             [logseq.db.property :as db-property]
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
-            ))
+            [frontend.components.icon :as icon-component]))
 
 (defn- update-property!
   [property property-name property-schema]
@@ -33,25 +33,33 @@
     :property-schema property-schema}))
 
 (rum/defc icon
-  [block {:keys [_type id]} {:keys [disabled?]}]            ; only :emoji supported yet
+  [block {:keys [type id icon]} {:keys [disabled?]}]
   (let [repo (state/get-current-repo)
         icon-property-id (:block/uuid (db/entity [:block/name "icon"]))]
     (ui/dropdown
      (fn [{:keys [toggle-fn]}]
-       (if id
+       (cond
+         (and (= :emoji type) id)
          [:a {:on-click #(when-not disabled? (toggle-fn))}
           [:em-emoji {:id id}]]
+
+         (and (= :tabler-icon type) icon)
+         [:a {:on-click #(when-not disabled? (toggle-fn))}
+          (ui/icon icon)]
+
+         :else
          [:a.flex.flex-row.items-center {:on-click #(when-not disabled? (toggle-fn))}
-          (ui/icon "point" {:size 16})
+          [:span.bullet-container.cursor
+           [:span.bullet]]
           [:div.ml-1.text-sm "Pick another icon"]]))
      (fn [{:keys [toggle-fn]}]
-       (ui/emoji-picker
-        {:auto-focus true
-         :on-emoji-select (fn [icon]
-                            (when-let [id (.-id icon)]
-                              (property-handler/update-property! repo (:block/uuid block) {:properties {icon-property-id {:type :emoji
-                                                                                                                          :id id}}}))
-                            (toggle-fn))})))))
+       [:div.p-4
+        (icon-component/icon-search
+         {:on-chosen
+          (fn [_e icon]
+            (when icon
+              (property-handler/update-property! repo (:block/uuid block) {:properties {icon-property-id icon}})
+              (toggle-fn)))})]))))
 
 (rum/defcs class-select < (rum/local false ::open?)
   [state *property-schema schema-classes {:keys [multiple-choices? disabled?]
@@ -567,23 +575,27 @@
      (ui/dropdown
       (fn [{:keys [toggle-fn]}]
         [:a.flex {:on-click toggle-fn}
-         (or
-          (when-let [id (:id icon)]
-            (when (= :emoji (:type icon))
-              [:em-emoji {:id id}]))
-          [:span.bullet-container.cursor (when collapsed? {:class "bullet-closed"})
-           [:span.bullet]])])
+         (cond
+           (and (= :emoji (:type icon)) (:id icon))
+           [:em-emoji {:id (:id icon)}]
+
+           (and (= :tabler-icon (:type icon)) (:icon icon))
+           (ui/icon (:icon icon))
+
+           :else
+           [:span.bullet-container.cursor (when collapsed? {:class "bullet-closed"})
+            [:span.bullet]])])
       (fn [{:keys [toggle-fn]}]
-        (ui/emoji-picker
-         {:auto-focus true
-          :on-emoji-select (fn [icon]
-                             (when-let [id (.-id icon)]
-                               (let [icon-property-id (:block/uuid (db/entity [:block/name "icon"]))]
-                                 (property-handler/update-property! repo
-                                                                    (:block/uuid property)
-                                                                    {:properties {icon-property-id {:type :emoji
-                                                                                                    :id id}}})))
-                             (toggle-fn))}))
+        [:div.p-4
+         (icon-component/icon-search
+          {:on-chosen
+           (fn [_e icon]
+             (let [icon-property-id (:block/uuid (db/entity [:block/name "icon"]))]
+               (when icon
+                (property-handler/update-property! repo
+                                                   (:block/uuid property)
+                                                   {:properties {icon-property-id icon}})
+                (toggle-fn))))})])
       {:modal-class (util/hiccup->class
                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
      (ui/dropdown

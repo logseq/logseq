@@ -1,3 +1,7 @@
+.icon-search {
+    width: 300px;
+}
+
 .emojis button:hover, .icons button:hover {
     background-color: var(--ls-quaternary-background-color);
     border-radius: 100%;
