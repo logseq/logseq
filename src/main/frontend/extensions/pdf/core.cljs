@@ -886,21 +886,24 @@
      [hls-file])
 
     ;; cache highlights
-    (rum/use-effect!
-     (fn []
-       (when (= :completed (:status loader-state))
-         (p/catch
-          (when-not (:error hls-state)
-            (p/do!
-              (p/delay 100)
-              (pdf-assets/persist-hls-data$
-                pdf-current (:latest-hls hls-state) (:extra hls-state))))
+    (let [persist-hls-data!
+          (rum/use-callback
+            (util/debounce
+              4000 (fn [latest-hls extra]
+                    (pdf-assets/persist-hls-data$
+                      pdf-current latest-hls extra))) [pdf-current])]
+      (rum/use-effect!
+        (fn []
+          (when (= :completed (:status loader-state))
+            (p/catch
+              (when-not (:error hls-state)
+                (p/do! (persist-hls-data! (:latest-hls hls-state) (:extra hls-state))))
 
-          ;; write hls file error
-          (fn [e]
-            (js/console.error "[write hls error]" e)))))
+              ;; write hls file error
+              (fn [e]
+                (js/console.error "[write hls error]" e)))))
 
-     [(:latest-hls hls-state) (:extra hls-state)])
+        [(:latest-hls hls-state) (:extra hls-state)]))
 
     ;; load document
     (rum/use-effect!

@@ -166,7 +166,7 @@ html[data-theme='light'] {
 }
 
 .tl-action-bar {
-  @apply absolute bottom-0 flex items-center border-0 left-10 bottom-10;
+  @apply absolute flex items-center border-0 left-10 bottom-8 flex-wrap-reverse pr-12;
 
   z-index: 100000;
   user-select: none;

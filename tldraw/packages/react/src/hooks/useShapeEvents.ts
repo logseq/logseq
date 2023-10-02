@@ -1,23 +1,33 @@
 import * as React from 'react'
 import { TLTargetType } from '@tldraw/core'
+import { useApp } from './useApp'
 import { useRendererContext } from '.'
 import { DOUBLE_CLICK_DURATION } from '../constants'
 import type { TLReactShape } from '../lib'
 import type { TLReactCustomEvents } from '../types'
 
 export function useShapeEvents<S extends TLReactShape>(shape: S) {
+  const app = useApp()
   const { inputs, callbacks } = useRendererContext()
 
   const rDoubleClickTimer = React.useRef<number>(-1)
 
   const events = React.useMemo(() => {
     const onPointerMove: TLReactCustomEvents['pointer'] = e => {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
+        return
+      }
+
       const { order = 0 } = e
       callbacks.onPointerMove?.({ type: TLTargetType.Shape, shape, order }, e)
       e.order = order + 1
     }
 
     const onPointerDown: TLReactCustomEvents['pointer'] = e => {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
+        return
+      }
+
       const { order = 0 } = e
       if (!order) e.currentTarget?.setPointerCapture(e.pointerId)
       callbacks.onPointerDown?.({ type: TLTargetType.Shape, shape, order }, e)
@@ -25,6 +35,10 @@ export function useShapeEvents<S extends TLReactShape>(shape: S) {
     }
 
     const onPointerUp: TLReactCustomEvents['pointer'] = e => {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
+        return
+      }
+
       const { order = 0 } = e
       if (!order) e.currentTarget?.releasePointerCapture(e.pointerId)
       callbacks.onPointerUp?.({ type: TLTargetType.Shape, shape, order }, e)
@@ -42,12 +56,20 @@ export function useShapeEvents<S extends TLReactShape>(shape: S) {
     }
 
     const onPointerEnter: TLReactCustomEvents['pointer'] = e => {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
+        return
+      }
+
       const { order = 0 } = e
       callbacks.onPointerEnter?.({ type: TLTargetType.Shape, shape, order }, e)
       e.order = order + 1
     }
 
     const onPointerLeave: TLReactCustomEvents['pointer'] = e => {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
+        return
+      }
+
       const { order = 0 } = e
       callbacks.onPointerLeave?.({ type: TLTargetType.Shape, shape, order }, e)
       e.order = order + 1

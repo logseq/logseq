@@ -58,6 +58,7 @@ export interface TLCanvasProps<S extends TLReactShape> {
   cursorRotation: number
   selectionRotation: number
   onEditingEnd: () => void
+  penMode: boolean
   showGrid: boolean
   showSelection: boolean
   showHandles: boolean

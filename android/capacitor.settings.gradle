@@ -32,8 +32,8 @@ project(':capacitor-status-bar').projectDir = new File('../node_modules/@capacit
 include ':capawesome-capacitor-background-task'
 project(':capawesome-capacitor-background-task').projectDir = new File('../node_modules/@capawesome/capacitor-background-task/android')
 
-include ':hugotomazi-capacitor-navigation-bar'
-project(':hugotomazi-capacitor-navigation-bar').projectDir = new File('../node_modules/@hugotomazi/capacitor-navigation-bar/android')
+include ':capgo-capacitor-navigation-bar'
+project(':capgo-capacitor-navigation-bar').projectDir = new File('../node_modules/@capgo/capacitor-navigation-bar/android')
 
 include ':logseq-capacitor-file-sync'
 project(':logseq-capacitor-file-sync').projectDir = new File('../node_modules/@logseq/capacitor-file-sync/android')

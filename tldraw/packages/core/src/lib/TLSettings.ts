@@ -4,6 +4,7 @@ import { observable, makeObservable, action } from 'mobx'
 export interface TLSettingsProps {
   mode: 'light' | 'dark'
   showGrid: boolean
+  penMode: boolean
   snapToGrid: boolean
   color: string
   scaleLevel: string
@@ -17,6 +18,7 @@ export class TLSettings implements TLSettingsProps {
   @observable mode: 'dark' | 'light' = 'light'
   @observable showGrid = true
   @observable snapToGrid = true
+  @observable penMode = false
   @observable scaleLevel = 'md'
   @observable color = ''
 

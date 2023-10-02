@@ -485,7 +485,7 @@
                  (when-not (:file? (first (:rum/args state)))
                    (let [code (nth (:rum/args state) 3)
                          editor @(:editor-atom state)]
-                     (when (not= (.getValue editor) code)
+                     (when (and editor (not= (.getValue editor) code))
                        (.setValue editor code))))
                  state)}
   [state _config id attr code _theme _options]

@@ -4,7 +4,7 @@
   rum/rum                               {:mvn/version "0.12.9"}
   datascript/datascript                 {:mvn/version "1.3.8"}
   datascript-transit/datascript-transit {:mvn/version "0.3.0"}
-  borkdude/rewrite-edn                  {:mvn/version "0.4.6"}
+  borkdude/rewrite-edn                  {:mvn/version "0.4.7"}
   funcool/promesa                       {:mvn/version "4.0.2"}
   medley/medley                         {:mvn/version "1.4.0"}
   metosin/reitit-frontend               {:mvn/version "0.3.10"}

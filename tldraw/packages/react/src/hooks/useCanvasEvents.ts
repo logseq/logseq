@@ -13,11 +13,19 @@ export function useCanvasEvents() {
 
   const events = React.useMemo(() => {
     const onPointerMove: TLReactCustomEvents['pointer'] = e => {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
+        return
+      }
+
       const { order = 0 } = e
       callbacks.onPointerMove?.({ type: TLTargetType.Canvas, order }, e)
     }
 
     const onPointerDown: TLReactCustomEvents['pointer'] = e => {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
+        return
+      }
+
       const { order = 0 } = e
       if (!order) e.currentTarget?.setPointerCapture(e.pointerId)
 
@@ -41,17 +49,29 @@ export function useCanvasEvents() {
     }
 
     const onPointerUp: TLReactCustomEvents['pointer'] = e => {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
+        return
+      }
+
       const { order = 0 } = e
       if (!order) e.currentTarget?.releasePointerCapture(e.pointerId)
       callbacks.onPointerUp?.({ type: TLTargetType.Canvas, order }, e)
     }
 
     const onPointerEnter: TLReactCustomEvents['pointer'] = e => {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
+        return
+      }
+
       const { order = 0 } = e
       callbacks.onPointerEnter?.({ type: TLTargetType.Canvas, order }, e)
     }
 
     const onPointerLeave: TLReactCustomEvents['pointer'] = e => {
+      if (app.settings.penMode && (e.pointerType !== 'pen' || !e.isPrimary)) {
+        return
+      }
+
       const { order = 0 } = e
       callbacks.onPointerLeave?.({ type: TLTargetType.Canvas, order }, e)
     }

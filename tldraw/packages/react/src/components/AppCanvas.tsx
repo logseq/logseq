@@ -27,6 +27,7 @@ export const AppCanvas = observer(function InnerApp<S extends TLReactShape>(
       shapes={app.shapes} // TODO: use shapes in viewport later?
       assets={app.assets}
       showGrid={app.settings.showGrid}
+      penMode={app.settings.penMode}
       showSelection={app.showSelection}
       showSelectionRotation={app.showSelectionRotation}
       showResizeHandles={app.showResizeHandles}

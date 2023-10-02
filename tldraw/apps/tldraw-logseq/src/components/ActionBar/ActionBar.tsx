@@ -41,10 +41,14 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
     app.api.toggleSnapToGrid()
   }, [app])
 
+  const togglePenMode = React.useCallback(() => {
+    app.api.togglePenMode()
+  }, [app])
+
   return (
     <div className="tl-action-bar" data-html2canvas-ignore="true">
       {!app.readOnly && (
-        <div className="tl-toolbar tl-history-bar">
+        <div className="tl-toolbar tl-history-bar mr-2 mb-2">
           <Button tooltip={t('whiteboard/undo')} onClick={undo}>
             <TablerIcon name="arrow-back-up" />
           </Button>
@@ -54,7 +58,7 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
         </div>
       )}
 
-      <div className={`tl-toolbar tl-zoom-bar ${app.readOnly ? '' : 'ml-4'}`}>
+      <div className={'tl-toolbar tl-zoom-bar mr-2 mb-2'}>
         <Button tooltip={t('whiteboard/zoom-in')} onClick={zoomIn} id="tl-zoom-in">
           <TablerIcon name="plus" />
         </Button>
@@ -65,7 +69,7 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
         <ZoomMenu />
       </div>
 
-      <div className={'tl-toolbar tl-grid-bar ml-4'}>
+      <div className={'tl-toolbar tl-grid-bar mr-2 mb-2'}>
         <ToggleInput
             tooltip={t('whiteboard/toggle-grid')}
             className="tl-button"
@@ -88,6 +92,20 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
           </ToggleInput>
         )}
       </div>
+
+      {!app.readOnly && (
+        <div className="tl-toolbar tl-pen-mode-bar mb-2">
+          <ToggleInput
+            tooltip={t('whiteboard/toggle-pen-mode')}
+            className="tl-button"
+            pressed={app.settings.penMode}
+            id="tl-toggle-pen-mode"
+            onPressedChange={togglePenMode}
+          >
+          <TablerIcon name={app.settings.penMode ? "pencil" : "pencil-off"} />
+        </ToggleInput>
+        </div>
+      )}
     </div>
   )
 })
