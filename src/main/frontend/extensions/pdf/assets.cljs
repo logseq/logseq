@@ -14,7 +14,6 @@
             [frontend.ui :as ui]
             [frontend.context.i18n :refer [t]]
             [frontend.extensions.lightbox :as lightbox]
-            [frontend.util.page-property :as page-property]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.extensions.pdf.utils :as pdf-utils]
@@ -179,7 +178,7 @@
         (db-model/get-page page-name))
 
       ;; try to update file path
-      (page-property/add-property! page-name :file-path url))
+      (property-handler/add-page-property! page-name :file-path url))
     page))
 
 (defn ensure-ref-block!

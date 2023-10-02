@@ -83,6 +83,7 @@
              frontend.handler.db-based.property db-property-handler
              frontend.handler.file-based.page file-page-handler
              frontend.handler.file-based.property file-property
+             frontend.handler.file-based.page-property file-page-property
              frontend.handler.file-based.property.util property-util
              frontend.handler.file-based.recent file-recent-handler
              frontend.handler.plugin plugin-handler

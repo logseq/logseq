@@ -2,7 +2,9 @@
   "Block properties handler."
   (:require [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.file-based.property :as file-property]
+            [frontend.handler.file-based.page-property :as file-page-property]
             [frontend.config :as config]
+            [frontend.util :as util]
             [frontend.state :as state]
             [frontend.db :as db]))
 
@@ -35,6 +37,15 @@
   (when (config/db-based-graph? repo)
     (db-property-handler/delete-property-value! repo block property-id property-value)))
 
+(defn add-page-property!
+  "Sanitized page-name, unsanitized key / value"
+  [page-name key value]
+  (let [repo (state/get-current-repo)]
+    (if (config/db-based-graph? repo)
+      (when-let [page (db/pull [:block/name (util/page-name-sanity-lc page-name)])]
+       (set-block-property! repo (:block/uuid page) key value))
+      (file-page-property/add-property! page-name key value))))
+ 
 (defn set-editing-new-property!
   [value]
   (state/set-state! :ui/new-property-input-id value))
@@ -48,13 +59,13 @@
   [repo class-uuid k-name]
   (when-let [class (db/entity repo [:block/uuid class-uuid])]
     (when (config/db-based-graph? repo)
-     (db-property-handler/class-add-property! repo class k-name))))
+      (db-property-handler/class-add-property! repo class k-name))))
 
 (defn class-remove-property!
   [repo class-uuid k-uuid]
   (when-let [class (db/entity repo [:block/uuid class-uuid])]
     (when (config/db-based-graph? repo)
-     (db-property-handler/class-remove-property! repo class k-uuid))))
+      (db-property-handler/class-remove-property! repo class k-uuid))))
 
 (defn remove-id-property
   [repo format content]

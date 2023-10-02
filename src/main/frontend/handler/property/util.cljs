@@ -1,4 +1,7 @@
 (ns frontend.handler.property.util
+  "Utility fns for properties. Most of these are used in file or db graphs.
+  Some fns like lookup and get-property were written to easily be backwards
+  compatible with file graphs"
   (:require [frontend.config :as config]
             [frontend.state :as state]
             [logseq.db.property :as db-property]

@@ -17,13 +17,13 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.file-based.page :as file-page-handler]
+            [frontend.handler.property :as property-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as web-nfs]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [frontend.util.page-property :as page-property]
             [frontend.util.page :as page-util]
             [frontend.util.url :as url-util]
             [goog.functions :refer [debounce]]
@@ -98,7 +98,7 @@
 
 (defn update-public-attribute!
   [page-name value]
-  (page-property/add-property! page-name :public value))
+  (property-handler/add-page-property! page-name :public value))
 
 (defn get-page-ref-text
   [page]
@@ -177,7 +177,7 @@
 
 (defn save-filter!
   [page-name filter-state]
-  (page-property/add-property! page-name :filters filter-state))
+  (property-handler/add-page-property! page-name :filters filter-state))
 
 ;; Editor
 (defn page-not-exists-handler
