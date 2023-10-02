@@ -94,7 +94,7 @@
     [:div.icon-search.flex.flex-1.flex-col.gap-2
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5
       {:auto-focus    true
-       :placeholder   "Search icons"
+       :placeholder   "Select icon"
        :default-value ""
        :on-change     (debounce
                        (fn [e]
@@ -126,7 +126,7 @@
           (emojis-cp emojis opts)
           (icons-cp tabler-icons opts))])
 
-     (when @*hover
+     (if @*hover
        [:div.flex.flex-1.flex-row.items-center.gap-2
         [:button.transition-opacity
          {:style {:font-size 32}
@@ -136,4 +136,5 @@
            (ui/icon (:icon @*hover) {:size 32})
            (:native (first (:skins @*hover))))]
 
-        (:name @*hover)])]))
+        (:name @*hover)]
+       [:div {:style {:padding-bottom 32}}])]))
