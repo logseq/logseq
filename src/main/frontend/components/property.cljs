@@ -770,7 +770,7 @@
         opts (assoc opts
                     :blocks-container-id (::blocks-container-id state)
                     :hover? @*hover?)]
-    (when-not (and (empty? own-properties)
+    (when-not (and (empty? block-own-properties)
                    (empty? class->properties)
                    (not new-property?)
                    (not (:page-configure? opts)))
