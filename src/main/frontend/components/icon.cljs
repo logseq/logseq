@@ -104,27 +104,28 @@
                            (p/let [result (search @*q)]
                              (reset! *result result))))
                        200)}]
-     (if (seq result)
-       [:div.flex.flex-1.flex-col.gap-1
-        (when (seq (:emojis result))
-          (emojis-cp (:emojis result) opts))
-        (when (seq (:icons result))
-          (icons-cp (:icons result) opts))]
-       [:div.flex.flex-1.flex-col.gap-1
-        [:div.flex.flex-1.flex-row.items-center.gap-2
-         (ui/button
-          "Emojis"
-          {:intent "logseq"
-           :small? true
-           :on-click #(reset! *tab :emoji)})
-         (ui/button
-          "Icons"
-          {:intent "logseq"
-           :small? true
-           :on-click #(reset! *tab :icon)})]
-        (if emoji-tab?
-          (emojis-cp emojis opts)
-          (icons-cp tabler-icons opts))])
+     [:div.search-result
+      (if (seq result)
+        [:div.flex.flex-1.flex-col.gap-1
+         (when (seq (:emojis result))
+           (emojis-cp (:emojis result) opts))
+         (when (seq (:icons result))
+           (icons-cp (:icons result) opts))]
+        [:div.flex.flex-1.flex-col.gap-1
+         [:div.flex.flex-1.flex-row.items-center.gap-2
+          (ui/button
+           "Emojis"
+           {:intent "logseq"
+            :small? true
+            :on-click #(reset! *tab :emoji)})
+          (ui/button
+           "Icons"
+           {:intent "logseq"
+            :small? true
+            :on-click #(reset! *tab :icon)})]
+         (if emoji-tab?
+           (emojis-cp emojis opts)
+           (icons-cp tabler-icons opts))])]
 
      (if @*hover
        [:div.flex.flex-1.flex-row.items-center.gap-2
