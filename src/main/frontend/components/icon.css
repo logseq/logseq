@@ -11,6 +11,6 @@
     vertical-align: middle;
 }
 
-.emojis, .icons {
+.search-result {
     @apply overflow-y-scroll max-h-80;
 }
