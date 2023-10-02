@@ -89,7 +89,6 @@ h1.title.whiteboard-dashboard-title {
 }
 
 .single-block > :is(.block-content-wrapper, .editor-wrapper) {
-  width: 100% !important;
   padding: 8px 12px;
   border-radius: 8px;
 }

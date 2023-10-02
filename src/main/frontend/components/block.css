@@ -377,8 +377,7 @@
   }
 }
 
-.ls-block,
-.editor-wrapper {
+.ls-block {
   margin-right: auto;
   margin-left: auto;
 }
