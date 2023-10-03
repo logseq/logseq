@@ -14,63 +14,123 @@
             ["os" :as os]
             [cljs.pprint :as pprint]))
 
-(def client-db-schema
-  [:sequential
-   [:map
-    {:closed false}
-    [:block/uuid :uuid]
-    [:block/name {:optional true} :string]
-    [:block/original-name {:optional true} :string]
-    [:block/type {:optional true} [:enum "property" "class" "object" "whiteboard"]]
-    [:block/content {:optional true} :string]
-    [:block/properties {:optional true}
-     [:map-of :uuid [:or
-                     :string
-                     :int
-                     :boolean
-                     :uuid
-                     :map
-                     [:vector [:or :keyword :uuid]]
-                     [:set :uuid]
+
+(def page-or-block-attrs
+  "Common attributes for page and normal blocks"
+  [[:block/properties {:optional true}
+    [:map-of :uuid [:or
+                    :string
+                    :int
+                    :boolean
+                    :uuid
+                    :map
+                    [:vector [:or :keyword :uuid]]
+                    [:set :uuid]
                      ;; TODO: Remove when bug is fixed
-                     [:sequential :uuid]
-                     [:set :string]
-                     [:set :int]]]]
-    [:block/created-at {:optional true} :int]
-    [:block/updated-at {:optional true} :int]
-    ;; refs
-    [:block/left {:optional true} :int]
-    [:block/parent {:optional true} :int]
-    [:block/page {:optional true} :int]
+                    [:sequential :uuid]
+                    [:set :string]
+                    [:set :int]]]]
+   [:block/refs {:optional true} :any] ;;TODO
+   [:block/tags {:optional true} :any] ;;TODO
+   [:block/tx-id {:optional true} :int]])
+
+(def page-block
+  (into
+   [[:block/name :string]
+    [:block/original-name :string]
+    [:block/uuid :uuid]
+    [:block/created-at :int]
+    [:block/updated-at :int]
+    [:block/type {:optional true} [:enum "property" "class" "object" "whiteboard"]]
     [:block/namespace {:optional true} :int]
-    [:block/link {:optional true} :int]
-    [:block/path-refs {:optional true} :any] ;;TODO
-    [:block/refs {:optional true} :any] ;;TODO
-    [:block/tags {:optional true} :any] ;;TODO
-    ;; other
-    [:block/collapsed? {:optional true} :boolean]
+    ;; TODO: journal?, journal-day and format optional b/c of property
     [:block/journal? {:optional true} :boolean]
     [:block/journal-day {:optional true} :int]
     [:block/format {:optional true} [:enum :markdown]]
-    [:block/tx-id {:optional true} :int]
-    [:block/marker {:optional true} :string]
+    ;; TODO: Should this be here?
+    [:block/path-refs {:optional true} :any]
+    ;; TODO: collapsed only for linked
+    [:block/collapsed? {:optional true} :boolean]
+    ;; TODO: Required for property and class types
     [:block/schema
      {:optional true}
      [:map
       {:closed false}
       ;; TODO: only validate most of these for property blocks
       [:type {:optional true} :keyword]
+      [:enum-config {:optional true} :map] ;; TODO
       [:cardinality {:optional true} [:enum :one :many]]
       [:classes {:optional true} [:set :uuid]]
       [:description {:optional true} :string]
       [:hide? {:optional true} :boolean]
       ;; TODO: require this for class blocks
-      [:properties {:optional true} [:vector :uuid]]]]
+      [:properties {:optional true} [:vector :uuid]]]]]
+   page-or-block-attrs))
 
-    [:file/content {:optional true} :string]
-    ;; TODO: Remove when bug is fixed
-    [:file/last-modified-at {:optional true} :any]
-    [:file/path {:optional true} :string]]])
+(def block-attrs
+  "Common attributes for normal blocks"
+  (into
+   [[:block/uuid :uuid]
+    [:block/page :int]
+    ;; refs
+    ;; left, parent are only optional b/c of dummy blocks
+    [:block/left {:optional true} :int]
+    [:block/parent {:optional true} :int]
+    [:block/path-refs {:optional true} :any] ;;TODO
+    [:block/format {:optional true} [:enum :markdown]]
+    ;; other
+    [:block/marker {:optional true} :string]
+    [:block/priority {:optional true} :string]
+    [:block/collapsed? {:optional true} :boolean]]
+   page-or-block-attrs))
+
+(def normal-block
+  "A normal block is a block with content and a page"
+  (into block-attrs
+        [[:block/content :string]
+         [:block/created-at :int]
+         [:block/updated-at :int]
+         ;; TODO: Try fixing journal attributes as it only happens on tagged blocks or blocks with refs
+         [:block/journal? {:optional true} :boolean]
+         [:block/journal-day {:optional true} :int]]))
+
+(def normal-link-block
+  (into block-attrs
+        [[:block/content :string]
+         [:block/link :int]
+         [:block/journal? :boolean]
+         [:block/journal-day {:optional true} :int]
+         [:block/created-at :int]
+         [:block/updated-at :int]]))
+
+(def normal-dummy-block
+  "A dummy block is created when a page is created"
+  (into block-attrs
+        [[:block/content [:= ""]]
+         [:block/journal? :boolean]
+         [:block/journal-day {:optional true} :int]]))
+
+;; TODO: Figure out where this is coming from
+(def unknown-empty-block
+  [[:block/uuid :uuid]])
+
+(def file-block
+  [[:block/uuid :uuid]
+   [:block/tx-id {:optional true} :int]
+   [:file/content :string]
+   [:file/path :string]
+    ;; ;; TODO: Remove when bug is fixed
+   [:file/last-modified-at {:optional true} :any]])
+
+(def client-db-schema
+  [:sequential
+   [:or
+    (into [:map {:closed false}] page-block)
+    (into [:map {:closed false}] normal-block)
+    (into [:map {:closed false}] normal-link-block)
+    (into [:map {:closed false}] normal-dummy-block)
+    (into [:map {:closed true}] file-block)
+    (into [:map {:closed true}] unknown-empty-block)]])
 
 (defn validate-client-db
   "Validate datascript db as a vec of entity maps"
@@ -88,17 +148,18 @@
                          vals
                          (m/explain schema)
                          :errors)]
-     (do
-       (println "Found" (count errors) "errors:")
-       (if verbose
-         (let [full-maps (vec (vals ent-maps))]
-           (pprint/pprint
-            (map #(assoc %
-                         :entity (get full-maps (-> % :in first)))
-                 errors)))
-         (pprint/pprint errors))
-       (js/process.exit 1))
-     (println "Valid!"))))
+      (do
+        (println "Found" (count errors) "errors:")
+        (if verbose
+          (let [full-maps (vec (vals ent-maps))]
+            (pprint/pprint
+             (map #(assoc %
+                          :entity (get full-maps (-> % :in first))
+                          :schema (m/form (:schema %)))
+                  errors)))
+          (pprint/pprint errors))
+        (js/process.exit 1))
+      (println "Valid!"))))
 
 (defn- datoms->entity-maps
   "Returns entity maps for given :eavt datoms"
@@ -117,22 +178,28 @@
    :closed-maps {:alias :c
                  :desc "Validate maps marked with closed as :closed"}})
 
-(defn -main [args]
-  (let [graph-dir (first args)
-        options (cli/parse-opts args {:spec spec})
-        _ (when (or (nil? graph-dir) (:help options))
-            (println (str "Usage: $0 GRAPH-NAME [OPTIONS]\nOptions:\n"
-                          (cli/format-opts {:spec spec})))
-            (js/process.exit 1))
-        [dir db-name] (if (string/includes? graph-dir "/")
+(defn- validate-graph [graph-dir options]
+  (let [[dir db-name] (if (string/includes? graph-dir "/")
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
-        _ (sqlite-db/open-db! dir db-name)
+        _ (try (sqlite-db/open-db! dir db-name)
+               (catch :default e
+                 (println "Error: For graph" (str (pr-str graph-dir) ":") (str e))
+                 (js/process.exit 1)))
         conn (sqlite-cli/read-graph db-name)
         datoms (d/datoms @conn :eavt)
         ent-maps (datoms->entity-maps datoms)]
     (println "Read graph" (str db-name " with " (count datoms) " datoms!"))
     (validate-client-db ent-maps options)))
+
+(defn -main [argv]
+  (let [{:keys [args opts]} (cli/parse-args argv {:spec spec})
+        _ (when (or (empty? args) (:help opts))
+            (println (str "Usage: $0 GRAPH-NAME [& ADDITIONAL-GRAPHS] [OPTIONS]\nOptions:\n"
+                          (cli/format-opts {:spec spec})))
+            (js/process.exit 1))]
+    (doseq [graph-dir args]
+      (validate-graph graph-dir opts))))
 
 (when (= nbb/*file* (:file (meta #'-main)))
   (-main *command-line-args*))
