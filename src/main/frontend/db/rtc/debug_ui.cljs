@@ -93,8 +93,7 @@
                                (let [s (or s (<! (rtc-core/<init-state)))
                                      graph-list (with-sub-data-from-ws s
                                                   (<! (ws/<send! s {:req-id (get-req-id)
-                                                                    :action "list-graphs"
-                                                                    :graph-uuid "placeholder"}))
+                                                                    :action "list-graphs"}))
                                                   (:graphs (<! (get-result-ch))))]
                                  (reset! (::remote-graphs state) (map :graph-uuid graph-list))
                                  (reset! debug-state s)))))]
