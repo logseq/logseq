@@ -258,7 +258,7 @@
                                       (swap! *property-schema assoc :enum-config {:values values
                                                                                   :order new-order})
                                       (update-property! property @*property-name @*property-schema))))
-                   :parent-node :ul
+                   :parent-node :ul.list-none
                    :child-node :li}))
      (ui/dropdown
       (fn [{:keys [toggle-fn]}]
@@ -682,7 +682,7 @@
                                                          :properties properties')]
                                        (when (seq properties')
                                          (property-handler/class-set-schema! (state/get-current-repo) (:block/uuid block) schema))))
-                      :parent-node :ul
+                      :parent-node :ul.list-none
                       :child-node :li}))
         (for [[k v] properties]
           (property-cp block k v opts))))))
