@@ -301,7 +301,14 @@
             class-new-schema (assoc class-schema :properties new-properties)]
         (db/transact! repo [{:db/id (:db/id class)
                              :block/schema class-new-schema}]
-                      {:outliner-op :save-block})))))
+          {:outliner-op :save-block})))))
+
+(defn class-set-schema!
+  [repo class schema]
+  (when (contains? (:block/type class) "class")
+    (db/transact! repo [{:db/id (:db/id class)
+                         :block/schema schema}]
+                  {:outliner-op :save-block})))
 
 (defn batch-set-property!
   "Notice that this works only for properties with cardinality equals to `one`."
