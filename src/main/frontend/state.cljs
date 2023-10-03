@@ -74,6 +74,8 @@
 
       ;; left sidebar
       :ui/navigation-item-collapsed?         {}
+      :ui/recent-pages                       (or (storage/get :ui/recent-pages) {})
+      :ui/recent-search                      (or (storage/get :ui/recent-search) {})
 
       ;; right sidebar
       :ui/settings-open?                     false
@@ -1856,6 +1858,24 @@ Similar to re-frame subscriptions"
   [v]
   (set-state! :copy/export-block-text-indent-style v)
   (storage/set :copy/export-block-text-indent-style v))
+
+(defn get-recent-pages
+  []
+  (get-in @state [:ui/recent-pages (get-current-repo)]))
+
+(defn set-recent-pages!
+  [v]
+  (set-state! [:ui/recent-pages (get-current-repo)] v)
+  (storage/set :ui/recent-pages (:ui/recent-pages @state)))
+
+(defn get-recent-search
+  []
+  (get-in @state [:ui/recent-search (get-current-repo)]))
+
+(defn set-recent-search!
+  [v]
+  (set-state! [:ui/recent-search (get-current-repo)] v)
+  (storage/set :ui/recent-search (:ui/recent-search @state)))
 
 (defn get-export-block-text-remove-options []
   (:copy/export-block-text-remove-options @state))

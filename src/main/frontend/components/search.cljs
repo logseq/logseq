@@ -395,7 +395,10 @@
                    {:style {:margin-left 12}
                     :on-click #(state/pub-event! [:modal/command-palette])}
                    (ui/icon "command" {:style {:font-size 20}})])])]]
-   (let [recent-search (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
+   (let [recent-search (mapv (fn [q] {:type :search :data q})
+                             (if (config/db-based-graph? (state/get-current-repo))
+                               (state/get-recent-search)
+                               (db/get-key-value :recent/search)))
          pages (->> (recent-handler/get-recent-pages)
                     (mapv (fn [page] {:type :page :data page})))
          result (concat (take 5 recent-search) pages)]
