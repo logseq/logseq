@@ -7,7 +7,7 @@
   Both `target` and `to` are indices."
   [items {:keys [target to]}]
   (let [items (vec items)]
-    (when (and target to (not= target to))
+    (if (and target to (not= target to))
       (let [result (->>
                     (if (< target to)
                       [(util/safe-subvec items 0 target)
@@ -27,4 +27,5 @@
             (prn :reorder-data {:items items
                                 :target target
                                 :to to})
-            items))))))
+            items)))
+      items)))
