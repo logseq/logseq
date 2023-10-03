@@ -3,6 +3,7 @@
    [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [frontend.config :as config]
             [frontend.util :as util]
+            [frontend.db.rtc.const :as rtc-const]
             [cljs.core.async :as async :refer [<! >! chan go go-loop offer!
                                                poll! timeout]]))
 
@@ -23,6 +24,7 @@
 (defn send!
   [ws message]
   (assert (= js/WebSocket.OPEN (.-readyState ws)))
+  (assert (rtc-const/data-to-ws-validator (rtc-const/data-to-ws-decoder message)) message)
   (.send ws (js/JSON.stringify (clj->js message))))
 
 (declare <send!)

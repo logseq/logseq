@@ -40,18 +40,25 @@
   (go
     (let [{:keys [url key all-blocks-str]}
           (with-sub-data-from-ws state
-            (<! (<send! state {:req-id (get-req-id) :action "presign-put-temp-s3-obj" :graph-uuid "not-yet"}))
+            (<! (<send! state {:req-id (get-req-id) :action "presign-put-temp-s3-obj"}))
             (let [all-blocks (export-as-blocks repo)
                   all-blocks-str (transit/write (transit/writer :json) all-blocks)]
               (merge (<! (get-result-ch)) {:all-blocks-str all-blocks-str})))]
       (<! (http/put url {:body all-blocks-str}))
       (with-sub-data-from-ws state
-        (<! (<send! state {:req-id (get-req-id) :action "full-upload-graph" :graph-uuid "not-yet" :s3-key key}))
+        (<! (<send! state {:req-id (get-req-id) :action "full-upload-graph" :s3-key key}))
         (let [r (<! (get-result-ch))]
           (if-not (:graph-uuid r)
             (ex-info "upload graph failed" r)
             (do (<! (p->c (op/<update-graph-uuid! repo (:graph-uuid r))))
                 r)))))))
+
+(def block-type-ident->str
+  {:block-type/property   "property"
+   :block-type/class      "class"
+   :block-type/whiteboard "whiteboard"
+   :block-type/macros     "macros"
+   :block-type/object     "object"})
 
 
 (defn- replace-db-id-with-temp-id
@@ -61,11 +68,16 @@
      (let [db-id (:db/id block)
            block-parent (:db/id (:block/parent block))
            block-left (:db/id (:block/left block))
-           block-alias (map :db/id (:block/alias block))]
+           block-alias (map :db/id (:block/alias block))
+           block-tags (map :db/id (:block/tags block))
+           block-type (keep (comp block-type-ident->str :db/ident) (:block/type block))]
+       ;; TODO: :block/tags :block/type
        (cond-> (assoc block :db/id (str db-id))
          block-parent (assoc :block/parent (str block-parent))
          block-left (assoc :block/left (str block-left))
-         (seq block-alias) (assoc :block/alias (map str block-alias)))))
+         (seq block-alias) (assoc :block/alias (map str block-alias))
+         (seq block-tags)  (assoc :block/tags (map str block-tags))
+         (seq block-type)  (assoc :block/type block-type))))
    blocks))
 
 (def page-of-block

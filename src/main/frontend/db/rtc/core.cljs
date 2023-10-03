@@ -16,9 +16,28 @@
             [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.util :as util]
             [malli.core :as m]
-            [malli.transform :as mt]
             [malli.util :as mu]))
 
+
+;;                     +-------------+
+;;                     |             |
+;;                     |   server    |
+;;                     |             |
+;;                     +----^----+---+
+;;                          |    |
+;;                          |    |
+;;                          |   rtc-const/data-from-ws-schema
+;;                          |    |
+;; rtc-const/data-to-ws-schema   |
+;;                          |    |
+;;                          |    |
+;;                          |    |
+;;                     +----+----v---+                     +------------+
+;;                     |             +--------------------->            |
+;;                     |   client    |                     |  indexeddb |
+;;                     |             |<--------------------+            |
+;;                     +-------------+                     +------------+
+;;                                frontend.db.rtc.op/op-schema
 
 (def state-schema
   "
@@ -49,12 +68,6 @@
 (def rtc-state-schema
   [:enum :open :closed])
 (def rtc-state-validator (m/validator rtc-state-schema))
-
-(def data-from-ws-decoder (m/decoder rtc-const/data-from-ws-schema mt/string-transformer))
-
-(def data-from-ws-validator (fn [data] (if ((m/validator rtc-const/data-from-ws-schema) data)
-                                         true
-                                         (prn data))))
 
 
 (defn apply-remote-remove-ops
@@ -240,7 +253,7 @@
 
 (defn <apply-remote-data
   [repo data-from-ws]
-  {:pre [(data-from-ws-validator data-from-ws)]}
+  (assert (rtc-const/data-from-ws-validator data-from-ws) data-from-ws)
   (go
     (let [
           affected-blocks-map (:affected-blocks data-from-ws)
@@ -435,7 +448,7 @@
           ;; else
           (throw (ex-info "Unavailable" {:remote-ex remote-ex})))
         (do (<! (p->c (op/<clean-ops repo op-keys)))
-            (<! (<apply-remote-data repo (data-from-ws-decoder r)))
+            (<! (<apply-remote-data repo (rtc-const/data-from-ws-decoder r)))
             (prn :<client-op-update-handler r))))))
 
 (defn <loop-for-rtc
@@ -447,7 +460,7 @@
     (reset! (:*repo state) repo)
     (reset! (:*rtc-state state) :open)
     (let [{:keys [data-from-ws-pub client-op-update-chan]} state
-          push-data-from-ws-ch (chan (async/sliding-buffer 100) (map data-from-ws-decoder))
+          push-data-from-ws-ch (chan (async/sliding-buffer 100) (map rtc-const/data-from-ws-decoder))
           stop-rtc-loop-chan (chan)]
       (reset! (:*stop-rtc-loop-chan state) stop-rtc-loop-chan)
       (<! (ws/<ensure-ws-open! state))
