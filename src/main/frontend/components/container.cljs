@@ -11,6 +11,7 @@
             [frontend.components.select :as select]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
+            [frontend.components.dnd :as dnd-component]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -94,38 +95,6 @@
      (when-not (string/blank? page-icon) page-icon)
      default-icon))) ;; Fall back to default if icon is undefined or empty
 
-(rum/defcs favorite-item <
-  (rum/local nil ::up?)
-  (rum/local nil ::dragging-over)
-  [state _t name icon]
-  (let [up? (get state ::up?)
-        dragging-over (get state ::dragging-over)
-        target (state/sub :favorites/dragging)]
-    [:li.favorite-item
-     {:key name
-      :title name
-      :data-ref name
-      :class (if (and target @dragging-over (not= target @dragging-over))
-               "dragging-target"
-               "")
-      :draggable true
-      :on-drag-start (fn [event]
-                       (editor-handler/block->data-transfer! name event)
-                       (state/set-state! :favorites/dragging name))
-      :on-drag-over (fn [e]
-                      (util/stop e)
-                      (reset! dragging-over name)
-                      (when-not (= name (get @state/state :favorites/dragging))
-                        (reset! up? (util/move-up? e))))
-      :on-drag-leave (fn [_e]
-                       (reset! dragging-over nil))
-      :on-drop (fn [e]
-                 (page-handler/reorder-favorites! {:to name
-                                                   :up? (util/move-up? e)})
-                 (reset! up? nil)
-                 (reset! dragging-over nil))}
-     (page-name name icon false)]))
-
 (rum/defc favorites < rum/reactive
   [t]
   (let [favorites (->> (:favorites (state/sub-config))
@@ -148,10 +117,21 @@
         (rfe/push-state :page {:name "Favorites"})
         (util/stop e))}
      (when (seq favorite-entities)
-       [:ul.favorites.text-sm
-        (for [entity favorite-entities]
-          (let [icon (get-page-icon entity)]
-            (favorite-item t (:block/name entity) icon)))]))))
+       (let [favorites (map
+                        (fn [e]
+                          (let [name (:block/name e)
+                                icon (get-page-icon e)]
+                            {:id (str (:db/id e))
+                             :content (page-name name icon false)}))
+                        favorite-entities)]
+         (dnd-component/items favorites
+                              {:droppable-id "favorites-droppable"
+                               :on-drag-end (fn [{:keys [source destination]}]
+                                              (page-handler/reorder-favorites!
+                                               {:target (:index source)
+                                                :to (:index destination)}))
+                               :parent-node :ul.favorites.text-sm
+                               :child-node :li.favorite-item}))))))
 
 (rum/defc recent-pages < rum/reactive db-mixins/query
   [t]

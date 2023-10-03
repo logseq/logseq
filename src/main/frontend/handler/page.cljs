@@ -77,14 +77,13 @@
      (file-page-handler/rename! old-name new-name redirect?))))
 
 (defn reorder-favorites!
-  [{:keys [to up?]}]
-  (let [target (get @state/state :favorites/dragging)
-        favorites (->> (reorder-handler/reorder-items (:favorites (state/get-config))
-                                                      {:target target
-                                                       :to to
-                                                       :up? up?})
-                       (mapv util/safe-page-name-sanity-lc))]
-    (config-handler/set-config! :favorites favorites)))
+  [opts]
+  (let [favorites (:favorites (state/get-config))
+        favorites' (->> (reorder-handler/reorder-items (:favorites (state/get-config))
+                                                       opts)
+                        (mapv util/safe-page-name-sanity-lc))]
+    (when (= (count favorites) (count favorites'))
+      (config-handler/set-config! :favorites favorites'))))
 
 (defn has-more-journals?
   []
