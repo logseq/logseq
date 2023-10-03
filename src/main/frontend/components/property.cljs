@@ -636,35 +636,55 @@
     (db/sub-block (:db/id linked-block))
     (db/sub-block (:db/id block))))
 
+(rum/defc property-cp
+  [block k v {:keys [inline-text] :as opts}]
+  (when (uuid? k)
+    (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid k])))]
+      (let [type (get-in property [:block/schema :type] :default)
+            block? (and (contains? #{:default :template} type)
+                        (uuid? v)
+                        (db/entity [:block/uuid v]))
+            collapsed? (when block? (property-collapsed? block property))]
+        [:div {:class (if block?
+                        "flex flex-1 flex-col gap-1 property-block"
+                        "property-pair items-start")}
+         [:div.property-key
+          {:class "col-span-2"}
+          (property-key block property (assoc (select-keys opts [:class-schema?])
+                                              :block? block?
+                                              :collapsed? collapsed?
+                                              :inline-text inline-text))]
+         (if (and (:class-schema? opts) (:page-configure? opts))
+           [:div.property-description.text-sm.opacity-70
+            {:class "col-span-3"}
+            (inline-text {} :markdown (get-in property [:block/schema :description]))]
+           (when-not collapsed?
+             [:div.property-value {:class (if block?
+                                            "block-property-value"
+                                            "col-span-3 inline-grid")}
+              (pv/property-value block property v opts)]))]))))
+
 (rum/defc properties-section < rum/reactive db-mixins/query
-  [block properties {:keys [inline-text] :as opts}]
-  (when (seq properties)
-    (for [[k v] properties]
-      (when (uuid? k)
-        (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid k])))]
-          (let [type (get-in property [:block/schema :type] :default)
-                block? (and (contains? #{:default :template} type)
-                            (uuid? v)
-                            (db/entity [:block/uuid v]))
-                collapsed? (when block? (property-collapsed? block property))]
-            [:div {:class (if block?
-                            "flex flex-1 flex-col gap-1 property-block"
-                            "property-pair items-start")}
-             [:div.property-key
-              {:class "col-span-2"}
-              (property-key block property (assoc (select-keys opts [:class-schema?])
-                                                  :block? block?
-                                                  :collapsed? collapsed?
-                                                  :inline-text inline-text))]
-             (if (and (:class-schema? opts) (:page-configure? opts))
-               [:div.property-description.text-sm.opacity-70
-                {:class "col-span-3"}
-                (inline-text {} :markdown (get-in property [:block/schema :description]))]
-               (when-not collapsed?
-                 [:div.property-value {:class (if block?
-                                                "block-property-value"
-                                                "col-span-3 inline-grid")}
-                  (pv/property-value block property v opts)]))]))))))
+  [block properties opts]
+  (let [class? (:class-schema? opts)]
+    (when (seq properties)
+      (if class?
+        (let [choices (map (fn [[k v]]
+                             {:id (str k)
+                              :content (property-cp block k v opts)}) properties)]
+          (dnd/items choices
+                     {:droppable-id (str "class-schema-" (:db/id block))
+                      :on-drag-end (fn [{:keys [source destination]}]
+                                     (let [opts {:target (:index source)
+                                                 :to (:index destination)}
+                                           properties (reorder-handler/reorder-items (map first properties) opts)
+                                           schema (assoc (:block/schema block)
+                                                         :properties properties)]
+                                       (property-handler/class-set-schema! (state/get-current-repo) (:block/uuid block) schema)))
+                      :parent-node :ul
+                      :child-node :li}))
+        (for [[k v] properties]
+          (property-cp block k v opts))))))
 
 (rum/defcs hidden-properties < (rum/local true ::hide?)
   [state block hidden-properties opts]

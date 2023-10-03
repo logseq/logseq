@@ -45,7 +45,7 @@
       (when-let [page (db/pull [:block/name (util/page-name-sanity-lc page-name)])]
        (set-block-property! repo (:block/uuid page) key value))
       (file-page-property/add-property! page-name key value))))
- 
+
 (defn set-editing-new-property!
   [value]
   (state/set-state! :ui/new-property-input-id value))
@@ -66,6 +66,12 @@
   (when-let [class (db/entity repo [:block/uuid class-uuid])]
     (when (config/db-based-graph? repo)
       (db-property-handler/class-remove-property! repo class k-uuid))))
+
+(defn class-set-schema!
+  [repo class-uuid schema]
+  (when-let [class (db/entity repo [:block/uuid class-uuid])]
+    (when (config/db-based-graph? repo)
+      (db-property-handler/class-set-schema! repo class schema))))
 
 (defn remove-id-property
   [repo format content]
