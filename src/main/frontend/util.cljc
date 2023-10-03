@@ -738,6 +738,7 @@
 
 (defn safe-subvec [xs start end]
   (if (or (neg? start)
+          (> start end)
           (> end (count xs)))
     []
     (subvec xs start end)))

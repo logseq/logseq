@@ -248,8 +248,6 @@
 
       :view/components                       {}
 
-      :favorites/dragging                    nil
-
       :srs/mode?                             false
 
       :srs/cards-due-count                   nil

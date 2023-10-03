@@ -1,22 +1,22 @@
 (ns frontend.handler.reorder
-  "Reorder items")
-
-(defn- split-col-by-element
-  [col element]
-  (let [col (vec col)
-        idx (.indexOf col element)]
-    [(subvec col 0 (inc idx))
-     (subvec col (inc idx))]))
+  "Reorder items"
+  (:require [frontend.util :as util]))
 
 (defn reorder-items
-  [items {:keys [target to up?]}]
-  (when (and target to (not= target to))
-    (let [[prev next] (split-col-by-element items to)
-          [prev next] (mapv #(remove (fn [e] (= target e)) %) [prev next])]
+  "Reorder items after moving 'target' to 'to'.
+  Both `target` and `to` are indices."
+  [items {:keys [target to]}]
+  (let [items (vec items)]
+    (when (and target to (not= target to))
       (->>
-       (if up?
-         (concat (drop-last prev) [target (last prev)] next)
-         (concat prev [target] next))
-       (remove nil?)
-       distinct
-       vec))))
+       (if (< target to)
+         [(util/safe-subvec items 0 target)
+          (util/safe-subvec items (inc target) (inc to))
+          [(nth items target)]
+          (util/safe-subvec items (inc to) (count items))]
+         [(util/safe-subvec items 0 to)
+          [(nth items target)]
+          (util/safe-subvec items to target)
+          (util/safe-subvec items (inc target) (count items))])
+       (apply concat)
+       (vec)))))
