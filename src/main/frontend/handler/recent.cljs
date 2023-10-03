@@ -8,7 +8,7 @@
 (defn add-page-to-recent!
   [repo page click-from-recent?]
   (if (config/db-based-graph? repo)
-    (db-based/add-page-to-recent! repo page click-from-recent?)
+    (db-based/add-page-to-recent! page click-from-recent?)
     (file-recent-handler/add-page-to-recent! repo page click-from-recent?)))
 
 (defn get-recent-pages
