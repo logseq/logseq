@@ -677,10 +677,11 @@
                       :on-drag-end (fn [{:keys [source destination]}]
                                      (let [opts {:target (:index source)
                                                  :to (:index destination)}
-                                           properties (reorder-handler/reorder-items (map first properties) opts)
+                                           properties' (reorder-handler/reorder-items (map first properties) opts)
                                            schema (assoc (:block/schema block)
-                                                         :properties properties)]
-                                       (property-handler/class-set-schema! (state/get-current-repo) (:block/uuid block) schema)))
+                                                         :properties properties')]
+                                       (when (seq properties')
+                                         (property-handler/class-set-schema! (state/get-current-repo) (:block/uuid block) schema))))
                       :parent-node :ul
                       :child-node :li}))
         (for [[k v] properties]
