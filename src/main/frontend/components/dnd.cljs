@@ -5,7 +5,8 @@
             ["@dnd-kit/utilities" :refer [CSS]]
             ["@dnd-kit/core" :refer [DndContext closestCenter KeyboardSensor PointerSensor useSensor useSensors DragOverlay]]
             ["react-dom" :refer [createPortal]]
-            [frontend.rum :as r]))
+            [frontend.rum :as r]
+            [frontend.util :as util]))
 
 (def dnd-context (r/adapt-class DndContext))
 (def sortable-context (r/adapt-class SortableContext))
@@ -35,7 +36,7 @@
         id->item (zipmap ids col)
         [items set-items] (rum/use-state items)
         [_active-id set-active-id] (rum/use-state nil)
-        sensors (useSensors (useSensor PointerSensor)
+        sensors (useSensors (useSensor PointerSensor (bean/->js {:activationConstraint {:distance 8}}))
                             (useSensor KeyboardSensor #js {:coordinateGetter sortableKeyboardCoordinates}))
         dnd-opts {:sensors sensors
                   :collisionDetection closestCenter
