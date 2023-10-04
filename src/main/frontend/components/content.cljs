@@ -5,7 +5,6 @@
             [frontend.components.editor :as editor]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.export :as export]
-            [frontend.components.property :as property]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.srs :as srs]
@@ -28,7 +27,6 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]
-            [logseq.db.property :as db-property]
             [frontend.config :as config]))
 
 ;; TODO i18n support
@@ -346,22 +344,6 @@
            (ui/menu-link options title)
            title))])))
 
-(rum/defc property-custom-context-menu-content
-  [block property {:keys [class-schema?]}]
-  (let [repo (state/get-current-repo)
-        built-in-property? (contains? db-property/built-in-properties-keys-str (:block/name property))]
-    [:.menu-links-wrapper
-     (ui/menu-link
-      {:key "Delete this property"
-       :on-click (fn []
-                   (let [class? (contains? (:block/type block) "class")
-                         f (if (and class? class-schema?)
-                             property-handler/class-remove-property!
-                             property-handler/remove-block-property!)]
-                     (f repo (:block/uuid block) (:block/uuid property))))}
-      (t :context-menu/delete-property)
-      nil)]))
-
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
 ;; blocks were already selected.
@@ -375,22 +357,9 @@
                       (let [target (gobj/get e "target")
                             block-el (.closest target ".bullet-container[blockid]")
                             block-id (some-> block-el (.getAttribute "blockid"))
-                            property-el (.closest target ".property-k")
-                            property-id (some-> property-el (.getAttribute "data-propertyid"))
-                            property-block-id (some-> property-el (.getAttribute "data-blockid"))
                             {:keys [block block-ref]} (state/sub :block-ref/context)
                             {:keys [page]} (state/sub :page-title/context)]
                         (cond
-                          (and property-id property-block-id)
-                          (let [block (db/entity [:block/uuid (uuid property-block-id)])
-                                property (db/entity [:block/uuid (uuid property-id)])]
-                            (when (and block property (not config/publishing?))
-                              (common-handler/show-custom-context-menu!
-                               e
-                               (property-custom-context-menu-content block
-                                                                     property
-                                                                     {:class-schema? (some-> property-el (.getAttribute "data-class-schema") (= "true"))}))))
-
                           page
                           (do
                             (common-handler/show-custom-context-menu!

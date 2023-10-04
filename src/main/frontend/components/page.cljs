@@ -377,7 +377,8 @@
         (when class?
           (page-properties page true))
         (when property?
-          (property/property-config page (assoc opts :inline-text component-block/inline-text)))])]))
+          (property/property-config page page (assoc opts
+                                                     :inline-text component-block/inline-text)))])]))
 
 (rum/defc page-configure
   [page *hover? *configuring?]
