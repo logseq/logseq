@@ -280,7 +280,7 @@
   (rum/local nil ::property-name)
   (rum/local nil ::property-schema)
   {:will-mount (fn [state]
-                 (let [[property] (:rum/args state)]
+                 (let [[_block property _opts] (:rum/args state)]
                    (reset! (::property-name state) (:block/original-name property))
                    (reset! (::property-schema state) (:block/schema property))
                    state))}
