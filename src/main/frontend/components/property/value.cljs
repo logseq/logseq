@@ -266,14 +266,15 @@
 (defn create-new-block!
   [block property value]
   (let [repo (state/get-current-repo)
-        pid (:block/uuid (db/entity [:block/name "created-in-property"]))
         page-id (or (:db/id (:block/page block)) (:db/id block))
         parent-id (db/new-block-id)
+        metadata {:created-from-block (:block/uuid block)
+                  :created-from-property (:block/uuid property)}
         parent (-> {:block/uuid parent-id
                     :block/format :markdown
                     :block/content ""
                     :block/page {:db/id page-id}
-                    :block/properties {pid true}}
+                    :block/metadata metadata}
                    outliner-core/block-with-timestamps)
         child-1-id (db/new-block-id)
         child-1 (-> {:block/uuid child-1-id
@@ -282,7 +283,7 @@
                      :block/page {:db/id page-id}
                      :block/parent [:block/uuid parent-id]
                      :block/left [:block/uuid parent-id]
-                     :block/properties {pid true}}
+                     :block/metadata metadata}
                     outliner-core/block-with-timestamps
                     (editor-handler/wrap-parse-block))
         child-2-id (db/new-block-id)
@@ -292,7 +293,7 @@
                      :block/page {:db/id page-id}
                      :block/parent [:block/uuid parent-id]
                      :block/left [:block/uuid child-1-id]
-                     :block/properties {pid true}}
+                     :block/metadata metadata}
                     outliner-core/block-with-timestamps)
         blocks (if (string/blank? value)
                  [parent child-1]
@@ -305,15 +306,13 @@
 (defn create-new-block-from-template!
   [block property template]
   (let [repo (state/get-current-repo)
-        pid (:block/uuid (db/entity [:block/name "created-in-property"]))
         page-id (or (:db/id (:block/page block)) (:db/id block))
         block-id (db/new-block-id)
         value-block (-> {:block/uuid block-id
                          :block/format :markdown
                          :block/content ""
                          :block/tags #{(:db/id template)}
-                         :block/page {:db/id page-id}
-                         :block/properties {pid true}}
+                         :block/page {:db/id page-id}}
                         outliner-core/block-with-timestamps)
         tx-data [value-block]]
     (db/transact! repo tx-data {:outliner-op :insert-blocks})

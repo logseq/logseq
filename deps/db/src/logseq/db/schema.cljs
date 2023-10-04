@@ -71,6 +71,9 @@
    ;; map, key -> original property value's content
    :block/properties-text-values {}
 
+   ;; non-indexed metadata
+   :block/metadata {}
+
    ;; first block that's not a heading or unordered list
    :block/pre-block? {}
 

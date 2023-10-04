@@ -66,8 +66,7 @@
             :visible true}
    :filters {:schema {:type :map}}
    :exclude-from-graph-view {:schema {:type :checkbox :hide? true}
-                             :visible true}
-   :created-in-property {:schema {:type :checkbox}}})
+                             :visible true}})
 
 (def visible-built-in-properties
   "These are built-in properties that users can see and use"
