@@ -5,36 +5,7 @@
             ["@dnd-kit/utilities" :refer [CSS]]
             ["@dnd-kit/core" :refer [DndContext closestCenter KeyboardSensor PointerSensor useSensor useSensors DragOverlay]]
             ["react-dom" :refer [createPortal]]
-            [frontend.rum :as r]
-            [frontend.util :as util]))
-
-(defn- reorder-items
-  "Reorder items after moving 'target' to 'to'.
-  Both `target` and `to` are indices."
-  [items {:keys [target to]}]
-  (let [items (vec items)]
-    (if (and target to (not= target to))
-      (let [result (->>
-                    (if (< target to)
-                      [(util/safe-subvec items 0 target)
-                       (util/safe-subvec items (inc target) (inc to))
-                       [(nth items target)]
-                       (util/safe-subvec items (inc to) (count items))]
-                      [(util/safe-subvec items 0 to)
-                       [(nth items target)]
-                       (util/safe-subvec items to target)
-                       (util/safe-subvec items (inc target) (count items))])
-                    (apply concat)
-                    (vec))]
-        (if (= (count items) (count result))
-          result
-          (do
-            (js/console.error "Reorder failed:")
-            (prn :reorder-data {:items items
-                                :target target
-                                :to to})
-            items)))
-      items)))
+            [frontend.rum :as r]))
 
 (def dnd-context (r/adapt-class DndContext))
 (def sortable-context (r/adapt-class SortableContext))
@@ -59,11 +30,13 @@
 
 (rum/defc items
   [col {:keys [on-drag-end parent-node]}]
-  (let [[items set-items] (rum/use-state col)
-        [active-id set-active-id] (rum/use-state nil)
+  (let [ids (mapv :id col)
+        items (bean/->js ids)
+        id->item (zipmap ids col)
+        [items set-items] (rum/use-state items)
+        [_active-id set-active-id] (rum/use-state nil)
         sensors (useSensors (useSensor PointerSensor)
                             (useSensor KeyboardSensor #js {:coordinateGetter sortableKeyboardCoordinates}))
-        ids (map :id col)
         dnd-opts {:sensors sensors
                   :collisionDetection closestCenter
                   :onDragStart (fn [event]
@@ -74,15 +47,16 @@
                                  (when-not (= active-id over-id)
                                    (let [old-index (.indexOf ids active-id)
                                          new-index (.indexOf ids over-id)
-                                         new-items (reorder-items items {:target old-index
-                                                                         :to new-index})]
+                                         new-items (arrayMove items old-index new-index)]
                                      (set-items new-items)
                                      (when (fn? on-drag-end)
-                                       (on-drag-end (mapv :value new-items)))))
+                                       (let [new-values (mapv (fn [id] (:value (id->item id))) new-items)]
+                                         (prn :debug :new-values new-values)
+                                         (on-drag-end new-values)))))
                                  (set-active-id nil)))}
         sortable-opts {:items items
                        :strategy verticalListSortingStrategy}
-        children (for [item items]
+        children (for [item col]
                    (let [id (str (:id item))]
                      (rum/with-key
                        (sortable-item {:key id
