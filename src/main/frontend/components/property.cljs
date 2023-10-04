@@ -284,12 +284,15 @@
                    (reset! (::property-name state) (:block/original-name property))
                    (reset! (::property-schema state) (:block/schema property))
                    state))}
-  [state property {:keys [toggle-fn inline-text] :as opts}]
+  [state block property {:keys [toggle-fn inline-text class-schema? add-new-property?] :as opts}]
   (let [*property-name (::property-name state)
         *property-schema (::property-schema state)
         built-in-property? (contains? db-property/built-in-properties-keys-str (:block/original-name property))
         property (db/sub-block (:db/id property))
-        disabled? (or built-in-property? config/publishing?)]
+        disabled? (or built-in-property? config/publishing?)
+        hide-delete? (or (= (:db/id block) (:db/id property)) ; property page
+                         add-new-property?)
+        class? (contains? (:block/type block) "class")]
     [:div.property-configure.flex.flex-1.flex-col
      [:div.grid.gap-2.p-1
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
@@ -405,7 +408,22 @@
           :on-click (fn [e]
                       (util/stop e)
                       (update-property! property @*property-name @*property-schema)
-                      (when toggle-fn (toggle-fn)))))]]]))
+                      (when toggle-fn (toggle-fn)))))]
+
+      (when-not hide-delete?
+        [:hr])
+
+      (when-not hide-delete?
+        [:a.fade-link {:on-click (fn [e]
+                                   (util/stop e)
+                                   (when (js/confirm "Are you sure to delete this property?")
+                                     (let [repo (state/get-current-repo)
+                                           f (if (and class? class-schema?)
+                                               property-handler/class-remove-property!
+                                               property-handler/remove-block-property!)]
+                                       (f repo (:block/uuid block) (:block/uuid property))
+                                       (when toggle-fn (toggle-fn)))))}
+         "Delete property from this block"])]]))
 
 (defn- get-property-from-db [name]
   (when-not (string/blank? name)
@@ -476,8 +494,9 @@
                   (pv/property-value entity property @*property-value (assoc opts :editing? true)))
                 (fn [{:keys [toggle-fn]}]
                   [:div.p-6
-                   (property-config property (merge opts {:toggle-fn toggle-fn
-                                                          :block entity}))])
+                   (property-config entity property (merge opts {:toggle-fn toggle-fn
+                                                                 :block entity
+                                                                 :add-new-property? true}))])
                 {:initial-open? true
                  :modal-class (util/hiccup->class
                                "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
@@ -603,7 +622,10 @@
            [:div {:style {:padding-left 6}} (:block/original-name property)]]))
       (fn [{:keys [toggle-fn]}]
         [:div.p-8
-         (property-config property {:toggle-fn toggle-fn :inline-text inline-text})])
+         (property-config block property
+                          {:toggle-fn toggle-fn
+                           :inline-text inline-text
+                           :class-schema? class-schema?})])
       {:modal-class (util/hiccup->class
                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg")})]))
 

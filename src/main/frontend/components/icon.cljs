@@ -35,7 +35,7 @@
                       (map (fn [k]
                              (-> (string/replace (csk/->Camel_Snake_Case (name k)) "_" " ")
                                  (string/replace-first "Icon " ""))))
-       ;; FIXME: somehow those icons don't work
+                      ;; FIXME: somehow those icons don't work
                       (remove #{"Ab" "Ab 2" "Ab Off"}))]
       (reset! *tabler-icons result)
       result)))
