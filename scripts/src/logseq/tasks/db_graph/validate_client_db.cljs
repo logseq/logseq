@@ -91,16 +91,25 @@
     block-attrs
     [[:block/content :string]
      [:block/left :int]
-     [:block/parent :int]])))
+     [:block/parent :int]
+     [:block/metadata {:optional true}
+      [:map {:closed false}
+       [:created-from-block :uuid]
+       [:created-from-property :uuid]]]])))
 
-;; TODO: Remove this when bug is fixed with blank content that has no
-;; :block/left or :block/parent
-(def normal-dummy-block
+(def normal-empty-block
+  "This empty block is created when a default property value has multiple
+  blocks. This block doesn't have :block/left or :block/parent attributes.
+  Unclear if this is intentional"
   (vec
    (concat
     [:map {:closed false}]
     block-attrs
-    [[:block/content [:= ""]]])))
+    [[:block/content [:= ""]]
+     [:block/metadata
+      [:map {:closed false}
+       [:created-from-block :uuid]
+       [:created-from-property :uuid]]]])))
 
 ;; TODO: Figure out where this is coming from
 (def unknown-empty-block
@@ -121,7 +130,7 @@
    [:or
     page-block
     normal-block
-    normal-dummy-block
+    normal-empty-block
     file-block
     unknown-empty-block]])
 
