@@ -381,8 +381,11 @@
         input-text-selected? (util/input-text-selected? input)
         new-m {:block/uuid (db/new-block-id)
                :block/content ""}
-        prev-block (-> (merge (select-keys block [:block/parent :block/left :block/format
-                                                  :block/page :block/journal?]) new-m)
+        prev-block (-> (merge (if (config/db-based-graph? (state/get-current-repo))
+                                (select-keys block [:block/parent :block/left :block/format :block/page])
+                                (select-keys block [:block/parent :block/left :block/format
+                                                    :block/page :block/journal?]))
+                              new-m)
                        (wrap-parse-block))
         left-block (db/pull (:db/id (:block/left block)))]
     (when input-text-selected?
@@ -413,8 +416,11 @@
         current-block (apply dissoc current-block db-schema/retract-attributes)
         new-m {:block/uuid (db/new-block-id)
                :block/content snd-block-text}
-        next-block (-> (merge (select-keys block [:block/parent :block/left :block/format
-                                                  :block/page :block/journal?]) new-m)
+        next-block (-> (merge (if (config/db-based-graph? (state/get-current-repo))
+                                (select-keys block [:block/parent :block/left :block/format :block/page])
+                                (select-keys block [:block/parent :block/left :block/format
+                                                    :block/page :block/journal?]))
+                              new-m)
                        (wrap-parse-block))
         sibling? (when block-self? false)]
     (outliner-insert-block! config current-block next-block {:sibling? sibling?
@@ -520,8 +526,10 @@
               content (if (seq properties)
                         (file-property/insert-properties-when-file-based repo format content properties)
                         content)
-              new-block (-> (select-keys block [:block/page :block/journal?
-                                                :block/journal-day])
+              new-block (-> (if db-based?
+                              (select-keys block [:block/page])
+                              ;; TODO: Figure out if journal attributes in this ns for file graphs is a bug
+                              (select-keys block [:block/page :block/journal? :block/journal-day]))
                             (assoc :block/content content
                                    :block/format format))
               new-block (assoc new-block :block/page
