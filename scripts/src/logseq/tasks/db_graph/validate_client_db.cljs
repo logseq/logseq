@@ -17,7 +17,10 @@
 
 (def page-or-block-attrs
   "Common attributes for page and normal blocks"
-  [[:block/properties {:optional true}
+  [[:block/uuid :uuid]
+   [:block/created-at :int]
+   [:block/updated-at :int]
+   [:block/properties {:optional true}
     [:map-of :uuid [:or
                     :string
                     :int
@@ -38,9 +41,6 @@
   (into
    [[:block/name :string]
     [:block/original-name :string]
-    [:block/uuid :uuid]
-    [:block/created-at :int]
-    [:block/updated-at :int]
     [:block/type {:optional true} [:enum "property" "class" "object" "whiteboard"]]
     [:block/namespace {:optional true} :int]
     ;; TODO: journal?, journal-day and format optional b/c of property
@@ -70,10 +70,9 @@
 (def block-attrs
   "Common attributes for normal blocks"
   (into
-   [[:block/uuid :uuid]
-    [:block/page :int]
+   [[:block/page :int]
     ;; refs
-    ;; left, parent are only optional b/c of dummy blocks
+    ;; TODO: left, parent are only optional b/c of dummy blocks
     [:block/left {:optional true} :int]
     [:block/parent {:optional true} :int]
     [:block/path-refs {:optional true} :any] ;;TODO
@@ -88,20 +87,7 @@
   "A normal block is a block with content and a page"
   (into block-attrs
         [[:block/content :string]
-         [:block/created-at :int]
-         [:block/updated-at :int]
-         ;; TODO: Try fixing journal attributes as it only happens on tagged blocks or blocks with refs
-         [:block/journal? {:optional true} :boolean]
-         [:block/journal-day {:optional true} :int]]))
-
-(def normal-link-block
-  (into block-attrs
-        [[:block/content :string]
-         [:block/link :int]
-         [:block/journal? :boolean]
-         [:block/journal-day {:optional true} :int]
-         [:block/created-at :int]
-         [:block/updated-at :int]]))
+         [:block/link {:optional true} :int]]))
 
 ;; TODO: Figure out where this is coming from
 (def unknown-empty-block
@@ -112,7 +98,7 @@
    [:block/tx-id {:optional true} :int]
    [:file/content :string]
    [:file/path :string]
-    ;; ;; TODO: Remove when bug is fixed
+   ;; TODO: Remove when bug is fixed
    [:file/last-modified-at {:optional true} :any]])
 
 (def client-db-schema
@@ -120,7 +106,6 @@
    [:or
     (into [:map {:closed false}] page-block)
     (into [:map {:closed false}] normal-block)
-    (into [:map {:closed false}] normal-link-block)
     (into [:map {:closed true}] file-block)
     (into [:map {:closed true}] unknown-empty-block)]])
 
