@@ -10,7 +10,6 @@
             [frontend.fs :as fs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.common.page :as page-common-handler]
-            [frontend.handler.reorder :as reorder-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.plugin :as plugin-handler]
@@ -77,13 +76,8 @@
      (file-page-handler/rename! old-name new-name redirect?))))
 
 (defn reorder-favorites!
-  [opts]
-  (let [favorites (:favorites (state/get-config))
-        favorites' (->> (reorder-handler/reorder-items (:favorites (state/get-config))
-                                                       opts)
-                        (mapv util/safe-page-name-sanity-lc))]
-    (when (= (count favorites) (count favorites'))
-      (config-handler/set-config! :favorites favorites'))))
+  [favorites]
+  (config-handler/set-config! :favorites favorites))
 
 (defn has-more-journals?
   []

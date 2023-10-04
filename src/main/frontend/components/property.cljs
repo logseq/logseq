@@ -11,7 +11,6 @@
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.reorder :as reorder-handler]
             [frontend.handler.property.util :as pu]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
@@ -246,20 +245,17 @@
      (let [choices (mapv (fn [id]
                            (let [item (assoc (get values id) :id id)]
                              {:id (str id)
-                              :content (choice-item-content property item values order *property-schema *property-name dropdown-opts)}))
+                              :value id
+                              :content [:li
+                                        (choice-item-content property item values order *property-schema *property-name dropdown-opts)]}))
                          order)]
        (dnd/items choices
-                  {:droppable-id "enum-droppable"
-                   :on-drag-end (fn [{:keys [source destination]}]
-                                  (let [opts {:target (:index source)
-                                              :to (:index destination)}
-                                        new-order (reorder-handler/reorder-items order opts)]
-                                    (when (seq new-order)
-                                      (swap! *property-schema assoc :enum-config {:values values
-                                                                                  :order new-order})
-                                      (update-property! property @*property-name @*property-schema))))
-                   :parent-node :ul.list-none
-                   :child-node :li}))
+                  {:on-drag-end (fn [new-order]
+                                  (when (seq new-order)
+                                    (swap! *property-schema assoc :enum-config {:values values
+                                                                                :order new-order})
+                                    (update-property! property @*property-name @*property-schema)))
+                   :parent-node :ul.list-none}))
      (ui/dropdown
       (fn [{:keys [toggle-fn]}]
         [:a.fade-link.flex.flex-row.items-center.gap-1.leading-8 {:on-click toggle-fn}
@@ -671,19 +667,15 @@
       (if class?
         (let [choices (map (fn [[k v]]
                              {:id (str k)
-                              :content (property-cp block k v opts)}) properties)]
+                              :content [:li
+                                        (property-cp block k v opts)]}) properties)]
           (dnd/items choices
-                     {:droppable-id (str "class-schema-" (:db/id block))
-                      :on-drag-end (fn [{:keys [source destination]}]
-                                     (let [opts {:target (:index source)
-                                                 :to (:index destination)}
-                                           properties' (reorder-handler/reorder-items (map first properties) opts)
-                                           schema (assoc (:block/schema block)
-                                                         :properties properties')]
-                                       (when (seq properties')
+                     {:on-drag-end (fn [properties]
+                                     (let [schema (assoc (:block/schema block)
+                                                         :properties properties)]
+                                       (when (seq properties)
                                          (property-handler/class-set-schema! (state/get-current-repo) (:block/uuid block) schema))))
-                      :parent-node :ul.list-none
-                      :child-node :li}))
+                      :parent-node :ul.list-none}))
         (for [[k v] properties]
           (property-cp block k v opts))))))
 

@@ -122,16 +122,13 @@
                           (let [name (:block/name e)
                                 icon (get-page-icon e)]
                             {:id (str (:db/id e))
-                             :content (page-name name icon false)}))
+                             :value name
+                             :content [:li.favorite-item (page-name name icon false)]}))
                         favorite-entities)]
          (dnd-component/items favorites
-                              {:droppable-id "favorites-droppable"
-                               :on-drag-end (fn [{:keys [source destination]}]
-                                              (page-handler/reorder-favorites!
-                                               {:target (:index source)
-                                                :to (:index destination)}))
-                               :parent-node :ul.favorites.text-sm
-                               :child-node :li.favorite-item}))))))
+                              {:on-drag-end (fn [favorites]
+                                              (page-handler/reorder-favorites! favorites))
+                               :parent-node :ul.favorites.text-sm}))))))
 
 (rum/defc recent-pages < rum/reactive db-mixins/query
   [t]
