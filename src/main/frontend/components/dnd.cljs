@@ -49,11 +49,18 @@
                                    (let [old-index (.indexOf ids active-id)
                                          new-index (.indexOf ids over-id)
                                          new-items (arrayMove items old-index new-index)]
-                                     (set-items new-items)
                                      (when (fn? on-drag-end)
-                                       (let [new-values (mapv (fn [id] (:value (id->item id))) new-items)]
-                                         (prn :debug :new-values new-values)
-                                         (on-drag-end new-values)))))
+                                       (let [new-values (->> (map (fn [id] (:value (id->item id))) new-items)
+                                                             (remove nil?)
+                                                             vec)]
+                                         (if (not= (count new-values) (count ids))
+                                           (do
+                                             (js/console.error "Dnd length not matched: ")
+                                             {:old-items items
+                                              :new-items new-items})
+                                           (do
+                                             (set-items new-items)
+                                             (on-drag-end new-values)))))))
                                  (set-active-id nil)))}
         sortable-opts {:items items
                        :strategy verticalListSortingStrategy}
