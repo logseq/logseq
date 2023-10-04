@@ -45,7 +45,9 @@
       (icon-component/icon-search
        {:on-chosen (fn [e icon]
                      (on-chosen e icon)
-                     (toggle-fn))})])))
+                     (toggle-fn))})])
+   {:modal-class (util/hiccup->class
+                  "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}))
 
 (rum/defcs class-select < (rum/local false ::open?)
   [state *property-schema schema-classes {:keys [multiple-choices? disabled?]
@@ -289,7 +291,7 @@
         property (db/sub-block (:db/id property))
         disabled? (or built-in-property? config/publishing?)]
     [:div.property-configure.flex.flex-1.flex-col
-     [:div.grid.gap-2.p-1.mt-4
+     [:div.grid.gap-2.p-1
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Name:"]
        [:input.form-input.col-span-2
