@@ -1927,6 +1927,7 @@
         priority (priority-cp t)
         tags (block-tags-cp t)
         bg-color (:background-color properties)
+        tx-color (:text-color properties)
         ;; `heading-level` is for backward compatibility, will remove it in later releases
         heading-level (:block/heading-level t)
         heading (or
@@ -1953,7 +1954,13 @@
                                        (str "var(--ls-highlight-color-" bg-color ")")
                                        bg-color)
                    :color (when-not built-in-color? "white")}
-           :class "px-1 with-bg-color"})))
+           :class "px-1 with-bg-color"}))
+      (when tx-color
+        (let [built-in-color? (ui/built-in-color? tx-color)]
+          {:style {:color (if built-in-color?
+                            (str "var(--ls-text-color-" tx-color ")")
+                            tx-color)}
+           :class "with-text-color"})))
 
      ;; children
      (let [area?  (= :area (keyword (:hl-type properties)))
