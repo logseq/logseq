@@ -752,11 +752,14 @@
                                      (string/blank? (:block/content target-block'))
                                      (> (count blocks) 1)
                                      (not move?)))
-        blocks' (blocks-with-level blocks)
-        blocks' (blocks-with-ordered-list-props blocks' target-block sibling?)
-        blocks' (if (= outliner-op :paste)
-                  (fix-top-level-blocks blocks')
-                  blocks')
+        blocks' (cond->>
+                 (-> blocks
+                     blocks-with-level
+                     (blocks-with-ordered-list-props target-block sibling?))
+                  (= outliner-op :paste)
+                  fix-top-level-blocks
+                  true
+                  (mapv block-with-timestamps))
         insert-opts {:sibling? sibling?
                      :replace-empty-target? replace-empty-target?
                      :keep-uuid? keep-uuid?
