@@ -103,13 +103,6 @@
          [:block/created-at :int]
          [:block/updated-at :int]]))
 
-(def normal-dummy-block
-  "A dummy block is created when a page is created"
-  (into block-attrs
-        [[:block/content [:= ""]]
-         [:block/journal? :boolean]
-         [:block/journal-day {:optional true} :int]]))
-
 ;; TODO: Figure out where this is coming from
 (def unknown-empty-block
   [[:block/uuid :uuid]])
@@ -128,7 +121,6 @@
     (into [:map {:closed false}] page-block)
     (into [:map {:closed false}] normal-block)
     (into [:map {:closed false}] normal-link-block)
-    (into [:map {:closed false}] normal-dummy-block)
     (into [:map {:closed true}] file-block)
     (into [:map {:closed true}] unknown-empty-block)]])
 
