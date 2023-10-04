@@ -417,7 +417,7 @@
       (when-not hide-delete?
         [:a.fade-link {:on-click (fn [e]
                                    (util/stop e)
-                                   (when (js/confirm "Are you sure to delete this property?")
+                                   (when (js/confirm "Are you sure you want to delete this property?")
                                      (let [repo (state/get-current-repo)
                                            f (if (and class? class-schema?)
                                                property-handler/class-remove-property!
@@ -611,10 +611,7 @@
            [:div {:style {:padding-left 6}} (:block/original-name property)]])
         (fn [{:keys [toggle-fn]}]
           [:a.property-k
-           {:data-propertyid (:block/uuid property)
-            :data-blockid (:block/uuid block)
-            :data-class-schema (boolean class-schema?)
-            :title (str "Configure property: " (:block/original-name property))
+           {:title (str "Configure property: " (:block/original-name property))
             :on-mouse-down (fn [e]
                              (when (util/meta-key? e)
                                (route-handler/redirect-to-page! (:block/name property))
