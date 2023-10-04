@@ -669,7 +669,7 @@
                                            page
                                            (str edit-input-id-prefix "-page")
                                            {:selected? false
-                                            :page-configure? (boolean (some #{"class" "property"} types))
+                                            :page-configure? false
                                             :class-schema? false}))])))
 
 (rum/defc page-properties-react < rum/reactive
