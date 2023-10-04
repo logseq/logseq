@@ -351,13 +351,6 @@
   (let [repo (state/get-current-repo)
         built-in-property? (contains? db-property/built-in-properties-keys-str (:block/name property))]
     [:.menu-links-wrapper
-     (when-not built-in-property?
-       (ui/menu-link
-        {:key "Configure this property"
-         :on-click (fn []
-                     (state/set-modal! #(property/property-config property {})))}
-        (t :context-menu/configure-property)
-        nil))
      (ui/menu-link
       {:key "Delete this property"
        :on-click (fn []

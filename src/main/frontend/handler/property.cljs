@@ -163,3 +163,11 @@
          (concat own-properties)
          (filter (fn [id] (enum-other-position? id (:block/properties block))))
          (distinct))))
+
+(defn block-has-viewable-properties?
+  [block-entity]
+  (let [properties (:block/properties block-entity)]
+    (or
+     (seq (:block/alias properties))
+     (and (seq properties)
+          (not= (keys properties) [(:block/uuid (db/entity [:block/name "icon"]))])))))

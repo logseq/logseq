@@ -340,26 +340,44 @@
 (declare configure)
 (declare page-properties)
 
-(rum/defc page-configure-inner <
+(rum/defcs page-configure-inner <
+  (rum/local false ::show-page-properties?)
   {:will-unmount (fn [state]
                    (let [on-unmount (nth (:rum/args state) 1)]
                      (on-unmount)))}
-  [page _on-unmount opts]
-  (let [types (:block/type page)
+  [state page _on-unmount opts]
+  (let [*show-page-properties? (::show-page-properties? state)
+        types (:block/type page)
         class? (contains? types "class")
-        property? (contains? types "property")]
+        property? (contains? types "property")
+        class-or-property? (or class? property?)]
     [:div.p-4.flex.flex-col.gap-4 {:style {:min-width 700}}
-     (when class?
-       (configure page {}))
-     (when class?
-       (page-properties page true))
-     (if property?
-       (property/property-config page (assoc opts :inline-text component-block/inline-text))
-              ;; add new property for normal pages
+     (when (and class-or-property?
+                (not (property-handler/block-has-viewable-properties? page)))
+       [:div.flex.flex-row.items-center.gap-2
+        [:div "Switch to page properties:"]
+        (ui/toggle @*show-page-properties?
+                   (fn [_]
+                     (swap! *show-page-properties? not))
+                   true)])
+     (cond
+       (not class-or-property?)
        (when (and (not class?)
-                  (empty? (:block/properties page))
-                  (empty? (:block/alias page)))
-         (page-properties page true)))]))
+                  (not property?)
+                  (not (property-handler/block-has-viewable-properties? page)))
+         (page-properties page true))
+
+       @*show-page-properties?
+       (page-properties page true)
+
+       :else
+       [:<>
+        (when class?
+          (configure page {}))
+        (when class?
+          (page-properties page true))
+        (when property?
+          (property/property-config page (assoc opts :inline-text component-block/inline-text)))])]))
 
 (rum/defc page-configure
   [page *hover? *configuring?]
@@ -425,10 +443,10 @@
           (if (map? icon)
             (property/icon icon {:on-chosen (fn [_e icon]
                                               (let [icon-property-id (:block/uuid (db/entity [:block/name "icon"]))]
-                                               (property-handler/update-property!
-                                                repo
-                                                (:block/uuid page)
-                                                {:properties {icon-property-id icon}})))})
+                                                (property-handler/update-property!
+                                                 repo
+                                                 (:block/uuid page)
+                                                 {:properties {icon-property-id icon}})))})
             icon)])
 
        [:div.flex.flex-1.flex-row.flex-wrap.items-center.gap-4
@@ -492,7 +510,7 @@
              (page-tags page tags-property *hover? *configuring?))
 
            (when (or (some #(contains? #{"class" "property"} %) (:block/type page))
-                     (and (empty? (:block/properties page)) (empty? (:block/alias page))))
+                     (not (property-handler/block-has-viewable-properties? page)))
              (page-configure page *hover? *configuring?))]])])))
 
 (defn- page-mouse-over
@@ -620,44 +638,40 @@
   [page configure?]
   (let [types (:block/type page)
         class? (contains? types "class")
-        property? (contains? types "property")
         edit-input-id-prefix (str "edit-block-" (:block/uuid page))
         configure-opts {:selected? false
-                        :page-configure? true}]
-    [:div.ls-page-properties.mb-4 {:style {:padding 2}}
-     (if configure?
-       (cond
-         class?
-         [:div
-          [:div.mb-2 "Class Properties:"]
-          [:div
-           (component-block/db-properties-cp {:editor-box editor/box}
-                                             page
-                                             (str edit-input-id-prefix "-schema")
-                                             (assoc configure-opts :class-schema? true))]]
-         (and (not property?)
-              (empty? (:block/properties page))
-              (empty? (:block/alias page)))
-         [:div
-          [:div.mb-2 "Page properties:"]
-          (component-block/db-properties-cp {:editor-box editor/box}
-                                            page
-                                            (str edit-input-id-prefix "-page")
-                                            (assoc configure-opts :class-schema? false))])
-       (component-block/db-properties-cp {:editor-box editor/box}
-                                         page
-                                         (str edit-input-id-prefix "-page")
-                                         {:selected? false
-                                          ;; Allow class and property pages to add new property
-                                          ;; when hovered over
-                                          :page-configure? (boolean (some #{"class" "property"} types))
-                                          :hidden-new-property? (boolean (some #{"class" "property"} types))
-                                          :class-schema? false}))]))
+                        :page-configure? true}
+        has-viewable-properties? (property-handler/block-has-viewable-properties? page)]
+    (when (or has-viewable-properties? configure?)
+      [:div.ls-page-properties.mb-4 {:style {:padding 2}}
+       (if configure?
+         (cond
+           class?
+           [:div
+            [:div.mb-2 "Class Properties:"]
+            [:div
+             (component-block/db-properties-cp {:editor-box editor/box}
+                                               page
+                                               (str edit-input-id-prefix "-schema")
+                                               (assoc configure-opts :class-schema? true))]]
+           (not (property-handler/block-has-viewable-properties? page))
+           [:div
+            [:div.mb-2 "Page properties:"]
+            (component-block/db-properties-cp {:editor-box editor/box}
+                                              page
+                                              (str edit-input-id-prefix "-page")
+                                              (assoc configure-opts :class-schema? false))])
+         (component-block/db-properties-cp {:editor-box editor/box}
+                                           page
+                                           (str edit-input-id-prefix "-page")
+                                           {:selected? false
+                                            :page-configure? (boolean (some #{"class" "property"} types))
+                                            :class-schema? false}))])))
 
 (rum/defc page-properties-react < rum/reactive
   [page* configure?]
   (let [page (db/sub-block (:db/id page*))]
-    (when (or (seq (:block/properties page)) (seq (:block/alias page))
+    (when (or (property-handler/block-has-viewable-properties? page)
               ;; Allow class and property pages to add new property
               (some #{"class" "property"} (:block/type page)))
       (page-properties page configure?))))

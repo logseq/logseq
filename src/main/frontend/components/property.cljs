@@ -246,16 +246,14 @@
                            (let [item (assoc (get values id) :id id)]
                              {:id (str id)
                               :value id
-                              :content [:li
-                                        (choice-item-content property item values order *property-schema *property-name dropdown-opts)]}))
+                              :content (choice-item-content property item values order *property-schema *property-name dropdown-opts)}))
                          order)]
        (dnd/items choices
                   {:on-drag-end (fn [new-order]
                                   (when (seq new-order)
                                     (swap! *property-schema assoc :enum-config {:values values
                                                                                 :order new-order})
-                                    (update-property! property @*property-name @*property-schema)))
-                   :parent-node :ul.list-none}))
+                                    (update-property! property @*property-name @*property-schema)))}))
      (ui/dropdown
       (fn [{:keys [toggle-fn]}]
         [:a.fade-link.flex.flex-row.items-center.gap-1.leading-8 {:on-click toggle-fn}
@@ -291,11 +289,6 @@
         property (db/sub-block (:db/id property))
         disabled? (or built-in-property? config/publishing?)]
     [:div.property-configure.flex.flex-1.flex-col
-     [:div.font-bold.text-xl
-      (if disabled?
-        "Property fields"
-        "Configure property")]
-
      [:div.grid.gap-2.p-1.mt-4
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Name:"]
@@ -527,24 +520,18 @@
        [:div#edit-new-property
         (property-input block *property-key *property-value opts)]
 
-       (and (or (:page-configure? opts)
-                (seq properties)
-                (seq (:block/alias block)))
+       (and (or (property-handler/block-has-viewable-properties? block)
+                (:page-configure? opts))
             (not config/publishing?)
-            (or (:page-configure? opts) (not (:in-block-container? opts))))
-       ;; When the :hidden-new-property? option is set, adding the
-       ;; first property is hidden and only appears when hovered over
-       (when (or (not (:hidden-new-property? opts))
-                 (seq (:block/properties block))
-                 (:hover? opts))
-         [:a.fade-link.flex
-          {:on-click (fn []
-                       (property-handler/set-editing-new-property! edit-input-id)
-                       (reset! *property-key nil)
-                       (reset! *property-value nil))}
-          [:div.flex.flex-row.items-center {:style {:padding-left 1}}
-           (ui/icon "circle-plus" {:size 15})
-           [:div.ml-1.text-sm "Add property"]]])
+            (not (:in-block-container? opts)))
+       [:a.fade-link.flex
+        {:on-click (fn []
+                     (property-handler/set-editing-new-property! edit-input-id)
+                     (reset! *property-key nil)
+                     (reset! *property-value nil))}
+        [:div.flex.flex-row.items-center {:style {:padding-left 1}}
+         (ui/icon "circle-plus" {:size 15})
+         [:div.ml-1.text-sm "Add property"]]]
 
        :else
        [:div {:style {:height 28}}]))])
@@ -667,15 +654,14 @@
       (if class?
         (let [choices (map (fn [[k v]]
                              {:id (str k)
-                              :content [:li
-                                        (property-cp block k v opts)]}) properties)]
+                              :value k
+                              :content (property-cp block k v opts)}) properties)]
           (dnd/items choices
                      {:on-drag-end (fn [properties]
                                      (let [schema (assoc (:block/schema block)
                                                          :properties properties)]
                                        (when (seq properties)
-                                         (property-handler/class-set-schema! (state/get-current-repo) (:block/uuid block) schema))))
-                      :parent-node :ul.list-none}))
+                                         (property-handler/class-set-schema! (state/get-current-repo) (:block/uuid block) schema))))}))
         (for [[k v] properties]
           (property-cp block k v opts))))))
 
