@@ -49,11 +49,21 @@
    {:modal-class (util/hiccup->class
                   "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}))
 
-(rum/defcs class-select < (rum/local false ::open?)
-  [state *property-schema schema-classes {:keys [multiple-choices? disabled?]
-                                          :or {multiple-choices? true}}]
-  (let [*open? (::open? state)]
-    (if @*open?
+(rum/defc class-select
+  [*property-schema schema-classes {:keys [multiple-choices?]
+                                    :or {multiple-choices? true}}]
+  [:div.flex.flex-1.col-span-3
+   (ui/dropdown
+    (fn [{:keys [toggle-fn]}]
+      [:div.flex.flex-1.cursor-pointer {:on-click toggle-fn}
+       (if (seq schema-classes)
+         [:div.flex.flex-1.flex-row.items-center.flex-wrap.gap-2
+          (for [class schema-classes]
+            (when-let [page (db/entity [:block/uuid class])]
+              (let [page-name (:block/original-name page)]
+                [:a.text-sm (str "#" page-name)])))]
+         [:div.opacity-50.pointer.text-sm "Empty"])])
+    (fn [{:keys [toggle-fn]}]
       (let [classes (db-model/get-all-classes (state/get-current-repo))
             options (map (fn [[name id]] {:label name
                                           :value id})
@@ -61,42 +71,33 @@
             opts (cond->
                   {:items options
                    :input-default-placeholder (if multiple-choices? "Choose classes" "Choose class")
-                   :dropdown? true
+                   :dropdown? false
                    :close-modal? false
                    :multiple-choices? multiple-choices?
                    :selected-choices schema-classes
                    :extract-fn :label
                    :extract-chosen-fn :value
-                   :input-opts {:on-blur (fn [] (reset! *open? false))
+                   :input-opts {:on-blur toggle-fn
                                 :on-key-down
                                 (fn [e]
                                   (case (util/ekey e)
                                     "Escape"
                                     (do
                                       (util/stop e)
-                                      (reset! *open? false))
+                                      (toggle-fn))
                                     nil))}}
                    multiple-choices?
                    (assoc :on-apply (fn [choices]
                                       (swap! *property-schema assoc :classes choices)
-                                      (reset! *open? false)))
+                                      (toggle-fn)))
 
                    (not multiple-choices?)
                    (assoc :on-chosen (fn [value]
                                        (swap! *property-schema assoc :classes [value])
-                                       (reset! *open? false))))]
-        (select/select opts))
-      [:div.flex.flex-1.flex-row.cursor.items-center.flex-wrap.gap-2.col-span-3
-       {:on-click #(when-not disabled? (reset! *open? true))}
-       (if (seq schema-classes)
-         (for [class schema-classes]
-           (when-let [page (db/entity [:block/uuid class])]
-             (let [page-name (:block/original-name page)]
-               [:a.text-sm (str "#" page-name)])))
-         [:div.text-sm
-          (if multiple-choices?
-            "Click to add classes"
-            "Click to select a class")])])))
+                                       (toggle-fn))))]
+        (select/select opts)))
+    {:modal-class (util/hiccup->class
+                   "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})])
 
 (rum/defcs enum-item-config < rum/reactive
   {:init (fn [state]
@@ -450,7 +451,7 @@
             (pv/set-editing! property editor-id "" ""))))
       ;; new property entered
       (if (db-property/valid-property-name? property-name)
-        (if (contains? (:block/type entity) "class")
+        (if (and (contains? (:block/type entity) "class") page-configure?)
           (pv/add-property! entity property-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
           (do
             (db-property-handler/upsert-property! repo property-name {:type :default} {})
@@ -487,7 +488,7 @@
            [:span.bullet-container.cursor [:span.bullet]]
            [:div {:style {:padding-left 6}} @*property-key]]
           [:div.col-span-3.flex.flex-row {:on-mouse-down (fn [e] (util/stop-propagation e))}
-           (when (not (and class-schema? page-configure?))
+           (when-not class-schema?
              (if @*show-new-property-config?
                (ui/dropdown
                 (fn [_opts]

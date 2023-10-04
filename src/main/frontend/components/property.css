@@ -90,10 +90,6 @@
         box-shadow: none;
     }
 
-    .cp__select-input {
-        padding: 0;
-    }
-
     .ls-block {
         margin: 0;
     }
@@ -173,6 +169,12 @@ input.simple-input:focus {
 .ls-property-add {
     .cp__select-input {
         padding: 0;
+    }
+}
+
+.property-configure {
+    .cp__select-input {
+        @apply px-4 py-2;
     }
 }
 
