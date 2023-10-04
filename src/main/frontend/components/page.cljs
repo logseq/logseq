@@ -350,7 +350,9 @@
         types (:block/type page)
         class? (contains? types "class")
         property? (contains? types "property")
-        class-or-property? (or class? property?)]
+        class-or-property? (or class? property?)
+        page-opts {:configure? true
+                   :show-page-properties? @*show-page-properties?}]
     [:div.p-4.flex.flex-col.gap-4 {:style {:min-width 700}}
      (when (and class-or-property?
                 (not (property-handler/block-has-viewable-properties? page)))
@@ -365,17 +367,17 @@
        (when (and (not class?)
                   (not property?)
                   (not (property-handler/block-has-viewable-properties? page)))
-         (page-properties page true))
+         (page-properties page page-opts))
 
        @*show-page-properties?
-       (page-properties page true)
+       (page-properties page page-opts)
 
        :else
        [:<>
         (when class?
           (configure page {}))
         (when class?
-          (page-properties page true))
+          (page-properties page page-opts))
         (when property?
           (property/property-config page page (assoc opts
                                                      :inline-text component-block/inline-text)))])]))
@@ -636,7 +638,7 @@
                                class-ancestors))]])))])))
 
 (rum/defc page-properties < rum/reactive
-  [page configure?]
+  [page {:keys [configure? show-page-properties?]}]
   (let [types (:block/type page)
         class? (contains? types "class")
         edit-input-id-prefix (str "edit-block-" (:block/uuid page))
@@ -647,7 +649,7 @@
       [:div.ls-page-properties.mb-4 {:style {:padding 2}}
        (if configure?
          (cond
-           class?
+           (and class? (not show-page-properties?))
            [:div
             [:div.mb-2 "Class Properties:"]
             [:div
@@ -655,6 +657,7 @@
                                                page
                                                (str edit-input-id-prefix "-schema")
                                                (assoc configure-opts :class-schema? true))]]
+
            (not (property-handler/block-has-viewable-properties? page))
            [:div
             [:div.mb-2 "Page properties:"]
@@ -670,12 +673,12 @@
                                             :class-schema? false}))])))
 
 (rum/defc page-properties-react < rum/reactive
-  [page* configure?]
+  [page* page-opts]
   (let [page (db/sub-block (:db/id page*))]
     (when (or (property-handler/block-has-viewable-properties? page)
               ;; Allow class and property pages to add new property
               (some #{"class" "property"} (:block/type page)))
-      (page-properties page configure?))))
+      (page-properties page page-opts))))
 
 (defn- get-path-page-name
   [state page-name]
@@ -770,7 +773,7 @@
 
            (when (and db-based?
                       (not block?))
-             (page-properties-react page false))
+             (page-properties-react page {:configure? false}))
 
            ;; blocks
            (let [_ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
