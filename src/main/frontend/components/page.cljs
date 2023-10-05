@@ -226,13 +226,13 @@
              (str repo "-custom-query-" (:query query))))]))))
 
 (defn tagged-pages
-  [repo tag]
+  [repo tag tag-original-name]
   (let [pages (db/get-tag-pages repo tag)]
     (when (seq pages)
       [:div.references.page-tags.mt-6.flex-1.flex-row
        [:div.content
         (ui/foldable
-         [:h2.font-bold.opacity-50 (util/format "Pages tagged with \"%s\"" tag)]
+         [:h2.font-bold.opacity-50 (util/format "Pages tagged with \"%s\"" tag-original-name)]
          [:ul.mt-2
           (for [[original-name name] (sort-by last pages)]
             [:li {:key (str "tagged-page-" name)}
@@ -788,7 +788,7 @@
          (scheduled/scheduled-and-deadlines page-name))
 
        (when-not block?
-         (tagged-pages repo page-name))
+         (tagged-pages repo page-name page-original-name))
 
        ;; referenced blocks
        (when-not block-or-whiteboard?
