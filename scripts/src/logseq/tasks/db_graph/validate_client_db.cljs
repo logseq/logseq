@@ -2,6 +2,7 @@
   "Script that validates the datascript db of a db graph"
   (:require [logseq.db.sqlite.cli :as sqlite-cli]
             [logseq.db.sqlite.db :as sqlite-db]
+            [logseq.db.schema :as db-schema]
             [datascript.core :as d]
             [clojure.string :as string]
             [nbb.core :as nbb]
@@ -12,7 +13,6 @@
             ["path" :as node-path]
             ["os" :as os]
             [cljs.pprint :as pprint]))
-
 
 (def page-or-block-attrs
   "Common attributes for page and normal blocks"
@@ -32,49 +32,89 @@
                     [:sequential :uuid]
                     [:set :string]
                     [:set :int]]]]
-   [:block/refs {:optional true} :any] ;;TODO
-   [:block/tags {:optional true} :any] ;;TODO
+   [:block/refs {:optional true} [:set :int]]
+   [:block/tags {:optional true} [:set :int]]
    [:block/tx-id {:optional true} :int]])
 
-(def page-block
+(def page-attrs
+  "Common attributes for pages"
+  [[:block/name :string]
+   [:block/original-name :string]
+   [:block/type {:optional true} [:enum #{"property"} #{"class"} #{"object"} #{"whiteboard"}]]
+    ;; TODO: Consider moving to just normal and class after figuring out journal attributes
+   [:block/format {:optional true} [:enum :markdown]]
+    ;; TODO: Should this be here or in common?
+   [:block/path-refs {:optional true} [:set :int]]])
+
+(def normal-page
   (vec
    (concat
     [:map {:closed false}]
-    [[:block/name :string]
-     [:block/original-name :string]
-     [:block/type {:optional true} [:enum "property" "class" "object" "whiteboard"]]
-     [:block/namespace {:optional true} :int]
-    ;; TODO: journal?, journal-day and format optional b/c of property
-     [:block/journal? {:optional true} :boolean]
+    page-attrs
+    ;; These are optional b/c some built-in pages only have :journal?
+    [[:block/journal? {:optional true} :boolean]
      [:block/journal-day {:optional true} :int]
-    ;; block/format optional b/c of property, objects and built-in pages
-     [:block/format {:optional true} [:enum :markdown]]
-    ;; TODO: Should this be here?
-     [:block/path-refs {:optional true} :any]
-    ;; TODO: collapsed only for linked
-     [:block/collapsed? {:optional true} :boolean]
-    ;; TODO: Required for property and class types
+     [:block/namespace {:optional true} :int]]
+    page-or-block-attrs)))
+
+(def object-page
+  (vec
+   (concat
+    [:map {:closed false}]
+    [[:block/collapsed? {:optional true} :boolean]
+     ;; TODO: Fix bug which introduces journal?
+     [:block/journal? {:optional true} :boolean]]
+    page-attrs
+    page-or-block-attrs)))
+
+(def class-page
+  (vec
+   (concat
+    [:map {:closed false}]
+    ;; TODO: Fix bug which introduces journal?
+    [[:block/journal? {:optional true} :boolean]
+     [:block/namespace {:optional true} :int]
+     ;; TODO: Require :block/schema
      [:block/schema
       {:optional true}
       [:map
        {:closed false}
-      ;; TODO: only validate most of these for property blocks
-       [:type {:optional true} :keyword]
-       [:enum-config {:optional true} :map] ;; TODO
-       [:cardinality {:optional true} [:enum :one :many]]
-       [:classes {:optional true} [:set :uuid]]
-       [:description {:optional true} :string]
-       [:hide? {:optional true} :boolean]
-      ;; TODO: require this for class blocks
        [:properties {:optional true} [:vector :uuid]]]]]
+    page-attrs
     page-or-block-attrs)))
+
+(def property-page
+  (vec
+   (concat
+    [:map {:closed false}]
+    [[:block/schema
+      [:map
+       {:closed false}
+       [:type :keyword]
+       [:hide? {:optional true} :boolean]
+       [:description {:optional true} :string]
+       ;; For any types except for :checkbox :default :template :enum
+       [:cardinality {:optional true} [:enum :one :many]]
+       ;; Just for :enum type
+       [:enum-config {:optional true} :map]
+       ;; Just for :page and :template types
+       [:classes {:optional true} [:set :uuid]]]]]
+    page-attrs
+    page-or-block-attrs)))
+
+(def page-block
+  [:multi {:dispatch :block/type}
+   [#{"property"} property-page]
+   [#{"class"} class-page]
+   [#{"object"} object-page]
+   [::m/default normal-page]])
 
 (def block-attrs
   "Common attributes for normal blocks"
   (into
    ;; refs
    [[:block/page :int]
-    [:block/path-refs {:optional true} :any] ;;TODO
+    [:block/path-refs {:optional true} [:set :int]]
     [:block/link {:optional true} :int]
     ;; other
     [:block/format [:enum :markdown]]
@@ -138,11 +178,11 @@
   (->> errors
        (group-by #(-> % :in first))
        (map (fn [[idx errors']]
-              {:entity (update (get full-maps idx)
-                               ;; Provide additional page info for debugging
-                               :block/page
-                               (fn [id] (when id
-                                          (select-keys (d/entity db id)
+              {:entity (cond-> (get full-maps idx)
+                         ;; Provide additional page info for debugging
+                         (:block/page (get full-maps idx))
+                         (update :block/page
+                                 (fn [id] (select-keys (d/entity db id)
                                                        [:block/name :block/type :db/id :block/created-at]))))
                ;; Group by type to reduce verbosity
                :errors-by-type
@@ -176,19 +216,22 @@
                          (m/explain schema)
                          :errors)]
       (do
-        (println "Found" (count errors) "errors:")
-        (if verbose
-          (let [full-maps (vec (vals ent-maps))]
-            (if group-errors
-              (let [ent-errors (build-grouped-errors db full-maps errors)]
-                (pprint/pprint ent-errors)
-                (println "Found" (count ent-errors) "entities in errors"))
-              (pprint/pprint
-               (map #(assoc %
-                            :entity (get full-maps (-> % :in first))
-                            :schema (m/form (:schema %)))
-                    errors))))
-          (pprint/pprint errors))
+        (if group-errors
+          (let [ent-errors (build-grouped-errors db (vec (vals ent-maps)) errors)]
+            (println "Found" (count ent-errors) "entities in errors:")
+            (if verbose
+              (pprint/pprint ent-errors)
+              (pprint/pprint (map :entity ent-errors))))
+          (do
+            (println "Found" (count errors) "errors:")
+            (if verbose
+              (let [full-maps (vec (vals ent-maps))]
+                (pprint/pprint
+                 (map #(assoc %
+                              :entity (get full-maps (-> % :in first))
+                              :schema (m/form (:schema %)))
+                      errors)))
+              (pprint/pprint errors))))
         (js/process.exit 1))
       (println "Valid!"))))
 
@@ -197,7 +240,9 @@
   [datoms]
   (->> datoms
        (reduce (fn [acc m]
-                 (update acc (:e m) assoc (:a m) (:v m)))
+                 (if (contains? db-schema/card-many-attributes (:a m))
+                   (update acc (:e m) update (:a m) (fnil conj #{}) (:v m))
+                   (update acc (:e m) assoc (:a m) (:v m))))
                {})))
 
 (def spec
@@ -209,7 +254,7 @@
    :closed-maps {:alias :c
                  :desc "Validate maps marked with closed as :closed"}
    :group-errors {:alias :g
-                  :desc "Groups errors by their entity id with --verbose enabled"}})
+                  :desc "Groups errors by their entity id"}})
 
 (defn- validate-graph [graph-dir options]
   (let [[dir db-name] (if (string/includes? graph-dir "/")
