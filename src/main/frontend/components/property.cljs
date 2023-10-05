@@ -704,10 +704,9 @@
   {:init (fn [state]
            (assoc state ::blocks-container-id (or (:blocks-container-id (last (:rum/args state)))
                                                   (state/next-blocks-container-id))))}
-  [state target-block edit-input-id {:keys [in-block-container? page-configure?] :as opts}]
+  [state target-block edit-input-id {:keys [in-block-container? page-configure? class-schema?] :as opts}]
   (let [*hover? (::hover? state)
         block (resolve-linked-block-if-exists target-block)
-        class-schema? (and (:class-schema? opts) (:block/schema block))
         block-properties (:block/properties block)
         properties (if (and class-schema? page-configure?)
                      (let [properties (:properties (:block/schema block))]
