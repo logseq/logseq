@@ -516,7 +516,7 @@
   }
 
   &-btn {
-    @apply fixed bottom-4 right-8 z-10;
+    @apply fixed bottom-4 right-4 sm:right-8;
 
     > .inner {
       @apply rounded-full h-8 w-8 flex items-center justify-center
