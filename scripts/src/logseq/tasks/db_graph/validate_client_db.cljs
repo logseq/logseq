@@ -3,6 +3,7 @@
   (:require [logseq.db.sqlite.cli :as sqlite-cli]
             [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.schema :as db-schema]
+            [logseq.db.property :as db-property]
             [datascript.core :as d]
             [clojure.string :as string]
             [nbb.core :as nbb]
@@ -79,14 +80,28 @@
     page-attrs
     page-or-block-attrs)))
 
-(def property-page
+(def internal-property
   (vec
    (concat
     [:map {:closed false}]
     [[:block/schema
       [:map
        {:closed false}
-       [:type :keyword]
+       [:type (apply vector :enum (into db-property/internal-builtin-schema-types
+                                        db-property/user-builtin-schema-types))]
+       [:hide? {:optional true} :boolean]
+       [:cardinality {:optional true} [:enum :one :many]]]]]
+    page-attrs
+    page-or-block-attrs)))
+
+(def user-property
+  (vec
+   (concat
+    [:map {:closed false}]
+    [[:block/schema
+      [:map
+       {:closed false}
+       [:type (apply vector :enum db-property/user-builtin-schema-types)]
        [:hide? {:optional true} :boolean]
        [:description {:optional true} :string]
        ;; For any types except for :checkbox :default :template :enum
@@ -97,6 +112,12 @@
        [:classes {:optional true} [:set :uuid]]]]]
     page-attrs
     page-or-block-attrs)))
+
+(def property-page
+  [:multi {:dispatch
+           (fn [m] (contains? db-property/built-in-properties-keys-str (:block/name m)))}
+   [true internal-property]
+   [::m/default user-property]])
 
 (def page-block
   [:multi {:dispatch :block/type}
