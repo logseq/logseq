@@ -3,7 +3,6 @@
             [frontend.components.page :as page]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
-            [frontend.db.model :as model]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]

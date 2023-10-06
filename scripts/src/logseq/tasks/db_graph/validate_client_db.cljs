@@ -41,6 +41,7 @@
   [[:block/name :string]
    [:block/original-name :string]
    [:block/type {:optional true} [:enum #{"property"} #{"class"} #{"object"} #{"whiteboard"}]]
+   [:block/journal? :boolean]
     ;; TODO: Consider moving to just normal and class after figuring out journal attributes
    [:block/format {:optional true} [:enum :markdown]]
     ;; TODO: Should this be here or in common?
@@ -51,9 +52,8 @@
    (concat
     [:map {:closed false}]
     page-attrs
-    ;; These are optional b/c some built-in pages only have :journal?
-    [[:block/journal? {:optional true} :boolean]
-     [:block/journal-day {:optional true} :int]
+    ;; journal-day is only set for journal pages
+    [[:block/journal-day {:optional true} :int]
      [:block/namespace {:optional true} :int]]
     page-or-block-attrs)))
 
@@ -61,9 +61,7 @@
   (vec
    (concat
     [:map {:closed false}]
-    [[:block/collapsed? {:optional true} :boolean]
-     ;; TODO: Fix bug which introduces journal?
-     [:block/journal? {:optional true} :boolean]]
+    [[:block/collapsed? {:optional true} :boolean]]
     page-attrs
     page-or-block-attrs)))
 
@@ -71,9 +69,7 @@
   (vec
    (concat
     [:map {:closed false}]
-    ;; TODO: Fix bug which introduces journal?
-    [[:block/journal? {:optional true} :boolean]
-     [:block/namespace {:optional true} :int]
+    [[:block/namespace {:optional true} :int]
      ;; TODO: Require :block/schema
      [:block/schema
       {:optional true}

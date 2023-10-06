@@ -157,21 +157,18 @@
         property-db-ids (->> property-uuids
                              (map #(vector (name (first %)) (new-db-id)))
                              (into {}))
-        created-at (js/Date.now)
         new-properties-tx (mapv (fn [[prop-name uuid]]
-                                  (merge {:db/id (or (property-db-ids (name prop-name))
-                                                     (throw (ex-info "No :db/id for property" {:property prop-name})))
-                                          :block/uuid uuid
-                                          :block/schema (merge {:type :default}
-                                                               (get-in properties [prop-name :block/schema]))
-                                          :block/original-name (name prop-name)
-                                          :block/name (sqlite-util/sanitize-page-name (name prop-name))
-                                          :block/type "property"
-                                          :block/created-at created-at
-                                          :block/updated-at created-at}
-                                         (when-let [props (not-empty (get-in properties [prop-name :properties]))]
-                                           {:block/properties (->block-properties-tx props uuid-maps)
-                                            :block/refs (build-property-refs props property-db-ids)})))
+                                  (sqlite-util/build-new-property
+                                   (merge {:db/id (or (property-db-ids (name prop-name))
+                                                      (throw (ex-info "No :db/id for property" {:property prop-name})))
+                                           :block/uuid uuid
+                                           :block/schema (merge {:type :default}
+                                                                (get-in properties [prop-name :block/schema]))
+                                           :block/original-name (name prop-name)
+                                           :block/name (sqlite-util/sanitize-page-name (name prop-name))}
+                                          (when-let [props (not-empty (get-in properties [prop-name :properties]))]
+                                            {:block/properties (->block-properties-tx props uuid-maps)
+                                             :block/refs (build-property-refs props property-db-ids)}))))
                                 property-uuids)
         pages-and-blocks-tx
         (vec
@@ -180,17 +177,18 @@
             (let [page-id (or (:db/id page) (new-db-id))]
               (into
                ;; page tx
-               [(merge (dissoc page :properties)
-                       {:db/id page-id
-                        :block/original-name (or (:block/original-name page) (string/capitalize (:block/name page)))
-                        :block/name (or (:block/name page) (sqlite-util/sanitize-page-name (:block/original-name page)))
-                        :block/created-at created-at
-                        :block/updated-at created-at}
-                       (when (seq (:properties page))
-                         {:block/properties (->block-properties-tx (:properties page) uuid-maps)
-                          :block/refs (build-property-refs (:properties page) property-db-ids)
+               [(sqlite-util/block-with-timestamps
+                 (merge
+                  {:db/id page-id
+                   :block/original-name (or (:block/original-name page) (string/capitalize (:block/name page)))
+                   :block/name (or (:block/name page) (sqlite-util/sanitize-page-name (:block/original-name page)))
+                   :block/journal? false}
+                  (dissoc page :properties)
+                  (when (seq (:properties page))
+                    {:block/properties (->block-properties-tx (:properties page) uuid-maps)
+                     :block/refs (build-property-refs (:properties page) property-db-ids)
                           ;; app doesn't do this yet but it should to link property to page
-                          :block/path-refs (build-property-refs (:properties page) property-db-ids)}))]
+                     :block/path-refs (build-property-refs (:properties page) property-db-ids)})))]
                ;; blocks tx
                (reduce (fn [acc m]
                          (conj acc
