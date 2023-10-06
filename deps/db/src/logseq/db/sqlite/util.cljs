@@ -64,8 +64,7 @@
                       (map (fn [{db-id :db/id}]
                              [:block/uuid (some #(when (= db-id (:db/id %)) (:block/uuid %)) blocks)])
                            v))]
-                  :else [a v]
-                  )))
+                  :else [a v])))
          (transit/write t-writer))))
 
 (defn block-with-timestamps
@@ -85,6 +84,14 @@
   [s]
   (string/lower-case s))
 
+(defn build-new-property
+  "Build a standard new property so that it is is consistent across contexts"
+  [block]
+  (block-with-timestamps
+   (merge {:block/type "property"
+           :block/journal? false}
+          block)))
+
 (defn build-db-initial-data
   [config-content]
   (let [initial-files [{:block/uuid (d/squuid)
@@ -99,11 +106,10 @@
         default-properties (map
                             (fn [[k-keyword {:keys [schema original-name]}]]
                               (let [k-name (name k-keyword)]
-                                (block-with-timestamps
+                                (build-new-property
                                  {:block/schema schema
                                   :block/original-name (or original-name k-name)
                                   :block/name (sanitize-page-name k-name)
-                                  :block/uuid (d/squuid)
-                                  :block/type "property"})))
+                                  :block/uuid (d/squuid)})))
                             db-property/built-in-properties)]
     (concat initial-files default-properties)))

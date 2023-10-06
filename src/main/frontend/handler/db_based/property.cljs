@@ -8,6 +8,7 @@
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.db.sqlite.util :as sqlite-util]
             [malli.util :as mu]
             [malli.error :as me]))
 
@@ -106,12 +107,11 @@
                             :block/type "property"})]
                     {:outliner-op :save-block}))
     (when (nil? property) ;if property not exists yet
-      (db/transact! repo [(outliner-core/block-with-timestamps
+      (db/transact! repo [(sqlite-util/build-new-property
                            {:block/schema schema
                             :block/original-name k-name
                             :block/name (util/page-name-sanity-lc k-name)
-                            :block/uuid property-uuid
-                            :block/type "property"})]
+                            :block/uuid property-uuid})]
                     {:outliner-op :insert-blocks}))))
 
 (defn- reset-block-property-multiple-values!
