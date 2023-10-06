@@ -8,9 +8,6 @@
             [frontend.state :as state]
             [frontend.db :as db]))
 
-(def user-face-builtin-schema-types db-property-handler/user-face-builtin-schema-types)
-(def internal-builtin-schema-types db-property-handler/internal-builtin-schema-types)
-
 (defn remove-block-property!
   [repo block-id key]
   (if (config/db-based-graph? repo)

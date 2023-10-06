@@ -318,9 +318,9 @@
 
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Schema type:"]
-       (let [schema-types (->> (concat property-handler/user-face-builtin-schema-types
+       (let [schema-types (->> (concat db-property/user-builtin-schema-types
                                        (when built-in-property?
-                                         property-handler/internal-builtin-schema-types))
+                                         db-property/internal-builtin-schema-types))
                                (map (comp string/capitalize name))
                                (map (fn [type]
                                       {:label (if (= type "Default") "Text" type)

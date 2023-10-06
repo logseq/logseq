@@ -9,6 +9,7 @@
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.property :as db-property]
             [malli.util :as mu]
             [malli.error :as me]))
 
@@ -57,8 +58,10 @@
    :coll     coll?
    :any      some?})
 
-(def internal-builtin-schema-types #{:keyword :map :coll :any})
-(def user-face-builtin-schema-types [:default :number :date :checkbox :url :page :template :enum])
+(assert (= (set (keys builtin-schema-types))
+           (into db-property/internal-builtin-schema-types
+                 db-property/user-builtin-schema-types))
+        "Built-in schema types must be equal")
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
