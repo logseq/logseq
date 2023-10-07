@@ -524,7 +524,7 @@ html[data-theme='dark'] {
   }
 
   &-btn {
-    @apply fixed bottom-4 right-8;
+    @apply fixed bottom-4 right-4 sm:right-8;
 
     > .inner {
       @apply font-bold

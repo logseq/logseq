@@ -205,7 +205,7 @@ input.tl-text-input {
 
   .tl-action-bar {
     left: 0.5rem;
-    bottom: 0.5rem;
+    bottom: 0;
   }
 
   .tl-primary-tools {

@@ -465,6 +465,7 @@
  :whiteboard/dashboard-card-edited "Edited "
  :whiteboard/toggle-grid "Toggle grid"
  :whiteboard/snap-to-grid "Snap to grid"
+ :whiteboard/toggle-pen-mode "Toggle pen mode"
  :flashcards/modal-welcome-title "Time to create a card!"
  :flashcards/modal-welcome-desc-1 "You can add \"#card\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."
  :flashcards/modal-welcome-desc-2 "You can "
