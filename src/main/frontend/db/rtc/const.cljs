@@ -10,7 +10,8 @@
    [:alias {:optional true} [:maybe [:sequential :uuid]]]
    [:type {:optional true} [:maybe [:sequential :string]]]
    [:schema {:optional true} [:maybe [:map {:closed false}]]]
-   [:tags {:optional true} [:maybe [:sequential :uuid]]]])
+   [:tags {:optional true} [:maybe [:sequential :uuid]]]
+   [:properties {:optional true} [:maybe [:map-of :uuid :any]]]])
 
 (def general-attr-set
   (into #{} (map first) general-attrs-schema-coll))
@@ -92,7 +93,12 @@
       [:type {:optional true} [:map
                                [:add {:optional true} [:maybe [:set block-type-schema]]]
                                [:retract {:optional true} [:maybe [:set block-type-schema]]]]]
-      [:schema {:optional true} [:map-of :keyword :any]]]]]
+      [:schema {:optional true} [:map-of :keyword :any]]
+      [:properties {:optional true} [:map-of :uuid
+                                     [:map
+                                      [:add {:optional true} [:set :any]]
+                                      [:retract {:optional true} [:set :any]]
+                                      [:reset {:optional true} :any]]]]]]]
    [:update-page
     [:cat :keyword
      [:map
