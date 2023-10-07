@@ -15,6 +15,8 @@
             [rum.core :as rum]
             [frontend.context.i18n :refer [t]]))
 
+(defonce *once-theme-loaded? (volatile! false))
+
 (rum/defc container
   [{:keys [route theme on-click current-repo nfs-granted? db-restoring?
            settings-open? sidebar-open? system-theme? sidebar-blocks-len onboarding-state preferred-language]} child]
@@ -38,7 +40,9 @@
 
     (rum/use-effect!
      #(js/setTimeout
-       (fn [] (when-not config/dev? (ipc/ipc "theme-loaded"))) 100) ; Wait for the theme to be applied
+       (fn [] (when-not @*once-theme-loaded?
+                (ipc/ipc "theme-loaded")
+                (vreset! *once-theme-loaded? true))) 100) ; Wait for the theme to be applied
      [])
 
     (rum/use-effect!
