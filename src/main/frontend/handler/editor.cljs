@@ -276,12 +276,15 @@
                                         (some-> (:block/page block') :db/id (db-utils/pull) :block/name))]
                 (state/set-page-properties-changed! page-name)))
              [original linked] (when-not (:insert-block? opts)
-                                 (let [original-block (some (fn [m] (and (map? m) (:block/link m) m)) tx-data)]
-                                   [original-block (db/entity (:db/id (:block/link original-block)))]))]
+                                 (let [original-block (some (fn [m] (and (map? m) (:block/link m) m)) tx-data)
+                                       link (:block/link original-block)
+                                       link' (if (and (map? link) (:db/id link))
+                                               (db/entity (:db/id link))
+                                               (db/entity link))]
+                                   [original-block link']))]
          ;; Block has been tagged, so we need to edit the linked page now
          (when (and linked
-                    (= (:block/uuid (state/get-edit-block))
-                       (:block/uuid original)))
+                    (= (:db/id (state/get-edit-block)) (:db/id original)))
            (edit-block! linked :max (:block/uuid linked) {})))
 
        ;; file based graph only
@@ -713,7 +716,10 @@
       (when-let [block (db/entity [:block/uuid (uuid sibling-block-id)])]
         (let [original-block (dom/attr sibling-block "originalblockid")
               id (if original-block (:block/uuid block) id)
-              original-content (util/trim-safe (:block/content block))
+              original-content (util/trim-safe
+                                (if (:block/name block)
+                                  (:block/original-name block)
+                                  (:block/content block)))
               value' (-> (file-property/remove-built-in-properties-when-file-based repo format original-content)
                          (drawer/remove-logbook))
               value (->> value
@@ -727,10 +733,10 @@
                      0)
                    0)]
           (edit-block! (db/pull (:db/id block))
-                                       pos
-                                       id
-                                       {:custom-content new-value
-                                        :tail-len tail-len})
+                       pos
+                       id
+                       {:custom-content new-value
+                        :tail-len tail-len})
           {:prev-block block
            :new-content new-value})))))
 
