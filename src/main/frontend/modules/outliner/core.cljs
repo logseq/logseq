@@ -164,14 +164,14 @@
               page-m (block/page-name->map linked-page (or existing-ref-id true))
               _ (when-not (db/entity [:block/uuid (:block/uuid page-m)])
                   (db/transact! [page-m]))
-              merge-tx (let [children (:block/_parent block-entity)]
-                         (let [page (db/entity [:block/uuid (:block/uuid page-m)])
-                               [target sibling?] (get-last-child-or-self page)]
-                           (when (seq children)
-                             (:tx-data
-                              (move-blocks children target
-                                           {:sibling? sibling?
-                                            :outliner-op :move-blocks})))))]
+              merge-tx (let [children (:block/_parent block-entity)
+                             page (db/entity [:block/uuid (:block/uuid page-m)])
+                             [target sibling?] (get-last-child-or-self page)]
+                         (when (seq children)
+                           (:tx-data
+                            (move-blocks children target
+                                         {:sibling? sibling?
+                                          :outliner-op :move-blocks}))))]
           (swap! txs-state (fn [txs]
                              (concat txs
                                      [(assoc page-m
