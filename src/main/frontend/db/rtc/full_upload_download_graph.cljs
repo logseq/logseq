@@ -16,6 +16,7 @@
             [cljs.reader :as edn]
             [frontend.db.rtc.const :as rtc-const]))
 
+(def transit-r (transit/reader :json))
 
 (defn- export-as-blocks
   [repo]
@@ -73,7 +74,9 @@
            block-type (keep (comp block-type-ident->str :db/ident) (:block/type block))
            block-schema (some->> (:block/schema block)
                                  edn/read-string
-                                 rtc-const/block-schema-decoder)]
+                                 rtc-const/block-schema-decoder)
+           block-properties (some->> (:block/properties block)
+                                     (transit/read transit-r))]
        ;; TODO: block/properties
        (cond-> (assoc block :db/id (str db-id))
          block-parent (assoc :block/parent (str block-parent))
@@ -81,7 +84,8 @@
          (seq block-alias) (assoc :block/alias (map str block-alias))
          (seq block-tags)  (assoc :block/tags (map str block-tags))
          (seq block-type)  (assoc :block/type block-type)
-         block-schema (assoc :block/schema block-schema))))
+         block-schema      (assoc :block/schema block-schema)
+         block-properties  (assoc :block/properties block-properties))))
    blocks))
 
 (def page-of-block
