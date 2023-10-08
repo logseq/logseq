@@ -140,14 +140,6 @@
 
 (declare move-blocks)
 
-(defn object-with-tag?
-  "Is it going to create an object?"
-  [content]
-  (and content
-       (string/starts-with? content "[[")
-       (string/includes? content "]]")
-       (string/includes? content "#")))
-
 (defn- create-object-when-save
   [txs-state block-entity m structured-tags?]
   (if structured-tags?
@@ -155,8 +147,7 @@
           linked-page (some-> content mldoc/extract-plain)
           sanity-linked-page (some-> linked-page util/page-name-sanity-lc)
           linking-page? (and (not (string/blank? sanity-linked-page))
-                             (or (object-with-tag? content)
-                                 @(:editor/create-page? @state/state)))]
+                             @(:editor/create-page? @state/state))]
       (if linking-page?
         (let [existing-ref-id (some (fn [r]
                                       (when (= sanity-linked-page (:block/name r))

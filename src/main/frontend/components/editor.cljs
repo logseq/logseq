@@ -127,11 +127,7 @@
     (page-handler/on-chosen-handler input id q pos format)))
 
 (rum/defcs page-search < rum/reactive
-  {:init (fn [state]
-           (let [create-page? (outliner-core/object-with-tag? (state/get-edit-content))]
-             (reset! (:editor/create-page? @state/state) create-page?))
-           state)
-   :will-unmount (fn [state]
+  {:will-unmount (fn [state]
                    (reset! commands/*current-command nil)
                    state)}
   "Embedded page searching popup"
