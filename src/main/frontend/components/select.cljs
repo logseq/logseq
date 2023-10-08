@@ -33,7 +33,7 @@
        [:div.tip.flex
         [:code.opacity-20.bg-transparent (:id result)]])]))
 
-(rum/defcs select
+(rum/defcs ^:large-vars/cleanup-todo select
   "Provides a select dropdown powered by a fuzzy search. Takes the following options:
    * :items - Vec of things to select from. Assumes a vec of maps with :value key by default. Required option
    * :limit - Limit number of items to search. Default is 100

@@ -408,7 +408,7 @@
        {:modal-class (util/hiccup->class
                       "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")}))))
 
-(rum/defcs page-title < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo page-title < rum/reactive
   (rum/local false ::edit?)
   (rum/local "" ::input-value)
   (rum/local false ::hover?)

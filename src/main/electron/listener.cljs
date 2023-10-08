@@ -2,7 +2,6 @@
   "System-component-like ns that defines listeners by event name to receive ipc
   messages from electron's main process"
   (:require [cljs-bean.core :as bean]
-            [datascript.core :as d]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.db :as db]

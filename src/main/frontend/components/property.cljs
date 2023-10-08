@@ -276,7 +276,7 @@
                                     (update-property! property @*property-name @*property-schema)))))))
       dropdown-opts)]))
 
-(rum/defcs property-config <
+(rum/defcs ^:large-vars/cleanup-todo property-config <
   rum/reactive
   (rum/local nil ::property-name)
   (rum/local nil ::property-schema)
@@ -463,7 +463,7 @@
 (rum/defcs property-input < rum/reactive
   (rum/local false ::show-new-property-config?)
   shortcut/disable-all-shortcuts
-  [state entity *property-key *property-value {:keys [class-schema? page-configure? in-block-container?]
+  [state entity *property-key *property-value {:keys [class-schema? _page-configure? in-block-container?]
                                                :as opts}]
   (let [*show-new-property-config? (::show-new-property-config? state)
         entity-properties (->> (keys (:block/properties entity))
@@ -533,7 +533,7 @@
       state
       :on-hide (fn [] (property-handler/set-editing-new-property! nil))
       :node (js/document.getElementById "edit-new-property"))))
-  [state block edit-input-id properties new-property? opts]
+  [state block edit-input-id new-property? opts]
   [:div.ls-new-property
    (let [*property-key (::property-key state)
          *property-value (::property-value state)]
@@ -699,7 +699,7 @@
      (when-not @*hide?
        (properties-section block hidden-properties opts))]))
 
-(rum/defcs properties-area < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive
   (rum/local false ::hover?)
   {:init (fn [state]
            (assoc state ::blocks-container-id (or (:blocks-container-id (last (:rum/args state)))
@@ -788,7 +788,7 @@
          (hidden-properties block full-hidden-properties opts))
 
        (when (or new-property? (not in-block-container?))
-         (new-property block edit-input-id properties new-property? opts))
+         (new-property block edit-input-id new-property? opts))
 
        (when (and (seq class->properties) (not one-class?))
          (let [page-cp (:page-cp opts)]

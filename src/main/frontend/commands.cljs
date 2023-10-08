@@ -226,7 +226,7 @@
    (remove nil?)
    (util/distinct-by-last-wins first)))
 
-(defn commands-map
+(defn ^:large-vars/cleanup-todo commands-map
   [get-page-ref-text]
   (let [db? (config/db-based-graph? (state/get-current-repo))
         embed-page (if db? db-based-embed-page file-based-embed-page)

@@ -55,7 +55,6 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.web.nfs :as nfs-handler]
-            [frontend.handler.editor :as editor-handler]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.graph-picker :as graph-picker]
             [frontend.mobile.util :as mobile-util]

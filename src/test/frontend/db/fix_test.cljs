@@ -3,12 +3,9 @@
             [datascript.core :as d]
             [frontend.core-test :as core-test]
             [frontend.test.fixtures :as fixtures]
-            [frontend.db.fix :as db-fix]
-            [frontend.test.helper :as test-helper]))
+            [frontend.db.fix :as db-fix]))
 
 (use-fixtures :each fixtures/reset-db)
-
-(def test-db test-helper/test-db)
 
 (defonce init-conflicts
   [{:block/uuid "1"}

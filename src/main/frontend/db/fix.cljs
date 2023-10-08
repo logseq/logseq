@@ -38,10 +38,9 @@
                                                        (do
                                                          (swap! *ids disj first-child-id)
                                                          [first-child-id])
-                                                       (do
-                                                         (let [id (first @*ids)]
-                                                           (swap! *ids disj id)
-                                                           [id]))))
+                                                       (let [id (first @*ids)]
+                                                         (swap! *ids disj id)
+                                                         [id])))
                                    section-with-left (or
                                                       (when-let [left-id (:db/id (:block/left (db/entity (first current-section))))]
                                                         (swap! *ids disj left-id)

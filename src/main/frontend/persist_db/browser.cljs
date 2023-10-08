@@ -1,4 +1,5 @@
 (ns frontend.persist-db.browser
+  "Browser db persist"
   (:require ["comlink" :as Comlink]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]

@@ -1,4 +1,5 @@
 (ns frontend.db.rtc.op
+  "TODO"                                ; @zhiyuan
   (:require [malli.core :as m]
             [frontend.db.rtc.ops-idb-store :as op-store]
             [promesa.core :as p]
@@ -90,6 +91,7 @@
   [repo]
   (op-store/<get-graph-uuid repo))
 
-(defn <get-local-tx
-  [repo]
-  (op-store/<get-local-tx repo))
+(comment
+  (defn <get-local-tx
+    [repo]
+    (op-store/<get-local-tx repo)))

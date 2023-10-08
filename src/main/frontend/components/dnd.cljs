@@ -3,14 +3,12 @@
             [cljs-bean.core :as bean]
             ["@dnd-kit/sortable" :refer [useSortable arrayMove SortableContext sortableKeyboardCoordinates verticalListSortingStrategy] :as sortable]
             ["@dnd-kit/utilities" :refer [CSS]]
-            ["@dnd-kit/core" :refer [DndContext closestCenter KeyboardSensor PointerSensor useSensor useSensors DragOverlay]]
-            ["react-dom" :refer [createPortal]]
-            [frontend.rum :as r]
-            [frontend.util :as util]))
+            ["@dnd-kit/core" :refer [DndContext closestCenter KeyboardSensor PointerSensor useSensor useSensors]]
+            [frontend.rum :as r]))
 
 (def dnd-context (r/adapt-class DndContext))
 (def sortable-context (r/adapt-class SortableContext))
-(def drag-overlay (r/adapt-class DragOverlay))
+;; (def drag-overlay (r/adapt-class DragOverlay))
 
 (rum/defc sortable-item
   [props children]
