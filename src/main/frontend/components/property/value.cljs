@@ -84,7 +84,8 @@
                         (when (= (util/ekey e) "Enter")
                           toggle-fn))}
         [:span.inline-flex.items-center
-         (when-not multiple-values? [:span.mr-1 (or title "Pick a date")])
+         (when title
+           (when-not multiple-values? [:span.mr-1 title]))
          (when-not title (ui/icon "calendar" {:size 15}))]])
      (fn [{:keys [toggle-fn]}]
        (ui/datepicker value' {:on-change (fn [_e date]

@@ -649,9 +649,14 @@
             block? (and (contains? #{:default :template} type)
                         (uuid? v)
                         (db/entity [:block/uuid v]))
-            collapsed? (when block? (property-collapsed? block property))]
-        [:div {:class (if block?
+            collapsed? (when block? (property-collapsed? block property))
+            date? (= type :date)]
+        [:div {:class (cond
+                        block?
                         "flex flex-1 flex-col gap-1 property-block"
+                        date?
+                        "property-pair items-center"
+                        :else
                         "property-pair items-start")}
          [:div.property-key
           {:class "col-span-2"}
