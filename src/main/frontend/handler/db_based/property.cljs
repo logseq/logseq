@@ -357,11 +357,26 @@
                    (let [origin-properties (:block/properties block)]
                      (when (contains? (set (keys origin-properties)) property-uuid)
                        (let [properties' (dissoc origin-properties property-uuid)
-                             refs (outliner-core/rebuild-block-refs block properties')]
-                         [[:db/retract (:db/id block) :block/refs]
-                          {:block/uuid (:block/uuid block)
-                           :block/properties properties'
-                           :block/refs refs}])))))
+                             refs (outliner-core/rebuild-block-refs block properties')
+                             property (db/entity [:block/uuid property-uuid])
+                             value (get origin-properties property-uuid)
+                             block-value? (and (= :default (get-in property [:block/schema :type] :default))
+                                               (uuid? value))
+                             property-block (when block-value? (db/entity [:block/uuid value]))
+                             retract-blocks-tx (when (and property-block
+                                                          (some? (get-in property-block [:block/metadata :created-from-block]))
+                                                          (some? (get-in property-block [:block/metadata :created-from-property])))
+                                                 (let [txs-state (atom [])]
+                                                   (outliner-core/delete-block txs-state
+                                                                               (outliner-core/->Block property-block)
+                                                                               true)
+                                                   @txs-state))]
+                         (concat
+                          [[:db/retract (:db/id block) :block/refs]
+                           {:block/uuid (:block/uuid block)
+                            :block/properties properties'
+                            :block/refs refs}]
+                          retract-blocks-tx))))))
                block-ids)]
       (when (seq txs)
         (db/transact! repo txs {:outliner-op :save-block})))))
