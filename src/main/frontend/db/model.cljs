@@ -447,7 +447,8 @@ independent of format as format specific heading characters are stripped"
                                  :tags (:block/tags e)
                                  :children children
                                  :collapsed? (:block/collapsed? e)
-                                 :collapsed-properties (:block/collapsed-properties e)}]))}
+                                 :collapsed-properties (:block/collapsed-properties e)
+                                 :refs-count (count (:block/_refs e))}]))}
               nil)
      react
      first)))

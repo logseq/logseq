@@ -2405,21 +2405,20 @@
         nil)]]))
 
 (rum/defc block-refs-count < rum/static
-  [block *hide-block-refs?]
-  (let [block-refs-count (count (:block/_refs block))]
-    (when (> block-refs-count 0)
-      [:div
-       [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link
-        {:title "Open block references"
-         :style {:margin-top -1}
-         :on-click (fn [e]
-                     (if (gobj/get e "shiftKey")
-                       (state/sidebar-add-block!
-                        (state/get-current-repo)
-                        (:db/id block)
-                        :block-ref)
-                       (swap! *hide-block-refs? not)))}
-        block-refs-count]])))
+  [block block-refs-count *hide-block-refs?]
+  (when (> block-refs-count 0)
+    [:div
+     [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link
+      {:title "Open block references"
+       :style {:margin-top -1}
+       :on-click (fn [e]
+                   (if (gobj/get e "shiftKey")
+                     (state/sidebar-add-block!
+                      (state/get-current-repo)
+                      (:db/id block)
+                      :block-ref)
+                     (swap! *hide-block-refs? not)))}
+      block-refs-count]]))
 
 (rum/defc block-left-menu < rum/reactive
   [_config {:block/keys [uuid] :as _block}]
@@ -2517,7 +2516,7 @@
                                    (editor-handler/edit-block! block :max (:block/uuid block)))}
                  svg/edit])
 
-              (block-refs-count block *hide-block-refs?)])]
+              (block-refs-count block refs-count *hide-block-refs?)])]
 
           (when (and (not hide-block-refs?) (> refs-count 0)
                      (not (:in-property? config)))
