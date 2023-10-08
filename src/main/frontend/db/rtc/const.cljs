@@ -94,11 +94,10 @@
                                [:add {:optional true} [:maybe [:set block-type-schema]]]
                                [:retract {:optional true} [:maybe [:set block-type-schema]]]]]
       [:schema {:optional true} [:map-of :keyword :any]]
-      [:properties {:optional true} [:map-of :uuid
-                                     [:map
-                                      [:add {:optional true} [:set :any]]
-                                      [:retract {:optional true} [:set :any]]
-                                      [:reset {:optional true} :any]]]]]]]
+      [:properties {:optional true} [:map
+                                     [:add {:optional true} [:sequential [:cat :uuid :string ;; value is transit-json-string
+                                                                          ]]]
+                                     [:retract {:optional true} [:set :uuid]]]]]]]
    [:update-page
     [:cat :keyword
      [:map
@@ -143,4 +142,5 @@
       [:action :string]
       [:s3-key :string]]]]))
 (def data-to-ws-decoder (m/decoder data-to-ws-schema mt/string-transformer))
+(def data-to-ws-encoder (m/encoder data-to-ws-schema mt/string-transformer))
 (def data-to-ws-validator (m/validator data-to-ws-schema))
