@@ -61,7 +61,8 @@
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.handler.db-based.property :as db-property-handler]))
+            [frontend.handler.db-based.property :as db-property-handler]
+            [frontend.db.model :as model]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -714,31 +715,37 @@
   (when (and repo sibling-block)
     (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
       (when-let [block (db/entity [:block/uuid (uuid sibling-block-id)])]
-        (let [original-block (dom/attr sibling-block "originalblockid")
-              id (if original-block (:block/uuid block) id)
-              original-content (util/trim-safe
-                                (if (:block/name block)
-                                  (:block/original-name block)
-                                  (:block/content block)))
-              value' (-> (file-property/remove-built-in-properties-when-file-based repo format original-content)
-                         (drawer/remove-logbook))
-              value (->> value
-                         (file-property/remove-properties-when-file-based repo format)
-                         (drawer/remove-logbook))
-              new-value (str value' value)
-              tail-len (count value)
-              pos (max
-                   (if original-content
-                     (gobj/get (utf8/encode original-content) "length")
-                     0)
-                   0)]
-          (edit-block! (db/pull (:db/id block))
-                       pos
-                       id
-                       {:custom-content new-value
-                        :tail-len tail-len})
-          {:prev-block block
-           :new-content new-value})))))
+        (if (:block/name block)
+          {:prev-block block}
+          (let [original-block (dom/attr sibling-block "originalblockid")
+                edit-block (some-> (:db/id (state/get-edit-block)) db/entity)
+                edit-block-has-refs? (some? (:block/_refs edit-block))
+                id (if original-block (:block/uuid block) id)
+                original-content (util/trim-safe
+                                  (if (:block/name block)
+                                    (:block/original-name block)
+                                    (:block/content block)))
+                value' (-> (file-property/remove-built-in-properties-when-file-based repo format original-content)
+                           (drawer/remove-logbook))
+                value (->> value
+                           (file-property/remove-properties-when-file-based repo format)
+                           (drawer/remove-logbook))
+                new-value (str value' value)
+                tail-len (count value)
+                pos (max
+                     (if original-content
+                       (gobj/get (utf8/encode original-content) "length")
+                       0)
+                     0)]
+            (edit-block! (if edit-block-has-refs?
+                           (db/pull (:db/id edit-block))
+                           (db/pull (:db/id block)))
+                         pos
+                         id
+                         {:custom-content new-value
+                          :tail-len tail-len})
+            {:prev-block block
+             :new-content new-value}))))))
 
 (declare save-block!)
 
@@ -746,6 +753,7 @@
   [eid]
   (empty? (:block/_refs (db/entity eid))))
 
+(declare expand-block!)
 (defn delete-block!
   ([repo]
    (delete-block! repo true))
@@ -776,15 +784,40 @@
                                    concat-prev-block?
                                    (assoc :concat-data
                                           {:last-edit-block (:block/uuid block)}))]
-               (outliner-tx/transact! transact-opts
-                                      (if concat-prev-block?
-                                        (let [prev-block' (if (seq (:block/_refs block-e))
-                                                            (assoc prev-block
-                                                                   :block/uuid (:block/uuid block))
-                                                            prev-block)]
-                                          (delete-block-aux! block delete-children?)
-                                          (save-block! repo prev-block' new-content {:editor/op :delete}))
-                                        (delete-block-aux! block delete-children?)))))))))
+               (outliner-tx/transact!
+                transact-opts
+                (cond
+                  (and prev-block (:block/name prev-block)
+                       (not= (:db/id prev-block) (:db/id (:block/parent block)))) ; embed page
+                  (let [target (or
+                                (some-> (model/get-block-last-direct-child (db/get-db)
+                                                                           (:db/id prev-block)
+                                                                           false)
+                                        db/entity)
+                                prev-block)]
+                    (outliner-core/move-blocks! [block] target (not= (:db/id target) (:db/id prev-block)))
+                    (when (:block/collapsed? prev-block)
+                      (expand-block! (:block/uuid prev-block)))
+                    ;; FIXME: save-block! will reset :block/parent && :block/left that have been modified by move-blocks! above,
+                    (util/schedule #(save-block! repo block value {:editor/op :delete}))
+                    (js/setTimeout #(edit-block! (db/pull (:db/id block)) :max (:block/uuid block) {}) 100))
+
+                  concat-prev-block?
+                  (if (seq (:block/_refs (db/entity (:db/id block))))
+                    (do
+                      (delete-block-aux! prev-block delete-children?)
+                      (save-block! repo block new-content {:editor/op :delete})
+                      (outliner-core/save-block! {:db/id (:db/id block)
+                                                  :block/uuid (:block/uuid block)
+                                                  :block/parent (:db/id (:block/parent prev-block))
+                                                  :block/left (or (:db/id (:block/left prev-block))
+                                                                  (:db/id (:block/parent prev-block)))}))
+                    (do
+                      (delete-block-aux! block delete-children?)
+                      (save-block! repo prev-block new-content {:editor/op :delete})))
+
+                  :else
+                  (delete-block-aux! block delete-children?)))))))))
    (state/set-editor-op! nil)))
 
 (defn delete-blocks!
