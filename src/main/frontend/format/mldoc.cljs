@@ -155,3 +155,15 @@
     (->> @*result
          (remove string/blank?)
          (distinct))))
+
+(defn content-without-tags
+  "Remove tags from content"
+  [content tags]
+  (->
+   (reduce
+    (fn [content tag]
+      (let [tag' (str "#" tag)]
+        (string/replace content tag' "")))
+    content
+    tags)
+   (string/trim)))

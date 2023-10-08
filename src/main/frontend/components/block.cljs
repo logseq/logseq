@@ -2371,7 +2371,7 @@
                :else
                nil)
 
-             (when (and (seq block-tags) (some? (:block/name block)))
+             (when (seq block-tags)
                (tags config block))]]))
 
        (clock-summary-cp block body)]

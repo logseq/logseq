@@ -125,6 +125,7 @@
    (dissoc schema :block/properties-text-values :block/pre-block? :recent/pages)
    {}))
 
+;; TODO: some attributes shouldn't be retracted for the db version
 (def retract-attributes
   #{
     :block/refs
@@ -141,8 +142,6 @@
     :block/properties-text-values
     :block/macros
     :block/invalid-properties
-    :block/created-at
-    :block/updated-at
     :block/warning
     }
   )
