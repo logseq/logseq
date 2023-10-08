@@ -68,6 +68,7 @@
 #?(:cljs (defonce convert-to-letters utils/convertToLetters))
 
 (defn string-join-path
+  #_:clj-kondo/ignore
   "Replace all `strings/join` used to construct paths with this function to reduce lint output.
   https://github.com/logseq/logseq/pull/8679"
   [parts]

@@ -45,7 +45,6 @@
             [promesa.core :as p]
             [frontend.mobile.core :as mobile]
             [frontend.db.listener :as db-listener]
-            [frontend.db.rtc.core :as rtc-core]
             [cljs-bean.core :as bean]))
 
 (defn- set-global-error-notification!

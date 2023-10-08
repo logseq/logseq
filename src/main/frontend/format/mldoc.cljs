@@ -10,8 +10,7 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.block :as gp-block]
-            [clojure.walk :as walk]
-            [frontend.util :as util]))
+            [clojure.walk :as walk]))
 
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
 (defonce parseOPML (gobj/get Mldoc "parseOPML"))
@@ -99,40 +98,40 @@
 (defn extract-plain
   "Extract plain elements including page refs"
   [content]
-  (let [ast (->edn content (gp-mldoc/default-config :markdown))]
-    (let [*result (atom [])]
-      (walk/prewalk
-       (fn [f]
-         (cond
+  (let [ast (->edn content (gp-mldoc/default-config :markdown))
+        *result (atom [])]
+    (walk/prewalk
+     (fn [f]
+       (cond
            ;; tag
-           (and (vector? f)
-                (= "Tag" (first f)))
-           nil
+         (and (vector? f)
+              (= "Tag" (first f)))
+         nil
 
            ;; nested page ref
-           (and (vector? f)
-                (= "Nested_link" (first f)))
-           (swap! *result conj (:content (second f)))
+         (and (vector? f)
+              (= "Nested_link" (first f)))
+         (swap! *result conj (:content (second f)))
 
            ;; page ref
-           (and (vector? f)
-                (= "Link" (first f))
-                (map? (second f))
-                (vector? (:url (second f)))
-                (= "Page_ref" (first (:url (second f)))))
-           (swap! *result conj
-                  (:full_text (second f)))
+         (and (vector? f)
+              (= "Link" (first f))
+              (map? (second f))
+              (vector? (:url (second f)))
+              (= "Page_ref" (first (:url (second f)))))
+         (swap! *result conj
+                (:full_text (second f)))
 
            ;; plain
-           (and (vector? f)
-                (= "Plain" (first f)))
-           (swap! *result conj (second f))
+         (and (vector? f)
+              (= "Plain" (first f)))
+         (swap! *result conj (second f))
 
-           :else
-           f))
-       ast)
-      (-> (string/trim (apply str @*result))
-          text/page-ref-un-brackets!))))
+         :else
+         f))
+     ast)
+    (-> (string/trim (apply str @*result))
+        text/page-ref-un-brackets!)))
 
 (defn extract-tags
   "Extract tags from content"
@@ -156,15 +155,3 @@
     (->> @*result
          (remove string/blank?)
          (distinct))))
-
-(defn content-without-tags
-  "Remove tags from content"
-  [content tags]
-  (->
-   (reduce
-    (fn [content tag]
-      (let [tag' (str "#" tag)]
-        (string/replace content tag' "")))
-    content
-    tags)
-   (string/trim)))

@@ -49,6 +49,7 @@ frontend.mobile.util/get-idevice-statusbar-height
 ;; Used in macro
 frontend.modules.outliner.datascript/transact!
 frontend.modules.outliner.core/*transaction-opts*
+frontend.modules.outliner.core/*transaction-args*
 ;; Referenced in comment
 frontend.page/route-view
 ;; placeholder fn
@@ -89,3 +90,5 @@ frontend.state/get-current-edit-block-and-position
 frontend.db.model/get-all-classes
 ;; Repl fn
 frontend.db.sync/export-as-blocks
+;; Initial loaded
+frontend.ui/_emoji-init-data

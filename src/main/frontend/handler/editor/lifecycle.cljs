@@ -37,7 +37,7 @@
 
 (defn will-unmount
   [state]
-  (let [{:keys [block value]} (get-state)]
+  (let [{:keys [value]} (get-state)]
     (editor-handler/clear-when-saved!)
     (when (and
            (not (contains? #{:insert :indent-outdent :auto-save :undo :redo :delete} (state/get-editor-op)))

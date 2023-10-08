@@ -64,9 +64,8 @@
 
 (goog-define ENABLE-RTC-SYNC-PRODUCTION false)
 (if ENABLE-RTC-SYNC-PRODUCTION
-  (do (def RTC-WS-URL "wss://ws.logseq.com/rtc-sync?useruuid=%s"))
-  (do (def RTC-WS-URL "wss://ws-dev.logseq.com/rtc-sync?useruuid=%s"))
-  )
+  (def RTC-WS-URL "wss://ws.logseq.com/rtc-sync?useruuid=%s")
+  (def RTC-WS-URL "wss://ws-dev.logseq.com/rtc-sync?useruuid=%s"))
 ;; Feature flags
 ;; =============
 
@@ -310,13 +309,6 @@
     [(util/format "[%s]()" label)
      (+ 3 (count label))]
     ["" 0]))
-
-(defn properties-wrapper-pattern
-  [format]
-  (case format
-    :markdown
-    "---\n%s\n---"
-    "%s"))
 
 (defn get-file-extension
   [format]

@@ -78,7 +78,7 @@
     txs))
 
 (defn replace-ref-with-content
-  [txs repo opts]
+  [txs opts]
   (if (and (= :delete-blocks (:outliner-op opts))
            (empty? (:uuid-changed opts)))
     (let [retracted-block-ids (->> (keep (fn [tx]
@@ -153,7 +153,7 @@
 
               (and (= :delete-blocks (:outliner-op opts))
                    (empty? (:uuid-changed opts)))
-              (replace-ref-with-content repo opts)
+              (replace-ref-with-content opts)
 
               true
               (distinct))]
@@ -171,7 +171,7 @@
               rs (db/transact! repo txs (assoc opts :outliner/transact? true))
               tx-id (get-tx-id rs)]
           ;; TODO: disable this when db is stable
-          ;; (when config/dev? (validate-db! rs))
+          (when config/dev? (validate-db! rs))
           (state/update-state! :history/tx->editor-cursor
                                (fn [m] (assoc m tx-id before-editor-cursor)))
 

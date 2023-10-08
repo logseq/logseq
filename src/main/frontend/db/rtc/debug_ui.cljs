@@ -5,7 +5,7 @@
   (:require [frontend.ui :as ui]
             [rum.core :as rum]
             [frontend.db.rtc.core :as rtc-core]
-            [cljs.core.async :as async :refer [go <! chan go-loop]]
+            [cljs.core.async :as async :refer [go <!]]
             [cljs.core.async.interop :refer [p->c]]
             [frontend.db.rtc.op :as op]
             [frontend.state :as state]
@@ -16,7 +16,7 @@
             [frontend.handler.notification :as notification]))
 
 (defonce debug-state (atom nil))
-(def debug-graph-uuid "c9d334d8-977a-428c-af53-25261de27db5")
+;; (def debug-graph-uuid "c9d334d8-977a-428c-af53-25261de27db5")
 
 
 (defn- <start-rtc

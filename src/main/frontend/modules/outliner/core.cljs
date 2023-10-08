@@ -299,9 +299,9 @@
                                 (:block/page block-entity)
                                 (seq (:block/tags m))
                                 @(:editor/create-page? @state/state))]
-  (when id
+      (when id
         ;; Retract attributes to prepare for tx which rewrites block attributes
-        (let [retract-attributes (if db-based?
+        (let [retract-attributes (when db-based?
                                    (remove #{:block/properties :block/properties-order} db-schema/retract-attributes))]
           (swap! txs-state (fn [txs]
                              (vec
@@ -588,23 +588,23 @@
 
 (defn- blocks-with-ordered-list-props
   [blocks target-block sibling?]
-  (let [target-block (if sibling? target-block (some-> target-block :db/id db/pull block tree/-get-down :data))]
-    (let [list-type-fn (fn [block] (pu/get-property block :logseq.order-list-type))
-          k (if (config/db-based-graph? (state/get-current-repo))
-              (:block/uuid (db/entity [:block/name "logseq.order-list-type"]))
-              :logseq.order-list-type)]
-      (if-let [list-type (and target-block (list-type-fn target-block))]
-        (mapv
-          (fn [{:block/keys [content format] :as block}]
-            (cond-> block
-              (and (some? (:block/uuid block))
-                   (nil? (list-type-fn block)))
-              (update :block/properties assoc k list-type)
+  (let [target-block (if sibling? target-block (some-> target-block :db/id db/pull block tree/-get-down :data))
+        list-type-fn (fn [block] (pu/get-property block :logseq.order-list-type))
+        k (if (config/db-based-graph? (state/get-current-repo))
+            (:block/uuid (db/entity [:block/name "logseq.order-list-type"]))
+            :logseq.order-list-type)]
+    (if-let [list-type (and target-block (list-type-fn target-block))]
+      (mapv
+       (fn [{:block/keys [content format] :as block}]
+         (cond-> block
+           (and (some? (:block/uuid block))
+                (nil? (list-type-fn block)))
+           (update :block/properties assoc k list-type)
 
-              (not (config/db-based-graph? (state/get-current-repo)))
-              (assoc :block/content (property-util/insert-property format content :logseq.order-list-type list-type))))
-          blocks)
-        blocks))))
+           (not (config/db-based-graph? (state/get-current-repo)))
+           (assoc :block/content (property-util/insert-property format content :logseq.order-list-type list-type))))
+       blocks)
+      blocks)))
 
 ;;; ### insert-blocks, delete-blocks, move-blocks
 
@@ -1099,7 +1099,7 @@
   see also `frontend.modules.outliner.transaction/transact!`"
   nil)
 
-(def ^:private ^:dynamic *transaction-args*
+(def ^:private ^:dynamic #_:clj-kondo/ignore *transaction-args*
   "Stores transaction args which can be fetched in all op-transact functions."
   nil)
 

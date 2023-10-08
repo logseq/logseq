@@ -1,11 +1,11 @@
 (ns frontend.db.rtc.ws
+  "TODO"                                ; @zhiyuan
   (:require-macros
    [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [frontend.config :as config]
             [frontend.util :as util]
             [frontend.db.rtc.const :as rtc-const]
-            [cljs.core.async :as async :refer [<! >! chan go go-loop offer!
-                                               poll! timeout]]))
+            [cljs.core.async :as async :refer [<! chan go offer!]]))
 
 
 (def ws-addr config/RTC-WS-URL)

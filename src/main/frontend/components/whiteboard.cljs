@@ -276,7 +276,6 @@
        (page/page-title page-name
                         [:span.text-lg
                          (ui/icon "whiteboard" {:extension? true})]
-                        (get-page-display-name page-name)
                         {:*configure-show? (atom false)})]
 
       [:div.whiteboard-page-refs

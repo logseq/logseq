@@ -285,7 +285,7 @@
       (prn :push-data-from-ws push-data-from-ws)))
 
 (def transit-w (transit/writer :json))
-(defn- local-ops->remote-ops
+(defn- ^:large-vars/cleanup-todo local-ops->remote-ops
   "when verbose?, update ops will contain more attributes"
   [repo sorted-ops _verbose?]
   (let [[remove-block-uuid-set move-block-uuid-set update-page-uuid-set remove-page-uuid-set update-block-uuid->attrs]

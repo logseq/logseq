@@ -265,7 +265,6 @@
     :settings-page/edit-global-config-edn "Modifier le fichier global config.edn"
     :settings-page/edit-setting "Modifier"
     :settings-page/enable-all-pages-public "Toutes les pages publiques lors de la publication"
-    :settings-page/enable-block-time "Horodatage de bloc"
     :settings-page/enable-flashcards "Cartes mémoire"
     :settings-page/enable-shortcut-tooltip "Activer les astuces sur les raccourcis"
     :settings-page/enable-tooltip "Astuces"

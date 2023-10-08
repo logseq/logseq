@@ -1533,7 +1533,7 @@ independent of format as format specific heading characters are stripped"
          :in $ % ?parent
          :where
          (namespace ?parent ?c)
-         (or
+         (or-join [?object ?c]
           [?object :block/tags ?parent]
           [?object :block/tags ?c])]
        (conn/get-db repo)

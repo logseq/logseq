@@ -63,7 +63,7 @@
             [frontend.util.clock :as clock]
             [frontend.util.drawer :as drawer]
             [frontend.handler.file-based.property :as file-property]
-            [frontend.handler.file-based.property.util :as property]
+            [frontend.handler.file-based.property.util :as property-util]
             [frontend.util.text :as text-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -75,15 +75,13 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [logseq.shui.core :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [shadow.loader :as loader]
-            [logseq.common.path :as path]
-            [clojure.data :as data]))
+            [logseq.common.path :as path]))
 
 
 
@@ -1565,7 +1563,7 @@
        (hiccups.core/html)
        (security/sanitize-html))))
 
-(defn inline
+(defn ^:large-vars/cleanup-todo inline
   [{:keys [html-export?] :as config} item]
   (match item
          [(:or "Plain" "Spaces") s]
@@ -2064,10 +2062,10 @@
 (rum/defc properties-cp
   [config {:block/keys [pre-block?] :as block}]
   (let [ordered-properties
-        (property/get-visible-ordered-properties (:block/properties block)
-                                                 (:block/properties-order block)
-                                                 {:pre-block? pre-block?
-                                                  :page-id (:db/id (:block/page block))})]
+        (property-util/get-visible-ordered-properties (:block/properties block)
+                                                      (:block/properties-order block)
+                                                      {:pre-block? pre-block?
+                                                       :page-id (:db/id (:block/page block))})]
     (cond
       (seq ordered-properties)
       [:div.block-properties
@@ -2311,7 +2309,7 @@
   [config {:block/keys [uuid content properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide? selected?]
   (let [repo (state/get-current-repo)
         content (or (:block/original-name block)
-                    (property/remove-built-in-properties format content))
+                    (property-util/remove-built-in-properties format content))
         {:block/keys [title body] :as block} (if (:block/title block) block
                                                  (merge block (block/parse-title-and-body uuid format pre-block? content)))
         collapsed? (util/collapsed? block)
@@ -2777,7 +2775,8 @@
        (= (:id config)
           (str (:block/uuid block)))))
 
-(defn- build-config [config block {:keys [navigating-block navigated?]}]
+(defn- build-config
+  [config block {:keys [navigating-block navigated?]}]
   (cond-> config
     navigated?
     (assoc :id (str navigating-block))
@@ -2796,7 +2795,7 @@
     (block-handler/attach-order-list-state block)
 
     (nil? (:level config))
-    (assoc config :level 0)))
+    (assoc :level 0)))
 
 (defn- build-block [config block* {:keys [navigating-block navigated?]}]
   (let [linked-block (:block/link (db/entity (:db/id block*)))

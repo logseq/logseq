@@ -7,7 +7,7 @@
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
             ["@emoji-mart/data" :as emoji-data]
-            ["@emoji-mart/react" :as Picker]
+            ;; ["@emoji-mart/react" :as Picker]
             ["emoji-mart" :as emoji-mart]
             [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
@@ -17,11 +17,9 @@
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.route :as route-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.config :as shortcut-config]
@@ -52,13 +50,7 @@
 (def ReactTweetEmbed (r/adapt-class react-tweet-embed))
 (def useInView (gobj/get react-intersection-observer "useInView"))
 (defonce _emoji-init-data ((gobj/get emoji-mart "init") #js {:data emoji-data}))
-(def EmojiPicker (r/adapt-class (gobj/get Picker "default")))
-
-(defn reset-ios-whole-page-offset!
-  []
-  (and (util/ios?)
-       (util/safari?)
-       (js/window.scrollTo 0 0)))
+;; (def EmojiPicker (r/adapt-class (gobj/get Picker "default")))
 
 (defonce icon-size (if (mobile-util/native-platform?) 26 20))
 
@@ -1172,15 +1164,8 @@
          inViewState (useInView #js {:initialInView initial-state
                                      :rootMargin (str root-margin "px")
                                      :triggerOnce trigger-once?
-                                     :onChange (fn [in-view? entry]
-                                                 (set-visible! in-view?)
-                                                 ;; (let [self-top (.-top (.-boundingClientRect entry))]
-                                                 ;;   (when (or (and (not visible?) in-view?)
-                                                 ;;             ;; hide only the components below the current top for better ux
-                                                 ;;             ;; visible?
-                                                 ;;             (and visible? (not in-view?) (> self-top root-margin)))
-                                                 ;;     (set-visible! in-view?)))
-                                                 )})
+                                     :onChange (fn [in-view? _entry]
+                                                 (set-visible! in-view?))})
          ref (.-ref inViewState)]
      (lazy-visible-inner visible? content-fn ref fade-in?))))
 
@@ -1240,6 +1225,7 @@
       :intent "link"
       :small? true)]]))
 
-(rum/defc emoji-picker
-  [opts]
-  (EmojiPicker. (assoc opts :data emoji-data)))
+(comment
+  (rum/defc emoji-picker
+   [opts]
+   (EmojiPicker. (assoc opts :data emoji-data))))

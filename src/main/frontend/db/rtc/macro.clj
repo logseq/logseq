@@ -1,4 +1,5 @@
-(ns frontend.db.rtc.macro)
+(ns frontend.db.rtc.macro
+  "Macros that are used for rtc")
 
 (def ^:private magic-str "YBTFRD")
 

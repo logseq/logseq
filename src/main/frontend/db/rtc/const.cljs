@@ -1,4 +1,5 @@
 (ns frontend.db.rtc.const
+  "RTC constants/schema"
   (:require [malli.util :as mu]
             [malli.core :as m]
             [malli.transform :as mt]))
