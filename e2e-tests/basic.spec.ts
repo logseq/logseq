@@ -48,13 +48,7 @@ test('create page and blocks, save to disk', async ({ page, block, graphDir }) =
     path.join(graphDir, `pages/${pageTitle}.md`),
     'utf8'
   )
-  expect(contentOnDisk.trim()).toEqual(`
-- first bullet
-- second bullet
-	- third bullet
-	- continue editing
-	  second line
-- test ok`.trim())
+  expect(contentOnDisk.trim()).toEqual('- first bullet\n- second bullet\n\t- third bullet\n\t- continue editing\n\t  second line\n- test ok'.trim())
 })
 
 
@@ -103,9 +97,9 @@ test('selection', async ({ page, block }) => {
 
   // shift+up select 3 blocks
   await page.keyboard.down('Shift')
-  await page.keyboard.press('ArrowUp')
-  await page.keyboard.press('ArrowUp')
-  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('ArrowUp', { delay: 20 })
+  await page.keyboard.press('ArrowUp', { delay: 20 })
+  await page.keyboard.press('ArrowUp', { delay: 20 })
   await page.keyboard.up('Shift')
 
   await block.waitForSelectedBlocks(3)
