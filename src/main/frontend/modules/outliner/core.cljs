@@ -148,15 +148,16 @@
        (string/includes? content "]]")
        (string/includes? content "#")))
 
-(defn- assoc-linked-block-when-save
+(defn- create-object-when-save
   [txs-state block-entity m structured-tags?]
   (if structured-tags?
     (let [content (state/get-edit-content)
           linked-page (some-> content mldoc/extract-plain)
-          sanity-linked-page (some-> linked-page util/page-name-sanity-lc)]
-      (when (and (not (string/blank? sanity-linked-page))
-                 (or (object-with-tag? content)
-                     (:editor/create-page? @state/state)))
+          sanity-linked-page (some-> linked-page util/page-name-sanity-lc)
+          linking-page? (and (not (string/blank? sanity-linked-page))
+                             (or (object-with-tag? content)
+                                 @(:editor/create-page? @state/state)))]
+      (if linking-page?
         (let [existing-ref-id (some (fn [r]
                                       (when (= sanity-linked-page (:block/name r))
                                         (:block/uuid r)))
@@ -181,7 +182,11 @@
                                        :block/content ""
                                        :block/refs []
                                        :block/link [:block/uuid (:block/uuid page-m)]}]
-                                     merge-tx))))))
+                                     merge-tx))))
+        (swap! txs-state (fn [txs]
+                           (concat txs
+                                   [{:db/id (:db/id block-entity)
+                                     :block/type "object"}])))))
     (reset! (:editor/create-page? @state/state) false)))
 
 (defn rebuild-block-refs
@@ -227,10 +232,14 @@
       (update m :block/tags (fn [tags]
                               (map (fn [tag]
                                      (if (contains? refs (:block/name tag))
-                                       (dissoc tag :block/uuid)
+                                       (assoc tag :block/uuid
+                                              (:block/uuid
+                                               (first (filter (fn [r] (= (:block/name tag)
+                                                                         (:block/name r)))
+                                                              (:block/refs m)))))
                                        tag))
-                                tags)))
-     m)))
+                                   tags)))
+      m)))
 
 ;; -get-id, -get-parent-id, -get-left-id return block-id
 ;; the :block/parent, :block/left should be datascript lookup ref
@@ -296,13 +305,23 @@
           id (:db/id (:data this))
           block-entity (db/entity id)
           structured-tags? (and (config/db-based-graph? (state/get-current-repo))
-                                (:block/page block-entity)
-                                (seq (:block/tags m))
-                                @(:editor/create-page? @state/state))]
+                                (seq (:block/tags m)))
+          m (if (:block/content m)
+              (update m* :block/content
+                      (fn [content]
+                        (mldoc/content-without-tags content
+                                                    (->>
+                                                     (map
+                                                      (fn [tag]
+                                                        (when (:block/uuid tag)
+                                                          (str config/page-ref-special-chars (:block/uuid tag))))
+                                                       (:block/tags m))
+                                                     (remove nil?)))))
+              m)]
       (when id
         ;; Retract attributes to prepare for tx which rewrites block attributes
         (let [retract-attributes (when db-based?
-                                   (remove #{:block/properties :block/properties-order} db-schema/retract-attributes))]
+                                   (remove #{:block/tags :block/properties} db-schema/retract-attributes))]
           (swap! txs-state (fn [txs]
                              (vec
                               (concat txs
@@ -322,11 +341,9 @@
           (swap! txs-state (fn [txs]
                              (vec (concat txs other-tx)))))
         (swap! txs-state conj
-               (cond-> (dissoc m :db/other-tx)
-                 structured-tags?
-                 (dissoc :block/tags :block/refs))))
+               (dissoc m :db/other-tx)))
 
-      (assoc-linked-block-when-save txs-state block-entity m structured-tags?)
+      (create-object-when-save txs-state block-entity m structured-tags?)
 
       (rebuild-refs txs-state block-entity m)
 
