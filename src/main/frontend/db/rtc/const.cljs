@@ -5,14 +5,24 @@
             [malli.transform :as mt]))
 
 
+(def block-schema-schema
+  [:map {:closed false}
+   [:type :keyword]
+   [:cardinality {:optional true} [:enum :one :many]]
+   [:hide? {:optional true} :boolean]])
+
+(def block-schema-decoder (m/decoder block-schema-schema mt/string-transformer))
+
+
 (def general-attrs-schema-coll
   [[:updated-at {:optional true} :int]
    [:created-at {:optional true} :int]
    [:alias {:optional true} [:maybe [:sequential :uuid]]]
    [:type {:optional true} [:maybe [:sequential :string]]]
-   [:schema {:optional true} [:maybe [:map {:closed false}]]]
+   [:schema {:optional true} [:maybe block-schema-schema]]
    [:tags {:optional true} [:maybe [:sequential :uuid]]]
-   [:properties {:optional true} [:maybe [:map-of :uuid :any]]]])
+   [:properties {:optional true} [:maybe :string ; transit-json-string
+                                  ]]])
 
 (def general-attr-set
   (into #{} (map first) general-attrs-schema-coll))

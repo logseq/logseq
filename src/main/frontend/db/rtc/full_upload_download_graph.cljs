@@ -12,7 +12,9 @@
             [logseq.db.schema :as db-schema]
             [frontend.persist-db :as persist-db]
             [frontend.db.rtc.op :as op]
-            [logseq.outliner.pipeline :as outliner-pipeline]))
+            [logseq.outliner.pipeline :as outliner-pipeline]
+            [cljs.reader :as edn]
+            [frontend.db.rtc.const :as rtc-const]))
 
 
 (defn- export-as-blocks
@@ -68,14 +70,18 @@
            block-left (:db/id (:block/left block))
            block-alias (map :db/id (:block/alias block))
            block-tags (map :db/id (:block/tags block))
-           block-type (keep (comp block-type-ident->str :db/ident) (:block/type block))]
-       ;; TODO: :block/tags :block/type
+           block-type (keep (comp block-type-ident->str :db/ident) (:block/type block))
+           block-schema (some->> (:block/schema block)
+                                 edn/read-string
+                                 rtc-const/block-schema-decoder)]
+       ;; TODO: block/properties
        (cond-> (assoc block :db/id (str db-id))
          block-parent (assoc :block/parent (str block-parent))
          block-left (assoc :block/left (str block-left))
          (seq block-alias) (assoc :block/alias (map str block-alias))
          (seq block-tags)  (assoc :block/tags (map str block-tags))
-         (seq block-type)  (assoc :block/type block-type))))
+         (seq block-type)  (assoc :block/type block-type)
+         block-schema (assoc :block/schema block-schema))))
    blocks))
 
 (def page-of-block
