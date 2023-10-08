@@ -24,8 +24,9 @@
 (defn send!
   [ws message]
   (assert (= js/WebSocket.OPEN (.-readyState ws)))
-  (assert (rtc-const/data-to-ws-validator (rtc-const/data-to-ws-decoder message)) message)
-  (.send ws (js/JSON.stringify (clj->js message))))
+  (let [decoded-message (rtc-const/data-to-ws-decoder message)]
+    (assert (rtc-const/data-to-ws-validator decoded-message) message)
+    (.send ws (js/JSON.stringify (clj->js (rtc-const/data-to-ws-encoder decoded-message))))))
 
 (declare <send!)
 (defn <ensure-ws-open!

@@ -3,7 +3,8 @@
   (:require [datascript.core :as d]
             [frontend.db :as db]
             [frontend.db.rtc.op :as op]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [clojure.data :as data]))
 
 
 (defn- entity-datoms=>attr->datom
@@ -29,6 +30,18 @@
       (seq add) (conj [:add add])
       (seq retract) (conj [:retract retract]))))
 
+
+(defn- diff-properties-value
+  [db-before db-after eid]
+  (let [current-value (:block/properties (d/entity db-after eid))
+        old-value (:block/properties (d/entity db-before eid))
+        [only-in-current only-in-old _both] (data/diff current-value old-value)
+        add-uuid (set (keys only-in-current))
+        retract-uuid (set/difference (set (keys only-in-old)) add-uuid)]
+    (cond-> {}
+      (seq add-uuid) (conj [:add (set add-uuid)])
+      (seq retract-uuid) (conj [:retract (set retract-uuid)]))))
+
 (defn- entity-datoms=>ops
   [repo db-before db-after entity-datoms]
   (let [attr->datom (entity-datoms=>attr->datom entity-datoms)]
@@ -38,12 +51,7 @@
             {[_e _a block-uuid _t add1?] :block/uuid
              [_e _a _v _t add2?]  :block/name
              [_e _a _v _t add3?]  :block/parent
-             [_e _a _v _t add4?]  :block/left
-             [_e _a _v _t _add5?] :block/alias
-             [_e _a _v _t _add6?] :block/type
-             [_e _a _v _t _add7?] :block/schema
-             [_e _a _v _t _add8?] :block/content} attr->datom
-            ;; _ (prn ::x attr->datom)
+             [_e _a _v _t add4?]  :block/left} attr->datom
             ops (cond
                   (and (not add1?) block-uuid
                        (not add2?) (contains? updated-key-set :block/name))
@@ -55,7 +63,8 @@
                   :else
                   (let [updated-general-attrs (seq (set/intersection
                                                     updated-key-set
-                                                    #{:block/tags :block/alias :block/type :block/schema :block/content}))
+                                                    #{:block/tags :block/alias :block/type :block/schema :block/content
+                                                      :block/properties}))
                         ops (cond-> []
                               (or add3? add4?)
                               (conj [:move])
@@ -77,7 +86,9 @@
                                                                                      (map :db/id add)))
                                                   retract (keep :block/uuid (d/pull-many db-before [:block/uuid]
                                                                                          (map :db/id retract)))]
-                                              {:alias {:add add :retract retract}})))
+                                              {:alias (cond-> {}
+                                                        (seq add) (conj [:add add])
+                                                        (seq retract) (conj [:retract retract]))})))
 
                                         :block/type
                                         (let [diff-value (diff-value-of-set-type-attr db-before db-after e :block/type)]
@@ -92,7 +103,19 @@
                                                                                      (map :db/id add)))
                                                   retract (keep :block/uuid (d/pull-many db-before [:block/uuid]
                                                                                          (map :db/id retract)))]
-                                              {:tags {:add add :retract retract}})))
+                                              {:tags (cond-> {}
+                                                       (seq add) (conj [:add add])
+                                                       (seq retract) (conj [:retract retract]))})))
+                                        :block/properties
+                                        (let [diff-value (diff-properties-value db-before db-after e)]
+                                          (when (seq diff-value)
+                                            (let [{:keys [add retract]} diff-value
+                                                  add (keep :block/uuid (d/pull-many
+                                                                         db-after [:block/uuid]
+                                                                         (map (fn [uuid] [:block/uuid uuid]) add)))]
+                                              {:properties (cond-> {}
+                                                             (seq add) (conj [:add add])
+                                                             (seq retract) (conj [:retract retract]))})))
                                         ;; else
                                         nil))
                                     updated-general-attrs)

@@ -16,7 +16,8 @@
             [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.util :as util]
             [malli.core :as m]
-            [malli.util :as mu]))
+            [malli.util :as mu]
+            [cognitect.transit :as transit]))
 
 
 ;;                     +-------------+
@@ -283,6 +284,7 @@
   (go (<! (<apply-remote-data repo push-data-from-ws))
       (prn :push-data-from-ws push-data-from-ws)))
 
+(def transit-w (transit/writer :json))
 (defn- local-ops->remote-ops
   "when verbose?, update ops will contain more attributes"
   [repo sorted-ops _verbose?]
@@ -323,10 +325,12 @@
                    attr-map (update-block-uuid->attrs block-uuid)
                    {{old-alias-add :add old-alias-retract :retract} :alias
                     {old-tags-add :add old-tags-retract :retract}   :tags
-                    {old-type-add :add old-type-retract :retract}   :type} attr-map
+                    {old-type-add :add old-type-retract :retract}   :type
+                    {old-prop-add :add old-prop-retract :retract}   :properties} attr-map
                    {{new-alias-add :add new-alias-retract :retract} :alias
                     {new-tags-add :add new-tags-retract :retract}   :tags
-                    {new-type-add :add new-type-retract :retract}   :type} updated-attrs
+                    {new-type-add :add new-type-retract :retract}   :type
+                    {new-prop-add :add new-prop-retract :retract}   :properties} updated-attrs
                    new-attr-map
                    (cond-> (merge (select-keys updated-attrs [:content :schema])
                                   (select-keys attr-map [:content :schema]))
@@ -347,7 +351,14 @@
                      (assoc-in [:type :add] (set/union old-type-add new-type-add))
                      (or old-type-retract new-type-retract)
                      (assoc-in [:type :retract] (set/difference (set/union old-type-retract new-type-retract)
-                                                                old-type-add new-type-retract)))
+                                                                old-type-add new-type-retract))
+
+                     ;; properties
+                     (or old-prop-add new-prop-add)
+                     (assoc-in [:properties :add] (set/union old-prop-add new-prop-add))
+                     (or old-prop-retract new-prop-retract)
+                     (assoc-in [:properties :retract] (set/difference (set/union old-prop-retract new-prop-retract)
+                                                                      old-prop-add new-prop-retract)))
                    update-block-uuid->attrs (assoc update-block-uuid->attrs block-uuid new-attr-map)]
                [remove-block-uuid-set move-block-uuid-set update-page-uuid-set
                 remove-page-uuid-set update-block-uuid->attrs])
@@ -386,13 +397,17 @@
                                                                          (keep :block/uuid)
                                                                          (map str))
                                                           retract-uuids (map str retract)]
-                                                      {:add add-uuids :retract retract-uuids}))
+                                                      (cond-> {}
+                                                        (seq add-uuids)     (assoc :add add-uuids)
+                                                        (seq retract-uuids) (assoc :retract retract-uuids))))
                                    attr-type-map (when (contains? key-set :type)
                                                    (let [{:keys [add retract]} (:type attr-map)
                                                          current-type-value (set (:block/type b))
                                                          add (set/intersection add current-type-value)
                                                          retract (set/difference retract current-type-value)]
-                                                     {:add add :retract retract}))
+                                                     (cond-> {}
+                                                       (seq add)     (assoc :add add)
+                                                       (seq retract) (assoc :retract retract))))
                                    attr-tags-map (when (contains? key-set :tags)
                                                    (let [{:keys [add retract]} (:tags attr-map)
                                                          add-uuids (->> add
@@ -401,7 +416,19 @@
                                                                         (keep :block/uuid)
                                                                         (map str))
                                                          retract-uuids (map str retract)]
-                                                     {:add add-uuids :retract retract-uuids}))]
+                                                     (cond-> {}
+                                                       (seq add-uuids) (assoc :add add-uuids)
+                                                       (seq retract-uuids) (assoc :retract retract-uuids))))
+                                   attr-properties-map (when (contains? key-set :properties)
+                                                         (let [{:keys [add retract]} (:properties attr-map)
+                                                               properties (:block/properties b)
+                                                               add* (into []
+                                                                          (update-vals (select-keys properties add)
+                                                                                       (partial transit/write transit-w)))]
+                                                           (cond-> {}
+                                                             (seq add*)    (assoc :add add*)
+                                                             (seq retract) (assoc :retract retract))))]
+
                                [:update
                                 (cond-> {:block-uuid block-uuid}
                                   (:block/updated-at b)       (assoc :updated-at (:block/updated-at b))
@@ -410,6 +437,7 @@
                                   attr-type-map               (assoc :type attr-type-map)
                                   attr-alias-map              (assoc :alias attr-alias-map)
                                   attr-tags-map               (assoc :tags attr-tags-map)
+                                  attr-properties-map         (assoc :properties attr-properties-map)
                                   (and (contains? key-set :content)
                                        (:block/content b))    (assoc :content (:block/content b))
                                   (and left-uuid parent-uuid) (assoc :target-uuid left-uuid
