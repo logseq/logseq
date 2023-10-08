@@ -846,7 +846,7 @@
                                   non-consecutive-blocks)))) page-blocks)
        (remove nil?)))))
 
-(defn- delete-block
+(defn delete-block
   "Delete block from the tree."
   [txs-state node children?]
   (let [right-node (tree/-get-right node)]

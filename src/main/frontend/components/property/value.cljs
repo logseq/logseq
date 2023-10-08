@@ -308,11 +308,15 @@
   (let [repo (state/get-current-repo)
         page-id (or (:db/id (:block/page block)) (:db/id block))
         block-id (db/new-block-id)
+        metadata {:created-from-block (:block/uuid block)
+                  :created-from-property (:block/uuid property)
+                  :created-from-template (:block/uuid template)}
         value-block (-> {:block/uuid block-id
                          :block/format :markdown
                          :block/content ""
                          :block/tags #{(:db/id template)}
-                         :block/page {:db/id page-id}}
+                         :block/page {:db/id page-id}
+                         :block/metadata metadata}
                         outliner-core/block-with-timestamps)
         tx-data [value-block]]
     (db/transact! repo tx-data {:outliner-op :insert-blocks})
