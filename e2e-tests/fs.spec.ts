@@ -12,12 +12,12 @@ test('create file on disk then delete', async ({ page, block, graphDir }) => {
   const testCases = [
     {pageTitle: "User:John", fileName: "User%3AJohn"},
     // invalid url decode escaping as %ff is not parsable but match the common URL encode regex
-    {pageTitle: "#%ff", fileName: "#%ff"},
+    {pageTitle: "%ff", fileName: "%ff"},
     // valid url decode escaping
-    {pageTitle: "#%23", fileName: "#%2523"},
-    {pageTitle: "@!#%", fileName: "@!#%"},
+    {pageTitle: "%23", fileName: "%2523"},
+    {pageTitle: "@!%", fileName: "@!%"},
     {pageTitle: "aàáâ", fileName: "aàáâ"},
-    {pageTitle: "#%gggg", fileName: "#%gggg"}
+    {pageTitle: "%gggg", fileName: "%gggg"}
   ]
   if (!IsWindows)
     testCases.push({pageTitle: "User:Bob", fileName: "User:Bob"})
@@ -62,11 +62,11 @@ test("Rename file on disk", async ({ page, block, graphDir }) => {
 
   const testCases = [
     // Normal -> NameSpace
-    {pageTitle: "User:John", fileName: "User%3AJohn", 
+    {pageTitle: "User:John", fileName: "User%3AJohn",
     newPageTitle: "User/John", newFileName: "User___John"},
     // NameSpace -> Normal
-    {pageTitle: "#/%23", fileName: "#___%2523",
-    newPageTitle: "#%23", newFileName: "#%2523"}
+    {pageTitle: "!/%23", fileName: "!___%2523",
+    newPageTitle: "%23", newFileName: "%2523"}
   ]
   if (!IsWindows)
     testCases.push({pageTitle: "User:Bob", fileName: "User:Bob",
@@ -112,12 +112,11 @@ test("Rename file on disk", async ({ page, block, graphDir }) => {
 test('special page names', async ({ page, block, graphDir }) => {
   const testCases = [
     {pageTitle: "User:John", fileName: "User%3AJohn"},
-    // FIXME: Logseq can't creat page starting with "#" in search panel
-    {pageTitle: "_#%ff", fileName: "_%23%25ff"},
-    {pageTitle: "_#%23", fileName: "_%23%2523"},
-    {pageTitle: "@!#%", fileName: "@!%23%"},
+    {pageTitle: "_%ff", fileName: "_%25ff"},
+    {pageTitle: "_%23", fileName: "_%2523"},
+    {pageTitle: "@!%", fileName: "@!%"},
     {pageTitle: "aàáâ", fileName: "aàáâ"},
-    {pageTitle: "_#%gggg", fileName: "_%23%gggg"}
+    {pageTitle: "_%gggg", fileName: "_%gggg"}
   ]
 
   // Test putting files on disk
@@ -127,7 +126,7 @@ test('special page names', async ({ page, block, graphDir }) => {
     const text = `content for ${pageTitle}`
     await block.mustFill(text)
     await page.keyboard.press("Enter")
-    
+
     // Wait for the file to be created on disk
     await page.waitForTimeout(2000);
     // Validate that the file is created on disk with the content
