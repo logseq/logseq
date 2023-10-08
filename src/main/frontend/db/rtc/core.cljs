@@ -71,6 +71,9 @@
 (def rtc-state-validator (m/validator rtc-state-schema))
 
 
+(def transit-w (transit/writer :json))
+(def transit-r (transit/reader :json))
+
 (defn apply-remote-remove-ops
   [repo remove-ops]
   (prn :remove-ops remove-ops)
@@ -158,6 +161,8 @@
       :wrong-pos
       :else nil)))
 
+
+
 (defn- update-block-attrs
   [repo block-uuid op-value]
   (let [key-set (set/intersection
@@ -181,10 +186,20 @@
               (contains? key-set :tags)           (assoc :block/tags (some->> (seq (:tags op-value))
                                                                               (map (partial vector :block/uuid))
                                                                               (db/pull-many repo [:db/id])
-                                                                              (keep :db/id))))]
+                                                                              (keep :db/id)))
+              ;; FIXME: it looks save-block won't save :block/properties??
+              ;;        so I need to transact properties myself
+              ;; (contains? key-set :properties)     (assoc :block/properties
+              ;;                                            (transit/read transit-r (:properties op-value)))
+              )]
         (outliner-tx/transact!
          {:persist-op? false}
-         (outliner-core/save-block! new-block))))))
+         (outliner-core/save-block! new-block))
+        (let [properties (transit/read transit-r (:properties op-value))]
+          (db/transact! repo
+                        [{:block/uuid block-uuid
+                          :block/properties properties}]
+                        {:outliner-op :save-block}))))))
 
 (defn apply-remote-move-ops
   [repo sorted-move-ops]
@@ -284,7 +299,7 @@
   (go (<! (<apply-remote-data repo push-data-from-ws))
       (prn :push-data-from-ws push-data-from-ws)))
 
-(def transit-w (transit/writer :json))
+
 (defn- ^:large-vars/cleanup-todo local-ops->remote-ops
   "when verbose?, update ops will contain more attributes"
   [repo sorted-ops _verbose?]
