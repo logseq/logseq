@@ -9,8 +9,7 @@
             [frontend.db :as db]
             [frontend.format.block :as block]
             [frontend.db.model :as model]
-            [frontend.modules.outliner.core :as outliner-core]
-            [clojure.string :as string]))
+            [frontend.modules.outliner.core :as outliner-core]))
 
 (defn remove-block-property!
   [repo block-id key]

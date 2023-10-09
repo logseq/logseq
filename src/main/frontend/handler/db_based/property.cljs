@@ -261,21 +261,23 @@
                               properties]}]
   {:pre [(uuid? property-uuid)]}
   (when-let [property (db/entity [:block/uuid property-uuid])]
-    (when (and (= :many (:cardinality property-schema))
-               (not= :many (:cardinality (:block/schema property))))
-      ;; cardinality changed from :one to :many
-      (fix-cardinality-many-values! repo property-uuid))
-    (let [tx-data (cond-> {:block/uuid property-uuid}
-                    property-name (merge
-                                   {:block/original-name property-name
-                                    :block/name (gp-util/page-name-sanity-lc property-name)})
-                    property-schema (assoc :block/schema property-schema)
-                    properties (assoc :block/properties
-                                      (merge (:block/properties property)
-                                             properties))
-                    true outliner-core/block-with-updated-at)]
-      (db/transact! repo [tx-data]
-                    {:outliner-op :save-block}))))
+    (let [type (get property [:block/schema :type])]
+      (when-not (and type (:type property-schema) (not= type (:type property-schema))) ; property type changed
+        (when (and (= :many (:cardinality property-schema))
+                   (not= :many (:cardinality (:block/schema property))))
+          ;; cardinality changed from :one to :many
+          (fix-cardinality-many-values! repo property-uuid))
+        (let [tx-data (cond-> {:block/uuid property-uuid}
+                        property-name (merge
+                                       {:block/original-name property-name
+                                        :block/name (gp-util/page-name-sanity-lc property-name)})
+                        property-schema (assoc :block/schema property-schema)
+                        properties (assoc :block/properties
+                                          (merge (:block/properties property)
+                                                 properties))
+                        true outliner-core/block-with-updated-at)]
+          (db/transact! repo [tx-data]
+                        {:outliner-op :save-block}))))))
 
 (defn class-add-property!
   [repo class k-name]

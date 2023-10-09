@@ -293,7 +293,8 @@
         disabled? (or built-in-property? config/publishing?)
         hide-delete? (or (= (:db/id block) (:db/id property)) ; property page
                          add-new-property?)
-        class? (contains? (:block/type block) "class")]
+        class? (contains? (:block/type block) "class")
+        property-type (get-in property [:block/schema :type])]
     [:div.property-configure.flex.flex-1.flex-col
      [:div.grid.gap-2.p-1
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
@@ -329,10 +330,14 @@
                                        :selected (= (keyword (string/lower-case type))
                                                     (:type @*property-schema))})))]
          [:div.col-span-2
-          (ui/select schema-types
-                     (fn [_e v]
-                       (let [type (keyword (string/lower-case v))]
-                         (swap! *property-schema assoc :type type))))])]
+          (if property-type
+            (if (= property-type :default)
+              "Text"
+              ((comp string/capitalize name) property-type))
+            (ui/select schema-types
+                       (fn [_e v]
+                         (let [type (keyword (string/lower-case v))]
+                           (swap! *property-schema assoc :type type)))))])]
 
       (case (:type @*property-schema)
         :page
@@ -454,7 +459,7 @@
         (if (and (contains? (:block/type entity) "class") page-configure?)
           (pv/add-property! entity property-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
           (do
-            (db-property-handler/upsert-property! repo property-name {:type :default} {})
+            (db-property-handler/upsert-property! repo property-name {} {})
             (when *show-new-property-config?
               (reset! *show-new-property-config? true))))
         (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
