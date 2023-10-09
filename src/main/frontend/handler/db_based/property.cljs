@@ -261,7 +261,7 @@
                               properties]}]
   {:pre [(uuid? property-uuid)]}
   (when-let [property (db/entity [:block/uuid property-uuid])]
-    (let [type (get property [:block/schema :type])]
+    (let [type (get-in property [:block/schema :type])]
       (when-not (and type (:type property-schema) (not= type (:type property-schema))) ; property type changed
         (when (and (= :many (:cardinality property-schema))
                    (not= :many (:cardinality (:block/schema property))))

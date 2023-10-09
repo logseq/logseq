@@ -276,6 +276,12 @@
                                     (update-property! property @*property-name @*property-schema)))))))
       dropdown-opts)]))
 
+(defn- property-type-label
+  [property-type]
+  (if (= property-type :default)
+    "Text"
+    ((comp string/capitalize name) property-type)))
+
 (rum/defcs ^:large-vars/cleanup-todo property-config <
   rum/reactive
   (rum/local nil ::property-name)
@@ -322,18 +328,14 @@
        (let [schema-types (->> (concat db-property/user-builtin-schema-types
                                        (when built-in-property?
                                          db-property/internal-builtin-schema-types))
-                               (map (comp string/capitalize name))
                                (map (fn [type]
-                                      {:label (if (= type "Default") "Text" type)
+                                      {:label (property-type-label type)
                                        :disabled disabled?
                                        :value type
-                                       :selected (= (keyword (string/lower-case type))
-                                                    (:type @*property-schema))})))]
+                                       :selected (= type (:type @*property-schema))})))]
          [:div.col-span-2
           (if property-type
-            (if (= property-type :default)
-              "Text"
-              ((comp string/capitalize name) property-type))
+           (property-type-label property-type) 
             (ui/select schema-types
                        (fn [_e v]
                          (let [type (keyword (string/lower-case v))]
