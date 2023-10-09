@@ -62,9 +62,10 @@
   (vec
    (concat
     [:map {:closed false}]
-    [[:block/collapsed? {:optional true} :boolean]]
+    [[:block/collapsed? {:optional true} :boolean]
+     [:block/tags [:set :int]]]
     page-attrs
-    page-or-block-attrs)))
+    (remove #(= :block/tags (first %)) page-or-block-attrs))))
 
 (def class-page
   (vec
@@ -119,35 +120,55 @@
    [true internal-property]
    [::m/default user-property]])
 
-(def page-block
+(def page
   [:multi {:dispatch :block/type}
    [#{"property"} property-page]
    [#{"class"} class-page]
    [#{"object"} object-page]
    [::m/default normal-page]])
 
-(def normal-block
-  "A normal block is a block with content and a page"
+(def block-attrs
+  "Common attributes for normal blocks"
+  [[:block/content :string]
+   [:block/left :int]
+   [:block/parent :int]
+   [:block/metadata {:optional true}
+    [:map {:closed false}
+     [:created-from-block :uuid]
+     [:created-from-property :uuid]]]
+    ;; refs
+   [:block/page :int]
+   [:block/path-refs {:optional true} [:set :int]]
+   [:block/link {:optional true} :int]
+    ;; other
+   [:block/format [:enum :markdown]]
+   [:block/marker {:optional true} :string]
+   [:block/priority {:optional true} :string]
+   [:block/collapsed? {:optional true} :boolean]])
+
+(def object-block
+  "A normal block with tags"
   (vec
    (concat
     [:map {:closed false}]
-    [[:block/content :string]
-     [:block/left :int]
-     [:block/parent :int]
-     [:block/metadata {:optional true}
-      [:map {:closed false}
-       [:created-from-block :uuid]
-       [:created-from-property :uuid]]]
-    ;; refs
-     [:block/page :int]
-     [:block/path-refs {:optional true} [:set :int]]
-     [:block/link {:optional true} :int]
-    ;; other
-     [:block/format [:enum :markdown]]
-     [:block/marker {:optional true} :string]
-     [:block/priority {:optional true} :string]
-     [:block/collapsed? {:optional true} :boolean]]
+    [[:block/type [:= #{"object"}]]
+     [:block/tags [:set :int]]]
+    block-attrs
+    (remove #(= :block/tags (first %)) page-or-block-attrs))))
+
+(def normal-block
+  "A block with content and no special type or tag behavior"
+  (vec
+   (concat
+    [:map {:closed false}]
+    block-attrs
     page-or-block-attrs)))
+
+(def block
+  "A block has content and a page"
+  [:or
+   normal-block
+   object-block])
 
 ;; TODO: Figure out where this is coming from
 (def unknown-empty-block
@@ -166,8 +187,8 @@
 (def client-db-schema
   [:sequential
    [:or
-    page-block
-    normal-block
+    page
+    block
     file-block
     unknown-empty-block]])
 
