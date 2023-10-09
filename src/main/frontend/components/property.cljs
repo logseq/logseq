@@ -424,7 +424,9 @@
       (when-not hide-delete?
         [:a.fade-link {:on-click (fn [e]
                                    (util/stop e)
-                                   (when (js/confirm "Are you sure you want to delete this property?")
+                                   (when (or (not (and class? class-schema?))
+                                             ;; Only ask for confirmation on class schema properties
+                                             (js/confirm "Are you sure you want to delete this property?"))
                                      (let [repo (state/get-current-repo)
                                            f (if (and class? class-schema?)
                                                property-handler/class-remove-property!
