@@ -6,6 +6,15 @@
     [logseq.shui.icon.v2 :as icon]
     [logseq.shui.button.v2 :as button]))
 
+(defn to-string [input]
+  (cond
+    (string? input) input
+    (keyword? input) (name input)
+    (symbol? input) (name input)
+    (number? input) (str input)
+    (nil? input) ""
+    :else (pr-str input)))
+
 (defn print-shortcut-key [key]
   (case key
     ("cmd" "command" "mod" "⌘") "⌘"
@@ -25,10 +34,7 @@
     (name key)))
 
 (defn normalize-text [app-config text]
-  (js/console.log "normalize-text" text app-config)
-  (cond-> (or text "") 
-    (keyword? text) (name)
-    :stringify (str)
+  (cond-> (to-string text)
     :lower-case (string/lower-case)
     :normalize (.normalize "NFKC")
     (:feature/enable-search-remove-accents? app-config) (remove-accents)))
@@ -36,10 +42,13 @@
 (defn split-text-on-highlight [text query normal-text normal-query]
   (let [start-index (string/index-of normal-text normal-query)
         end-index (+ start-index (count query))
-        text-string (cond-> (or text "") (keyword? text) name :always str)]
-    [(or (subs text-string 0 start-index) "")
-     (or (subs text-string start-index end-index) "") 
-     (or (subs text-string end-index) "")]))
+        text-string (to-string text)]
+    (if start-index
+      [(to-string (subs text-string 0 start-index))
+       (to-string (subs text-string start-index end-index)) 
+       (to-string (subs text-string end-index))]
+      [text-string "" ""])))
+      
 
 (defn span-with-single-highlight-token [text query normal-text normal-query]
   (let [[before-text highlighted-text after-text] (split-text-on-highlight text query normal-text normal-query)]
@@ -71,19 +80,20 @@
            (recur more)))))
 
 (defn highlight-query* [app-config query text]
-  (if-not (seq query) [:span text]
-    (let [normal-text (normalize-text app-config text)
-          normal-query (normalize-text app-config query)]
-      (cond 
-        ;; When the match is present but is multiple tokens, highlight all tokens
-        (and (string? query) (re-find #" " query))
-        (span-with-mutliple-highlight-tokens app-config text query normal-text normal-query)
-        ;; When the match is present and only a single token, highlight that token
-        (string/includes? normal-text normal-query)
-        (span-with-single-highlight-token text query normal-text normal-query)
-        ;; Otherwise, just return the text
-        :else
-        [:span text]))))
+  (let [text-string (to-string text)]
+    (if-not (seq text-string) [:span text-string]
+      (let [normal-text (normalize-text app-config text-string)
+            normal-query (normalize-text app-config query)]
+        (cond 
+          ;; When the match is present but is multiple tokens, highlight all tokens
+          (and (string? query) (re-find #" " query))
+          (span-with-mutliple-highlight-tokens app-config text-string query normal-text normal-query)
+          ;; When the match is present and only a single token, highlight that token
+          (string/includes? normal-text normal-query)
+          (span-with-single-highlight-token text-string query normal-text normal-query)
+          ;; Otherwise, just return the text
+          :else
+          [:span text])))))
         
 
 ;; result-item
@@ -127,11 +137,11 @@
       (when (or value-label value)
         [:div {:class "text-xs"}
          (when (and value-label value)
-           [:span.text-gray-11 (str value-label ": ")])
+           [:span.text-gray-11 (str (to-string value-label) ": ")])
          (when (and value-label (not value))
-           [:span.text-gray-11 (str value-label)])
+           [:span.text-gray-11 (str (to-string value-label))])
          (when value
-           [:span.text-gray-11 value])])
+           [:span.text-gray-11 (to-string value)])])
       (when shortcut 
         [:div {:class "flex gap-1"}
          (for [[index option] (map-indexed vector (string/split shortcut #" \| "))]
@@ -144,7 +154,7 @@
                                    (apply str))]]
                (button/root {:theme :gray 
                              :interactive false 
-                             :text text
+                             :text (to-string text)
                              :tiled true}
                             context))])])]]))
         ; [:span {:style} (str key)])])])

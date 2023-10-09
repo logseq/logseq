@@ -13,6 +13,8 @@
             :or {limit 20}}]
   (let [indice (or (get-in @indices [repo :blocks])
                    (search-db/make-blocks-indice! repo))
+                   ; (search-db/make-blocks-indice-non-blocking! repo))
+
         result
         (if page
           (.search indice
@@ -40,7 +42,7 @@
     (let [indice (search-db/make-blocks-indice! repo)]
       (p/promise indice)))
   (transact-blocks! [_this {:keys [blocks-to-remove-set
-                                  blocks-to-add]}]
+                                   blocks-to-add]}]
     (swap! search-db/indices update-in [repo :blocks]
            (fn [indice]
              (when indice

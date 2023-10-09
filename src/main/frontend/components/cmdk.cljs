@@ -17,6 +17,7 @@
     [frontend.modules.shortcut.core :as shortcut]
     [frontend.modules.shortcut.data-helper :as shortcut-helper]
     [frontend.search :as search]
+    [frontend.search.db :as search-db]
     [frontend.shui :refer [make-shui-context]]
     [frontend.state :as state]
     [frontend.ui :as ui]
@@ -193,25 +194,25 @@
         opts {:limit 100}]
     (swap! !results assoc-in [group :status] :loading)
     (swap! !results assoc-in [:current-page :status] :loading)
-    (p/let [blocks (search/block-search repo @!input opts)
-            items (map #(hash-map :icon "block" 
-                                  :icon-theme :gray 
-                                  :text (:block/content %) 
-                                  :header (some-> % :block/page db/entity :block/name)
-                                  :current-page? (some-> % :block/page #{current-page})
-                                  :source-block %) blocks)
-            items-on-other-pages (remove :current-page? items)
-            items-on-current-page (filter :current-page? items)]
-      (js/console.log "blocks" (clj->js items) current-page) 
-      ; (js/console.log "blocks" (clj->js items) 
-      ;                 (pr-str (map (comp pr-str :block/page) blocks)) 
-      ;                 (pr-str (map (comp :block/name :block/page) blocks)) 
-      ;                 (pr-str (map (comp :block/name db/entity :block/page) blocks)))
-      ; (js/console.log "load-results/blocks" 
-      ;                 (clj->js blocks) 
-      ;                 (pr-str (first blocks)))
-      (swap! !results assoc group {:status :success :items items-on-other-pages}
-                            :current-page {:status :success :items items-on-current-page}))))
+    (p/let [blocks (search/block-search repo @!input opts)])))
+            ; items (map #(hash-map :icon "block" 
+            ;                       :icon-theme :gray 
+            ;                       :text (:block/content %) 
+            ;                       :header (some-> % :block/page db/entity :block/name)
+            ;                       :current-page? (some-> % :block/page #{current-page})
+            ;                       :source-block %) blocks)
+            ; items-on-other-pages (remove :current-page? items)
+            ; items-on-current-page (filter :current-page? items)]
+      ; (js/console.log "blocks" (clj->js items) current-page) 
+      ; ; (js/console.log "blocks" (clj->js items) 
+      ; ;                 (pr-str (map (comp pr-str :block/page) blocks)) 
+      ; ;                 (pr-str (map (comp :block/name :block/page) blocks)) 
+      ; ;                 (pr-str (map (comp :block/name db/entity :block/page) blocks)))
+      ; ; (js/console.log "load-results/blocks" 
+      ; ;                 (clj->js blocks) 
+      ; ;                 (pr-str (first blocks)))
+      ; (swap! !results assoc group {:status :success :items items-on-other-pages}
+            ;                 :current-page {:status :success :items items-on-current-page}))))
 
 ; (defmethod load-results :whiteboards [group state]
 ;   (let [!input (::input state)
@@ -258,9 +259,9 @@
       (load-results :commands state)
       (load-results :blocks state)
       (load-results :pages state)
-      ; (load-results :whiteboards state)
-      (load-results :files state)
+      ; (load-results :files state)
       (load-results :recents state))))
+      ; ; (load-results :whiteboards state)
 
 ; (def search [query]
 ;   (load-results :search-actions state))
@@ -604,6 +605,7 @@
                    (reset! (::keyup-handler state) nil)
                    state)}
   {:did-mount (fn [state] 
+                ; (search-db/make-blocks-indice-non-blocking! (state/get-current-repo))
                 (when-let [ref @(::scroll-container-ref state)]
                   (js/console.log "scrolling")
                   (js/setTimeout #(set! (.-scrollTop ref) FILTER-ROW-HEIGHT)))

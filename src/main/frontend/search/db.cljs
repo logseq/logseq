@@ -51,6 +51,15 @@
        (remove nil?)
        (bean/->js)))
 
+(defn build-blocks-indice-non-blocking
+  [repo]
+  (.then (db/get-all-block-contents-non-blocking)
+         (fn [block-contents] 
+           (->> block-contents
+                (map block->index)
+                (remove nil?)
+                (bean/->js)))))
+
 (defn build-pages-indice
   [repo]
   (->> (db/get-all-pages repo)
@@ -71,6 +80,21 @@
                                 :threshold 0.35}))]
     (swap! indices assoc-in [repo :blocks] indice)
     indice))
+
+(defn make-blocks-indice-non-blocking! 
+  [repo]
+  (.then (build-blocks-indice-non-blocking repo)
+    (fn [blocks]
+      (let [indice (fuse. blocks 
+                          (clj->js {:keys ["uuid" "content" "page"]
+                                    :shouldSort true
+                                    :tokenize true
+                                    :minMatchCharLength 1
+                                    :distance 1000
+                                    :threshold 0.35}))]
+        (swap! indices assoc-in [repo :blocks] indice)
+        indice))))
+  ; (let [blocks (build-blocks-indice-non-blocking repo)]))
 
 (defn original-page-name->index
   [p]
