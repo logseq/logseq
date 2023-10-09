@@ -178,6 +178,13 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     return this
   }
 
+
+  togglePenMode = (): this => {
+    const { settings } = this.app
+    settings.update({ penMode: !settings.penMode })
+    return this
+  }
+
   setColor = (color: string): this => {
     const { settings } = this.app
 

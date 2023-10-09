@@ -2,14 +2,14 @@
   (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
             [frontend.components.block :as component-block]
-            [frontend.components.query :as query]
             [frontend.components.content :as content]
             [frontend.components.editor :as editor]
             [frontend.components.hierarchy :as hierarchy]
             [frontend.components.plugins :as plugins]
+            [frontend.components.query :as query]
             [frontend.components.reference :as reference]
-            [frontend.components.svg :as svg]
             [frontend.components.scheduled-deadlines :as scheduled]
+            [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -21,6 +21,7 @@
             [frontend.format.block :as block]
             [frontend.handler.common :as common-handler]
             [frontend.handler.config :as config-handler]
+            [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
@@ -34,12 +35,13 @@
             [frontend.util :as util]
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
-            [medley.core :as medley]
-            [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
             [logseq.graph-parser.util.page-ref :as page-ref]
-            [logseq.graph-parser.mldoc :as gp-mldoc]))
+            [medley.core :as medley]
+            [promesa.core :as p]
+            [reitit.frontend.easy :as rfe]
+            [rum.core :as rum]))
 
 (defn- get-page-name
   [state]
@@ -109,10 +111,26 @@
 
 (rum/defc dummy-block
   [page-name]
-  (let [handler-fn (fn []
-                     (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false})]
-                       (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 0)))]
-    [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
+  (let [[hover set-hover!] (rum/use-state false)
+        click-handler-fn (fn []
+                           (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false})]
+                             (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 0)))
+        drop-handler-fn (fn [^js event]
+                          (util/stop event)
+                          (p/let [block-uuids (state/get-selection-block-ids)
+                                  lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
+                                  selected (db/pull-many (state/get-current-repo) '[*] lookup-refs)
+                                  blocks (if (seq selected) selected [@component-block/*dragging-block])
+                                  _ (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false})]
+                            (js/setTimeout #(let [target-block (db/pull (:db/id (db/get-page page-name)))]
+                                              (dnd/move-blocks event blocks target-block :sibling))
+                                           0)))]
+    [:div.ls-block.flex-1.flex-col.rounded-sm
+     {:style {:width "100%"
+              ;; The same as .dnd-separator
+              :border-top (if hover
+                            "3px solid #ccc"
+                            nil)}}
      [:div.flex.flex-row
       [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
        [:span.bullet-container.cursor
@@ -120,8 +138,12 @@
       [:div.flex.flex-1 {:tabIndex 0
                          :on-key-press (fn [e]
                                          (when (= "Enter" (util/ekey e))
-                                           (handler-fn)))
-                         :on-click handler-fn}
+                                           (click-handler-fn)))
+                         :on-click click-handler-fn
+                         :on-drag-enter #(set-hover! true)
+                         :on-drag-over #(util/stop %)
+                         :on-drop drop-handler-fn
+                         :on-drag-leave #(set-hover! false)}
        [:span.opacity-70
         "Click here to edit..."]]]]))
 

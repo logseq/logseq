@@ -411,16 +411,6 @@
         right-sidebar? (:ui/sidebar-open? @state/state)
         editing-key    (first (keys (:editor/editing? @state/state)))
         *el (rum/use-ref nil)
-        _ (rum/use-effect! (fn []
-                             (when-let [^js/HTMLElement cnt
-                                        (and right-sidebar? editing-key
-                                             (js/document.querySelector "#main-content-container"))]
-                               (when (.contains cnt (js/document.querySelector (str "#" editing-key)))
-                                 (let [el  (rum/deref *el)
-                                       ofx (- (.-scrollWidth cnt) (.-clientWidth cnt))]
-                                   (when (> ofx 0)
-                                     (set! (.-transform (.-style el)) (str "translateX(-" (+ ofx 20) "px)")))))))
-                           [right-sidebar? editing-key])
         y-overflow-vh? (or (< to-max-height Y-BOUNDARY-HEIGHT)
                            (> (- max-height' to-max-height) Y-BOUNDARY-HEIGHT))
         to-max-height (if y-overflow-vh? max-height' to-max-height)
@@ -430,22 +420,36 @@
         style (merge
                {:top        (+ top offset-top (if (int? y-diff) y-diff 0))
                 :max-height to-max-height
-                :max-width 700
+                :max-width  700
                 ;; TODO: auto responsive fixed size
-                :width "fit-content"
+                :width      "fit-content"
                 :z-index    11}
                (when set-default-width?
                  {:width max-width})
                (if (<= vw-max-width (+ left (if set-default-width? max-width 500)))
                  {:right 0}
-                 {:left (if (or (nil? y-diff) (and y-diff (= y-diff 0))) left 0)}))]
+                 {:left 0}))]
+
+    (rum/use-effect!
+     (fn []
+       (when-let [^js/HTMLElement cnt
+                  (and right-sidebar? editing-key
+                       (js/document.querySelector "#main-content-container"))]
+         (when (.contains cnt (js/document.querySelector (str "#" editing-key)))
+           (let [el  (rum/deref *el)
+                 ofx (- (.-scrollWidth cnt) (.-clientWidth cnt))]
+             (when (> ofx 0)
+               (set! (.-transform (.-style el))
+                     (util/format "translate(-%spx, %s)" (+ ofx 20) (if y-overflow-vh? "calc(-100% - 2rem)" 0))))))))
+     [right-sidebar? editing-key y-overflow-vh?])
+
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
-     {:ref *el
+     {:ref             *el
       :data-modal-name modal-name
-      :class (if y-overflow-vh? "is-overflow-vh-y" "")
-      :on-mouse-down (fn [e]
-                       (.stopPropagation e))
-      :style style}
+      :class           (if y-overflow-vh? "is-overflow-vh-y" "")
+      :on-mouse-down   (fn [e]
+                         (.stopPropagation e))
+      :style           style}
      cp]))
 
 (rum/defc transition-cp < rum/reactive
