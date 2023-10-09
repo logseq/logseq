@@ -267,61 +267,19 @@
 (defn create-new-block!
   [block property value]
   (let [repo (state/get-current-repo)
-        page-id (or (:db/id (:block/page block)) (:db/id block))
-        parent-id (db/new-block-id)
-        metadata {:created-from-block (:block/uuid block)
-                  :created-from-property (:block/uuid property)}
-        parent (-> {:block/uuid parent-id
-                    :block/format :markdown
-                    :block/content ""
-                    :block/page {:db/id page-id}
-                    :block/metadata metadata}
-                   outliner-core/block-with-timestamps)
-        child-1-id (db/new-block-id)
-        child-1 (-> {:block/uuid child-1-id
-                     :block/format :markdown
-                     :block/content value
-                     :block/page {:db/id page-id}
-                     :block/parent [:block/uuid parent-id]
-                     :block/left [:block/uuid parent-id]
-                     :block/metadata metadata}
-                    outliner-core/block-with-timestamps
-                    (editor-handler/wrap-parse-block))
-        child-2-id (db/new-block-id)
-        child-2 (-> {:block/uuid child-2-id
-                     :block/format :markdown
-                     :block/content ""
-                     :block/page {:db/id page-id}
-                     :block/parent [:block/uuid parent-id]
-                     :block/left [:block/uuid child-1-id]
-                     :block/metadata metadata}
-                    outliner-core/block-with-timestamps)
-        blocks (if (string/blank? value)
-                 [parent child-1]
-                 [parent child-1 child-2])
+        {:keys [page blocks]} (property-handler/property-create-new-block block property value editor-handler/wrap-parse-block)
         last-block-id (:block/uuid (last blocks))]
-    (db/transact! repo blocks {:outliner-op :insert-blocks})
-    (add-property! block (:block/original-name property) parent-id)
+    (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})
+    (add-property! block (:block/original-name property)
+                   (:block/uuid (first blocks)))
     (editor-handler/edit-block! (db/entity [:block/uuid last-block-id]) 0 last-block-id)))
 
 (defn create-new-block-from-template!
   [block property template]
   (let [repo (state/get-current-repo)
-        page-id (or (:db/id (:block/page block)) (:db/id block))
-        block-id (db/new-block-id)
-        metadata {:created-from-block (:block/uuid block)
-                  :created-from-property (:block/uuid property)
-                  :created-from-template (:block/uuid template)}
-        value-block (-> {:block/uuid block-id
-                         :block/format :markdown
-                         :block/content ""
-                         :block/tags #{(:db/id template)}
-                         :block/page {:db/id page-id}
-                         :block/metadata metadata}
-                        outliner-core/block-with-timestamps)
-        tx-data [value-block]]
-    (db/transact! repo tx-data {:outliner-op :insert-blocks})
-    (add-property! block (:block/original-name property) block-id)))
+        {:keys [page blocks]} (property-handler/property-create-new-block-from-template block property template)]
+    (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})
+    (add-property! block (:block/original-name property) (:block/uuid (last blocks)))))
 
 (defn- new-text-editor-opts
   [repo block property value editor-id]

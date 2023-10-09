@@ -788,11 +788,10 @@
                 transact-opts
                 (cond
                   (and prev-block (:block/name prev-block)
-                       (not= (:db/id prev-block) (:db/id (:block/parent block)))) ; embed page
+                       (not= (:db/id prev-block) (:db/id (:block/parent block)))
+                       (model/hidden-page? (:block/page block))) ; embed page
                   (let [target (or
-                                (some-> (model/get-block-last-direct-child (db/get-db)
-                                                                           (:db/id prev-block)
-                                                                           false)
+                                (some-> (model/get-block-last-direct-child (db/get-db) (:db/id prev-block))
                                         db/entity)
                                 prev-block)]
                     (outliner-core/move-blocks! [block] target (not= (:db/id target) (:db/id prev-block)))

@@ -2,6 +2,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.db :as db]
+            [frontend.db.model :as model]
             [frontend.state :as state]
             [frontend.util :as util]
             ["fuse.js" :as fuse]))
@@ -35,7 +36,8 @@
   [{:block/keys [uuid original-name] :as page}]
   (when-let [content (some-> (:block/file page)
                              (:file/content))]
-    (when-not (string/blank? original-name)
+    (when-not (or (string/blank? original-name)
+                  (model/hidden-page? original-name))
       (when-not (> (count content) (* (max-len) 10))
         {:id   (:db/id page)
          :uuid (str uuid)

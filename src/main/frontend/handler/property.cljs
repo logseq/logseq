@@ -6,7 +6,11 @@
             [frontend.config :as config]
             [frontend.util :as util]
             [frontend.state :as state]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.format.block :as block]
+            [frontend.db.model :as model]
+            [frontend.modules.outliner.core :as outliner-core]
+            [clojure.string :as string]))
 
 (defn remove-block-property!
   [repo block-id key]
@@ -168,3 +172,76 @@
      (seq (:block/alias properties))
      (and (seq properties)
           (not= (keys properties) [(:block/uuid (db/entity [:block/name "icon"]))])))))
+
+(defn property-create-new-block
+  [block property value parse-block]
+  (let [current-page-id (:block/uuid (or (:block/page block) block))
+        page-name (str "$$$" current-page-id)
+        page-entity (db/entity [:block/name page-name])
+        page (or page-entity
+                 (-> (block/page-name->map page-name true)
+                     (assoc :block/type #{"hidden"})))
+        page-tx (when-not page-entity page)
+        page-id [:block/uuid (:block/uuid page)]
+        parent-id (db/new-block-id)
+        metadata {:created-from-block (:block/uuid block)
+                  :created-from-property (:block/uuid property)}
+        parent (-> {:block/uuid parent-id
+                    :block/format :markdown
+                    :block/content ""
+                    :block/page page-id
+                    :block/parent page-id
+                    :block/left (or (when page-entity (model/get-block-last-direct-child (db/get-db) (:db/id page-entity)))
+                                    page-id)
+                    :block/metadata metadata}
+                   outliner-core/block-with-timestamps)
+        child-1-id (db/new-block-id)
+        child-1 (-> {:block/uuid child-1-id
+                     :block/format :markdown
+                     :block/content value
+                     :block/page page-id
+                     :block/parent [:block/uuid parent-id]
+                     :block/left [:block/uuid parent-id]
+                     :block/metadata metadata}
+                    outliner-core/block-with-timestamps
+                    parse-block)
+        child-2-id (db/new-block-id)
+        child-2 (-> {:block/uuid child-2-id
+                     :block/format :markdown
+                     :block/content ""
+                     :block/page page-id
+                     :block/parent [:block/uuid parent-id]
+                     :block/left [:block/uuid child-1-id]
+                     :block/metadata metadata}
+                    outliner-core/block-with-timestamps)]
+    {:page page-tx
+     :blocks (if (string/blank? value)
+               [parent child-1]
+               [parent child-1 child-2])}))
+
+(defn property-create-new-block-from-template
+  [block property template]
+  (let [current-page-id (:block/uuid (or (:block/page block) block))
+        page-name (str "$$$" current-page-id)
+        page-entity (db/entity [:block/name page-name])
+        page (or page-entity
+                 (-> (block/page-name->map page-name true)
+                     (assoc :block/type #{"hidden"})))
+        page-tx (when-not page-entity page)
+        page-id [:block/uuid (:block/uuid page)]
+        block-id (db/new-block-id)
+        metadata {:created-from-block (:block/uuid block)
+                  :created-from-property (:block/uuid property)
+                  :created-from-template (:block/uuid template)}
+        new-block (-> {:block/uuid block-id
+                       :block/format :markdown
+                       :block/content ""
+                       :block/tags #{(:db/id template)}
+                       :block/page page-id
+                       :block/metadata metadata
+                       :block/parent page-id
+                       :block/left (or (when page-entity (model/get-block-last-direct-child (db/get-db) (:db/id page-entity)))
+                                       page-id)}
+                      outliner-core/block-with-timestamps)]
+    {:page page-tx
+     :blocks [new-block]}))
