@@ -12,6 +12,7 @@
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
             [frontend.components.dnd :as dnd-component]
+            [frontend.components.icon :as icon]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -92,7 +93,8 @@
   (let [default-icon (ui/icon "page" {:extension? true})
         page-icon (pu/get-property page-entity :icon)]
     (or
-     (when-not (string/blank? page-icon) page-icon)
+     (when-not (string/blank? page-icon)
+       (icon/icon page-icon))
      default-icon))) ;; Fall back to default if icon is undefined or empty
 
 (rum/defc favorites < rum/reactive
