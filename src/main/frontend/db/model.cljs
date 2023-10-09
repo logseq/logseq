@@ -115,7 +115,7 @@
   (if (string? page)
     (and (string/starts-with? page "$$$")
          (util/uuid-string? (gp-util/safe-subs page 3)))
-    (contains? (:block/type page) "hidden")))
+    (contains? (set (:block/type page)) "hidden")))
 
 (defn get-pages
   [repo]

@@ -41,7 +41,7 @@
   "Common attributes for pages"
   [[:block/name :string]
    [:block/original-name :string]
-   [:block/type {:optional true} [:enum #{"property"} #{"class"} #{"object"} #{"whiteboard"}]]
+   [:block/type {:optional true} [:enum #{"property"} #{"class"} #{"object"} #{"whiteboard"} #{"hidden"}]]
    [:block/journal? :boolean]
     ;; TODO: Consider moving to just normal and class after figuring out journal attributes
    [:block/format {:optional true} [:enum :markdown]]
@@ -126,47 +126,28 @@
    [#{"object"} object-page]
    [::m/default normal-page]])
 
-(def block-attrs
-  "Common attributes for normal blocks"
-  (into
-   ;; refs
-   [[:block/page :int]
-    [:block/path-refs {:optional true} [:set :int]]
-    [:block/link {:optional true} :int]
-    ;; other
-    [:block/format [:enum :markdown]]
-    [:block/marker {:optional true} :string]
-    [:block/priority {:optional true} :string]
-    [:block/collapsed? {:optional true} :boolean]]
-   page-or-block-attrs))
-
 (def normal-block
   "A normal block is a block with content and a page"
   (vec
    (concat
     [:map {:closed false}]
-    block-attrs
     [[:block/content :string]
      [:block/left :int]
      [:block/parent :int]
      [:block/metadata {:optional true}
       [:map {:closed false}
        [:created-from-block :uuid]
-       [:created-from-property :uuid]]]])))
-
-(def normal-empty-block
-  "This empty block is created when a default property value has multiple
-  blocks. This block doesn't have :block/left or :block/parent attributes.
-  Unclear if this is intentional"
-  (vec
-   (concat
-    [:map {:closed false}]
-    block-attrs
-    [[:block/content [:= ""]]
-     [:block/metadata
-      [:map {:closed false}
-       [:created-from-block :uuid]
-       [:created-from-property :uuid]]]])))
+       [:created-from-property :uuid]]]
+    ;; refs
+     [:block/page :int]
+     [:block/path-refs {:optional true} [:set :int]]
+     [:block/link {:optional true} :int]
+    ;; other
+     [:block/format [:enum :markdown]]
+     [:block/marker {:optional true} :string]
+     [:block/priority {:optional true} :string]
+     [:block/collapsed? {:optional true} :boolean]]
+    page-or-block-attrs)))
 
 ;; TODO: Figure out where this is coming from
 (def unknown-empty-block
@@ -187,7 +168,6 @@
    [:or
     page-block
     normal-block
-    normal-empty-block
     file-block
     unknown-empty-block]])
 
