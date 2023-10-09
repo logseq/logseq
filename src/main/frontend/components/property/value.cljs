@@ -272,7 +272,7 @@
     (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})
     (add-property! block (:block/original-name property)
                    (:block/uuid (first blocks)))
-    (editor-handler/edit-block! (db/entity [:block/uuid last-block-id]) 0 last-block-id)))
+    (editor-handler/edit-block! (db/entity [:block/uuid last-block-id]) :max last-block-id)))
 
 (defn create-new-block-from-template!
   [block property template]
