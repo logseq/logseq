@@ -95,12 +95,18 @@
           :else
           [:span text])))))
         
+(defn highlight-query-builder-with-log [props app-config query text]
+  (js/console.log "highlight-query" query text (clj->js props))
+  (let [result (highlight-query* app-config query text)]
+    (js/console.log "highlight-query.result" (pr-str result))
+    result))
+  
 
 ;; result-item
-(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted on-highlight on-highlight-dep header on-click]} 
+(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted on-highlight on-highlight-dep header on-click] :as props} 
                 {:keys [app-config] :as context}]
   (let [ref (rum/create-ref)
-        highlight-query (partial highlight-query* app-config query)]
+        highlight-query (partial highlight-query-builder-with-log props app-config query)]
     (rum/use-effect! 
       (fn [] 
         (when (and highlighted on-highlight) 
