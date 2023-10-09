@@ -204,20 +204,9 @@
                      :block/left [:block/uuid parent-id]
                      :block/metadata metadata}
                     outliner-core/block-with-timestamps
-                    parse-block)
-        child-2-id (db/new-block-id)
-        child-2 (-> {:block/uuid child-2-id
-                     :block/format :markdown
-                     :block/content ""
-                     :block/page page-id
-                     :block/parent [:block/uuid parent-id]
-                     :block/left [:block/uuid child-1-id]
-                     :block/metadata metadata}
-                    outliner-core/block-with-timestamps)]
+                    parse-block)]
     {:page page-tx
-     :blocks (if (string/blank? value)
-               [parent child-1]
-               [parent child-1 child-2])}))
+     :blocks [parent child-1]}))
 
 (defn property-create-new-block-from-template
   [block property template]
