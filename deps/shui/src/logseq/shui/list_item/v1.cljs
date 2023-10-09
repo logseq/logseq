@@ -12,6 +12,7 @@
     (keyword? input) (name input)
     (symbol? input) (name input)
     (number? input) (str input)
+    (uuid? input) (str input)
     (nil? input) ""
     :else (pr-str input)))
 
@@ -59,7 +60,7 @@
 
 (defn span-with-mutliple-highlight-tokens [app-config text query normal-text normal-query]
   (loop [[query-token & more] (string/split normal-query #" ")
-         result [[:text text]]]
+         result [[:text (to-string text)]]]
     (if-not query-token 
       (->> result 
            (map (fn [[type value]] 
@@ -85,7 +86,6 @@
       (let [normal-text (normalize-text app-config text-string)
             normal-query (normalize-text app-config query)]
         (cond 
-          ;; When the match is present but is multiple tokens, highlight all tokens
           (and (string? query) (re-find #" " query))
           (span-with-mutliple-highlight-tokens app-config text-string query normal-text normal-query)
           ;; When the match is present and only a single token, highlight that token
@@ -93,14 +93,17 @@
           (span-with-single-highlight-token text-string query normal-text normal-query)
           ;; Otherwise, just return the text
           :else
-          [:span text])))))
+          [:span text-string])))))
         
 (defn highlight-query-builder-with-log [props app-config query text]
   (js/console.log "highlight-query" query text (clj->js props))
-  (let [result (highlight-query* app-config query text)]
-    (js/console.log "highlight-query.result" (pr-str result))
-    result))
-  
+  (try
+    (let [result (highlight-query* app-config query text)]
+      (js/console.log "highlight-query.result" (pr-str result))
+      result)
+    (catch js/Error e
+      (js/console.log "highlight-query.error" (pr-str e) props query text)
+      [:span])))
 
 ;; result-item
 (rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted on-highlight on-highlight-dep header on-click] :as props} 
