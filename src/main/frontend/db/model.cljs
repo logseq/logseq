@@ -110,6 +110,13 @@
   (->> (get-all-namespace-relation repo)
        (map second)))
 
+(defn hidden-page?
+  [page]
+  (if (string? page)
+    (and (string/starts-with? page "$$$")
+         (util/uuid-string? (gp-util/safe-subs page 3)))
+    (contains? (:block/type page) "hidden")))
+
 (defn get-pages
   [repo]
   (->> (d/q
@@ -117,22 +124,26 @@
           :where
           [?page :block/name ?page-name]
           [(get-else $ ?page :block/original-name ?page-name) ?page-original-name]]
-        (conn/get-db repo))
-       (map first)))
+         (conn/get-db repo))
+       (map first)
+       (remove hidden-page?)))
 
 (defn get-all-pages
   [repo]
-  (d/q
-   '[:find [(pull ?page [*]) ...]
-     :where
-     [?page :block/name]]
-    (conn/get-db repo)))
+  (->>
+   (d/q
+    '[:find [(pull ?page [*]) ...]
+      :where
+      [?page :block/name]]
+     (conn/get-db repo))
+   (remove hidden-page?)))
 
 (defn get-all-page-original-names
   [repo]
   (let [db (conn/get-db repo)]
     (->> (d/datoms db :avet :block/original-name)
-         (map :v))))
+         (map :v)
+         (remove hidden-page?))))
 
 (defn get-pages-with-file
   "Return full file entity for calling file renaming"
@@ -562,7 +573,7 @@ independent of format as format specific heading characters are stripped"
 (defn get-block-last-direct-child
   "Notice: if `not-collapsed?` is true, will skip searching for any collapsed block."
   ([db db-id]
-   (get-block-last-direct-child db db-id true))
+   (get-block-last-direct-child db db-id false))
   ([db db-id not-collapsed?]
    (when-let [block (db-utils/entity db db-id)]
      (when (if not-collapsed?
@@ -1448,7 +1459,8 @@ independent of format as format specific heading characters are stripped"
                                 page))))
                          pages)
                         (remove false?)
-                        (remove nil?))]
+                        (remove nil?)
+                        (remove hidden-page?))]
     orphaned-pages))
 
 ;; FIXME: replace :logseq.macro-name with id

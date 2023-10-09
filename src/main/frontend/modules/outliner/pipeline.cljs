@@ -94,7 +94,9 @@
         (when-not importing?
           (react/refresh! repo tx-report'))
 
-        (when (and (config/db-based-graph? repo) (not (:skip-persist? tx-meta)) (not replace?))
+        (when (and (config/db-based-graph? repo) (not (:skip-persist? tx-meta))
+                   (not replace?)
+                   (not (:update-tx-ids? tx-meta)))
           (let [upsert-blocks (outliner-pipeline/build-upsert-blocks blocks deleted-block-uuids (:db-after tx-report'))
                 updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids)  (:block/uuid b))) blocks)
                 tx-id (get-in tx-report' [:tempids :db/current-tx])
@@ -103,7 +105,8 @@
                                        {:db/id db-id
                                         :block/tx-id tx-id})) updated-blocks)]
             (when (seq update-tx-ids)
-              (db/transact! repo update-tx-ids {:replace? true}))
+              (db/transact! repo update-tx-ids {:replace? true
+                                                :update-tx-ids? true}))
             (when-not config/publishing?
               (p/let [_transact-result (persist-db/<transact-data repo upsert-blocks deleted-block-uuids)
                       _ipc-result (comment ipc/ipc :db-transact-data repo

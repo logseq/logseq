@@ -133,7 +133,7 @@
 
 (defn- get-last-child-or-self
   [block]
-  (let [last-child (some-> (db-model/get-block-last-direct-child (conn/get-db) (:db/id block))
+  (let [last-child (some-> (db-model/get-block-last-direct-child (conn/get-db) (:db/id block) true)
                            db/entity)
         target (or last-child block)]
     [target (some? last-child)]))
@@ -1050,7 +1050,7 @@
             opts {:outliner-op :indent-outdent-blocks}]
         (if indent?
           (when (and left (not (page-first-child? first-block)))
-            (let [last-direct-child-id (db-model/get-block-last-direct-child db (:db/id left) false)
+            (let [last-direct-child-id (db-model/get-block-last-direct-child db (:db/id left))
                   blocks' (drop-while (fn [b]
                                         (= (:db/id (:block/parent b))
                                            (:db/id left)))
@@ -1089,7 +1089,7 @@
                         right-siblings (->> (get-right-siblings (block last-top-block))
                                             (map :data))]
                     (if (seq right-siblings)
-                      (let [result2 (if-let [last-direct-child-id (db-model/get-block-last-direct-child db (:db/id last-top-block) false)]
+                      (let [result2 (if-let [last-direct-child-id (db-model/get-block-last-direct-child db (:db/id last-top-block))]
                                       (move-blocks right-siblings (db/entity last-direct-child-id) (merge opts {:sibling? true}))
                                       (move-blocks right-siblings last-top-block (merge opts {:sibling? false})))]
                         (concat-tx-fn result result2))
