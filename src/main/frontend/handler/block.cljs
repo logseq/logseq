@@ -11,7 +11,6 @@
    [frontend.state :as state]
    [frontend.util :as util]
    [goog.dom :as gdom]
-   [goog.object :as gobj]
    [logseq.graph-parser.block :as gp-block]
    [frontend.config :as config]
    [frontend.db.listener :as db-listener]
@@ -327,16 +326,18 @@
     (db-listener/clear-repo-persistent-job! repo)))
 
 (defn- edit-block-aux
-  [repo block content block-node text-range {:keys [direction retry-times]
-                                             :or {retry-times 0}
+  [repo block content block-node text-range {:keys [direction retry-times max-retry-times]
+                                             :or {retry-times 0
+                                                  max-retry-times 3}
                                              :as opts}]
-  (when (and (<= retry-times 3) block)
+  (when (and (<= retry-times max-retry-times) block)
     (let [block-node block-node
           block-id (:block/uuid block)
           id-class (str "id" block-id)
-          next-edit-node (if block-node
+          next-edit-node (cond
+                           (and block-node (< retry-times max-retry-times))
                            (or
-                            ;; up/down
+                              ;; up/down
                             (when direction
                               (let [blocks (dom/by-class "ls-block")
                                     idx (.indexOf blocks block-node)]
@@ -345,21 +346,27 @@
                                     (util/nth-safe blocks (inc idx))
                                     (util/nth-safe blocks (dec idx))))))
 
-                            ;; next | next then first child
-                            (when-let [next (.-nextSibling block-node)]
-                              (when (dom/has-class? next id-class)
-                                next))
+                              ;; next
+                            (let [id (some-> (dom/attr block-node "blockid") uuid)
+                                  link (when id (:link (db/entity [:block/uuid id])))
+                                  block-node (if link
+                                               (.-previousSibling block-node)
+                                               block-node)]
+                              (when-let [next (.-nextSibling block-node)]
+                                (when (dom/has-class? next id-class)
+                                  next)))
 
-                            ;; first child
+                              ;; first child
                             (when-let [first-child (first (dom/sel block-node ".ls-block"))]
                               (when (dom/has-class? first-child id-class)
                                 first-child))
 
-                            ;; prev
+                              ;; prev
                             (when-let [prev (.-previousSibling block-node)]
                               (when (dom/has-class? prev id-class)
                                 prev)))
 
+                           :else
                            ;; take the first dom node
                            (gdom/getElement (str "ls-block-" (:block/uuid block))))]
       (if next-edit-node
