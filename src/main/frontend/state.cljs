@@ -297,7 +297,9 @@
       :history/page-only-mode?               false
       ;; db tx-id -> editor cursor
       :history/tx->editor-cursor             (atom {})
-      :system/info                           {}})))
+      :system/info                           {}
+      ;; Whether block is selected
+      :ui/select-query-cache                 (atom {})})))
 
 ;; Block ast state
 ;; ===============
@@ -672,10 +674,17 @@ Similar to re-frame subscriptions"
 
 (defn sub-block-selected?
   [block-uuid]
-  (rum/react
-   (rum/derived-atom [(:selection/blocks @state)] [::select-block block-uuid]
-     (fn [s]
-       (contains? (set (get-selected-block-ids s)) block-uuid)))))
+  (let [*cache (:ui/select-query-cache @state)
+        keys [::select-block block-uuid]
+        atom (or (get @*cache keys)
+                 (let [result (rum/derived-atom
+                               [(:selection/blocks @state)]
+                               keys
+                               (fn [s]
+                                 (contains? (set (get-selected-block-ids s)) block-uuid)))]
+                   (swap! *cache assoc keys result)
+                   result))]
+    (rum/react atom)))
 
 (defn block-content-max-length
   [repo]
@@ -1247,7 +1256,8 @@ Similar to re-frame subscriptions"
   (swap! state merge {:cursor-range    nil
                       :editor/last-saved-cursor nil})
   (set-state! :editor/content {})
-  (set-state! :editor/block nil))
+  (set-state! :editor/block nil)
+  (set-state! :ui/select-query-cache {}))
 
 (defn into-code-editor-mode!
   []
