@@ -2821,9 +2821,7 @@
 
 (rum/defcs ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
   {:init (fn [state]
-           (assoc state ::ref (or (:*ref (second (:rum/args state)))
-                                  (atom nil))))
-
+           (assoc state ::ref (or (:*ref (second (:rum/args state))) (atom nil))))
    :did-mount (fn [state]
                 (when-let [editing-node @(:editor/editing @state/state)]
                   (let [ref @(::ref state)
