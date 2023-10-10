@@ -378,7 +378,6 @@
     (when (seq children)
       [:div.property-block-container.w-full
        (block-cp children {:id (str (:block/uuid parent))
-                           :blocks-container-id (:blocks-container-id opts)
                            :editor-box editor-box
                            :in-property? true})])))
 
@@ -449,7 +448,6 @@
   [block property value {:keys [inline-text block-cp
                                 editor-id dom-id row?
                                 editor-box editor-args editing?
-                                blocks-container-id
                                 on-chosen]
                          :as opts}]
   (let [property (model/sub-block (:db/id property))
@@ -457,7 +455,7 @@
         schema (:block/schema property)
         type (get schema :type :default)
         multiple-values? (= :many (:cardinality schema))
-        editor-id (or editor-id (str "ls-property-" blocks-container-id "-" (:db/id block) "-" (:db/id property)))
+        editor-id (or editor-id (str "ls-property-" (:db/id block) "-" (:db/id property)))
         editing? (or editing? (state/sub-editing? editor-id))
         select-type? (select-type? type)
         select-opts {:on-chosen on-chosen}]
@@ -519,8 +517,7 @@
                    [:div.opacity-50.pointer.text-sm "Empty"])
                  (case type
                    :template
-                   (property-template-value {:blocks-container-id blocks-container-id
-                                             :editor-id editor-id}
+                   (property-template-value {:editor-id editor-id}
                                             value
                                             opts)
 
@@ -572,7 +569,7 @@
 
 (rum/defc property-value < rum/reactive
   [block property v opts]
-  (let [dom-id (str "ls-property-" (:blocks-container-id opts) "-" (:db/id block) "-" (:db/id property))
+  (let [dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
         editor-id (str dom-id "-editor")
         schema (:block/schema property)
         multiple-values? (= :many (:cardinality schema))

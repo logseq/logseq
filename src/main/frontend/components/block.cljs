@@ -2088,8 +2088,7 @@
   (property-component/properties-area block
                                       edit-input-id
                                       (merge
-                                       {:blocks-container-id (:blocks-container-id config)
-                                        :inline-text inline-text
+                                       {:inline-text inline-text
                                         :page-cp page-cp
                                         :block-cp blocks-container
                                         :properties-cp db-properties-cp
@@ -2527,33 +2526,26 @@
 (rum/defcs single-block-cp-inner < rum/reactive db-mixins/query
   {:init (fn [state]
            (assoc state
-                  ::init-blocks-container-id (atom nil)
                   ::ref (atom nil)))}
   [state block-uuid]
   (let [*ref (::ref state)
         uuid (if (string? block-uuid) (uuid block-uuid) block-uuid)
-        *init-blocks-container-id (::init-blocks-container-id state)
         block-entity (db/entity [:block/uuid uuid])
         block-id (:db/id block-entity)
         block (db/sub-block block-id)
-        blocks-container-id (if @*init-blocks-container-id
-                              @*init-blocks-container-id
-                              (let [id' (state/next-blocks-container-id)]
-                                (reset! *init-blocks-container-id id')
-                                id'))
-        block-el-id (str "ls-block-" blocks-container-id "-" uuid)
+        block-el-id (str "ls-block-" uuid)
         config {:id (str uuid)
                 :db/id (:db/id block-entity)
                 :block/uuid uuid
                 :block? true
                 :editor-box (state/get-component :editor/box)}
-        edit-input-id (str "edit-block-" blocks-container-id "-" uuid)
+        edit-input-id (str "edit-block-" uuid)
         edit? (state/sub-editing? edit-input-id)
         block (block/parse-title-and-body block)]
     (when (:block/content block)
       [:div.single-block.ls-block
        {:class (str block-uuid)
-        :id (str "ls-block-" blocks-container-id "-" block-uuid)}
+        :id (str "ls-block-" block-uuid)}
        (block-content-or-editor config block edit-input-id block-el-id edit? true false *ref)])))
 
 (rum/defc single-block-cp
@@ -2846,11 +2838,11 @@
                                 (= editing-parent-node (.-previousSibling ref))))
                       (state/set-editing-ref! ref))))
                 state)}
-  [inner-state state repo config* block {:keys [blocks-container-id navigating-block navigated?]}]
+  [inner-state state repo config* block {:keys [navigating-block navigated?]}]
   (let [*ref (::ref inner-state)
         ref (rum/react *ref)
         ref? (:ref? config*)
-        edit-input-id (str "edit-block-" blocks-container-id "-" (:block/uuid block))
+        edit-input-id (str "edit-block-" (:block/uuid block))
         edit? (state/sub-editing? ref)
         custom-query? (boolean (:custom-query? config*))
         ref-or-custom-query? (or ref? custom-query?)
@@ -2858,7 +2850,6 @@
         {:block/keys [uuid pre-block? refs content properties]} block
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         level (:level config)
-        blocks-container-id (:blocks-container-id config)
         heading? (pu/lookup properties :heading)
         *control-show? (get state ::control-show?)
         db-collapsed? (util/collapsed? block)
@@ -2876,7 +2867,7 @@
         embed? (:embed? config)
         reference? (:reference? config)
         whiteboard-block? (pu/shape-block? block)
-        block-id (str "ls-block-" blocks-container-id "-" uuid)
+        block-id (str "ls-block-" uuid)
         has-child? (first (:block/_parent (db/entity (:db/id block))))
         top? (:top? config)
         original-block (:original-block config)
@@ -2889,7 +2880,7 @@
         own-number-list? (:own-order-number-list? config)
         order-list? (boolean own-number-list?)
         selected? (when-not slide?
-                    (state/sub-block-selected? blocks-container-id uuid))]
+                    (state/sub-block-selected? uuid))]
     [:div.ls-block
      (cond->
       {:id block-id
@@ -2987,13 +2978,9 @@
 (rum/defcs block-container < rum/reactive db-mixins/query
   (rum/local false ::show-block-left-menu?)
   (rum/local false ::show-block-right-menu?)
-  (rum/local false ::blocks-container-id-changed?)
   {:init (fn [state]
            (let [[config block] (:rum/args state)
-                 block-id (:block/uuid block)
-                 container-id (if (:original-block config)
-                                (state/next-blocks-container-id)
-                                (:blocks-container-id config))]
+                 block-id (:block/uuid block)]
              (cond
                (root-block? config block)
                (state/set-collapsed-block! block-id false)
@@ -3006,8 +2993,7 @@
                nil)
              (assoc state
                     ::control-show? (atom false)
-                    ::navigating-block (atom (:block/uuid block))
-                    ::blocks-container-id (atom container-id))))
+                    ::navigating-block (atom (:block/uuid block)))))
    :will-unmount (fn [state]
                    ;; restore root block's collapsed state
                    (let [[config block] (:rum/args state)
@@ -3017,21 +3003,15 @@
                    state)}
   [state config block]
   (let [repo (state/get-current-repo)
-        *blocks-container-id (::blocks-container-id state)
-        *blocks-container-id-changed? (::blocks-container-id-changed? state)
         unloaded? (state/sub-block-unloaded? repo (str (:block/uuid block)))
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
         [original-block block] (build-block config block {:navigating-block navigating-block :navigated? navigated?})
-        _ (when (and original-block (false? @*blocks-container-id-changed?))
-            (reset! *blocks-container-id (state/next-blocks-container-id))
-            (reset! *blocks-container-id-changed? true))
-        config' (-> (if original-block
-                      (assoc config :original-block original-block)
-                      config)
-                    (assoc :blocks-container-id @*blocks-container-id))
-        opts {:blocks-container-id @*blocks-container-id}]
+        config' (if original-block
+                  (assoc config :original-block original-block)
+                  config)
+        opts {}]
     (if unloaded?
       [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
        [:div.flex.flex-row
@@ -3441,9 +3421,7 @@
                   (assoc config :original-block original-block)
                   config)]
     (rum/with-key (block-container config' item)
-      (str (:blocks-container-id config')
-           "-"
-           (:block/uuid item)
+      (str (:block/uuid item)
            (when linked-block
              (str "-" (:block/uuid original-block)))))))
 
@@ -3500,10 +3478,7 @@
         *ref (::ref state)]
     [:<>
      (if (and hidden? (not (:disable-lazy-load? config)))
-       [:div {:key (str "item-"
-                    (:blocks-container-id config)
-                    "-"
-                    (:block/uuid item))}
+       [:div {:key (str "item-" (:block/uuid item))}
         {:style {:height 24}}]
        (block-item-inner config item (assoc opts :*ref *ref)))]))
 
@@ -3516,26 +3491,15 @@
         (block-item (assoc config :top? top?) item
                     {:top? top?
                      :bottom? bottom?})
-        (str "blocks-" (:blocks-container-id config)
-             "-"
-             (:block/uuid item))))))
+        (str "blocks-" (:block/uuid item))))))
 
 (rum/defcs blocks-container < rum/static
-  {:init (fn [state] (assoc state ::init-blocks-container-id (atom nil)))}
   [state blocks config]
-  (let [*init-blocks-container-id (::init-blocks-container-id state)
-        ;; blocks-container-id (if @*init-blocks-container-id
-        ;;                       @*init-blocks-container-id
-        ;;                       (let [id' (state/next-blocks-container-id)]
-        ;;                         (reset! *init-blocks-container-id id')
-        ;;                         id'))
-        blocks-container-id 0
-        config (assoc config :blocks-container-id blocks-container-id)
-        doc-mode? (:document/mode? config)]
+  (let [doc-mode? (:document/mode? config)]
     (when (seq blocks)
       [:div.blocks-container.flex-1
-         {:class (when doc-mode? "document-mode")}
-         (block-list config blocks)])))
+       {:class (when doc-mode? "document-mode")}
+       (block-list config blocks)])))
 
 (rum/defcs breadcrumb-with-container < rum/reactive db-mixins/query
   {:init (fn [state]

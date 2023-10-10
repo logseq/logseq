@@ -17,12 +17,11 @@
    :inline-block (inline->inline-block inline block-config)
    :map-inline-block (inline->map-inline-block inline block-config)
    ;; Currently frontend component are provided an object map containing at least the following keys:
-   ;; These will be passed through in a whitelisted fashion so as to be able to track the dependencies  
+   ;; These will be passed through in a whitelisted fashion so as to be able to track the dependencies
    ;; back to the core application
    ;; TODO: document the following
    :block (:block block-config)  ;; the db entity of the current block
    :block? (:block? block-config)
-   :blocks-container-id (:blocks-container-id block-config)
    :editor-box (:editor-box block-config)
    :id (:id block-config)
    :mode? (:mode? block-config)
