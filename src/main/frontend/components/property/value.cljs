@@ -11,7 +11,6 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.property :as property-handler]
-            [frontend.modules.outliner.core :as outliner-core]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -30,12 +29,12 @@
   (state/clear-edit!))
 
 (defn set-editing!
-  [property editor-id dom-id v]
+  [property editor-id dom-id v opts]
   (let [v (str v)
         cursor-range (if dom-id
                        (some-> (gdom/getElement dom-id) util/caret-range)
                        "")]
-    (state/set-editing! editor-id v property cursor-range)))
+    (state/set-editing! editor-id v property cursor-range opts)))
 
 (defn add-property!
   "If a class and in a class schema context, add the property to its schema.
@@ -130,7 +129,8 @@
 
 (defn- select-aux
   [block property {:keys [items selected-choices multiple-choices?] :as opts}]
-  (let [clear-value (str "No " (:block/original-name property))
+  (let [selected-choices (remove nil? selected-choices)
+        clear-value (str "No " (:block/original-name property))
         items' (if (and (seq selected-choices) (not multiple-choices?))
                  (cons {:value clear-value
                         :label clear-value}
@@ -251,16 +251,13 @@
 
 (defn- save-text!
   [repo block property value editor-id e]
-  (let [new-value (util/evalue e)
-        blank? (string/blank? new-value)]
+  (let [new-value (util/evalue e)]
     (when (not (state/get-editor-action))
       (util/stop e)
-      (when-not blank?
-        (when (not= (string/trim new-value) (and value (string/trim value)))
-          (property-handler/set-block-property! repo (:block/uuid block)
-                                                (:block/original-name property)
-                                                new-value
-                                                :old-value value)))
+      (when (not= new-value value)
+        (property-handler/set-block-property! repo (:block/uuid block)
+                                              (:block/original-name property)
+                                              (string/trim new-value)))
       (when (= js/document.activeElement (gdom/getElement editor-id))
         (exit-edit-property)))))
 
@@ -287,7 +284,8 @@
            :background "none"}
    :on-blur
    (fn [e]
-     (save-text! repo block property value editor-id e))
+     (when-not (:editor/mouse-down-from-property-configure? @state/state)
+       (save-text! repo block property value editor-id e)))
    :on-key-down
    (fn [e]
      (let [enter? (= (util/ekey e) "Enter")
@@ -444,19 +442,21 @@
        select-f
        dropdown-opts))))
 
-(rum/defc property-scalar-value < rum/reactive db-mixins/query
-  [block property value {:keys [inline-text block-cp
-                                editor-id dom-id row?
-                                editor-box editor-args editing?
-                                on-chosen]
-                         :as opts}]
-  (let [property (model/sub-block (:db/id property))
+(rum/defcs property-scalar-value < rum/reactive db-mixins/query
+  (rum/local nil ::ref)
+  [state block property value {:keys [inline-text block-cp
+                                      editor-id dom-id row?
+                                      editor-box editor-args editing?
+                                      on-chosen]
+                               :as opts}]
+  (let [*ref (::ref state)
+        property (model/sub-block (:db/id property))
         repo (state/get-current-repo)
         schema (:block/schema property)
         type (get schema :type :default)
         multiple-values? (= :many (:cardinality schema))
         editor-id (or editor-id (str "ls-property-" (:db/id block) "-" (:db/id property)))
-        editing? (or editing? (state/sub-editing? editor-id))
+        editing? (or editing? (and @*ref (state/sub-editing? @*ref)))
         select-type? (select-type? type)
         select-opts {:on-chosen on-chosen}]
     (if (and select-type? (not= type :date))
@@ -479,52 +479,54 @@
                                        (when (= (util/ekey e) "Enter")
                                          (add-property!)))}))
         ;; :others
-        (if editing?
-          [:div.flex.flex-1
-           (case type
-             :template
-             (let [id (first (:classes schema))
-                   template (when id (db/entity [:block/uuid id]))]
-               (when template
-                 (create-new-block-from-template! block property template)))
+        [:div.flex.flex-1 {:ref #(when-not @*ref (reset! *ref %))}
+         (if editing?
+           [:div.flex.flex-1
+            (case type
+              :template
+              (let [id (first (:classes schema))
+                    template (when id (db/entity [:block/uuid id]))]
+                (when template
+                  (create-new-block-from-template! block property template)))
 
-             (let [config {:editor-opts (new-text-editor-opts repo block property value editor-id)}]
-               [:div
-                (editor-box editor-args editor-id (cond-> config
-                                                    multiple-values?
-                                                    (assoc :property-value value)))]))]
-          (let [class (str (when-not row? "flex flex-1 ")
-                           (when multiple-values? "property-value-content"))]
-            [:div {:id (or dom-id (random-uuid))
-                   :class class
-                   :style {:min-height 24}
-                   :on-click (fn []
-                               (when (and (= type :default) (not (uuid? value)))
-                                 (set-editing! property editor-id dom-id value)))}
-             (let [type (or (when (and (= type :default) (uuid? value)) :block)
-                            type
-                            :default)]
-               (if (string/blank? value)
-                 (if (= :template type)
-                   (let [id (first (:classes schema))
-                         template (when id (db/entity [:block/uuid id]))]
-                     (when template
-                       [:a.fade-link.pointer.text-sm
-                        {:on-click (fn [e]
-                                     (util/stop e)
-                                     (create-new-block-from-template! block property template))}
-                        (str "Use template #" (:block/original-name template))]))
-                   [:div.opacity-50.pointer.text-sm "Empty"])
-                 (case type
-                   :template
-                   (property-template-value {:editor-id editor-id}
-                                            value
-                                            opts)
+              (let [config {:editor-opts (new-text-editor-opts repo block property value editor-id)}]
+                [:div
+                 (editor-box editor-args editor-id (cond-> config
+                                                     multiple-values?
+                                                     (assoc :property-value value)))]))]
+           (let [class (str (when-not row? "flex flex-1 ")
+                            (when multiple-values? "property-value-content"))]
+             [:div.cursor-text
+              {:id (or dom-id (random-uuid))
+               :class class
+               :style {:min-height 24}
+               :on-click (fn []
+                           (when (and (= type :default) (not (uuid? value)))
+                             (set-editing! property editor-id dom-id value {:ref @*ref})))}
+              (let [type (or (when (and (= type :default) (uuid? value)) :block)
+                             type
+                             :default)]
+                (if (string/blank? value)
+                  (if (= :template type)
+                    (let [id (first (:classes schema))
+                          template (when id (db/entity [:block/uuid id]))]
+                      (when template
+                        [:a.fade-link.pointer.text-sm
+                         {:on-click (fn [e]
+                                      (util/stop e)
+                                      (create-new-block-from-template! block property template))}
+                         (str "Use template #" (:block/original-name template))]))
+                    [:div.opacity-50.pointer.text-sm "Empty"])
+                  (case type
+                    :template
+                    (property-template-value {:editor-id editor-id}
+                                             value
+                                             opts)
 
-                   :block
-                   (property-block-value value block-cp editor-box opts)
+                    :block
+                    (property-block-value value block-cp editor-box opts)
 
-                   (inline-text {} :markdown (str value)))))]))))))
+                    (inline-text {} :markdown (str value)))))]))]))))
 
 (rum/defc multiple-values < rum/reactive
   [block property v {:keys [on-chosen dropdown? editing?]
