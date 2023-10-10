@@ -22,7 +22,8 @@
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
             [frontend.components.icon :as icon-component]
-            [frontend.components.dnd :as dnd]))
+            [frontend.components.dnd :as dnd]
+            [dommy.core :as dom]))
 
 (defn- update-property!
   [property property-name property-schema]
@@ -301,7 +302,8 @@
                          add-new-property?)
         class? (contains? (:block/type block) "class")
         property-type (get-in property [:block/schema :type])]
-    [:div.property-configure.flex.flex-1.flex-col
+    [:div.property-configure.flex.flex-1.flex-col {:on-mouse-down #(state/set-state! :editor/mouse-down-from-property-configure? true)
+                                                   :on-mouse-up #(state/set-state! :editor/mouse-down-from-property-configure? nil)}
      [:div.grid.gap-2.p-1
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Name:"]
@@ -335,7 +337,7 @@
                                        :selected (= type (:type @*property-schema))})))]
          [:div.col-span-2
           (if property-type
-           (property-type-label property-type) 
+            (property-type-label property-type)
             (ui/select schema-types
                        (fn [_e v]
                          (let [type (keyword (string/lower-case v))]
@@ -416,7 +418,9 @@
           :on-click (fn [e]
                       (util/stop e)
                       (update-property! property @*property-name @*property-schema)
-                      (when toggle-fn (toggle-fn)))))]
+                      (when toggle-fn (toggle-fn))
+                      (when-let [input (first (dom/by-tag "textarea"))]
+                        (.focus input)))))]
 
       (when-not hide-delete?
         [:hr])
@@ -446,18 +450,16 @@
                                 *show-new-property-config?]}]
   (let [repo (state/get-current-repo)]
     ;; existing property selected or entered
-    (if-let [property (get-property-from-db property-name)]
+    (if-let [_property (get-property-from-db property-name)]
       (if (contains? db-property/hidden-built-in-properties (keyword property-name))
         (do (notification/show! "This is a built-in property that can't be used." :error)
             (pv/exit-edit-property))
         ;; Both conditions necessary so that a class can add its own page properties
-        (if (and (contains? (:block/type entity) "class") class-schema?)
+        (when (and (contains? (:block/type entity) "class") class-schema?)
           (pv/add-property! entity property-name "" {:class-schema? class-schema?
-                                                  ;; Only enter property names from sub-modal as inputting
-                                                  ;; property values is buggy in sub-modal
-                                                     :exit-edit? page-configure?})
-          (let [editor-id (str "ls-property-" (:db/id entity) "-" (:db/id property))]
-            (pv/set-editing! property editor-id "" ""))))
+                                                     ;; Only enter property names from sub-modal as inputting
+                                                     ;; property values is buggy in sub-modal
+                                                     :exit-edit? page-configure?})))
       ;; new property entered
       (if (db-property/valid-property-name? property-name)
         (if (and (contains? (:block/type entity) "class") page-configure?)
