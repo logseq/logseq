@@ -51,15 +51,6 @@
        (remove nil?)
        (bean/->js)))
 
-(defn build-blocks-indice-non-blocking
-  [repo]
-  (.then (db/get-all-block-contents-non-blocking)
-         (fn [block-contents] 
-           (->> block-contents
-                (map block->index)
-                (remove nil?)
-                (bean/->js)))))
-
 (defn build-pages-indice
   [repo]
   (->> (db/get-all-pages repo)
@@ -69,32 +60,39 @@
        (bean/->js)))
 
 (defn make-blocks-indice!
-  [repo]
-  (let [blocks (build-blocks-indice repo)
-        indice (fuse. blocks
-                      (clj->js {:keys ["uuid" "content" "page"]
-                                :shouldSort true
-                                :tokenize true
-                                :minMatchCharLength 1
-                                :distance 1000
-                                :threshold 0.35}))]
-    (swap! indices assoc-in [repo :blocks] indice)
-    indice))
+  ([repo] (make-blocks-indice! repo (build-blocks-indice repo)))
+  ([repo blocks]
+   (let [indice (fuse. blocks
+                       (clj->js {:keys ["uuid" "content" "page"]
+                                 :shouldSort true
+                                 :tokenize true
+                                 :minMatchCharLength 1
+                                 :distance 1000
+                                 :threshold 0.35}))]
+     (swap! indices assoc-in [repo :blocks] indice)
+     indice)))
+
+(defn process-block-avet [avet]
+  (some->> avet :v db/get-single-block-contents block->index bean/->js)) 
 
 (defn make-blocks-indice-non-blocking! 
-  [repo]
-  (.then (build-blocks-indice-non-blocking repo)
-    (fn [blocks]
-      (let [indice (fuse. blocks 
-                          (clj->js {:keys ["uuid" "content" "page"]
-                                    :shouldSort true
-                                    :tokenize true
-                                    :minMatchCharLength 1
-                                    :distance 1000
-                                    :threshold 0.35}))]
-        (swap! indices assoc-in [repo :blocks] indice)
-        indice))))
-  ; (let [blocks (build-blocks-indice-non-blocking repo)]))
+  ([repo] (make-blocks-indice-non-blocking! 1000))
+  ([repo chunk-size]
+   (let [avets (db/get-all-block-avets)
+         chunks (partition-all chunk-size avets)
+         acc (atom [])
+         process-chunks (fn process-recur [[curr & more]]
+                          (js/console.log "process-recur") 
+                          (when-not (empty? curr) 
+                            (->> (map process-block-avet curr)
+                                 (remove nil?)
+                                 (doall)
+                                 (swap! acc concat)))
+                          (if (empty? more)
+                            (make-blocks-indice! repo @acc)
+                            (js/setTimeout #(process-recur more) 0)))]
+     (js/console.log "process-make-blocks-indice-non-blocking!" (count avets))
+     (process-chunks chunks))))
 
 (defn original-page-name->index
   [p]

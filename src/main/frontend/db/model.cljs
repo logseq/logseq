@@ -1499,50 +1499,10 @@ independent of format as format specific heading characters are stripped"
          (map get-single-block-contents)
          (remove nil?))))
 
-(defn get-all-block-contents-non-blocking 
-  ([]
-   (when-let [db (conn/get-db)]
-     (let [ids (->> (d/datoms db :avet :block/uuid)
-                    (map :v)
-                    (remove nil?)
-                    (not-empty))]
-       (js/Promise. 
-         (fn [resolve-all _] 
-           (-> (fn [promise-acc id]
-                 (.then promise-acc 
-                    (fn [acc] 
-                      (let [contents (get-single-block-contents id)] 
-                        (js/Promise.
-                          (fn [resolve _]
-                            (js/setTimeout 
-                              #(if (nil? contents) 
-                                 (resolve acc) 
-                                 (resolve (conj acc contents))) 
-                              0)))))))
-               (reduce (js/Promise.resolve (list)) ids)
-               (.then #(resolve-all %)))))))))
-              ; (apply get-all-block-contents-non-blocking (list))))))
-          ; (map get-single-block-contents)
-          ; (remove nil?))))
-  ; ([acc id & more]
-  ;  (let [contents (get-single-block-contents id)
-  ;        acc (cond-> acc (seq contents) (conj contents))])
-
-  ;  (js/Promise. 
-  ;    (fn [resolve reject] 
-  ;      (let [callback (fn [acc] 
-  ;                       (let [contents (get-single-block-contents id)] 
-  ;                         (js/setTimeout
-  ;                           #(resolve
-  ;                              (if (nil? contents) 
-  ;                                acc 
-  ;                                (conj acc contents)))
-  ;                           0)))]
-  ;        (if (seq more) 
-  ;          (.then (apply get-all-block-contents-non-blocking more) callback)
-  ;          (callback (list))))))))
-           
-
+(defn get-all-block-avets
+  []
+  (when-let [db (conn/get-db)]
+    (->> (d/datoms db :avet :block/uuid))))
 
 ;; Deprecated?
 (defn delete-blocks

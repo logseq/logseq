@@ -55,8 +55,8 @@
   (let [[before-text highlighted-text after-text] (split-text-on-highlight text query normal-text normal-query)]
     [:span 
      (when-not (string/blank? before-text) [:span before-text])
-     (when-not (string/blank? after-text) [:span after-text])
-     (when-not (string/blank? highlighted-text) [:span {:class "bg-accent-06 dark:bg-accent-08-alpha"} highlighted-text])]))
+     (when-not (string/blank? highlighted-text) [:span {:class "bg-accent-06 dark:bg-accent-08-alpha"} highlighted-text])
+     (when-not (string/blank? after-text) [:span after-text])]))
 
 (defn span-with-mutliple-highlight-tokens [app-config text query normal-text normal-query]
   (loop [[query-token & more] (string/split normal-query #" ")
@@ -94,22 +94,12 @@
           ;; Otherwise, just return the text
           :else
           [:span text-string])))))
-        
-(defn highlight-query-builder-with-log [props app-config query text]
-  (js/console.log "highlight-query" query text (clj->js props))
-  (try
-    (let [result (highlight-query* app-config query text)]
-      (js/console.log "highlight-query.result" (pr-str result))
-      result)
-    (catch js/Error e
-      (js/console.log "highlight-query.error" (pr-str e) props query text)
-      [:span])))
 
 ;; result-item
-(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted on-highlight on-highlight-dep header on-click] :as props} 
+(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted on-highlight on-highlight-dep header on-click] :as _props} 
                 {:keys [app-config] :as context}]
   (let [ref (rum/create-ref)
-        highlight-query (partial highlight-query-builder-with-log props app-config query)]
+        highlight-query (partial highlight-query* app-config query)]
     (rum/use-effect! 
       (fn [] 
         (when (and highlighted on-highlight) 

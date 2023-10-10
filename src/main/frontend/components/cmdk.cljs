@@ -61,8 +61,8 @@
 (defn create-items [q]
   (if-not (seq q)
     []
-    [{:text "Create page"       :icon "page"       :icon-theme :color :shortcut "cmd+shift+P" :info (str "Create page called '" q "'") :source-create :page} 
-     {:text "Create whiteboard" :icon "whiteboard" :icon-theme :color :shortcut "cmd+shift+W" :info (str "Create whiteboard called '" q "'") :source-create :whiteboard}]))
+    [{:text "Create page"       :icon "new-page"       :icon-theme :color :shortcut "cmd+shift+P" :info (str "Create page called '" q "'") :source-create :page} 
+     {:text "Create whiteboard" :icon "new-whiteboard" :icon-theme :color :shortcut "cmd+shift+W" :info (str "Create whiteboard called '" q "'") :source-create :whiteboard}]))
 
 ;; Take the results, decide how many items to show, and order the results appropriately
 (defn state->results-ordered [state]
@@ -160,8 +160,7 @@
                            :shortcut (:shortcut %)
                            :source-command %))
            (hash-map :status :success :items)
-           (swap! !results assoc group))) 
-    (js/console.log "commands" (clj->js (get-in @!results [:commands :items])))))
+           (swap! !results assoc group))))) 
 
 ;; The pages search action uses an existing handler
 (defmethod load-results :pages [group state]
@@ -180,7 +179,6 @@
                                             :icon-theme :gray 
                                             :text % 
                                             :source-page %) non-boards)]
-      (js/console.log "pages" (clj->js whiteboards) (clj->js non-boards))
       (swap! !results assoc group {:status :success :items non-board-items}
       ; (swap! !results assoc :whiteboards {:status :success :items whiteboard-items}
                             :whiteboards {:status :success :items whiteboard-items}))))
@@ -194,15 +192,15 @@
         opts {:limit 100}]
     (swap! !results assoc-in [group :status] :loading)
     (swap! !results assoc-in [:current-page :status] :loading)
-    (p/let [blocks (search/block-search repo @!input opts)])))
-            ; items (map #(hash-map :icon "block" 
-            ;                       :icon-theme :gray 
-            ;                       :text (:block/content %) 
-            ;                       :header (some-> % :block/page db/entity :block/name)
-            ;                       :current-page? (some-> % :block/page #{current-page})
-            ;                       :source-block %) blocks)
-            ; items-on-other-pages (remove :current-page? items)
-            ; items-on-current-page (filter :current-page? items)]
+    (p/let [blocks (search/block-search repo @!input opts)
+            items (map #(hash-map :icon "block" 
+                                  :icon-theme :gray 
+                                  :text (:block/content %) 
+                                  :header (some-> % :block/page db/entity :block/name)
+                                  :current-page? (some-> % :block/page #{current-page})
+                                  :source-block %) blocks)
+            items-on-other-pages (remove :current-page? items)
+            items-on-current-page (filter :current-page? items)]
       ; (js/console.log "blocks" (clj->js items) current-page) 
       ; ; (js/console.log "blocks" (clj->js items) 
       ; ;                 (pr-str (map (comp pr-str :block/page) blocks)) 
@@ -211,8 +209,8 @@
       ; ; (js/console.log "load-results/blocks" 
       ; ;                 (clj->js blocks) 
       ; ;                 (pr-str (first blocks)))
-      ; (swap! !results assoc group {:status :success :items items-on-other-pages}
-            ;                 :current-page {:status :success :items items-on-current-page}))))
+      (swap! !results assoc group {:status :success :items items-on-other-pages}
+                            :current-page {:status :success :items items-on-current-page}))))
 
 ; (defmethod load-results :whiteboards [group state]
 ;   (let [!input (::input state)
@@ -512,12 +510,13 @@
 
 (defn print-group-name [group]
   (case group
-    :current-page "Search current page"
-    :blocks "Search blocks"
-    :pages "Search pages"
-    :whiteboards "Search whiteboards"
-    :commands "Search commands"
-    (str "Search " (name group))))
+    :current-page "Current page"
+    :blocks "Blocks"
+    :pages "Pages"
+    :whiteboards "Whiteboards"
+    :commands "Commands"
+    :recents "Recents"
+    (string/capitalize (name group))))
 
 (rum/defc filter-row [state filter]
   [:div {:class "pt-3 border-b flex flex-col gap-2 bg-gray-02 border-gray-07" 
@@ -605,10 +604,10 @@
                    (reset! (::keyup-handler state) nil)
                    state)}
   {:did-mount (fn [state] 
-                ; (search-db/make-blocks-indice-non-blocking! (state/get-current-repo))
-                (when-let [ref @(::scroll-container-ref state)]
-                  (js/console.log "scrolling")
-                  (js/setTimeout #(set! (.-scrollTop ref) FILTER-ROW-HEIGHT)))
+                (search-db/make-blocks-indice-non-blocking! (state/get-current-repo))
+                ; (when-let [ref @(::scroll-container-ref state)]
+                ;   (js/console.log "scrolling")
+                ;   (js/setTimeout #(set! (.-scrollTop ref) FILTER-ROW-HEIGHT)))
                 state)}
                   ; (load-results :initial state)))}
   [state {:keys []}]
