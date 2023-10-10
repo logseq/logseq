@@ -2,14 +2,6 @@
   "Property related fns for DB graphs and frontend/datascript usage"
   (:require [clojure.set :as set]))
 
-(def internal-builtin-schema-types
-  "Valid schema :type only to be used by built-in-properties"
-  #{:keyword :map :coll :any})
-
-(def user-builtin-schema-types
-  "Valid schema :type for users in order they appear in the UI"
-  [:default :number :date :checkbox :url :page :template :enum])
-
 ;; FIXME: no support for built-in-extended-properties
 (def ^:large-vars/data-var built-in-properties
   "Map of built in properties for db graphs. Each property has a config map with

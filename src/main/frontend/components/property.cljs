@@ -19,6 +19,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.db.property :as db-property]
+            [logseq.db.property.type :as db-property-type]
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
             [frontend.components.icon :as icon-component]
@@ -327,9 +328,9 @@
 
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Schema type:"]
-       (let [schema-types (->> (concat db-property/user-builtin-schema-types
+       (let [schema-types (->> (concat db-property-type/user-builtin-schema-types
                                        (when built-in-property?
-                                         db-property/internal-builtin-schema-types))
+                                         db-property-type/internal-builtin-schema-types))
                                (map (fn [type]
                                       {:label (property-type-label type)
                                        :disabled disabled?
