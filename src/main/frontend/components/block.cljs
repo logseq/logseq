@@ -3476,11 +3476,10 @@
   (let [*hidden? (::hidden? state)
         hidden? (rum/react *hidden?)
         *ref (::ref state)]
-    [:<>
-     (if (and hidden? (not (:disable-lazy-load? config)))
-       [:div {:key (str "item-" (:block/uuid item))}
-        {:style {:height 24}}]
-       (block-item-inner config item (assoc opts :*ref *ref)))]))
+    (if (and hidden? (not (:disable-lazy-load? config)))
+      [:div {:key (str "item-" (:block/uuid item))
+             :style {:height 24}}]
+      (block-item-inner config item (assoc opts :*ref *ref)))))
 
 (defn- block-list
   [config blocks]
