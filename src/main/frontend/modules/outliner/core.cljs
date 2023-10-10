@@ -707,7 +707,11 @@
                      [block sibling?]
                      (let [target (or linked block)]
                        (if (and up?
+                                ;; target is not any parent of the first block
                                 (not= (:db/id (:block/parent (first blocks)))
+                                      (:db/id target))
+                                (not= (:db/id (:block/parent
+                                               (db/entity (:db/id (:block/parent (first blocks))))))
                                       (:db/id target)))
                          (get-last-child-or-self target)
                          [target false])))
@@ -723,10 +727,6 @@
 
                    :else
                    [block sibling?])]
-      ;; (prn :debug {:result result
-      ;;              :sibling? sibling?
-      ;;              :block {:db/id (:db/id block)
-      ;;                      :block/content (:block/content block)}})
       result)))
 
 (defn insert-blocks
