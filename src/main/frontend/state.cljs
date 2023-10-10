@@ -107,7 +107,6 @@
                                                true)
       :ui/scrolling?                         (atom false)
       :ui/new-property-input-id              nil
-      :ui/blocks-container-id                (atom 0)
       :document/mode?                        document-mode?
 
       :config                                {}
@@ -672,9 +671,9 @@ Similar to re-frame subscriptions"
        (distinct)))
 
 (defn sub-block-selected?
-  [container-id block-uuid]
+  [block-uuid]
   (rum/react
-   (rum/derived-atom [(:selection/blocks @state)] [::select-block container-id block-uuid]
+   (rum/derived-atom [(:selection/blocks @state)] [::select-block block-uuid]
      (fn [s]
        (contains? (set (get-selected-block-ids s)) block-uuid)))))
 
@@ -2291,12 +2290,6 @@ Similar to re-frame subscriptions"
    (rum/derived-atom [(rum/cursor-in state [repo :restore/unloaded-blocks])] [::block-unloaded repo block-uuid]
      (fn [s]
        (contains? s (str block-uuid))))))
-
-(defn next-blocks-container-id
-  []
-  0
-  ;; (swap! (:ui/blocks-container-id @state) inc)
-  )
 
 (defn set-page-properties-changed!
   [page-name]

@@ -442,7 +442,7 @@
 (defn- add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context.
    For pages, used to add both schema properties or properties for a page"
-  [entity property-name {:keys [class-schema? blocks-container-id page-configure?
+  [entity property-name {:keys [class-schema? page-configure?
                                 *show-new-property-config?]}]
   (let [repo (state/get-current-repo)]
     ;; existing property selected or entered
@@ -456,7 +456,7 @@
                                                   ;; Only enter property names from sub-modal as inputting
                                                   ;; property values is buggy in sub-modal
                                                      :exit-edit? page-configure?})
-          (let [editor-id (str "ls-property-" blocks-container-id (:db/id entity) "-" (:db/id property))]
+          (let [editor-id (str "ls-property-" (:db/id entity) "-" (:db/id property))]
             (pv/set-editing! property editor-id "" ""))))
       ;; new property entered
       (if (db-property/valid-property-name? property-name)
@@ -715,9 +715,6 @@
 
 (rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive
   (rum/local false ::hover?)
-  {:init (fn [state]
-           (assoc state ::blocks-container-id (or (:blocks-container-id (last (:rum/args state)))
-                                                  (state/next-blocks-container-id))))}
   [state target-block edit-input-id {:keys [in-block-container? page-configure? class-schema?] :as opts}]
   (let [*hover? (::hover? state)
         block (resolve-linked-block-if-exists target-block)
@@ -784,9 +781,7 @@
                                        (set/union properties (set cur-properties))
                                        (conj result [class cur-properties])))
                               result))
-        opts (assoc opts
-                    :blocks-container-id (::blocks-container-id state)
-                    :hover? @*hover?)]
+        opts (assoc opts :hover? @*hover?)]
     (when-not (and (empty? block-own-properties)
                    (empty? class->properties)
                    (not new-property?)
