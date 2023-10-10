@@ -142,7 +142,7 @@
             input (gdom/getElement id)]
         (when input
           (let [current-pos (cursor/pos input)
-                edit-content (or (state/sub :editor/content :path-in-sub-atom id) "")
+                edit-content (state/sub-edit-content)
                 sidebar? (in-sidebar? input)
                 q (or
                    (editor-handler/get-selected-text)
@@ -277,7 +277,7 @@
           input (gdom/getElement id)
           [id format] (:rum/args state)
           current-pos (cursor/pos input)
-          edit-content (state/sub :editor/content :path-in-sub-atom id)
+          edit-content (state/sub-edit-content)
           edit-block (state/get-edit-block)
           selected-text (editor-handler/get-selected-text)
           q (or
@@ -293,7 +293,7 @@
         input (gdom/getElement id)]
     (when input
       (let [current-pos (cursor/pos input)
-            edit-content (state/sub :editor/content :path-in-sub-atom id)
+            edit-content (state/sub-edit-content)
             q (or
                (when (>= (count edit-content) current-pos)
                  (subs edit-content pos current-pos))
@@ -336,7 +336,7 @@
     (when (and input
                (not (string/blank? property)))
       (let [current-pos (cursor/pos input)
-            edit-content (state/sub :editor/content :path-in-sub-atom id)
+            edit-content (state/sub-edit-content)
             start-idx (string/last-index-of (subs edit-content 0 current-pos)
                                             gp-property/colons)
             q (or
@@ -371,7 +371,7 @@
     (when-let [input (gdom/getElement id)]
       (let [pos          (state/get-editor-last-pos)
             current-pos  (cursor/pos input)
-            edit-content (or (state/sub [:editor/content id]) "")
+            edit-content (or (state/sub-edit-content) "")
             q            (or (editor-handler/get-selected-text)
                              (gp-util/safe-subs edit-content pos current-pos)
                              "")
@@ -385,7 +385,7 @@
                                            (let [prefix (str "```" chosen)
                                                  last-pattern (str "```" q)]
                                              (editor-handler/insert-command! id
-                                               prefix format {:last-pattern last-pattern})
+                                                                             prefix format {:last-pattern last-pattern})
                                              (commands/handle-step [:codemirror/focus])))
                             :on-enter    (fn []
                                            (state/clear-editor-action!)
@@ -718,7 +718,7 @@
   (shortcut/mixin :shortcut.handler/block-editing-only)
   lifecycle/lifecycle
   [state {:keys [format block parent-block]} id config]
-  (let [content (state/sub-edit-content id)
+  (let [content (state/sub-edit-content (:block/uuid block))
         heading-class (get-editor-style-class block content format)
         opts (cond->
                  {:id                id

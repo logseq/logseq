@@ -9,7 +9,7 @@
 (defn did-mount!
   [state]
   (let [[{:keys [block-parent-id]} id] (:rum/args state)
-        content (get @(get @state/state :editor/content) id)]
+        content (state/get-edit-content)]
     (when block-parent-id
       (state/set-editing-block-dom-id! block-parent-id))
     ;; FIXME: remove ugly :editor/property-triggered-by-click?

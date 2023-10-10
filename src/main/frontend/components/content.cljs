@@ -409,7 +409,6 @@
                          (util/stop e)
                          (editor-handler/reset-cursor-range! (gdom/getElement (str id)))
                          (state/set-edit-content! id content)
-                         (state/set-edit-input-id! id)
                          (when on-click
                            (on-click e))))]
         [:pre.cursor.content.pre-white-space
@@ -450,5 +449,6 @@
   (if hiccup
     [:div
      (hiccup-content id option)]
+    ;; TODO: remove this
     (let [format (gp-util/normalize-format format)]
       (non-hiccup-content id content on-click on-hide config format))))

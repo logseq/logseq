@@ -960,8 +960,7 @@
   [state {:keys [fixed-position? open? in-editor? html] :as opts} child]
   (let [*mounted? (::mounted? state)
         manual (not= open? nil)
-        edit-id (state/sub :editor/editing)
-        editing-node (when edit-id (gdom/getElement edit-id))
+        editing-node (state/sub :editor/editing)
         editing? (some? editing-node)
         scrolling? (state/sub :ui/scrolling?)
         open? (if manual open? @*mounted?)

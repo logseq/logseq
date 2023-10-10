@@ -587,11 +587,11 @@ Similar to re-frame subscriptions"
       :else    (util/react (rum/cursor state ks)))))
 
 (defn sub-editing?
-  [editor-id]
-  (when editor-id
+  [block-node]
+  (when block-node
     (rum/react
-     (rum/derived-atom [(:editor/editing @state)] [:ui/editing editor-id]
-                       (fn [id] (= editor-id id))))))
+     (rum/derived-atom [(:editor/editing @state)] [:ui/editing block-node]
+       (fn [editing-node] (= editing-node block-node))))))
 
 (defn sub-config
   "Sub equivalent to get-config which should handle all sub user-config access"
@@ -662,10 +662,6 @@ Similar to re-frame subscriptions"
 (defn sub-default-home-page
   []
   (get-in (sub-config) [:default-home :page] ""))
-
-(defn sub-edit-content
-  [id]
-  (sub :editor/content :path-in-sub-atom id))
 
 (defn- get-selected-block-ids
   [blocks]
@@ -924,6 +920,10 @@ Similar to re-frame subscriptions"
   []
   (:editor/set-timestamp-block @state))
 
+(defn get-edit-block
+  []
+  @(get @state :editor/block))
+
 (defn set-edit-content!
   ([input-id value] (set-edit-content! input-id value true))
   ([input-id value set-input-value?]
@@ -931,17 +931,23 @@ Similar to re-frame subscriptions"
      (when set-input-value?
        (when-let [input (gdom/getElement input-id)]
          (util/set-change-value input value)))
-     (update-state! :editor/content (fn [m]
-                                      (assoc m input-id value))))))
+     (set-state! :editor/content value :path-in-sub-atom
+                 (or (:block/uuid (get-edit-block)) input-id)))))
 
 (defn get-edit-input-id
   []
-  @(:editor/editing @state))
+  (when-let [node @(:editor/editing @state)]
+    (some-> (dom/sel1 node "textarea")
+            (gobj/get "id"))))
 
 (defn get-input
   []
   (when-let [id (get-edit-input-id)]
     (gdom/getElement id)))
+
+(defn get-edit-block-node
+  []
+  @(:editor/editing @state))
 
 (defn editing?
   []
@@ -950,7 +956,15 @@ Similar to re-frame subscriptions"
 
 (defn get-edit-content
   []
-  (get @(:editor/content @state) (get-edit-input-id)))
+  (when-let [id (:block/uuid (get-edit-block))]
+    (get @(:editor/content @state) id)))
+
+(defn sub-edit-content
+  ([]
+   (sub-edit-content (:block/uuid (get-edit-block))))
+  ([block-id]
+   (when block-id
+     (sub :editor/content {:path-in-sub-atom block-id}))))
 
 (defn get-cursor-range
   []
@@ -1022,10 +1036,6 @@ Similar to re-frame subscriptions"
 (defn clear-editor-action!
   []
   (set-state! :editor/action nil))
-
-(defn set-edit-input-id!
-  [input-id]
-  (set-state! :editor/editing input-id))
 
 (defn get-edit-pos
   []
@@ -1217,10 +1227,6 @@ Similar to re-frame subscriptions"
     (doseq [item items]
       (set-state! [:ui/sidebar-collapsed-blocks item] collapsed?))))
 
-(defn get-edit-block
-  []
-  @(get @state :editor/block))
-
 (defn get-current-edit-block-and-position
   []
   (let [edit-input-id (get-edit-input-id)
@@ -1237,6 +1243,8 @@ Similar to re-frame subscriptions"
 (defn clear-edit!
   []
   (set-state! :editor/editing nil)
+  (set-state! :editor/editing-prev-node nil)
+  (set-state! :editor/editing-parent-node nil)
   (swap! state merge {:cursor-range    nil
                       :editor/last-saved-cursor nil})
   (set-state! :editor/content {})
@@ -1940,51 +1948,56 @@ Similar to re-frame subscriptions"
    (clear-edit!)
    (set-selection-blocks! blocks direction)))
 
+(defn set-editing-ref!
+  [ref]
+  (set-state! :editor/editing ref)
+  (when ref
+    (when-let [prev (.-previousSibling ref)]
+      (set-state! :editor/editing-prev-node prev))
+    (when-let [parent (util/rec-get-node (.-parentNode ref) "ls-block")]
+      (set-state! :editor/editing-parent-node parent))))
+
 (defn set-editing!
-  ([edit-input-id content block cursor-range]
-   (set-editing! edit-input-id content block cursor-range true))
-  ([edit-input-id content block cursor-range move-cursor?]
-   (if (> (count content)
-          (block-content-max-length (get-current-repo)))
-     (let [elements (array-seq (js/document.getElementsByClassName (str "id" (:block/uuid block))))]
-       (when (first elements)
-         (util/scroll-to-element (gobj/get (first elements) "id")))
-       (exit-editing-and-set-selected-blocks! elements))
-     (when (and edit-input-id block
-                (or
-                 (publishing-enable-editing?)
-                 (not @publishing?)))
-       (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
-             container (util/get-block-container block-element)
-             block (if container
-                     (assoc block
-                            :block.temp/container (gobj/get container "id"))
-                     block)
-             content (string/trim (or content ""))]
-         (set-state! :editor/editing edit-input-id)
-         (swap! state
-                (fn [state]
-                  (-> state
-                      (assoc
-                       :editor/set-timestamp-block nil
-                       :cursor-range cursor-range))))
-         (set-state! :editor/block block)
-         (set-state! :editor/content content :path-in-sub-atom edit-input-id)
-         (set-state! :editor/last-key-code nil)
+  [edit-input-id content block cursor-range & {:keys [move-cursor? ref]
+                                               :or {move-cursor? true}}]
+  (if (> (count content)
+         (block-content-max-length (get-current-repo)))
+    (let [elements (array-seq (js/document.getElementsByClassName (str "id" (:block/uuid block))))]
+      (when (first elements)
+        (util/scroll-to-element (gobj/get (first elements) "id")))
+      (exit-editing-and-set-selected-blocks! elements))
+    (when (and edit-input-id block
+               (or
+                (publishing-enable-editing?)
+                (not @publishing?)))
+      (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
+            container (util/get-block-container block-element)
+            block (if container
+                    (assoc block
+                           :block.temp/container (gobj/get container "id"))
+                    block)
+            content (string/trim (or content ""))]
+        (set-editing-ref! ref)
+        (swap! state
+               (fn [state]
+                 (-> state
+                     (assoc
+                      :editor/set-timestamp-block nil
+                      :cursor-range cursor-range))))
+        (set-state! :editor/block block)
+        (set-state! :editor/content content :path-in-sub-atom (:block/uuid block))
+        (set-state! :editor/last-key-code nil)
 
-         (when-let [input (gdom/getElement edit-input-id)]
-           (let [pos (count cursor-range)]
-             (when content
-               (util/set-change-value input content))
+        (when-let [input (gdom/getElement edit-input-id)]
+          (let [pos (count cursor-range)]
+            (when content
+              (util/set-change-value input content))
 
-             (when move-cursor?
-               (cursor/move-cursor-to input pos))
+            (when move-cursor?
+              (cursor/move-cursor-to input pos))
 
-             (when (or (util/mobile?) (mobile-util/native-platform?))
-               (set-state! :mobile/show-action-bar? false)))))))))
-
-(defn remove-watch-state [key]
-  (remove-watch state key))
+            (when (or (util/mobile?) (mobile-util/native-platform?))
+              (set-state! :mobile/show-action-bar? false))))))))
 
 (defn get-git-auto-commit-enabled?
   []
@@ -2281,7 +2294,9 @@ Similar to re-frame subscriptions"
 
 (defn next-blocks-container-id
   []
-  (swap! (:ui/blocks-container-id @state) inc))
+  0
+  ;; (swap! (:ui/blocks-container-id @state) inc)
+  )
 
 (defn set-page-properties-changed!
   [page-name]

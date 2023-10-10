@@ -338,18 +338,10 @@
               (when (and near-by (check-node? near-by block-id))
                 near-by))))))))
 
-(defn- get-edit-input-id-with-block-id
-  [block-id direction retry-times current-container-id]
-  (let [container-id (when current-container-id
-                       (string/replace current-container-id "edit-block" "ls-block"))]
-
-    (when-let [target (if (and (< retry-times 2) container-id)
-                        (gdom/getElement container-id)
-                        (or (get-nearby-block-by-id block-id direction)
-                            (util/get-first-block-by-id block-id)))]
-      (string/replace (gobj/get target "id")
-                      "ls-block"
-                      "edit-block"))))
+(defn- get-block-node-by-id
+  [block-id direction]
+  (or (get-nearby-block-by-id block-id direction)
+      (util/get-first-block-by-id block-id)))
 
 (defn- text-range-by-lst-fst-line [content [direction pos]]
   (case direction
@@ -370,52 +362,72 @@
     (db-listener/clear-repo-persistent-job! repo)))
 
 (defn- edit-block-aux
-  [repo block content id text-range {:keys [direction retry-times]
-                                     :or {retry-times 0}
-                                     :as opts}]
-  (when (<= retry-times 10)
-    (let [block-id (:block/uuid block)
-          edit-input-id (if (uuid? id)
-                          (get-edit-input-id-with-block-id id direction retry-times nil)
-                          (let [id (str (subs id 0 (- (count id) 36)) block-id)]
-                            (string/replace id "ls-block" "edit-block")))]
-      (if edit-input-id
+  [repo block content block-node text-range {:keys [direction retry-times]
+                                             :or {retry-times 0}
+                                             :as opts}]
+  (when (and (<= retry-times 10) block)
+    (let [block-node block-node
+          block-id (:block/uuid block)
+          id-class (str "id" block-id)
+          next-edit-node (or
+                          (when (and direction block-node)
+                            (let [blocks (dom/by-class "ls-block")
+                                  idx (.indexOf blocks block-node)]
+                              (when idx
+                                (if (= direction :down)
+                                  (util/nth-safe blocks (inc idx))
+                                  (util/nth-safe blocks (dec idx))))))
+                          (when block-node
+                            (when-let [next (.-nextSibling block-node)]
+                              (when (dom/has-class? next id-class)
+                                next)))
+                          (when block-node
+                            (when-let [prev (.-previousSibling block-node)]
+                              (when (dom/has-class? prev id-class)
+                                prev)))
+                          (when-not block-node
+                            (get-block-node-by-id (:block/uuid block) direction)))]
+      (if next-edit-node
         (do
-          (state/set-editing! edit-input-id content block text-range)
+          (state/set-editing! "" content block text-range {:ref next-edit-node})
           (mark-last-input-time! repo))
-        (js/setTimeout (fn [] (edit-block-aux repo block content id text-range (update opts :retry-times inc)))
-                       5)))))
+        (js/setTimeout (fn [] (edit-block-aux repo block content block-node text-range (update opts :retry-times inc))) 5)))))
 
 (defn edit-block!
-  ([block pos id]
-   (edit-block! block pos id nil))
-  ([block pos id {:keys [custom-content tail-len _direction]
-                  :or {tail-len 0}
-                  :as opts}]
-   (when-not config/publishing?
-     (when-let [block-id (:block/uuid block)]
-       (let [repo (state/get-current-repo)
-             db-graph? (config/db-based-graph? repo)
-             block (or (db/entity [:block/uuid block-id]) block)
-             content (if (and db-graph? (:block/name block))
-                       (:block/original-name block)
-                       (or custom-content (:block/content block) ""))
-             content-length (count content)
-             text-range (cond
-                          (vector? pos)
-                          (text-range-by-lst-fst-line content pos)
+  [block pos block-node & {:keys [custom-content tail-len _direction]
+                           :or {tail-len 0}
+                           :as opts}]
+  (when-not config/publishing?
+    (when-let [block-id (:block/uuid block)]
+      (let [repo (state/get-current-repo)
+            block-node (cond
+                         (uuid? block-node)
+                         nil
+                         (string? block-node)
+                         (gdom/getElement(string/replace block-node "edit-block" "ls-block"))
+                         :else
+                         block-node)
+            db-graph? (config/db-based-graph? repo)
+            block (or (db/entity [:block/uuid block-id]) block)
+            content (if (and db-graph? (:block/name block))
+                      (:block/original-name block)
+                      (or custom-content (:block/content block) ""))
+            content-length (count content)
+            text-range (cond
+                         (vector? pos)
+                         (text-range-by-lst-fst-line content pos)
 
-                          (and (> tail-len 0) (>= (count content) tail-len))
-                          (subs content 0 (- (count content) tail-len))
+                         (and (> tail-len 0) (>= (count content) tail-len))
+                         (subs content 0 (- (count content) tail-len))
 
-                          (or (= :max pos) (<= content-length pos))
-                          content
+                         (or (= :max pos) (<= content-length pos))
+                         content
 
-                          :else
-                          (subs content 0 pos))
-             content (if db-graph?
-                       content
-                       (-> (property-util/remove-built-in-properties (:block/format block) content)
-                           (drawer/remove-logbook)))]
-         (state/clear-selection!)
-         (edit-block-aux repo block content id text-range opts))))))
+                         :else
+                         (subs content 0 pos))
+            content (if db-graph?
+                      content
+                      (-> (property-util/remove-built-in-properties (:block/format block) content)
+                          (drawer/remove-logbook)))]
+        (state/clear-selection!)
+        (edit-block-aux repo block content block-node text-range opts)))))

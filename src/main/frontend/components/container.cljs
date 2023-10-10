@@ -444,7 +444,7 @@
                  (state/set-editor-last-pos! pos)))
     :onStop (fn [_event]
               (when-let [block (get @(get @state/state :editor/block) :block/uuid)]
-                (editor-handler/edit-block! block :max (:block/uuid block))
+                (editor-handler/edit-block! block :max nil)
                 (when-let [input (state/get-input)]
                   (when-let [saved-cursor (state/get-editor-last-pos)]
                     (cursor/move-cursor-to input saved-cursor)))))}
