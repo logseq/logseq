@@ -286,7 +286,7 @@
          ;; Block has been tagged, so we need to edit the linked page now
          (when (and linked
                     (= (:db/id (state/get-edit-block)) (:db/id original)))
-           (edit-block! linked :max (:block/uuid linked) {})))
+           (edit-block! linked :max nil {})))
 
        ;; file based graph only
        ;; sanitized page name changed
@@ -464,11 +464,13 @@
               (not= :insert (state/get-editor-op)))
      (state/set-editor-op! :insert)
      (when-let [state (get-state)]
-       (let [{:keys [block value id config]} state
+       (let [{:keys [block value config]} state
              value (if (string? block-value) block-value value)
              block-id (:block/uuid block)
              block-self? (block-self-alone-when-insert? config block-id)
-             input (gdom/getElement (state/get-edit-input-id))
+             input-id (state/get-edit-input-id)
+             input (gdom/getElement input-id)
+             block-node (state/get-edit-block-node)
              selection-start (util/get-selection-start input)
              selection-end (util/get-selection-end input)
              [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
@@ -497,7 +499,7 @@
                     {:ok-handler
                      (fn insert-new-block!-ok-handler [last-block]
                        (clear-when-saved!)
-                       (edit-block! last-block 0 (if original-block (:block/uuid last-block) id)))}))))
+                       (edit-block! last-block 0 (when-not original-block block-node)))}))))
    (state/set-editor-op! nil)))
 
 (defn api-insert-new-block!
@@ -577,13 +579,8 @@
             (when edit-block?
               (if (and replace-empty-target?
                        (string/blank? (:block/content last-block)))
-                ;; 20ms of waiting for DOM to load the block, to avoid race condition.
-                ;; It's ensuring good response under M1 pro
-                ;; Used to be 10ms before, but is causing occasional failure on M1 pro with a full page of blocks,
-                ;; or failing E2E with a small number of blocks.
-                ;; Should be related to the # of elements in page
-                (js/setTimeout #(edit-block! last-block :max (:block/uuid last-block)) 20)
-                (js/setTimeout #(edit-block! new-block :max (:block/uuid new-block)) 20)))
+                (edit-block! last-block :max nil)
+                (edit-block! new-block :max nil)))
             new-block))))))
 
 (defn insert-first-page-block-if-not-exists!
@@ -720,7 +717,6 @@
           (let [original-block (dom/attr sibling-block "originalblockid")
                 edit-block (some-> (:db/id (state/get-edit-block)) db/entity)
                 edit-block-has-refs? (some? (:block/_refs edit-block))
-                id (if original-block (:block/uuid block) id)
                 original-content (util/trim-safe
                                   (if (:block/name block)
                                     (:block/original-name block)
@@ -736,12 +732,13 @@
                      (if original-content
                        (gobj/get (utf8/encode original-content) "length")
                        0)
-                     0)]
-            (edit-block! (if edit-block-has-refs?
-                           (db/pull (:db/id edit-block))
-                           (db/pull (:db/id block)))
+                     0)
+                edit-target (if edit-block-has-refs?
+                              (db/pull (:db/id edit-block))
+                              (db/pull (:db/id block)))]
+            (edit-block! edit-target
                          pos
-                         id
+                         (state/get-edit-block-node)
                          {:custom-content new-value
                           :tail-len tail-len})
             {:prev-block block
@@ -790,16 +787,7 @@
                   (and prev-block (:block/name prev-block)
                        (not= (:db/id prev-block) (:db/id (:block/parent block)))
                        (model/hidden-page? (:block/page block))) ; embed page
-                  (let [target (or
-                                (some-> (model/get-block-last-direct-child (db/get-db) (:db/id prev-block))
-                                        db/entity)
-                                prev-block)]
-                    (outliner-core/move-blocks! [block] target (not= (:db/id target) (:db/id prev-block)))
-                    (when (:block/collapsed? prev-block)
-                      (expand-block! (:block/uuid prev-block)))
-                    ;; FIXME: save-block! will reset :block/parent && :block/left that have been modified by move-blocks! above,
-                    (util/schedule #(save-block! repo block value {:editor/op :delete}))
-                    (js/setTimeout #(edit-block! (db/pull (:db/id block)) :max (:block/uuid block) {}) 100))
+                  nil
 
                   concat-prev-block?
                   (if (seq (:block/_refs (db/entity (:db/id block))))
@@ -1152,7 +1140,7 @@
                           :block/uuid)]
       (let [pos (state/get-edit-pos)]
         (route-handler/redirect-to-page! id)
-        (util/schedule #(edit-block! {:block/uuid id} pos id))))
+        (util/schedule #(edit-block! {:block/uuid id} pos nil))))
     (js/window.history.forward)))
 
 (defn zoom-out!
@@ -1167,14 +1155,14 @@
                        (:block/uuid block-parent))]
             (do
               (route-handler/redirect-to-page! id)
-              (util/schedule #(edit-block! {:block/uuid block-id} :max block-id)))
+              (util/schedule #(edit-block! {:block/uuid block-id} :max nil)))
             (let [page-id (some-> (db/entity [:block/uuid block-id])
                                   :block/page
                                   :db/id)]
 
               (when-let [page-name (:block/name (db/entity page-id))]
                 (route-handler/redirect-to-page! page-name)
-                (util/schedule #(edit-block! {:block/uuid block-id} :max block-id))))))))
+                (util/schedule #(edit-block! {:block/uuid block-id} :max nil))))))))
     (js/window.history.back)))
 
 (defn cut-block!
@@ -1741,7 +1729,7 @@
               (util/schedule (fn []
                                (when-not (gdom/getElement input-id)
                                  ;; could be crossing containers
-                                 (edit-block! block pos (:block/uuid block))))))))
+                                 (edit-block! block pos nil)))))))
         (let [ids (state/get-selection-block-ids)]
           (when (seq ids)
             (let [lookup-refs (map (fn [id] [:block/uuid id]) ids)
@@ -1995,7 +1983,7 @@
      (when-let [last-block (last (:blocks result))]
        (clear-when-saved!)
        (let [last-block' (db/pull [:block/uuid (:block/uuid last-block)])]
-         (edit-block! last-block' :max (:block/uuid last-block')))))))
+         (edit-block! last-block' :max nil))))))
 
 (defn- nested-blocks
   [blocks]
@@ -2065,7 +2053,6 @@
                                                                          :keep-uuid? keep-uuid?})]
          (state/set-block-op-type! nil)
          (edit-last-block-after-inserted! result))))))
-
 
 (defn- block-tree->blocks
   "keep-uuid? - maintain the existing :uuid in tree vec"
@@ -2246,7 +2233,7 @@
             :real-outliner-op :indent-outdent}
            (outliner-core/move-blocks! [block] target true))
           (when original-block
-            (util/schedule #(edit-block! block pos (:block/uuid block)))))))))
+            (util/schedule #(edit-block! block pos nil))))))))
 
 (defn- last-top-level-child?
   [{:keys [id]} current-node]
@@ -2565,6 +2552,7 @@
 (defn- move-cross-boundary-up-down
   [direction move-opts]
   (let [input (state/get-input)
+        input-id (when input (.-id input))
         line-pos (util/get-first-or-last-line-pos input)
         repo (state/get-current-repo)
         f (case direction
@@ -2579,13 +2567,12 @@
                       (string/trim value))
             (save-block! repo uuid value)))
 
-        (let [new-id (string/replace (gobj/get sibling-block "id") "ls-block" "edit-block")
-              new-uuid (cljs.core/uuid sibling-block-id)
+        (let [new-uuid (cljs.core/uuid sibling-block-id)
               block (db/pull repo '[*] [:block/uuid new-uuid])]
           (edit-block! block
                        (or (:pos move-opts)
-                        [direction line-pos])
-                       new-id
+                           [direction line-pos])
+                       (state/get-edit-block-node)
                        {:direction direction})))
       (case direction
         :up (cursor/move-cursor-to input 0)
@@ -2618,7 +2605,6 @@
   (let [up? (= :left direction)
         pos (if up? :max 0)
         {:block/keys [format uuid] :as block} (state/get-edit-block)
-        id (state/get-edit-input-id)
         repo (state/get-current-repo)
         editing-block (gdom/getElement (state/get-editing-block-dom-id))
         f (if up? util/get-prev-block-non-collapsed util/get-next-block-non-collapsed)
@@ -2635,7 +2621,7 @@
                       (string/trim value))
             (save-block! repo uuid value)))
         (let [block (db/pull repo '[*] [:block/uuid (cljs.core/uuid sibling-block-id)])]
-          (edit-block! block pos id))))))
+          (edit-block! block pos (state/get-edit-block-node)))))))
 
 (defn keydown-arrow-handler
   [direction]
@@ -2708,7 +2694,7 @@
          (delete-block-aux! next-block false)
          (save-block! repo edit-block' new-content {:editor/op :delete}))
         (let [block (if next-block-has-refs? next-block edit-block)]
-          (edit-block! block current-pos (:block/uuid block)))))))
+          (edit-block! block current-pos nil))))))
 
 (defn keydown-delete-handler
   [_e]
@@ -2827,11 +2813,6 @@
   (save-current-block!)
   (state/set-editor-op! :indent-outdent)
   (let [editor (state/get-input)
-        crossing-container? (when editor
-                              (or (and (not indent?) (outliner-core/get-current-editing-original-block))
-                                  (and indent?
-                                       (when-let [sibling (db-model/get-prev-sibling (db/get-db) (:db/id (state/get-edit-block)))]
-                                         (some? (:block/link sibling))))))
         pos (some-> editor cursor/pos)
         {:keys [block]} (get-state)]
     (when block
@@ -2839,9 +2820,7 @@
       (outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
-       (outliner-core/indent-outdent-blocks! [block] indent?))
-      (when crossing-container?
-        (util/schedule #(edit-block! block (state/get-edit-pos) (:block/uuid block)))))
+       (outliner-core/indent-outdent-blocks! [block] indent?)))
     (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler
@@ -3312,12 +3291,11 @@
       (let [block    {:block/uuid block-id}
             block-id (-> selected-blocks
                          f
-                         (gobj/get "id")
-                         (string/replace "ls-block" "edit-block"))
+                         (gobj/get "id"))
             left?    (= direction :left)]
         (edit-block! block
-                    (if left? 0 :max)
-                    block-id)))))
+                     (if left? 0 :max)
+                     (when block-id (gdom/getElement block-id)))))))
 
 (defn shortcut-left-right [direction]
   (fn [e]
