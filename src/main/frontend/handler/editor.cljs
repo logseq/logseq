@@ -708,24 +708,28 @@
        (outliner-core/delete-blocks! [block] {:children? children?})))))
 
 (defn- move-to-prev-block
-  [repo sibling-block format id value]
+  [repo sibling-block format _id value]
   (when (and repo sibling-block)
     (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
       (when-let [block (db/entity [:block/uuid (uuid sibling-block-id)])]
         (if (:block/name block)
-          {:prev-block block}
-          (let [original-block (dom/attr sibling-block "originalblockid")
-                edit-block (some-> (:db/id (state/get-edit-block)) db/entity)
+          (do
+            (edit-block! block :max (state/get-edit-block-node) {})
+            {:prev-block block
+            :new-value (:block/original-name block)})
+          (let [edit-block (some-> (:db/id (state/get-edit-block)) db/entity)
                 edit-block-has-refs? (some? (:block/_refs edit-block))
-                original-content (util/trim-safe
-                                  (if (:block/name block)
-                                    (:block/original-name block)
-                                    (:block/content block)))
-                value' (-> (file-property/remove-built-in-properties-when-file-based repo format original-content)
-                           (drawer/remove-logbook))
-                value (->> value
-                           (file-property/remove-properties-when-file-based repo format)
-                           (drawer/remove-logbook))
+                db? (config/db-based-graph? repo)
+                original-content (util/trim-safe (:block/content block))
+                value' (if db?
+                         original-content
+                         (-> (file-property/remove-built-in-properties-when-file-based repo format original-content)
+                             (drawer/remove-logbook)))
+                value (if db?
+                        value
+                        (->> value
+                             (file-property/remove-properties-when-file-based repo format)
+                             (drawer/remove-logbook)))
                 new-value (str value' value)
                 tail-len (count value)
                 pos (max
