@@ -285,9 +285,12 @@
     (let [k-name (name k-name)
           property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
           property-uuid (or (:block/uuid property) (db/new-block-id))
-          property-type (get-in property [:block/schema :type] :default)
+          property-type (get-in property [:block/schema :type])
           {:keys [properties] :as class-schema} (:block/schema class)
-          _ (upsert-property! repo k-name (assoc (:block/schema property) :type property-type)
+          _ (upsert-property! repo k-name
+                              (cond-> (:block/schema property)
+                                (some? property-type)
+                                (assoc :type property-type))
                               {:property-uuid property-uuid})
           new-properties (vec (distinct (conj properties property-uuid)))
           class-new-schema (assoc class-schema :properties new-properties)]
