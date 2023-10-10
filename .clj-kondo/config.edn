@@ -118,6 +118,7 @@
              logseq.common.graph common-graph
              logseq.common.config common-config
              logseq.db.property db-property
+             logseq.db.property.type db-property-type
              logseq.db.rules rules
              logseq.db.schema db-schema
              logseq.db.sqlite.db sqlite-db

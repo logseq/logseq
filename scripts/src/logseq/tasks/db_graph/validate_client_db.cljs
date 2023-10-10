@@ -4,6 +4,7 @@
             [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.schema :as db-schema]
             [logseq.db.property :as db-property]
+            [logseq.db.property.type :as db-property-type]
             [datascript.core :as d]
             [clojure.string :as string]
             [nbb.core :as nbb]
@@ -15,24 +16,39 @@
             ["os" :as os]
             [cljs.pprint :as pprint]))
 
+(defn- validate-property-value
+  "Validates the value in a property tuple. The property value can be one or
+  many of a value to validated"
+  [prop-type schema-fn val]
+  (if (and (or (sequential? val) (set? val))
+           (not= :coll prop-type))
+    (every? schema-fn val)
+    (schema-fn val)))
+
+(def property-tuple
+  "Represents a tuple of a property and its property value. This schema
+   has 2 metadata hooks which are used to inject a datascript db later"
+  (into
+   [:multi {:dispatch ^:add-db (fn [db property-tuple]
+                                 (get-in (d/entity db [:block/uuid (first property-tuple)])
+                                         [:block/schema :type]))}]
+   (map (fn [[prop-type value-schema]]
+          ^:property-value [prop-type (if (vector? value-schema) (last value-schema) value-schema)])
+        db-property-type/builtin-schema-types)))
+
+(def block-properties
+  "Validates a slightly modified verson of :block/properties. Properties are
+  expected to be a vector of tuples instead of a map in order to validate each
+  property with its property value that is valid for its type"
+  [:sequential property-tuple])
+
 (def page-or-block-attrs
   "Common attributes for page and normal blocks"
   [[:block/uuid :uuid]
    [:block/created-at :int]
    [:block/updated-at :int]
    [:block/properties {:optional true}
-    [:map-of :uuid [:or
-                    :string
-                    :int
-                    :boolean
-                    :uuid
-                    :map
-                    [:vector [:or :keyword :uuid]]
-                    [:set :uuid]
-                     ;; TODO: Remove when bug is fixed
-                    [:sequential :uuid]
-                    [:set :string]
-                    [:set :int]]]]
+    block-properties]
    [:block/refs {:optional true} [:set :int]]
    [:block/tags {:optional true} [:set :int]]
    [:block/tx-id {:optional true} :int]])
@@ -88,8 +104,8 @@
     [[:block/schema
       [:map
        {:closed false}
-       [:type (apply vector :enum (into db-property/internal-builtin-schema-types
-                                        db-property/user-builtin-schema-types))]
+       [:type (apply vector :enum (into db-property-type/internal-builtin-schema-types
+                                        db-property-type/user-builtin-schema-types))]
        [:hide? {:optional true} :boolean]
        [:cardinality {:optional true} [:enum :one :many]]]]]
     page-attrs
@@ -102,15 +118,18 @@
     [[:block/schema
       [:map
        {:closed false}
-       [:type (apply vector :enum db-property/user-builtin-schema-types)]
+       [:type (apply vector :enum db-property-type/user-builtin-schema-types)]
        [:hide? {:optional true} :boolean]
        [:description {:optional true} :string]
        ;; For any types except for :checkbox :default :template :enum
        [:cardinality {:optional true} [:enum :one :many]]
        ;; Just for :enum type
        [:enum-config {:optional true} :map]
-       ;; Just for :page and :template types
-       [:classes {:optional true} [:set :uuid]]]]]
+       ;; :template uses :sequential and :page uses :set.
+       ;; Should :template should use :set?
+       [:classes {:optional true} [:or
+                                   [:set :uuid]
+                                   [:sequential :uuid]]]]]]
     page-attrs
     page-or-block-attrs)))
 
@@ -135,7 +154,8 @@
    [:block/metadata {:optional true}
     [:map {:closed false}
      [:created-from-block :uuid]
-     [:created-from-property :uuid]]]
+     [:created-from-property :uuid]
+     [:created-from-template {:optional true} :uuid]]]
     ;; refs
    [:block/page :int]
    [:block/path-refs {:optional true} [:set :int]]
@@ -217,25 +237,48 @@
                                                    vec)}]))
                     (into {}))}))))
 
+(defn- update-schema
+  "Updates the db schema to add a datascript db for property validations
+   and to optionally close maps"
+  [db-schema db {:keys [closed-maps]}]
+  (let [db-schema-with-property-vals
+        (walk/postwalk (fn [e]
+                         (let [meta' (meta e)]
+                           (cond
+                             (:add-db meta')
+                             (partial e db)
+                             (:property-value meta')
+                             (let [[property-type schema-fn] e
+                                   schema-fn' (if (db-property-type/property-types-with-db property-type) (partial schema-fn db) schema-fn)
+                                   validation-fn #(validate-property-value property-type schema-fn' %)]
+                               [property-type [:tuple :uuid [:fn validation-fn]]])
+                             :else
+                             e)))
+                       db-schema)]
+    (if closed-maps
+      (walk/postwalk (fn [e]
+                       (if (and (vector? e)
+                                (= :map (first e))
+                                (contains? (second e) :closed))
+                         (assoc e 1 (assoc (second e) :closed true))
+                         e))
+                     db-schema-with-property-vals)
+      db-schema-with-property-vals)))
+
 (defn validate-client-db
   "Validate datascript db as a vec of entity maps"
-  [db ent-maps {:keys [closed-maps verbose group-errors]}]
-  (let [schema (if closed-maps
-                 (walk/postwalk (fn [e]
-                                  (if (and (vector? e)
-                                           (= :map (first e))
-                                           (contains? (second e) :closed))
-                                    (assoc e 1 (assoc (second e) :closed true))
-                                    e))
-                                client-db-schema)
-                 client-db-schema)]
+  [db ent-maps* {:keys [verbose group-errors] :as options}]
+  (let [ent-maps (vec (map #(if (:block/properties %)
+                              (update % :block/properties (fn [x] (mapv identity x)))
+                              %)
+                           (vals ent-maps*)))
+        schema (update-schema client-db-schema db options)]
     (if-let [errors (->> ent-maps
-                         vals
                          (m/explain schema)
                          :errors)]
       (do
         (if group-errors
-          (let [ent-errors (build-grouped-errors db (vec (vals ent-maps)) errors)]
+          (let [ent-errors (build-grouped-errors db ent-maps errors)]
             (println "Found" (count ent-errors) "entities in errors:")
             (if verbose
               (pprint/pprint ent-errors)
@@ -243,12 +286,11 @@
           (do
             (println "Found" (count errors) "errors:")
             (if verbose
-              (let [full-maps (vec (vals ent-maps))]
-                (pprint/pprint
-                 (map #(assoc %
-                              :entity (get full-maps (-> % :in first))
-                              :schema (m/form (:schema %)))
-                      errors)))
+              (pprint/pprint
+               (map #(assoc %
+                            :entity (get ent-maps (-> % :in first))
+                            :schema (m/form (:schema %)))
+                    errors))
               (pprint/pprint errors))))
         (js/process.exit 1))
       (println "Valid!"))))
@@ -285,7 +327,9 @@
         conn (sqlite-cli/read-graph db-name)
         datoms (d/datoms @conn :eavt)
         ent-maps (datoms->entity-maps datoms)]
-    (println "Read graph" (str db-name " with " (count datoms) " datoms!"))
+    (println "Read graph" (str db-name " with " (count datoms) " datoms, "
+                               (count ent-maps) " entities and "
+                               (count (mapcat :block/properties (vals ent-maps))) " properties"))
     (validate-client-db @conn ent-maps options)))
 
 (defn -main [argv]

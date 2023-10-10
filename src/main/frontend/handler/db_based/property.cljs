@@ -9,62 +9,23 @@
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.property :as db-property]
+            [logseq.db.property.type :as db-property-type]
             [malli.util :as mu]
             [malli.error :as me]))
 
-;; TODO:
-;; Validate && list fixes for non-validated values when updating property schema
-
-(defn- logseq-page?
-  [id]
-  (and (uuid? id)
-       (when-let [e (db/entity [:block/uuid id])]
-         (nil? (:block/page e)))))
-
-;; FIXME: template instance check
-(defn- logseq-template?
-  [id]
-  (and (uuid? id)
-       (some? (db/entity [:block/uuid id]))))
-
-(defn- text-or-uuid?
-  [value]
-  (or (string? value) (uuid? value)))
-
-(def builtin-schema-types
-  {:default  [:fn
-              {:error/message "should be a text or UUID"}
-              text-or-uuid?]                     ; refs/tags will not be extracted
-   :number   number?
-   :date     [:fn
-              {:error/message "should be a journal date"}
-              logseq-page?]
-   :checkbox boolean?
-   :url      [:fn
-              {:error/message "should be a URL"}
-              gp-util/url?]
-   :page     [:fn
-              {:error/message "should be a page"}
-              logseq-page?]
-   :template [:fn
-              {:error/message "should has #template"}
-              logseq-template?]
-   :enum     some?                      ; the value could be anything such as number, text, url, date, page, image, video, etc.
-   ;; internal usage
-   :keyword  keyword?
-   :map      map?
-   ;; coll elements are ordered as it's saved as a vec
-   :coll     coll?
-   :any      some?})
-
-(assert (= (set (keys builtin-schema-types))
-           (into db-property/internal-builtin-schema-types
-                 db-property/user-builtin-schema-types))
-        "Built-in schema types must be equal")
-
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
+
+(def builtin-schema-types
+  "A frontend version of builtin-schema-types that adds the current database to
+   schema fns"
+  (into {}
+        (map (fn [[property-type property-val-schema]]
+               (if (db-property-type/property-types-with-db property-type)
+                 (let [[_ schema-opts schema-fn] property-val-schema]
+                   [property-type [:fn schema-opts #(schema-fn (db/get-db) %)]])
+                 [property-type property-val-schema]))
+             db-property-type/builtin-schema-types)))
 
 (defn- infer-schema-from-input-string
   [v-str]
