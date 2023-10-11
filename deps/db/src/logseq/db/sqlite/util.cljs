@@ -23,7 +23,7 @@
   [block]
   (cond
     (:block/page block) 1
-    (:file/content block) 3
+    (some #{:file/content :schema/version :db/type} (keys block)) 3
     (contains? (:block/type block) "property") 6
     (:block/name block) 2
     :else 5))

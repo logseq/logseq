@@ -381,6 +381,8 @@
       (sqlite-db/delete-blocks! repo deleted-block-uuids))
     (when (seq blocks)
       (let [blocks' (mapv sqlite-util/ds->sqlite-block blocks)]
+        (when-let [unknown-blocks (seq (filter #(= 5 (:type %)) blocks'))]
+          (logger/error "The following blocks saved as unknown:" unknown-blocks))
         (sqlite-db/upsert-blocks! repo (bean/->js blocks'))))))
 
 ;; Needs to be called first for an existing graph
