@@ -2602,7 +2602,12 @@
                               level-limit 3}
                          :as opts}]
   (when block-id
-    (let [parents (db/get-block-parents repo block-id {:depth (inc level-limit)})
+    (let [block-id (or (when block-id
+                         (some-> (property-handler/get-property-block-created-block [:block/uuid block-id])
+                                 db/entity
+                                 :block/uuid))
+                       block-id)
+          parents (db/get-block-parents repo block-id {:depth (inc level-limit)})
           page (or (db/get-block-page repo block-id) ;; only return for block uuid
                    (model/query-block-by-uuid block-id)) ;; return page entity when received page uuid
           page-name (:block/name page)

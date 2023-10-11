@@ -233,3 +233,12 @@
                       outliner-core/block-with-timestamps)]
     {:page page-tx
      :blocks [new-block]}))
+
+(defn get-property-block-created-block
+  "Get the root block that created this property block."
+  [eid]
+  (let [b (db/entity eid)
+        from (get-in b [:block/metadata :created-from-block])]
+    (if from
+      (get-property-block-created-block [:block/uuid from])
+      (:db/id b))))

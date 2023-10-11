@@ -7,6 +7,7 @@
             [frontend.components.search.highlight :as highlight]
             [frontend.handler.route :as route-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.property :as property-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.notification :as notification]
             [frontend.db :as db]
@@ -140,6 +141,11 @@
 
     :block
     (let [block-uuid (uuid (:block/uuid data))
+          block-uuid (or
+                      (some-> (property-handler/get-property-block-created-block [:block/uuid block-uuid])
+                              db/entity
+                              :block/uuid)
+                      block-uuid)
           collapsed? (db/parents-collapsed? repo block-uuid)
           page (:block/page (db/entity [:block/uuid block-uuid]))
           page-name (:block/name page)]
