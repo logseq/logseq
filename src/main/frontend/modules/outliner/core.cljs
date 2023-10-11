@@ -181,7 +181,7 @@
     (reset! (:editor/create-page? @state/state) false)))
 
 (defn rebuild-block-refs
-  [block new-properties & {:keys [skip-content-parsing?]}]
+  [block new-properties & {:keys [skip-content-parsing? no-property-values?]}]
   (let [property-key-refs (keys new-properties)
         property-value-refs (->> (vals new-properties)
                                  (mapcat (fn [v]
@@ -200,7 +200,7 @@
 
                                              :else
                                              nil))))
-        property-refs (->> (concat property-key-refs property-value-refs)
+        property-refs (->> (concat property-key-refs (when-not no-property-values? property-value-refs))
                            (map (fn [id-or-map] (if (uuid? id-or-map) {:block/uuid id-or-map} id-or-map))))
         content-refs (when-not skip-content-parsing?
                        (some-> (:block/content block) block/extract-refs-from-text))]

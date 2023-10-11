@@ -189,14 +189,18 @@
 
                                       :else
                                       v*)
-                      ;; don't modify maps
+                          ;; don't modify maps
                           new-value (if (or (sequential? new-value) (set? new-value))
                                       (if (= :coll property-type)
                                         (vec (remove string/blank? new-value))
                                         (set (remove string/blank? new-value)))
                                       new-value)
                           block-properties (assoc properties property-uuid new-value)
-                          refs (outliner-core/rebuild-block-refs block block-properties)]
+                          refs (outliner-core/rebuild-block-refs block
+                                                                 block-properties
+                                                                 ;; enum values aren't actually blocks and shouldn't
+                                                                 ;; be referenced because they create garbage unknown blocks
+                                                                 :no-property-values? (= :enum property-type))]
                       (db/transact! repo
                                     [[:db/retract (:db/id block) :block/refs]
                                      {:block/uuid (:block/uuid block)

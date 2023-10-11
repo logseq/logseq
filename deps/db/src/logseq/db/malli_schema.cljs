@@ -143,7 +143,16 @@
        ;; For any types except for :checkbox :default :template :enum
        [:cardinality {:optional true} [:enum :one :many]]
        ;; Just for :enum type
-       [:enum-config {:optional true} :map]
+       [:enum-config {:optional true}
+        [:map {:closed false}
+         [:values
+          [:map-of
+           :uuid [:map {:closed false}
+                  [:name :string]
+                  [:description :string]]]]
+         [:order [:vector :uuid]]]]
+       ;; Just for :enum
+       [:position {:optional true} :string]
        ;; :template uses :sequential and :page uses :set.
        ;; Should :template should use :set?
        [:classes {:optional true} [:or
@@ -210,7 +219,6 @@
    object-block])
 
 ;; TODO: invalid macros should not generate unknown
-;; TODO: Creating an enum property should not generate unknown
 (def unknown-block
   "A block that has an unknown type. This type of block should be removed when
   the above TODOs have been addressed and the frontend ensures no unknown blocks
