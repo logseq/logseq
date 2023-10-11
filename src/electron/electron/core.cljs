@@ -16,7 +16,6 @@
             ["os" :as os]
             ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell] :as electron]
             ["electron-deeplink" :refer [Deeplink]]
-            [clojure.core.async :as async]
             [electron.state :as state]
             [electron.git :as git]
             [electron.window :as win]
