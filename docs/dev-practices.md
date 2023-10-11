@@ -301,6 +301,19 @@ point out:
   bb dev:validate-repo-config-edn deps/common/resources/templates/config.edn
   ```
 
+* `dev:validate-db` - Validates a DB graph's datascript schema
+
+  ```sh
+  # One time setup
+  $ cd deps/db && yarn install && cd -
+  # One or more graphs can be validated e.g.
+  $ bb dev:validate-db test-db schema -c -g
+  Read graph test-db with 1572 datoms, 220 entities and 13 properties
+  Valid!
+  Read graph schema with 26105 datoms, 2320 entities and 3168 properties
+  Valid!
+  ```
+
 * `dev:publishing` - Build a publishing app for a given graph dir. If the
   publishing frontend is out of date, it builds that first which takes time.
   Subsequent runs are quick.

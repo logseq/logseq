@@ -5,6 +5,7 @@
                   logseq.db.sqlite.util
                   logseq.db.sqlite.cli
                   logseq.db.property
+                  logseq.db.malli-schema
                   ;; Some fns are used by frontend but not worth moving over yet
                   logseq.db.schema]
  :report {:format :ignore}}

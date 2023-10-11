@@ -1,8 +1,6 @@
 {:paths ["src"]
  :deps
- {metosin/malli
-  {:mvn/version "0.10.0"}
-  logseq/graph-parser
+ {logseq/graph-parser
   {:local/root "../deps/graph-parser"}
   logseq/outliner
   {:local/root "../deps/outliner"}
