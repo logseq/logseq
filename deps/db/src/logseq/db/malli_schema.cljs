@@ -209,19 +209,33 @@
    normal-block
    object-block])
 
-;; TODO: Figure out where this is coming from
-(def unknown-empty-block
+;; TODO: invalid macros should not generate unknown
+;; TODO: Creating an enum property should not generate unknown
+(def unknown-block
+  "A block that has an unknown type. This type of block should be removed when
+  the above TODOs have been addressed and the frontend ensures no unknown blocks
+  are being created"
   [:map {:closed true}
-   [:block/uuid :uuid]])
+   [:block/uuid :uuid]
+   [:block/unknown? :boolean]])
 
 (def file-block
-  [:map {:closed true}
+  [:map {:closed false}
    [:block/uuid :uuid]
    [:block/tx-id {:optional true} :int]
    [:file/content :string]
    [:file/path :string]
    ;; TODO: Remove when bug is fixed
    [:file/last-modified-at {:optional true} :any]])
+
+(def schema-version
+  [:map {:closed false}
+   [:schema/version :int]])
+
+(def db-ident
+  [:map {:closed false}
+   [:db/ident :keyword]
+   [:db/type {:optional true} :string]])
 
 (def DB
   "Malli schema for entities from schema/schema-for-db-based-graph. In order to
@@ -233,4 +247,6 @@
     page
     block
     file-block
-    unknown-empty-block]])
+    schema-version
+    db-ident
+    unknown-block]])
