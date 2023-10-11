@@ -42,6 +42,13 @@
                 "yarn -s nbb-logseq -cp src -m logseq.tasks.dev.publishing"
                 (into ["static"] *command-line-args*))}
 
+  dev:validate-db
+  {:doc "Validate a DB graph's datascript schema"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq script/validate_client_db.cljs"
+                *command-line-args*)}
+
   dev:npx-cap-run-ios
   logseq.tasks.dev.mobile/npx-cap-run-ios
 

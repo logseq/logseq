@@ -1,5 +1,5 @@
 (ns logseq.db.schema
-  "Main db schemas for the Logseq app"
+  "Main datascript schemas for the Logseq app"
   (:require [clojure.set :as set]))
 
 (defonce version 2)
