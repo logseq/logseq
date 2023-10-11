@@ -184,22 +184,15 @@
   (str "(" (->> (map (fn [id] (str "'" id "'")) ids)
                 (string/join ", ")) ")"))
 
-(defn- upsert-pages-inner!
-  [repo pages]
-  (when-let [db (get-db repo)]
-      ;; TODO: what if a CONFLICT on uuid
-      ;; Should update all values on id conflict
-    (let [insert (prepare db "INSERT INTO pages (id, uuid, content) VALUES (@id, @uuid, @content) ON CONFLICT (id) DO UPDATE SET (uuid, content) = (@uuid, @content)" repo)
-          insert-many (.transaction ^object db
-                                    (fn [pages]
-                                      (doseq [page pages]
-                                        (.run ^object insert page))))]
-      (insert-many pages))))
-
+(defn- get-or-open-db [repo]
+  (or (get-db repo)
+      (do
+        (open-db! repo)
+        (get-db repo))))
 
 (defn upsert-pages!
   [repo pages]
-  (if-let [db (get-db repo)]
+  (when-let [db (get-or-open-db repo)]
     ;; TODO: what if a CONFLICT on uuid
     ;; Should update all values on id conflict
     (let [insert (prepare db "INSERT INTO pages (id, uuid, content) VALUES (@id, @uuid, @content) ON CONFLICT (id) DO UPDATE SET (uuid, content) = (@uuid, @content)" repo)
@@ -207,10 +200,7 @@
                                     (fn [pages]
                                       (doseq [page pages]
                                         (.run ^object insert page))))]
-      (insert-many pages))
-    (do
-      (open-db! repo)
-      (upsert-pages-inner! repo pages))))
+      (insert-many pages))))
 
 (defn delete-pages!
   [repo ids]
@@ -219,21 +209,9 @@
           stmt (prepare db sql repo)]
       (.run ^object stmt))))
 
-(defn- upsert-blocks-inner!
-  [repo blocks]
-  (when-let [db (get-db repo)]
-      ;; TODO: what if a CONFLICT on uuid
-      ;; Should update all values on id conflict
-    (let [insert (prepare db "INSERT INTO blocks (id, uuid, content, page) VALUES (@id, @uuid, @content, @page) ON CONFLICT (id) DO UPDATE SET (uuid, content, page) = (@uuid, @content, @page)" repo)
-          insert-many (.transaction ^object db
-                                    (fn [blocks]
-                                      (doseq [block blocks]
-                                        (.run ^object insert block))))]
-      (insert-many blocks))))
-
 (defn upsert-blocks!
   [repo blocks]
-  (if-let [db (get-db repo)]
+  (when-let [db (get-or-open-db repo)]
     ;; TODO: what if a CONFLICT on uuid
     ;; Should update all values on id conflict
     (let [insert (prepare db "INSERT INTO blocks (id, uuid, content, page) VALUES (@id, @uuid, @content, @page) ON CONFLICT (id) DO UPDATE SET (uuid, content, page) = (@uuid, @content, @page)" repo)
@@ -241,10 +219,7 @@
                                     (fn [blocks]
                                       (doseq [block blocks]
                                         (.run ^object insert block))))]
-      (insert-many blocks))
-    (do
-      (open-db! repo)
-      (upsert-blocks-inner! repo blocks))))
+      (insert-many blocks))))
 
 (defn delete-blocks!
   [repo ids]
