@@ -69,7 +69,7 @@
         blocks (outliner-core/tree-vec-flatten blocks :block/children)]
     (map (fn [block] (assoc block
                             :block/page 1
-                            :block/content 1)) blocks)))
+                            :block/content "1")) blocks)))
 
 (defn- build-blocks
   [tree]
