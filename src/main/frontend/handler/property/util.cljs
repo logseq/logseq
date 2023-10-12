@@ -33,7 +33,7 @@
   (:block/original-name (db/entity [:block/uuid uuid])))
 
 (defn get-pid
-  "Get a property's UUID given its name or key"
+  "Get a property's id (name or uuid) given its name"
   [property-name]
   (let [repo (state/get-current-repo)]
     (if (config/db-based-graph? repo)
