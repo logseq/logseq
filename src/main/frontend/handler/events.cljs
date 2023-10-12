@@ -895,7 +895,9 @@
 
 (defmethod handle :class/configure [[_ page opts]]
   (state/set-modal!
-   #(page/configure page opts)
+   #(vector :<>
+            (page/configure page opts)
+            (page/page-properties page {:configure? true}))
    {:id :page-configure
     :label "page-configure"}))
 
