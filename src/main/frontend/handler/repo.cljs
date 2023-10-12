@@ -491,7 +491,7 @@
                              (util-fs/inflate-graphs-info nfs-dbs)
 
                              :else
-                             nil))
+                             nfs-dbs))
           nfs-dbs (seq (bean/->clj nfs-dbs))]
     (cond
       (seq nfs-dbs)
