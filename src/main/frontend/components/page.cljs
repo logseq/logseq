@@ -248,28 +248,19 @@
                        (db/page-exists? page-name)
                        (db/page-exists? @*title-value))
         rename-fn (fn [old-name new-name]
-                    (if (and whiteboard-page? untitled? (config/db-based-graph? (state/get-current-repo)))
-                      (db/transact! [{:db/id (:db/id page)
-                                           :block/original-name new-name
-                                           :block/name (util/page-name-sanity-lc new-name)
-                                           :block/updated-at (util/time-ms)}])
+                    (if (and whiteboard-page? (config/db-based-graph? (state/get-current-repo)))
+                      (do
+                        (db/transact! [{:db/id (:db/id page)
+                                        :block/original-name new-name
+                                        :block/name (util/page-name-sanity-lc new-name)
+                                        :block/updated-at (util/time-ms)}])
+                        (route-handler/redirect-to-whiteboard! new-name))
                       (page-handler/rename! old-name new-name)))
         rollback-fn #(do
                        (reset! *title-value old-name)
                        (gobj/set (rum/deref input-ref) "value" old-name)
                        (reset! *edit? true)
                        (.focus (rum/deref input-ref)))
-        confirm-fn (fn []
-                     (let [new-page-name (string/trim @*title-value)]
-                       (ui/make-confirm-modal
-                        {:title         (if (collide?)
-                                          (str "Page “" @*title-value "” already exists, merge to it?")
-                                          (str "Do you really want to change the page name to “" new-page-name "”?"))
-                         :on-confirm    (fn [_e {:keys [close-fn]}]
-                                          (close-fn)
-                                          (rename-fn (or title page-name) @*title-value)
-                                          (reset! *edit? false))
-                         :on-cancel     rollback-fn})))
         blur-fn (fn [e]
                   (when (gp-util/wrapped-by-quotes? @*title-value)
                     (swap! *title-value gp-util/unquote-string)
@@ -290,11 +281,8 @@
                     (do (notification/show! (t :page/whiteboard-to-journal-error) :error)
                         (rollback-fn))
 
-                    untitled?
-                    (rename-fn (or title page-name) @*title-value)
-
                     :else
-                    (state/set-modal! (confirm-fn)))
+                    (rename-fn (or title page-name) @*title-value))
                   (util/stop e))]
     [:input.edit-input.p-0.focus:outline-none.ring-none
      {:type          "text"
@@ -315,7 +303,7 @@
                          (blur-fn e)))
       :placeholder   (when untitled? (t :untitled))
       :on-key-up     (fn [^js e]
-                            ;; Esc
+                       ;; Esc
                        (when (= 27 (.-keyCode e))
                          (reset! *title-value old-name)
                          (reset! *edit? false)))
@@ -429,7 +417,7 @@
   (when page-name
     (let [page (when page-name (db/entity [:block/name page-name]))
           page (db/sub-block (:db/id page))
-          title (:block/original-name page)
+          title (or (:block/original-name page) page-name)
           icon (pu/lookup (:block/properties page) :icon)
           *hover? (::hover? state)
           *title-value (get state ::title-value)
