@@ -149,7 +149,12 @@
           [:map-of
            :uuid [:map {:closed false}
                   [:name :string]
-                  [:description :string]]]]
+                  [:description :string]
+                  [:icon {:optional true}
+                   [:map {:closed false}
+                    [:id :string]
+                    [:name :string]
+                    [:type [:enum :tabler-icon :emoji]]]]]]]
          [:order [:vector :uuid]]]]
        ;; Just for :enum
        [:position {:optional true} :string]
