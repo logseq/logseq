@@ -160,12 +160,9 @@ input.tl-text-input {
     overflow: hidden;
   }
 
-  .page-title-sizer-wrapper {
-    width: calc(100% - 20px);
-
-    > .title {
-      @apply whitespace-nowrap min-w-[100px];
-    }
+  .ls-page-title {
+      padding: 0;
+      margin: 0;
   }
 
   .edit-input {
