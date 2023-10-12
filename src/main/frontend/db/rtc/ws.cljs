@@ -1,22 +1,23 @@
 (ns frontend.db.rtc.ws
-  "TODO"                                ; @zhiyuan
+  "Websocket related util-fns"
   (:require-macros
    [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [frontend.config :as config]
             [frontend.util :as util]
             [frontend.db.rtc.const :as rtc-const]
-            [cljs.core.async :as async :refer [<! chan go offer!]]))
+            [cljs.core.async :as async :refer [<! chan go offer!]]
+            [frontend.state :as state]))
 
 
 (def ws-addr config/RTC-WS-URL)
 
 (defn ws-listen
-  [user-uuid data-from-ws-chan ws-opened-ch]
-  (let [ws (js/WebSocket. (util/format ws-addr user-uuid))]
+  [token data-from-ws-chan ws-opened-ch]
+  (let [ws (js/WebSocket. (util/format ws-addr token))]
     (set! (.-onopen ws) (fn [_e] (async/close! ws-opened-ch)))
     (set! (.-onmessage ws) (fn [e]
-                                     (let [data (js->clj (js/JSON.parse (.-data e)) :keywordize-keys true)]
-                                       (offer! data-from-ws-chan data))))
+                             (let [data (js->clj (js/JSON.parse (.-data e)) :keywordize-keys true)]
+                               (offer! data-from-ws-chan data))))
 
     (set! (.-onclose ws) (fn [_e] (println :ws-stopped)))
     ws))
@@ -38,7 +39,8 @@
       (when (or (nil? ws)
                 (> (.-readyState ws) js/WebSocket.OPEN))
         (let [ws-opened-ch (chan)
-              ws* (ws-listen (:user-uuid state) (:data-from-ws-chan state) ws-opened-ch)]
+              token (state/get-auth-id-token)
+              ws* (ws-listen token (:data-from-ws-chan state) ws-opened-ch)]
           (<! ws-opened-ch)
           (reset! (:*ws state) ws*)
           (when-let [graph-uuid @(:*graph-uuid state)]

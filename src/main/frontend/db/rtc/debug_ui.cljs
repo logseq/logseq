@@ -26,8 +26,10 @@
        (<! (<start-rtc state)))))
   ([state]
    (go
-     (let [repo (state/get-current-repo)]
-       (<! (<start-rtc state repo)))))
+     (if (= :expired-token (:anom (ex-data state)))
+       (prn ::<start-rtc state)
+       (let [repo (state/get-current-repo)]
+         (<! (<start-rtc state repo))))))
   ([state repo]
    (go
      (if-let [graph-uuid (<! (p->c (op/<get-graph-uuid repo)))]

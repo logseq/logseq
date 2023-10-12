@@ -31,7 +31,9 @@
                       (when (and (contains? #{:block/parent :block/left} (:a datom))
                                  (not (pos-int? (:v datom))))
                         (throw (ex-info "invalid block data" {:datom datom})))
-                      (assoc r (:a datom) (:v datom)))
+                      (if (contains? db-schema/card-many-attributes (:a datom))
+                        (update r (:a datom) conj (:v datom))
+                        (assoc r (:a datom) (:v datom))))
                     {:db/id (:e (first datoms))}
                     datoms)))))))
 

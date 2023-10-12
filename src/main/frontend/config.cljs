@@ -64,8 +64,8 @@
 
 (goog-define ENABLE-RTC-SYNC-PRODUCTION false)
 (if ENABLE-RTC-SYNC-PRODUCTION
-  (def RTC-WS-URL "wss://ws.logseq.com/rtc-sync?useruuid=%s")
-  (def RTC-WS-URL "wss://ws-dev.logseq.com/rtc-sync?useruuid=%s"))
+  (def RTC-WS-URL "wss://ws.logseq.com/rtc-sync?token=%s")
+  (def RTC-WS-URL "wss://ws-dev.logseq.com/rtc-sync?token=%s"))
 ;; Feature flags
 ;; =============
 
