@@ -288,33 +288,31 @@
                     :else
                     (state/set-modal! (confirm-fn)))
                   (util/stop e))]
-    [:span.absolute.inset-0.edit-input-wrapper.z-10
-     {:class (util/classnames [{:editing @*edit?}])}
-     [:input.edit-input
-      {:type          "text"
-       :ref           input-ref
-       :auto-focus    true
-       :style         {:outline "none"
-                       :width "100%"
-                       :font-weight "inherit"}
-       :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
-       :value         (rum/react *input-value)
-       :on-change     (fn [^js e]
-                        (let [value (util/evalue e)]
-                          (reset! *title-value (string/trim value))
-                          (reset! *input-value value)))
-       :on-blur       blur-fn
-       :on-key-down   (fn [^js e]
-                        (when (= (gobj/get e "key") "Enter")
-                          (blur-fn e)))
-       :placeholder   (when untitled? (t :untitled))
-       :on-key-up     (fn [^js e]
+    [:input.edit-input.p-0.focus:outline-none.ring-none
+     {:type          "text"
+      :ref           input-ref
+      :auto-focus    true
+      :style         {:outline "none"
+                      :width "100%"
+                      :font-weight "inherit"}
+      :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
+      :value         (rum/react *input-value)
+      :on-change     (fn [^js e]
+                       (let [value (util/evalue e)]
+                         (reset! *title-value (string/trim value))
+                         (reset! *input-value value)))
+      :on-blur       blur-fn
+      :on-key-down   (fn [^js e]
+                       (when (= (gobj/get e "key") "Enter")
+                         (blur-fn e)))
+      :placeholder   (when untitled? (t :untitled))
+      :on-key-up     (fn [^js e]
                             ;; Esc
-                        (when (= 27 (.-keyCode e))
-                          (reset! *title-value old-name)
-                          (reset! *edit? false)))
-       :on-focus (fn []
-                   (when untitled? (reset! *title-value "")))}]]))
+                       (when (= 27 (.-keyCode e))
+                         (reset! *title-value old-name)
+                         (reset! *edit? false)))
+      :on-focus (fn []
+                  (when untitled? (reset! *title-value "")))}]))
 
 (rum/defc page-tags <
   [page tags-property *hover? *configuring?]
@@ -453,7 +451,7 @@
             icon)])
 
        [:div.flex.flex-1.flex-row.flex-wrap.items-center.gap-4
-        [:h1.page-title.flex.cursor-pointer.gap-1
+        [:h1.page-title.flex-1.cursor-pointer.gap-1
          {:class (when-not whiteboard-page? "title")
           :on-mouse-down (fn [e]
                            (when (util/right-click? e)
@@ -475,31 +473,29 @@
                             (reset! *input-value (if untitled? "" old-name))
                             (reset! *edit? true)))))}
 
-         [:div.page-title-sizer-wrapper.relative
-          (when @*edit?
-            (page-title-editor {:*title-value *title-value
-                                :*edit? *edit?
-                                :*input-value *input-value
-                                :title title
-                                :page-name page-name
-                                :old-name old-name
-                                :untitled? untitled?
-                                :whiteboard-page? whiteboard-page?
-                                :preview? preview?}))
-          [:span.title.block
-           {:on-click (fn []
-                        (when (and (state/home?) (not preview?))
-                          (route-handler/redirect-to-page! page-name)))
-            :data-value @*input-value
-            :data-ref   page-name
-            :style      {:opacity (when @*edit? 0)}}
-           (let [nested? (and (string/includes? title page-ref/left-brackets)
-                              (string/includes? title page-ref/right-brackets))]
-             (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
-                   untitled? [:span.opacity-50 (t :untitled)]
-                   nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (gp-mldoc/default-config
-                                                                                       (:block/format page))))
-                   :else title))]]]
+         (if @*edit?
+           (page-title-editor {:*title-value *title-value
+                               :*edit? *edit?
+                               :*input-value *input-value
+                               :title title
+                               :page-name page-name
+                               :old-name old-name
+                               :untitled? untitled?
+                               :whiteboard-page? whiteboard-page?
+                               :preview? preview?})
+           [:span.title.block
+            {:on-click (fn []
+                         (when (and (state/home?) (not preview?))
+                           (route-handler/redirect-to-page! page-name)))
+             :data-value @*input-value
+             :data-ref   page-name
+             :style      {:opacity (when @*edit? 0)}}
+            (let [nested? (and (string/includes? title page-ref/left-brackets)
+                               (string/includes? title page-ref/right-brackets))]
+              (cond untitled? [:span.opacity-50 (t :untitled)]
+                    nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (gp-mldoc/default-config
+                                                                                        (:block/format page))))
+                    :else title))])]
         (when (and db-based? (seq (:block/tags page)))
           [:div.page-tags.ml-4
            (pv/property-value page tags-property (map :block/uuid (:block/tags page))

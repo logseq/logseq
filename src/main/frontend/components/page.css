@@ -255,18 +255,6 @@
   .edit-input {
     width: 100%;
     border: none;
-    box-shadow: none;
-    padding-left: 5px;
-    padding-top: 5px;
-    padding-bottom: 4px;
-
-    &-wrapper {
-      @apply rounded;
-
-      &.editing {
-        background-color: var(--ls-secondary-background-color);
-      }
-    }
   }
 }
 
@@ -277,22 +265,6 @@ a.page-title {
   display: block;
   color: inherit;
   margin-bottom: 0;
-}
-
-.page-title-sizer-wrapper {
-  @apply w-full overflow-x-auto overflow-y-hidden;
-
-  :empty::before {
-    content: '\200b';
-  }
-
-  > .title {
-    @apply w-full overflow-hidden overflow-ellipsis;
-  }
-
-  .edit-input {
-    padding-right: 4px;
-  }
 }
 
 html.is-native-android,
@@ -403,4 +375,8 @@ html.is-native-ios {
 
 .class-parent .form-select {
   line-height: 1rem;
+}
+
+.ring-none {
+    @apply focus:ring-0 focus:ring-offset-0;
 }
