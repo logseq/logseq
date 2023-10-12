@@ -86,18 +86,18 @@
 (def normal-page
   (vec
    (concat
-    [:map {:closed false}]
-    page-attrs
-    ;; journal-day is only set for journal pages
-    [[:block/journal-day {:optional true} :int]
+    [:map
+     ;; journal-day is only set for journal pages
+     [:block/journal-day {:optional true} :int]
      [:block/namespace {:optional true} :int]]
+    page-attrs
     page-or-block-attrs)))
 
 (def object-page
   (vec
    (concat
-    [:map {:closed false}]
-    [[:block/collapsed? {:optional true} :boolean]
+    [:map
+     [:block/collapsed? {:optional true} :boolean]
      [:block/tags [:set :int]]]
     page-attrs
     (remove #(= :block/tags (first %)) page-or-block-attrs))))
@@ -105,13 +105,12 @@
 (def class-page
   (vec
    (concat
-    [:map {:closed false}]
-    [[:block/namespace {:optional true} :int]
+    [:map
+     [:block/namespace {:optional true} :int]
      ;; TODO: Require :block/schema
      [:block/schema
       {:optional true}
       [:map
-       {:closed false}
        [:properties {:optional true} [:vector :uuid]]]]]
     page-attrs
     page-or-block-attrs)))
@@ -119,10 +118,9 @@
 (def internal-property
   (vec
    (concat
-    [:map {:closed false}]
-    [[:block/schema
+    [:map
+     [:block/schema
       [:map
-       {:closed false}
        [:type (apply vector :enum (into db-property-type/internal-builtin-schema-types
                                         db-property-type/user-builtin-schema-types))]
        [:hide? {:optional true} :boolean]
@@ -133,10 +131,9 @@
 (def user-property
   (vec
    (concat
-    [:map {:closed false}]
-    [[:block/schema
+    [:map
+     [:block/schema
       [:map
-       {:closed false}
        [:type (apply vector :enum db-property-type/user-builtin-schema-types)]
        [:hide? {:optional true} :boolean]
        [:description {:optional true} :string]
@@ -144,14 +141,14 @@
        [:cardinality {:optional true} [:enum :one :many]]
        ;; Just for :enum type
        [:enum-config {:optional true}
-        [:map {:closed false}
+        [:map
          [:values
           [:map-of
-           :uuid [:map {:closed false}
+           :uuid [:map
                   [:name :string]
                   [:description :string]
                   [:icon {:optional true}
-                   [:map {:closed false}
+                   [:map
                     [:id :string]
                     [:name :string]
                     [:type [:enum :tabler-icon :emoji]]]]]]]
@@ -185,7 +182,7 @@
    [:block/left :int]
    [:block/parent :int]
    [:block/metadata {:optional true}
-    [:map {:closed false}
+    [:map
      [:created-from-block :uuid]
      [:created-from-property :uuid]
      [:created-from-template {:optional true} :uuid]]]
@@ -203,7 +200,7 @@
   "A normal block with tags"
   (vec
    (concat
-    [:map {:closed false}]
+    [:map]
     [[:block/type [:= #{"object"}]]
      [:block/tags [:set :int]]]
     block-attrs
@@ -213,7 +210,7 @@
   "A block with content and no special type or tag behavior"
   (vec
    (concat
-    [:map {:closed false}]
+    [:map]
     block-attrs
     page-or-block-attrs)))
 
@@ -228,12 +225,12 @@
   "A block that has an unknown type. This type of block should be removed when
   the above TODOs have been addressed and the frontend ensures no unknown blocks
   are being created"
-  [:map {:closed true}
+  [:map
    [:block/uuid :uuid]
    [:block/unknown? :boolean]])
 
 (def file-block
-  [:map {:closed false}
+  [:map
    [:block/uuid :uuid]
    [:block/tx-id {:optional true} :int]
    [:file/content :string]
@@ -242,11 +239,11 @@
    [:file/last-modified-at {:optional true} :any]])
 
 (def schema-version
-  [:map {:closed false}
+  [:map
    [:schema/version :int]])
 
 (def db-ident
-  [:map {:closed false}
+  [:map
    [:db/ident :keyword]
    [:db/type {:optional true} :string]])
 

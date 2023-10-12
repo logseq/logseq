@@ -45,11 +45,15 @@
   [db-schema db {:keys [closed-maps]}]
   (let [db-schema-with-property-vals (db-malli-schema/update-properties-in-schema db-schema db)]
     (if closed-maps
+      ;; closes maps that don't have an explicit :closed option
       (walk/postwalk (fn [e]
                        (if (and (vector? e)
-                                (= :map (first e))
-                                (contains? (second e) :closed))
-                         (assoc e 1 (assoc (second e) :closed true))
+                                (= :map (first e)))
+                         (if (map? (second e))
+                           (if (not (contains? (second e) :closed))
+                             (assoc e 1 (assoc (second e) :closed true))
+                             e)
+                           (into [:map {:closed true}] (rest e)))
                          e))
                      db-schema-with-property-vals)
       db-schema-with-property-vals)))
