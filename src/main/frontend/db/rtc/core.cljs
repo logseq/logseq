@@ -7,17 +7,19 @@
             [cljs.core.async :as async :refer [<! chan go go-loop]]
             [cljs.core.async.interop :refer [p->c]]
             [clojure.set :as set]
+            [cognitect.transit :as transit]
             [frontend.db :as db]
+            [frontend.db.rtc.const :as rtc-const]
             [frontend.db.rtc.op :as op]
             [frontend.db.rtc.ws :as ws]
-            [frontend.db.rtc.const :as rtc-const]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.user :as user]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.transaction :as outliner-tx]
+            [frontend.state :as state]
             [frontend.util :as util]
             [malli.core :as m]
-            [malli.util :as mu]
-            [cognitect.transit :as transit]))
+            [malli.util :as mu]))
 
 
 ;;                     +-------------+
@@ -42,7 +44,6 @@
 
 (def state-schema
   "
-  | :user-uuid             | string                                              |
   | :*graph-uuid           | atom of graph-uuid syncing now                      |
   | :*repo                 | atom of repo name syncing now                       |
   | :data-from-ws-chan     | channel for receive messages from server websocket  |
@@ -53,7 +54,6 @@
   | :*rtc-state            | atom of state of current rtc progress               |
 "
   [:map
-   [:user-uuid :string]
    [:*graph-uuid :any]
    [:*repo :any]
    [:data-from-ws-chan :any]
@@ -70,6 +70,9 @@
   [:enum :open :closed])
 (def rtc-state-validator (m/validator rtc-state-schema))
 
+(defn- guard-ex
+  [x]
+  (when (instance? ExceptionInfo x) x))
 
 (def transit-w (transit/writer :json))
 (def transit-r (transit/reader :json))
@@ -525,8 +528,12 @@
                 (do (<push-data-from-ws-handler repo push-data-from-ws)
                     (recur))
                 client-op-update
-                (do (<! (<client-op-update-handler state))
-                    (recur))
+                (let [maybe-exp (<! (user/<wrap-ensure-id&access-token
+                                     (<! (<client-op-update-handler state))))]
+                  (if (= :expired-token (:anom (ex-data maybe-exp)))
+                    (prn ::<loop-for-rtc "quiting loop" maybe-exp)
+                    (recur)))
+
                 stop
                 (do (ws/stop @(:*ws state))
                     (reset! (:*rtc-state state) :closed))
@@ -535,31 +542,24 @@
       (async/unsub data-from-ws-pub "push-updates" push-data-from-ws-ch))))
 
 (defn- init-state
-  [ws data-from-ws-chan user-uuid]
-  (m/parse state-schema
-           {:*rtc-state (atom :closed :validator rtc-state-validator)
-            :user-uuid user-uuid
-            :*graph-uuid (atom nil)
-            :*repo (atom nil)
-            :data-from-ws-chan data-from-ws-chan
-            :data-from-ws-pub (async/pub data-from-ws-chan :req-id)
-            :*stop-rtc-loop-chan (atom nil)
-            :client-op-update-chan (chan 1)
-            :*ws (atom ws)}))
+  [ws data-from-ws-chan]
+  {:post [(m/validate state-schema %)]}
+  {:*rtc-state (atom :closed :validator rtc-state-validator)
+   :*graph-uuid (atom nil)
+   :*repo (atom nil)
+   :data-from-ws-chan data-from-ws-chan
+   :data-from-ws-pub (async/pub data-from-ws-chan :req-id)
+   :*stop-rtc-loop-chan (atom nil)
+   :client-op-update-chan (chan 1)
+   :*ws (atom ws)})
 
 (defn <init-state
   []
   (go
     (let [data-from-ws-chan (chan (async/sliding-buffer 100))
-          ws-opened-ch (chan)
-          user-uuid "f92bb5b3-0f72-4a74-9ad8-1793e655c309"
-          ws (ws/ws-listen user-uuid data-from-ws-chan ws-opened-ch)]
-      (<! ws-opened-ch)
-      (init-state ws data-from-ws-chan user-uuid))))
-
-
-(comment
-  (go
-    (def global-state (<! (<init-state))))
-  (reset! (:*graph-uuid global-state) debug-graph-uuid)
-  (reset! (:*repo global-state) (state/get-current-repo)))
+          ws-opened-ch (chan)]
+      (<! (user/<wrap-ensure-id&access-token
+           (let [token (state/get-auth-id-token)
+                 ws (ws/ws-listen token data-from-ws-chan ws-opened-ch)]
+             (<! ws-opened-ch)
+             (init-state ws data-from-ws-chan)))))))
