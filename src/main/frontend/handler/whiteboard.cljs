@@ -30,8 +30,8 @@
 
 (defn shape->block [shape page-name]
   ;; FIXME: support whiteboard props for db graph
-  (let [properties {:ls-type :whiteboard-shape
-                    :logseq.tldraw.shape shape}
+  (let [properties {(pu/get-pid :ls-type) :whiteboard-shape
+                    (pu/get-pid :logseq.tldraw.shape) shape}
         block {:block/page {:block/name (util/page-name-sanity-lc page-name)}
                :block/parent {:block/name page-name}
                :block/properties properties}
@@ -41,8 +41,7 @@
 (defn- get-whiteboard-clj [page-name]
   (when (model/page-exists? page-name)
     (let [page-block (model/get-page page-name)
-          ;; fixme: can we use cache?
-          blocks (model/get-page-blocks-no-cache page-name)]
+          blocks (:block/_page page-block)]
       [page-block blocks])))
 
 (defn- build-shapes
@@ -77,14 +76,16 @@
         get-k #(gobj/get tldraw-page %)]
     {:block/name page-name
      :block/type "whiteboard"
-     ;; FIXME: support whiteboard props for db graph
-     :block/properties {:ls-type :whiteboard-page
-                        :logseq.tldraw.page {:id (get-k "id")
-                                             :name (get-k "name")
-                                             :bindings (js->clj-keywordize (get-k "bindings"))
-                                             :nonce (get-k "nonce")
-                                             :assets (js->clj-keywordize assets)
-                                             :shapes-index shapes-index}}
+     :block/properties {(pu/get-pid :ls-type)
+                        :whiteboard-page
+
+                        (pu/get-pid :logseq.tldraw.page)
+                        {:id (get-k "id")
+                         :name (get-k "name")
+                         :bindings (js->clj-keywordize (get-k "bindings"))
+                         :nonce (get-k "nonce")
+                         :assets (js->clj-keywordize assets)
+                         :shapes-index shapes-index}}
      :block/updated-at (util/time-ms)
      :block/created-at (or (:block/created-at page-entity)
                            (util/time-ms))}))
@@ -191,16 +192,14 @@
 
 (defn get-default-new-whiteboard-tx
   [page-name id]
-  (let [properties (->>
-                    {:ls-type :whiteboard-page,
-                     :logseq.tldraw.page
-                     {:id id,
-                      :name page-name,
-                      :ls-type :whiteboard-page,
-                      :bindings {},
-                      :nonce 1,
-                      :assets []}}
-                    (property-handler/replace-key-with-id! (state/get-current-repo)))]
+  (let [properties {(pu/get-pid :ls-type) :whiteboard-page,
+                    (pu/get-pid :logseq.tldraw.page)
+                    {:id id,
+                     :name page-name,
+                     :ls-type :whiteboard-page,
+                     :bindings {},
+                     :nonce 1,
+                     :assets []}}]
     [#:block{:uuid id
              :name (util/page-name-sanity-lc page-name),
              :original-name page-name

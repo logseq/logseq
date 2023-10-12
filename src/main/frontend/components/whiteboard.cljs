@@ -273,10 +273,7 @@
                             e
                             (content/page-title-custom-context-menu-content page-name))
                            (state/set-state! :page-title/context nil))}
-       (page/page-title page-name
-                        [:span.text-lg
-                         (ui/icon "whiteboard" {:extension? true})]
-                        {:*configure-show? (atom false)})]
+       (page/page-title page-name {:*configure-show? (atom false)})]
 
       [:div.whiteboard-page-refs
        (references-count page-name
@@ -289,7 +286,7 @@
      (tldraw-app page-name block-id)]))
 
 (rum/defc whiteboard-route <
-(shortcut/mixin :shortcut.handler/whiteboard false)
+  (shortcut/mixin :shortcut.handler/whiteboard false)
   [route-match]
   (let [name (get-in route-match [:parameters :path :name])
         {:keys [block-id]} (get-in route-match [:parameters :query])]

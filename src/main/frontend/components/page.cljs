@@ -420,11 +420,16 @@
   (rum/local false ::hover?)
   (rum/local false ::configuring?)
   {:init (fn [state]
-           (assoc state ::title-value (atom (nth (:rum/args state) 1))))}
-  [state page-name title {:keys [fmt-journal? preview?]}]
-  (when title
+           (let [page-name (first (:rum/args state))
+                 original-name (if page-name
+                                 (:block/origina-name (db/entity [:block/name (util/page-name-sanity-lc page-name)]))
+                                 "")]
+             (assoc state ::title-value (atom original-name))))}
+  [state page-name {:keys [fmt-journal? preview?]}]
+  (when page-name
     (let [page (when page-name (db/entity [:block/name page-name]))
           page (db/sub-block (:db/id page))
+          title (:block/original-name page)
           icon (pu/lookup (:block/properties page) :icon)
           *hover? (::hover? state)
           *title-value (get state ::title-value)
@@ -757,10 +762,10 @@
                                    (page-mouse-leave e *control-show?))}
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (when-not whiteboard?
-               (page-title page-name title {:journal? journal?
-                                            :fmt-journal? fmt-journal?
-                                            :built-in-property? built-in-property?
-                                            :preview? preview?}))
+               (page-title page-name {:journal? journal?
+                                      :fmt-journal? fmt-journal?
+                                      :built-in-property? built-in-property?
+                                      :preview? preview?}))
              (when (not config/publishing?)
                (when config/lsp-enabled?
                  [:div.flex.flex-row

@@ -192,15 +192,19 @@
            ref-block)
          (let [text       (:text content)
                wrap-props #(if-let [stamp (:image content)]
-                             (assoc % :hl-type :area :hl-stamp stamp)
+                             (assoc %
+                                    (pu/get-pid :hl-type) :area
+                                    (pu/get-pid :hl-stamp) stamp)
                              %)
+               props (cond->
+                      {(pu/get-pid :ls-type)  :annotation
+                       (pu/get-pid :hl-page)  page
+                       (pu/get-pid :hl-color) (:color properties)}
+                       (not (config/db-based-graph? (state/get-current-repo)))
+                       ;; force custom uuid
+                       (assoc (pu/get-pid :id) (str id)))
                properties (->>
-                           (wrap-props
-                            {:ls-type  :annotation
-                             :hl-page  page
-                             :hl-color (:color properties)
-                             ;; force custom uuid
-                             :id       (str id)})
+                           (wrap-props props)
                            (property-handler/replace-key-with-id! (state/get-current-repo)))]
            (when (string? text)
              (editor-handler/api-insert-new-block!
