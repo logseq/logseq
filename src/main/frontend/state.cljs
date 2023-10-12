@@ -2008,6 +2008,10 @@ Similar to re-frame subscriptions"
             (when (or (util/mobile?) (mobile-util/native-platform?))
               (set-state! :mobile/show-action-bar? false))))))))
 
+(defn action-bar-open?
+  []
+  (:mobile/show-action-bar? @state))
+
 (defn get-git-auto-commit-enabled?
   []
   (false? (sub [:electron/user-cfgs :git/disable-auto-commit?])))

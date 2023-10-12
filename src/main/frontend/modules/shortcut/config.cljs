@@ -702,7 +702,8 @@
            :sidebar/clear
            :command/run
            :command-palette/toggle
-           :editor/add-property])
+           :editor/add-property
+           :window/close])
         (with-meta {:before m/prevent-default-behavior}))
 
     :shortcut.handler/global-non-editing-only
@@ -729,7 +730,6 @@
            :editor/open-file-in-directory
            :editor/copy-current-file
            :editor/copy-page-url
-           :window/close
            :editor/new-whiteboard
            :ui/toggle-wide-mode
            :ui/select-theme-color
