@@ -10,7 +10,8 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.block :as gp-block]
-            [clojure.walk :as walk]))
+            [clojure.walk :as walk]
+            [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
 (defonce parseOPML (gobj/get Mldoc "parseOPML"))
@@ -162,8 +163,9 @@
   (->
    (reduce
     (fn [content tag]
-      (let [tag' (str "#" tag)]
-        (string/replace content tag' "")))
+      (-> content
+          (string/replace (str "#" tag) "")
+          (string/replace (str "#" page-ref/left-brackets tag page-ref/right-brackets) "")))
     content
     tags)
    (string/trim)))
