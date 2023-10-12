@@ -8,7 +8,6 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.property.util :as pu]
-            [frontend.handler.property :as property-handler]
             [frontend.modules.editor.undo-redo :as history]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.file :as outliner-file]
@@ -29,10 +28,10 @@
   (js->clj obj :keywordize-keys true))
 
 (defn shape->block [shape page-name]
-  ;; FIXME: support whiteboard props for db graph
   (let [properties {(pu/get-pid :ls-type) :whiteboard-shape
                     (pu/get-pid :logseq.tldraw.shape) shape}
-        block {:block/page {:block/name (util/page-name-sanity-lc page-name)}
+        block {:block/uuid (:id shape)
+               :block/page {:block/name (util/page-name-sanity-lc page-name)}
                :block/parent {:block/name page-name}
                :block/properties properties}
         additional-props (gp-whiteboard/with-whiteboard-block-props block page-name)]
