@@ -7,7 +7,8 @@
             [logseq.db.property :as db-property]
             [logseq.graph-parser.util :as gp-util]
             [frontend.db :as db]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [frontend.util :as util]))
 
 (defn lookup
   "Get the value of coll's (a map) `key`"
@@ -30,6 +31,14 @@
   "Get a property's name given its uuid"
   [uuid]
   (:block/original-name (db/entity [:block/uuid uuid])))
+
+(defn get-pid
+  "Get a property's UUID given its name or key"
+  [property-name]
+  (let [repo (state/get-current-repo)]
+    (if (config/db-based-graph? repo)
+      (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc (name property-name))]))
+      property-name)))
 
 (defn block->shape [block]
   (get-property block :logseq.tldraw.shape))

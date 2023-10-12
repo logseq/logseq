@@ -413,12 +413,14 @@
   [m]
   (zipmap
    (map (fn [k]
-          (let [property-id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc (name k))]))]
-            (when-not property-id
-              (throw (ex-info "Property not exists yet"
-                              {:key k})))
-            property-id))
-     (keys m))
+          (if (uuid? k)
+            k
+            (let [property-id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc (name k))]))]
+             (when-not property-id
+               (throw (ex-info "Property not exists yet"
+                               {:key k})))
+             property-id)))
+        (keys m))
    (vals m)))
 
 (defn collapse-expand-property!

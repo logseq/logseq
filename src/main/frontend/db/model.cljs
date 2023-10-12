@@ -1506,8 +1506,9 @@ independent of format as format specific heading characters are stripped"
   [repo page-name]
   (let [key (if (react/db-graph?)
               (:block/uuid (db-utils/entity [:block/name "logseq.tldraw.shape"]))
-              :logseq.tldraw.shape)]
-    (->> (get-page-blocks-no-cache repo page-name {:keys [:block/uuid :block/properties]})
+              :logseq.tldraw.shape)
+        page (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])]
+    (->> (:block/_page page)
          (keep (fn [{:block/keys [uuid properties]}]
                  (when-let [shape (get properties key)]
                    {:id (str uuid)
