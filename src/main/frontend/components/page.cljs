@@ -240,12 +240,20 @@
          {:default-collapsed? false})]])))
 
 (rum/defc page-title-editor < rum/reactive
-  [{:keys [*input-value *title-value *edit? untitled? page-name old-name title whiteboard-page?]}]
+  [page {:keys [*input-value *title-value *edit? untitled? page-name old-name whiteboard-page?]}]
   (let [input-ref (rum/create-ref)
+        title (:block/original-name page)
         collide? #(and (not= (util/page-name-sanity-lc page-name)
                              (util/page-name-sanity-lc @*title-value))
                        (db/page-exists? page-name)
                        (db/page-exists? @*title-value))
+        rename-fn (fn [old-name new-name]
+                    (if (and whiteboard-page? untitled? (config/db-based-graph? (state/get-current-repo)))
+                      (db/transact! [{:db/id (:db/id page)
+                                           :block/original-name new-name
+                                           :block/name (util/page-name-sanity-lc new-name)
+                                           :block/updated-at (util/time-ms)}])
+                      (page-handler/rename! old-name new-name)))
         rollback-fn #(do
                        (reset! *title-value old-name)
                        (gobj/set (rum/deref input-ref) "value" old-name)
@@ -259,7 +267,7 @@
                                           (str "Do you really want to change the page name to “" new-page-name "”?"))
                          :on-confirm    (fn [_e {:keys [close-fn]}]
                                           (close-fn)
-                                          (page-handler/rename! (or title page-name) @*title-value)
+                                          (rename-fn (or title page-name) @*title-value)
                                           (reset! *edit? false))
                          :on-cancel     rollback-fn})))
         blur-fn (fn [e]
@@ -283,7 +291,7 @@
                         (rollback-fn))
 
                     untitled?
-                    (page-handler/rename! (or title page-name) @*title-value)
+                    (rename-fn (or title page-name) @*title-value)
 
                     :else
                     (state/set-modal! (confirm-fn)))
@@ -474,15 +482,14 @@
                             (reset! *edit? true)))))}
 
          (if @*edit?
-           (page-title-editor {:*title-value *title-value
-                               :*edit? *edit?
-                               :*input-value *input-value
-                               :title title
-                               :page-name page-name
-                               :old-name old-name
-                               :untitled? untitled?
-                               :whiteboard-page? whiteboard-page?
-                               :preview? preview?})
+           (page-title-editor page {:*title-value *title-value
+                                    :*edit? *edit?
+                                    :*input-value *input-value
+                                    :page-name page-name
+                                    :old-name old-name
+                                    :untitled? untitled?
+                                    :whiteboard-page? whiteboard-page?
+                                    :preview? preview?})
            [:span.title.block
             {:on-click (fn []
                          (when (and (state/home?) (not preview?))
