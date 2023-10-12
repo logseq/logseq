@@ -107,7 +107,6 @@
    (concat
     [:map
      [:block/namespace {:optional true} :int]
-     ;; TODO: Require :block/schema
      [:block/schema
       {:optional true}
       [:map
@@ -133,7 +132,9 @@
    (concat
     [:map
      [:block/schema
+      {:optional true}
       [:map
+       ;; Once a schema is defined it must have :type as this is an irreversible decision
        [:type (apply vector :enum db-property-type/user-builtin-schema-types)]
        [:hide? {:optional true} :boolean]
        [:description {:optional true} :string]
