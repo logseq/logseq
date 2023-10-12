@@ -19,6 +19,7 @@
             [frontend.components.query.builder :as query-builder-component]
             [frontend.components.svg :as svg]
             [frontend.components.query :as query]
+            [frontend.components.icon :as icon]
             [frontend.components.property :as property-component]
             [frontend.components.property.value :as pv]
             [frontend.config :as config]
@@ -2363,7 +2364,9 @@
             [:div.flex.flex-1.w-full.flex-row.flex-wrap.justify-between.items-center
              (cond
                (:block/name block)
-               (page-cp config block)
+               [:div.flex.flex-row.items-center.gap-1
+                (icon/get-page-icon block {})
+                (page-cp config block)]
 
                (or (seq title) (:block/marker block))
                (build-block-title config block)
@@ -2371,8 +2374,13 @@
                :else
                nil)
 
-             (when (seq block-tags)
-               (tags config block))]]))
+             [:div.flex.flex-row.items-center.gap-1
+              (when (seq block-tags)
+                (tags config block))
+              (when (and (:original-block config) (not (:block/name block)))
+                [:a.fade-link {:title "Embed block"
+                               :href (rfe/href :page {:name (str (:block/uuid block))})}
+                 (ui/icon "link")])]]]))
 
        (clock-summary-cp block body)]
 
@@ -2896,7 +2904,8 @@
                    (when (and card? (not review-cards?)) " shadow-md")
                    (when selected? " selected")
                    (when order-list? " is-order-list")
-                   (when (string/blank? content) " is-blank"))
+                   (when (string/blank? content) " is-blank")
+                   (when original-block " embed-block"))
        :blockid (str uuid)
        :haschild (str (boolean has-child?))}
 

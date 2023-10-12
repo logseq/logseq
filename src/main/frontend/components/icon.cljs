@@ -10,16 +10,27 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.object :as gobj]
-            [goog.functions :refer [debounce]]))
+            [goog.functions :refer [debounce]]
+            [frontend.handler.property.util :as pu]))
 
 (defn icon
-  [icon]
+  [icon & opts]
   (cond
     (and (= :emoji (:type icon)) (:id icon))
-    [:em-emoji {:id (:id icon)}]
+    [:em-emoji (merge {:id (:id icon)}
+                      opts)]
 
     (and (= :tabler-icon (:type icon)) (:id icon))
-    (ui/icon (:id icon))))
+    (ui/icon (:id icon) opts)))
+
+(defn get-page-icon
+  [page-entity opts]
+  (let [default-icon (ui/icon "page" (merge opts {:extension? true}))
+        page-icon (pu/get-property page-entity :icon)]
+    (or
+     (when-not (string/blank? page-icon)
+       (icon page-icon opts))
+     default-icon)))
 
 (defn- search-emojis
   [q]

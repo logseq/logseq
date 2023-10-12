@@ -1035,13 +1035,21 @@
    (when-not (string/blank? name)
      (let [^js jsTablerIcons (gobj/get js/window "tablerIcons")]
        (if (or extension? font? (not jsTablerIcons))
-         [:span.ui__icon (merge {:class
-                                 (util/format
-                                  (str "%s-" name
-                                       (when (:class opts)
-                                         (str " " (string/trim (:class opts)))))
-                                  (if extension? "tie tie" "ti ti"))}
-                                (dissoc opts :class :extension? :font?))]
+         (let [opts (merge {:class
+                            (util/format
+                             (str "%s-" name
+                                  (when (:class opts)
+                                    (str " " (string/trim (:class opts)))))
+                             (if extension? "tie tie" "ti ti"))}
+                           (dissoc opts :class :extension? :font?))
+               opts' (cond
+                      (and size (:style opts))
+                      (assoc opts :style (assoc (:style opts) :font-size size))
+                      size
+                      (assoc opts :style {:font-size size})
+                      :else
+                      opts)]
+           [:span.ui__icon opts'])
 
          ;; tabler svg react
          (when-let [klass (tabler-icon name)]

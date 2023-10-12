@@ -27,7 +27,6 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.recent :as recent-handler]
-            [frontend.handler.property.util :as pu]
             [frontend.mixins :as mixins]
             [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
@@ -89,13 +88,7 @@
       (if untitiled? (t :untitled)
           (pdf-utils/fix-local-asset-pagename original-name))]]))
 
-(defn get-page-icon [page-entity]
-  (let [default-icon (ui/icon "page" {:extension? true})
-        page-icon (pu/get-property page-entity :icon)]
-    (or
-     (when-not (string/blank? page-icon)
-       (icon/icon page-icon))
-     default-icon))) ;; Fall back to default if icon is undefined or empty
+ ;; Fall back to default if icon is undefined or empty
 
 (rum/defc favorites < rum/reactive
   [t]
@@ -122,7 +115,7 @@
        (let [favorites (map
                         (fn [e]
                           (let [name (:block/name e)
-                                icon (get-page-icon e)]
+                                icon (icon/get-page-icon e {})]
                             {:id (str (:db/id e))
                              :value name
                              :content [:li.favorite-item (page-name name icon false)]}))
@@ -153,7 +146,7 @@
             :draggable true
             :on-drag-start (fn [event] (editor-handler/block->data-transfer! name event))
             :data-ref name}
-           (page-name name (get-page-icon entity) true)]))])))
+           (page-name name (icon/get-page-icon entity {}) true)]))])))
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
   {:did-mount (fn [state]
