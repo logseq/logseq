@@ -2214,30 +2214,21 @@
                       {:last-pattern (str gp-property/colons " " q)})
     (state/clear-editor-action!)))
 
-(defn parent-is-page?
-  [{{:block/keys [parent page]} :data :as node}]
-  {:pre [(tree/satisfied-inode? node)]}
-  (= parent page))
-
 (defn outdent-on-enter
   [node]
-  (let [original-block (outliner-core/get-current-editing-original-block)]
-    (when (or (not (parent-is-page? node))
-              original-block)
-      (let [parent-node (tree/-get-parent node)
-            target (if (parent-is-page? node)
-                     original-block
-                     (:data parent-node))
-            pos (state/get-edit-pos)
-            block (:data node)]
-        (save-current-block!)
-        (when target
-          (outliner-tx/transact!
-           {:outliner-op :move-blocks
-            :real-outliner-op :indent-outdent}
-           (outliner-core/move-blocks! [block] target true))
-          (when original-block
-            (util/schedule #(edit-block! block pos nil))))))))
+  (let [original-block (outliner-core/get-current-editing-original-block)
+        parent-node (tree/-get-parent node)
+        target (or original-block (:data parent-node))
+        pos (state/get-edit-pos)
+        block (:data node)]
+    (save-current-block!)
+    (when target
+      (outliner-tx/transact!
+       {:outliner-op :move-blocks
+        :real-outliner-op :indent-outdent}
+       (outliner-core/move-blocks! [block] target true))
+      (when original-block
+        (util/schedule #(edit-block! block pos nil))))))
 
 (defn- last-top-level-child?
   [{:keys [id]} current-node]
