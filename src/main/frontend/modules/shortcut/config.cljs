@@ -529,19 +529,19 @@
                                              :inactive (not (util/electron?))
                                              :fn       commit/show-commit-modal!}
 
-   :dev/show-block-data                     {:binding  false
+   :dev/show-block-data                     {:binding  []
                                              :inactive (not (state/developer-mode?))
                                              :fn       :frontend.handler.common.developer/show-block-data}
 
-   :dev/show-block-ast                      {:binding  false
+   :dev/show-block-ast                      {:binding  []
                                              :inactive (not (state/developer-mode?))
                                              :fn       :frontend.handler.common.developer/show-block-ast}
 
-   :dev/show-page-data                      {:binding  false
+   :dev/show-page-data                      {:binding  []
                                              :inactive (not (state/developer-mode?))
                                              :fn       :frontend.handler.common.developer/show-page-data}
 
-   :dev/show-page-ast                       {:binding  false
+   :dev/show-page-ast                       {:binding  []
                                              :inactive (not (state/developer-mode?))
                                              :fn       :frontend.handler.common.developer/show-page-ast}})
 

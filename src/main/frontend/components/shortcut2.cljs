@@ -284,7 +284,8 @@
 
       [:div.shortcuts-keys-wrap
        [:span.keyboard-shortcut.flex.flex-wrap.mr-2.space-x-2
-        (for [x current-binding]
+        (for [x current-binding
+              :when (string? x)]
           [:code.tracking-wider
            (-> x (string/trim) (string/lower-case) (shortcut-utils/decorate-binding))
            [:a.x {:on-click (fn [] (set-current-binding!
@@ -455,7 +456,7 @@
 
                      [:a.action-wrap
                       {:class    (util/classnames [{:disabled disabled?}])
-                       :on-click (when id
+                       :on-click (when (and id (not disabled?))
                                    #(open-customize-shortcut-dialog! id))}
 
                       (cond
