@@ -192,6 +192,7 @@ export interface BlockEntity {
   level?: number
   meta?: { timestamps: any; properties: any; startPos: number; endPos: number }
   title?: Array<any>
+	marker?: string
 }
 
 /**

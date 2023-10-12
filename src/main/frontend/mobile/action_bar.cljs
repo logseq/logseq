@@ -1,4 +1,5 @@
 (ns frontend.mobile.action-bar
+  "Block Action bar, activated when swipe on a block"
   (:require
    [frontend.db :as db]
    [frontend.extensions.srs :as srs]

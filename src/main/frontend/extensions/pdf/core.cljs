@@ -848,7 +848,6 @@
                        (confirm-fn password)))}
         "Submit"]]]]))
 
-
 (rum/defc ^:large-vars/data-var pdf-loader
   [{:keys [url hls-file identity filename] :as pdf-current}]
   (let [*doc-ref       (rum/use-ref nil)
@@ -860,6 +859,13 @@
                          (set-hls-state! #(merge % {:initial-hls [] :latest-hls latest-hls})))
         set-hls-extra! (fn [extra]
                          (set-hls-state! #(merge % {:extra extra})))]
+
+    ;; current pdf effects
+    (rum/use-effect!
+     (fn []
+       (when pdf-current
+         (pdf-assets/ensure-ref-page! pdf-current)))
+     [pdf-current])
 
     ;; load highlights
     (rum/use-effect!
@@ -888,22 +894,23 @@
     ;; cache highlights
     (let [persist-hls-data!
           (rum/use-callback
-            (util/debounce
-              4000 (fn [latest-hls extra]
-                    (pdf-assets/persist-hls-data$
-                      pdf-current latest-hls extra))) [pdf-current])]
+           (util/debounce
+            4000 (fn [latest-hls extra]
+                   (pdf-assets/persist-hls-data$
+                    pdf-current latest-hls extra))) [pdf-current])]
+
       (rum/use-effect!
-        (fn []
-          (when (= :completed (:status loader-state))
-            (p/catch
-              (when-not (:error hls-state)
-                (p/do! (persist-hls-data! (:latest-hls hls-state) (:extra hls-state))))
+       (fn []
+         (when (= :completed (:status loader-state))
+           (p/catch
+            (when-not (:error hls-state)
+              (p/do! (persist-hls-data! (:latest-hls hls-state) (:extra hls-state))))
 
-              ;; write hls file error
-              (fn [e]
-                (js/console.error "[write hls error]" e)))))
+            ;; write hls file error
+            (fn [e]
+              (js/console.error "[write hls error]" e)))))
 
-        [(:latest-hls hls-state) (:extra hls-state)]))
+       [(:latest-hls hls-state) (:extra hls-state)]))
 
     ;; load document
     (rum/use-effect!

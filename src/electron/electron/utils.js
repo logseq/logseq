@@ -57,15 +57,14 @@ export async function getAllFiles(dir, exts) {
 
       const fileStats = await fse.lstat(filePath)
 
-      const stats = {
+      return {
+        path: filePath,
         size: fileStats.size,
         accessTime: fileStats.atimeMs,
         modifiedTime: fileStats.mtimeMs,
         changeTime: fileStats.ctimeMs,
-        birthTime: fileStats.birthtimeMs,
+        birthTime: fileStats.birthtimeMs
       }
-
-      return { path: filePath, ...stats }
     })
   )
   return files.flat().filter((it) => it != null)
