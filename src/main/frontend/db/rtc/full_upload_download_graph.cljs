@@ -13,7 +13,7 @@
             [frontend.persist-db :as persist-db]
             [frontend.db.rtc.op :as op]
             [logseq.outliner.pipeline :as outliner-pipeline]
-            [cljs.reader :as edn]
+            [cljs.reader :as reader]
             [frontend.db.rtc.const :as rtc-const]))
 
 (def transit-r (transit/reader :json))
@@ -75,7 +75,7 @@
            block-tags (map :db/id (:block/tags block))
            block-type (keep (comp block-type-ident->str :db/ident) (:block/type block))
            block-schema (some->> (:block/schema block)
-                                 edn/read-string
+                                 reader/read-string
                                  rtc-const/block-schema-decoder)
            block-properties (some->> (:block/properties block)
                                      (transit/read transit-r))]

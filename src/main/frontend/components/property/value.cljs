@@ -369,7 +369,7 @@
                   (assoc :on-chosen on-chosen)))))
 
 (rum/defc property-block-value < rum/reactive
-  [value block-cp editor-box opts]
+  [value block-cp editor-box]
   (let [parent (db/entity [:block/uuid value])
         parent (db/sub-block (:db/id parent))
         children (model/sort-by-left (:block/_parent parent) parent)]
@@ -524,7 +524,7 @@
                                              opts)
 
                     :block
-                    (property-block-value value block-cp editor-box opts)
+                    (property-block-value value block-cp editor-box)
 
                     (inline-text {} :markdown (str value)))))]))]))))
 

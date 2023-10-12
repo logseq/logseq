@@ -70,9 +70,10 @@
   [:enum :open :closed])
 (def rtc-state-validator (m/validator rtc-state-schema))
 
-(defn- guard-ex
-  [x]
-  (when (instance? ExceptionInfo x) x))
+;; TODO: Remove or uncomment when used
+;; (defn- guard-ex
+;;   [x]
+;;   (when (instance? ExceptionInfo x) x))
 
 (def transit-w (transit/writer :json))
 (def transit-r (transit/reader :json))
@@ -237,7 +238,7 @@
 
 (defn apply-remote-update-page-ops
   [repo update-page-ops]
-  (doseq [{:keys [self page-name] :as op-value } update-page-ops]
+  (doseq [{:keys [self page-name] :as op-value} update-page-ops]
     (let [old-page-name (:block/name (db/entity repo [:block/uuid (uuid self)]))
           exist-page (db/entity repo [:block/name page-name])]
       (cond
@@ -274,8 +275,7 @@
   [repo data-from-ws]
   (assert (rtc-const/data-from-ws-validator data-from-ws) data-from-ws)
   (go
-    (let [
-          affected-blocks-map (:affected-blocks data-from-ws)
+    (let [affected-blocks-map (:affected-blocks data-from-ws)
           remote-t (:t data-from-ws)
           local-t (<! (p->c (op/<get-ops&local-tx repo)))]
       (if (<= remote-t local-t)
@@ -531,7 +531,7 @@
                 (let [maybe-exp (<! (user/<wrap-ensure-id&access-token
                                      (<! (<client-op-update-handler state))))]
                   (if (= :expired-token (:anom (ex-data maybe-exp)))
-                    (prn ::<loop-for-rtc "quiting loop" maybe-exp)
+                    (prn ::<loop-for-rtc "quitting loop" maybe-exp)
                     (recur)))
 
                 stop

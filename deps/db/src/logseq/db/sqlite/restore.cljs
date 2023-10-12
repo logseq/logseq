@@ -61,21 +61,10 @@
        (remove #(= :page_uuid (first %)))
        (mapv (partial apply vector eid))))
 
-(defn restore-initial-data
-  "Given initial sqlite data, returns a datascript connection and other data
-  needed for subsequent restoration"
-  [data & [{:keys [conn-from-datoms-fn] :or {conn-from-datoms-fn d/conn-from-datoms}}]]
-  (let [{:keys [all-pages all-blocks journal-blocks init-data]} (bean/->clj data)
-        uuid->db-id-tmap (transient (hash-map))
-        *next-db-id (atom 100001)
-        assign-id-to-uuid-fn (fn [uuid-str]
-                               (or
-                                (get uuid->db-id-tmap uuid-str)
-                                (let [id @*next-db-id]
-                                  (conj! uuid->db-id-tmap [uuid-str id])
-                                  (swap! *next-db-id inc)
-                                  id)))
-        pages-eav-coll (doall (mapcat (fn [page]
+(defn- restore-initial-data*
+  "Builds up most datom vectors including all that are assigned new db ids"
+  [assign-id-to-uuid-fn all-pages all-blocks init-data]
+  (let [pages-eav-coll (doall (mapcat (fn [page]
                                         (let [eid (assign-id-to-uuid-fn (:uuid page))]
                                           (datoms-str->eav-vec (:datoms page) eid)))
                                       all-pages))
@@ -95,7 +84,27 @@
                                 [[eid :block/uuid (:uuid b)]
                                  [eid :block/unknown? true]]
                                 (datoms-str->eav-vec (:datoms b) eid))))
-                          init-data))
+                          init-data))]
+    {:pages-eav-coll pages-eav-coll
+     :all-blocks' all-blocks'
+     :init-data' init-data'}))
+
+(defn restore-initial-data
+  "Given initial sqlite data, returns a datascript connection and other data
+  needed for subsequent restoration"
+  [data & [{:keys [conn-from-datoms-fn] :or {conn-from-datoms-fn d/conn-from-datoms}}]]
+  (let [{:keys [all-pages all-blocks journal-blocks init-data]} (bean/->clj data)
+        uuid->db-id-tmap (transient (hash-map))
+        *next-db-id (atom 100001)
+        assign-id-to-uuid-fn (fn [uuid-str]
+                               (or
+                                (get uuid->db-id-tmap uuid-str)
+                                (let [id @*next-db-id]
+                                  (conj! uuid->db-id-tmap [uuid-str id])
+                                  (swap! *next-db-id inc)
+                                  id)))
+        {:keys [pages-eav-coll all-blocks' init-data']}
+        (restore-initial-data* assign-id-to-uuid-fn all-pages all-blocks init-data)
         uuid->db-id-map (persistent! uuid->db-id-tmap)
         journal-blocks' (mapv
                          (fn [b]

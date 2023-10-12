@@ -61,8 +61,7 @@
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.handler.db-based.property :as db-property-handler]
-            [frontend.db.model :as model]))
+            [frontend.handler.db-based.property :as db-property-handler]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -790,7 +789,7 @@
                 (cond
                   (and prev-block (:block/name prev-block)
                        (not= (:db/id prev-block) (:db/id (:block/parent block)))
-                       (model/hidden-page? (:block/page block))) ; embed page
+                       (db-model/hidden-page? (:block/page block))) ; embed page
                   nil
 
                   concat-prev-block?
@@ -2547,7 +2546,6 @@
 (defn- move-cross-boundary-up-down
   [direction move-opts]
   (let [input (state/get-input)
-        input-id (when input (.-id input))
         line-pos (util/get-first-or-last-line-pos input)
         repo (state/get-current-repo)
         f (case direction

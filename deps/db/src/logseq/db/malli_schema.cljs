@@ -56,7 +56,7 @@
         db-property-type/builtin-schema-types)))
 
 (def block-properties
-  "Validates a slightly modified verson of :block/properties. Properties are
+  "Validates a slightly modified version of :block/properties. Properties are
   expected to be a vector of tuples instead of a map in order to validate each
   property with its property value that is valid for its type"
   [:sequential property-tuple])
