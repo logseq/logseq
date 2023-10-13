@@ -1527,7 +1527,6 @@
   "Paste asset and insert link to current editing block"
   [id ^js files format uploading? drop-or-paste?]
   (let [repo (state/get-current-repo)]
-    (prn ::upload-asset id)
     (when (config/local-db? repo)
       (-> (save-assets! repo (js->clj files))
           ;; FIXME: only the first asset is handled
