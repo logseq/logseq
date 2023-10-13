@@ -88,9 +88,8 @@ h1.title.whiteboard-dashboard-title {
   color: var(--ls-primary-text-color);
 }
 
-.single-block > :is(.block-content-wrapper, .editor-wrapper) {
-  padding: 8px 12px;
-  border-radius: 8px;
+.single-block {
+  padding: 4px 8px;
 }
 
 .tl-logseq-cp-container > .page {
