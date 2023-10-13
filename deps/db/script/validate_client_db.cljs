@@ -1,5 +1,6 @@
 (ns validate-client-db
-  "Script that validates the datascript db of a DB graph"
+  "Script that validates the datascript db of a DB graph
+   NOTE: This script is also used in CI to confirm our db's schema is up to date"
   (:require [logseq.db.sqlite.cli :as sqlite-cli]
             [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.schema :as db-schema]

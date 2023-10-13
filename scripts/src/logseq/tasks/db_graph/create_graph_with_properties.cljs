@@ -1,6 +1,7 @@
 (ns logseq.tasks.db-graph.create-graph-with-properties
   "Script that generates all the permutations of property types and cardinality.
-   Also creates a page of queries that exercises most properties"
+   Also creates a page of queries that exercises most properties
+   NOTE: This script is also used in CI to confirm graph creation works"
   (:require [logseq.tasks.db-graph.create-graph :as create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
             [clojure.string :as string]
