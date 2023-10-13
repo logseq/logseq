@@ -200,8 +200,7 @@
                      :block/content value
                      :block/page page-id
                      :block/parent [:block/uuid parent-id]
-                     :block/left [:block/uuid parent-id]
-                     :block/metadata metadata}
+                     :block/left [:block/uuid parent-id]}
                     outliner-core/block-with-timestamps
                     parse-block)]
     {:page page-tx
@@ -238,7 +237,7 @@
   "Get the root block that created this property block."
   [eid]
   (let [b (db/entity eid)
-        from (get-in b [:block/metadata :created-from-block])]
-    (if from
-      (get-property-block-created-block [:block/uuid from])
-      (:db/id b))))
+        parents (model/get-block-parents (state/get-current-repo) (:block/uuid b) {})
+        from-id (some #(get-in % [:block/metadata :created-from-block]) (reverse parents))
+        from (when from-id (db/entity [:block/uuid from-id]))]
+    (or (:db/id from) (:db/id b))))
