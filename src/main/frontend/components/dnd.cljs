@@ -1,9 +1,9 @@
 (ns frontend.components.dnd
   (:require [rum.core :as rum]
             [cljs-bean.core :as bean]
-            ["@dnd-kit/sortable" :refer [useSortable arrayMove SortableContext sortableKeyboardCoordinates verticalListSortingStrategy] :as sortable]
+            ["@dnd-kit/sortable" :refer [useSortable arrayMove SortableContext verticalListSortingStrategy] :as sortable]
             ["@dnd-kit/utilities" :refer [CSS]]
-            ["@dnd-kit/core" :refer [DndContext closestCenter KeyboardSensor PointerSensor useSensor useSensors]]
+            ["@dnd-kit/core" :refer [DndContext closestCenter PointerSensor useSensor useSensors]]
             [frontend.rum :as r]))
 
 (def dnd-context (r/adapt-class DndContext))
@@ -34,8 +34,7 @@
         id->item (zipmap ids col)
         [items set-items] (rum/use-state items)
         [_active-id set-active-id] (rum/use-state nil)
-        sensors (useSensors (useSensor PointerSensor (bean/->js {:activationConstraint {:distance 8}}))
-                            (useSensor KeyboardSensor #js {:coordinateGetter sortableKeyboardCoordinates}))
+        sensors (useSensors (useSensor PointerSensor (bean/->js {:activationConstraint {:distance 8}})))
         dnd-opts {:sensors sensors
                   :collisionDetection closestCenter
                   :onDragStart (fn [event]

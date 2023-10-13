@@ -155,7 +155,7 @@
       [:input.form-input.col-span-3
        {:default-value ""
         :auto-focus true
-        :on-change #(reset! *name (util/evalue %))}]]
+        :on-change (fn [e] (reset! *name (util/evalue e)))}]]
      [:div.grid.grid-cols-5.gap-1.items-center.leading-8
       [:label.col-span-2 "Icon:"]
       [:div.col-span-3
@@ -769,8 +769,7 @@
         own-properties (->>
                         (if one-class?
                           (concat block-own-properties' class-own-properties)
-                          block-own-properties')
-                        (remove (fn [[id _]] (property-handler/enum-other-position? id block-properties))))
+                          block-own-properties'))
         full-hidden-properties (concat block-hidden-properties class-hidden-properties)
         new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
         class->properties (loop [classes all-classes
@@ -779,8 +778,7 @@
                             (if-let [class (first classes)]
                               (let [cur-properties (->> (:properties (:block/schema class))
                                                         (remove properties)
-                                                        (remove hide-with-property-id)
-                                                        (remove (fn [id] (property-handler/enum-other-position? id block-properties))))]
+                                                        (remove hide-with-property-id))]
                                 (recur (rest classes)
                                        (set/union properties (set cur-properties))
                                        (conj result [class cur-properties])))
