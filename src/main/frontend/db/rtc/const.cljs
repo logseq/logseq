@@ -72,7 +72,7 @@
 
 
 
-(def block-type-schema [:enum "property" "class" "whiteboard" "macros" "object"])
+(def block-type-schema [:enum "property" "class" "whiteboard" "object" "hidden"])
 (def op-schema
   [:multi {:dispatch first :decode/string #(update % 0 keyword)}
    [:move
