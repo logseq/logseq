@@ -78,8 +78,7 @@
             [rum.core :as rum]
             [shadow.loader :as loader]
             [datascript.impl.entity :as e]
-            [logseq.common.path :as path]
-            [frontend.handler.page :as page-handler]))
+            [logseq.common.path :as path]))
 
 
 
