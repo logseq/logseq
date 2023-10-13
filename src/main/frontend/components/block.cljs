@@ -2660,7 +2660,8 @@
             (= transfer-type "Files")
             (let [files (.-files data-transfer)
                   format (:block/format target-block)]
-              (when (config/local-db? repo)
+              ;; When editing, this event will be handled by editor-handler/upload-asset(editor-on-paste)
+              (when (and (config/local-db? repo) (not (state/editing?)))
                 ;; Basically the same logic as editor-handler/upload-asset,
                 ;; does not require edting
                 (-> (editor-handler/save-assets! repo (js->clj files))
@@ -2680,8 +2681,9 @@
                             link-content
                             {:block-uuid  uuid
                              :edit-block? false
-                             :sibling?    (= @*move-to :sibling)
-                             :before?     (= @*move-to :top)}))))))))
+                             :replace-empty-target? true
+                             :sibling?   true
+                             :before?    false}))))))))
 
             :else
             (prn ::unhandled-drop-data-transfer-type transfer-types)))
