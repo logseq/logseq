@@ -890,7 +890,8 @@
                          (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
                                         block nil (:block/uuid block)
                                         (:slide? config)
-                                        false)]
+                                        false
+                                        (atom nil))]
                   inner (if label
                           (->elem
                            :span.block-ref
