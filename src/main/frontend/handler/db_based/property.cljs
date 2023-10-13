@@ -12,7 +12,8 @@
             [logseq.db.property.type :as db-property-type]
             [malli.util :as mu]
             [malli.error :as me]
-            [frontend.format.block :as block]))
+            [frontend.format.block :as block]
+            [logseq.graph-parser.util.page-ref :as page-ref]))
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
@@ -132,13 +133,13 @@
                                   :block/refs refs}]
                                 {:outliner-op :save-block}))))))))))
 
-(defn resolve-tag-when-possible
+(defn resolve-tag
   "Change `v` to a tag's UUID if v is a string tag, e.g. `#book`"
   [v]
-  (if (and (string? v)
-           (string/starts-with? v "#")
-           (not (string/includes? v " ")))
-    (let [tag (gp-util/safe-subs (string/trim v) 1)]
+  (when (and (string? v)
+             (util/tag? (string/trim v)))
+    (let [tag-without-hash (gp-util/safe-subs (string/trim v) 1)
+          tag (or (page-ref/get-page-name tag-without-hash) tag-without-hash)]
       (when-not (string/blank? tag)
         (let [e (db/entity [:block/name (util/page-name-sanity-lc tag)])
               e' (if e
@@ -151,8 +152,7 @@
                                   :block/type #{"class"})]
                      (db/transact! [m])
                      m))]
-          (:block/uuid e'))))
-    v))
+          (:block/uuid e'))))))
 
 (defn set-block-property!
   [repo block-id k-name v {:keys [old-value] :as opts}]
@@ -163,7 +163,7 @@
         property-schema (:block/schema property)
         {:keys [type cardinality]} property-schema
         multiple-values? (= cardinality :many)
-        v (resolve-tag-when-possible v)]
+        v (or (resolve-tag v) v)]
     (if (and multiple-values? (coll? v))
       (reset-block-property-multiple-values! repo block-id k-name v opts)
       (let [v (if property v (or v ""))]

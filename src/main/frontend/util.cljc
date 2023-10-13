@@ -1528,7 +1528,7 @@ Arg *stop: atom, reset to true to stop the loop"
        (with-meta o meta)
        o)))
 
-   ;; from rum
+;; from rum
 #?(:cljs
    (def schedule
      (or (and (exists? js/window)
@@ -1537,3 +1537,14 @@ Arg *stop: atom, reset to true to stop the loop"
                   js/window.mozRequestAnimationFrame
                   js/window.msRequestAnimationFrame))
          #(js/setTimeout % 16))))
+
+#?(:cljs
+   (defn tag?
+     "Whether `s` is a tag."
+     [s]
+     (and (string? s)
+          (string/starts-with? s "#")
+          (or
+           (not (string/includes? s " "))
+           (string/starts-with? s "#[[")
+           (string/ends-with? s "]]")))))
