@@ -154,6 +154,7 @@
       [:label.col-span-2 "Name:"]
       [:input.form-input.col-span-3
        {:default-value ""
+        :auto-focus true
         :on-change #(reset! *name (util/evalue %))}]]
      [:div.grid.grid-cols-5.gap-1.items-center.leading-8
       [:label.col-span-2 "Icon:"]
