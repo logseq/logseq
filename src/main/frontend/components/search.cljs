@@ -151,8 +151,11 @@
     :graph-add-filter
     (state/add-graph-search-filter! search-q)
 
+    ;; If it's a journal title or journal file name, translate the title
     :new-page
-    (page-handler/create! search-q {:redirect? true})
+    (if-let [journal-title (date/journal-title->custom-format search-q)]
+        (page-handler/create! journal-title {:redirect? true})
+        (page-handler/create! search-q {:redirect? true}))
 
     :new-whiteboard
     (whiteboard-handler/create-new-whiteboard-and-redirect! search-q)
