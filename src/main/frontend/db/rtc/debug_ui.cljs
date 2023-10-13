@@ -13,11 +13,10 @@
             [fipp.edn :as fipp]
             [frontend.db.rtc.full-upload-download-graph :as full-upload-download-graph]
             [frontend.util :as util]
-            [frontend.handler.notification :as notification]))
+            [frontend.handler.notification :as notification]
+            [frontend.handler.user :as user]))
 
 (defonce debug-state (atom nil))
-;; (def debug-graph-uuid "c9d334d8-977a-428c-af53-25261de27db5")
-
 
 (defn- <start-rtc
   ([]
@@ -70,6 +69,7 @@
   (rum/local nil ::download-graph-to-repo)
   (rum/local nil ::remote-graphs)
   (rum/local nil ::graph-uuid-to-download)
+  (rum/local nil ::grant-access-to-user)
   [state]
   (let [s (rum/react debug-state)
         rtc-state (and s (rum/react (:*rtc-state s)))]
@@ -100,14 +100,16 @@
                                  (reset! (::remote-graphs state) (map :graph-uuid graph-list))
                                  (reset! debug-state s)))))]
 
-     [:pre (-> {:graph @(::graph-uuid state)
-                :rtc-state rtc-state
-                :ws (and s (ws/get-state @(:*ws s)))
-                :local-tx @(::local-tx state)
-                :pending-ops @(::ops state)
-                :remote-graphs @(::remote-graphs state)}
-               (fipp/pprint {:width 20})
-               with-out-str)]
+     [:pre.select-text
+      (-> {:user-uuid (user/user-uuid)
+           :graph @(::graph-uuid state)
+           :rtc-state rtc-state
+           :ws (and s (ws/get-state @(:*ws s)))
+           :local-tx @(::local-tx state)
+           :pending-ops @(::ops state)
+           :remote-graphs @(::remote-graphs state)}
+          (fipp/pprint {:width 20})
+          with-out-str)]
      (if (or (nil? s)
              (= :closed rtc-state))
        (ui/button "start" {:class "my-2"
@@ -121,6 +123,23 @@
         [:div.mr-2 (ui/button (str "send pending ops")
                               {:on-click (fn [] (push-pending-ops))})]
         [:div (ui/button "stop" {:on-click (fn [] (stop))})]])
+     (when (some? s)
+       [:hr]
+       [:div.flex.flex-row
+        (ui/button "grant graph access to"
+                   {:class "mr-2"
+                    :on-click (fn []
+                                (go
+                                  (when-let [user-uuid (some-> @(::grant-access-to-user state) parse-uuid)]
+                                    (when-let [graph-uuid @(::graph-uuid state)]
+                                      (<! (rtc-core/<grant-graph-access-to-others s graph-uuid [user-uuid]))))))})
+
+        [:input.form-input.my-2
+         {:on-change (fn [e] (reset! (::grant-access-to-user state) (util/evalue e)))
+          :on-focus (fn [e] (let [v (.-value (.-target e))]
+                              (when (= v "input user-uuid here")
+                                (set! (.-value (.-target e)) ""))))
+          :default-value "input user-uuid here"}]])
      [:hr]
      [:div.flex.flex-row
       (ui/button (str "download graph to")
