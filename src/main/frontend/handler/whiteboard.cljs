@@ -30,7 +30,7 @@
 (defn shape->block [shape page-name]
   (let [properties {(pu/get-pid :ls-type) :whiteboard-shape
                     (pu/get-pid :logseq.tldraw.shape) shape}
-        block {:block/uuid (:id shape)
+        block {:block/uuid (if (uuid? (:id shape)) (:id shape) (uuid (:id shape)))
                :block/page {:block/name (util/page-name-sanity-lc page-name)}
                :block/parent {:block/name page-name}
                :block/properties properties}
@@ -294,7 +294,7 @@
         tx {:block/left (select-keys last-root-block [:db/id])
             :block/uuid uuid
             :block/content (or content "")
-            :block/format :markdown ;; fixme to support org?
+            :block/format :markdown
             :block/page {:block/name (util/page-name-sanity-lc page-name)
                          :block/original-name page-name}
             :block/parent {:block/name page-name}}]

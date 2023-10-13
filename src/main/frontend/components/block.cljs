@@ -2531,34 +2531,19 @@
             (let [refs-cp (state/get-component :block/linked-references)]
               (refs-cp uuid)))]))]))
 
-(rum/defcs single-block-cp-inner < rum/reactive db-mixins/query
-  {:init (fn [state]
-           (assoc state
-                  ::ref (atom nil)))}
-  [state block-uuid]
-  (let [*ref (::ref state)
-        uuid (if (string? block-uuid) (uuid block-uuid) block-uuid)
-        block-entity (db/entity [:block/uuid uuid])
-        block-id (:db/id block-entity)
-        block (db/sub-block block-id)
-        block-el-id (str "ls-block-" uuid)
-        config {:id (str uuid)
-                :db/id (:db/id block-entity)
-                :block/uuid uuid
-                :block? true
-                :editor-box (state/get-component :editor/box)}
-        edit-input-id (str "edit-block-" uuid)
-        edit? (state/sub-editing? edit-input-id)
-        block (block/parse-title-and-body block)]
-    (when (:block/content block)
-      [:div.single-block.ls-block
-       {:class (str block-uuid)
-        :id (str "ls-block-" block-uuid)}
-       (block-content-or-editor config block edit-input-id block-el-id edit? true false *ref)])))
-
 (rum/defc single-block-cp
   [block-uuid]
-  (single-block-cp-inner block-uuid))
+  (let [uuid (if (string? block-uuid) (uuid block-uuid) block-uuid)
+        block (db/entity [:block/uuid uuid])
+        config {:id (str uuid)
+                :db/id (:db/id block)
+                :block/uuid uuid
+                :block? true
+                :editor-box (state/get-component :editor/box)
+                :in-whiteboard? true}]
+    (when (:block/content block)
+      [:div.single-block
+       (block-container config block)])))
 
 (defn non-dragging?
   [e]
@@ -2853,6 +2838,10 @@
   (let [*ref (::ref inner-state)
         ref (rum/react *ref)
         ref? (:ref? config*)
+        ;; whiteboard block shape
+        in-whiteboard? (and (:in-whiteboard? config*)
+                            (= (:id config*)
+                               (str (:block/uuid block))))
         edit-input-id (str "edit-block-" (:block/uuid block))
         edit? (state/sub-editing? ref)
         custom-query? (boolean (:custom-query? config*))
@@ -2949,10 +2938,10 @@
                         (block-mouse-over e *control-show? block-id doc-mode?))
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
-      (when (not slide?)
+      (when (and (not slide?) (not in-whiteboard?))
         (block-control config block uuid block-id collapsed? *control-show? edit?))
 
-      (when @*show-left-menu?
+      (when (and @*show-left-menu? (not in-whiteboard?))
         (block-left-menu config block))
 
       (if whiteboard-block?
@@ -2964,7 +2953,7 @@
                                            (= (:block/uuid block) (:embed-id config)))]
            (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count? selected? *ref))])
 
-      (when @*show-right-menu?
+      (when (and @*show-right-menu? (not in-whiteboard?))
         (block-right-menu config block edit?))]
 
      (when (and (config/db-based-graph? repo) (not collapsed?))
@@ -2975,13 +2964,13 @@
                           {:selected? selected?
                            :in-block-container? true})])
 
-     (when-not (:hide-children? config)
+     (when-not (or (:hide-children? config) in-whiteboard?)
        (let [children (db/sort-by-left (:block/_parent block) block)
              config' (-> (update config :level inc)
                          (dissoc :original-block))]
          (block-children config' block children collapsed?)))
 
-     (dnd-separator-wrapper block block-id slide? false false)]))
+     (when-not in-whiteboard? (dnd-separator-wrapper block block-id slide? false false))]))
 
 (defn- block-changed?
   [old-block new-block]
