@@ -45,7 +45,7 @@
 
 (defn- push-pending-ops
   []
-  (async/put! (:client-op-update-chan @debug-state) true))
+  (async/put! (:force-push-client-ops-chan @debug-state) true))
 
 (defn- <download-graph
   [repo graph-uuid]
@@ -70,6 +70,7 @@
   (rum/local nil ::remote-graphs)
   (rum/local nil ::graph-uuid-to-download)
   (rum/local nil ::grant-access-to-user)
+  (rum/local nil ::auto-push-updates?)
   [state]
   (let [s (rum/react debug-state)
         rtc-state (and s (rum/react (:*rtc-state s)))]
@@ -87,7 +88,8 @@
                                  (reset! (::local-tx state) local-tx)
                                  (reset! (::ops state) (count ops))
                                  (reset! (::graph-uuid state) graph-uuid)
-                                 (reset! (::ws-state state) (and s (ws/get-state @(:*ws s))))))))
+                                 (reset! (::ws-state state) (and s (ws/get-state @(:*ws s))))
+                                 (reset! (::auto-push-updates? state) (and s @(:*auto-push-client-ops? s)))))))
       (ui/button "graph-list"
                  :icon "refresh"
                  :on-click (fn [_]
@@ -107,7 +109,8 @@
            :ws (and s (ws/get-state @(:*ws s)))
            :local-tx @(::local-tx state)
            :pending-ops @(::ops state)
-           :remote-graphs @(::remote-graphs state)}
+           :remote-graphs @(::remote-graphs state)
+           :auto-push-updates? @(::auto-push-updates? state)}
           (fipp/pprint {:width 20})
           with-out-str)]
      (if (or (nil? s)
@@ -122,6 +125,14 @@
        [:div.my-2.flex
         [:div.mr-2 (ui/button (str "send pending ops")
                               {:on-click (fn [] (push-pending-ops))})]
+        [:div.mr-2 (ui/button (str "Toggle auto push updates("
+                                   (if @(:*auto-push-client-ops? s)
+                                     "ON" "OFF")
+                                   ")")
+                              {:on-click
+                               (fn []
+                                 (swap! (:*auto-push-client-ops? s) not)
+                                 (reset! (::auto-push-updates? state) @(:*auto-push-client-ops? s)))})]
         [:div (ui/button "stop" {:on-click (fn [] (stop))})]])
      (when (some? s)
        [:hr]

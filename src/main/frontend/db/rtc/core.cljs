@@ -44,24 +44,28 @@
 
 (def state-schema
   "
-  | :*graph-uuid           | atom of graph-uuid syncing now                      |
-  | :*repo                 | atom of repo name syncing now                       |
-  | :data-from-ws-chan     | channel for receive messages from server websocket  |
-  | :data-from-ws-pub      | pub of :data-from-ws-chan, dispatch by :req-id      |
-  | :client-op-update-chan | channel to notify that there're some new operations |
-  | :*stop-rtc-loop-chan   | atom of chan to stop <loop-for-rtc                  |
-  | :*ws                   | atom of websocket                                   |
-  | :*rtc-state            | atom of state of current rtc progress               |
+  | :*graph-uuid                      | atom of graph-uuid syncing now                     |
+  | :*repo                            | atom of repo name syncing now                      |
+  | :data-from-ws-chan                | channel for receive messages from server websocket |
+  | :data-from-ws-pub                 | pub of :data-from-ws-chan, dispatch by :req-id     |
+  | :*stop-rtc-loop-chan              | atom of chan to stop <loop-for-rtc                 |
+  | :*ws                              | atom of websocket                                  |
+  | :*rtc-state                       | atom of state of current rtc progress              |
+  | :toggle-auto-push-client-ops-chan | channel to toggle pushing client ops automatically |
+  | :*auto-push-client-ops?           | atom to show if it's push client-ops automatically |
+  | :force-push-client-ops-chan       | chan used to force push client-ops                 |
 "
-  [:map
+  [:map {:closed true}
    [:*graph-uuid :any]
    [:*repo :any]
    [:data-from-ws-chan :any]
    [:data-from-ws-pub :any]
-   [:client-op-update-chan :any]
    [:*stop-rtc-loop-chan :any]
    [:*ws :any]
-   [:*rtc-state :any]])
+   [:*rtc-state :any]
+   [:toggle-auto-push-client-ops-chan :any]
+   [:*auto-push-client-ops? :any]
+   [:force-push-client-ops-chan :any]])
 (def state-validator (fn [data] (if ((m/validator state-schema) data)
                                   true
                                   (prn (mu/explain-data state-schema data)))))
@@ -69,11 +73,6 @@
 (def rtc-state-schema
   [:enum :open :closed])
 (def rtc-state-validator (m/validator rtc-state-schema))
-
-;; TODO: Remove or uncomment when used
-;; (defn- guard-ex
-;;   [x]
-;;   (when (instance? ExceptionInfo x) x))
 
 (def transit-w (transit/writer :json))
 (def transit-r (transit/reader :json))
@@ -497,6 +496,15 @@
             (<! (<apply-remote-data repo (rtc-const/data-from-ws-decoder r)))
             (prn :<client-op-update-handler r))))))
 
+(defn- make-push-client-ops-timeout-ch
+  [repo never-timeout?]
+  (if never-timeout?
+    (chan)
+    (go
+      (<! (async/timeout 2000))
+      (when (seq (:ops (<! (p->c (op/<get-ops&local-tx repo)))))
+        true))))
+
 (defn <loop-for-rtc
   [state graph-uuid repo]
   {:pre [(state-validator state)
@@ -505,9 +513,11 @@
   (go
     (reset! (:*repo state) repo)
     (reset! (:*rtc-state state) :open)
-    (let [{:keys [data-from-ws-pub client-op-update-chan]} state
+    (let [{:keys [data-from-ws-pub _client-op-update-chan]} state
           push-data-from-ws-ch (chan (async/sliding-buffer 100) (map rtc-const/data-from-ws-decoder))
-          stop-rtc-loop-chan (chan)]
+          stop-rtc-loop-chan (chan)
+          *auto-push-client-ops? (:*auto-push-client-ops? state)
+          force-push-client-ops-ch (:force-push-client-ops-chan state)]
       (reset! (:*stop-rtc-loop-chan state) stop-rtc-loop-chan)
       (<! (ws/<ensure-ws-open! state))
       (reset! (:*graph-uuid state) graph-uuid)
@@ -516,27 +526,36 @@
         (<! (get-result-ch)))
 
       (async/sub data-from-ws-pub "push-updates" push-data-from-ws-ch)
-      (<! (go-loop []
-            (let [{:keys [push-data-from-ws client-op-update stop]}
+      (<! (go-loop [push-client-ops-ch
+                    (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))]
+            (let [{:keys [push-data-from-ws client-op-update stop continue]}
                   (async/alt!
-                    client-op-update-chan {:client-op-update true}
+                    force-push-client-ops-ch {:client-op-update true}
+                    push-client-ops-ch ([v] (if (and @*auto-push-client-ops? (true? v))
+                                              {:client-op-update true}
+                                              {:continue true}))
                     push-data-from-ws-ch ([v] {:push-data-from-ws v})
                     stop-rtc-loop-chan {:stop true}
                     :priority true)]
               (cond
+                continue
+                (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?)))
+
                 push-data-from-ws
                 (do (<push-data-from-ws-handler repo push-data-from-ws)
-                    (recur))
+                    (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))))
+
                 client-op-update
                 (let [maybe-exp (<! (user/<wrap-ensure-id&access-token
                                      (<! (<client-op-update-handler state))))]
                   (if (= :expired-token (:anom (ex-data maybe-exp)))
                     (prn ::<loop-for-rtc "quitting loop" maybe-exp)
-                    (recur)))
+                    (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?)))))
 
                 stop
                 (do (ws/stop @(:*ws state))
                     (reset! (:*rtc-state state) :closed))
+
                 :else
                 nil))))
       (async/unsub data-from-ws-pub "push-updates" push-data-from-ws-ch))))
@@ -558,14 +577,16 @@
 
 (defn- init-state
   [ws data-from-ws-chan]
-  {:post [(m/validate state-schema %)]}
+  ;; {:post [(m/validate state-schema %)]}
   {:*rtc-state (atom :closed :validator rtc-state-validator)
    :*graph-uuid (atom nil)
    :*repo (atom nil)
    :data-from-ws-chan data-from-ws-chan
    :data-from-ws-pub (async/pub data-from-ws-chan :req-id)
+   :toggle-auto-push-client-ops-chan (chan 1)
+   :*auto-push-client-ops? (atom true :validator boolean?)
    :*stop-rtc-loop-chan (atom nil)
-   :client-op-update-chan (chan 1)
+   :force-push-client-ops-chan (chan 1)
    :*ws (atom ws)})
 
 (defn <init-state
