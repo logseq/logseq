@@ -2647,7 +2647,7 @@
               transfer-types (js->clj (.-types data-transfer))
               transfer-type (first transfer-types)]
           (cond
-            (contains? transfer-types "text/plain")
+            (= transfer-type "text/plain")
             (let [text (.getData data-transfer "text/plain")]
               (editor-handler/api-insert-new-block!
                text
