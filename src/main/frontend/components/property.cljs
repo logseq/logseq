@@ -664,9 +664,10 @@
   (when (uuid? k)
     (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid k])))]
       (let [type (get-in property [:block/schema :type] :default)
-            block? (and (contains? #{:default :template} type)
-                        (uuid? v)
-                        (db/entity [:block/uuid v]))
+            v-block (when (uuid? v) (db/entity [:block/uuid v]))
+            block? (and v-block
+                        (:block/page v-block)
+                        (contains? #{:default :template} type))
             collapsed? (when block? (property-collapsed? block property))
             date? (= type :date)]
         [:div {:class (cond

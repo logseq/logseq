@@ -444,7 +444,7 @@
 
 (rum/defcs property-scalar-value < rum/reactive db-mixins/query
   (rum/local nil ::ref)
-  [state block property value {:keys [inline-text block-cp
+  [state block property value {:keys [inline-text block-cp page-cp
                                       editor-id dom-id row?
                                       editor-box editor-args editing?
                                       on-chosen]
@@ -524,7 +524,20 @@
                                              opts)
 
                     :block
-                    (property-block-value value block-cp editor-box)
+                    (let [block (db/entity [:block/uuid value])]
+                      (cond
+                        (:block/page block)
+                        ;; normal block
+                        (property-block-value value block-cp editor-box)
+
+                        ;; page/class/etc.
+                        (:block/name block)
+                        (let [class? (contains? (:block/type block) "class")]
+                          (page-cp {:disable-preview? true
+                                    :hide-close-button? true
+                                    :tag? class?} block))
+                        :else
+                        (js/console.error "Invalid property value: " block)))
 
                     (inline-text {} :markdown (str value)))))]))]))))
 
