@@ -11,6 +11,7 @@
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.property.util :as pu]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
@@ -51,6 +52,16 @@
    {:modal-class (util/hiccup->class
                   "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}))
 
+(defn- create-class-if-not-exists!
+  [value]
+  (when (string? value)
+    (let [page-name (string/trim value)]
+      (when-not (string/blank? page-name)
+        (page-handler/create! page-name {:redirect? false
+                                         :create-first-block? false
+                                         :class? true})
+        (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page-name)]))))))
+
 (rum/defc class-select
   [*property-schema schema-classes {:keys [multiple-choices?]
                                     :or {multiple-choices? true}}]
@@ -79,6 +90,7 @@
                    :selected-choices schema-classes
                    :extract-fn :label
                    :extract-chosen-fn :value
+                   :show-new-when-not-exact-match? true
                    :input-opts {:on-blur toggle-fn
                                 :on-key-down
                                 (fn [e]
@@ -90,13 +102,16 @@
                                     nil))}}
                    multiple-choices?
                    (assoc :on-apply (fn [choices]
-                                      (swap! *property-schema assoc :classes choices)
-                                      (toggle-fn)))
+                                      (let [choices' (map (fn [value] (or (create-class-if-not-exists! value) value)) choices)]
+                                        (swap! *property-schema assoc :classes choices')
+                                        (toggle-fn))))
 
                    (not multiple-choices?)
                    (assoc :on-chosen (fn [value]
-                                       (swap! *property-schema assoc :classes [value])
-                                       (toggle-fn))))]
+                                       (let [value' (or (create-class-if-not-exists! value) value)]
+                                         (swap! *property-schema assoc :classes [value'])
+                                         (toggle-fn)))))]
+
         (select/select opts)))
     {:modal-class (util/hiccup->class
                    "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})])
