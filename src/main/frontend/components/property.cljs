@@ -38,7 +38,7 @@
   [icon {:keys [disabled? on-chosen]}]
   (ui/dropdown
    (fn [{:keys [toggle-fn]}]
-     [:button {:on-click #(when-not disabled? (toggle-fn))}
+     [:button.flex {:on-click #(when-not disabled? (toggle-fn))}
       (if icon
         (icon-component/icon icon)
         [:span.bullet-container.cursor [:span.bullet]])])
