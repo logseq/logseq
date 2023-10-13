@@ -11,7 +11,8 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.property.type :as db-property-type]
             [malli.util :as mu]
-            [malli.error :as me]))
+            [malli.error :as me]
+            [frontend.format.block :as block]))
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
@@ -131,6 +132,28 @@
                                   :block/refs refs}]
                                 {:outliner-op :save-block}))))))))))
 
+(defn resolve-tag-when-possible
+  "Change `v` to a tag's UUID if v is a string tag, e.g. `#book`"
+  [v]
+  (if (and (string? v)
+           (string/starts-with? v "#")
+           (not (string/includes? v " ")))
+    (let [tag (gp-util/safe-subs (string/trim v) 1)]
+      (when-not (string/blank? tag)
+        (let [e (db/entity [:block/name (util/page-name-sanity-lc tag)])
+              e' (if e
+                   (do
+                     (when-not (contains? (:block/type e) "tag")
+                       (db/transact! [{:db/id (:db/id e)
+                                       :block/type (set (conj (:block/type e) "class"))}]))
+                     e)
+                   (let [m (assoc (block/page-name->map tag true)
+                                  :block/type #{"class"})]
+                     (db/transact! [m])
+                     m))]
+          (:block/uuid e'))))
+    v))
+
 (defn set-block-property!
   [repo block-id k-name v {:keys [old-value] :as opts}]
   (let [block (db/entity repo [:block/uuid block-id])
@@ -139,7 +162,8 @@
         property-uuid (or (:block/uuid property) (db/new-block-id))
         property-schema (:block/schema property)
         {:keys [type cardinality]} property-schema
-        multiple-values? (= cardinality :many)]
+        multiple-values? (= cardinality :many)
+        v (resolve-tag-when-possible v)]
     (if (and multiple-values? (coll? v))
       (reset-block-property-multiple-values! repo block-id k-name v opts)
       (let [v (if property v (or v ""))]
