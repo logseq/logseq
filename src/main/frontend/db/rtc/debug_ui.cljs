@@ -60,7 +60,7 @@
           repo (state/get-current-repo)]
       (<! (full-upload-download-graph/<upload-graph state repo)))))
 
-(rum/defcs rtc-debug-ui <
+(rum/defcs ^:large-vars/cleanup-todo rtc-debug-ui <
   rum/reactive
   (rum/local nil ::graph-uuid)
   (rum/local nil ::local-tx)
