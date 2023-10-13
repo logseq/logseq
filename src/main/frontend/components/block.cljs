@@ -2302,7 +2302,7 @@
   [block]
   (let [enum-properties (property-handler/get-block-enum-other-position-properties (:db/id block))]
     (when (seq enum-properties)
-    [:div.enum-properties.flex.flex-row.items-center.gap-1.select-none
+    [:div.enum-properties.flex.flex-row.items-center.gap-1.select-none.h-full
      (for [pid enum-properties]
        (when-let [property (db/entity [:block/uuid pid])]
          (pv/property-value block property (get (:block/properties block) pid) {:icon? true})))])))
