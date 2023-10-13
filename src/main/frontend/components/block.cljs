@@ -2307,7 +2307,7 @@
        (when-let [property (db/entity [:block/uuid pid])]
          (pv/property-value block property (get (:block/properties block) pid) {:icon? true})))])))
 
-(rum/defc block-content < rum/reactive
+(rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
   [config {:block/keys [uuid content properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide? selected? *ref]
   (let [repo (state/get-current-repo)
         content (or (:block/original-name block)
