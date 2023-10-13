@@ -545,7 +545,11 @@
      (mixins/hide-when-esc-or-outside
       state
       :on-hide (fn [] (property-handler/set-editing-new-property! nil))
-      :node (js/document.getElementById "edit-new-property"))))
+      :node (js/document.getElementById "edit-new-property"))
+     (mixins/on-enter state {:on-enter (fn [_e]
+                                         (when-let [node (first (dom/by-class "add-property"))]
+                                           (.click node)))
+                             :node js/window})))
   [state block edit-input-id new-property? opts]
   [:div.ls-new-property
    (let [*property-key (::property-key state)
@@ -559,7 +563,7 @@
                 (:page-configure? opts))
             (not config/publishing?)
             (not (:in-block-container? opts)))
-       [:a.fade-link.flex
+       [:a.fade-link.flex.add-property
         {:on-click (fn []
                      (property-handler/set-editing-new-property! edit-input-id)
                      (reset! *property-key nil)
