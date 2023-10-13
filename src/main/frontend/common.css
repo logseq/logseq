@@ -921,3 +921,13 @@ html.is-mobile {
     @apply inline-block;
   }
 }
+
+h1.title {
+    @apply text-2xl;
+}
+h2.title {
+    @apply text-xl;
+}
+h3.title {
+    @apply text-lg;
+}

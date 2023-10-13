@@ -347,15 +347,8 @@
         class-or-property? (or class? property?)
         page-opts {:configure? true
                    :show-page-properties? @*show-page-properties?}]
-    [:div.p-4.flex.flex-col.gap-4 {:style {:min-width 700}}
-     (when (and class-or-property?
-                (not (property-handler/block-has-viewable-properties? page)))
-       [:div.flex.flex-row.items-center.gap-2
-        [:div "Switch to page properties:"]
-        (ui/toggle @*show-page-properties?
-                   (fn [_]
-                     (swap! *show-page-properties? not))
-                   true)])
+    [:div.p-4.flex.flex-col.gap-2 {:style {:min-width 700
+                                           :min-height 400}}
      (cond
        (not class-or-property?)
        (when (and (not class?)
@@ -372,9 +365,18 @@
           (configure page {}))
         (when class?
           (page-properties page page-opts))
+        (when (and property? (not class?))
+          [:h1.title "Configure property"])
         (when property?
           (property/property-config page page (assoc opts
-                                                     :inline-text component-block/inline-text)))])]))
+                                                     :inline-text component-block/inline-text)))])
+
+     (when (and class-or-property?
+                (not (property-handler/block-has-viewable-properties? page)))
+       [:a.fade-link.ml-2 {:on-click #(swap! *show-page-properties? not)}
+        (if @*show-page-properties?
+          "Back"
+          "Edit page properties")])]))
 
 (rum/defc page-configure
   [page *hover? *configuring?]
@@ -600,6 +602,8 @@
         class? (contains? types "class")]
     (when page
       [:div.property-configure.grid.gap-2
+       [:h1.title.mb-4 "Configure page"]
+
        (when class?
          [:div.grid.grid-cols-5.gap-1.items-center.class-parent
           [:div.col-span-2 "Parent class:"]
