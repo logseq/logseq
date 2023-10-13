@@ -541,6 +541,21 @@
                 nil))))
       (async/unsub data-from-ws-pub "push-updates" push-data-from-ws-ch))))
 
+
+(defn <grant-graph-access-to-others
+  [state graph-uuid target-user-uuids]
+  (go
+    (let [r (with-sub-data-from-ws state
+              (<! (ws/<send! state {:req-id (get-req-id)
+                                    :action "grant-access"
+                                    :graph-uuid graph-uuid
+                                    :target-user-uuids target-user-uuids}))
+
+              (<! (get-result-ch)))]
+      (when-let [ex-message (:ex-message r)]
+        (prn ::<grant-graph-access-to-others ex-message (:ex-data r))))))
+
+
 (defn- init-state
   [ws data-from-ws-chan]
   {:post [(m/validate state-schema %)]}

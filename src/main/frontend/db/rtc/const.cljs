@@ -151,7 +151,13 @@
      [:map
       [:req-id :string]
       [:action :string]
-      [:s3-key :string]]]]))
+      [:s3-key :string]]]
+    ["grant-access"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:graph-uuid :uuid]
+      [:target-user-uuids [:sequential :uuid]]]]]))
 (def data-to-ws-decoder (m/decoder data-to-ws-schema mt/string-transformer))
 (def data-to-ws-encoder (m/encoder data-to-ws-schema mt/string-transformer))
 (def data-to-ws-validator (m/validator data-to-ws-schema))
