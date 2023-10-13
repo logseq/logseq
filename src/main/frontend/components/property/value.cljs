@@ -272,11 +272,13 @@
     (editor-handler/edit-block! (db/entity [:block/uuid last-block-id]) :max last-block-id)))
 
 (defn create-new-block-from-template!
+  "`template`: tag block"
   [block property template]
   (let [repo (state/get-current-repo)
         {:keys [page blocks]} (property-handler/property-create-new-block-from-template block property template)]
     (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})
-    (add-property! block (:block/original-name property) (:block/uuid (last blocks)))))
+    (add-property! block (:block/original-name property) (:block/uuid (last blocks)))
+    (last blocks)))
 
 (defn- new-text-editor-opts
   [repo block property value editor-id]
@@ -297,10 +299,9 @@
                   (not (state/get-editor-action)))
          (when-not backspace? (util/stop e))
          (cond
-           esc?
-           (save-text! repo block property value editor-id e)
-
-           (and enter? new-property?)
+           (or esc?
+               (and enter? new-property?)
+               (and enter? (util/tag? new-value)))
            (save-text! repo block property value editor-id e)
 
            enter?
@@ -505,7 +506,13 @@
                              (set-editing! property editor-id dom-id value {:ref @*ref})))}
               (let [type (or (when (and (= type :default) (uuid? value)) :block)
                              type
-                             :default)]
+                             :default)
+                    type (if (= :block type)
+                           (let [v-block (db/entity [:block/uuid value])]
+                             (if (get-in v-block [:block/metadata :created-from-template])
+                               :template
+                               type))
+                           type)]
                 (if (string/blank? value)
                   (if (= :template type)
                     (let [id (first (:classes schema))
@@ -524,20 +531,26 @@
                                              opts)
 
                     :block
-                    (let [block (db/entity [:block/uuid value])]
+                    (let [v-block (db/entity [:block/uuid value])
+                          class? (contains? (:block/type v-block) "class")]
                       (cond
-                        (:block/page block)
+                        (:block/page v-block)
                         ;; normal block
                         (property-block-value value block-cp editor-box)
 
+                        (and class? (seq (:properties (:block/schema v-block))))
+                        (let [template-instance-block (create-new-block-from-template! block property v-block)]
+                          (property-template-value {:editor-id editor-id}
+                                                   (:block/uuid template-instance-block)
+                                                   opts))
+
                         ;; page/class/etc.
-                        (:block/name block)
-                        (let [class? (contains? (:block/type block) "class")]
-                          (page-cp {:disable-preview? true
-                                    :hide-close-button? true
-                                    :tag? class?} block))
+                        (:block/name v-block)
+                        (page-cp {:disable-preview? true
+                                  :hide-close-button? true
+                                  :tag? class?} v-block)
                         :else
-                        (js/console.error "Invalid property value: " block)))
+                        (js/console.error "Invalid property value: " v-block)))
 
                     (inline-text {} :markdown (str value)))))]))]))))
 
