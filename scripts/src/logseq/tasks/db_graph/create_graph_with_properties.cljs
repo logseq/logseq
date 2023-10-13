@@ -25,10 +25,21 @@
   [date days]
   (new js/Date (- (.getTime date) (* days 24 60 60 1000))))
 
+(defn- build-enum-config
+  []
+  (let [values (->> ["joy" "sob" "upside_down_face"]
+         (map #(vector (random-uuid) {:name %
+                                      :description ""
+                                      :icon {:id % :name % :type :emoji}}))
+         (into {}))]
+    {:values values
+     :order (vec (keys values))}))
+
 (defn- create-init-data
   []
   (let [today (new js/Date)
-        yesterday (subtract-days today 1)]
+        yesterday (subtract-days today 1)
+        enum-config (build-enum-config)]
     {:pages-and-blocks
      [{:page
        {:block/name (date-journal-title today) :block/journal? true :block/journal-day (date-journal-day today)}
@@ -51,7 +62,8 @@
         {:block/content "page-many property block" :properties {:page-many #{[:page "page 1"] [:page "page 2"]}}}
         {:block/content "date property block" :properties {:date [:page (date-journal-title today)]}}
         {:block/content "date-many property block" :properties {:date-many #{[:page (date-journal-title today)]
-                                                                             [:page (date-journal-title yesterday)]}}}]}
+                                                                             [:page (date-journal-title yesterday)]}}}
+        {:block/content "enum property block" :properties {:enum (-> enum-config :values keys first)}}]}
       {:page {:block/name "queries"}
        :blocks
        [{:block/content "{{query (property :default \"haha\")}}"}
@@ -73,6 +85,8 @@
           (mapcat #(cond-> [[% {:block/schema {:type %}}]]
                      (not (#{:checkbox :default} %))
                      (conj [(keyword (str (name %) "-many")) {:block/schema {:type % :cardinality :many}}])))
+          (into [[:enum {:block/schema {:type :enum
+                                        :enum-config enum-config}}]])
           (into {}))}))
 
 (defn -main [args]

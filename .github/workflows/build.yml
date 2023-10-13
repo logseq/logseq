@@ -158,11 +158,15 @@ jobs:
       - name: Create DB graph with properties
         run: cd scripts && yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs ./db-graph-with-props
 
+      # TODO: Use a smaller, test-focused graph to test classes
+      - name: Create DB graph with classes
+        run: cd scripts && yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs ./db-graph-with-schema
+
       - name: Fetch deps/db yarn deps
         run: cd deps/db && yarn install --frozen-lockfile
 
-      - name: Validate created DB graph
-        run: cd deps/db && yarn nbb-logseq script/validate_client_db.cljs ../../scripts/db-graph-with-props --closed-maps --group-errors
+      - name: Validate created DB graphs
+        run: cd deps/db && yarn nbb-logseq script/validate_client_db.cljs ../../scripts/db-graph-with-props ../../scripts/db-graph-with-schema --closed-maps --group-errors
 
   e2e-test:
     runs-on: ubuntu-latest
