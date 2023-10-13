@@ -633,6 +633,7 @@
            [:div {:style {:padding-left 6}} (:block/original-name property)]]))
       (fn [{:keys [toggle-fn]}]
         [:div.p-8
+         [:h1.title "Configure property"]
          (property-config block property
                           {:toggle-fn toggle-fn
                            :inline-text inline-text

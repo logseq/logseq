@@ -195,3 +195,14 @@ a.control-link {
         @apply select-none;
     }
 }
+
+.property-key {
+    h1.title, h2.title {
+        border-bottom: 0;
+        padding-bottom: 0;
+    }
+
+    h1.title {
+        margin-bottom: 1.5rem;
+    }
+}
