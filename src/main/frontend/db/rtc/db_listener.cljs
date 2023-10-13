@@ -13,7 +13,7 @@
    (fn [m datom]
      (let [[_e a _v t _add?] datom]
        (if-let [[_e _a _v old-t _old-add?] (get m a)]
-         (if (< old-t t)
+         (if (<= old-t t)
            (assoc m a datom)
            m)
          (assoc m a datom))))
