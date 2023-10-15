@@ -460,6 +460,14 @@
                                 (state/set-state! [:electron/user-cfgs :settings/agent] opts)
                                 (state/close-sub-modal! :https-proxy-panel))))]]]))
 
+(rum/defc stylus-settings-panel []
+    [:div.cp__settings-stylus-panel
+     [:h1.mb-2.text-2xl.font-bold (t :settings-page/stylus)]
+     [:p.pt-2
+       (ui/button (t :save)
+                   :on-click (fn []
+                              (state/close-sub-modal! :stylus-panel)))]])
+
 (rum/defc auto-check-for-updates-control
   []
   (let [[enabled, set-enabled!] (rum/use-state (plugin-handler/get-enabled-auto-check-for-updates?))

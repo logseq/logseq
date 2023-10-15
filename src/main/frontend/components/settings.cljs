@@ -429,6 +429,20 @@
           #(let [value (not enable-timetracking?)]
              (config-handler/set-config! :feature/enable-timetracking? value))))
 
+(rum/defc stylus-settings []
+  (ui/button [:span.flex.items-center
+              [:span.pr-1]
+              (ui/icon "edit")]
+             :class "text-sm p-1"
+             :on-click #(state/set-sub-modal!
+                         (fn [_] (plugins/stylus-settings-panel))
+                         {:id :stylus-panel :center? true})))
+
+(defn stylus-settings-row []
+  (row-with-button-action
+   {:left-label (t :settings-page/stylus)
+    :action (stylus-settings)}))
+
 (defn update-home-page
   [event]
   (let [value (util/evalue event)]
@@ -687,7 +701,8 @@
        (tooltip-row t enable-tooltip?))
      (timetracking-row t enable-timetracking?)
      (enable-all-pages-public-row t enable-all-pages-public?)
-     (auto-push-row t current-repo enable-git-auto-push?)]))
+     (auto-push-row t current-repo enable-git-auto-push?)
+     (stylus-settings-row)]))
 
 (rum/defc settings-git
   []

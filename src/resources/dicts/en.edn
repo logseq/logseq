@@ -305,6 +305,7 @@
  :settings-page/preferred-pasting-file "Prefer pasting file"
  :settings-page/enable-shortcut-tooltip "Enable shortcut tooltip"
  :settings-page/enable-timetracking "Timetracking"
+ :settings-page/stylus "Stylus settings"
  :settings-page/enable-tooltip "Tooltips"
  :settings-page/enable-journals "Journals"
  :settings-page/enable-all-pages-public "All pages public when publishing"
