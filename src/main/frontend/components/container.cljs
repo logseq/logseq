@@ -490,7 +490,7 @@
 
 (rum/defc main <
   {:did-mount (fn [state]
-                (when-let [element (gdom/getElement "app-container")]
+                (when-let [element (gdom/getElement "main-content-container")]
                   (dnd/subscribe!
                    element
                    :upload-files
@@ -503,7 +503,7 @@
                     (set! (.. element -scrollTop) 0)))
                 state)
    :will-unmount (fn [state]
-                   (when-let [el (gdom/getElement "app-container")]
+                   (when-let [el (gdom/getElement "main-content-container")]
                      (dnd/unsubscribe! el :upload-files))
                    state)}
   [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content show-action-bar? show-recording-bar?]}]
