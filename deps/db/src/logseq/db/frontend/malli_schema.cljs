@@ -1,9 +1,9 @@
-(ns logseq.db.malli-schema
-  "Malli schemas and fns for logseq.db.*"
+(ns logseq.db.frontend.malli-schema
+  "Malli schemas and fns for logseq.db.frontend.*"
   (:require [clojure.walk :as walk]
             [datascript.core :as d]
-            [logseq.db.property :as db-property]
-            [logseq.db.property.type :as db-property-type]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.type :as db-property-type]))
 
 ;; Helper fns
 ;; ==========

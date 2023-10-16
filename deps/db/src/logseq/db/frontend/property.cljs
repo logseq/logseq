@@ -1,4 +1,4 @@
-(ns logseq.db.property
+(ns logseq.db.frontend.property
   "Property related fns for DB graphs and frontend/datascript usage"
   (:require [clojure.set :as set]))
 

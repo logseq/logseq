@@ -18,7 +18,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.util.fs :as fs-util]
             [frontend.util :as util]
-            [logseq.db.schema :as db-schema]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.text :as text]

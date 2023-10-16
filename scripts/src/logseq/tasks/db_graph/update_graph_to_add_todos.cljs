@@ -3,7 +3,7 @@
   (:require [logseq.tasks.db-graph.persist-graph :as persist-graph]
             [logseq.db.sqlite.cli :as sqlite-cli]
             [logseq.db.sqlite.db :as sqlite-db]
-            [logseq.db.rules :as rules]
+            [logseq.db.frontend.rules :as rules]
             [datascript.core :as d]
             [clojure.edn :as edn]
             [clojure.string :as string]

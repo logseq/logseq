@@ -12,7 +12,7 @@
             [frontend.util :as util]
             [frontend.search :as search]
             [frontend.mixins :as mixins]
-            [logseq.db.default :as db-default]
+            [logseq.db.frontend.default :as db-default]
             [rum.core :as rum]
             [clojure.string :as string]
             [logseq.graph-parser.util :as gp-util]

@@ -13,7 +13,7 @@
             [frontend.db.conn :as conn]
             [datascript.core :as d]
             [logseq.graph-parser.util.db :as db-util]
-            [logseq.db.rules :as rules]
+            [logseq.db.frontend.rules :as rules]
             [frontend.template :as template]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util.page-ref :as page-ref]

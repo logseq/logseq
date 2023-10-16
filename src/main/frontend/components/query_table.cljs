@@ -17,7 +17,7 @@
             [medley.core :as medley]
             [rum.core :as rum]
             [logseq.graph-parser.text :as text]
-            [logseq.db.property :as db-property]
+            [logseq.db.frontend.property :as db-property]
             [frontend.handler.property.util :as pu]))
 
 ;; Util fns

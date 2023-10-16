@@ -1,4 +1,4 @@
-(ns logseq.db.schema
+(ns logseq.db.frontend.schema
   "Main datascript schemas for the Logseq app"
   (:require [clojure.set :as set]))
 

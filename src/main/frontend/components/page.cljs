@@ -42,7 +42,7 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
-            [logseq.db.property :as db-property]
+            [logseq.db.frontend.property :as db-property]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]

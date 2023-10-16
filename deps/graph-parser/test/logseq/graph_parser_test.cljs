@@ -3,7 +3,7 @@
             [clojure.string :as string]
             [logseq.graph-parser :as graph-parser]
             [logseq.db :as ldb]
-            [logseq.db.default :as default-db]
+            [logseq.db.frontend.default :as default-db]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
             [datascript.core :as d]))

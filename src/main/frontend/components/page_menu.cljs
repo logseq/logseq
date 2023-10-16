@@ -19,7 +19,7 @@
             [frontend.handler.file-sync :as file-sync-handler]
             [logseq.common.path :as path]
             [frontend.handler.property.util :as pu]
-            [logseq.db.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]))
 
 (defn- delete-page!
   [page-name]

@@ -5,7 +5,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [goog.object :as gobj]
-            [logseq.db.schema :as db-schema]))
+            [logseq.db.frontend.schema :as db-schema]))
 
 (def ^:private t-reader (transit/reader :json))
 

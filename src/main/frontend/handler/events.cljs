@@ -69,7 +69,7 @@
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [goog.dom :as gdom]
-            [logseq.db.schema :as db-schema]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
             [rum.core :as rum]

@@ -7,7 +7,7 @@
             [frontend.config :as config]
             [frontend.state :as state]
             [logseq.common.path :as path]
-            [logseq.db.schema :as db-schema]))
+            [logseq.db.frontend.schema :as db-schema]))
 
 
 (defn get-schema-version

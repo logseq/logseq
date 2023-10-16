@@ -6,7 +6,7 @@
               [clojure.edn :as edn]
               [logseq.db.sqlite.db :as sqlite-db]
               [logseq.db.sqlite.cli :as sqlite-cli]
-              [logseq.db.rules :as rules]
+              [logseq.db.frontend.rules :as rules]
               [nbb.core :as nbb]
               ["path" :as path]
               ["os" :as os]))

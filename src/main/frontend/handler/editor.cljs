@@ -50,7 +50,7 @@
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [logseq.db.schema :as db-schema]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
