@@ -561,9 +561,14 @@
       state
       :on-hide (fn [] (property-handler/set-editing-new-property! nil))
       :node (js/document.getElementById "edit-new-property"))
-     (mixins/on-enter state {:on-enter (fn [_e]
-                                         (when-let [node (first (dom/by-class "add-property"))]
-                                           (.click node)))
+     (mixins/on-enter state {:on-enter (fn [e]
+                                         ;; FIXME: modal
+                                         (when-not (or (state/editing?)
+                                                       (state/selection?))
+                                           (when (or (= "main-content-container" (.-id (.-target e)))
+                                                     (= (.-tagName (.-target e)) "BODY"))
+                                             (when-let [node (first (dom/by-class "add-property"))]
+                                               (.click node)))))
                              :node js/window})))
   [state block edit-input-id new-property? opts]
   [:div.ls-new-property
