@@ -610,13 +610,16 @@
   (panel-content close-fn))
 
 (rum/defc modal-panel
-  [show? panel-content transition-state close-fn fullscreen? close-btn?]
+  [show? panel-content transition-state close-fn fullscreen? close-btn? style]
   [:div.ui__modal-panel.transform.transition-all.sm:min-w-lg.sm
-   {:class (case transition-state
-             "entering" "ease-out duration-300 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-             "entered" "ease-out duration-300 opacity-100 translate-y-0 sm:scale-100"
-             "exiting" "ease-in duration-200 opacity-100 translate-y-0 sm:scale-100"
-             "exited" "ease-in duration-200 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95")}
+   (cond->
+    {:class (case transition-state
+              "entering" "ease-out duration-300 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              "entered" "ease-out duration-300 opacity-100 translate-y-0 sm:scale-100"
+              "exiting" "ease-in duration-200 opacity-100 translate-y-0 sm:scale-100"
+              "exited" "ease-in duration-200 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95")}
+     (seq style)
+     (assoc :style style))
    [:div.ui__modal-close-wrap
     (when-not (false? close-btn?)
       [:a.ui__modal-close
@@ -632,7 +635,9 @@
           :stroke-linecap  "round"}]]])]
 
    (when show?
-     [:div {:class (if fullscreen? "" "panel-content")}
+     [:div (cond-> {:class (if fullscreen? "" "panel-content")}
+             (seq style)
+             (assoc :style style))
       (modal-panel-content panel-content close-fn)])])
 
 (rum/defc modal < rum/reactive
@@ -659,6 +664,7 @@
         close-backdrop? (state/sub :modal/close-backdrop?)
         show? (state/sub :modal/show?)
         label (state/sub :modal/label)
+        style (state/sub :modal/style)
         close-fn (fn []
                    (state/close-modal!)
                    (state/close-settings!))
@@ -673,7 +679,7 @@
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
-        (modal-panel show? modal-panel-content state close-fn fullscreen? close-btn?)))]))
+        (modal-panel show? modal-panel-content state close-fn fullscreen? close-btn? style)))]))
 
 (defn make-confirm-modal
   [{:keys [tag title sub-title sub-checkbox? on-cancel on-confirm]
@@ -733,6 +739,7 @@
             close-backdrop? (:modal/close-backdrop? modal)
             show? (:modal/show? modal)
             label (:modal/label modal)
+            style (:modal/style modal)
             close-fn (fn []
                        (state/close-sub-modal! id))
             modal-panel-content (or modal-panel-content (fn [_close] [:div]))]
@@ -746,7 +753,7 @@
          (css-transition
           {:in show? :timeout 0}
           (fn [state]
-            (modal-panel show? modal-panel-content state close-fn false close-btn?)))]))))
+            (modal-panel show? modal-panel-content state close-fn false close-btn? style)))]))))
 
 (defn loading
   ([] (loading (t :loading)))

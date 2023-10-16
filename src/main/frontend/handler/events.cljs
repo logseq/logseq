@@ -899,7 +899,8 @@
             (page/configure page opts)
             (page/page-properties page {:configure? true}))
    {:id :page-configure
-    :label "page-configure"}))
+    :label "page-configure"
+    :container-overflow-visible? true}))
 
 (defmethod handle :file/alter [[_ repo path content]]
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]
