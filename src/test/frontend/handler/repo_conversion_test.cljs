@@ -49,7 +49,7 @@
                 (into {})))
         "Task marker counts")
 
-    (is (= {:markdown 3141 :org 460}
+    (is (= {:markdown 3552 :org 519}
            (docs-graph-helper/get-block-format-counts db))
         "Block format counts")
 
@@ -98,7 +98,7 @@
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
     (is (= 211 (count files)) "Correct file count")
-    (is (= 38823 (count (d/datoms db :eavt))) "Correct datoms count")
+    (is (= 39293 (count (d/datoms db :eavt))) "Correct datoms count")
 
     (is (= 3600
            (ffirst
