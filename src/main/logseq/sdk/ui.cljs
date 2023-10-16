@@ -3,6 +3,7 @@
             [cljs-bean.core :as bean]
             [goog.dom :as gdom]
             [sci.core :as sci]
+            [frontend.util :as utils]
             [clojure.string :as string]))
 
 (defn- parse-hiccup-ui
@@ -20,9 +21,9 @@
    (let [{:keys [key timeout]} (bean/->clj opts)
          hiccup? (and (string? content) (string/starts-with? (string/triml content) "[:"))
          content (if hiccup? (parse-hiccup-ui content) content)
-         uid     (when (string? key) (keyword key))
-         clear?  (not= timeout 0)
-         key'    (notification/show! content (keyword status) clear? uid timeout nil)]
+         uid (when (string? key) (keyword key))
+         clear? (not= timeout 0)
+         key' (notification/show! content (keyword status) clear? uid timeout nil)]
      (name key'))))
 
 (defn ^:export show_msg
@@ -48,3 +49,14 @@
   [slot]
   (when (string? slot)
     (boolean (query_element_by_id slot))))
+
+(defn ^:export resolve_theme_css_props_vals
+  [props]
+  (when-let [props (if (string? props) [props] (bean/->clj props))]
+    (let [^js s (js/window.getComputedStyle js/document.body)]
+      (some->> (for [prop props]
+                 (when (string? prop)
+                   [prop (utils/trim-safe (.getPropertyValue s prop))]))
+               (remove empty?)
+               (into {})
+               (bean/->js)))))

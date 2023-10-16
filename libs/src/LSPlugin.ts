@@ -884,6 +884,7 @@ export interface IUIProxy {
   queryElementRect: (selector: string) => Promise<DOMRectReadOnly | null>
   queryElementById: (id: string) => Promise<string | boolean>
   checkSlotValid: (slot: UISlotIdentity['slot']) => Promise<boolean>
+  resolveThemeCssPropsVals: (props: string | Array<string>) => Promise<Record<string, string | undefined> | null>
 }
 
 /**
