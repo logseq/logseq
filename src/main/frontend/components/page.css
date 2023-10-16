@@ -246,6 +246,7 @@
 
   h1.page-title {
     margin-bottom: 0;
+    font-size: var(--ls-page-title-size, 36px);
   }
 
   .page-icon {

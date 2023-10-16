@@ -44,7 +44,7 @@
   [repo tx-report deleted-block-uuids]
   (let [empty-property-parents (->> (keep (fn [child-id]
                                             (let [e (d/entity (:db-before tx-report) [:block/uuid child-id])]
-                                              (when (:created-from-property (:block/metadata e))
+                                              (when (:created-from-property (:block/metadata (:block/parent e)))
                                                 (let [parent-now (db/entity (:db/id (:block/parent e)))]
                                                   (when (empty? (:block/_parent parent-now))
                                                     parent-now))))) deleted-block-uuids)
