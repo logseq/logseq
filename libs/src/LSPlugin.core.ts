@@ -308,8 +308,7 @@ function initProviderHandlers(pluginLocal: PluginLocal) {
   // provider:ui
   pluginLocal.on(_('ui'), (ui: UIOptions) => {
     pluginLocal._onHostMounted(() => {
-      pluginLocal._dispose(
-        setupInjectedUI.call(
+      const ret = setupInjectedUI.call(
           pluginLocal,
           ui,
           Object.assign(
@@ -324,7 +323,10 @@ function initProviderHandlers(pluginLocal: PluginLocal) {
             pluginLocal.layoutCore.move_container_to_top(identity)
           }
         )
-      )
+
+      if (typeof ret === 'function') {
+        pluginLocal._dispose(ret)
+      }
     })
   })
 }
@@ -346,14 +348,14 @@ function initApiProxyHandlers(pluginLocal: PluginLocal) {
       }
     }
 
-    const { _sync } = payload
-
     if (pluginLocal.shadow) {
       if (payload.actor) {
         payload.actor.resolve(ret)
       }
       return
     }
+
+    const { _sync } = payload
 
     if (_sync != null) {
       const reply = (result: any) => {

@@ -1,6 +1,7 @@
 (ns logseq.sdk.ui
   (:require [frontend.handler.notification :as notification]
             [cljs-bean.core :as bean]
+            [goog.dom :as gdom]
             [sci.core :as sci]
             [clojure.string :as string]))
 
@@ -32,3 +33,13 @@
   [key]
   (when (string? key)
     (notification/clear! (keyword key)) nil))
+
+(defn ^:export query_element_by_id
+  [id]
+  (when-let [^js el (gdom/getElement id)]
+    (if el (str (.-tagName el) "#" id) false)))
+
+(defn ^:export check_slot_valid
+  [slot]
+  (when (string? slot)
+    (boolean (query_element_by_id slot))))

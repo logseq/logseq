@@ -83,10 +83,10 @@
                  (fn []
                    (state/pub-event! [:modal/set-git-username-and-email])))
 
-  (safe-api-call "getCurrentGraph"
+  (safe-api-call "setCurrentGraph"
                  (fn []
                    (when-let [graph (state/get-current-repo)]
-                     (ipc/ipc "setCurrentGraph" graph))))
+                     (ipc/ipc :setCurrentGraph graph))))
 
   (safe-api-call "redirect"
                  (fn [data]

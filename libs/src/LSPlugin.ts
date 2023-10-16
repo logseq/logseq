@@ -908,6 +908,8 @@ export interface IUIProxy {
   ) => Promise<UIMsgKey>
 
   closeMsg: (key: UIMsgKey) => void
+
+  checkSlotValid: (slot: UISlotIdentity['slot']) => Promise<boolean>
 }
 
 /**

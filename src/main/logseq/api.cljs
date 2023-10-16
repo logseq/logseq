@@ -897,19 +897,10 @@
   (when-let [args (and args (seq (bean/->clj args)))]
     (shell/run-git-command! args)))
 
-;; git
-(def ^:export git_exec_command sdk-git/exec_command)
-(def ^:export git_load_ignore_file sdk-git/load_ignore_file)
-(def ^:export git_save_ignore_file sdk-git/save_ignore_file)
-
 ;; ui
 (def ^:export show_msg sdk-ui/-show_msg)
-(def ^:export ui_show_msg sdk-ui/show_msg)
-(def ^:export ui_close_msg sdk-ui/close_msg)
 
 ;; assets
-(def ^:export assets_list_files_of_current_graph sdk-assets/list_files_of_current_graph)
-(def ^:export assets_make_url sdk-assets/make_url)
 (def ^:export make_asset_url sdk-assets/make_url)
 
 ;; experiments
@@ -998,10 +989,7 @@
       (p/then #(bean/->js %))))
 
 ;; helpers
-(defn ^:export query_element_by_id
-  [id]
-  (when-let [^js el (gdom/getElement id)]
-    (if el (str (.-tagName el) "#" id) false)))
+(def ^:export query_element_by_id sdk-ui/query_element_by_id)
 
 (defn ^:export query_element_rect
   [selector]
