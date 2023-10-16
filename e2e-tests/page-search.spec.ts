@@ -35,6 +35,7 @@ test('Search page and blocks (diacritics)', async ({ page, block }) => {
 
   await block.enterNext()
   await block.mustType('[[Einführung in die Allgemeine Sprachwissenschaft' + rand + ']] diacritic-block-2', { delay: 10 })
+  await page.waitForTimeout(500)
   await page.keyboard.press(hotkeyBack)
 
   // check if diacritics are indexed
@@ -113,7 +114,9 @@ async function alias_test(block: Block, page: Page, page_name: string, search_kw
   expect(await page.inputValue('textarea >> nth=0')).toBe(alias_test_content_1)
 
   await enterNextBlock(page)
+  await page.waitForTimeout(100)
   await page.type('textarea >> nth=0', alias_test_content_2)
+  await page.waitForTimeout(100)
   page.keyboard.press(hotkeyBack)
 
   await page.waitForNavigation()
@@ -129,7 +132,9 @@ async function alias_test(block: Block, page: Page, page_name: string, search_kw
   await block.activeEditing(2)
   expect(await page.inputValue('textarea >> nth=0')).toBe(alias_test_content_2)
   await newInnerBlock(page)
+  await page.waitForTimeout(100)
   await page.type('textarea >> nth=0', alias_test_content_3)
+  await page.waitForTimeout(100)
   page.keyboard.press(hotkeyBack)
 
   await page.waitForNavigation()
