@@ -168,6 +168,7 @@
                              (concat txs
                                      [(assoc page-m
                                              :block/tags (:block/tags m)
+                                             :block/format :markdown
                                              :block/type "object")
                                       {:db/id (:db/id block-entity)
                                        :block/content ""

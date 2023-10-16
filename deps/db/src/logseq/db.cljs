@@ -9,19 +9,21 @@
 (defn create-default-pages!
   "Creates default pages if one of the default pages does not exist. This
    fn is idempotent"
-  [db-conn]
+  [db-conn {:keys [db-graph?]}]
   (when-not (d/entity @db-conn [:block/name "card"])
     (let [time (tc/to-long (t/now))
-          built-in-pages-with-timestamp (map
-                                          (fn [m]
-                                            (-> m
-                                                (assoc :block/created-at time)
-                                                (assoc :block/updated-at time)))
-                                          default-db/built-in-pages)]
+          built-in-pages (map
+                          (fn [m]
+                            (cond-> (-> m
+                                        (assoc :block/created-at time)
+                                        (assoc :block/updated-at time))
+                              db-graph?
+                              (assoc :block/format :markdown)))
+                          default-db/built-in-pages)]
       (d/transact! db-conn
-       (concat
-        [{:schema/version db-schema/version}]
-        built-in-pages-with-timestamp)))))
+                   (concat
+                    [{:schema/version db-schema/version}]
+                    built-in-pages)))))
 
 (defn start-conn
   "Create datascript conn with schema and default data"
@@ -30,5 +32,5 @@
            schema db-schema/schema}}]
   (let [db-conn (d/create-conn schema)]
     (when create-default-pages?
-      (create-default-pages! db-conn))
+      (create-default-pages! db-conn {}))
     db-conn))

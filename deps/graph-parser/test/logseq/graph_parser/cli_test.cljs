@@ -137,7 +137,7 @@
                      frontend-blocks)
         _ (sqlite-db/upsert-blocks! db-name (bean/->js blocks))
         conn (sqlite-cli/read-graph db-name)]
-    (ldb/create-default-pages! conn)
+    (ldb/create-default-pages! conn {:db-graph? true})
     @conn))
 
 (defn- datoms->entity-maps

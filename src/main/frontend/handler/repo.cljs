@@ -365,7 +365,8 @@
 (defn start-repo-db-if-not-exists!
   [repo]
   (state/set-current-repo! repo)
-  (db/start-db-conn! repo {:listen-handler db-listener/listen-and-persist!}))
+  (db/start-db-conn! repo {:listen-handler db-listener/listen-and-persist!
+                           :db-graph? (config/db-based-graph? repo)}))
 
 (defn- setup-local-repo-if-not-exists-impl!
   []

@@ -38,7 +38,7 @@
   ;; Same order as frontend.db.conn/start!
   (let [conn (ldb/start-conn :create-default-pages? false)]
     (persist-graph/add-listener conn db-name)
-    (ldb/create-default-pages! conn)
+    (ldb/create-default-pages! conn {:db-graph? true})
     (setup-init-data conn)
     conn))
 
@@ -182,7 +182,8 @@
                   {:db/id page-id
                    :block/original-name (or (:block/original-name page) (string/capitalize (:block/name page)))
                    :block/name (or (:block/name page) (sqlite-util/sanitize-page-name (:block/original-name page)))
-                   :block/journal? false}
+                   :block/journal? false
+                   :block/format :markdown}
                   (dissoc page :properties)
                   (when (seq (:properties page))
                     {:block/properties (->block-properties-tx (:properties page) uuid-maps)

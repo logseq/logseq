@@ -66,8 +66,8 @@
   [[:block/uuid :uuid]
    [:block/created-at :int]
    [:block/updated-at :int]
-   [:block/properties {:optional true}
-    block-properties]
+   [:block/properties {:optional true} block-properties]
+   [:block/format [:enum :markdown]]
    [:block/refs {:optional true} [:set :int]]
    [:block/tags {:optional true} [:set :int]]
    [:block/tx-id {:optional true} :int]])
@@ -78,8 +78,6 @@
    [:block/original-name :string]
    [:block/type {:optional true} [:enum #{"property"} #{"class"} #{"object"} #{"whiteboard"} #{"hidden"}]]
    [:block/journal? :boolean]
-    ;; TODO: Consider moving to just normal and class after figuring out journal attributes
-   [:block/format {:optional true} [:enum :markdown]]
     ;; TODO: Should this be here or in common?
    [:block/path-refs {:optional true} [:set :int]]])
 
@@ -192,7 +190,6 @@
    [:block/path-refs {:optional true} [:set :int]]
    [:block/link {:optional true} :int]
     ;; other
-   [:block/format [:enum :markdown]]
    [:block/marker {:optional true} :string]
    [:block/priority {:optional true} :string]
    [:block/collapsed? {:optional true} :boolean]])
