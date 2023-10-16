@@ -28,27 +28,28 @@
     (outliner-pipeline/compute-block-path-refs-tx tx-report blocks)))
 
 (defn- reset-editing-block-content!
-  [tx-data]
+  [tx-data tx-meta]
   (let [repo (state/get-current-repo)
         db? (config/db-based-graph? repo)]
-    (when-let [edit-block (state/get-edit-block)]
-      (when-let [last-datom (-> (filter (fn [datom]
-                                          (and (= :block/content (:a datom))
-                                               (= (:e datom) (:db/id edit-block)))) tx-data)
-                                last)]
-        (when-let [input (state/get-input)]
-          (when (:added last-datom)
-            (let [entity (db/entity (:e last-datom))
-                  db-content (:block/content entity)
-                  content (if db? db-content
-                              (->> db-content
-                                   (property-util/remove-built-in-properties (or (:block/format entity) :markdown))
-                                   drawer/remove-logbook))
-                  pos (cursor/pos input)]
-              (when (not= (string/trim content)
-                          (string/trim (.-value input)))
-                (state/set-edit-content! input content)
-                (when pos (cursor/move-cursor-to input pos))))))))))
+    (when-not (or (:undo? tx-meta) (:redo? tx-meta))
+      (when-let [edit-block (state/get-edit-block)]
+        (when-let [last-datom (-> (filter (fn [datom]
+                                            (and (= :block/content (:a datom))
+                                                 (= (:e datom) (:db/id edit-block)))) tx-data)
+                                  last)]
+          (when-let [input (state/get-input)]
+            (when (:added last-datom)
+              (let [entity (db/entity (:e last-datom))
+                    db-content (:block/content entity)
+                    content (if db? db-content
+                                (->> db-content
+                                     (property-util/remove-built-in-properties (or (:block/format entity) :markdown))
+                                     drawer/remove-logbook))
+                    pos (cursor/pos input)]
+                (when (not= (string/trim content)
+                            (string/trim (.-value input)))
+                  (state/set-edit-content! input content)
+                  (when pos (cursor/move-cursor-to input pos)))))))))))
 
 (defn- delete-property-parent-block-if-empty!
   [repo tx-report deleted-block-uuids]
@@ -81,7 +82,7 @@
                (not new-graph?)
                (not compute-path-refs?))
 
-      (reset-editing-block-content! (:tx-data tx-report))
+      (reset-editing-block-content! (:tx-data tx-report) tx-meta)
 
       (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
             repo (state/get-current-repo)
