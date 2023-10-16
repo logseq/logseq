@@ -792,7 +792,7 @@
  :right-side-bar/pane-expand "Ekspander"
  :right-side-bar/pane-expand-all "Ekspander alle"
  :right-side-bar/pane-more "Mer"
- :right-side-bar/pane-open-as-page "Åpne som side
+ :right-side-bar/pane-open-as-page "Åpne som side"
  :reset "Nullstill"
  :command.window/close "Lukk vindu"
  :file-sync/connectivity-testing-failed "Test av nettverksforbindelse feilet. Vennligst sjekk dine nettverksinnstillinger. Test URLer: "
