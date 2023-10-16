@@ -372,7 +372,8 @@
                                                      :inline-text component-block/inline-text)))])
 
      (when (and class-or-property?
-                (not (property-handler/block-has-viewable-properties? page)))
+                (not (property-handler/block-has-viewable-properties? page))
+                (not config/publishing?))
        [:a.fade-link.ml-2 {:on-click #(swap! *show-page-properties? not)}
         (if @*show-page-properties?
           "Back"
