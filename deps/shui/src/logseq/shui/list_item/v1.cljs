@@ -96,7 +96,7 @@
           [:span text-string])))))
 
 ;; result-item
-(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted on-highlight on-highlight-dep header on-click] :as _props} 
+(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted on-highlight on-highlight-dep header on-click hoverable compact] :as _props :or {hoverable true}} 
                 {:keys [app-config] :as context}]
   (let [ref (rum/create-ref)
         highlight-query (partial highlight-query* app-config query)]
@@ -107,9 +107,12 @@
       [highlighted on-highlight-dep])
     [:div {:style {:opacity (if highlighted 1 0.8)
                    :mix-blend-mode (if highlighted :normal :luminosity)}
-           :class (cond-> "flex flex-col px-6 gap-1 py-4" 
-                    highlighted (str " bg-gray-03-alpha dark:bg-gray-04-alpha")
-                    (not highlighted) (str " bg-gray-02"))
+           :class (cond-> "flex flex-col grayscale" 
+                    highlighted (str " !grayscale-0 !opacity-100 bg-gray-03-alpha dark:bg-gray-04-alpha")
+                    hoverable (str " !rounded-lg transition-all duration-50 ease-in !opacity-75 hover:!opacity-100 hover:grayscale-0 hover:cursor-pointer hover:bg-gradient-to-r hover:from-gray-03-alpha hover:to-gray-01-alpha")
+                    (not compact) (str  " py-4 px-6 gap-1")
+                    compact (str " py-1.5 px-3.5 gap-0.5")
+                    (not highlighted) (str " "))
            :ref ref
            :on-click (when on-click on-click)}
      ;; header
@@ -124,7 +127,7 @@
                 :box-shadow (when (#{:color :gradient} icon-theme) "inset 0 0 0 1px rgba(255,255,255,0.3) ")}
         :class (cond-> "w-5 h-5 rounded flex items-center justify-center" 
                  (= icon-theme :color) (str " bg-accent-10 dark:bg-accent-09 text-white") 
-                 (= icon-theme :gray) (str " bg-gray-10 dark:bg-gray-09 text-white"))} 
+                 (= icon-theme :gray) (str " bg-gray-05 dark:bg-gray-05 text-white"))} 
        (icon/root icon {:size "14"
                         :class ""})]
       [:div.flex.flex-1.flex-col
@@ -132,7 +135,7 @@
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])
        [:div {:class "text-sm font-medium text-gray-12"} (highlight-query text)
         (when info 
-          [:span.text-gray-11 " — " (highlight-query info)])]]
+          [:span.text-xs.text-gray-11 " — " (highlight-query info)])]]
       (when (or value-label value)
         [:div {:class "text-xs"}
          (when (and value-label value)
@@ -153,7 +156,7 @@
                                    (apply str))]]
                (button/root {:theme :gray 
                              :interactive false 
-                             :text (to-string text)
+                             :text (string/upper-case (to-string text))
                              :tiled true}
                             context))])])]]))
         ; [:span {:style} (str key)])])])

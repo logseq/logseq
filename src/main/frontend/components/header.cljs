@@ -16,9 +16,11 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.web.nfs :as nfs]
             [frontend.mobile.util :as mobile-util]
+            [frontend.shui :refer [make-shui-context]]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.shui.core :as shui]
             [frontend.version :refer [version]]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
@@ -82,64 +84,135 @@
   (let [page-menu (page-menu/page-menu nil)
         page-menu-and-hr (when (seq page-menu)
                            (concat page-menu [{:hr true}]))]
-    (ui/dropdown-with-links
-     (fn [{:keys [toggle-fn]}]
-       [:button.button.icon.toolbar-dots-btn
-        {:on-click toggle-fn
-         :title (t :header/more)}
-        (ui/icon "dots" {:size ui/icon-size})])
-     (->>
-      [(when (state/enable-editing?)
-         {:title (t :settings)
-          :options {:on-click state/open-settings!}
-          :icon (ui/icon "settings")})
+    [:<>
+     (shui/dialog-v1 {:trigger (fn [{:keys [toggle-dialog! dialog]}] 
+                                 [:div.relative
+                                  [:button.button.icon.toolbar-dots-btn
+                                   {:on-click toggle-dialog!
+                                    :title (t :header/more)}
+                                   (ui/icon "dots" {:size ui/icon-size})]
+                                  (dialog)])
+                      :groups [[:<> [:div.pl-3.pb-1.text-xxs.font-semibold.text-gray-11-alpha {:class "pt-0.5"} "General"]
+                                    (shui/list-item-v1 {:text (t :settings) 
+                                                        :compact true
+                                                        :icon "settings" 
+                                                        :icon-theme :gray
+                                                        ; :info "Open settings"
+                                                        :shortcut "cmd+s"
+                                                        :on-click state/open-settings!}
+                                                       (make-shui-context nil nil))
+                                    (shui/list-item-v1 {:text (t :plugins) 
+                                                        :compact true
+                                                        :icon "apps" 
+                                                        :icon-theme :gray
+                                                        :shortcut "g a"
+                                                        :on-click #(plugin-handler/goto-plugins-dashboard!)}
+                                                       (make-shui-context nil nil))
+                                    (shui/list-item-v1 {:text (t :themes) 
+                                                        :compact true
+                                                        :icon "palette" 
+                                                        :icon-theme :gray
+                                                        :shortcut "g p"
+                                                        :on-click #(plugins/open-select-theme!)}
+                                                       (make-shui-context nil nil))]
+                               [:<> [:div.pl-3.pb-1.pt-2.text-xxs.font-semibold.text-gray-11-alpha "Publishing"]
+                                    (shui/list-item-v1 {:text "Publishing settings"
+                                                        :compact true
+                                                        :icon-theme :gray 
+                                                        :icon "bulb"}
+                                                       (make-shui-context nil nil))
+                                    (shui/list-item-v1 {:text "Copy page URL"
+                                                        :compact true
+                                                        :icon-theme :gray 
+                                                        :icon "bulb"}
+                                                       (make-shui-context nil nil))
+                                    (shui/list-item-v1 {:text "Publish"
+                                                        :compact true
+                                                        :header "Last published: 2 days ago"
+                                                        :icon-theme :gray 
+                                                        :icon "bulb"}
+                                                       (make-shui-context nil nil))]
+                               [:<> [:div.pl-3.pb-1.pt-2.text-xxs.font-semibold.text-gray-11-alpha "Graph management"]
+                                    (shui/list-item-v1 {:text (t :export-graph) 
+                                                        :compact true
+                                                        :icon "database-export" 
+                                                        :icon-theme :color
+                                                        :on-click #(state/set-modal! export/export)}
+                                                       (make-shui-context nil nil))
+                                    (shui/list-item-v1 {:text (t :import) 
+                                                        :compact true
+                                                        :icon "file-upload" 
+                                                        :icon-theme :color
+                                                        :on-click #(js/alert "set href")}
+                                                       (make-shui-context nil nil))]
+                               [:<> [:div.pl-3.pb-1.pt-2.text-xxs.font-semibold.text-gray-11-alpha "Account"]
+                                    (shui/list-item-v1 {:text "Logout"
+                                                        :compact true
+                                                        :icon "logout" 
+                                                        ; :shortcut "shift+cmd+x"
+                                                        :icon-theme :gradient
+                                                        :value "ben@logseq.com"
+                                                        :on-click #(user-handler/logout)}
+                                                       (make-shui-context nil nil))]]}
+       (make-shui-context nil nil))
+     (ui/dropdown-with-links
+      (fn [{:keys [toggle-fn]}]
+        [:button.button.icon.toolbar-dots-btn
+         {:on-click toggle-fn
+          :title (t :header/more)}
+         (ui/icon "dots" {:size ui/icon-size})])
+      (->>
+       [(when (state/enable-editing?)
+          {:title (t :settings)
+           :options {:on-click state/open-settings!}
+           :icon (ui/icon "settings")})
 
-       (when config/lsp-enabled?
-         {:title (t :plugins)
-          :options {:on-click #(plugin-handler/goto-plugins-dashboard!)}
-          :icon (ui/icon "apps")})
+        (when config/lsp-enabled?
+          {:title (t :plugins)
+           :options {:on-click #(plugin-handler/goto-plugins-dashboard!)}
+           :icon (ui/icon "apps")})
 
-       (when config/lsp-enabled?
-         {:title (t :themes)
-          :options {:on-click #(plugins/open-select-theme!)}
-          :icon (ui/icon "palette")})
+        (when config/lsp-enabled?
+          {:title (t :themes)
+           :options {:on-click #(plugins/open-select-theme!)}
+           :icon (ui/icon "palette")})
 
-       (when current-repo
-         {:title (t :export-graph)
-          :options {:on-click #(state/set-modal! export/export)}
-          :icon (ui/icon "database-export")})
+        (when current-repo
+          {:title (t :export-graph)
+           :options {:on-click #(state/set-modal! export/export)}
+           :icon (ui/icon "database-export")})
 
-       (when (and current-repo (state/enable-editing?))
-         {:title (t :import)
-          :options {:href (rfe/href :import)}
-          :icon (ui/icon "file-upload")})
+        (when (and current-repo (state/enable-editing?))
+          {:title (t :import)
+           :options {:href (rfe/href :import)}
+           :icon (ui/icon "file-upload")})
 
-       (when-not config/publishing? 
-         {:title [:div.flex-row.flex.justify-between.items-center
-                  [:span (t :join-community)]]
-          :options {:href "https://discuss.logseq.com"
-                    :title (t :discourse-title)
-                    :target "_blank"}
-          :icon (ui/icon "brand-discord")})
+        (when-not config/publishing? 
+          {:title [:div.flex-row.flex.justify-between.items-center
+                   [:span (t :join-community)]]
+           :options {:href "https://discuss.logseq.com"
+                     :title (t :discourse-title)
+                     :target "_blank"}
+           :icon (ui/icon "brand-discord")})
 
-       (when-not config/publishing?
-         {:title [:div.flex-row.flex.justify-between.items-center
-                  [:span (t :help/bug)]]
-          :options {:href (rfe/href :bug-report)}
-          :icon (ui/icon "bug")})
+        (when-not config/publishing?
+          {:title [:div.flex-row.flex.justify-between.items-center
+                   [:span (t :help/bug)]]
+           :options {:href (rfe/href :bug-report)}
+           :icon (ui/icon "bug")})
 
-       (when config/publishing?
-         {:title (t :toggle-theme)
-          :options {:on-click #(state/toggle-theme!)}
-          :icon (ui/icon "bulb")})
+        (when config/publishing?
+          {:title (t :toggle-theme)
+           :options {:on-click #(state/toggle-theme!)}
+           :icon (ui/icon "bulb")})
 
-       (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
-         {:title (t :logout-user (user-handler/email))
-          :options {:on-click #(user-handler/logout)}
-          :icon  (ui/icon "logout")})]
-      (concat page-menu-and-hr)
-      (remove nil?))
-     {})))
+        (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
+          {:title (t :logout-user (user-handler/email))
+           :options {:on-click #(user-handler/logout)}
+           :icon  (ui/icon "logout")})]
+       (concat page-menu-and-hr)
+       (remove nil?))
+      {})]))
 
 (rum/defc back-and-forward
   < {:key-fn #(identity "nav-history-buttons")}

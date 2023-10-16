@@ -604,7 +604,7 @@
                    (reset! (::keyup-handler state) nil)
                    state)}
   {:did-mount (fn [state] 
-                (search-db/make-blocks-indice-non-blocking! (state/get-current-repo))
+                ; (search-db/make-blocks-indice-non-blocking! (state/get-current-repo))
                 ; (when-let [ref @(::scroll-container-ref state)]
                 ;   (js/console.log "scrolling")
                 ;   (js/setTimeout #(set! (.-scrollTop ref) FILTER-ROW-HEIGHT)))
