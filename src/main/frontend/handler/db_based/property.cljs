@@ -411,7 +411,9 @@
                               :block/tags)]
               (when property-value-id
                 (db/transact! repo
-                              [[:db/retract (:db/id block) attribute property-value-id]]
+                              (cond-> [[:db/retract (:db/id block) attribute property-value-id]]
+                                (and :block/tags (= 1 (count (:block/tags block))))
+                                (conj [:db/retract (:db/id block) :block/type "object"]))
                               {:outliner-op :save-block})))
             (if (= :many (:cardinality schema))
               (let [properties (:block/properties block)
