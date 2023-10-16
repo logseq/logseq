@@ -282,7 +282,9 @@
                         (rollback-fn))
 
                     :else
-                    (rename-fn (or title page-name) @*title-value))
+                    (do
+                      (rename-fn (or title page-name) @*title-value)
+                      (reset! *edit? false)))
                   (util/stop e))]
     [:input.edit-input.p-0.focus:outline-none.ring-none
      {:type          "text"
@@ -412,10 +414,9 @@
   (rum/local false ::configuring?)
   {:init (fn [state]
            (let [page-name (first (:rum/args state))
-                 original-name (if page-name
-                                 (:block/origina-name (db/entity [:block/name (util/page-name-sanity-lc page-name)]))
-                                 "")]
-             (assoc state ::title-value (atom original-name))))}
+                 original-name (:block/original-name (db/entity [:block/name (util/page-name-sanity-lc page-name)]))
+                 *title-value (atom original-name)]
+             (assoc state ::title-value *title-value)))}
   [state page-name {:keys [fmt-journal? preview?]}]
   (when page-name
     (let [page (when page-name (db/entity [:block/name page-name]))
@@ -754,11 +755,12 @@
                  :on-mouse-leave (fn [e]
                                    (page-mouse-leave e *control-show?))}
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
-             (when-not whiteboard?
-               (page-title page-name {:journal? journal?
-                                      :fmt-journal? fmt-journal?
-                                      :built-in-property? built-in-property?
-                                      :preview? preview?}))
+             (let [original-name (:block/original-name (db/entity [:block/name (util/page-name-sanity-lc page-name)]))]
+               (when (and (not whiteboard?) original-name)
+                (page-title page-name {:journal? journal?
+                                       :fmt-journal? fmt-journal?
+                                       :built-in-property? built-in-property?
+                                       :preview? preview?})))
              (when (not config/publishing?)
                (when config/lsp-enabled?
                  [:div.flex.flex-row
