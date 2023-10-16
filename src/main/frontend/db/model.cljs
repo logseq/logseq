@@ -1417,13 +1417,13 @@ independent of format as format specific heading characters are stripped"
     (string? page)
     (let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)])]
       (or
-       (contains? (:block/type page) "whiteboard")
+       (contains? (set (:block/type page)) "whiteboard")
        (when-let [file (:block/file page)]
          (when-let [path (:file/path (db-utils/entity (:db/id file)))]
            (gp-config/whiteboard? path)))))
 
     (seq page)
-    (contains? (:block/type page) "whiteboard")
+    (contains? (set (:block/type page)) "whiteboard")
 
     :else false))
 

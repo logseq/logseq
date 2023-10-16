@@ -70,7 +70,7 @@
           repo (state/sub :git/current-repo)
           page (db/entity repo [:block/name page-name])
           page-original-name (:block/original-name page)
-          whiteboard? (contains? (:block/type page) "whiteboard")
+          whiteboard? (contains? (set (:block/type page)) "whiteboard")
           block? (and page (util/uuid-string? page-name) (not whiteboard?))
           contents? (= page-name "contents")
           properties (:block/properties page)

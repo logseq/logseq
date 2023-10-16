@@ -314,7 +314,7 @@
                [?b :block/name]] db)
 
         (map (fn [[{:block/keys [name] :as page}]]
-               (let [whiteboard? (contains? (:block/type page) "whiteboard")
+               (let [whiteboard? (contains? (set (:block/type page)) "whiteboard")
                      blocks (db/get-page-blocks-no-cache
                              (state/get-current-repo)
                              name

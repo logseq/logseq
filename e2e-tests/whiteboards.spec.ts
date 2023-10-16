@@ -67,13 +67,6 @@ test('update whiteboard title', async ({ page }) => {
   await page.click('.whiteboard-page-title')
   await page.fill('.whiteboard-page-title input', title + '-2')
   await page.keyboard.press('Enter')
-
-  // Updating non-default title should pop up a confirmation dialog
-  await expect(page.locator('.ui__confirm-modal >> .headline')).toContainText(
-    `Do you really want to change the page name to “${title}-2”?`
-  )
-
-  await page.click('.ui__confirm-modal button')
   await expect(page.locator('.whiteboard-page-title .title')).toContainText(
     title + '-2'
   )

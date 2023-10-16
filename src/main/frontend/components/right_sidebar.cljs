@@ -151,7 +151,7 @@
       [[:.flex.items-center.page-title
         (if-let [icon (pu/lookup (:block/properties page) :icon)]
           [:.text-md.mr-2 icon]
-          (ui/icon (if (contains? (:block/type page) "whiteboard") "whiteboard" "page") {:class "text-md mr-2"}))
+          (ui/icon (if (contains? (set (:block/type page)) "whiteboard") "whiteboard" "page") {:class "text-md mr-2"}))
         [:span.overflow-hidden.text-ellipsis (db-model/get-page-original-name page-name)]]
        (page-cp repo page-name)])
 
