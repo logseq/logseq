@@ -1,7 +1,7 @@
 (ns logseq.db
   "Main namespace for public db fns"
-  (:require [logseq.db.default :as default-db]
-            [logseq.db.schema :as db-schema]
+  (:require [logseq.db.frontend.default :as default-db]
+            [logseq.db.frontend.schema :as db-schema]
             [datascript.core :as d]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]))

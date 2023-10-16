@@ -9,7 +9,7 @@
             [cljs.core.async.interop :refer [p->c]]
             [cljs-http.client :as http]
             [cognitect.transit :as transit]
-            [logseq.db.schema :as db-schema]
+            [logseq.db.frontend.schema :as db-schema]
             [frontend.persist-db :as persist-db]
             [frontend.db.rtc.op :as op]
             [logseq.outliner.pipeline :as outliner-pipeline]

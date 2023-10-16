@@ -1,4 +1,4 @@
-(ns logseq.db.default
+(ns logseq.db.frontend.default
   "Provides fns for seeding default data in a logseq db"
   (:require [clojure.string :as string]
             [clojure.set :as set]))

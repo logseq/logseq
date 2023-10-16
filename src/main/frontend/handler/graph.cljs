@@ -3,7 +3,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [frontend.db :as db]
-            [logseq.db.default :as default-db]
+            [logseq.db.frontend.default :as default-db]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.handler.property.util :as pu]

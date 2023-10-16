@@ -1,5 +1,5 @@
-(ns ^:bb-compatible logseq.db.rules
-  "Datalog rules for use with logseq.db.schema")
+(ns ^:bb-compatible logseq.db.frontend.rules
+  "Datalog rules for use with logseq.db.frontend.schema")
 
 (def ^:large-vars/data-var rules
   "Rules used mainly in frontend.db.model"

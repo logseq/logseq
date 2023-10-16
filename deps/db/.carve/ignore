@@ -1,10 +1,10 @@
 ;; API
 logseq.db/start-conn
 ;; API
-logseq.db.rules/query-dsl-rules
+logseq.db.frontend.rules/query-dsl-rules
 ;; API
-logseq.db.rules/db-query-dsl-rules
+logseq.db.frontend.rules/db-query-dsl-rules
 ;; API
-logseq.db.rules/extract-rules
+logseq.db.frontend.rules/extract-rules
 ;; Internal API
-logseq.db.rules/rules
+logseq.db.frontend.rules/rules

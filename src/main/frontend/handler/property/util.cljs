@@ -4,7 +4,7 @@
   compatible with file graphs"
   (:require [frontend.config :as config]
             [frontend.state :as state]
-            [logseq.db.property :as db-property]
+            [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.util :as gp-util]
             [frontend.db :as db]
             [clojure.set :as set]

@@ -28,7 +28,7 @@
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [logseq.db.property :as db-property]
+            [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.page-ref :as page-ref]

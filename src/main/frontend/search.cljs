@@ -18,7 +18,7 @@
             [datascript.core :as d]
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.config :as config]
-            [logseq.db.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]))
 
 (defn get-engine
   [repo]

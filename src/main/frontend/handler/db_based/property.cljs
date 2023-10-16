@@ -9,7 +9,7 @@
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.property.type :as db-property-type]
+            [logseq.db.frontend.property.type :as db-property-type]
             [malli.util :as mu]
             [malli.error :as me]
             [frontend.format.block :as block]

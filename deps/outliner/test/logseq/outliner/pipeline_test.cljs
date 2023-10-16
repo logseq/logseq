@@ -1,6 +1,6 @@
 (ns logseq.outliner.pipeline-test
   (:require [cljs.test :refer [deftest is]]
-            [logseq.db.schema :as db-schema]
+            [logseq.db.frontend.schema :as db-schema]
             [datascript.core :as d]
             [logseq.outliner.pipeline :as outliner-pipeline]))
 

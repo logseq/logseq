@@ -11,7 +11,7 @@
             [frontend.util.drawer :as drawer]
             [frontend.util.marker :as marker]
             [frontend.handler.file-based.property :as file-property]
-            [logseq.db.schema :as db-schema]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util.block-ref :as block-ref]))

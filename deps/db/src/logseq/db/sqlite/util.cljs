@@ -5,8 +5,8 @@
             [clojure.string :as string]
             [cognitect.transit :as transit]
             [datascript.core :as d]
-            [logseq.db.schema :as db-schema]
-            [logseq.db.property :as db-property]))
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn- type-of-block
   "

@@ -3,8 +3,8 @@
    NOTE: This script is also used in CI to confirm our db's schema is up to date"
   (:require [logseq.db.sqlite.cli :as sqlite-cli]
             [logseq.db.sqlite.db :as sqlite-db]
-            [logseq.db.schema :as db-schema]
-            [logseq.db.malli-schema :as db-malli-schema]
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]
             [datascript.core :as d]
             [clojure.string :as string]
             [nbb.core :as nbb]

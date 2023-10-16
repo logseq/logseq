@@ -1,6 +1,6 @@
 (ns frontend.test.fixtures
   (:require [datascript.core :as d]
-            [logseq.db.schema :as db-schema]
+            [logseq.db.frontend.schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.state :as state]

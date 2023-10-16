@@ -6,7 +6,7 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.date-time-util :as date-time-util]
             [logseq.graph-parser.config :as gp-config]
-            [logseq.db.schema :as db-schema]
+            [logseq.db.frontend.schema :as db-schema]
             [clojure.string :as string]
             [clojure.set :as set]))
 

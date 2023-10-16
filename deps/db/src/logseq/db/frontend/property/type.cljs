@@ -1,4 +1,4 @@
-(ns logseq.db.property.type
+(ns logseq.db.frontend.property.type
   "Provides property types including fns to validate them"
   (:require [datascript.core :as d]))
 

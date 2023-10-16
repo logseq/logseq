@@ -1,6 +1,6 @@
 (ns logseq.outliner.pipeline
   "Core fns for use with frontend.modules.outliner.pipeline"
-  (:require [logseq.db.schema :as db-schema]
+  (:require [logseq.db.frontend.schema :as db-schema]
             [datascript.core :as d]
             [cognitect.transit :as t]
             [clojure.set :as set]))

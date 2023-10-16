@@ -12,13 +12,13 @@
             [frontend.state :as state]
             [frontend.persist-db :as persist-db]
             [goog.object :as gobj]
-            [logseq.db.schema :as db-schema]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.restore :as sqlite-restore]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]
             [frontend.util :as util]
             [cljs-time.core :as t]
-            [logseq.db.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]))
 
 (defn- old-schema?
   "Requires migration if the schema version is older than db-schema/version"

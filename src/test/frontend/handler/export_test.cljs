@@ -6,7 +6,7 @@
             [frontend.handler.export.text :as export-text]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
-            [logseq.db.default :as default-db]
+            [logseq.db.frontend.default :as default-db]
             [promesa.core :as p]))
 
 (def test-files
