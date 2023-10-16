@@ -745,7 +745,8 @@
                          {:custom-content new-value
                           :tail-len tail-len})
             {:prev-block block
-             :new-content new-value}))))))
+             :new-content new-value
+             :pos pos}))))))
 
 (declare save-block!)
 
@@ -777,7 +778,7 @@
                                     block-parent
                                     {:container (util/rec-get-blocks-container block-parent)})
                                    (util/get-prev-block-non-collapsed-non-embed block-parent))
-                   {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)
+                   {:keys [prev-block new-content pos]} (move-to-prev-block repo sibling-block format id value)
                    concat-prev-block? (boolean (and prev-block new-content))
                    transact-opts (cond->
                                   {:outliner-op :delete-blocks}
@@ -801,7 +802,12 @@
                                                   :block/uuid (:block/uuid block)
                                                   :block/parent (:db/id (:block/parent prev-block))
                                                   :block/left (or (:db/id (:block/left prev-block))
-                                                                  (:db/id (:block/parent prev-block)))}))
+                                                                  (:db/id (:block/parent prev-block)))})
+                      (when pos
+                        (util/schedule
+                         (fn []
+                           (when-let [input (state/get-input)]
+                             (cursor/move-cursor-to input pos))))))
                     (do
                       (delete-block-aux! block delete-children?)
                       (save-block! repo prev-block new-content {:editor/op :delete})))
@@ -2685,7 +2691,7 @@
           :concat-data {:last-edit-block (:block/uuid edit-block)
                         :end? true}}
          (delete-block-aux! next-block false)
-         (save-block! repo edit-block' new-content {:editor/op :delete}))
+          (save-block! repo edit-block' new-content {:editor/op :delete}))
         (let [block (if next-block-has-refs? next-block edit-block)]
           (edit-block! block current-pos nil))))))
 
