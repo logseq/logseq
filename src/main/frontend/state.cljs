@@ -1472,8 +1472,12 @@ Similar to re-frame subscriptions"
    (set-modal! modal-panel-content
                {:fullscreen? false
                 :close-btn?  true}))
-  ([modal-panel-content {:keys [id label payload fullscreen? close-btn? close-backdrop? center?]}]
-   (let [opened? (modal-opened?)]
+  ([modal-panel-content {:keys [id label payload fullscreen? close-btn? close-backdrop? center?
+                                container-overflow-visible? style]}]
+   (let [opened? (modal-opened?)
+         style (if container-overflow-visible?
+                 (merge style {:overflow "visible"})
+                 style)]
      (when opened?
        (close-modal!))
      (when (seq (get-sub-modals))
@@ -1490,7 +1494,8 @@ Similar to re-frame subscriptions"
               :modal/payload payload
               :modal/fullscreen? fullscreen?
               :modal/close-btn? close-btn?
-              :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true))))
+              :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)
+              :modal/style style)))
    nil))
 
 (defn close-dropdowns!
