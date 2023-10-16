@@ -116,6 +116,7 @@ test('template', async ({ page, block }) => {
   await block.mustFill('template test\ntemplate:: ')
   await page.keyboard.type(randomTemplate, {delay: 100})
   await page.keyboard.press('Enter')
+  await page.keyboard.press('Escape')
   await block.clickNext()
 
   expect(await block.indent()).toBe(true)
