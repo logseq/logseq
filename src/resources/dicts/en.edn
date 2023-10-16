@@ -298,6 +298,7 @@
  :settings-page/auto-updater "Auto updater"
  :settings-page/disable-sentry "Send usage data and diagnostics to Logseq"
  :settings-page/disable-sentry-desc "Logseq will never collect your local graph database or sell your data."
+ :settings-page/pen-mode-default "Enable pen mode by default"
  :settings-page/preferred-outdenting "Logical outdenting"
  :settings-page/preferred-outdenting-tip "The left side shows outdenting with the default setting, and the right shows outdenting with logical outdenting enabled "
  :settings-page/preferred-outdenting-tip-more "→ Learn more"

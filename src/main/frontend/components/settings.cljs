@@ -601,6 +601,13 @@
    {:left-label (t :settings-page/network-proxy)
     :action (user-proxy-settings agent-opts)}))
 
+(defn pen-mode-default-row [t pen-mode-default?]
+  (toggle "pen_mode_default"
+          (t :settings-page/pen-mode-default)
+          pen-mode-default?
+          #(let [value (not pen-mode-default?)]
+             (config-handler/set-config! :feature/pen-mode-default? value))))
+
 (rum/defcs auto-chmod-row < rum/reactive
   [state t]
   (let [enabled? (if (= nil (state/sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))
@@ -691,10 +698,10 @@
 
 (rum/defcs settings-input < rum/reactive
   [_state current-repo]
-  (let []
+  (let [pen-mode-default? (state/pen-mode-default?)]
 
-    [:div.panel-wrap.is-editor
-     ]))
+    [:div.panel-wrap.is-input
+      (pen-mode-default-row t pen-mode-default?)]))
 
 (rum/defc settings-git
   []

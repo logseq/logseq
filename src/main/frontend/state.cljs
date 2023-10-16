@@ -2219,3 +2219,7 @@ Similar to re-frame subscriptions"
   [page-name]
   (when-not (string/blank? page-name)
     (sub [:db/properties-changed-pages page-name])))
+
+(defn pen-mode-default?
+  []
+  (not (false? (:feature/pen-mode-default? (sub-config)))))
