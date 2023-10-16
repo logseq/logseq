@@ -989,13 +989,6 @@
       (p/then #(bean/->js %))))
 
 ;; helpers
-(def ^:export query_element_by_id sdk-ui/query_element_by_id)
-
-(defn ^:export query_element_rect
-  [selector]
-  (when-let [^js el (js/document.querySelector selector)]
-    (bean/->js (.toJSON (.getBoundingClientRect el)))))
-
 (defn ^:export set_focused_settings
   [pid]
   (when-let [plugin (state/get-plugin-by-id pid)]

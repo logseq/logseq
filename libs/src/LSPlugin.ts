@@ -472,25 +472,6 @@ export interface IAppProxy {
   removeTemplate: (name: string) => Promise<any>
   insertTemplate: (target: BlockUUID, name: string) => Promise<any>
 
-  // ui
-  queryElementById: (id: string) => Promise<string | boolean>
-
-  /**
-   * @added 0.0.5
-   * @param selector
-   */
-  queryElementRect: (selector: string) => Promise<DOMRectReadOnly | null>
-
-  /**
-   * @deprecated Use `logseq.UI.showMsg` instead
-   * @param content
-   * @param status
-   */
-  showMsg: (
-    content: string,
-    status?: 'success' | 'warning' | 'error' | string
-  ) => void
-
   setZoomFactor: (factor: number) => void
   setFullScreen: (flag: boolean | 'toggle') => void
   setLeftSidebarVisible: (flag: boolean | 'toggle') => void
@@ -894,21 +875,14 @@ export type UIMsgOptions = {
 export type UIMsgKey = UIMsgOptions['key']
 
 export interface IUIProxy {
-  /**
-   * @added 0.0.2
-   *
-   * @param content
-   * @param status
-   * @param opts
-   */
   showMsg: (
     content: string,
     status?: 'success' | 'warning' | 'error' | string,
     opts?: Partial<UIMsgOptions>
   ) => Promise<UIMsgKey>
-
   closeMsg: (key: UIMsgKey) => void
-
+  queryElementRect: (selector: string) => Promise<DOMRectReadOnly | null>
+  queryElementById: (id: string) => Promise<string | boolean>
   checkSlotValid: (slot: UISlotIdentity['slot']) => Promise<boolean>
 }
 
