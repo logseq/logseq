@@ -689,6 +689,13 @@
      (enable-all-pages-public-row t enable-all-pages-public?)
      (auto-push-row t current-repo enable-git-auto-push?)]))
 
+(rum/defcs settings-input < rum/reactive
+  [_state current-repo]
+  (let []
+
+    [:div.panel-wrap.is-editor
+     ]))
+
 (rum/defc settings-git
   []
   [:div.panel-wrap
@@ -1098,6 +1105,7 @@
                [:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
                [:keymap "keymap" (t :settings-page/tab-keymap) (ui/icon "keyboard")]
+               [:input "input" (t :settings-page/tab-input) (ui/icon "ballpen")]
 
                (when (util/electron?)
                  [:version-control "git" (t :settings-page/tab-version-control) (ui/icon "history")])
@@ -1143,6 +1151,9 @@
 
          :keymap
          (shortcut2/shortcut-keymap-x)
+
+         :input
+         (settings-input current-repo)
 
          :version-control
          (settings-git)
