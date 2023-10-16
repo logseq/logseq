@@ -594,8 +594,11 @@
         block (if (seq timestamps)
                 (merge block (timestamps->scheduled-and-deadline timestamps))
                 block)
-        block (assoc block :body body)
-        block (with-page-block-refs block with-id? db date-formatter)
+        block (-> block
+                  (assoc :body body)
+                  (with-page-block-refs with-id? db date-formatter)
+                  (update :tags (fn [tags] (map #(assoc % :block/format format) tags)))
+                  (update :refs (fn [refs] (map #(if (map? %) (assoc % :block/format format) %) refs))))
         block (update block :refs concat (:block-refs properties))
         {:keys [created-at updated-at]} (:properties properties)
         block (cond-> block

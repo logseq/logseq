@@ -89,7 +89,8 @@
   [block]
   (block-with-timestamps
    (merge {:block/type "property"
-           :block/journal? false}
+           :block/journal? false
+           :block/format :markdown}
           block)))
 
 (defn build-db-initial-data

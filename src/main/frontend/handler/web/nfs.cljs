@@ -295,7 +295,8 @@
       (search/reset-indice! repo)
       (db/remove-conn! repo)
       (db/clear-query-state!)
-      (db/start-db-conn! repo {:listen-handler db-listener/listen-and-persist!})
+      (db/start-db-conn! repo {:listen-handler db-listener/listen-and-persist!
+                               :db-graph? (config/db-based-graph? repo)})
       (reload-dir! repo {:re-index? true
                          :ok-handler ok-handler}))))
 

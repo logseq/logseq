@@ -179,7 +179,7 @@
         page-entity (db/entity [:block/name page-name])
         page (or page-entity
                  (-> (block/page-name->map page-name true)
-                     (assoc :block/type #{"hidden"})))
+                     (assoc :block/type #{"hidden"} :block/format :markdown)))
         page-tx (when-not page-entity page)
         page-id [:block/uuid (:block/uuid page)]
         parent-id (db/new-block-id)
@@ -213,7 +213,7 @@
         page-entity (db/entity [:block/name page-name])
         page (or page-entity
                  (-> (block/page-name->map page-name true)
-                     (assoc :block/type #{"hidden"})))
+                     (assoc :block/type #{"hidden"} :block/format :markdown)))
         page-tx (when-not page-entity page)
         page-id [:block/uuid (:block/uuid page)]
         block-id (db/new-block-id)
