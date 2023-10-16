@@ -369,7 +369,7 @@
                   (not multiple-choices?)
                   (assoc :on-chosen on-chosen)))))
 
-(rum/defc property-block-value < rum/reactive
+(rum/defc property-normal-block-value < rum/reactive
   [value block-cp editor-box]
   (let [parent (db/entity [:block/uuid value])
         parent (db/sub-block (:db/id parent))
@@ -388,6 +388,28 @@
     (when (and entity properties-cp)
       [:div.property-block-container.w-full.property-template
        (properties-cp config entity (:editor-id config) (merge opts {:in-block-container? true}))])))
+
+(rum/defc property-block-value < rum/reactive
+  [value block property block-cp editor-box opts page-cp editor-id]
+  (let [v-block (db/entity [:block/uuid value])
+        class? (contains? (:block/type v-block) "class")]
+    (cond
+      (:block/page v-block)
+      (property-normal-block-value value block-cp editor-box)
+
+      (and class? (seq (:properties (:block/schema v-block))))
+      (let [template-instance-block (create-new-block-from-template! block property v-block)]
+        (property-template-value {:editor-id editor-id}
+                                 (:block/uuid template-instance-block)
+                                 opts))
+
+      ;; page/class/etc.
+      (:block/name v-block)
+      (page-cp {:disable-preview? true
+                :hide-close-button? true
+                :tag? class?} v-block)
+      :else
+      (js/console.error "Invalid property value: " v-block))))
 
 (rum/defc select-item
   [property type value {:keys [page-cp inline-text]}]
@@ -531,26 +553,7 @@
                                              opts)
 
                     :block
-                    (let [v-block (db/entity [:block/uuid value])
-                          class? (contains? (:block/type v-block) "class")]
-                      (cond
-                        (:block/page v-block)
-                        ;; normal block
-                        (property-block-value value block-cp editor-box)
-
-                        (and class? (seq (:properties (:block/schema v-block))))
-                        (let [template-instance-block (create-new-block-from-template! block property v-block)]
-                          (property-template-value {:editor-id editor-id}
-                                                   (:block/uuid template-instance-block)
-                                                   opts))
-
-                        ;; page/class/etc.
-                        (:block/name v-block)
-                        (page-cp {:disable-preview? true
-                                  :hide-close-button? true
-                                  :tag? class?} v-block)
-                        :else
-                        (js/console.error "Invalid property value: " v-block)))
+                    (property-block-value value block property block-cp editor-box opts page-cp editor-id)
 
                     (inline-text {} :markdown (str value)))))]))]))))
 
