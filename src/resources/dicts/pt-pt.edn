@@ -174,8 +174,6 @@
  :settings-page/enable-tooltip "Dicas de contexto"
  :settings-page/enable-journals "Páginas Diárias"
  :settings-page/enable-all-pages-public "Todas as páginas públicas ao publicar"
- :settings-page/customize-shortcuts "Atalhos de teclado"
- :settings-page/shortcut-settings "Personalizar atalhos"
  :settings-page/home-default-page "Definir a página inicial predefinida"
  :settings-page/enable-block-time "Marcas de tempo em blocos"
  :settings-page/clear-cache "Limpar cache"

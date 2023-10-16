@@ -83,8 +83,6 @@
  :settings-page/enable-tooltip "Ativar dicas de ferramentas"
  :settings-page/enable-journals "Ativar diários"
  :settings-page/enable-all-pages-public "Ativar todas as páginas públicas ao publicar"
- :settings-page/customize-shortcuts "Atalhos de teclado"
- :settings-page/shortcut-settings "Personalizar atalhos"
  :settings-page/home-default-page "Definir a página inicial padrão"
  :settings-page/enable-block-time "Ativar carimbos temporais nos blocos"
  :settings-page/clear-cache "Limpar cache"

@@ -192,6 +192,7 @@ export interface BlockEntity {
   level?: number
   meta?: { timestamps: any; properties: any; startPos: number; endPos: number }
   title?: Array<any>
+	marker?: string
 }
 
 /**
@@ -811,7 +812,7 @@ export interface IEditorProxy extends Record<string, any> {
     opts?: { replaceState: boolean }
   ) => void
 
-  openInRightSidebar: (uuid: BlockUUID) => void
+  openInRightSidebar: (id: BlockUUID | EntityID) => void
 
   /**
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-a-translator

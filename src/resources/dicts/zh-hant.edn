@@ -172,8 +172,6 @@
  :settings-page/enable-timetracking "啟用時間追蹤"
  :settings-page/enable-tooltip "啟用提示"
  :settings-page/enable-journals "啟用日記頁面"
- :settings-page/customize-shortcuts "個人化快捷鍵"
- :settings-page/shortcut-settings "設定快捷鍵"
  :settings-page/home-default-page "設定預設首頁"
  :settings-page/enable-block-time "啟用區塊時間截記"
  :settings-page/clear-cache "清除快取資料"

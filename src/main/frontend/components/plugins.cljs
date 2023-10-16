@@ -433,6 +433,8 @@
                           (assoc opts :test (util/trim-safe (util/evalue %))))
           :value       (:test opts)}]
         [:datalist#proxy-test-url-datalist
+         [:option "https://api.logseq.com/logseq/version"]
+         [:option "https://logseq-connectivity-testing-prod.s3.us-east-1.amazonaws.com/logseq-connectivity-testing"]
          [:option "https://www.google.com"]
          [:option "https://s3.amazonaws.com"]
          [:option "https://clients3.google.com/generate_204"]]]
@@ -445,9 +447,10 @@
                                  (-> (p/let [result (ipc/ipc :testProxyUrl val opts)]
                                        (js->clj result :keywordize-keys true))
                                      (p/then (fn [{:keys [code response-ms]}]
+                                               (notification/clear! :proxy-net-check)
                                                (notification/show! (str "Success! Status " code " in " response-ms "ms.") :success)))
                                      (p/catch (fn [e]
-                                                (notification/show! (str e) :error)))
+                                                (notification/show! (str e) :error false :proxy-net-check)))
                                      (p/finally (fn [] (set-testing?! false)))))))]
 
       [:p.pt-2

@@ -104,8 +104,6 @@
  :settings-page/enable-tooltip "툴팁 활성화"
  :settings-page/enable-journals "일지 활성화"
  :settings-page/enable-all-pages-public "출판할 때 모든 페이지 공개로 설정"
- :settings-page/customize-shortcuts "키보드 단축키"
- :settings-page/shortcut-settings "단축키 설정"
  :settings-page/home-default-page "기본 홈 페이지 설정"
  :settings-page/enable-block-time "블록 타임스탬프"
  :settings-page/clear-cache "캐시 지우기"

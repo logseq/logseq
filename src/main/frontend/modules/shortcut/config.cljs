@@ -16,6 +16,7 @@
             [frontend.handler.export :as export-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
+            [frontend.handler.window :as window-handler]
             [frontend.modules.editor.undo-redo :as undo-redo]
             [frontend.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
@@ -174,7 +175,7 @@
    :cards/recall                            {:binding "t"
                                              :fn      srs/recall}
 
-   :editor/escape-editing                   {:binding false
+   :editor/escape-editing                   {:binding []
                                              :fn      (fn [_ _]
                                                         (editor-handler/escape-editing))}
 
@@ -331,7 +332,7 @@
    :editor/zoom-out                         {:binding (if mac? "mod+," "alt+left")
                                              :fn      editor-handler/zoom-out!}
 
-   :editor/toggle-undo-redo-mode            {:binding false
+   :editor/toggle-undo-redo-mode            {:binding []
                                              :fn      undo-redo/toggle-undo-redo-mode!}
 
    :editor/toggle-number-list               {:binding "t n"
@@ -400,7 +401,7 @@
 
    :graph/export-as-html                    {:fn      #(export-handler/download-repo-as-html!
                                                          (state/get-current-repo))
-                                             :binding false}
+                                             :binding []}
 
    :graph/open                              {:fn      #(do
                                                          (editor-handler/escape-editing)
@@ -410,18 +411,18 @@
    :graph/remove                            {:fn      #(do
                                                          (editor-handler/escape-editing)
                                                          (state/set-state! :ui/open-select :graph-remove))
-                                             :binding false}
+                                             :binding []}
 
    :graph/add                               {:fn      (fn [] (route-handler/redirect! {:to :repo-add}))
-                                             :binding false}
+                                             :binding []}
 
    :graph/save                              {:fn      #(state/pub-event! [:graph/save])
-                                             :binding false}
+                                             :binding []}
 
    :graph/re-index                          {:fn      (fn []
                                                         (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
                                                           (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
-                                             :binding false}
+                                             :binding []}
 
    :command/run                             {:binding  "mod+shift+1"
                                              :inactive (not (util/electron?))
@@ -498,9 +499,13 @@
                                              :inactive (not (util/electron?))
                                              :fn       page-handler/copy-current-file}
 
-   :editor/copy-page-url                    {:binding  false
+   :editor/copy-page-url                    {:binding  []
                                              :inactive (not (util/electron?))
                                              :fn       #(page-handler/copy-page-url)}
+
+   :window/close                            {:binding  "mod+w"
+                                             :inactive (not (util/electron?))
+                                             :fn       window-handler/close!}
 
    :ui/toggle-wide-mode                     {:binding "t w"
                                              :fn      ui-handler/toggle-wide-mode!}
@@ -516,7 +521,7 @@
                                              :inactive (not (config/plugin-config-enabled?))
                                              :fn       plugin-config-handler/open-replace-plugins-modal}
 
-   :ui/clear-all-notifications              {:binding false
+   :ui/clear-all-notifications              {:binding []
                                              :fn      :frontend.handler.notification/clear-all!}
 
    :editor/toggle-open-blocks               {:binding "t o"
@@ -535,19 +540,19 @@
                                              :inactive (not (util/electron?))
                                              :fn       commit/show-commit-modal!}
 
-   :dev/show-block-data                     {:binding  false
+   :dev/show-block-data                     {:binding  []
                                              :inactive (not (state/developer-mode?))
                                              :fn       :frontend.handler.common.developer/show-block-data}
 
-   :dev/show-block-ast                      {:binding  false
+   :dev/show-block-ast                      {:binding  []
                                              :inactive (not (state/developer-mode?))
                                              :fn       :frontend.handler.common.developer/show-block-ast}
 
-   :dev/show-page-data                      {:binding  false
+   :dev/show-page-data                      {:binding  []
                                              :inactive (not (state/developer-mode?))
                                              :fn       :frontend.handler.common.developer/show-page-data}
 
-   :dev/show-page-ast                       {:binding  false
+   :dev/show-page-ast                       {:binding  []
                                              :inactive (not (state/developer-mode?))
                                              :fn       :frontend.handler.common.developer/show-page-ast}})
 
@@ -693,7 +698,8 @@
            :search/re-index
            :sidebar/clear
            :sidebar/open-today-page
-           :ui/toggle-brackets])
+           :ui/toggle-brackets
+           :window/close])
         (with-meta {:before m/prevent-default-behavior}))
 
     :shortcut.handler/global-non-editing-only
@@ -833,90 +839,91 @@
      :editor/select-parent
      :editor/select-block-up
      :editor/select-block-down
-     :editor/delete-selection]}))
+     :editor/delete-selection]
 
-:shortcut.category/toggle
-[:ui/toggle-help
- :editor/toggle-open-blocks
- :editor/toggle-undo-redo-mode
- :editor/toggle-number-list
- :ui/toggle-wide-mode
- :ui/toggle-cards
- :ui/toggle-document-mode
- :ui/toggle-brackets
- :ui/toggle-theme
- :ui/toggle-left-sidebar
- :ui/toggle-right-sidebar
- :ui/toggle-settings
- :ui/toggle-contents
- :ui/cycle-color-off
- :ui/cycle-color] 
+    :shortcut.category/toggle
+    [:ui/toggle-help
+     :editor/toggle-open-blocks
+     :editor/toggle-undo-redo-mode
+     :editor/toggle-number-list
+     :ui/toggle-wide-mode
+     :ui/toggle-cards
+     :ui/toggle-document-mode
+     :ui/toggle-brackets
+     :ui/toggle-theme
+     :ui/toggle-left-sidebar
+     :ui/toggle-right-sidebar
+     :ui/toggle-settings
+     :ui/toggle-contents
+     :ui/cycle-color-off
+     :ui/cycle-color] 
 
-:shortcut.category/whiteboard
-[:editor/new-whiteboard
- :whiteboard/select
- :whiteboard/pan
- :whiteboard/portal
- :whiteboard/pencil
- :whiteboard/highlighter
- :whiteboard/eraser
- :whiteboard/connector
- :whiteboard/text
- :whiteboard/rectangle
- :whiteboard/ellipse
- :whiteboard/reset-zoom
- :whiteboard/zoom-to-fit
- :whiteboard/zoom-to-selection
- :whiteboard/zoom-out
- :whiteboard/zoom-in
- :whiteboard/send-backward
- :whiteboard/send-to-back
- :whiteboard/bring-forward
- :whiteboard/bring-to-front
- :whiteboard/lock
- :whiteboard/unlock
- :whiteboard/group
- :whiteboard/ungroup
- :whiteboard/toggle-grid]
+    :shortcut.category/whiteboard
+    [:editor/new-whiteboard
+     :whiteboard/select
+     :whiteboard/pan
+     :whiteboard/portal
+     :whiteboard/pencil
+     :whiteboard/highlighter
+     :whiteboard/eraser
+     :whiteboard/connector
+     :whiteboard/text
+     :whiteboard/rectangle
+     :whiteboard/ellipse
+     :whiteboard/reset-zoom
+     :whiteboard/zoom-to-fit
+     :whiteboard/zoom-to-selection
+     :whiteboard/zoom-out
+     :whiteboard/zoom-in
+     :whiteboard/send-backward
+     :whiteboard/send-to-back
+     :whiteboard/bring-forward
+     :whiteboard/bring-to-front
+     :whiteboard/lock
+     :whiteboard/unlock
+     :whiteboard/group
+     :whiteboard/ungroup
+     :whiteboard/toggle-grid
 
-:shortcut.category/others
-[:pdf/previous-page
- :pdf/next-page
- :pdf/close
- :pdf/find
- :command/toggle-favorite
- :command/run
- :command-palette/toggle
- :graph/export-as-html
- :graph/open
- :graph/remove
- :graph/add
- :graph/save
- :graph/re-index
- :sidebar/close-top
- :sidebar/clear
- :sidebar/open-today-page
- :search/re-index
- :editor/insert-youtube-timestamp
- :editor/open-file-in-default-app
- :editor/open-file-in-directory
- :editor/copy-page-url
- :auto-complete/prev
- :auto-complete/next
- :auto-complete/complete
- :auto-complete/shift-complete
- :auto-complete/open-link
- :date-picker/prev-day
- :date-picker/next-day
- :date-picker/prev-week
- :date-picker/next-week
- :date-picker/complete
- :git/commit
- :dev/show-block-data
- :dev/show-block-ast
- :dev/show-page-data
- :dev/show-page-ast
- :ui/clear-all-notifications]
+     :shortcut.category/others
+     [:pdf/previous-page
+      :pdf/next-page
+      :pdf/close
+      :pdf/find
+      :command/toggle-favorite
+      :command/run
+      :command-palette/toggle
+      :graph/export-as-html
+      :graph/open
+      :graph/remove
+      :graph/add
+      :graph/save
+      :graph/re-index
+      :sidebar/close-top
+      :sidebar/clear
+      :sidebar/open-today-page
+      :search/re-index
+      :editor/insert-youtube-timestamp
+      :editor/open-file-in-default-app
+      :editor/open-file-in-directory
+      :editor/copy-page-url
+      :window/close
+      :auto-complete/prev
+      :auto-complete/next
+      :auto-complete/complete
+      :auto-complete/shift-complete
+      :auto-complete/open-link
+      :date-picker/prev-day
+      :date-picker/next-day
+      :date-picker/prev-week
+      :date-picker/next-week
+      :date-picker/complete
+      :git/commit
+      :dev/show-block-data
+      :dev/show-block-ast
+      :dev/show-page-data
+      :dev/show-page-ast
+      :ui/clear-all-notifications]]}))
 
 :shortcut.category/plugins
 []

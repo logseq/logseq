@@ -205,7 +205,7 @@
   ; (js/console.log "db-entity/string" (db/entity [:block/uuid (str block-id)]))
   ; (js/console.log "db-entity/uuid" (db/entity [:block/uuid (uuid block-id)]))
   (when block-id
-    (when-let [block (db/entity [:block/uuid block-id])]
+    (when-let [block (db/entity (if (number? block-id) block-id [:block/uuid block-id]))]
       (let [page? (nil? (:block/page block))]
         (state/sidebar-add-block!
          (state/get-current-repo)
@@ -2564,7 +2564,7 @@
             :down util/get-next-block-non-collapsed)
         sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))
         {:block/keys [uuid content format]} (state/get-edit-block)]
-    (when sibling-block
+    (if sibling-block
       (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
         (let [value (state/get-edit-content)]
           (when (not= (clean-content! format content)
@@ -2576,7 +2576,10 @@
               block (db/pull repo '[*] [:block/uuid new-uuid])]
           (edit-block! block
                        [direction line-pos]
-                       new-id))))))
+                       new-id)))
+      (case direction
+        :up (cursor/move-cursor-to input 0)
+        :down (cursor/move-cursor-to-end input)))))
 
 (defn keydown-up-down-handler
   [direction]
