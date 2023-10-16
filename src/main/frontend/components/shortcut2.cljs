@@ -284,7 +284,8 @@
 
       [:div.shortcuts-keys-wrap
        [:span.keyboard-shortcut.flex.flex-wrap.mr-2.space-x-2
-        (for [x current-binding]
+        (for [x current-binding
+              :when (string? x)]
           [:code.tracking-wider
            (-> x (string/trim) (string/lower-case) (shortcut-utils/decorate-binding))
            [:a.x {:on-click (fn [] (set-current-binding!
@@ -428,7 +429,9 @@
                           disabled? (or (false? user-binding)
                                         (false? (first binding)))
                           unset? (and (not disabled?)
-                                      (= user-binding []))]]
+                                      (or (= user-binding [])
+                                          (and (= binding [])
+                                               (nil? user-binding))))]]
 
                 (when (or (nil? (seq filters))
                           (when (contains? filters :Custom) custom?)
@@ -453,11 +456,11 @@
 
                      [:a.action-wrap
                       {:class    (util/classnames [{:disabled disabled?}])
-                       :on-click (when-not disabled?
+                       :on-click (when (and id (not disabled?))
                                    #(open-customize-shortcut-dialog! id))}
 
                       (cond
-                        (or user-binding (false? user-binding))
+                        (or unset? user-binding (false? user-binding))
                         [:code.dark:bg-green-800.bg-green-300
                          (if unset?
                            (t :keymap/unset)
@@ -473,4 +476,5 @@
                         (for [x binding]
                           [:code.tracking-wide
                            {:key (str x)}
-                           (dh/binding-for-display id x)]))]]))))])])]]))
+                           (dh/binding-for-display id x)]))
+                      ]]))))])])]]))
