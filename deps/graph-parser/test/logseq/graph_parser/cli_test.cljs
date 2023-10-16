@@ -167,13 +167,16 @@
                        datoms->entity-maps
                        (map #(assoc (or (not-empty (select-keys % [:block/content :block/name]))
                                         %)
-                                    :attributes (disj (set (keys %)) :block/file)))
+                                    :attributes (disj (set (keys %)) :block/file :block/format)))
                        set)
         db-ents (->> (d/datoms graph-db :eavt)
                      datoms->entity-maps
                      (map #(assoc (or (not-empty (select-keys % [:block/content :block/name]))
                                       %)
-                                  :attributes (cond-> (set (keys %))
+                                  :attributes (cond-> (disj (set (keys %))
+                                                            ;; Don't compare :block/format as db graphs
+                                                            ;; are purposely different
+                                                            :block/format)
                                                 (seq (:block/content %))
                                                 (set/difference #{:block/created-at :block/updated-at}))))
                      set)]
