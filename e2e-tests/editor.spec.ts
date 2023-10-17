@@ -240,6 +240,8 @@ test('copy and paste block after editing new block #5962', async ({ page, block 
   await page.keyboard.press('Enter')
   await block.waitForBlocks(2)
 
+  await page.waitForTimeout(100)
+
   await block.mustType('Typed block')
 
   await page.keyboard.press(modKey + '+v')

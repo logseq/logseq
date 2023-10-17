@@ -33,7 +33,7 @@ test('remove heading', async ({ page }) => {
 
 test('set heading to 2', async ({ page }) => {
   await page.locator('span.bullet-container >> nth=0').click({button: "right"})
-
+  await page.waitForTimeout(500)
   await page.locator('#custom-context-menu .to-heading-button[title="Heading 2"]').click()
 
   expect(await page.locator('.ls-block .block-content >> nth=0').innerHTML()).toContain('<h2>foo</h2>')
