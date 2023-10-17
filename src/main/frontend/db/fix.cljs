@@ -20,8 +20,15 @@
             sorted (db-model/sort-by-left blocks parent)
             broken-chain? (not= (count sorted) (count blocks))]
         (when broken-chain?
-          (let [error-data {:parent-id parent-id}]
+          (let [error-data {:parent {:db/id parent-id
+                                     :block/uuid (:block/uuid parent)
+                                     :block/content (:block/content parent)}
+                            :children (mapv (fn [b]
+                                              {:db/id (:db/id b)
+                                               :block/content (:block/content b)
+                                               :block/left (:db/id (:block/left b))}) blocks)}]
             (prn :debug "Broken chain:")
+            (util/pprint error-data)
             (notification/show!
              [:div
               (str "Broken chain detected:\n" error-data)]
