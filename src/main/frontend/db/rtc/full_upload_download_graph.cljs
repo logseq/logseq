@@ -12,9 +12,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [frontend.persist-db :as persist-db]
             [frontend.db.rtc.op :as op]
-            [logseq.outliner.pipeline :as outliner-pipeline]
-            [cljs.reader :as reader]
-            [frontend.db.rtc.const :as rtc-const]))
+            [logseq.outliner.pipeline :as outliner-pipeline]))
 
 (def transit-r (transit/reader :json))
 
@@ -75,8 +73,7 @@
            block-tags (map :db/id (:block/tags block))
            block-type (keep (comp block-type-ident->str :db/ident) (:block/type block))
            block-schema (some->> (:block/schema block)
-                                 reader/read-string
-                                 rtc-const/block-schema-decoder)
+                                 (transit/read transit-r))
            block-properties (some->> (:block/properties block)
                                      (transit/read transit-r))]
        ;; TODO: block/properties
@@ -142,8 +139,7 @@
           repo (str "logseq_db_rtc-" repo)]
       (if (not= 200 status)
         (ex-info "<download-graph failed" r)
-        (let [reader (transit/reader :json)
-              all-blocks (transit/read reader body)]
+        (let [all-blocks (transit/read transit-r body)]
           (<! (<transact-remote-all-blocks-to-sqlite all-blocks repo))
           (<! (p->c (op/<update-graph-uuid! repo graph-uuid))))))))
 

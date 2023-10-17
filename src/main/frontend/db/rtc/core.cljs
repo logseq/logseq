@@ -185,7 +185,7 @@
                                                                                (db/pull-many repo [:db/id])
                                                                                (keep :db/id)))
               (contains? key-set :type)           (assoc :block/type (:type op-value))
-              (contains? key-set :schema)         (assoc :block/schema (:schema op-value))
+              (contains? key-set :schema)         (assoc :block/schema (transit/read transit-r (:schema op-value)))
               (contains? key-set :tags)           (assoc :block/tags (some->> (seq (:tags op-value))
                                                                               (map (partial vector :block/uuid))
                                                                               (db/pull-many repo [:db/id])
@@ -450,7 +450,7 @@
                                 (cond-> {:block-uuid block-uuid}
                                   (:block/updated-at b)       (assoc :updated-at (:block/updated-at b))
                                   (:block/created-at b)       (assoc :created-at (:block/created-at b))
-                                  (contains? key-set :schema) (assoc :schema (:block/schema b))
+                                  (contains? key-set :schema) (assoc :schema (transit/write transit-w (:block/schema b)))
                                   attr-type-map               (assoc :type attr-type-map)
                                   attr-alias-map              (assoc :alias attr-alias-map)
                                   attr-tags-map               (assoc :tags attr-tags-map)
@@ -492,9 +492,11 @@
               nil)
           ;; else
           (throw (ex-info "Unavailable" {:remote-ex remote-ex})))
-        (do (<! (p->c (op/<clean-ops repo op-keys)))
-            (<! (<apply-remote-data repo (rtc-const/data-from-ws-decoder r)))
-            (prn :<client-op-update-handler r))))))
+        (do (assert (pos? (:t r)) r)
+            (<! (p->c (op/<clean-ops repo op-keys)))
+            (<! (p->c (op/<update-local-tx! repo (:t r))))
+            ;; (<! (<apply-remote-data repo (rtc-const/data-from-ws-decoder r)))
+            (prn :<client-op-update-handler :t (:t r)))))))
 
 (defn- make-push-client-ops-timeout-ch
   [repo never-timeout?]

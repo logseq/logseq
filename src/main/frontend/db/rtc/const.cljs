@@ -5,21 +5,12 @@
             [malli.transform :as mt]))
 
 
-(def block-schema-schema
-  [:map {:closed false}
-   [:type :keyword]
-   [:cardinality {:optional true} [:enum :one :many]]
-   [:hide? {:optional true} :boolean]])
-
-(def block-schema-decoder (m/decoder block-schema-schema mt/string-transformer))
-
-
 (def general-attrs-schema-coll
   [[:updated-at {:optional true} :int]
    [:created-at {:optional true} :int]
    [:alias {:optional true} [:maybe [:sequential :uuid]]]
    [:type {:optional true} [:maybe [:sequential :string]]]
-   [:schema {:optional true} [:maybe block-schema-schema]]
+   [:schema {:optional true} [:maybe :string]]
    [:tags {:optional true} [:maybe [:sequential :uuid]]]
    [:properties {:optional true} [:maybe :string ; transit-json-string
                                   ]]])
@@ -104,9 +95,10 @@
       [:type {:optional true} [:map
                                [:add {:optional true} [:maybe [:set block-type-schema]]]
                                [:retract {:optional true} [:maybe [:set block-type-schema]]]]]
-      [:schema {:optional true} [:map-of :keyword :any]]
+      [:schema {:optional true} :string ;transit-string
+       ]
       [:properties {:optional true} [:map
-                                     [:add {:optional true} [:sequential [:cat :uuid :string ;; value is transit-json-string
+                                     [:add {:optional true} [:sequential [:cat :uuid :string ;; transit-string
                                                                           ]]]
                                      [:retract {:optional true} [:set :uuid]]]]]]]
    [:update-page
