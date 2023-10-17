@@ -45,7 +45,8 @@
             [promesa.core :as p]
             [frontend.mobile.core :as mobile]
             [frontend.db.listener :as db-listener]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.handler.test :as test]))
 
 (defn- set-global-error-notification!
   []
@@ -208,6 +209,7 @@
 
 (defn start!
   [render]
+  (test/setup-test!)
   (get-system-info)
   (set-global-error-notification!)
 
