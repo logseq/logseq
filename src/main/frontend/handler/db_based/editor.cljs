@@ -100,7 +100,8 @@
 
     (when file-valid?
       (db/transact! [{:file/path path
-                      :file/content content}])
+                      :file/content content
+                      :file/last-modified-at (js/Date.)}])
       ;; Post save
       (cond (= path "logseq/config.edn")
             (p/let [_ (repo-config-handler/restore-repo-config! (state/get-current-repo) content)]

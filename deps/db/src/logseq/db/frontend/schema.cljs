@@ -117,13 +117,12 @@
    ;; :file/created-at {}
    ;; :file/last-modified-at {}
    ;; :file/size {}
-   ;; :file/handle {}
    })
 
 (def schema-for-db-based-graph
   (merge
-   (dissoc schema :block/properties-text-values :block/pre-block? :recent/pages)
-   {}))
+   (dissoc schema :block/properties-text-values :block/pre-block? :recent/pages :file/handle)
+   {:file/last-modified-at {}}))
 
 ;; TODO: some attributes shouldn't be retracted for the db version
 (def retract-attributes

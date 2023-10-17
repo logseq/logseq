@@ -97,13 +97,16 @@
   [config-content]
   (let [initial-files [{:block/uuid (d/squuid)
                         :file/path (str "logseq/" "config.edn")
-                        :file/content config-content}
+                        :file/content config-content
+                        :file/last-modified-at (js/Date.)}
                        {:block/uuid (d/squuid)
                         :file/path (str "logseq/" "custom.css")
-                        :file/content ""}
+                        :file/content ""
+                        :file/last-modified-at (js/Date.)}
                        {:block/uuid (d/squuid)
                         :file/path (str "logseq/" "custom.js")
-                        :file/content ""}]
+                        :file/content ""
+                        :file/last-modified-at (js/Date.)}]
         default-properties (map
                             (fn [[k-keyword {:keys [schema original-name]}]]
                               (let [k-name (name k-keyword)]
