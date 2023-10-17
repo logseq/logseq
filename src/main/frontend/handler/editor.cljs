@@ -698,13 +698,15 @@
     (save-block-if-changed! block new-content)))
 
 (defn delete-block-aux!
-  [{:block/keys [uuid repo] :as _block} children?]
+  [{:block/keys [uuid repo] :as _block} children? & {:keys [_children-checks?] :as delete-opts}]
   (let [repo (or repo (state/get-current-repo))
         block (db/pull repo '[*] [:block/uuid uuid])]
     (when block
       (outliner-tx/transact!
        {:outliner-op :delete-blocks}
-       (outliner-core/delete-blocks! [block] {:children? children?})))))
+        (outliner-core/delete-blocks! [block] (merge
+                                               delete-opts
+                                               {:children? children?}))))))
 
 (defn- move-to-prev-block
   [repo sibling-block format _id value]
@@ -756,65 +758,65 @@
 
 (declare expand-block!)
 (defn delete-block!
-  ([repo]
-   (delete-block! repo true))
-  ([repo delete-children?]
-   (state/set-editor-op! :delete)
-   (let [{:keys [id block-id block-parent-id value format config]} (get-state)]
-     (when block-id
-       (let [block-e (db/entity [:block/uuid block-id])
-             has-children? (seq (:block/_parent block-e))
-             block (db/pull (:db/id block-e))
-             left (tree/-get-left (outliner-core/block block))
-             left-has-children? (and left
-                                     (when-let [block-id (:block/uuid (:data left))]
-                                       (let [block (db/entity [:block/uuid block-id])]
-                                         (seq (:block/_parent block)))))]
-         (when-not (and has-children? left-has-children?)
-           (when block-parent-id
-             (let [block-parent (gdom/getElement block-parent-id)
-                   sibling-block (if (:embed? config)
-                                   (util/get-prev-block-non-collapsed
-                                    block-parent
-                                    {:container (util/rec-get-blocks-container block-parent)})
-                                   (util/get-prev-block-non-collapsed-non-embed block-parent))
-                   {:keys [prev-block new-content pos]} (move-to-prev-block repo sibling-block format id value)
-                   concat-prev-block? (boolean (and prev-block new-content))
-                   transact-opts (cond->
-                                  {:outliner-op :delete-blocks}
-                                   concat-prev-block?
-                                   (assoc :concat-data
-                                          {:last-edit-block (:block/uuid block)}))]
-               (outliner-tx/transact!
-                transact-opts
-                (cond
-                  (and prev-block (:block/name prev-block)
-                       (not= (:db/id prev-block) (:db/id (:block/parent block)))
-                       (db-model/hidden-page? (:block/page block))) ; embed page
-                  nil
+  [repo delete-children?]
+  (state/set-editor-op! :delete)
+  (let [{:keys [id block-id block-parent-id value format config]} (get-state)]
+    (when block-id
+      (let [block-e (db/entity [:block/uuid block-id])
+            has-children? (seq (:block/_parent block-e))
+            block (db/pull (:db/id block-e))
+            left (tree/-get-left (outliner-core/block block))
+            left-has-children? (and left
+                                    (when-let [block-id (:block/uuid (:data left))]
+                                      (let [block (db/entity [:block/uuid block-id])]
+                                        (seq (:block/_parent block)))))
+            delete-block-fn (fn [block]
+                              (delete-block-aux! block delete-children? {:children-check? false}))]
+        (when-not (and has-children? left-has-children?)
+          (when block-parent-id
+            (let [block-parent (gdom/getElement block-parent-id)
+                  sibling-block (if (:embed? config)
+                                  (util/get-prev-block-non-collapsed
+                                   block-parent
+                                   {:container (util/rec-get-blocks-container block-parent)})
+                                  (util/get-prev-block-non-collapsed-non-embed block-parent))
+                  {:keys [prev-block new-content pos]} (move-to-prev-block repo sibling-block format id value)
+                  concat-prev-block? (boolean (and prev-block new-content))
+                  transact-opts (cond->
+                                 {:outliner-op :delete-blocks}
+                                  concat-prev-block?
+                                  (assoc :concat-data
+                                         {:last-edit-block (:block/uuid block)}))]
+              (outliner-tx/transact!
+               transact-opts
+               (cond
+                 (and prev-block (:block/name prev-block)
+                      (not= (:db/id prev-block) (:db/id (:block/parent block)))
+                      (db-model/hidden-page? (:block/page block))) ; embed page
+                 nil
 
-                  concat-prev-block?
-                  (if (seq (:block/_refs (db/entity (:db/id block))))
-                    (do
-                      (delete-block-aux! prev-block delete-children?)
-                      (save-block! repo block new-content {:editor/op :delete})
-                      (outliner-core/save-block! {:db/id (:db/id block)
-                                                  :block/uuid (:block/uuid block)
-                                                  :block/parent (:db/id (:block/parent prev-block))
-                                                  :block/left (or (:db/id (:block/left prev-block))
-                                                                  (:db/id (:block/parent prev-block)))})
-                      (when pos
-                        (util/schedule
-                         (fn []
-                           (when-let [input (state/get-input)]
-                             (cursor/move-cursor-to input pos))))))
-                    (do
-                      (delete-block-aux! block delete-children?)
-                      (save-block! repo prev-block new-content {:editor/op :delete})))
+                 concat-prev-block?
+                 (if (seq (:block/_refs (db/entity (:db/id block))))
+                   (do
+                     (delete-block-fn prev-block)
+                     (save-block! repo block new-content {:editor/op :delete})
+                     (outliner-core/save-block! {:db/id (:db/id block)
+                                                 :block/uuid (:block/uuid block)
+                                                 :block/parent (:db/id (:block/parent prev-block))
+                                                 :block/left (or (:db/id (:block/left prev-block))
+                                                                 (:db/id (:block/parent prev-block)))})
+                     (when pos
+                       (util/schedule
+                        (fn []
+                          (when-let [input (state/get-input)]
+                            (cursor/move-cursor-to input pos))))))
+                   (do
+                     (delete-block-fn block)
+                     (save-block! repo prev-block new-content {:editor/op :delete})))
 
-                  :else
-                  (delete-block-aux! block delete-children?)))))))))
-   (state/set-editor-op! nil)))
+                 :else
+                 (delete-block-fn block)))))))))
+  (state/set-editor-op! nil))
 
 (defn delete-blocks!
   [repo block-uuids blocks dom-blocks]

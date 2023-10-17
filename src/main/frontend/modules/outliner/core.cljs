@@ -857,21 +857,28 @@
 
 (defn delete-block
   "Delete block from the tree."
-  [txs-state node children?]
-  (let [right-node (tree/-get-right node)]
-    (tree/-del node txs-state children?)
-    (when (tree/satisfied-inode? right-node)
-      (let [left-node (tree/-get-left node)
-            new-right-node (tree/-set-left-id right-node (tree/-get-id left-node))]
-        (tree/-save new-right-node txs-state)))
-    @txs-state))
+  [txs-state node {:keys [children? children-check?]
+                   :or {children-check? true}}]
+  (if (and children-check?
+           (not children?)
+           (first (:block/_parent (db/entity [:block/uuid (:block/uuid (get-data node))]))))
+    (throw (ex-info "Block can't be deleted because it still has children left, you can pass `children?` equals to `true`."
+                    {:block (get-data node)}))
+    (let [right-node (tree/-get-right node)]
+      (tree/-del node txs-state children?)
+      (when (tree/satisfied-inode? right-node)
+        (let [left-node (tree/-get-left node)
+              new-right-node (tree/-set-left-id right-node (tree/-get-id left-node))]
+          (tree/-save new-right-node txs-state)))
+      @txs-state)))
 
 (defn delete-blocks
   "Delete blocks from the tree.
    Args:
     `children?`: whether to replace `blocks'` children too. "
   [blocks {:keys [children?]
-           :or {children? true}}]
+           :or {children? true}
+           :as delete-opts}]
   [:pre [(seq blocks)]]
   (let [txs-state (ds/new-outliner-txs-state)
         blocks (get-top-level-blocks blocks)
@@ -892,7 +899,7 @@
          (= 1 (count blocks))
          (= start-node end-node)
          self-block?)
-      (delete-block txs-state start-node children?)
+      (delete-block txs-state start-node (assoc delete-opts :children? children?))
       (let [sibling? (= (tree/-get-parent-id start-node)
                         (tree/-get-parent-id end-node))
             right-node (tree/-get-right end-node)]
