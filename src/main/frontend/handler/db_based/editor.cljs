@@ -93,17 +93,17 @@
 (defn save-file!
   "This fn is the db version of file-handler/alter-file"
   [path content]
-  ;; Pre save
-  (when (= path "logseq/config.edn")
-    (config-edn-common-handler/detect-deprecations path content)
-    (config-edn-common-handler/validate-config-edn path content repo-config-schema/Config-edn))
+  (let [file-valid? (if (= path "logseq/config.edn")
+                      (do (config-edn-common-handler/detect-deprecations path content)
+                          (config-edn-common-handler/validate-config-edn path content repo-config-schema/Config-edn))
+                      true)]
 
-  (db/transact! [{:file/path path
-                  :file/content content}])
-
-  ;; Post save
-  (cond (= path "logseq/config.edn")
-        (p/let [_ (repo-config-handler/restore-repo-config! (state/get-current-repo) content)]
-          (state/pub-event! [:shortcut/refresh]))
-        (= path "logseq/custom.css")
-        (ui-handler/add-style-if-exists!)))
+    (when file-valid?
+      (db/transact! [{:file/path path
+                      :file/content content}])
+      ;; Post save
+      (cond (= path "logseq/config.edn")
+            (p/let [_ (repo-config-handler/restore-repo-config! (state/get-current-repo) content)]
+              (state/pub-event! [:shortcut/refresh]))
+            (= path "logseq/custom.css")
+            (ui-handler/add-style-if-exists!)))))

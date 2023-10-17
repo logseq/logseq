@@ -36,7 +36,7 @@ nested keys or positional errors e.g. tuples"
   ([title body]
    (config-notification-show! title body :error))
   ([title body status]
-   (config-notification-show! title body status true))
+   (config-notification-show! title body status false))
   ([title body status clear?]
    (notification/show!
     [:.mb-2
