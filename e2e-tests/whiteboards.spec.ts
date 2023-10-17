@@ -17,7 +17,7 @@ test('enable whiteboards', async ({ page }) => {
 
 test('should display onboarding tour', async ({ page }) => {
   // ensure onboarding tour is going to be triggered locally
-  await page.evaluate(`window.localStorage.removeItem('whiteboard-onboarding-tour?')`)
+  await page.evaluate(`window.clearWhiteboardStorage()`)
   await page.click('.nav-header .whiteboard')
 
   await expect(page.locator('.cp__whiteboard-welcome')).toBeVisible()
