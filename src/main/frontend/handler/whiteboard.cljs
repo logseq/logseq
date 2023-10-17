@@ -112,7 +112,8 @@
         repo (state/get-current-repo)
         deleted-shapes (when (seq deleted-ids)
                          (->> (db/pull-many repo '[*] (mapv (fn [id] [:block/uuid (uuid id)]) deleted-ids))
-                              (map (fn [b] (pu/get-property b :logseq.tldraw.shape)))))
+                              (mapv (fn [b] (pu/get-property b :logseq.tldraw.shape)))
+                              (remove nil?)))
         deleted-shapes-tx (mapv (fn [id] [:db/retractEntity [:block/uuid (uuid id)]]) deleted-ids)
         with-timestamps (fn [block]
                           (if (contains? created-ids (str (:block/uuid block)))
