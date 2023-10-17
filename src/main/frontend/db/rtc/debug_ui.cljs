@@ -131,8 +131,9 @@
                                    ")")
                               {:on-click
                                (fn []
-                                 (swap! (:*auto-push-client-ops? s) not)
-                                 (reset! (::auto-push-updates? state) @(:*auto-push-client-ops? s)))})]
+                                 (go
+                                   (<! (rtc-core/<toggle-auto-push-client-ops s))
+                                   (reset! (::auto-push-updates? state) @(:*auto-push-client-ops? s))))})]
         [:div (ui/button "stop" {:on-click (fn [] (stop))})]])
      (when (some? s)
        [:hr]
