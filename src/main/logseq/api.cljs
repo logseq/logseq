@@ -654,10 +654,9 @@
 
 (def ^:export remove_block
   (fn [block-uuid ^js _opts]
-    (let [includeChildren true
-          repo            (state/get-current-repo)]
+    (let [repo            (state/get-current-repo)]
       (editor-handler/delete-block-aux!
-        {:block/uuid (sdk-utils/uuid-or-throw-error block-uuid) :repo repo} includeChildren)
+       {:block/uuid (sdk-utils/uuid-or-throw-error block-uuid) :repo repo} true)
       nil)))
 
 (def ^:export update_block

@@ -363,7 +363,7 @@
                                                  (let [txs-state (atom [])]
                                                    (outliner-core/delete-block txs-state
                                                                                (outliner-core/->Block property-block)
-                                                                               true)
+                                                                               {:children? true})
                                                    @txs-state))]
                          (concat
                           [[:db/retract (:db/id block) :block/refs]
