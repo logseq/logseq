@@ -54,7 +54,7 @@
                  file])]
              (when-not mobile?
                [:td [:span.text-gray-500.text-sm
-                     (if (zero? modified-at)
+                     (if (or (nil? modified-at) (zero? modified-at))
                        (t :file/no-data)
                        (date/get-date-time-string
                         (t/to-default-time-zone (tc/to-date-time modified-at))))]])

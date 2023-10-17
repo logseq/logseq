@@ -233,8 +233,7 @@
    [:block/tx-id {:optional true} :int]
    [:file/content :string]
    [:file/path :string]
-   ;; TODO: Remove when bug is fixed
-   [:file/last-modified-at {:optional true} :any]])
+   [:file/last-modified-at inst?]])
 
 (def schema-version
   [:map

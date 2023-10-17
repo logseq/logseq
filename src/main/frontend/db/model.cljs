@@ -200,15 +200,12 @@
   [repo]
   (when-let [db (conn/get-db repo)]
     (->> (d/q
-          '[:find ?path
-             ;; ?modified-at
+          '[:find ?path ?modified-at
             :where
             [?file :file/path ?path]
-             ;; [?file :file/last-modified-at ?modified-at]
-            ]
+            [(get-else $ ?file :file/last-modified-at 0) ?modified-at]]
           db)
          (seq)
-         ;; (sort-by last)
          (reverse))))
 
 (defn get-files-blocks
