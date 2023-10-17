@@ -88,9 +88,10 @@ async function alias_test(block: Block, page: Page, page_name: string, search_kw
   //   alias_test_content_3 sequentially, to validate the target page state
   await page.type('textarea >> nth=0', 'alias:: [[' + alias_name, { delay: 10 })
   await page.keyboard.press('Enter', { delay: 200 }) // Enter for finishing selection
-  await page.keyboard.press('Enter', { delay: 200 }) // double Enter for exit property editing
-  await page.keyboard.press('Enter', { delay: 200 }) // double Enter for exit property editing
-  await page.waitForTimeout(200)
+  await page.keyboard.press('Enter', { delay: 200 })
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(100)
+  await block.clickNext()
   await block.activeEditing(1)
   await page.type('textarea >> nth=0', alias_test_content_1)
   await lastBlock(page)
