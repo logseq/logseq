@@ -3,8 +3,10 @@
   (:require [frontend.state :as state]
             [frontend.handler.file :as file-handler]
             [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.db :as db]
-            [borkdude.rewrite-edn :as rewrite]))
+            [borkdude.rewrite-edn :as rewrite]
+            [frontend.config :as config]))
 
 (defn parse-repo-config
   "Parse repo configuration file content"
@@ -23,7 +25,9 @@
                        (reduce-kv (fn [a k v] (rewrite/assoc a k v)) (rewrite/parse-string "{}")))
             new-result (rewrite/assoc-in result ks v)
             new-content (str new-result)]
-        (file-handler/set-file-content! repo path new-content) nil))))
+        (if (config/db-based-graph? repo)
+          (db-editor-handler/save-file! path new-content)
+          (file-handler/set-file-content! repo path new-content)) nil))))
 
 (defn set-config!
   [k v]
