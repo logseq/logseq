@@ -601,6 +601,7 @@ test('should keep correct undo and redo seq after indenting or outdenting the bl
   await page.keyboard.press("Shift+Tab", { delay: 10 })
 
   await page.keyboard.press("Enter")
+  await page.waitForTimeout(100)
   await expect(page.locator('textarea >> nth=0')).toHaveText("")
   // swap input seq
   await block.mustFill("baz")
