@@ -4,7 +4,7 @@
    [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
-            [cljs.core.async :as async :refer [<! chan go go-loop]]
+            [cljs.core.async :as async :refer [<! >! chan go go-loop]]
             [cljs.core.async.interop :refer [p->c]]
             [clojure.set :as set]
             [cognitect.transit :as transit]
@@ -517,7 +517,8 @@
           push-data-from-ws-ch (chan (async/sliding-buffer 100) (map rtc-const/data-from-ws-decoder))
           stop-rtc-loop-chan (chan)
           *auto-push-client-ops? (:*auto-push-client-ops? state)
-          force-push-client-ops-ch (:force-push-client-ops-chan state)]
+          force-push-client-ops-ch (:force-push-client-ops-chan state)
+          toggle-auto-push-client-ops-ch (:toggle-auto-push-client-ops-chan state)]
       (reset! (:*stop-rtc-loop-chan state) stop-rtc-loop-chan)
       (<! (ws/<ensure-ws-open! state))
       (reset! (:*graph-uuid state) graph-uuid)
@@ -530,6 +531,7 @@
                     (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))]
             (let [{:keys [push-data-from-ws client-op-update stop continue]}
                   (async/alt!
+                    toggle-auto-push-client-ops-ch {:continue true}
                     force-push-client-ops-ch {:client-op-update true}
                     push-client-ops-ch ([v] (if (and @*auto-push-client-ops? (true? v))
                                               {:client-op-update true}
@@ -574,6 +576,12 @@
       (when-let [ex-message (:ex-message r)]
         (prn ::<grant-graph-access-to-others ex-message (:ex-data r))))))
 
+(defn <toggle-auto-push-client-ops
+  [state]
+  (go
+    (swap! (:*auto-push-client-ops? state) not)
+    (>! (:toggle-auto-push-client-ops-chan state) true)))
+
 
 (defn- init-state
   [ws data-from-ws-chan]
@@ -583,7 +591,7 @@
    :*repo (atom nil)
    :data-from-ws-chan data-from-ws-chan
    :data-from-ws-pub (async/pub data-from-ws-chan :req-id)
-   :toggle-auto-push-client-ops-chan (chan 1)
+   :toggle-auto-push-client-ops-chan (chan (async/sliding-buffer 1))
    :*auto-push-client-ops? (atom true :validator boolean?)
    :*stop-rtc-loop-chan (atom nil)
    :force-push-client-ops-chan (chan 1)
