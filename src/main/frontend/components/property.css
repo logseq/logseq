@@ -205,4 +205,8 @@ a.control-link {
     h1.title {
         margin-bottom: 1.5rem;
     }
+
+    h2.title {
+        margin-bottom: 1rem;
+    }
 }
