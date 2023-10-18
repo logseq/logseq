@@ -114,11 +114,7 @@
                 file-exists? (fs/file-exists? repo-dir file-rpath)]
           (when-not file-exists?
             (p/let [_ (file-common-handler/reset-file! repo-url file-rpath content)]
-              (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-rpath content)]
-                (when-not (state/editing?)
-                  (ui-handler/re-render-root!)))))
-          (when-not (state/editing?)
-            (ui-handler/re-render-root!)))))))
+              (fs/create-if-not-exists repo-url repo-dir file-rpath content))))))))
 
 (defn create-default-files!
   [repo-url]
