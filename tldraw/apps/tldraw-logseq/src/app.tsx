@@ -71,6 +71,12 @@ const AppImpl = () => {
   const ref = React.useRef<HTMLDivElement>(null)
   const app = useApp()
 
+  React.useEffect(() => {
+    if (app.appPenModeDefault) {
+      app.settings.update({ penMode: app.appPenModeDefault })
+    }
+  }, [app])
+
   const components = React.useMemo(
     () => ({
       ContextBar,

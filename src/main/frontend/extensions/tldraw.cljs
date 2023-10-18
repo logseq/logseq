@@ -139,6 +139,7 @@
         [loaded-app set-loaded-app] (rum/use-state nil)
         on-mount (fn [^js tln]
                    (when tln
+                     (set! (.-appPenModeDefault tln) (state/pen-mode-default?))
                      (set! (.-appUndo tln) undo)
                      (set! (.-appRedo tln) redo)
                      (when-let [^js api (gobj/get tln "api")]
