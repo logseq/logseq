@@ -63,7 +63,7 @@
         (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page-name)]))))))
 
 (rum/defc class-select
-  [*property-schema schema-classes {:keys [multiple-choices?]
+  [*property-schema schema-classes {:keys [multiple-choices? save-property-fn]
                                     :or {multiple-choices? true}}]
   [:div.flex.flex-1.col-span-3
    (ui/dropdown
@@ -104,12 +104,14 @@
                    (assoc :on-apply (fn [choices]
                                       (let [choices' (map (fn [value] (or (create-class-if-not-exists! value) value)) choices)]
                                         (swap! *property-schema assoc :classes choices')
+                                        (save-property-fn)
                                         (toggle-fn))))
 
                    (not multiple-choices?)
                    (assoc :on-chosen (fn [value]
                                        (let [value' (or (create-class-if-not-exists! value) value)]
                                          (swap! *property-schema assoc :classes [value'])
+                                         (save-property-fn)
                                          (toggle-fn)))))]
 
         (select/select opts)))
@@ -318,7 +320,8 @@
         hide-delete? (or (= (:db/id block) (:db/id property)) ; property page
                          add-new-property?)
         class? (contains? (:block/type block) "class")
-        property-type (get-in property [:block/schema :type])]
+        property-type (get-in property [:block/schema :type])
+        save-property-fn (fn [] (update-property! property @*property-name @*property-schema))]
     [:div.property-configure.flex.flex-1.flex-col {:on-mouse-down #(state/set-state! :editor/mouse-down-from-property-configure? true)
                                                    :on-mouse-up #(state/set-state! :editor/mouse-down-from-property-configure? nil)}
      [:div.grid.gap-2.p-1
@@ -326,6 +329,10 @@
        [:label.col-span-1 "Name:"]
        [:input.form-input.col-span-2
         {:on-change #(reset! *property-name (util/evalue %))
+         :on-blur save-property-fn
+         :on-key-press (fn [e]
+                         (when (= "Enter" (util/ekey e))
+                           (save-property-fn)))
          :disabled disabled?
          :value @*property-name}]]
 
@@ -358,19 +365,27 @@
             (ui/select schema-types
                        (fn [_e v]
                          (let [type (keyword (string/lower-case v))]
-                           (swap! *property-schema assoc :type type)))))])]
+                           (swap! *property-schema assoc :type type)
+                           (update-property! property @*property-name @*property-schema)))))])]
 
       (case (:type @*property-schema)
         :page
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
          [:label "Specify classes:"]
-         (class-select *property-schema (:classes @*property-schema) (assoc opts :disabled? disabled?))]
+         (class-select *property-schema
+                       (:classes @*property-schema)
+                       (assoc opts
+                              :disabled? disabled?
+                              :save-property-fn save-property-fn))]
 
         :template
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
          [:label "Specify template:"]
          (class-select *property-schema (:classes @*property-schema)
-                       (assoc opts :multiple-choices? false :disabled? disabled?))]
+                       (assoc opts
+                              :multiple-choices? false
+                              :disabled? disabled?
+                              :save-property-fn save-property-fn))]
 
         :enum
         [:div.grid.grid-cols-4.gap-1.items-start.leading-8
@@ -398,7 +413,8 @@
            [:div.col-span-3
             (ui/select choices
                        (fn [_e v]
-                         (swap! *property-schema assoc :position v)))]]))
+                         (swap! *property-schema assoc :position v)
+                         (save-property-fn)))]]))
 
       (when-not (contains? #{:checkbox :default :template :enum} (:type @*property-schema))
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
@@ -407,7 +423,8 @@
            (ui/checkbox {:checked many?
                          :disabled disabled?
                          :on-change (fn []
-                                      (swap! *property-schema assoc :cardinality (if many? :one :many)))}))])
+                                      (swap! *property-schema assoc :cardinality (if many? :one :many))
+                                      (save-property-fn))}))])
 
       (let [hide? (:hide? @*property-schema)]
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
@@ -415,7 +432,8 @@
          (ui/checkbox {:checked hide?
                        :disabled disabled?
                        :on-change (fn []
-                                    (swap! *property-schema assoc :hide? (not hide?)))})])
+                                    (swap! *property-schema assoc :hide? (not hide?))
+                                    (save-property-fn))})])
 
       [:div.grid.grid-cols-4.gap-1.items-start.leading-8
        [:label "Description:"]
@@ -426,19 +444,9 @@
            (ui/ls-textarea
             {:on-change (fn [e]
                           (swap! *property-schema assoc :description (util/evalue e)))
+             :on-blur save-property-fn
              :disabled disabled?
              :value (:description @*property-schema)})])]]
-
-      [:div
-       (when-not disabled?
-         (ui/button
-          "Save"
-          :on-click (fn [e]
-                      (util/stop e)
-                      (update-property! property @*property-name @*property-schema)
-                      (when toggle-fn (toggle-fn))
-                      (when-let [input (first (dom/by-tag "textarea"))]
-                        (.focus input)))))]
 
       (when-not hide-delete?
         [:hr])
