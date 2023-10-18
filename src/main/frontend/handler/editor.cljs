@@ -1970,17 +1970,19 @@
           (:block/content block))
         new-content
         (cond->> new-content
-             (not keep-uuid?) (file-property/remove-property-when-file-based repo format "id")
-             true             (file-property/remove-property-when-file-based repo format "custom_id"))]
+          (not keep-uuid?) (file-property/remove-property-when-file-based repo format "id")
+          true             (file-property/remove-property-when-file-based repo format "custom_id"))]
     (merge (apply dissoc block (conj (when-not keep-uuid? [:block/_refs]) :block/pre-block? :block/meta))
            {:block/page {:db/id (:db/id page)}
             :block/format format
-            ;; FIXME: Handle db graphs
-            :block/properties (apply dissoc (:block/properties block)
-                                     (concat
-                                      (when-not keep-uuid? [:id])
-                                      [:custom_id :custom-id]
-                                      exclude-properties))
+            ;; only file graphs exclude properties because db graphs don't put ids in properties
+            :block/properties (if (config/db-based-graph? (state/get-current-repo))
+                                (:block/properties block)
+                                (apply dissoc (:block/properties block)
+                                       (concat
+                                        (when-not keep-uuid? [:id])
+                                        [:custom_id :custom-id]
+                                        exclude-properties)))
             :block/properties-text-values (apply dissoc (:block/properties-text-values block)
                                                  (concat
                                                   (when-not keep-uuid? [:id])
