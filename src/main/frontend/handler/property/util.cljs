@@ -23,7 +23,7 @@
 (defn get-property
   "Get the value of block's property `key`"
   [block key]
-  (let [block (db/entity (:db/id block))]
+  (let [block (or (db/entity (:db/id block)) block)]
     (when-let [properties (:block/properties block)]
       (lookup properties key))))
 
