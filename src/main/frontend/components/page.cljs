@@ -369,7 +369,7 @@
          (when class?
            (page-properties page page-opts))
          (when (and property? (not class?))
-           [:h1.title "Configure property"])
+           [:h2.title "Configure property"])
          (when property?
            (property/property-config page page (assoc opts
                                                       :inline-text component-block/inline-text)))])]
