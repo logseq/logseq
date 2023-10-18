@@ -28,6 +28,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.property.util :as pu]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.handler.command-palette :as palette-handler]
@@ -737,16 +738,19 @@
      (state/get-current-repo)
      (sdk-utils/uuid-or-throw-error block-uuid) key)))
 
-;; FIXME: Update :block/properties for db version
 (def ^:export get_block_property
   (fn [block-uuid key]
     (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
-      (get (:block/properties block) (keyword key)))))
+      (let [property-id (pu/get-pid key)]
+        (get (:block/properties block) (if (string? property-id) (keyword property-id) property-id))))))
 
 (def ^:export get_block_properties
   (fn [block-uuid]
     (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
-      (bean/->js (sdk-utils/normalize-keyword-for-json (:block/properties block))))))
+      (let [properties (if (config/db-based-graph? (state/get-current-repo))
+                         (update-keys (:block/properties block) pu/get-property-name)
+                         (:block/properties block))]
+        (bean/->js (sdk-utils/normalize-keyword-for-json properties))))))
 
 (def ^:export get_current_page_blocks_tree
   (fn []
