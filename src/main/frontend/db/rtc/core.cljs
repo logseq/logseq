@@ -81,7 +81,7 @@
   [repo remove-ops]
   (prn :remove-ops remove-ops)
   (doseq [op remove-ops]
-    (when-let [block (db/entity repo [:block/uuid (uuid (:block-uuid op))])]
+    (when-let [block (db/pull repo '[*] [:block/uuid (uuid (:block-uuid op))])]
       (outliner-tx/transact!
        {:persist-op? false}
        (outliner-core/delete-blocks! [block] {:children? false}))
@@ -90,9 +90,9 @@
 (defn- insert-or-move-block
   [repo block-uuid-str remote-parents remote-left-uuid-str move?]
   (when (and (seq remote-parents) remote-left-uuid-str)
-    (let [local-left (db/entity repo [:block/uuid (uuid remote-left-uuid-str)])
+    (let [local-left (db/pull repo '[*] [:block/uuid (uuid remote-left-uuid-str)])
           first-remote-parent (first remote-parents)
-          local-parent (db/entity repo [:block/uuid (uuid first-remote-parent)])
+          local-parent (db/pull repo '[*] [:block/uuid (uuid first-remote-parent)])
           b {:block/uuid (uuid block-uuid-str)}
           ;; b-ent (db/entity repo [:block/uuid (uuid block-uuid-str)])
           ]
@@ -153,7 +153,7 @@
 
 (defn- check-block-pos
   [repo block-uuid-str remote-parents remote-left-uuid-str]
-  (let [local-b (db/entity repo [:block/uuid (uuid block-uuid-str)])
+  (let [local-b (db/pull repo '[*] [:block/uuid (uuid block-uuid-str)])
         remote-parent-uuid-str (first remote-parents)]
     (cond
       (nil? local-b)
@@ -172,7 +172,7 @@
                  (conj rtc-const/general-attr-set :content)
                  (set (keys op-value)))]
     (when (seq key-set)
-      (let [b-ent (db/entity repo [:block/uuid block-uuid])
+      (let [b-ent (db/pull repo '[*] [:block/uuid block-uuid])
             new-block
             (cond-> (db/pull repo '[*] (:db/id b-ent))
               (and (contains? key-set :content)
@@ -238,8 +238,8 @@
 (defn apply-remote-update-page-ops
   [repo update-page-ops]
   (doseq [{:keys [self page-name] :as op-value} update-page-ops]
-    (let [old-page-name (:block/name (db/entity repo [:block/uuid (uuid self)]))
-          exist-page (db/entity repo [:block/name page-name])]
+    (let [old-page-name (:block/name (db/pull repo '[*] [:block/uuid (uuid self)]))
+          exist-page (db/pull repo '[*] [:block/name page-name])]
       (cond
           ;; same name but different uuid
           ;; remote page has same block/name as local's, but they don't have same block/uuid.
@@ -266,34 +266,69 @@
 (defn apply-remote-remove-page-ops
   [repo remove-page-ops]
   (doseq [op remove-page-ops]
-    (when-let [page-name (:block/name (db/entity repo [:block/uuid (uuid (:block-uuid op))]))]
+    (when-let [page-name (:block/name (db/pull repo '[*] [:block/uuid (uuid (:block-uuid op))]))]
       (page-handler/delete! page-name nil {:redirect-to-home? false :persist-op? false}))))
 
 
+(defn- filter-remote-data-by-local-unpushed-ops
+  "when remote-data request client to move/update blocks,
+  these updates maybe not needed, because this client just updated some of these blocks,
+  so we need to filter these just-updated blocks out, according to the unpushed-local-ops in indexeddb"
+  [affected-blocks-map local-unpushed-ops]
+  (reduce
+   (fn [affected-blocks-map local-op]
+     (case (first local-op)
+       "move"
+       (let [block-uuids (:block-uuids (second local-op))
+             remote-ops (vals (select-keys affected-blocks-map block-uuids))
+             block-uuids-to-del-in-result
+             (keep (fn [op] (when (= :move (:op op)) (:self op))) remote-ops)]
+         (apply dissoc affected-blocks-map block-uuids-to-del-in-result))
+
+       "update"
+       (let [block-uuid (:block-uuid (second local-op))
+             local-updated-attr-set (set (keys (:updated-attrs (second local-op))))]
+         (if-let [remote-op (get affected-blocks-map block-uuid)]
+           (assoc affected-blocks-map block-uuid
+                  (if (= :update-attrs (:op remote-op))
+                    (apply dissoc remote-op local-updated-attr-set)
+                    remote-op))
+           affected-blocks-map))
+       ;;else
+       affected-blocks-map))
+   affected-blocks-map local-unpushed-ops))
+
+
 (defn <apply-remote-data
-  [repo data-from-ws]
+  [repo data-from-ws & {:keys [max-pushed-op-key]}]
   (assert (rtc-const/data-from-ws-validator data-from-ws) data-from-ws)
   (go
     (let [affected-blocks-map (:affected-blocks data-from-ws)
           remote-t (:t data-from-ws)
-          local-t (<! (p->c (op/<get-ops&local-tx repo)))]
-      (if (<= remote-t local-t)
-        (prn ::skip :remote-t remote-t :local-t local-t)
+          {:keys [local-tx ops]} (<! (p->c (op/<get-ops&local-tx repo)))
+          unpushed-ops (when max-pushed-op-key
+                         (keep (fn [[key op]] (when (> key max-pushed-op-key) op)) ops))
+          affected-blocks-map* (if unpushed-ops
+                                 (filter-remote-data-by-local-unpushed-ops
+                                  affected-blocks-map unpushed-ops)
+                                 affected-blocks-map)]
+      (if (<= remote-t local-tx)
+        (prn ::skip :remote-t remote-t :local-t local-tx)
         (let [{remove-ops-map :remove move-ops-map :move update-ops-map :update-attrs
                update-page-ops-map :update-page remove-page-ops-map :remove-page}
               (update-vals
-               (group-by (fn [[_ env]] (get env :op)) affected-blocks-map)
+               (group-by (fn [[_ env]] (get env :op)) affected-blocks-map*)
                (partial into {}))
               remove-ops (vals remove-ops-map)
               sorted-move-ops (move-ops-map->sorted-move-ops move-ops-map)
               update-ops (vals update-ops-map)
               update-page-ops (vals update-page-ops-map)
               remove-page-ops (vals remove-page-ops-map)]
-          (util/profile ::apply-remote-update-page-ops (apply-remote-update-page-ops repo update-page-ops))
-          (util/profile ::apply-remote-remove-ops (apply-remote-remove-ops repo remove-ops))
-          (util/profile ::apply-remote-move-ops (apply-remote-move-ops repo sorted-move-ops))
-          (util/profile ::apply-remote-update-ops (apply-remote-update-ops repo update-ops))
-          (util/profile ::apply-remote-remove-page-ops (apply-remote-remove-page-ops repo remove-page-ops))
+          (util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo update-page-ops))
+          (util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo remove-ops))
+          (util/profile :apply-remote-move-ops (apply-remote-move-ops repo sorted-move-ops))
+          (util/profile :apply-remote-update-ops (apply-remote-update-ops repo update-ops))
+          (util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo remove-page-ops))
           (<! (p->c (op/<update-local-tx! repo remote-t))))))))
 
 (defn- <push-data-from-ws-handler
@@ -383,7 +418,7 @@
          [#{} #{} #{} #{} {}] sorted-ops)
         move-ops (keep
                   (fn [block-uuid]
-                    (when-let [block (db/entity repo [:block/uuid (uuid block-uuid)])]
+                    (when-let [block (db/pull repo '[*] [:block/uuid (uuid block-uuid)])]
                       (let [left-uuid (some-> block :block/left :block/uuid str)
                             parent-uuid (some-> block :block/parent :block/uuid str)]
                         (when (and left-uuid parent-uuid)
@@ -391,18 +426,18 @@
                            {:block-uuid block-uuid :target-uuid left-uuid :sibling? (not= left-uuid parent-uuid)}]))))
                   move-block-uuid-set)
         remove-block-uuid-set
-        (filter (fn [block-uuid] (nil? (db/entity repo [:block/uuid (uuid block-uuid)]))) remove-block-uuid-set)
+        (filter (fn [block-uuid] (nil? (db/pull '[*] repo [:block/uuid (uuid block-uuid)]))) remove-block-uuid-set)
         remove-ops (when (seq remove-block-uuid-set) [[:remove {:block-uuids remove-block-uuid-set}]])
         update-page-ops (keep (fn [block-uuid]
-                                (when-let [page-name (:block/name (db/entity repo [:block/uuid (uuid block-uuid)]))]
+                                (when-let [page-name (:block/name (db/pull repo '[*] [:block/uuid (uuid block-uuid)]))]
                                   [:update-page {:block-uuid block-uuid :page-name page-name}]))
                               update-page-uuid-set)
         remove-page-ops (keep (fn [block-uuid]
-                                (when (nil? (db/entity repo [:block/uuid (uuid block-uuid)]))
+                                (when (nil? (db/pull repo '[*] [:block/uuid (uuid block-uuid)]))
                                   [:remove-page {:block-uuid block-uuid}]))
                               remove-page-uuid-set)
         update-ops (keep (fn [[block-uuid attr-map]]
-                           (when-let [b (db/entity repo [:block/uuid (uuid block-uuid)])]
+                           (when-let [b (db/pull repo '[*] [:block/uuid (uuid block-uuid)])]
                              (let [key-set (set (keys attr-map))
                                    left-uuid (some-> b :block/left :block/uuid str)
                                    parent-uuid (some-> b :block/parent :block/uuid str)
@@ -472,6 +507,7 @@
           {:keys [ops local-tx]} (<! (p->c (op/<get-ops&local-tx repo)))
           ops* (mapv second ops)
           op-keys (mapv first ops)
+          max-op-key (apply max op-keys)
           ops-for-remote (apply concat (local-ops->remote-ops repo ops* nil))
           r (with-sub-data-from-ws state
               (<! (ws/<send! state {:req-id (get-req-id)
@@ -494,8 +530,9 @@
           (throw (ex-info "Unavailable" {:remote-ex remote-ex})))
         (do (assert (pos? (:t r)) r)
             (<! (p->c (op/<clean-ops repo op-keys)))
-            (<! (p->c (op/<update-local-tx! repo (:t r))))
-            ;; (<! (<apply-remote-data repo (rtc-const/data-from-ws-decoder r)))
+            ;; (<! (p->c (op/<update-local-tx! repo (:t r))))
+            (<! (<apply-remote-data repo (rtc-const/data-from-ws-decoder r)
+                                    :max-pushed-op-key max-op-key))
             (prn :<client-op-update-handler :t (:t r)))))))
 
 (defn- make-push-client-ops-timeout-ch
