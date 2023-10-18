@@ -319,7 +319,7 @@
         (prn ::skip :remote-t remote-t :remote-t remote-t-before :local-t local-tx)
 
         (< local-tx remote-t-before)
-        (do (prn ::need-pull-remote-data :remote-t remote-t :remote-t remote-t-before :local-t local-tx)
+        (do (prn ::need-pull-remote-data :remote-t remote-t :remote-t-before remote-t-before :local-t local-tx)
             ::need-pull-remote-data)
 
         (<= remote-t-before local-tx remote-t)
