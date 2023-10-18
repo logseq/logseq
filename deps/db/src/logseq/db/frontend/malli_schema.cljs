@@ -121,7 +121,8 @@
        [:type (apply vector :enum (into db-property-type/internal-builtin-schema-types
                                         db-property-type/user-builtin-schema-types))]
        [:hide? {:optional true} :boolean]
-       [:cardinality {:optional true} [:enum :one :many]]]]]
+       [:cardinality {:optional true} [:enum :one :many]]
+       [:classes {:optional true} [:set :keyword]]]]]
     page-attrs
     page-or-block-attrs)))
 
@@ -154,11 +155,8 @@
          [:order [:vector :uuid]]]]
        ;; Just for :enum
        [:position {:optional true} :string]
-       ;; :template uses :sequential and :page uses :set.
-       ;; Should :template should use :set?
-       [:classes {:optional true} [:or
-                                   [:set :uuid]
-                                   [:sequential :uuid]]]]]]
+       ;; For :page and :template
+       [:classes {:optional true} [:set [:or :uuid :keyword]]]]]]
     page-attrs
     page-or-block-attrs)))
 
