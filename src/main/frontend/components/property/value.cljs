@@ -185,9 +185,9 @@
                :dropdown? dropdown?
                :input-default-placeholder (cond
                                             tags?
-                                            "Update tags"
+                                            "Set tags"
                                             alias?
-                                            "Update alias"
+                                            "Set alias"
                                             multiple-choices?
                                             "Choose pages"
                                             :else
