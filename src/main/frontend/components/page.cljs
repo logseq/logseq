@@ -322,7 +322,7 @@
      (fn [{:keys [toggle-fn]}]
        [:a.fade-link.flex.flex-row.items-center
         {:on-click (toggle-fn' toggle-fn)}
-        [:div.ml-1.text-sm "Add tags"]])
+        [:div.ml-1.text-sm "Set tags"]])
      (fn [{:keys [toggle-fn]}]
        (pv/property-value page tags-property nil {:on-chosen (toggle-fn' toggle-fn)
                                                   :dropdown? false}))
