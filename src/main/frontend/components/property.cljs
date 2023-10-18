@@ -72,15 +72,19 @@
        (if (seq schema-classes)
          [:div.flex.flex-1.flex-row.items-center.flex-wrap.gap-2
           (for [class schema-classes]
-            (when-let [page (db/entity [:block/uuid class])]
-              (let [page-name (:block/original-name page)]
-                [:a.text-sm (str "#" page-name)])))]
+            (if (= class :logseq.class)
+              [:a.text-sm "#Logseq Class"]
+              (when-let [page (db/entity [:block/uuid class])]
+                (let [page-name (:block/original-name page)]
+                  [:a.text-sm (str "#" page-name)]))))]
          [:div.opacity-50.pointer.text-sm "Empty"])])
     (fn [{:keys [toggle-fn]}]
       (let [classes (db-model/get-all-classes (state/get-current-repo))
-            options (map (fn [[name id]] {:label name
-                                          :value id})
-                         classes)
+            options (cond->> (map (fn [[name id]]
+                                    {:label name :value id})
+                                  classes)
+                      (not= :template (:type @*property-schema))
+                      (concat [{:label "Logseq Class" :value :logseq.class}]))
             opts (cond->
                   {:items options
                    :input-default-placeholder (if multiple-choices? "Choose classes" "Choose class")
@@ -103,14 +107,14 @@
                    multiple-choices?
                    (assoc :on-apply (fn [choices]
                                       (let [choices' (map (fn [value] (or (create-class-if-not-exists! value) value)) choices)]
-                                        (swap! *property-schema assoc :classes choices')
+                                        (swap! *property-schema assoc :classes (set choices'))
                                         (save-property-fn)
                                         (toggle-fn))))
 
                    (not multiple-choices?)
                    (assoc :on-chosen (fn [value]
                                        (let [value' (or (create-class-if-not-exists! value) value)]
-                                         (swap! *property-schema assoc :classes [value'])
+                                         (swap! *property-schema assoc :classes #{value'})
                                          (save-property-fn)
                                          (toggle-fn)))))]
 

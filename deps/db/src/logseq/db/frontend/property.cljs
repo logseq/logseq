@@ -19,7 +19,8 @@
           :attribute :block/tags
           :visible true
           :schema {:type :page
-                   :cardinality :many}}
+                   :cardinality :many
+                   :classes #{:logseq.class}}}
    :background-color {:schema {:type :default :hide? true}
                       :visible true}
    :background-image {:schema {:type :default :hide? true}

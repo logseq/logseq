@@ -171,9 +171,11 @@
                (if (seq classes)
                  (mapcat
                   (fn [class]
-                    (some->> (:db/id (db/entity [:block/uuid class]))
-                             (model/get-class-objects repo)
-                             (map #(:block/original-name (db/entity %)))))
+                    (if (= :logseq.class class)
+                      (map first (model/get-all-classes repo))
+                      (some->> (:db/id (db/entity [:block/uuid class]))
+                               (model/get-class-objects repo)
+                               (map #(:block/original-name (db/entity %))))))
                   classes)
                  (model/get-all-page-original-names repo))
                distinct)
