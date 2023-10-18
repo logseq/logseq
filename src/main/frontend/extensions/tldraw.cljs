@@ -132,13 +132,6 @@
                            (route-handler/redirect-to-whiteboard! page-name {:block-id page-name-or-uuid})
                            (route-handler/redirect-to-page! (model/get-redirect-page-name page-name-or-uuid))))))})
 
-(rum/defc tldraw-inner <
-  {:should-update (fn [old-state new-state]
-                    (not= (:model (first (:rum/args old-state)))
-                          (:model (first (:rum/args new-state)))))}
-  [opts]
-  (tldraw opts))
-
 (rum/defc tldraw-app
   [page-name block-id]
   (let [populate-onboarding? (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
