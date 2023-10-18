@@ -561,7 +561,9 @@
       :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name-in-block e))
       :on-mouse-over #(reset! *hover? true)
       :on-mouse-leave #(reset! *hover? false)
-      :on-mouse-down (fn [_e] (reset! *mouse-down? true))
+      :on-mouse-down (fn [e]
+                       (util/stop e)
+                       (reset! *mouse-down? true))
       :on-mouse-up (fn [e]
                      (when @*mouse-down?
                        (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)
