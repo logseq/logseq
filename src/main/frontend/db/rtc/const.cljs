@@ -22,6 +22,7 @@
   [:map {:closed true}
    [:req-id :string]
    [:t {:optional true} :int]
+   [:t-before {:optional true} :int]
    [:affected-blocks {:optional true}
     [:map-of :string
      [:multi {:dispatch :op :decode/string #(update % :op keyword)}
