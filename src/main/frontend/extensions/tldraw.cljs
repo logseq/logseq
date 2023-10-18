@@ -139,24 +139,26 @@
   [opts]
   (tldraw opts))
 
-(rum/defcs tldraw-app < rum/static
-  (rum/local false ::loaded?)
-  {:init (fn [state]
-           (assoc state ::data (whiteboard-handler/page-name->tldr! (first (:rum/args state)))))}
-  [state page-name block-id]
-  (let [*loaded? (::loaded? state)
-        data (::data state)
-        populate-onboarding? (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
+(rum/defc tldraw-app
+  [page-name block-id]
+  (let [populate-onboarding? (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
+        data (whiteboard-handler/page-name->tldr! page-name)
+        [loaded-app set-loaded-app] (rum/use-state nil)
         on-mount (fn [^js tln]
                    (when tln
                      (set! (.-appUndo tln) undo)
                      (set! (.-appRedo tln) redo)
                      (when-let [^js api (gobj/get tln "api")]
-                       (p/then (when populate-onboarding?
-                                 (whiteboard-handler/populate-onboarding-whiteboard api))
-                               #(do (whiteboard-handler/cleanup! (.-currentPage tln))
-                                    (state/focus-whiteboard-shape tln block-id)
-                                    (reset! *loaded? true))))))]
+                      (p/then (when populate-onboarding?
+                                (whiteboard-handler/populate-onboarding-whiteboard api))
+                              #(do (whiteboard-handler/cleanup! (.-currentPage tln))
+                                   (state/focus-whiteboard-shape tln block-id)
+                                   (set-loaded-app tln))))))]
+    (rum/use-effect! (fn []
+                       (when (and loaded-app block-id)
+                         (state/focus-whiteboard-shape loaded-app block-id))
+                       #())
+                     [block-id loaded-app])
     (when data
       [:div.draw.tldraw.whiteboard.relative.w-full.h-full
        {:style {:overscroll-behavior "none"}
@@ -166,17 +168,17 @@
         ;; wheel -> overscroll may cause browser navigation
         :on-wheel util/stop-propagation}
 
-       (if (and populate-onboarding? (not @*loaded?))
+       (when
+        (and populate-onboarding? (not loaded-app))
          [:div.absolute.inset-0.flex.items-center.justify-center
           {:style {:z-index 200}}
-          (ui/loading "Loading onboarding whiteboard ...")]
-
-         (tldraw-inner {:renderers tldraw-renderers
-                        :handlers (get-tldraw-handlers page-name)
-                        :onMount on-mount
-                        :readOnly config/publishing?
-                        :onPersist (fn [app info]
-                                     (state/set-state! [:whiteboard/last-persisted-at (state/get-current-repo)] (util/time-ms))
-                                     (util/profile "tldraw persist"
-                                                   (whiteboard-handler/transact-tldr-delta! page-name app (.-replace info))))
-                        :model data}))])))
+          (ui/loading "Loading onboarding whiteboard ...")])
+       (tldraw {:renderers tldraw-renderers
+                :handlers (get-tldraw-handlers page-name)
+                :onMount on-mount
+                :readOnly config/publishing?
+                :onPersist (fn [app info]
+                             (state/set-state! [:whiteboard/last-persisted-at (state/get-current-repo)] (util/time-ms))
+                             (util/profile "tldraw persist"
+                                           (whiteboard-handler/transact-tldr-delta! page-name app (.-replace info))))
+                :model data})])))
