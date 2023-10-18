@@ -422,11 +422,12 @@
        [:div.col-span-3
         (if (and disabled? inline-text)
           (inline-text {} :markdown (:description @*property-schema))
-          (ui/ls-textarea
-           {:on-change (fn [e]
-                         (swap! *property-schema assoc :description (util/evalue e)))
-            :disabled disabled?
-            :value (:description @*property-schema)}))]]
+          [:div.mt-1
+           (ui/ls-textarea
+            {:on-change (fn [e]
+                          (swap! *property-schema assoc :description (util/evalue e)))
+             :disabled disabled?
+             :value (:description @*property-schema)})])]]
 
       [:div
        (when-not disabled?
@@ -588,7 +589,7 @@
                      (property-handler/set-editing-new-property! edit-input-id)
                      (reset! *property-key nil)
                      (reset! *property-value nil))}
-        [:div.flex.flex-row.items-center {:style {:padding-left 1}}
+        [:div.flex.flex-row.items-center.py-1
          (ui/icon "circle-plus" {:size 15})
          [:div.ml-1.text-sm "Add property"]]]
 
