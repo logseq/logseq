@@ -52,6 +52,7 @@
           (if-not (:graph-uuid r)
             (ex-info "upload graph failed" r)
             (do (<! (p->c (op/<update-graph-uuid! repo (:graph-uuid r))))
+                (<! (p->c (op/<update-local-tx! repo (:t r))))
                 r)))))))
 
 (def block-type-ident->str
