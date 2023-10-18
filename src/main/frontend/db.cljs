@@ -49,7 +49,7 @@
  [frontend.db.react
   get-current-page set-key-value
   remove-key! remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
-  clear-query-state-without-refs-and-embeds! kv q
+  kv q
   query-state query-components remove-custom-query! set-new-result! sub-key-value refresh!]
 
  [frontend.db.query-custom

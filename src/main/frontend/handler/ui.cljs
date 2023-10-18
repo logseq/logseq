@@ -85,7 +85,6 @@
   ([_opts]
    {:post [(nil? %)]}
    (when-let [component (state/get-root-component)]
-     (db/clear-query-state!)
      (rum/request-render component))
    nil))
 
