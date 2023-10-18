@@ -349,34 +349,39 @@
         class-or-property? (or class? property?)
         page-opts {:configure? true
                    :show-page-properties? @*show-page-properties?}]
-    [:div.p-4.flex.flex-col.gap-2 {:style {:min-width 700
-                                           :min-height 400}}
-     (cond
-       (not class-or-property?)
-       (when (and (not class?)
-                  (not property?)
-                  (not (property-handler/block-has-viewable-properties? page)))
-         (page-properties page page-opts))
-
-       @*show-page-properties?
-       (page-properties page page-opts)
-
-       :else
-       [:<>
-        (when class?
-          (configure page {}))
-        (when class?
+    [:div.flex.flex-col.justify-between.p-4 {:style {:min-width 700
+                                                     :min-height 400}}
+     [:div.flex.flex-col.gap-2
+      (cond
+        (not class-or-property?)
+        (when (and (not class?)
+                   (not property?)
+                   (not (property-handler/block-has-viewable-properties? page)))
           (page-properties page page-opts))
-        (when (and property? (not class?))
-          [:h1.title "Configure property"])
-        (when property?
-          (property/property-config page page (assoc opts
-                                                     :inline-text component-block/inline-text)))])
+
+        @*show-page-properties?
+        (page-properties page page-opts)
+
+        :else
+        [:<>
+         (when class?
+           (configure page {}))
+         (when class?
+           (page-properties page page-opts))
+         (when (and property? (not class?))
+           [:h1.title "Configure property"])
+         (when property?
+           (property/property-config page page (assoc opts
+                                                      :inline-text component-block/inline-text)))])]
 
      (when (and class-or-property?
                 (not (property-handler/block-has-viewable-properties? page))
                 (not config/publishing?))
-       [:a.fade-link.ml-2 {:on-click #(swap! *show-page-properties? not)}
+       [:a.fade-link.flex.flex-row.items-center.gap-1.text-sm
+        {:on-click #(swap! *show-page-properties? not)}
+        (ui/icon (if @*show-page-properties?
+                   "arrow-narrow-left"
+                   "arrow-narrow-right"))
         (if @*show-page-properties?
           "Back"
           "Edit page properties")])]))
