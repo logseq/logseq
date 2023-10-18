@@ -315,7 +315,8 @@
          repo (or repo (state/get-current-repo))
          format (or format (state/get-preferred-format))
          page (db/entity repo (:db/id page))
-         block-id (when (map? properties) (get properties :id))
+         block-id (when (and (not (config/db-based-graph? repo)) (map? properties))
+                    (get properties :id))
          content (-> (file-property/remove-built-in-properties-when-file-based repo format content)
                      (drawer/remove-logbook))]
      (cond

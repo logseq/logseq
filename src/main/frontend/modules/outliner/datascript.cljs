@@ -137,15 +137,12 @@
   [txs opts before-editor-cursor]
   (let [repo (state/get-current-repo)
         db-based? (config/db-based-graph? repo)
-        txs (map (fn [m] (if (map? m)
-                           (cond-> m
-                             true
-                             (dissoc :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                                     :block/title :block/body :block/level :block/container :db/other-tx
-                                     :block/unordered)
-                             db-based?
-                             (update :block/properties dissoc :id))
-                           m)) txs)
+        txs (map (fn [m]
+                   (if (map? m)
+                     (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
+                               :block/title :block/body :block/level :block/container :db/other-tx
+                               :block/unordered)
+                     m)) txs)
         txs (remove-nil-from-transaction txs)
         txs (cond-> txs
               (:uuid-changed opts)
