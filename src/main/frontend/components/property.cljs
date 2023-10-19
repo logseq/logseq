@@ -515,10 +515,13 @@
   (let [*show-new-property-config? (::show-new-property-config? state)
         entity-properties (->> (keys (:block/properties entity))
                                (map #(:block/original-name (db/entity [:block/uuid %])))
+                               (remove nil?)
                                (set))
         existing-tag-alias (reduce (fn [acc prop]
                                      (if (seq (get entity (get-in db-property/built-in-properties [prop :attribute])))
-                                       (conj acc (get-in db-property/built-in-properties [prop :original-name]))
+                                       (if-let [name (get-in db-property/built-in-properties [prop :original-name])]
+                                         (conj acc name)
+                                         acc)
                                        acc))
                                    #{}
                                    [:tags :alias])
