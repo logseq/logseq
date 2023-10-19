@@ -2644,10 +2644,9 @@
         ;; handle DataTransfer
         (let [repo (state/get-current-repo)
               data-transfer (.-dataTransfer event)
-              transfer-types (js->clj (.-types data-transfer))
-              transfer-type (first transfer-types)]
+              transfer-types (set (js->clj (.-types data-transfer)))]
           (cond
-            (= transfer-type "text/plain")
+            (contains? transfer-types "text/plain")
             (let [text (.getData data-transfer "text/plain")]
               (editor-handler/api-insert-new-block!
                text
@@ -2656,7 +2655,7 @@
                 :sibling?    (= @*move-to :sibling)
                 :before?     (= @*move-to :top)}))
 
-            (= transfer-type "Files")
+            (contains? transfer-types "Files")
             (let [files (.-files data-transfer)
                   format (:block/format target-block)]
               ;; When editing, this event will be handled by editor-handler/upload-asset(editor-on-paste)
@@ -2685,8 +2684,7 @@
                              :before?    false}))))))))
 
             :else
-            (prn ::unhandled-drop-data-transfer-type transfer-types)))
-        )))
+            (prn ::unhandled-drop-data-transfer-type transfer-types))))))
   (block-drag-end event *move-to))
 
 (defn- block-mouse-over
