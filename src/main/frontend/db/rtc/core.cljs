@@ -240,8 +240,8 @@
 
 (defn apply-remote-update-page-ops
   [repo update-page-ops]
-  (doseq [{:keys [self page-name] :as op-value} update-page-ops]
-    (let [old-page-name (:block/name (db/pull repo [:block/name] [:block/uuid (uuid self)]))
+  (doseq [{:keys [self page-name original-name] :as op-value} update-page-ops]
+    (let [old-page-original-name (:block/original-name (db/pull repo [:block/name] [:block/uuid (uuid self)]))
           exist-page (db/pull repo [:block/uuid] [:block/name page-name])]
       (cond
           ;; same name but different uuid
@@ -249,20 +249,20 @@
           ;; 1. rename local page's name to '<origin-name>-<ms-epoch>-Conflict'
           ;; 2. create page, name=<origin-name>, uuid=remote-uuid
         (and exist-page (not= (:block/uuid exist-page) (uuid self)))
-        (do (page-handler/rename! page-name (util/format "%s-%s-CONFLICT" page-name (tc/to-long (t/now))))
-            (page-handler/create! page-name {:redirect? false :create-first-block? false
-                                             :uuid (uuid self) :persist-op? false}))
+        (do (page-handler/rename! original-name (util/format "%s-%s-CONFLICT" original-name (tc/to-long (t/now))))
+            (page-handler/create! original-name {:redirect? false :create-first-block? false
+                                                 :uuid (uuid self) :persist-op? false}))
 
           ;; a client-page has same uuid as remote but different page-names,
           ;; then we need to rename the client-page to remote-page-name
-        (and old-page-name (not= old-page-name page-name))
-        (page-handler/rename! old-page-name page-name false false)
+        (and old-page-original-name (not= old-page-original-name original-name))
+        (page-handler/rename! old-page-original-name original-name false false)
 
           ;; no such page, name=remote-page-name, OR, uuid=remote-block-uuid
           ;; just create-page
         :else
-        (page-handler/create! page-name {:redirect? false :create-first-block? false
-                                         :uuid (uuid self) :persist-op? false}))
+        (page-handler/create! original-name {:redirect? false :create-first-block? false
+                                             :uuid (uuid self) :persist-op? false}))
 
       (update-block-attrs repo (uuid self) op-value))))
 
@@ -360,7 +360,6 @@
 
 
 (defn- ^:large-vars/cleanup-todo local-ops->remote-ops
-  "when verbose?, update ops will contain more attributes"
   [repo sorted-ops _verbose?]
   (let [[remove-block-uuid-set move-block-uuid-set update-page-uuid-set remove-page-uuid-set update-block-uuid->attrs]
         (reduce
@@ -453,10 +452,12 @@
         (filter (fn [block-uuid] (nil? (db/pull [:block/uuid] repo [:block/uuid (uuid block-uuid)]))) remove-block-uuid-set)
         remove-ops (when (seq remove-block-uuid-set) [[:remove {:block-uuids remove-block-uuid-set}]])
         update-page-ops (keep (fn [block-uuid]
-                                (when-let [page-name
-                                           (:block/name
-                                            (db/pull repo [:block/name] [:block/uuid (uuid block-uuid)]))]
-                                  [:update-page {:block-uuid block-uuid :page-name page-name}]))
+                                (when-let [{page-name :block/name
+                                            original-name :block/original-name}
+                                           (db/pull repo [:block/name :block/original-name] [:block/uuid (uuid block-uuid)])]
+                                  [:update-page {:block-uuid block-uuid
+                                                 :page-name page-name
+                                                 :original-name (or original-name page-name)}]))
                               update-page-uuid-set)
         remove-page-ops (keep (fn [block-uuid]
                                 (when (nil? (db/pull repo [:block/uuid] [:block/uuid (uuid block-uuid)]))

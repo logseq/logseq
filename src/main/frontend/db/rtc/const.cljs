@@ -53,7 +53,8 @@
               [:map {:closed true}
                [:op :keyword]
                [:self :string]
-               [:page-name :string]]
+               [:page-name :string]
+               [:original-name :string]]
               general-attrs-schema-coll)]
       [:remove-page
        [:map {:closed true}
@@ -106,7 +107,8 @@
     [:cat :keyword
      [:map
       [:block-uuid :uuid]
-      [:page-name :string]]]]
+      [:page-name :string]
+      [:original-name :string]]]]
    [:remove-page
     [:cat :keyword
      [:map
