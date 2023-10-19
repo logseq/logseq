@@ -25,8 +25,9 @@
 
 (defn exit-edit-property
   []
-  (property-handler/set-editing-new-property! nil)
-  (state/clear-edit!))
+  (when-not (:editor/property-configure? @state/state)
+    (property-handler/set-editing-new-property! nil)
+    (state/clear-edit!)))
 
 (defn set-editing!
   [property editor-id dom-id v opts]
@@ -312,9 +313,10 @@
            :else
            nil))))})
 
-(defn- select
+(rum/defc select < rum/reactive
   [block property {:keys [multiple-choices? dropdown?] :as opts}]
   (let [schema (:block/schema property)
+        property (db/sub-block (:db/id property))
         type (:type schema)
         enum? (= :enum type)
         items (if enum?
