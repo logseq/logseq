@@ -314,8 +314,14 @@
                  (let [[_block property _opts] (:rum/args state)]
                    (reset! (::property-name state) (:block/original-name property))
                    (reset! (::property-schema state) (:block/schema property))
-                   state))}
-  [state block property {:keys [toggle-fn inline-text class-schema? add-new-property?] :as opts}]
+                   (state/set-state! :editor/property-configure? true)
+                   state))
+   :will-unmount (fn [state]
+                   (util/schedule #(state/set-state! :editor/property-configure? false))
+                   (when-let [*show-property-config? (:*show-new-property-config? (last (:rum/args state)))]
+                     (reset! *show-property-config? false))
+                   state)}
+  [state block property {:keys [toggle-fn inline-text class-schema? add-new-property? _*show-new-property-config?] :as opts}]
   (let [*property-name (::property-name state)
         *property-schema (::property-schema state)
         built-in-property? (contains? db-property/built-in-properties-keys-str (:block/original-name property))
@@ -538,7 +544,8 @@
                   [:div.p-6
                    (property-config entity property (merge opts {:toggle-fn toggle-fn
                                                                  :block entity
-                                                                 :add-new-property? true}))])
+                                                                 :add-new-property? true
+                                                                 :*show-new-property-config? *show-new-property-config?}))])
                 {:initial-open? true
                  :modal-class (util/hiccup->class
                                "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
@@ -572,7 +579,9 @@
    (fn [state]
      (mixins/hide-when-esc-or-outside
       state
-      :on-hide (fn [] (property-handler/set-editing-new-property! nil))
+      :on-hide (fn []
+                 (when-not (:editor/property-configure? @state/state)
+                   (property-handler/set-editing-new-property! nil)))
       :node (js/document.getElementById "edit-new-property"))
      (mixins/on-enter state {:on-enter (fn [e]
                                          ;; FIXME: modal
