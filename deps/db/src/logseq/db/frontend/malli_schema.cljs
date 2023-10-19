@@ -112,17 +112,40 @@
     page-attrs
     page-or-block-attrs)))
 
+(def property-schema-attrs
+  [[:hide? {:optional true} :boolean]
+   [:description {:optional true} :string]
+   ;; For any types except for :checkbox :default :template :enum
+   [:cardinality {:optional true} [:enum :one :many]]
+   ;; Just for :enum type
+   [:enum-config {:optional true}
+    [:map
+     [:values
+      [:map-of
+       :uuid [:map
+              [:name :string]
+              [:description :string]
+              [:icon {:optional true}
+               [:map
+                [:id :string]
+                [:name :string]
+                [:type [:enum :tabler-icon :emoji]]]]]]]
+     ;; Optional b/c built-in props don't have it set
+     [:order {:optional true} [:vector :uuid]]]]
+   ;; Just for :enum
+   [:position {:optional true} :string]
+   ;; For :page and :template
+   [:classes {:optional true} [:set [:or :uuid :keyword]]]])
+
 (def internal-property
   (vec
    (concat
     [:map
      [:block/schema
-      [:map
-       [:type (apply vector :enum (into db-property-type/internal-builtin-schema-types
-                                        db-property-type/user-builtin-schema-types))]
-       [:hide? {:optional true} :boolean]
-       [:cardinality {:optional true} [:enum :one :many]]
-       [:classes {:optional true} [:set :keyword]]]]]
+      (into [:map
+             [:type (apply vector :enum (into db-property-type/internal-builtin-schema-types
+                                              db-property-type/user-builtin-schema-types))]]
+            property-schema-attrs)]]
     page-attrs
     page-or-block-attrs)))
 
@@ -132,31 +155,10 @@
     [:map
      [:block/schema
       {:optional true}
-      [:map
-       ;; Once a schema is defined it must have :type as this is an irreversible decision
-       [:type (apply vector :enum db-property-type/user-builtin-schema-types)]
-       [:hide? {:optional true} :boolean]
-       [:description {:optional true} :string]
-       ;; For any types except for :checkbox :default :template :enum
-       [:cardinality {:optional true} [:enum :one :many]]
-       ;; Just for :enum type
-       [:enum-config {:optional true}
-        [:map
-         [:values
-          [:map-of
-           :uuid [:map
-                  [:name :string]
-                  [:description :string]
-                  [:icon {:optional true}
-                   [:map
-                    [:id :string]
-                    [:name :string]
-                    [:type [:enum :tabler-icon :emoji]]]]]]]
-         [:order [:vector :uuid]]]]
-       ;; Just for :enum
-       [:position {:optional true} :string]
-       ;; For :page and :template
-       [:classes {:optional true} [:set [:or :uuid :keyword]]]]]]
+      (into [:map
+             ;; Once a schema is defined it must have :type as this is an irreversible decision
+             [:type (apply vector :enum db-property-type/user-builtin-schema-types)]]
+            property-schema-attrs)]]
     page-attrs
     page-or-block-attrs)))
 

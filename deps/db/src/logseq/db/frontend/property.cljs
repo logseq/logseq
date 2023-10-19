@@ -43,22 +43,43 @@
    :logseq.tldraw.page {:schema {:type :map}}
    :logseq.tldraw.shape {:schema {:type :map}}
    ;; color props
-   :logseq.color {:schema {:type :default}
+   :logseq.color {:schema
+                  {:type :enum
+                   :hide? true
+                   :enum-config
+                   {:values
+                    (into {}
+                          (map #(vector (random-uuid) {:name % :description ""})
+                               ["red" "orange" "green" "blue" "purple"]))}}
                   :visible true}
    ;; table-v2 props
-   :logseq.table.version {:schema {:type :number}
+   :logseq.table.version {:schema {:type :number :hide? true}
                           :visible true}
-   :logseq.table.compact {:schema {:type :checkbox}
+   :logseq.table.compact {:schema {:type :checkbox :hide? true}
                           :visible true}
-   :logseq.table.headers {:schema {:type :default}
+   :logseq.table.headers {:schema
+                          {:type :enum
+                           :hide? true
+                           :enum-config
+                           {:values
+                            (into {}
+                                  (map #(vector (random-uuid) {:name % :description ""})
+                                       ["uppercase" "capitalize" "capitalize-first" "lowercase"]))}}
                           :visible true}
-   :logseq.table.hover {:schema {:type :default}
+   :logseq.table.hover {:schema
+                        {:type :enum
+                         :hide? true
+                         :enum-config
+                         {:values
+                          (into {}
+                                (map #(vector (random-uuid) {:name % :description ""})
+                                     ["row" "col" "both" "none"]))}}
                         :visible true}
-   :logseq.table.borders {:schema {:type :checkbox}
+   :logseq.table.borders {:schema {:type :checkbox :hide? true}
                           :visible true}
-   :logseq.table.stripes {:schema {:type :checkbox}
+   :logseq.table.stripes {:schema {:type :checkbox :hide? true}
                           :visible true}
-   :logseq.table.max-width {:schema {:type :number}
+   :logseq.table.max-width {:schema {:type :number :hide? true}
                             :visible true}
 
    :icon {:original-name "Icon"
