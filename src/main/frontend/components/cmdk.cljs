@@ -483,9 +483,10 @@
 
 (rum/defc page-preview [state highlighted]
   (let [page-name (:source-page highlighted)]
-    (page/page {:page-name (model/get-redirect-page-name page-name) :whiteboard? true})))
+    (page/page {:page-name (if (uuid? page-name) (str page-name) (model/get-redirect-page-name page-name))
+                :whiteboard? true})))
 
-(defn top-level-block 
+(defn top-level-block
   ([block-uuid] (top-level-block block-uuid -1))
   ([block-uuid max-depth]
    (assert (uuid? block-uuid) "top-level-block expects block-uuid to be of type uuid")
