@@ -153,7 +153,7 @@
    (some? (get block-properties property-id))
    (let [schema (:block/schema (db/entity [:block/uuid property-id]))]
      (and (= :enum (:type schema))
-          (not= (:position schema) "properties")))))
+          (= (:position schema) "block-beginning")))))
 
 (defn get-block-enum-other-position-properties
   [eid]
