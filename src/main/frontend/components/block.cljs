@@ -2818,7 +2818,7 @@
   (boolean
    (when ref
      (let [top (.-top (.getBoundingClientRect ref))]
-       (not (<= top (+ js/window.innerHeight 1000)))))))
+       (not (<= top (+ js/window.innerHeight 100)))))))
 
 (rum/defcs ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
   {:init (fn [state]
@@ -3436,33 +3436,45 @@
         *latest-value (atom nil)]
     (rum/derived-atom [(:ui/main-container-scroll-top @state/state)] [::lazy-display sub-id]
                       (fn [top]
-                        (let [prev @*prev-scroll-top
-                              minor-update? (< (abs (- prev top)) 64)
-                              _ (reset! *prev-scroll-top top)
-                              value (cond
-                                      (and @*initial? (some? initial-value))
-                                      (do
-                                        (reset! *initial? false)
-                                        initial-value)
+                        (if (false? @*latest-value)
+                          @*latest-value
+                          (let [prev @*prev-scroll-top
+                                minor-update? (< (abs (- prev top)) 64)
+                                _ (reset! *prev-scroll-top top)
+                                value (cond
+                                        (and @*initial? (some? initial-value))
+                                        (do
+                                          (reset! *initial? false)
+                                          initial-value)
 
-                                      (and minor-update? (some? @*latest-value))
-                                      @*latest-value
+                                        (and minor-update? (some? @*latest-value))
+                                        @*latest-value
 
-                                      :else
-                                      (boolean (hide-block? @*ref)))]
-                          value)))))
+                                        :else
+                                        (boolean (hide-block? @*ref)))]
+                            (reset! *latest-value value)
+                            value))))))
 
 (rum/defcs block-item < rum/reactive
   {:init (fn [state]
            (let [id (random-uuid)
                  editing-block (state/get-edit-block)
-                 current-block (second (:rum/args state))
-                 disable-lazy? (:disable-lazy-load? (first (:rum/args state)))
+                 [config current-block opts] (:rum/args state)
+                 disable-lazy? (:disable-lazy-load? config)
+                 first-20-item? (<= (:idx opts) 20)
                  *ref (atom nil)
-                 *hidden? (if (or disable-lazy? (= (:block/uuid editing-block) (:block/uuid current-block)))
+                 *hidden? (if (or disable-lazy?
+                                  (= (:block/uuid editing-block) (:block/uuid current-block))
+                                  first-20-item?)
                             (atom false)
-                            (get-hidden-atom id *ref {:initial-value true}))]
-             (assoc state ::sub-id id ::ref *ref ::hidden? *hidden?)))
+                            (get-hidden-atom id *ref {:initial-value true
+                                                      :id (:db/id current-block)
+                                                      :content (:block/content current-block)}))]
+             (assoc state
+                    ::sub-id id
+                    ::container-ref (atom nil)
+                    ::ref *ref
+                    ::hidden? *hidden?)))
    :should-update (fn [old-state new-state]
                     (let [args-1 (:rum/args old-state)
                           args-2 (:rum/args new-state)]
@@ -3473,17 +3485,22 @@
    :did-mount (fn [state]
                 (if (:disable-lazy-load? (first (:rum/args state)))
                   state
-                  (let [hide? (hide-block? @(::ref state))]
-                    (reset! (::hidden? state) hide?)
+                  (let [*container-ref (::container-ref state)
+                        *hidden? (::hidden? state)]
+                    (when (and @*hidden? (not (hide-block? @*container-ref)))
+                      (reset! (::hidden? state) false))
                     state)))}
   [state config item opts]
   (let [*hidden? (::hidden? state)
         hidden? (rum/react *hidden?)
-        *ref (::ref state)]
-    (if (and hidden? (not (:disable-lazy-load? config)))
-      [:div {:key (str "item-" (:block/uuid item))
-             :style {:height 24}}]
-      (block-item-inner config item (assoc opts :*ref *ref)))))
+        *ref (::ref state)
+        *container-ref (::container-ref state)]
+    [:div {:ref #(when (nil? @*container-ref)
+                   (reset! *container-ref %))}
+     (if (and hidden? (not (:disable-lazy-load? config)))
+       [:div {:key (str "item-" (:block/uuid item))
+              :style {:height 24}}]
+       (block-item-inner config item (assoc opts :*ref *ref)))]))
 
 (defn- block-list
   [config blocks]
@@ -3493,6 +3510,7 @@
       (rum/with-key
         (block-item (assoc config :top? top?) item
                     {:top? top?
+                     :idx idx
                      :bottom? bottom?})
         (str "blocks-" (:block/uuid item))))))
 
