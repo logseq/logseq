@@ -1114,6 +1114,7 @@
           (when label
             [:li.settings-menu-item
              {:key      text
+              :data-id  id
               :class    (util/classnames [{:active (= label (first @*active))}])
               :on-click #(reset! *active [label (first @*active)])}
 

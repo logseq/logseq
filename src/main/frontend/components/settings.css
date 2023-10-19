@@ -65,6 +65,10 @@
     .settings-menu-item {
       @apply list-none p-0 my-1.5 rounded;
       @apply hover:bg-black/10;
+
+      &[data-id=keymap] {
+        @apply hidden sm:block;
+      }
     }
 
     .settings-menu-link {
