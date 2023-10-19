@@ -61,3 +61,8 @@
                                       db-property/built-in-properties-keys))]
         (swap! *db-built-in-properties assoc repo built-in-properties)))
     (set/subset? (set properties) (get @*db-built-in-properties repo))))
+
+(defn enum-value
+  "Given an enum ent and the value's uuid, return the value's string"
+  [ent value-uuid]
+  (get-in ent [:block/schema :enum-config :values value-uuid :name]))
