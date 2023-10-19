@@ -30,9 +30,10 @@
 (rum/defc items
   [col {:keys [on-drag-end parent-node]}]
   (let [ids (mapv :id col)
-        items (bean/->js ids)
+        items' (bean/->js ids)
         id->item (zipmap ids col)
-        [items set-items] (rum/use-state items)
+        [items set-items] (rum/use-state items')
+        _ (rum/use-effect! (fn [] (set-items items')) [col])
         [_active-id set-active-id] (rum/use-state nil)
         sensors (useSensors (useSensor PointerSensor (bean/->js {:activationConstraint {:distance 8}})))
         dnd-opts {:sensors sensors
@@ -47,7 +48,10 @@
                                          new-index (.indexOf ids over-id)
                                          new-items (arrayMove items old-index new-index)]
                                      (when (fn? on-drag-end)
-                                       (let [new-values (->> (map (fn [id] (:value (id->item id))) new-items)
+                                       (let [new-values (->> (map (fn [id]
+                                                                    (let [item (id->item id)]
+                                                                      (if (map? item) (:value item) item)))
+                                                                  new-items)
                                                              (remove nil?)
                                                              vec)]
                                          (if (not= (count new-values) (count ids))
