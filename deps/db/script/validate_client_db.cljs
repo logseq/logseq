@@ -86,16 +86,6 @@
         (js/process.exit 1))
       (println "Valid!"))))
 
-(defn- datoms->entity-maps
-  "Returns entity maps for given :eavt datoms"
-  [datoms]
-  (->> datoms
-       (reduce (fn [acc m]
-                 (if (contains? db-schema/card-many-attributes (:a m))
-                   (update acc (:e m) update (:a m) (fnil conj #{}) (:v m))
-                   (update acc (:e m) assoc (:a m) (:v m))))
-               {})))
-
 (def spec
   "Options spec"
   {:help {:alias :h
@@ -119,7 +109,7 @@
                  (js/process.exit 1)))
         conn (sqlite-cli/read-graph db-name)
         datoms (d/datoms @conn :eavt)
-        ent-maps (datoms->entity-maps datoms)]
+        ent-maps (db-malli-schema/datoms->entity-maps datoms)]
     (println "Read graph" (str db-name " with " (count datoms) " datoms, "
                                (count ent-maps) " entities and "
                                (count (mapcat :block/properties (vals ent-maps))) " properties"))
