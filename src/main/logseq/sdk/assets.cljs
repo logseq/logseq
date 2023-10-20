@@ -21,4 +21,4 @@
       (contains? #{"pdf"} ext)
       (state/set-current-pdf! (pdf-assets/inflate-asset asset-file))
 
-      :else :default)))
+      :else false)))

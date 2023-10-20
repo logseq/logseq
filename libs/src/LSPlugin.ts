@@ -924,7 +924,7 @@ export interface IAssetsProxy {
    * @added 0.0.16
    * @param path
    */
-  builtInOpen(path: string): Promise<any>
+  builtInOpen(path: string): Promise<boolean | undefined>
 }
 
 export interface ILSPluginThemeManager {
