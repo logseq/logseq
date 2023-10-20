@@ -192,7 +192,7 @@ export interface BlockEntity {
   level?: number
   meta?: { timestamps: any; properties: any; startPos: number; endPos: number }
   title?: Array<any>
-	marker?: string
+  marker?: string
 }
 
 /**
@@ -918,6 +918,13 @@ export interface IAssetsProxy {
    * @param path
    */
   makeUrl(path: string): Promise<string>
+
+  /**
+   * try to open asset type file in Logseq app
+   * @added 0.0.16
+   * @param path
+   */
+  builtInOpen(path: string): Promise<any>
 }
 
 export interface ILSPluginThemeManager {
