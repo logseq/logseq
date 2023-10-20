@@ -49,6 +49,7 @@
             [goog.dom :as gdom]
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
+            [goog.crypt.base64 :as base64]
             [lambdaisland.glogi :as log]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.graph-parser.block :as gp-block]
@@ -61,7 +62,8 @@
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.handler.db-based.property :as db-property-handler]))
+            [frontend.handler.db-based.property :as db-property-handler]
+            [frontend.fs.capacitor-fs :as capacitor-fs]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -1361,19 +1363,6 @@
   (when restore?
     (commands/restore-state)))
 
-(defn get-asset-file-link
-  "Link text for inserting to markdown/org"
-  [format url file-name image?]
-  (let [pdf?   (and url (string/ends-with? (string/lower-case url) ".pdf"))
-        media? (and url (or (config/ext-of-audio? url)
-                            (config/ext-of-video? url)))]
-    (case (keyword format)
-      :markdown (util/format (str (when (or image? media? pdf?) "!") "[%s](%s)") file-name url)
-      :org (if image?
-             (util/format "[[%s]]" url)
-             (util/format "[[%s][%s]]" url file-name))
-      nil)))
-
 (defn- ensure-assets-dir!
   [repo]
   (p/let [repo-dir (config/get-repo-dir repo)
@@ -1391,7 +1380,7 @@
   "Save incoming(pasted) assets to assets directory.
 
    Returns: [file-rpath file-obj file-fpath matched-alias]"
-  ([_ repo files]
+  ([repo files]
    (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
      (save-assets! repo repo-dir assets-dir files
                    (fn [index file-stem]
@@ -1435,7 +1424,13 @@
                 (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
 
           (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
-                 (fs/write-file! repo dir file-rpath (.stream file) nil)
+                 (if (mobile-util/native-platform?)
+                   ;; capacitor fs accepts Blob, File implements Blob
+                   (p/let [buffer (.arrayBuffer file)
+                           content (base64/encodeByteArray (js/Uint8Array. buffer))
+                           fpath (path/path-join dir file-rpath)]
+                     (capacitor-fs/<write-file-with-base64 fpath content))
+                   (fs/write-file! repo dir file-rpath (.stream file) nil))
                  [file-rpath file (path/path-join dir file-rpath) matched-alias])))))))
 
 (defonce *assets-url-cache (atom {}))
@@ -1517,11 +1512,10 @@
 (defn upload-asset
   "Paste asset and insert link to current editing block"
   [id ^js files format uploading? drop-or-paste?]
-  (let [repo (state/get-current-repo)
-        block (state/get-edit-block)]
+  (let [repo (state/get-current-repo)]
     (when (or (config/local-file-based-graph? repo)
               (config/db-based-graph? repo))
-      (-> (save-assets! block repo (js->clj files))
+      (-> (save-assets! repo (js->clj files))
           ;; FIXME: only the first asset is handled
           (p/then
            (fn [res]
@@ -1529,7 +1523,7 @@
                (let [image? (config/ext-of-image? asset-file-name)]
                  (insert-command!
                   id
-                  (get-asset-file-link format
+                  (assets-handler/get-asset-file-link format
                                        (if matched-alias
                                          (str
                                           (if image? "../assets/" "")

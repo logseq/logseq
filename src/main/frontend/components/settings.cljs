@@ -1104,13 +1104,11 @@
           (when label
             [:li.settings-menu-item
              {:key      text
+              :data-id  id
               :class    (util/classnames [{:active (= label (first @*active))}])
               :on-click #(reset! *active [label (first @*active)])}
 
-             [:a.flex.items-center.settings-menu-link
-              {:data-id id}
-              icon
-              [:strong text]]]))]]
+             [:a.flex.items-center.settings-menu-link icon [:strong text]]]))]]
 
       [:article
        [:header.cp__settings-header
