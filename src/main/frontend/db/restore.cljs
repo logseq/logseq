@@ -76,7 +76,12 @@
                               {:schema (:block/schema property)
                                :original-name (:block/original-name property)})
                    (if property
-                     {:block/schema schema
+                     {:block/schema (if (= :enum (:type schema))
+                                      ;; Need to preserve existing uuids to avoid invalidating existing choices
+                                      (-> schema
+                                          (dissoc :position)
+                                          (assoc-in [:enum-config :values] (get-in property [:block/schema :enum-config :values])))
+                                      schema)
                       :block/original-name (or original-name k-name)
                       :block/name (util/page-name-sanity-lc k-name)
                       :block/uuid (:block/uuid property)
