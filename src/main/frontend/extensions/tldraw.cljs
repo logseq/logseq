@@ -66,7 +66,7 @@
 
 (defn save-asset-handler
   [file]
-  (-> (editor-handler/save-assets! nil (state/get-current-repo) [(js->clj file)])
+  (-> (editor-handler/save-assets! (state/get-current-repo) [(js->clj file)])
       (p/then
        (fn [res]
          (when-let [[asset-file-name _ full-file-path] (and (seq res) (first res))]

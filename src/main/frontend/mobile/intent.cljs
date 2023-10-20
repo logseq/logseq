@@ -8,6 +8,7 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.mobile.util :as mobile-util]
@@ -72,7 +73,7 @@
                  (fn [error]
                    (log/error :copy-file-error {:error error})))
           url (util/format "../assets/%s" basename)
-          url (editor-handler/get-asset-file-link format url label true)
+          url (assets-handler/get-asset-file-link format url label true)
           template (get-in (state/get-config)
                            [:quick-capture-templates :media]
                            "**{time}** [[quick capture]]: {url}")]
@@ -169,7 +170,7 @@
                  (fn [error]
                    (log/error :copy-file-error {:error error})))
           url (util/format "../assets/%s" basename)
-          url-link (editor-handler/get-asset-file-link format url label true)]
+          url-link (assets-handler/get-asset-file-link format url label true)]
     url-link))
 
 (defn- handle-payload-resource

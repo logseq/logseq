@@ -1,14 +1,15 @@
 (ns frontend.mobile.camera
   (:require ["@capacitor/camera" :refer [Camera CameraResultType]]
             ["@capacitor/filesystem" :refer [Filesystem]]
-            [lambdaisland.glogi :as log]
-            [promesa.core :as p]
+            [frontend.commands :as commands]
+            [frontend.date :as date]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
-            [frontend.date :as date]
-            [frontend.commands :as commands]
+            [frontend.util.cursor :as cursor]
             [goog.object :as gobj]
-            [frontend.util.cursor :as cursor]))
+            [lambdaisland.glogi :as log]
+            [promesa.core :as p]))
 
 (defn- take-or-choose-photo []
   (-> (.getPhoto Camera (clj->js
@@ -55,6 +56,6 @@
         (commands/simple-insert!
          id
          (str left-padding
-              (editor-handler/get-asset-file-link format (str "../assets/" filename) filename true)
+              (assets-handler/get-asset-file-link format (str "../assets/" filename) filename true)
               " ")
          {})))))

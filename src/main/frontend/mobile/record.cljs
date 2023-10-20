@@ -1,14 +1,15 @@
 (ns frontend.mobile.record
   (:require ["@capacitor/filesystem" :refer [Filesystem]]
             ["capacitor-voice-recorder" :refer [VoiceRecorder]]
-            [promesa.core :as p]
+            [clojure.string :as string]
+            [frontend.date :as date]
+            [frontend.db :as db]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
-            [frontend.date :as date]
-            [lambdaisland.glogi :as log]
             [frontend.util :as util]
-            [clojure.string :as string]
-            [frontend.db :as db]))
+            [lambdaisland.glogi :as log]
+            [promesa.core :as p]))
 
 (defn request-audio-recording-permission []
   (p/then
@@ -56,7 +57,7 @@
                    (log/error :file/write-failed {:path path
                                                   :error error})))
           url (util/format "../assets/%s" filename)
-          file-link (editor-handler/get-asset-file-link format url filename true)
+          file-link (assets-handler/get-asset-file-link format url filename true)
           args (merge (if (parse-uuid page)
                         {:block-uuid (uuid page)}
                         {:page page})
