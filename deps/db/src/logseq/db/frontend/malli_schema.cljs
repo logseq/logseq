@@ -2,12 +2,13 @@
   "Malli schemas and fns for logseq.db.frontend.*"
   (:require [clojure.walk :as walk]
             [datascript.core :as d]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]))
 
 ;; Helper fns
 ;; ==========
-(defn validate-property-value
+(defn- validate-property-value
   "Validates the value in a property tuple. The property value can be one or
   many of a value to validated"
   [prop-type schema-fn val]
@@ -40,6 +41,16 @@
           (update % :block/properties (fn [x] (mapv identity x)))
           %)
        ents))
+
+(defn datoms->entity-maps
+  "Returns entity maps for given :eavt datoms"
+  [datoms]
+  (->> datoms
+       (reduce (fn [acc m]
+                 (if (contains? db-schema/card-many-attributes (:a m))
+                   (update acc (:e m) update (:a m) (fnil conj #{}) (:v m))
+                   (update acc (:e m) assoc (:a m) (:v m))))
+               {})))
 
 ;; Malli schemas
 ;; =============
