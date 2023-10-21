@@ -357,6 +357,7 @@
  :pdf/linked-ref "转到注解"
  :pdf/toggle-dashed "区域选取为虚线"
  :pdf/hl-block-colored "颜色标识高亮块"
+ :pdf/auto-open-context-menu "为选中文本自动打开上下文菜单"
  :pdf/doc-metadata "查看文档元数据"
 
  :asset/open-in-browser "在浏览器打开"
