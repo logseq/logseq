@@ -26,6 +26,8 @@
    (coll? @state)))
 
 (defn- validate-db!
+  "Validates the entities that have changed in the given datascript tx-report.
+   Validation is only for DB graphs"
   [{:keys [db-after tx-data tx-meta]}]
   (let [changed-ids (->> tx-data (map :e) distinct)
         ent-maps* (->> changed-ids (mapcat #(d/datoms db-after :eavt %)) db-malli-schema/datoms->entity-maps vals)
@@ -45,8 +47,10 @@
   [repo {:keys [_db-before _db-after _tx-data _tempids tx-meta] :as tx-report}]
   (when-not config/test?
     (pipelines/invoke-hooks tx-report)
-    ;; Skip tx with update-tx-ids? because they are immediately followed by the original block tx
-    (when (and config/dev? (not (:update-tx-ids? tx-meta)))
+    (when (and config/dev?
+               (config/db-based-graph? (state/get-current-repo))
+                ;; Skip tx with update-tx-ids? because they are immediately followed by the original block tx
+               (not (:update-tx-ids? tx-meta)))
       (validate-db! tx-report))
 
     (when (or (:outliner/transact? tx-meta)
