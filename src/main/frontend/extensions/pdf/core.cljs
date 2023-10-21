@@ -128,6 +128,7 @@
         left        (+ (:x point) (.-scrollLeft cnt))
         id          (:id highlight)
         new?        (nil? id)
+        can-open?   (or (not selection) (and selection (not= false (state/sub :pdf/auto-open-ctx-menu?))))
         content     (:content highlight)
         area?       (not (string/blank? (:image content)))
         action-fn!  (fn [action clear?]
@@ -189,7 +190,7 @@
 
     [:ul.extensions__pdf-hls-ctx-menu
      {:ref      *el
-      :style    {:top top :left left :visibility (if (and @*highlight-mode? new?) "hidden" "visible")}
+      :style    {:top top :left left :visibility (if (or (not can-open?) (and @*highlight-mode? new?)) "hidden" "visible")}
       :on-click (fn [^js/MouseEvent e]
                   (.stopPropagation e)
                   (when-let [action (.. e -target -dataset -action)]
@@ -502,7 +503,7 @@
                                                       :content    {:text "[:span]" :image (js/Date.now)}
                                                       :properties {}}]
 
-                                     ;; ctx tips
+                                     ;; ctx tips for area
                                      (show-ctx-menu! viewer hl point {:reset-fn #(reset-coords!)}))
 
                                    (set-area-mode! false))
