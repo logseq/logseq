@@ -51,7 +51,8 @@
             {[_e _a block-uuid _t add1?] :block/uuid
              [_e _a _v _t add2?]  :block/name
              [_e _a _v _t add3?]  :block/parent
-             [_e _a _v _t add4?]  :block/left} attr->datom
+             [_e _a _v _t add4?]  :block/left
+             [_e _a _v _t add5?]  :block/original-name} attr->datom
             ops (cond
                   (and (not add1?) block-uuid
                        (not add2?) (contains? updated-key-set :block/name))
@@ -69,7 +70,8 @@
                               (or add3? add4?)
                               (conj [:move])
 
-                              (and (contains? updated-key-set :block/name) add2?)
+                              (or (and (contains? updated-key-set :block/name) add2?)
+                                  (and (contains? updated-key-set :block/original-name) add5?))
                               (conj [:update-page]))
                         update-op (->>
                                    (keep

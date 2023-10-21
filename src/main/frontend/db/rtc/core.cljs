@@ -241,7 +241,8 @@
 (defn apply-remote-update-page-ops
   [repo update-page-ops]
   (doseq [{:keys [self page-name original-name] :as op-value} update-page-ops]
-    (let [old-page-original-name (:block/original-name (db/pull repo [:block/name] [:block/uuid (uuid self)]))
+    (let [old-page-original-name (:block/original-name
+                                  (db/pull repo [:block/original-name] [:block/uuid (uuid self)]))
           exist-page (db/pull repo [:block/uuid] [:block/name page-name])]
       (cond
           ;; same name but different uuid
