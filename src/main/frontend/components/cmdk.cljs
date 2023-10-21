@@ -564,6 +564,30 @@
               :on-change (partial handle-input-change state)
               :value input}]]))
 
+(rum/defc resize-preview < rum/reactive
+  [state]
+  (let [on-pointer-down (fn [e] 
+                          (js/console.log "pointer down")
+                          (reset! (::resizing? state) true)
+                          (.setPointerCapture ^js (.-currentTarget e) (.-pointerId e)))
+                          ; (.. e -currentTarget -setPointerCapture (.-pointerId e))
+        on-pointer-move (fn [e] 
+                          (when @(::resizing? state)
+                            (when-let [cmdk (.closest ^js (.-target e) ".cp__cmdk")]
+                              (let [rect (.getBoundingClientRect ^js cmdk) 
+                                    left (.-left rect) 
+                                    width (.-width rect)
+                                    percentage (-> (.-clientX e) (- left) (* -1) (+ width) (/ width) (* 100))]
+                                (when-let [preview (.closest ^js (.-target e) ".cp__cmdk-preview")]
+                                  (js/console.log "pointer move" percentage)
+                                  (set! (.. preview -style -width) (str percentage "%")))))))
+        on-pointer-up (fn [e] 
+                        (reset! (::resizing? state) false))]
+    [:div {:on-pointer-down on-pointer-down
+           :on-pointer-move on-pointer-move
+           :on-pointer-up on-pointer-up
+           :class "bg-transparent border-l border-r border-gray-06 w-2 h-full hover:cursor-col-resize"}]))
+
 (rum/defcs cmdk < 
   shortcut/disable-all-shortcuts 
   (rum/local "" ::input)
@@ -579,6 +603,7 @@
   (rum/local [:close :filter] ::actions) 
   (rum/local nil ::scroll-container-ref)
   (rum/local nil ::input-ref)
+  (rum/local false ::resizing?)
   {:did-mount (fn [state] 
                 (let [next-keydown-handler (partial keydown-handler state)
                       next-keyup-handler (partial keyup-handler state)]
@@ -627,8 +652,8 @@
     ; (rum/use-effect! #(load-results :initial state) [])
     [:div.cp__cmdk {:class "-m-8 max-w-[90dvw] max-h-[90dvh] w-[60rem] h-[30.7rem] "}
      (input-row state all-items)
-     [:div {:class (str "grid" (if preview? " grid-cols-2" " grid-cols-1"))}
-      [:div {:class "pt-1 overflow-y-auto h-96"
+     [:div {:class "flex w-full"}  ;;#_(str "grid" (if preview? " grid-cols-2" " grid-cols-1"))}
+      [:div {:class "pt-1 overflow-y-auto h-96 flex-1"
              :ref #(when % (some-> state ::scroll-container-ref (reset! %))) 
              :style {:background "var(--lx-gray-02)"}}
        (filter-row state filter)
@@ -637,12 +662,15 @@
              :when (if-not group-filter true (= group-filter group-key))]
          (result-group state group-name group-key group-items first-item))]
       (when preview?
-       [:div {:class "h-96 overflow-y-auto bg-gray-01 dark:bg-gray-02 border-l border-gray-07"} 
-        (cond 
-         (:source-page highlighted-item)
-         (page-preview state highlighted-item)
-         (:source-block highlighted-item)
-         (block-preview state highlighted-item))])]
+       [:div {:class "h-96 bg-gray-01 dark:bg-gray-02 cp__cmdk-preview w-1/2 flex relative"} 
+        (resize-preview state)
+        [:div {:class "flex-1 h-full shrunk-0 relative"}
+         [:div {:class "w-[200%] h-[200%] overflow-y-auto absolute scale-50 origin-top-left px-4 py-8"}
+          (cond 
+           (:source-page highlighted-item)
+           (page-preview state highlighted-item)
+           (:source-block highlighted-item)
+           (block-preview state highlighted-item))]]])]
 
      [:div {:class "flex justify-between w-full px-4"
             :style {:background "var(--lx-gray-03)"
