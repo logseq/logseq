@@ -298,16 +298,7 @@
       (case table-version
         2 (let [v2-columns (mapv #(if (uuid? %) (pu/get-property-name %) %) columns)
                 v2-config (assoc-in config [:block :properties]
-                                    (->> (get-in config [:block :block/properties])
-                                         (map (fn [[k v]]
-                                                (let [prop-ent (db/entity [:block/uuid k])]
-                                                  [(-> prop-ent
-                                                      :block/name
-                                                      keyword)
-                                                  (if (= :enum (get-in prop-ent [:block/schema :type]))
-                                                    (pu/enum-value prop-ent v)
-                                                    v)])))
-                                         (into {})))
+                                (pu/readable-properties (get-in config [:block :block/properties])))
                 result-as-text (for [row result]
                                  (for [column columns]
                                    (build-column-text row column)))]
