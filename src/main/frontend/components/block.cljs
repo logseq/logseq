@@ -3165,8 +3165,10 @@
 (defn table
   [config {:keys [header groups col_groups]}]
   (case (get-shui-component-version :table config)
-    2 (shui/table-v2 {:data (concat [[header]] groups)}
-                     (make-shui-context config inline))
+    2 (let [v2-config (assoc-in config [:block :properties]
+                                (pu/readable-properties (get-in config [:block :block/properties])))]
+        (shui/table-v2 {:data (concat [[header]] groups)}
+                       (make-shui-context v2-config inline)))
     1 (let [tr (fn [elm cols]
                  (->elem
                   :tr

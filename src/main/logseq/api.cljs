@@ -748,7 +748,7 @@
   (fn [block-uuid]
     (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
       (let [properties (if (config/db-based-graph? (state/get-current-repo))
-                         (update-keys (:block/properties block) pu/get-property-name)
+                         (pu/readable-properties (:block/properties block))
                          (:block/properties block))]
         (bean/->js (sdk-utils/normalize-keyword-for-json properties))))))
 

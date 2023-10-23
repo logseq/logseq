@@ -66,3 +66,19 @@
   "Given an enum ent and the value's uuid, return the value's string"
   [ent value-uuid]
   (get-in ent [:block/schema :enum-config :values value-uuid :name]))
+
+(defn readable-properties
+  "Given a DB graph's properties, returns a readable properties map with keys as
+  property names and property values dereferenced where possible. A property's
+  value will only be a uuid if it's a page or a block"
+  [properties]
+  (->> properties
+       (map (fn [[k v]]
+              (let [prop-ent (db/entity [:block/uuid k])]
+                [(-> prop-ent
+                     :block/name
+                     keyword)
+                 (if (= :enum (get-in prop-ent [:block/schema :type]))
+                   (enum-value prop-ent v)
+                   v)])))
+       (into {})))
