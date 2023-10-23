@@ -2629,6 +2629,7 @@
    (editor-handler/unhighlight-blocks!)))
 
 (defn- block-drop
+  "Block on-drop handler"
   [^js event uuid target-block *move-to]
   (util/stop event)
   (when-not (dnd-same-block? uuid)
@@ -2637,15 +2638,53 @@
           selected (db/pull-many (state/get-current-repo) '[*] lookup-refs)
           blocks (if (seq selected) selected [@*dragging-block])
           blocks (remove-nils blocks)]
-      (if-not (seq blocks)
-        (when-let [text (.getData (.-dataTransfer event) "text/plain")]
-          (editor-handler/api-insert-new-block!
-           text
-           {:block-uuid  uuid
-            :edit-block? false
-            :sibling?    (= @*move-to :sibling)
-            :before?     (= @*move-to :top)}))
-        (dnd/move-blocks event blocks target-block @*move-to))))
+      (if (seq blocks)
+        ;; dnd block moving in current Logseq instance
+        (dnd/move-blocks event blocks target-block @*move-to)
+        ;; handle DataTransfer
+        (let [repo (state/get-current-repo)
+              data-transfer (.-dataTransfer event)
+              transfer-types (set (js->clj (.-types data-transfer)))]
+          (cond
+            (contains? transfer-types "text/plain")
+            (let [text (.getData data-transfer "text/plain")]
+              (editor-handler/api-insert-new-block!
+               text
+               {:block-uuid  uuid
+                :edit-block? false
+                :sibling?    (= @*move-to :sibling)
+                :before?     (= @*move-to :top)}))
+
+            (contains? transfer-types "Files")
+            (let [files (.-files data-transfer)
+                  format (:block/format target-block)]
+              ;; When editing, this event will be handled by editor-handler/upload-asset(editor-on-paste)
+              (when (and (config/local-db? repo) (not (state/editing?)))
+                ;; Basically the same logic as editor-handler/upload-asset,
+                ;; does not require edting
+                (-> (editor-handler/save-assets! repo (js->clj files))
+                    (p/then
+                     (fn [res]
+                       (when-let [[asset-file-name file-obj asset-file-fpath matched-alias] (and (seq res) (first res))]
+                         (let [image? (config/ext-of-image? asset-file-name)
+                               link-content (assets-handler/get-asset-file-link format
+                                                                                (if matched-alias
+                                                                                  (str
+                                                                                   (if image? "../assets/" "")
+                                                                                   "@" (:name matched-alias) "/" asset-file-name)
+                                                                                  (editor-handler/resolve-relative-path (or asset-file-fpath asset-file-name)))
+                                                                                (if file-obj (.-name file-obj) (if image? "image" "asset"))
+                                                                                image?)]
+                           (editor-handler/api-insert-new-block!
+                            link-content
+                            {:block-uuid  uuid
+                             :edit-block? false
+                             :replace-empty-target? true
+                             :sibling?   true
+                             :before?    false}))))))))
+
+            :else
+            (prn ::unhandled-drop-data-transfer-type transfer-types))))))
   (block-drag-end event *move-to))
 
 (defn- block-mouse-over
