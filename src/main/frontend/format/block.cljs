@@ -11,8 +11,28 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.mldoc :as gp-mldoc]
+            [frontend.handler.property.util :as pu]
             [lambdaisland.glogi :as log]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [logseq.db.frontend.property :as db-property]))
+
+(defn- update-extracted-block-properties
+  "Updates DB graph blocks to ensure that built-in properties are using uuids
+  for property ids"
+  [blocks]
+  (if (config/db-based-graph? (state/get-current-repo))
+    (map (fn [b]
+           (if (:block/properties b)
+             (-> b
+                 (dissoc :block/properties-order)
+                 (update :block/properties
+                         (fn [props]
+                           (update-keys props #(if (contains? db-property/built-in-properties-keys %)
+                                                 (pu/get-built-in-property-uuid %)
+                                                 %)))))
+             b))
+         blocks)
+    blocks))
 
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
@@ -20,12 +40,13 @@ and handles unexpected failure."
   [blocks content format {:keys [with-id? page-name]
                           :or {with-id? true}}]
   (try
-    (gp-block/extract-blocks blocks content with-id? format
-                             {:user-config (state/get-config)
-                              :block-pattern (config/get-block-pattern format)
-                              :db (db/get-db (state/get-current-repo))
-                              :date-formatter (state/get-date-formatter)
-                              :page-name page-name})
+    (update-extracted-block-properties
+     (gp-block/extract-blocks blocks content with-id? format
+                              {:user-config (state/get-config)
+                               :block-pattern (config/get-block-pattern format)
+                               :db (db/get-db (state/get-current-repo))
+                               :date-formatter (state/get-date-formatter)
+                               :page-name page-name}))
     (catch :default e
       (log/error :exception e)
       (state/pub-event! [:capture-error {:error e
