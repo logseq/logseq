@@ -3832,6 +3832,7 @@
   [block-ids heading]
   (let [repo (state/get-current-repo)]
     (if (config/db-based-graph? repo)
+      ;; FIXME: Update content like is done with set-heading-aux!
       (property-handler/batch-set-block-property! repo block-ids :heading heading)
       (outliner-tx/transact!
        {:outliner-op :save-block}

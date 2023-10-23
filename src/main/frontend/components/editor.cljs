@@ -177,7 +177,9 @@
                                           (cons q (rest matched-pages)))
                                     (cons q matched-pages))))]
             [:div
-             (when (and db? tag?)
+             (when (and db? tag?
+                        ;; Don't display in heading
+                        (not (some->> edit-content (re-find #"^\s*#"))))
                [:div.flex.flex-row.items-center.px-4.py-1.text-sm.opacity-70.gap-2
                 "Turn this block into a page:"
                 (ui/toggle create-page?

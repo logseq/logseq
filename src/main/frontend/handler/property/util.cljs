@@ -32,6 +32,11 @@
   [uuid]
   (:block/original-name (db/entity [:block/uuid uuid])))
 
+(defn get-built-in-property-uuid
+  "Get a property's uuid given its name"
+  [property-name]
+  (:block/uuid (db/entity [:block/name (name property-name)])))
+
 (defn get-pid
   "Get a property's id (name or uuid) given its name"
   [property-name]
