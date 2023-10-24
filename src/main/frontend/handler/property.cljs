@@ -1,7 +1,7 @@
 (ns frontend.handler.property
   "Block properties handler."
   (:require [frontend.handler.db-based.property :as db-property-handler]
-            [frontend.handler.file-based.property :as file-property]
+            [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.file-based.page-property :as file-page-property]
             [frontend.config :as config]
             [frontend.util :as util]
@@ -16,7 +16,7 @@
   [repo block-id key]
   (if (config/db-based-graph? repo)
     (db-property-handler/remove-block-property! repo block-id key)
-    (file-property/remove-block-property! block-id key)))
+    (file-property-handler/remove-block-property! block-id key)))
 
 (defn set-block-property!
   [repo block-id key v & opts]
@@ -24,7 +24,7 @@
     (if (or (nil? v) (and (coll? v) (empty? v)))
       (db-property-handler/remove-block-property! repo block-id key)
       (db-property-handler/set-block-property! repo block-id key v opts))
-    (file-property/set-block-property! block-id key v)))
+    (file-property-handler/set-block-property! block-id key v)))
 
 (defn update-property!
   [repo property-uuid opts]
@@ -78,18 +78,18 @@
   [repo format content]
   (if (config/db-based-graph? repo)
     content
-    (file-property/remove-id-property format content)))
+    (file-property-handler/remove-id-property format content)))
 
 (defn file-persist-block-id!
   [repo block-id]
   (when-not (config/db-based-graph? repo)
-    (file-property/set-block-property! block-id :id (str block-id))))
+    (file-property-handler/set-block-property! block-id :id (str block-id))))
 
 (defn batch-remove-block-property!
   [repo block-ids key]
   (if (config/db-based-graph? repo)
     (db-property-handler/batch-remove-property! repo block-ids key)
-    (file-property/batch-remove-block-property! block-ids key)))
+    (file-property-handler/batch-remove-block-property! block-ids key)))
 
 (defn batch-set-block-property!
   [repo block-ids key value]
@@ -97,12 +97,12 @@
     (if (nil? value)
       (db-property-handler/batch-remove-property! repo block-ids key)
       (db-property-handler/batch-set-property! repo block-ids key value))
-    (file-property/batch-set-block-property! block-ids key value)))
+    (file-property-handler/batch-set-block-property! block-ids key value)))
 
 (defn file-batch-set-property!
   [repo col]
   (when-not (config/db-based-graph? repo)
-    (file-property/batch-set-block-property-aux! col)))
+    (file-property-handler/batch-set-block-property-aux! col)))
 
 (defn replace-key-with-id!
   [repo m]

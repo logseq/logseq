@@ -18,7 +18,7 @@
    [logseq.publishing.html :as publish-html]
    [frontend.state :as state]
    [frontend.util :as util]
-   [frontend.handler.file-based.property :as file-property]
+   [frontend.handler.property.file :as property-file]
    [goog.dom :as gdom]
    [lambdaisland.glogi :as log]
    [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -325,7 +325,7 @@
                                       (let [b' (if (seq (:block/properties b))
                                                  (update b :block/content
                                                          (fn [content]
-                                                           (file-property/remove-properties-when-file-based
+                                                           (property-file/remove-properties-when-file-based
                                                             repo (:block/format b) content)))
                                                  b)]
                                         (safe-keywordize b'))) blocks))

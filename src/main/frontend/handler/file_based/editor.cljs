@@ -13,7 +13,8 @@
             [frontend.util.clock :as clock]
             [frontend.util.drawer :as drawer]
             [frontend.util.marker :as marker]
-            [frontend.handler.file-based.property :as file-property]
+            [frontend.handler.property.file :as property-file]
+            [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.file-based.property.util :as property-util]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.graph-parser.block :as gp-block]
@@ -84,7 +85,7 @@
                      properties)
         real-content (:block/content block)
         content (if (and (seq properties) real-content (not= real-content content))
-                  (file-property/with-built-in-properties-when-file-based repo properties content format)
+                  (property-file/with-built-in-properties-when-file-based repo properties content format)
                   content)
         content (drawer/with-logbook block content)
         content (with-timetracking block content)
@@ -120,7 +121,7 @@
         block (update block :block/refs remove-non-existed-refs!)
         block (if (and left (not= (:block/left block) left)) (assoc block :block/left left) block)
         new-properties (merge
-                        (select-keys properties (file-property/hidden-properties))
+                        (select-keys properties (file-property-handler/hidden-properties))
                         (:block/properties block))]
     (-> block
         (dissoc :block.temp/top?
@@ -131,7 +132,7 @@
 
 (defn properties-block
   [repo properties format page]
-  (let [content (file-property/insert-properties-when-file-based repo format "" properties)
+  (let [content (property-file/insert-properties-when-file-based repo format "" properties)
         refs (gp-block/get-page-refs-from-properties properties
                                                      (db/get-db (state/get-current-repo))
                                                      (state/get-date-formatter)

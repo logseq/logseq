@@ -28,15 +28,6 @@
   "Alias to hidden-properties to keep existing behavior"
   hidden-properties)
 
-(defn properties-hidden?
-  [properties]
-  (and (seq properties)
-       (let [ks (if (config/db-based-graph? (state/get-current-repo))
-                  (map #(:block/name (db/entity [:block/uuid %])) (keys properties))
-                  (map (comp keyword string/lower-case name) (keys properties)))
-             hidden-properties-set (hidden-properties)]
-         (every? hidden-properties-set ks))))
-
 (defn remove-empty-properties
   [content]
   (if (gp-property/contains-properties? content)
