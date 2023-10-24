@@ -27,7 +27,12 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.db.rtc.core :as rtc-core]
+            [frontend.db.rtc.debug-ui :as rtc-debug-ui]
+            [cljs.core.async :as async]
+            [cljs.pprint :as pp]
+            [cljs-time.coerce :as tc]))
 
 ;; TODO i18n support
 
@@ -302,7 +307,25 @@
              :on-click (fn []
                          (let [block (db/pull [:block/uuid block-id])]
                            (dev-common-handler/show-content-ast (:block/content block) (:block/format block))))}
-            (t :dev/show-block-ast)))]))))
+            (t :dev/show-block-ast)))
+         (when (state/sub [:ui/developer-mode?])
+           (ui/menu-link
+            {:key "(Dev) Show block content history"
+             :on-click
+             (fn []
+               (async/go
+                 (let [blocks-versions
+                       (async/<! (rtc-core/<get-block-content-versions @rtc-debug-ui/debug-state block-id))]
+                   (prn :Dev-show-block-content-history)
+                   (doseq [[block-uuid versions] blocks-versions]
+                     (prn :block-uuid block-uuid)
+                     (pp/print-table [:content :created-at]
+                                     (map (fn [version]
+                                            {:created-at (tc/from-long (* (:created-at version) 1000))
+                                             :content (:value version)})
+                                          versions))))))}
+
+            "(Dev) Show block content history"))]))))
 
 (rum/defc block-ref-custom-context-menu-content
   [block block-ref-id]

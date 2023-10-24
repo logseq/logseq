@@ -654,6 +654,20 @@
     (swap! (:*auto-push-client-ops? state) not)
     (>! (:toggle-auto-push-client-ops-chan state) true)))
 
+(defn <get-block-content-versions
+  [state block-uuid]
+  (go
+    (when (some-> state :*graph-uuid deref)
+      (with-sub-data-from-ws state
+        (<! (ws/<send! state {:req-id (get-req-id)
+                              :action "query-block-content-versions"
+                              :block-uuids [block-uuid]
+                              :graph-uuid @(:*graph-uuid state)}))
+        (let [{:keys [ex-message ex-data versions]} (<! (get-result-ch))]
+          (if ex-message
+            (prn ::<get-block-content-versions :ex-message ex-message :ex-data ex-data)
+            versions))))))
+
 
 (defn- init-state
   [ws data-from-ws-chan]

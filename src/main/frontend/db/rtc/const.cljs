@@ -152,7 +152,13 @@
       [:req-id :string]
       [:action :string]
       [:graph-uuid :uuid]
-      [:target-user-uuids [:sequential :uuid]]]]]))
+      [:target-user-uuids [:sequential :uuid]]]]
+    ["query-block-content-versions"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:graph-uuid :string]
+      [:block-uuids [:sequential :uuid]]]]]))
 (def data-to-ws-decoder (m/decoder data-to-ws-schema mt/string-transformer))
 (def data-to-ws-encoder (m/encoder data-to-ws-schema mt/string-transformer))
 (def data-to-ws-validator (m/validator data-to-ws-schema))
