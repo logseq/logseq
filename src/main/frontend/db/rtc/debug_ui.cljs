@@ -2,19 +2,19 @@
   "Debug UI for rtc module"
   (:require-macros
    [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
-  (:require [frontend.ui :as ui]
-            [rum.core :as rum]
-            [frontend.db.rtc.core :as rtc-core]
-            [cljs.core.async :as async :refer [go <!]]
+  (:require [cljs.core.async :as async :refer [<! go]]
             [cljs.core.async.interop :refer [p->c]]
-            [frontend.db.rtc.op :as op]
-            [frontend.state :as state]
-            [frontend.db.rtc.ws :as ws]
             [fipp.edn :as fipp]
+            [frontend.db.rtc.core :as rtc-core]
             [frontend.db.rtc.full-upload-download-graph :as full-upload-download-graph]
-            [frontend.util :as util]
+            [frontend.db.rtc.op :as op]
+            [frontend.db.rtc.ws :as ws]
             [frontend.handler.notification :as notification]
-            [frontend.handler.user :as user]))
+            [frontend.handler.user :as user]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [rum.core :as rum]))
 
 (defonce debug-state (atom nil))
 
@@ -82,8 +82,7 @@
                  :on-click (fn [_]
                              (go
                                (let [repo (state/get-current-repo)
-                                     {:keys [local-tx ops]}
-                                     (<! (p->c (op/<get-ops&local-tx repo)))
+                                     {:keys [local-tx ops]} (<! (p->c (op/<get-ops&local-tx repo)))
                                      graph-uuid (<! (p->c (op/<get-graph-uuid repo)))]
                                  (reset! (::local-tx state) local-tx)
                                  (reset! (::ops state) (count ops))
