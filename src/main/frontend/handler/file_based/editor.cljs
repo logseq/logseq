@@ -2,15 +2,19 @@
   "File-based graph implementation"
   (:require [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.commands :as commands]
             [frontend.format.block :as block]
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
+            [frontend.modules.outliner.core :as outliner-core]
             [frontend.state :as state]
+            [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.util :as util]
             [frontend.util.clock :as clock]
             [frontend.util.drawer :as drawer]
             [frontend.util.marker :as marker]
             [frontend.handler.file-based.property :as file-property]
+            [frontend.handler.file-based.property.util :as property-util]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -142,3 +146,72 @@
      :block/content content
      :block/parent page
      :block/page page}))
+
+(defn- set-block-property-aux!
+  [block-or-id key value]
+  (when-let [block (cond (string? block-or-id) (db/entity [:block/uuid (uuid block-or-id)])
+                         (uuid? block-or-id) (db/entity [:block/uuid block-or-id])
+                         :else block-or-id)]
+    (let [format (:block/format block)
+          content (:block/content block)
+          properties (:block/properties block)
+          properties (if (nil? value)
+                       (dissoc properties key)
+                       (assoc properties key value))
+          content (if (nil? value)
+                    (property-util/remove-property format key content)
+                    (property-util/insert-property format content key value))
+          content (property-util/remove-empty-properties content)]
+      {:block/uuid (:block/uuid block)
+       :block/properties properties
+       :block/properties-order (or (keys properties) [])
+       :block/content content})))
+
+(defn- set-heading-aux!
+  [block-id heading]
+  (let [block (db/pull [:block/uuid block-id])
+        format (:block/format block)
+        old-heading (get-in block [:block/properties :heading])]
+    (if (= format :markdown)
+      (cond
+        ;; nothing changed
+        (or (and (nil? old-heading) (nil? heading))
+            (and (true? old-heading) (true? heading))
+            (= old-heading heading))
+        nil
+
+        (or (and (nil? old-heading) (true? heading))
+            (and (true? old-heading) (nil? heading)))
+        (set-block-property-aux! block :heading heading)
+
+        (and (or (nil? heading) (true? heading))
+             (number? old-heading))
+        (let [block' (set-block-property-aux! block :heading heading)
+              content (commands/clear-markdown-heading (:block/content block'))]
+          (merge block' {:block/content content}))
+
+        (and (or (nil? old-heading) (true? old-heading))
+             (number? heading))
+        (let [block' (set-block-property-aux! block :heading nil)
+              properties (assoc (:block/properties block) :heading heading)
+              content (commands/set-markdown-heading (:block/content block') heading)]
+          (merge block' {:block/content content :block/properties properties}))
+
+        ;; heading-num1 -> heading-num2
+        :else
+        (let [properties (assoc (:block/properties block) :heading heading)
+              content (-> block
+                          :block/content
+                          commands/clear-markdown-heading
+                          (commands/set-markdown-heading heading))]
+          {:block/uuid (:block/uuid block)
+           :block/properties properties
+           :block/content content}))
+      (set-block-property-aux! block :heading heading))))
+
+(defn batch-set-heading! [block-ids heading]
+  (outliner-tx/transact!
+       {:outliner-op :save-block}
+       (doseq [block-id block-ids]
+         (when-let [block (set-heading-aux! block-id heading)]
+           (outliner-core/save-block! block)))))
