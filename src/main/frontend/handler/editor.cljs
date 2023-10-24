@@ -837,26 +837,6 @@
                             (dom/attr sibling-block "id")
                             "")))))
 
-(defn- set-block-property-aux!
-  [repo block-or-id key value]
-  (when-let [block (cond (string? block-or-id) (db/entity [:block/uuid (uuid block-or-id)])
-                         (uuid? block-or-id) (db/entity [:block/uuid block-or-id])
-                         :else block-or-id)]
-    (let [format (:block/format block)
-          content (:block/content block)
-          properties (:block/properties block)
-          properties (if (nil? value)
-                       (dissoc properties key)
-                       (assoc properties key value))
-          content (if (nil? value)
-                    (file-property/remove-property-when-file-based repo format key content)
-                    (file-property/insert-property format content key value))
-          content (file-property/remove-empty-properties-when-file-based repo content)]
-      {:block/uuid (:block/uuid block)
-       :block/properties properties
-       :block/properties-order (or (keys properties) [])
-       :block/content content})))
-
 (defn set-block-query-properties!
   [block-id all-properties key add?]
   (when-let [block (db/entity [:block/uuid block-id])]
@@ -3785,60 +3765,12 @@
     (first (:block/_parent (db/entity (:db/id block)))))
    (util/collapsed? block)))
 
-;; file graph only
-(defn- set-heading-aux!
-  [repo block-id heading]
-  (let [block (db/pull [:block/uuid block-id])
-        format (:block/format block)
-        old-heading (get-in block [:block/properties :heading])]
-    (if (= format :markdown)
-      (cond
-        ;; nothing changed
-        (or (and (nil? old-heading) (nil? heading))
-            (and (true? old-heading) (true? heading))
-            (= old-heading heading))
-        nil
-
-        (or (and (nil? old-heading) (true? heading))
-            (and (true? old-heading) (nil? heading)))
-        (set-block-property-aux! repo block :heading heading)
-
-        (and (or (nil? heading) (true? heading))
-             (number? old-heading))
-        (let [block' (set-block-property-aux! repo block :heading heading)
-              content (commands/clear-markdown-heading (:block/content block'))]
-          (merge block' {:block/content content}))
-
-        (and (or (nil? old-heading) (true? old-heading))
-             (number? heading))
-        (let [block' (set-block-property-aux! repo block :heading nil)
-              properties (assoc (:block/properties block) :heading heading)
-              content (commands/set-markdown-heading (:block/content block') heading)]
-          (merge block' {:block/content content :block/properties properties}))
-
-        ;; heading-num1 -> heading-num2
-        :else
-        (let [properties (assoc (:block/properties block) :heading heading)
-              content (-> block
-                          :block/content
-                          commands/clear-markdown-heading
-                          (commands/set-markdown-heading heading))]
-          {:block/uuid (:block/uuid block)
-           :block/properties properties
-           :block/content content}))
-      (set-block-property-aux! repo block :heading heading))))
-
 (defn batch-set-heading!
   [block-ids heading]
   (let [repo (state/get-current-repo)]
     (if (config/db-based-graph? repo)
-      ;; FIXME: Update content like is done with set-heading-aux!
-      (property-handler/batch-set-block-property! repo block-ids :heading heading)
-      (outliner-tx/transact!
-       {:outliner-op :save-block}
-       (doseq [block-id block-ids]
-         (when-let [block (set-heading-aux! repo block-id heading)]
-           (outliner-core/save-block! block)))))))
+      (db-editor-handler/batch-set-heading! repo block-ids heading) 
+      (file-editor-handler/batch-set-heading! block-ids heading))))
 
 (defn set-heading!
   [block-id heading]

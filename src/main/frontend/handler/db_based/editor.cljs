@@ -2,6 +2,7 @@
   "DB-based graph implementation"
   (:require [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.commands :as commands]
             [frontend.db :as db]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
@@ -11,7 +12,11 @@
             [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.common.config-edn :as config-edn-common-handler]
+            [frontend.handler.property :as property-handler]
+            [frontend.handler.property.util :as pu]
             [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.modules.outliner.core :as outliner-core]
+            [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.schema.handler.repo-config :as repo-config-schema]
             [promesa.core :as p]))
 
@@ -108,3 +113,47 @@
               (state/pub-event! [:shortcut/refresh]))
             (= path "logseq/custom.css")
             (ui-handler/add-style-if-exists!)))))
+
+(defn- set-heading-aux!
+  [block-id heading]
+  (let [block (db/pull [:block/uuid block-id])
+        old-heading (pu/lookup (:block/properties block) :heading)]
+    (cond
+      ;; nothing changed for first two cases
+      (or (and (nil? old-heading) (nil? heading))
+          (and (true? old-heading) (true? heading))
+          (= old-heading heading))
+      nil
+
+      (or (and (nil? old-heading) (true? heading))
+          (and (true? old-heading) (nil? heading)))
+      nil
+
+      (and (or (nil? heading) (true? heading))
+           (number? old-heading))
+      (let [content (commands/clear-markdown-heading (:block/content block))]
+        {:block/content content
+         :block/uuid (:block/uuid block)})
+
+      (and (or (nil? old-heading) (true? old-heading))
+           (number? heading))
+      (let [content (commands/set-markdown-heading (:block/content block) heading)]
+        {:block/content content
+         :block/uuid (:block/uuid block)})
+
+        ;; heading-num1 -> heading-num2
+      :else
+      (let [content (-> block
+                        :block/content
+                        commands/clear-markdown-heading
+                        (commands/set-markdown-heading heading))]
+        {:block/uuid (:block/uuid block)
+         :block/content content}))))
+
+(defn batch-set-heading!
+  [repo block-ids heading]
+  (outliner-tx/transact!
+   {:outliner-op :save-block}
+   (doseq [block-tx (keep #(set-heading-aux! % heading) block-ids)]
+     (outliner-core/save-block! block-tx))
+   (property-handler/batch-set-block-property! repo block-ids :heading heading)))
