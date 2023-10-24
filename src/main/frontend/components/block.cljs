@@ -2870,27 +2870,12 @@
                   true))]
     result))
 
-(rum/defcs ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
-  {:init (fn [state]
-           (assoc state ::ref (or (:*ref (second (:rum/args state))) (atom nil))))
-   :did-mount (fn [state]
-                (when-let [editing-node @(:editor/editing @state/state)]
-                  (let [ref @(::ref state)
-                        editing-prev-node (:editor/editing-prev-node @state/state)
-                        editing-parent-node (:editor/editing-parent-node @state/state)]
-                    (when (and (not= editing-node ref)
-                               (= (gobj/get ref "id") (.-id editing-node))
-                               (or
-                                ;; block indent
-                                (= editing-prev-node (util/rec-get-node (.-parentNode ref) "ls-block"))
-                                ;; block outdent
-                                (= editing-parent-node (.-previousSibling ref))))
-                      (state/set-editing-ref! ref))))
-                state)}
-  [inner-state state repo config* block {:keys [navigating-block navigated?]}]
-  (let [*ref (::ref inner-state)
+(rum/defc ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
+  [state repo config* block {:keys [navigating-block navigated?]}]
+  (let [*ref (:*ref config*)
         ref (rum/react *ref)
         ref? (:ref? config*)
+        selected? (:selected? config*)
         ;; whiteboard block shape
         in-whiteboard? (and (:in-whiteboard? config*)
                             (= (:id config*)
@@ -2931,24 +2916,17 @@
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
         own-number-list? (:own-order-number-list? config)
-        order-list? (boolean own-number-list?)
-        selected? (when-not slide?
-                    (state/sub-block-selected? uuid))]
-    [:div.ls-block
+        order-list? (boolean own-number-list?)]
+    [:div
      (cond->
-      {:id block-id
-       :ref #(when (nil? @*ref) (reset! *ref %))
-       :data-refs data-refs
+      {:data-refs data-refs
        :data-refs-self data-refs-self
        :data-collapsed (and collapsed? has-child?)
-       :class (str (str "id" uuid)      ; ID starts with a number can't be selected
-                   (when pre-block? " pre-block")
+       :class (str (when pre-block? "pre-block")
                    (when (and card? (not review-cards?)) " shadow-md")
-                   (when selected? " selected")
                    (when order-list? " is-order-list")
                    (when (string/blank? content) " is-blank")
                    (when original-block " embed-block"))
-       :blockid (str uuid)
        :haschild (str (boolean has-child?))}
 
        original-block
@@ -3453,7 +3431,7 @@
 
 (rum/defc block-item-inner <
   {:should-update (fn [old-state new-state]
-                    (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block]
+                    (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :selected?]
                           b1                  (second (:rum/args old-state))
                           b2                  (second (:rum/args new-state))
                           result              (or
@@ -3462,7 +3440,7 @@
                                                (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
                                                      (select-keys (first (:rum/args new-state)) config-compare-keys)))]
                       (boolean result)))}
-  [config item {:keys [top? bottom? *ref]}]
+  [config item {:keys [top? bottom?]}]
   (let [original-block item
         linked-block (:block/link item)
         item (or linked-block item)
@@ -3470,9 +3448,7 @@
                (not (:block-children? config))
                (assoc :block.temp/top? top?
                       :block.temp/bottom? bottom?))
-        config (assoc config
-                      :block/uuid (:block/uuid item)
-                      :*ref *ref)
+        config (assoc config :block/uuid (:block/uuid item))
         config' (if linked-block
                   (assoc config :original-block original-block)
                   config)]
@@ -3520,15 +3496,13 @@
                  [config current-block _opts] (:rum/args state)
                  disable-lazy? (:disable-lazy-load? config)
                  *ref (atom nil)
-                 *container-ref (atom nil)
                  editing? (= (:block/uuid editing-block) (:block/uuid current-block))
-                 *hidden? (get-hidden-atom id *container-ref
-                           {:initial-value (if (or disable-lazy? editing?) false true)
-                            :id (:db/id current-block)
-                            :content (:block/content current-block)})]
+                 *hidden? (get-hidden-atom id *ref
+                                           {:initial-value (if (or disable-lazy? editing?) false true)
+                                            :id (:db/id current-block)
+                                            :content (:block/content current-block)})]
              (assoc state
                     ::sub-id id
-                    ::container-ref *container-ref
                     ::ref *ref
                     ::hidden? *hidden?)))
    :should-update (fn [old-state new-state]
@@ -3540,19 +3514,38 @@
                              (last args-2)])))
    :did-mount (fn [state]
                 (when @(::hidden? state)
-                  (reset! (::hidden? state) (hide-block? @(::container-ref state) (::hidden? state))))
+                  (reset! (::hidden? state) (hide-block? @(::ref state) (::hidden? state))))
+                (when-let [editing-node @(:editor/editing @state/state)]
+                  (let [*ref (::ref state)
+                        ref @*ref
+                        editing-prev-node (:editor/editing-prev-node @state/state)
+                        editing-parent-node (:editor/editing-parent-node @state/state)]
+                    (when (and ref
+                               (not= editing-node ref)
+                               (= (gobj/get ref "id") (.-id editing-node))
+                               (or
+                                ;; block indent
+                                (= editing-prev-node (util/rec-get-node (.-parentNode ref) "ls-block"))
+                                ;; block outdent
+                                (= editing-parent-node (.-previousSibling ref))))
+                      (state/set-editing-ref! ref))))
                 state)}
-  [state config item opts]
+  [state config item _opts]
   (let [*hidden? (::hidden? state)
         hidden? (rum/react *hidden?)
         *ref (::ref state)
-        *container-ref (::container-ref state)]
-    [:div {:ref #(when (nil? @*container-ref)
-                   (reset! *container-ref %))}
+        uuid (:block/uuid item)
+        selected? (when-not (:slide? config)
+                    (state/sub-block-selected? uuid))]
+    [:div.ls-block {:blockid (str uuid)
+                    :id (str "ls-block-" uuid)
+                    :class (str "id" uuid
+                                (when selected? " selected"))
+                    :ref #(when (nil? @*ref) (reset! *ref %))}
      (if hidden?
        [:div.block-lazy-placeholder {:key (str "item-" (:block/uuid item))
                                      :style {:height 24}}]
-       (block-item-inner config item (assoc opts :*ref *ref)))]))
+       (block-item-inner (assoc config :*ref *ref :selected? selected?) item {}))]))
 
 (defn- block-list
   [config blocks]
