@@ -599,9 +599,7 @@
   [blocks target-block sibling?]
   (let [target-block (if sibling? target-block (some-> target-block :db/id db/pull block tree/-get-down :data))
         list-type-fn (fn [block] (pu/get-property block :logseq.order-list-type))
-        k (if (config/db-based-graph? (state/get-current-repo))
-            (:block/uuid (db/entity [:block/name "logseq.order-list-type"]))
-            :logseq.order-list-type)]
+        k (pu/get-pid :logseq.order-list-type)]
     (if-let [list-type (and target-block (list-type-fn target-block))]
       (mapv
        (fn [{:block/keys [content format] :as block}]

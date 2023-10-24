@@ -9,7 +9,8 @@
             [frontend.db :as db]
             [frontend.format.block :as block]
             [frontend.db.model :as model]
-            [frontend.modules.outliner.core :as outliner-core]))
+            [frontend.modules.outliner.core :as outliner-core]
+            [frontend.handler.property.util :as pu]))
 
 (defn remove-block-property!
   [repo block-id key]
@@ -170,7 +171,7 @@
     (or
      (seq (:block/alias properties))
      (and (seq properties)
-          (not= (keys properties) [(:block/uuid (db/entity [:block/name "icon"]))])))))
+          (not= (keys properties) [(pu/get-built-in-property-uuid :icon)])))))
 
 (defn property-create-new-block
   [block property value parse-block]
