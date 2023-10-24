@@ -35,12 +35,14 @@
   [db-before db-after eid]
   (let [current-value (:block/properties (d/entity db-after eid))
         old-value (:block/properties (d/entity db-before eid))
-        [only-in-current only-in-old _both] (data/diff current-value old-value)
-        add-uuid (set (keys only-in-current))
-        retract-uuid (set/difference (set (keys only-in-old)) add-uuid)]
+        [only-in-current-uuids only-in-old-uuids both-uuids] (map (comp set keys) (data/diff current-value old-value))
+        add-uuids only-in-current-uuids
+        retract-uuids (set/difference only-in-old-uuids add-uuids both-uuids)
+        update-uuids (set/intersection both-uuids only-in-old-uuids)
+        add-uuids* (set/union add-uuids update-uuids)]
     (cond-> {}
-      (seq add-uuid) (conj [:add (set add-uuid)])
-      (seq retract-uuid) (conj [:retract (set retract-uuid)]))))
+      (seq add-uuids*) (conj [:add add-uuids*])
+      (seq retract-uuids) (conj [:retract retract-uuids]))))
 
 (defn- entity-datoms=>ops
   [repo db-before db-after entity-datoms]
