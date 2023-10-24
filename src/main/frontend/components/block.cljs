@@ -63,7 +63,7 @@
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.util.clock :as clock]
             [frontend.util.drawer :as drawer]
-            [frontend.handler.file-based.property :as file-property]
+            [frontend.handler.property.file :as property-file]
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.util.text :as text-util]
             [goog.dom :as gdom]
@@ -1744,7 +1744,7 @@
   (and
    (or
     (empty? properties)
-    (file-property/properties-hidden? properties))
+    (property-file/properties-hidden? properties))
 
    (empty? title)
 
@@ -2202,7 +2202,7 @@
                                  content (if (config/db-based-graph? repo)
                                            (or (:block/original-name block) content)
                                            (->> content
-                                                (file-property/remove-built-in-properties-when-file-based
+                                                (property-file/remove-built-in-properties-when-file-based
                                                  (state/get-current-repo) format)
                                                 (drawer/remove-logbook)))]
                             ;; save current editing block
@@ -2400,7 +2400,7 @@
           (invalid-properties-cp invalid-properties)))
 
       (when (and (seq properties)
-                 (let [hidden? (file-property/properties-hidden? properties)]
+                 (let [hidden? (property-file/properties-hidden? properties)]
                    (not hidden?))
                  (not (and block-ref? (or (seq title) (seq body))))
                  (not (:slide? config))

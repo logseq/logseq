@@ -43,7 +43,7 @@
             [frontend.util.keycode :as keycode]
             [frontend.util.list :as list]
             [frontend.util.marker :as marker]
-            [frontend.handler.file-based.property :as file-property]
+            [frontend.handler.property.file :as property-file]
             [frontend.util.text :as text-util]
             [frontend.util.thingatpt :as thingatpt]
             [goog.dom :as gdom]
@@ -319,7 +319,7 @@
          page (db/entity repo (:db/id page))
          block-id (when (and (not (config/db-based-graph? repo)) (map? properties))
                     (get properties :id))
-         content (-> (file-property/remove-built-in-properties-when-file-based repo format content)
+         content (-> (property-file/remove-built-in-properties-when-file-based repo format content)
                      (drawer/remove-logbook))]
      (cond
        (and (another-block-with-same-id-exists? uuid block-id)
@@ -532,7 +532,7 @@
                       (db/get-page-format (:db/id block))
                       (state/get-preferred-format))
               content (if (seq properties)
-                        (file-property/insert-properties-when-file-based repo format content properties)
+                        (property-file/insert-properties-when-file-based repo format content properties)
                         content)
               new-block (-> (if db-based?
                               (select-keys block [:block/page])
@@ -727,12 +727,12 @@
                 original-content (util/trim-safe (:block/content block))
                 value' (if db?
                          original-content
-                         (-> (file-property/remove-built-in-properties-when-file-based repo format original-content)
+                         (-> (property-file/remove-built-in-properties-when-file-based repo format original-content)
                              (drawer/remove-logbook)))
                 value (if db?
                         value
                         (->> value
-                             (file-property/remove-properties-when-file-based repo format)
+                             (property-file/remove-properties-when-file-based repo format)
                              (drawer/remove-logbook)))
                 new-value (str value' value)
                 tail-len (count value)
@@ -1257,7 +1257,7 @@
      (save-block!
       {:block block :repo repo :opts (dissoc opts :properties)}
       (if (seq properties)
-        (file-property/insert-properties-when-file-based repo (:block/format block) content properties)
+        (property-file/insert-properties-when-file-based repo (:block/format block) content properties)
         content))))
   ([{:keys [block repo opts] :as _state} value]
    (let [repo (or repo (state/get-current-repo))]
@@ -1317,7 +1317,7 @@
     content
     (some->> (text/remove-level-spaces content format (config/get-block-pattern format))
              (drawer/remove-logbook)
-             (file-property/remove-properties-when-file-based repo format)
+             (property-file/remove-properties-when-file-based repo format)
              string/trim)))
 
 (defn insert-command!
@@ -1945,8 +1945,8 @@
           (:block/content block))
         new-content
         (cond->> new-content
-          (not keep-uuid?) (file-property/remove-property-when-file-based repo format "id")
-          true             (file-property/remove-property-when-file-based repo format "custom_id"))]
+          (not keep-uuid?) (property-file/remove-property-when-file-based repo format "id")
+          true             (property-file/remove-property-when-file-based repo format "custom_id"))]
     (merge (apply dissoc block (conj (when-not keep-uuid? [:block/_refs]) :block/pre-block? :block/meta))
            {:block/page {:db/id (:db/id page)}
             :block/format format
@@ -2050,7 +2050,7 @@
               (let [content (:content block)
                     props (into [] (:properties block))
                     content* (str (if (= :markdown format) "- " "* ")
-                                  (file-property/insert-properties-when-file-based repo format content props))
+                                  (property-file/insert-properties-when-file-based repo format content props))
                     ast (mldoc/->edn content* (gp-mldoc/default-config format))
                     blocks (->> (block/extract-blocks ast content* format {:page-name page-name})
                                 (map wrap-parse-block))
@@ -2120,8 +2120,8 @@
            (let [exclude-properties [:id :template :template-including-parent]
                  content-update-fn (fn [content]
                                      (->> content
-                                          (file-property/remove-property-when-file-based repo format "template")
-                                          (file-property/remove-property-when-file-based repo format "template-including-parent")
+                                          (property-file/remove-property-when-file-based repo format "template")
+                                          (property-file/remove-property-when-file-based repo format "template-including-parent")
                                           template/resolve-dynamic-template!))
                  page (if (:block/name block) block
                           (when target (:block/page (db/entity (:db/id target)))))
@@ -2279,7 +2279,7 @@
                   (save-current-block!)
                   (insert-new-block! state))
                 ;; cursor in other positions of :ke|y: or ke|y::, move to line end for inserting value.
-                (if (file-property/property-key-exist?-when-file-based format content property-key)
+                (if (property-file/property-key-exist?-when-file-based format content property-key)
                   (notification/show!
                    [:p.content
                     (util/format "Property key \"%s\" already exists!" property-key)]
@@ -2292,7 +2292,7 @@
                    input
                    (cursor/line-beginning-pos input)
                    (inc (cursor/line-end-pos input)))
-                  (file-property/goto-properties-end-when-file-based format input)
+                  (property-file/goto-properties-end-when-file-based format input)
                   (cursor/move-cursor-to-line-end input))
               :else
               ;;When cursor in other place of PROPERTIES drawer, add :|: in a new line and move cursor to |
@@ -2657,7 +2657,7 @@
             new-content (if next-block-has-refs?
                           (str value ""
                                (->> (:block/content next-block)
-                                    (file-property/remove-properties-when-file-based repo (:block/format next-block))
+                                    (property-file/remove-properties-when-file-based repo (:block/format next-block))
                                     (drawer/remove-logbook)))
                           (str value "" (:block/content next-block)))
             repo (state/get-current-repo)
@@ -3701,7 +3701,7 @@
       (when-let [block (db/pull [:block/uuid link])]
         (let [block-content (:block/content block)
               format (or (:block/format block) :markdown)
-              block-content-without-prop (-> (file-property/remove-properties-when-file-based repo format block-content)
+              block-content-without-prop (-> (property-file/remove-properties-when-file-based repo format block-content)
                                              (drawer/remove-logbook))]
           (when-let [input (state/get-input)]
             (when-let [current-block-content (gobj/get input "value")]
@@ -3732,7 +3732,7 @@
           match (block-ref/->block-ref ref-id)
           ref-block (db/entity [:block/uuid ref-id])
           block-ref-content (->> (or (:block/content ref-block) "")
-                                 (file-property/remove-built-in-properties-when-file-based repo (:block/format ref-block))
+                                 (property-file/remove-built-in-properties-when-file-based repo (:block/format ref-block))
                                  (drawer/remove-logbook))
           content (string/replace-first (:block/content block) match
                                         block-ref-content)]

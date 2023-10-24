@@ -12,7 +12,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.clock :as clock]
-            [frontend.handler.file-based.property :as file-property]
+            [frontend.handler.file-based.property :as file-property-handler]
             [logseq.shui.core :as shui]
             [medley.core :as medley]
             [rum.core :as rum]
@@ -110,7 +110,7 @@
                             ;; or gp-property/built-in-extended properties
                             (set (map #(pu/get-built-in-property-uuid repo %)
                                       db-property/built-in-properties-keys-str))
-                            (conj (file-property/built-in-properties) :template))
+                            (conj (file-property-handler/built-in-properties) :template))
         prop-keys* (->> (distinct (mapcat keys (map :block/properties result)))
                         (remove hidden-properties))
         prop-keys (cond-> (if page? (cons :page prop-keys*) (concat '(:block :page) prop-keys*))

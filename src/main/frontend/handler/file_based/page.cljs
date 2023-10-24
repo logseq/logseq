@@ -4,7 +4,8 @@
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.db.model :as model]
-            [frontend.handler.file-based.property :as file-property]
+            [frontend.handler.file-based.property :as file-property-handler]
+            [frontend.handler.property.file :as property-file]
             [frontend.handler.file-based.page-property :as file-page-property]
             [frontend.handler.file-based.recent :as file-recent-handler]
             [frontend.handler.config :as config-handler]
@@ -207,10 +208,10 @@
                                            properties-content
                                            (string/includes? (util/page-name-sanity-lc properties-content)
                                                              old-page-name))
-                                  (let [front-matter? (and (file-property/front-matter?-when-file-based properties-content)
+                                  (let [front-matter? (and (property-file/front-matter?-when-file-based properties-content)
                                                            (= :markdown (:block/format properties-block)))]
                                     {:db/id         (:db/id properties-block)
-                                     :block/content (file-property/insert-property
+                                     :block/content (file-property-handler/insert-property
                                                      (:block/format properties-block)
                                                      properties-content
                                                      :title

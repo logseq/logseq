@@ -5,7 +5,7 @@
             [frontend.util :as util]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.util.page-ref :as page-ref]
-            [frontend.handler.file-based.property :as file-property]
+            [frontend.handler.property.file :as property-file]
             [frontend.util.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
             [frontend.db :as db]
@@ -110,7 +110,7 @@
   [block props]
   (editor-handler/save-block-if-changed!
    block
-   (file-property/insert-properties-when-file-based
+   (property-file/insert-properties-when-file-based
     (state/get-current-repo) (:block/format block) (:block/content block) props)
    {:force? true}))
 
@@ -775,7 +775,7 @@
   [block-id]
   (when-let [block (db/entity [:block/uuid block-id])]
     (when-let [content (:block/content block)]
-      (let [content (-> (file-property/remove-built-in-properties-when-file-based
+      (let [content (-> (property-file/remove-built-in-properties-when-file-based
                          (state/get-current-repo) (:block/format block) content)
                         (drawer/remove-logbook))]
         (editor-handler/save-block!
@@ -787,7 +787,7 @@
   ([] (batch-make-cards! (state/get-selection-block-ids)))
   ([block-ids]
    (let [block-content-fn (fn [block]
-                            [block (-> (file-property/remove-built-in-properties-when-file-based
+                            [block (-> (property-file/remove-built-in-properties-when-file-based
                                         (state/get-current-repo) (:block/format block) (:block/content block))
                                        (drawer/remove-logbook)
                                        string/trim
