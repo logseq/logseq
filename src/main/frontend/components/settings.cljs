@@ -662,7 +662,8 @@
         enable-git-auto-push? (state/enable-git-auto-push? current-repo)]
 
     [:div.panel-wrap.is-editor
-     (file-format-row t preferred-format)
+     (when-not (config/db-based-graph? (state/get-current-repo))
+       (file-format-row t preferred-format))
      (date-format-row t preferred-date-format)
      (workflow-row t preferred-workflow)
      (show-brackets-row t show-brackets?)
