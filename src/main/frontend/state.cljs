@@ -1901,6 +1901,10 @@ Similar to re-frame subscriptions"
             (when (or (util/mobile?) (mobile-util/native-platform?))
               (set-state! :mobile/show-action-bar? false)))))))))
 
+(defn action-bar-open?
+  []
+  (:mobile/show-action-bar? @state))
+
 (defn remove-watch-state [key]
   (remove-watch state key))
 
