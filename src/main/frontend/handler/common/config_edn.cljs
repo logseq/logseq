@@ -88,11 +88,16 @@ nested keys or positional errors e.g. tuples"
 
 (defn detect-deprecations
   "Detects config keys that will or have been deprecated"
-  [path content]
+  [path content {:keys [db-graph?]}]
   (let [body (try (edn/read-string content)
                (catch :default _ ::failed-to-detect))
-        warnings {:editor/command-trigger
-                  "is no longer supported. Please use '/' and report bugs on it."}]
+        warnings (cond->
+                  {:editor/command-trigger
+                   "is no longer supported. Please use '/' and report bugs on it."}
+                   db-graph?
+                   (merge
+                    {:preferred-format
+                     "is not used in DB graphs as there is only markdown mode."}))]
     (cond
       (= body ::failed-to-detect)
       (log/info :msg "Skip deprecation check since config is not valid edn")

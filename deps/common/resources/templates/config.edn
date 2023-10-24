@@ -1,6 +1,7 @@
 {:meta/version 1
 
  ;; Set the preferred format.
+ ;; This is _only_ for file graphs.
  ;; Available options:
  ;; - Markdown (default)
  ;; - Org
