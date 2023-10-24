@@ -24,10 +24,13 @@
   (contains? #{:page :number :url :date :enum} type))
 
 (defn exit-edit-property
-  []
-  (when-not (:editor/property-configure? @state/state)
-    (property-handler/set-editing-new-property! nil)
-    (state/clear-edit!)))
+  ([]
+   (exit-edit-property true))
+  ([property-configure-check?]
+   (when (or (and property-configure-check? (not (:editor/property-configure? @state/state)))
+             (not property-configure-check?))
+     (property-handler/set-editing-new-property! nil)
+     (state/clear-edit!))))
 
 (defn set-editing!
   [property editor-id dom-id v opts]
@@ -262,7 +265,7 @@
                                               (:block/original-name property)
                                               (string/trim new-value)))
       (when (= js/document.activeElement (gdom/getElement editor-id))
-        (exit-edit-property)))))
+        (exit-edit-property false)))))
 
 (defn create-new-block!
   [block property value]
@@ -356,14 +359,14 @@
                   :extract-chosen-fn :value
                   :input-opts (fn [_]
                                 {:on-blur (fn []
-                                            (exit-edit-property)
+                                            (exit-edit-property false)
                                             (when-let [f (:on-chosen opts)] (f)))
                                  :on-key-down
                                  (fn [e]
                                    (case (util/ekey e)
                                      "Escape"
                                      (do
-                                       (exit-edit-property)
+                                       (exit-edit-property false)
                                        (when-let [f (:on-chosen opts)] (f)))
                                      nil))})}
                   enum?
