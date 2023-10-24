@@ -11,7 +11,7 @@
             [frontend.util :as util]))
 
 (defn lookup
-  "Get the value of coll's (a map) `key`"
+  "Get the value of coll's (a map) `key`. For file and db graphs"
   [coll key]
   (let [repo (state/get-current-repo)]
     (if (and (config/db-based-graph? repo)
@@ -33,12 +33,22 @@
   (:block/original-name (db/entity [:block/uuid uuid])))
 
 (defn get-built-in-property-uuid
-  "Get a property's uuid given its name"
-  [property-name]
-  (:block/uuid (db/entity [:block/name (name property-name)])))
+  "Get a built-in property's uuid given its name"
+  ([property-name] (get-built-in-property-uuid (state/get-current-repo) property-name))
+  ([repo property-name]
+   (:block/uuid (db/entity repo [:block/name (name property-name)]))))
+
+(defn get-user-property-uuid
+  "Get a user property's uuid given its unsanitized name"
+  ([property-name] (get-user-property-uuid (state/get-current-repo) property-name))
+  ([repo property-name]
+   (:block/uuid (db/entity repo [:block/name (gp-util/page-name-sanity-lc (name property-name))]))))
+
+;; Get a page's uuid given its unsanitized name
+(def get-page-uuid get-user-property-uuid)
 
 (defn get-pid
-  "Get a property's id (name or uuid) given its name"
+  "Get a property's id (name or uuid) given its name. For file and db graphs"
   [property-name]
   (let [repo (state/get-current-repo)]
     (if (config/db-based-graph? repo)
@@ -60,10 +70,8 @@
   [properties]
   (let [repo (state/get-current-repo)]
     (when (empty? @*db-built-in-properties)
-      (let [built-in-properties (set (map
-                                      (fn [p]
-                                        (:block/uuid (db/entity [:block/name (name p)])))
-                                      db-property/built-in-properties-keys))]
+      (let [built-in-properties (set (map #(get-built-in-property-uuid repo %)
+                                          db-property/built-in-properties-keys))]
         (swap! *db-built-in-properties assoc repo built-in-properties)))
     (set/subset? (set properties) (get @*db-built-in-properties repo))))
 

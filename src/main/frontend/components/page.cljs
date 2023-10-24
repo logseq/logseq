@@ -453,7 +453,7 @@
          [:div.page-icon {:on-mouse-down util/stop-propagation}
           (if (map? icon)
             (property/icon icon {:on-chosen (fn [_e icon]
-                                              (let [icon-property-id (:block/uuid (db/entity [:block/name "icon"]))]
+                                              (let [icon-property-id (pu/get-built-in-property-uuid :icon)]
                                                 (property-handler/update-property!
                                                  repo
                                                  (:block/uuid page)

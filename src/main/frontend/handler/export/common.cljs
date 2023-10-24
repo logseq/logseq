@@ -13,6 +13,7 @@
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
+            [frontend.handler.property.util :as pu]
             [malli.core :as m]
             [malli.util :as mu]))
 
@@ -92,7 +93,7 @@
   ([page-name]
    (get-page-content (state/get-current-repo) page-name))
   ([repo page-name]
-   (when-let [page-uuid (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page-name)]))]
+   (when-let [page-uuid (pu/get-page-uuid page-name)]
      (get-blocks-contents repo page-uuid :init-level 0))))
 
 (defn- page-name->ast

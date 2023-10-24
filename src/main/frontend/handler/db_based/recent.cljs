@@ -2,15 +2,15 @@
   "Fns related to recent pages feature"
   (:require [frontend.db :as db]
             [frontend.state :as state]
-            [logseq.graph-parser.util :as gp-util]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.handler.property.util :as pu]))
 
 (defn add-page-to-recent!
   [page click-from-recent?]
   (when-not (:db/restoring? @state/state)
     (when-let [page-uuid (if (uuid? page)
                            nil
-                           (:block/uuid (db/entity [:block/name (gp-util/page-name-sanity-lc page)])))]
+                           (pu/get-page-uuid page))]
       (let [pages (state/get-recent-pages)]
         (when (or (and click-from-recent? (not ((set pages) page-uuid)))
                   (not click-from-recent?))

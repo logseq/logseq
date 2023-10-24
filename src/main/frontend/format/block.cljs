@@ -20,19 +20,20 @@
   "Updates DB graph blocks to ensure that built-in properties are using uuids
   for property ids"
   [blocks]
-  (if (config/db-based-graph? (state/get-current-repo))
-    (map (fn [b]
-           (if (:block/properties b)
-             (-> b
-                 (dissoc :block/properties-order)
-                 (update :block/properties
-                         (fn [props]
-                           (update-keys props #(if (contains? db-property/built-in-properties-keys %)
-                                                 (pu/get-built-in-property-uuid %)
-                                                 %)))))
-             b))
-         blocks)
-    blocks))
+  (let [repo (state/get-current-repo)]
+    (if (config/db-based-graph? repo)
+     (map (fn [b]
+            (if (:block/properties b)
+              (-> b
+                  (dissoc :block/properties-order)
+                  (update :block/properties
+                          (fn [props]
+                            (update-keys props #(if (contains? db-property/built-in-properties-keys %)
+                                                  (pu/get-built-in-property-uuid repo %)
+                                                  %)))))
+              b))
+          blocks)
+     blocks)))
 
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state

@@ -17,7 +17,8 @@
             [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
             [rum.core :as rum]
-            [frontend.handler.route :as route-handler]))
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.property.util :as pu]))
 
 (defn- select-type?
   [type]
@@ -113,12 +114,12 @@
   (let [page* (string/trim page)
         [_ page inline-class] (or (seq (map string/trim (re-find #"(.*)#(.*)$" page*)))
                                   [nil page* nil])
-        id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))
+        id (pu/get-page-uuid page)
         class? (= (:block/name property) "tags")]
     (when (nil? id)
       (let [inline-class-uuid
             (when inline-class
-              (or (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc inline-class)]))
+              (or (pu/get-page-uuid inline-class)
                   (do (log/error :msg "Given inline class does not exist" :inline-class inline-class)
                       nil)))]
         (page-handler/create! page {:redirect? false
@@ -228,8 +229,7 @@
                                   (let [pages (->> choices
                                                    (map #(create-page-if-not-exists! property classes %))
                                                    (map first))
-                                        values (set (map (fn [page]
-                                                           (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)]))) pages))]
+                                        values (set (map #(pu/get-page-uuid repo %) pages))]
                                     (add-property! block (:block/original-name property) values)
                                     (when-let [f (:on-chosen opts)] (f)))))
                (not multiple-choices?)
@@ -237,7 +237,7 @@
                                    (let [page* (string/trim (if (string? chosen) chosen (:value chosen)))]
                                      (when-not (string/blank? page*)
                                        (let [[page id] (create-page-if-not-exists! property classes page*)
-                                             id' (or id (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page)])))]
+                                             id' (or id (pu/get-page-uuid repo page))]
                                          (add-property! block (:block/original-name property) id')
                                          (when-let [f (:on-chosen opts)] (f))))))))]
     (select-aux block property opts)))

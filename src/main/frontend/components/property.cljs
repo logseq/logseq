@@ -60,7 +60,7 @@
         (page-handler/create! page-name {:redirect? false
                                          :create-first-block? false
                                          :class? true})
-        (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc page-name)]))))))
+        (pu/get-page-uuid page-name)))))
 
 (rum/defc class-select
   [*property-schema schema-classes {:keys [multiple-choices? save-property-fn]
@@ -353,7 +353,7 @@
           (icon icon-value
                 {:disabled? disabled?
                  :on-chosen (fn [_e icon]
-                              (let [icon-property-id (:block/uuid (db/entity [:block/name "icon"]))]
+                              (let [icon-property-id (pu/get-built-in-property-uuid :icon)]
                                 (property-handler/update-property!
                                  (state/get-current-repo)
                                  (:block/uuid property)
@@ -657,7 +657,7 @@
          (icon-component/icon-search
           {:on-chosen
            (fn [_e icon]
-             (let [icon-property-id (:block/uuid (db/entity [:block/name "icon"]))]
+             (let [icon-property-id (pu/get-built-in-property-uuid :icon)]
                (when icon
                  (property-handler/update-property! repo
                                                     (:block/uuid property)
@@ -780,7 +780,7 @@
                      (sort-by first block-properties))
         alias (set (map :block/uuid (:block/alias block)))
         alias-properties (when (seq alias)
-                           [[(:block/uuid (db/entity [:block/name "alias"])) alias]])
+                           [[(pu/get-built-in-property-uuid :alias) alias]])
         remove-built-in-properties (fn [properties]
                                      (remove (fn [x]
                                                (let [id (if (uuid? x) x (first x))]

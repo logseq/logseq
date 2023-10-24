@@ -4,9 +4,7 @@
             [frontend.extensions.sci :as sci]
             [frontend.handler.common :as common-handler]
             [frontend.handler.property.util :as pu]
-            [frontend.db :as db]
             [frontend.state :as state]
-            [logseq.graph-parser.util :as gp-util]
             [goog.string :as gstring]
             [goog.string.format]
             [frontend.config :as config]))
@@ -50,7 +48,7 @@
                  int? (some integer? vals)
                  repo (state/get-current-repo)
                  prop-key (if (config/db-based-graph? repo)
-                            (or (:block/uuid (db/entity repo [:block/name (gp-util/page-name-sanity-lc (name f))]))
+                            (or (pu/get-user-property-uuid repo f)
                                 ;; Fall back to the keyword for queries that set named properties through :result-transform
                                 f)
                             f)]
