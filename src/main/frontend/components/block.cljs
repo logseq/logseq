@@ -2861,9 +2861,8 @@
                     (if (and prev-node (first (dom/by-class prev-node "block-lazy-placeholder")))
                       (do
                         (when (and hidden-atom (not @*scheduled?))
-                          (util/schedule #(do
-                                            (reset! *scheduled? true)
-                                            (reset! hidden-atom (hide-block? ref hidden-atom)))))
+                          (reset! *scheduled? true)
+                          (util/schedule #(reset! hidden-atom (hide-block? ref hidden-atom))))
                         true)
                       (let [top (.-top (.getBoundingClientRect ref))]
                         (not (<= top (+ js/window.innerHeight 2000))))))
