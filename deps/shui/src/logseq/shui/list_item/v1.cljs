@@ -96,7 +96,7 @@
           [:span text-string])))))
 
 ;; result-item
-(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted on-highlight on-highlight-dep header on-click hoverable compact] :as _props :or {hoverable true}} 
+(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted on-highlight on-highlight-dep header on-click hoverable compact rounded] :as _props :or {hoverable true rounded true}} 
                 {:keys [app-config] :as context}]
   (let [ref (rum/create-ref)
         highlight-query (partial highlight-query* app-config query)]
@@ -109,7 +109,8 @@
                    :mix-blend-mode (if highlighted :normal :luminosity)}
            :class (cond-> "flex flex-col grayscale" 
                     highlighted (str " !grayscale-0 !opacity-100 bg-gray-03-alpha dark:bg-gray-04-alpha")
-                    hoverable (str " !rounded-lg transition-all duration-50 ease-in !opacity-75 hover:!opacity-100 hover:grayscale-0 hover:cursor-pointer hover:bg-gradient-to-r hover:from-gray-03-alpha hover:to-gray-01-alpha")
+                    hoverable (str " transition-all duration-50 ease-in !opacity-75 hover:!opacity-100 hover:grayscale-0 hover:cursor-pointer hover:bg-gradient-to-r hover:from-gray-03-alpha hover:to-gray-01-alpha")
+                    (and hoverable rounded) (str " !rounded-lg")
                     (not compact) (str  " py-4 px-6 gap-1")
                     compact (str " py-1.5 px-3.5 gap-0.5")
                     (not highlighted) (str " "))

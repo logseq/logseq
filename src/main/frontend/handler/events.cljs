@@ -416,13 +416,11 @@
 
 (defmethod handle :go/cmdk [_]
   (when-not (= cmdk/cmdk (:modal/panel-content @state/state))
-    (state/set-modal! ; (partial cmdk {} (make-context {:blocks-container block/blocks-container :page-cp block/page-cp :page page/page})) 
-                      ; cmdk
-                      cmdk/cmdk
-                      {:fullscreen? false 
+    (state/set-modal! cmdk/cmdk-modal
+                      {:fullscreen? true
+                       :panel? false
                        :close-btn?  false 
-                       :label "ls-modal-cmdk" 
-                       :shui? true})))
+                       :label "ls-modal-cmdk"}))) 
 
 (defmethod handle :go/plugins [_]
   (plugin/open-plugins-modal!))

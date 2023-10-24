@@ -2,6 +2,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.block :as block]
+            [frontend.components.cmdk :as cmdk]
             [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
             [frontend.components.shortcut :as shortcut]
@@ -422,10 +423,13 @@
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.ml-2.pr-3
        (if @*anim-finished?
-         (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
-           (rum/with-key
-             (sidebar-item repo idx db-id block-type block-count)
-             (str "sidebar-block-" db-id)))
+         [:<>
+          [:div.sidebar-drop-indicator]
+          (cmdk/cmdk-block {:sidebar? true})
+          (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
+            (rum/with-key
+              (sidebar-item repo idx db-id block-type block-count)
+              (str "sidebar-block-" db-id)))]
          [:div.p-4
           [:span.font-medium.opacity-50 "Loading ..."]])]]]))
 
