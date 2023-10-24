@@ -3,7 +3,7 @@
             [cljs-bean.core :as bean]
             [goog.dom :as gdom]
             [sci.core :as sci]
-            [frontend.util :as utils]
+            [frontend.util :as util]
             [clojure.string :as string]))
 
 (defn- parse-hiccup-ui
@@ -56,7 +56,7 @@
     (let [^js s (js/window.getComputedStyle js/document.body)]
       (some->> (for [prop props]
                  (when (string? prop)
-                   [prop (utils/trim-safe (.getPropertyValue s prop))]))
+                   [prop (util/trim-safe (.getPropertyValue s prop))]))
                (remove empty?)
                (into {})
                (bean/->js)))))

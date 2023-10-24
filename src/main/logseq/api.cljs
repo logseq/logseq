@@ -4,7 +4,6 @@
             [logseq.sdk.core]
             [logseq.sdk.utils :as sdk-utils]
             [logseq.sdk.ui :as sdk-ui]
-            [logseq.sdk.git :as sdk-git]
             [logseq.sdk.assets :as sdk-assets]
             [clojure.string :as string]
             [datascript.core :as d]
