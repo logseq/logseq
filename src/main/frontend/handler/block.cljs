@@ -328,7 +328,7 @@
 (defn- edit-block-aux
   [repo block content block-node text-range {:keys [direction retry-times max-retry-times]
                                              :or {retry-times 0
-                                                  max-retry-times 3}
+                                                  max-retry-times 5}
                                              :as opts}]
   (when (and (<= retry-times max-retry-times) block)
     (let [block-node block-node
@@ -386,7 +386,7 @@
                          (uuid? block-node)
                          nil
                          (string? block-node)
-                         (gdom/getElement(string/replace block-node "edit-block" "ls-block"))
+                         (gdom/getElement (string/replace block-node "edit-block" "ls-block"))
                          :else
                          block-node)
             db-graph? (config/db-based-graph? repo)

@@ -2896,7 +2896,12 @@
                                 ;; block outdent
                                 (= editing-parent-node (.-previousSibling ref))))
                       (state/set-editing-ref! ref))))
-                state)}
+                state)
+   ;; FIXME:
+   ;; :will-unmount (fn [state]
+   ;;                 (swap! (:editor/ref->editing? @state/state) dissoc @(::ref state))
+   ;;                 state)
+   }
   [state container-state repo config* block {:keys [navigating-block navigated?]}]
   (let [*ref (::ref state)
         ref (rum/react *ref)
@@ -2947,9 +2952,10 @@
        :id (str "ls-block-" uuid)
        :ref #(when (nil? @*ref) (reset! *ref %))
        :data-collapsed (and collapsed? has-child?)
-       :class (str (when selected? "selected")
+       :class (str "id" uuid " "
+                   (when selected? " selected")
                    (when hidden? " hidden-block")
-                   (when pre-block? "pre-block")
+                   (when pre-block? " pre-block")
                    (when order-list? " is-order-list")
                    (when (string/blank? content) " is-blank")
                    (when original-block " embed-block"))
