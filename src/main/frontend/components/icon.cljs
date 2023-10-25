@@ -14,7 +14,7 @@
             [frontend.handler.property.util :as pu]))
 
 (defn icon
-  [icon & opts]
+  [icon & [opts]]
   (cond
     (and (= :emoji (:type icon)) (:id icon))
     [:em-emoji (merge {:id (:id icon)}
