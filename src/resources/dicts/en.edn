@@ -608,6 +608,7 @@
  :pdf/linked-ref "Linked references"
  :pdf/toggle-dashed "Dashed style for area highlight"
  :pdf/hl-block-colored "Colored label for highlight block"
+ :pdf/auto-open-context-menu "Auto open context menu for selections"
  :pdf/doc-metadata "Document metadata"
 
  :updater/new-version-install "A new version has been downloaded."
