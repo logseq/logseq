@@ -38,7 +38,7 @@
    :hl-stamp {:schema {:type :number}}
    :hl-color {:schema {:type :default}}
    :logseq.macro-name {:schema {:type :default}}
-   :logseq.macro-arguments {:schema {:type :default}}
+   :logseq.macro-arguments {:schema {:type :coll}}
    :logseq.order-list-type {:schema {:type :default}}
    :logseq.tldraw.page {:schema {:type :map}}
    :logseq.tldraw.shape {:schema {:type :map}}

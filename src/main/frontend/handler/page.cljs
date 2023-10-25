@@ -154,8 +154,7 @@
                    (or (util/uuid-string? name)
                        (gp-config/draw? name)
                        (db/built-in-pages-names (string/upper-case name))
-                       (db-property/built-in-properties-keys-str name)
-                       (contains? (:block/type p) "macro")))))
+                       (db-property/built-in-properties-keys-str name)))))
        (common-handler/fix-pages-timestamps)))
 
 (defn get-filters
