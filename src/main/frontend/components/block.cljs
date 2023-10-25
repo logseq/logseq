@@ -2840,8 +2840,12 @@
 
 (defn- hide-block?
   [ref]
-  (let [top (.-top (.getBoundingClientRect ref))]
-    (> top (+ js/window.innerHeight 500))))
+  (let [rect (.getBoundingClientRect ref)
+        top (.-top rect)
+        bottom (.-bottom rect)]
+    (or
+     (< bottom -200)
+     (> top (+ js/window.innerHeight 500)))))
 
 (defn- get-hidden-atom
   [sub-id *ref {:keys [initial-value]}]
