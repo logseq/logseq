@@ -636,13 +636,14 @@
 
 
 (defn <grant-graph-access-to-others
-  [state graph-uuid target-user-uuids]
+  [state graph-uuid & {:keys [target-user-uuids target-user-emails]}]
   (go
     (let [r (with-sub-data-from-ws state
               (<! (ws/<send! state {:req-id (get-req-id)
                                     :action "grant-access"
                                     :graph-uuid graph-uuid
-                                    :target-user-uuids target-user-uuids}))
+                                    :target-user-uuids target-user-uuids
+                                    :target-user-emails target-user-emails}))
 
               (<! (get-result-ch)))]
       (when-let [ex-message (:ex-message r)]
