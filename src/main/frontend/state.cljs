@@ -128,7 +128,7 @@
       :editor/content                        (atom {})
       :editor/block                          (atom nil)
       :editor/block-dom-id                   (atom nil)
-      :editor/set-timestamp-block            nil ;; click rendered block timestamp-cp to set timestamp
+      :editor/set-timestamp-block            (atom nil) ;; click rendered block timestamp-cp to set timestamp
       :editor/last-input-time                (atom {})
       :editor/document-mode?                 document-mode?
       :editor/args                           (atom nil)
@@ -153,7 +153,7 @@
       :db/last-transact-time                 (atom {})
       ;; whether database is persisted
       :db/persisted?                         {}
-      :cursor-range                          nil
+      :editor/cursor-range                   (atom nil)
 
       :selection/mode                        (atom false)
       ;; Warning: blocks order is determined when setting this attribute
@@ -931,7 +931,7 @@ Similar to re-frame subscriptions"
 
 (defn get-timestamp-block
   []
-  (:editor/set-timestamp-block @state))
+  @(:editor/set-timestamp-block @state))
 
 (defn get-edit-block
   []
@@ -981,11 +981,11 @@ Similar to re-frame subscriptions"
 
 (defn get-cursor-range
   []
-  (:cursor-range @state))
+  @(:editor/cursor-range @state))
 
 (defn set-cursor-range!
   [range]
-  (set-state! :cursor-range range))
+  (set-state! :editor/cursor-range range))
 
 (defn set-q!
   [value]
@@ -1260,8 +1260,8 @@ Similar to re-frame subscriptions"
   (reset! *editor-editing-ref nil)
   (set-state! :editor/editing-prev-node nil)
   (set-state! :editor/editing-parent-node nil)
-  (swap! state merge {:cursor-range    nil
-                      :editor/last-saved-cursor nil})
+  (set-state! :editor/cursor-range nil)
+  (swap! state merge {:editor/last-saved-cursor nil})
   (set-state! :editor/content {})
   (set-state! :editor/block nil)
   (set-state! :ui/select-query-cache {}))
@@ -1271,8 +1271,8 @@ Similar to re-frame subscriptions"
   (when-let [prev-ref @*editor-editing-ref]
     (reset! (get @(:editor/ref->editing? @state) prev-ref) false))
   (reset! *editor-editing-ref nil)
-  (swap! state merge {:cursor-range      nil
-                      :editor/code-mode? true}))
+  (set-state! :editor/cursor-range nil)
+  (swap! state merge {:editor/code-mode? true}))
 
 (defn set-editor-last-pos!
   [new-pos]
@@ -2006,16 +2006,12 @@ Similar to re-frame subscriptions"
                            :block.temp/container (gobj/get container "id"))
                     block)
             content (string/trim (or content ""))]
-        (set-editing-ref! ref)
-        (swap! state
-               (fn [state]
-                 (-> state
-                     (assoc
-                      :editor/set-timestamp-block nil
-                      :cursor-range cursor-range))))
+        (when ref (set-editing-ref! ref))
         (set-state! :editor/block block)
         (set-state! :editor/content content :path-in-sub-atom (:block/uuid block))
         (set-state! :editor/last-key-code nil)
+        (set-state! :editor/set-timestamp-block nil)
+        (set-state! :editor/cursor-range cursor-range)
 
         (when-let [input (gdom/getElement edit-input-id)]
           (let [pos (count cursor-range)]

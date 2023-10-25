@@ -2114,7 +2114,7 @@
   < rum/reactive
   (rum/local false ::show-datepicker?)
   [state block typ ast]
-  (let [ts-block-id (state/sub [:editor/set-timestamp-block :block :block/uuid])
+  (let [ts-block-id (get-in (state/sub [:editor/set-timestamp-block]) [:block :block/uuid])
         active? (= (get block :block/uuid) ts-block-id)
         *show-datapicker? (get state ::show-datepicker?)]
     [:div.flex.flex-col.gap-4.timestamp
@@ -2912,7 +2912,7 @@
                             (= (:id config*)
                                (str (:block/uuid block))))
         edit-input-id (str "edit-block-" (:block/uuid block))
-        edit? (state/sub-editing? ref)
+        edit? (when ref (state/sub-editing? ref))
         custom-query? (boolean (:custom-query? config*))
         ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get container-state ::navigating-block)
