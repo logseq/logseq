@@ -504,30 +504,32 @@
 (declare page-reference)
 
 (defn open-page-ref
-  [e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?]
+  [e config page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?]
   (util/stop e)
   (when (not (util/right-click? e))
-    (cond
-      (gobj/get e "shiftKey")
-      (when-let [page-entity (db/entity [:block/name redirect-page-name])]
-        (state/sidebar-add-block!
-         (state/get-current-repo)
-         (:db/id page-entity)
-         :page))
+    (let [redirect-page-name (or redirect-page-name
+                                 (model/get-redirect-page-name page-name (:block/alias? config)))]
+      (cond
+        (gobj/get e "shiftKey")
+        (when-let [page-entity (db/entity [:block/name redirect-page-name])]
+          (state/sidebar-add-block!
+           (state/get-current-repo)
+           (:db/id page-entity)
+           :page))
 
-      (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
-      (whiteboard-handler/add-new-block-portal-shape!
-       page-name
-       (whiteboard-handler/closest-shape (.-target e)))
+        (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
+        (whiteboard-handler/add-new-block-portal-shape!
+         page-name
+         (whiteboard-handler/closest-shape (.-target e)))
 
-      whiteboard-page?
-      (route-handler/redirect-to-whiteboard! page-name)
+        whiteboard-page?
+        (route-handler/redirect-to-whiteboard! page-name)
 
-      (not= redirect-page-name page-name)
-      (route-handler/redirect-to-page! redirect-page-name)
+        (not= redirect-page-name page-name)
+        (route-handler/redirect-to-page! redirect-page-name)
 
-      :else
-      (state/pub-event! [:page/create page-name-in-block])))
+        :else
+        (state/pub-event! [:page/create page-name-in-block]))))
   (when (and contents-page?
              (util/mobile?)
              (state/get-left-sidebar-open?))
@@ -551,7 +553,7 @@
     [:a.relative
      {:tabIndex "0"
       :class (cond->
-               (if tag? "tag" "page-ref")
+              (if tag? "tag" "page-ref")
                (:property? config) (str " page-property-key block-property")
                untitled? (str " opacity-50")
                (not display-close-button?) (str " pl-0")
@@ -566,10 +568,10 @@
                        (reset! *mouse-down? true))
       :on-mouse-up (fn [e]
                      (when @*mouse-down?
-                       (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)
+                       (open-page-ref e config page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)
                        (reset! *mouse-down? false)))
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
-                           (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)))}
+                           (open-page-ref e config page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)))}
 
      (if (and (coll? children) (seq children))
        (for [child children]
@@ -630,8 +632,6 @@
   [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open? manual?] :as config} page-name]
   (let [*tippy-ref (rum/create-ref)
         page-name (util/page-name-sanity-lc page-name)
-        redirect-page-name (or (model/get-redirect-page-name page-name (:block/alias? config))
-                               page-name)
         _  #_:clj-kondo/ignore (rum/defc html-template []
                                  (let [*el-popup (rum/use-ref nil)]
 
@@ -650,20 +650,22 @@
                                         #(.removeEventListener el-popup "keyup" cb)))
                                     [])
 
-                                   (when redirect-page-name
-                                     [:div.tippy-wrapper.overflow-y-auto.p-4.outline-none.rounded-md
-                                      {:ref   *el-popup
-                                       :tab-index -1
-                                       :style {:width          600
-                                               :text-align     "left"
-                                               :font-weight    500
-                                               :max-height     600
-                                               :padding-bottom 64}}
-                                      (let [page-cp (state/get-page-blocks-cp)]
-                                        (page-cp {:repo (state/get-current-repo)
-                                                  :page-name redirect-page-name
-                                                  :sidebar? sidebar?
-                                                  :preview? true}))])))]
+                                   (let [redirect-page-name (or (model/get-redirect-page-name page-name (:block/alias? config))
+                                                                page-name)]
+                                     (when redirect-page-name
+                                       [:div.tippy-wrapper.overflow-y-auto.p-4.outline-none.rounded-md
+                                        {:ref   *el-popup
+                                         :tab-index -1
+                                         :style {:width          600
+                                                 :text-align     "left"
+                                                 :font-weight    500
+                                                 :max-height     600
+                                                 :padding-bottom 64}}
+                                        (let [page-cp (state/get-page-blocks-cp)]
+                                          (page-cp {:repo (state/get-current-repo)
+                                                    :page-name redirect-page-name
+                                                    :sidebar? sidebar?
+                                                    :preview? true}))]))))]
 
     (if (or (not manual?) open?)
       (ui/tippy {:ref             *tippy-ref
@@ -690,10 +692,9 @@
           page-name (util/page-name-sanity-lc page-name-in-block)
           page-entity (db/entity [:block/name page-name])
           whiteboard-page? (model/whiteboard-page? page-name)
-          redirect-page-name (or (and (= :org (state/get-preferred-format))
-                                      (:org-mode/insert-file-link? (state/get-config))
-                                      redirect-page-name)
-                                 (model/get-redirect-page-name page-name (:block/alias? config)))
+          redirect-page-name (and (= :org (state/get-preferred-format))
+                                  (:org-mode/insert-file-link? (state/get-config))
+                                  redirect-page-name)
           inner (page-inner config
                             page-name-in-block
                             page-name
