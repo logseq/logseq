@@ -197,6 +197,10 @@
   }
 }
 
+.hidden-block .block-children {
+  border-left: 0px;
+}
+
 .block-control-wrap {
   @apply h-[24px] mt-0 pr-[6px];
 
