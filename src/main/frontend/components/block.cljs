@@ -1808,15 +1808,15 @@
               (not doc-mode?))
          bullet
 
-         (or
+         (and
+          (not (util/react *control-show?))
+          (or
            (and empty-content?
                 (not edit?)
                 (not (:block.temp/top? block))
-                (not (:block.temp/bottom? block))
-                (not (util/react *control-show?)))
+                (not (:block.temp/bottom? block)))
            (and doc-mode?
-                (not collapsed?)
-                (not (util/react *control-show?))))
+                (not collapsed?))))
          ;; hidden
          [:span.bullet-container]
 
@@ -2986,7 +2986,7 @@
 
      ;; only render this for the first block in each container
      (when top?
-       (dnd-separator-wrapper block block-id slide? true false))
+       (dnd-separator-wrapper block children block-id slide? true false))
 
      [:div.block-main-container.flex.flex-row.pr-2
       {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
@@ -3002,8 +3002,8 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (and (not slide?) (not in-whiteboard?) (not hidden?))
-        (block-control config block uuid block-id collapsed? *control-show? edit?))
-
+        (block-control config block uuid block-id collapsed? *control-show?
+                       (or edit? (= uuid (:block/uuid (state/get-edit-block))))))
       (when (and @*show-left-menu? (not in-whiteboard?) (not hidden?))
         (block-left-menu config block))
 

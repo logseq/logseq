@@ -369,10 +369,9 @@
                            :else
                            ;; take the first dom node
                            (gdom/getElement (str "ls-block-" (:block/uuid block))))]
+      (state/set-editing! "" content block text-range {:ref next-edit-node})
       (if next-edit-node
-        (do
-          (state/set-editing! "" content block text-range {:ref next-edit-node})
-          (mark-last-input-time! repo))
+        (mark-last-input-time! repo)
         (util/schedule (fn [] (edit-block-aux repo block content block-node text-range (update opts :retry-times inc))))))))
 
 (defn edit-block!
