@@ -778,6 +778,7 @@
 (rum/defc settings-account-usage-description [pro-account? graph-usage]
   (let [count-usage (count graph-usage)
         count-limit (if pro-account? 10 1)
+        default-storage-limit (if pro-account? 10 0.05)
         count-percent (js/Math.round (/ count-usage count-limit 0.01))
         storage-usage (->> (map :used-gbs graph-usage)
                            (reduce + 0))
@@ -788,7 +789,6 @@
         ;; TODO: check logic on this. What are the rules around storage limits?
         ;; do we, and should we be able to, give individual users more storage?
         ;; should that be on a per graph or per user basis?
-        default-storage-limit (if pro-account? 10 0.05)
         storage-limit (->> (range 0 count-limit)
                            (map #(get-in graph-usage [% :limit-gbs] default-storage-limit))
                            (reduce + 0))
@@ -802,28 +802,39 @@
         ", "])
      (gstring/format "%sGB of %sGB total storage " storage-usage-formatted storage-limit)
      [:strong.dark:text-white (gstring/format "(%s%%)" storage-percent-formatted)]]))
-; storage-usage-formatted "GB of " storage-limit "GB total storage"
-; [:strong.text-white " (" storage-percent-formatted "%)"]]))
 
-(rum/defc settings-account-usage-graphs [_pro-account? graph-usage]
-  (when (< 0 (count graph-usage))
-    [:div.grid.gap-3 {:style {:grid-template-columns (str "repeat(" (count graph-usage) ", 1fr)")}}
-     (for [{:keys [name used-percent]} graph-usage
-           :let [color (if (<= 100 used-percent) "bg-red-500" "bg-blue-500")
-                 used-percent' (if (number? used-percent) (* 100 (.toFixed used-percent 2)) 0)]]
-       (ui/tippy
-         {:html  (fn [] [:small.inline-flex.px-2.py-1 (str name " (" used-percent' "%)")])
-          :arrow true}
-         [:div.rounded-full.w-full.h-2.cursor-pointer.overflow-hidden
-          {:class    "bg-black/50"
-           :on-click (fn []
-                       (state/close-modal!)
-                       (route-handler/redirect-to-all-graphs))
-           :tooltip  name}
-          [:div.rounded-full.h-2
-           {:class color
-            :style {:width     (str used-percent' "%")
-                    :max-width "100%"}}]]))]))
+;(rum/defc settings-account-usage-graphs [_pro-account? graph-usage]
+;  (when (< 0 (count graph-usage))
+;    [:div.grid.gap-3 {:style {:grid-template-columns (str "repeat(" (count graph-usage) ", 1fr)")}}
+;     (for [{:keys [name used-percent]} graph-usage
+;           :let [color (if (<= 100 used-percent) "bg-red-500" "bg-blue-500")
+;                 used-percent' (if (number? used-percent) (* 100 (.toFixed used-percent 2)) 0)]]
+;       (ui/tippy
+;         {:html  (fn [] [:small.inline-flex.px-2.py-1 (str name " (" used-percent' "%)")])
+;          :arrow true}
+;         [:div.rounded-full.w-full.h-2.cursor-pointer.overflow-hidden
+;          {:class    "bg-black/50"
+;           :on-click (fn []
+;                       (state/close-modal!)
+;                       (route-handler/redirect-to-all-graphs))
+;           :tooltip  name}
+;          [:div.rounded-full.h-2
+;           {:class color
+;            :style {:width     (str used-percent' "%")
+;                    :max-width "100%"}}]]))]))
+
+(defn gigaBytesFormat
+  [bytes]
+  (if-let [giga (and (number? bytes) (/ bytes 1024 1024 1024))]
+    (if (> giga 1)
+      (util/format "%.1fGB" giga)
+      (util/format "%fMB" (* giga 1024)))
+    bytes))
+
+(rum/defc settings-account-usage-graphs [_pro-account? user-info _graph-usage]
+  (when-let [{:keys [GraphCountLimit StorageLimit]} user-info]
+    [:span.inline-block.opacity-70.text-sm
+     (util/format "%s synced graph (up to %s)" GraphCountLimit (gigaBytesFormat StorageLimit))]))
 
 (rum/defc ^:large-vars/cleanup-todo settings-account < rum/reactive
   []
@@ -833,12 +844,14 @@
         current-graph-is-remote? ((set (map :uuid graph-usage)) current-graph-uuid)
         logged-in? (user-handler/logged-in?)
         user-info (state/get-user-info)
-        paid-user? (#{"active" "on_trial" "cancelled"} (:LemonStatus user-info))
+        lemon-status (:LemonStatus user-info)
+        subscribe-active? (= "active" lemon-status)
+        has-subscribed? (some? lemon-status)
+        paid-user? (#{"active" "on_trial" "cancelled"} lemon-status)
         gift-user? (some #{"pro"} (:UserGroups user-info))
         pro-account? (or (:ProUser user-info) paid-user? gift-user?)
         expiration-date (some-> user-info :LemonEndsAt date/parse-iso)
-        renewal-date (some-> user-info :LemonRenewsAt date/parse-iso)
-        has-subscribed? (some? (:LemonStatus user-info))]
+        renewal-date (some-> user-info :LemonRenewsAt date/parse-iso)]
     [:div.panel-wrap.is-account.mb-4
      [:div.mt-1.sm:mt-0.sm:col-span-2
       (cond
@@ -847,10 +860,11 @@
          [:label "Current plan"]
          [:div.col-span-3
           [:div.active-plan-card
-           [:div.flex.gap-4.items-center.pb-2.pt-1.justify-between
+           [:div.flex.gap-4.items-center.pt-1.justify-between
             (if pro-account?
               [:b.plan-flag "Pro"]
               [:b.plan-flag "Free"])
+
             [:span
              {:class "relative top-[-4px] flex items-center gap-3"}
              (cond
@@ -874,10 +888,11 @@
                             (state/pub-event! [:user/fetch-info-and-graphs]))}
               (ui/icon "reload")]]]
 
-           (settings-account-usage-graphs pro-account? graph-usage)
-           (settings-account-usage-description pro-account? graph-usage)]]
+           (settings-account-usage-graphs pro-account? user-info graph-usage)
+           (when pro-account?
+             (settings-account-usage-description pro-account? graph-usage))]]
 
-         (when has-subscribed?
+         (when (and has-subscribed? subscribe-active?)
            [:<>
             [:label "Subscription"]
 

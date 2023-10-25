@@ -158,7 +158,7 @@
           }
 
           .active-plan-card {
-            @apply w-full bg-gray-5 rounded-lg p-4 flex flex-col gap-4
+            @apply w-full bg-gray-5 rounded-lg p-4 flex flex-col gap-2
             dark:bg-gray-500/10;
           }
         }

@@ -99,9 +99,11 @@
         (map? result)
         (do
           (state/set-user-info! result)
+
           (when-let [uid (user-handler/user-uuid)]
             (sentry-event/set-user! uid))
-          (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
+
+          (let [status :welcome]
             (when (and (= status :welcome) (user-handler/logged-in?))
               (enable-beta-features!)
               (async/<! (file-sync-handler/load-session-graphs))
