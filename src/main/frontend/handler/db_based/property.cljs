@@ -75,10 +75,11 @@
                     {:outliner-op :save-block}))
     (when (nil? property) ;if property not exists yet
       (db/transact! repo [(sqlite-util/build-new-property
-                           {:block/schema schema
-                            :block/original-name k-name
-                            :block/name (util/page-name-sanity-lc k-name)
-                            :block/uuid property-uuid})]
+                           (cond-> {:block/original-name k-name
+                                    :block/name (util/page-name-sanity-lc k-name)
+                                    :block/uuid property-uuid}
+                             (seq schema)
+                             (assoc :block/schema schema)))]
                     {:outliner-op :insert-blocks}))))
 
 (defn- reset-block-property-multiple-values!
