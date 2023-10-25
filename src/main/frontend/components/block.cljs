@@ -1729,8 +1729,8 @@
                (not collapsed?))
       [:div.block-children-container.flex
        [:div.block-children-left-border
-        {:on-click (fn [_]
-                     (editor-handler/toggle-open-block-children! (:block/uuid block)))}]
+         {:on-click (fn [_]
+                      (editor-handler/toggle-open-block-children! (:block/uuid block)))}]
        [:div.block-children.w-full {:style {:display (if collapsed? "none" "")}}
         (let [config' (cond-> (dissoc config :breadcrumb-show? :embed-parent)
                         (or ref? query?)
@@ -2787,21 +2787,6 @@
    :on-drag-end (fn [event]
                   (block-drag-end event *move-to))})
 
-(defn- build-refs-data-value
-  [refs]
-  (let [refs (model/get-page-names-by-ids
-              (->> (map :db/id refs)
-                   (remove nil?)))]
-    (text-util/build-data-value refs)))
-
-(defn- get-children-refs
-  [block]
-  (when-let [children (seq (:block/_parent block))]
-    (set
-     (lazy-seq
-      (concat (map :block/refs children)
-              (mapcat get-children-refs children))))))
-
 (defn- root-block?
   [config block]
   (and (:block? config)
@@ -2853,28 +2838,69 @@
       [nil result])))
 
 (defn- hide-block?
-  [ref hidden-atom]
-  (let [*scheduled? (atom false)
-        result (boolean
-                (if ref
-                  (let [prev-node (.-previousSibling ref)]
-                    (if (and prev-node (first (dom/by-class prev-node "block-lazy-placeholder")))
-                      (do
-                        (when (and hidden-atom (not @*scheduled?))
-                          (reset! *scheduled? true)
-                          (util/schedule #(reset! hidden-atom (hide-block? ref hidden-atom))))
-                        true)
-                      (let [top (.-top (.getBoundingClientRect ref))]
-                        (not (<= top (+ js/window.innerHeight 2000))))))
-                  true))]
-    result))
+  [ref]
+  (let [top (.-top (.getBoundingClientRect ref))]
+    (> top (+ js/window.innerHeight 500))))
 
-(rum/defc ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
-  [state repo config* block {:keys [navigating-block navigated?]}]
-  (let [*ref (:*ref config*)
+(defn- get-hidden-atom
+  [sub-id *ref {:keys [initial-value]}]
+  (let [*latest-value (atom nil)
+        *hidden? (rum/derived-atom [(:ui/main-container-scroll-top @state/state)] [::lazy-display sub-id]
+                                   (fn [_top]
+                                     (if (false? @*latest-value)
+                                       @*latest-value
+                                       (let [value (cond
+                                                     (some? initial-value)
+                                                     initial-value
+
+                                                     @*ref
+                                                     (hide-block? @*ref)
+
+                                                     :else
+                                                     true)]
+                                         (reset! *latest-value value)
+                                         value))))]
+    *hidden?))
+
+(rum/defcs ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
+  {:init (fn [state]
+           (let [id (random-uuid)
+                 editing-block (state/get-edit-block)
+                 [_ _repo config current-block _opts] (:rum/args state)
+                 disable-lazy? (:disable-lazy-load? config)
+                 *ref (atom nil)
+                 editing? (= (:block/uuid editing-block) (:block/uuid current-block))
+                 *hidden? (get-hidden-atom id *ref
+                                           {:initial-value (when (or disable-lazy? editing?) false)
+                                            :id (:db/id current-block)
+                                            :content (:block/content current-block)})]
+             (assoc state
+                    ::sub-id id
+                    ::ref *ref
+                    ::hidden? *hidden?)))
+   :did-mount (fn [state]
+                (when @(::hidden? state)
+                  (reset! (::hidden? state) (hide-block? @(::ref state))))
+                (when-let [editing-node @(:editor/editing @state/state)]
+                  (let [*ref (::ref state)
+                        ref @*ref
+                        editing-prev-node (:editor/editing-prev-node @state/state)
+                        editing-parent-node (:editor/editing-parent-node @state/state)]
+                    (when (and ref
+                               (not= editing-node ref)
+                               (= (gobj/get ref "id") (.-id editing-node))
+                               (or
+                                ;; block indent
+                                (= editing-prev-node (util/rec-get-node (.-parentNode ref) "ls-block"))
+                                ;; block outdent
+                                (= editing-parent-node (.-previousSibling ref))))
+                      (state/set-editing-ref! ref))))
+                state)}
+  [state container-state repo config* block {:keys [navigating-block navigated?]}]
+  (let [*ref (::ref state)
         ref (rum/react *ref)
+        hidden? (rum/react (::hidden? state))
         ref? (:ref? config*)
-        selected? (:selected? config*)
         ;; whiteboard block shape
         in-whiteboard? (and (:in-whiteboard? config*)
                             (= (:id config*)
@@ -2883,12 +2909,12 @@
         edit? (state/sub-editing? ref)
         custom-query? (boolean (:custom-query? config*))
         ref-or-custom-query? (or ref? custom-query?)
-        *navigating-block (get state ::navigating-block)
-        {:block/keys [uuid pre-block? refs content properties]} block
+        *navigating-block (get container-state ::navigating-block)
+        {:block/keys [uuid pre-block? content properties]} block
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         level (:level config)
         heading? (pu/lookup properties :heading)
-        *control-show? (get state ::control-show?)
+        *control-show? (get container-state ::control-show?)
         db-collapsed? (util/collapsed? block)
         collapsed? (cond
                      (or ref-or-custom-query? (root-block? config block))
@@ -2897,8 +2923,8 @@
                      :else
                      db-collapsed?)
         breadcrumb-show? (:breadcrumb-show? config)
-        *show-left-menu? (::show-block-left-menu? state)
-        *show-right-menu? (::show-block-right-menu? state)
+        *show-left-menu? (::show-block-left-menu? container-state)
+        *show-right-menu? (::show-block-right-menu? container-state)
         slide? (boolean (:slide? config))
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
@@ -2909,20 +2935,19 @@
         top? (:top? config)
         original-block (:original-block config)
         attrs (on-drag-and-mouse-attrs block original-block uuid top? block-id *move-to)
-        children-refs (get-children-refs block)
-        data-refs (build-refs-data-value children-refs)
-        data-refs-self (build-refs-data-value refs)
-        card? (string/includes? data-refs-self "\"card\"")
-        review-cards? (:review-cards? config)
         own-number-list? (:own-order-number-list? config)
-        order-list? (boolean own-number-list?)]
-    [:div
+        order-list? (boolean own-number-list?)
+        selected? (when-not (:slide? config)
+                    (state/sub-block-selected? uuid))]
+    [:div.ls-block
      (cond->
-      {:data-refs data-refs
-       :data-refs-self data-refs-self
+      {:blockid (str uuid)
+       :id (str "ls-block-" uuid)
+       :ref #(when (nil? @*ref) (reset! *ref %))
        :data-collapsed (and collapsed? has-child?)
-       :class (str (when pre-block? "pre-block")
-                   (when (and card? (not review-cards?)) " shadow-md")
+       :class (str (when selected? "selected")
+                   (when hidden? " hidden-block")
+                   (when pre-block? "pre-block")
                    (when order-list? " is-order-list")
                    (when (string/blank? content) " is-blank")
                    (when original-block " embed-block"))
@@ -2946,7 +2971,7 @@
        custom-query?
        (assoc :data-query true))
 
-     (when (and ref? breadcrumb-show?)
+     (when (and ref? breadcrumb-show? (not hidden?))
        (breadcrumb config repo uuid {:show-page? false
                                      :indent? true
                                      :navigating-block *navigating-block}))
@@ -2968,25 +2993,26 @@
                         (block-mouse-over e *control-show? block-id doc-mode?))
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
-      (when (and (not slide?) (not in-whiteboard?))
+      (when (and (not slide?) (not in-whiteboard?) (not hidden?))
         (block-control config block uuid block-id collapsed? *control-show? edit?))
 
-      (when (and @*show-left-menu? (not in-whiteboard?))
+      (when (and @*show-left-menu? (not in-whiteboard?) (not hidden?))
         (block-left-menu config block))
 
-      (if whiteboard-block?
-        (block-reference {} (str uuid) nil)
+      (when-not hidden?
+        (if whiteboard-block?
+          (block-reference {} (str uuid) nil)
         ;; Not embed self
-        [:div.flex.flex-col.w-full
-         (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? content))
-               hide-block-refs-count? (and (:embed? config)
-                                           (= (:block/uuid block) (:embed-id config)))]
-           (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count? selected? *ref))])
+          [:div.flex.flex-col.w-full
+           (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? content))
+                 hide-block-refs-count? (and (:embed? config)
+                                             (= (:block/uuid block) (:embed-id config)))]
+             (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count? selected? *ref))]))
 
-      (when (and @*show-right-menu? (not in-whiteboard?))
+      (when (and @*show-right-menu? (not in-whiteboard?) (not hidden?))
         (block-right-menu config block edit?))]
 
-     (when (and (config/db-based-graph? repo) (not collapsed?))
+     (when (and (config/db-based-graph? repo) (not collapsed?) (not hidden?))
        [:div.mt-1 {:style {:padding-left 29}}
         (db-properties-cp config
                           block
@@ -3428,9 +3454,9 @@
   [config col]
   (map #(markup-element-cp config %) col))
 
-(rum/defc block-item-inner <
+(rum/defc block-item <
   {:should-update (fn [old-state new-state]
-                    (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :selected?]
+                    (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :selected? :hidden?]
                           b1                  (second (:rum/args old-state))
                           b2                  (second (:rum/args new-state))
                           result              (or
@@ -3455,96 +3481,6 @@
       (str (:block/uuid item)
            (when linked-block
              (str "-" (:block/uuid original-block)))))))
-
-(defn- get-hidden-atom
-  [sub-id *ref {:keys [initial-value]}]
-  (let [*prev-scroll-top (atom @(:ui/main-container-scroll-top @state/state))
-        *latest-value (atom nil)
-        *initial? (atom true)
-        *hidden? (rum/derived-atom [(:ui/main-container-scroll-top @state/state)] [::lazy-display sub-id]
-                                   (fn [top]
-                                     (if (false? @*latest-value)
-                                       @*latest-value
-                                       (let [prev @*prev-scroll-top
-                                             minor-update? (< (abs (- prev top)) 64)
-                                             _ (reset! *prev-scroll-top top)
-                                             value (cond
-                                                     (and @*initial? (some? initial-value))
-                                                     (do
-                                                       (reset! *initial? false)
-                                                       initial-value)
-
-                                                     (and minor-update? (some? @*latest-value))
-                                                     @*latest-value
-
-                                                     @*ref
-                                                     (boolean (hide-block? @*ref nil))
-
-                                                     :else
-                                                     true)]
-                                         (reset! *latest-value value)
-                                         value))))]
-    (add-watch *hidden? :hidden-changed (fn [_ _ _old-value new-value]
-                                          (reset! *latest-value new-value)))
-    *hidden?))
-
-(rum/defcs block-item < rum/reactive
-  {:init (fn [state]
-           (let [id (random-uuid)
-                 editing-block (state/get-edit-block)
-                 [config current-block _opts] (:rum/args state)
-                 disable-lazy? (:disable-lazy-load? config)
-                 *ref (atom nil)
-                 editing? (= (:block/uuid editing-block) (:block/uuid current-block))
-                 *hidden? (get-hidden-atom id *ref
-                                           {:initial-value (if (or disable-lazy? editing?) false true)
-                                            :id (:db/id current-block)
-                                            :content (:block/content current-block)})]
-             (assoc state
-                    ::sub-id id
-                    ::ref *ref
-                    ::hidden? *hidden?)))
-   :should-update (fn [old-state new-state]
-                    (let [args-1 (:rum/args old-state)
-                          args-2 (:rum/args new-state)]
-                      (not= [(dissoc (first args-1) :query-result)
-                             (last args-1)]
-                            [(dissoc (first args-2) :query-result)
-                             (last args-2)])))
-   :did-mount (fn [state]
-                (when @(::hidden? state)
-                  (reset! (::hidden? state) (hide-block? @(::ref state) (::hidden? state))))
-                (when-let [editing-node @(:editor/editing @state/state)]
-                  (let [*ref (::ref state)
-                        ref @*ref
-                        editing-prev-node (:editor/editing-prev-node @state/state)
-                        editing-parent-node (:editor/editing-parent-node @state/state)]
-                    (when (and ref
-                               (not= editing-node ref)
-                               (= (gobj/get ref "id") (.-id editing-node))
-                               (or
-                                ;; block indent
-                                (= editing-prev-node (util/rec-get-node (.-parentNode ref) "ls-block"))
-                                ;; block outdent
-                                (= editing-parent-node (.-previousSibling ref))))
-                      (state/set-editing-ref! ref))))
-                state)}
-  [state config item _opts]
-  (let [*hidden? (::hidden? state)
-        hidden? (rum/react *hidden?)
-        *ref (::ref state)
-        uuid (:block/uuid item)
-        selected? (when-not (:slide? config)
-                    (state/sub-block-selected? uuid))]
-    [:div.ls-block {:blockid (str uuid)
-                    :id (str "ls-block-" uuid)
-                    :class (str "id" uuid
-                                (when selected? " selected"))
-                    :ref #(when (nil? @*ref) (reset! *ref %))}
-     (if hidden?
-       [:div.block-lazy-placeholder {:key (str "item-" (:block/uuid item))
-                                     :style {:height 24}}]
-       (block-item-inner (assoc config :*ref *ref :selected? selected?) item {}))]))
 
 (defn- block-list
   [config blocks]
