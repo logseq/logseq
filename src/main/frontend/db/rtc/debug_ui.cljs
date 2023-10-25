@@ -141,16 +141,20 @@
                    {:class "mr-2"
                     :on-click (fn []
                                 (go
-                                  (when-let [user-uuid (some-> @(::grant-access-to-user state) parse-uuid)]
+                                  (let [user-uuid (some-> @(::grant-access-to-user state) parse-uuid)
+                                        user-email (when-not user-uuid @(::grant-access-to-user state))]
                                     (when-let [graph-uuid @(::graph-uuid state)]
-                                      (<! (rtc-core/<grant-graph-access-to-others s graph-uuid [user-uuid]))))))})
+                                      (<! (rtc-core/<grant-graph-access-to-others
+                                           s graph-uuid
+                                           :target-user-uuids [user-uuid]
+                                           :target-user-emails [user-email]))))))})
 
         [:input.form-input.my-2
          {:on-change (fn [e] (reset! (::grant-access-to-user state) (util/evalue e)))
           :on-focus (fn [e] (let [v (.-value (.-target e))]
-                              (when (= v "input user-uuid here")
+                              (when (= v "input email or user-uuid here")
                                 (set! (.-value (.-target e)) ""))))
-          :default-value "input user-uuid here"}]])
+          :default-value "input email or user-uuid here"}]])
      [:hr]
      [:div.flex.flex-row
       (ui/button (str "download graph to")
