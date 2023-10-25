@@ -46,14 +46,15 @@
 
 ;; The results are separated into groups, and loaded/fetched/queried separately
 (def default-results 
-  {:search-actions {:status :success :show-more false :items nil} 
-   :recents        {:status :success :show-more false :items nil}
-   :commands       {:status :success :show-more false :items nil}
-   :favorites      {:status :success :show-more false :items nil}
-   :current-page   {:status :success :show-more false :items nil}
-   :pages          {:status :success :show-more false :items nil}
-   :blocks         {:status :success :show-more false :items nil} 
-   :files          {:status :success :show-more false :items nil}})        
+  {:search-actions {:status :success :show :less :items nil} 
+   :recents        {:status :success :show :less :items nil}
+   :commands       {:status :success :show :less :items nil}
+   :favorites      {:status :success :show :less :items nil}
+   :current-page   {:status :success :show :less :items nil}
+   :pages          {:status :success :show :less :items nil}
+   :blocks         {:status :success :show :less :items nil} 
+   :files          {:status :success :show :less :items nil}        
+   :filters        {:status :success :show :less :items nil}})
 
 (defn lower-case-str [x]
   (.toLowerCase (str x)))
@@ -70,26 +71,41 @@
         input @(::input state)
         index (volatile! -1)
         visible-items (fn [group] 
-                        (let [{:keys [items show-more]} (get results group)]
-                          (if show-more items (take 5 items))))
-        results [["Filters"        :filters        (visible-items :filters)]
-                 ["Recents"        :recents        (visible-items :recents)]
-                 ["Search actions" :search-actions (visible-items :search-actions)]
-                 ["Current page"   :current-page   (visible-items :current-page)]
-                 ["Commands"       :commands       (visible-items :commands)]
-                 ["Pages"          :pages          (visible-items :pages)]
-                 ["Whiteboards"    :whiteboards    (visible-items :whiteboards)]
-                 ["Blocks"         :blocks         (visible-items :blocks)]
-                 ["Create"         :create         (create-items input)]]]
+                        (let [{:keys [items show]} (get results group)]
+                          (case show 
+                            :none (take 0 items) 
+                            :more items
+                            :less (take 5 items)
+                            (take 2 items))))
+        order [["Filters"        :filters        (visible-items :filters)]
+               ["Recents"        :recents        (visible-items :recents)]
+               ["Search actions" :search-actions (visible-items :search-actions)]
+               ["Current page"   :current-page   (visible-items :current-page)]
+               ["Commands"       :commands       (visible-items :commands)]
+               ["Pages"          :pages          (visible-items :pages)]
+               ["Whiteboards"    :whiteboards    (visible-items :whiteboards)]
+               ["Blocks"         :blocks         (visible-items :blocks)]
+               ["Create"         :create         (create-items input)]]]
     ; results
-    (for [[group-name group-key group-items] results]
-      [group-name group-key (mapv #(assoc % :item-index (vswap! index inc)) group-items)])))
+    (for [[group-name group-key group-items] order]
+      [group-name group-key (count (get-in results [group-key :items])) (mapv #(assoc % :item-index (vswap! index inc)) group-items)])))
 
 (defn state->highlighted-item [state]
   (or (some-> state ::highlighted-item deref)
       (some->> (state->results-ordered state)
                (mapcat last)
                (first))))
+
+(defn state->action [state]
+  (let [highlighted-item (state->highlighted-item state)]
+    (cond (:source-page highlighted-item) :open 
+          (:source-block highlighted-item) :open
+          (:source-search highlighted-item) :search
+          (:source-command highlighted-item) :trigger 
+          (:source-create highlighted-item) :create
+          (:source-adjustment highlighted-item) :filter
+          (:source-group highlighted-item) :filter
+          :else nil)))
 
 ;; Take the ordered results and the highlight index and determine which item is highlighted
 ; (defn state->highlighted-item 
@@ -353,26 +369,27 @@
     (close-unless-alt! state)))
 
 (defmethod handle-action :open [_ state event]
-  (js/console.log "open" (some-> state state->highlighted-item clj->js))
   (when-let [item (some-> state state->highlighted-item)]
     (let [shift? @(::shift? state)
           page? (boolean (:source-page item))
-          block? (boolean (:source-block item))
-          search? (boolean (:source-search item))]
-      (js/console.log "open" page? block? search? shift?)
+          block? (boolean (:source-block item))]
       (cond 
         (and shift? block?) (handle-action :open-block-right state event)
         (and shift? page?) (handle-action :open-page-right state event)
-        search? (js/alert "TODO: implement search autofill")
         block? (handle-action :open-block state event)
         page? (handle-action :open-page state event)))))
+
+(defmethod handle-action :search [_ state event]
+  (when-let [item (some-> state state->highlighted-item)]
+    (let [search-query (:source-search item)]
+      (reset! (::input state) search-query))))
 
 (defmethod handle-action :trigger [_ state event]
   (when-let [action (some-> state state->highlighted-item :source-command :action)]
     (action)
     (close-unless-alt! state)))
 
-(defmethod handle-action :filter [_ state event]
+(defmethod handle-action :filter-old [_ state event]
   (let [!filter (::filter state) 
         filter (some-> state state->highlighted-item :filter)]
     (if filter
@@ -392,7 +409,7 @@
       (and create-page? (not alt?)) (page-handler/create! @!input {:redirect? true}))
     (close-unless-alt! state)))
 
-(defmethod handle-action :testing [_ state event]
+(defmethod handle-action :filter [_ state event]
   (let [!filter (::filter state)
         item (some-> state state->highlighted-item)]
     (js/log "TESTING" (clj->js item))
@@ -402,11 +419,18 @@
     (when-let [group (:source-group item)]
       (swap! !filter assoc :group group))))
 
+(defmethod handle-action :default [_ state event]
+  (when-let [action (state->action state)]
+    (handle-action action state event)))
+
 (rum/defc result-group < rum/reactive 
   [state title group visible-items first-item]
-  (let [{:keys [show-more items]} (some-> state ::results deref group) 
-        toggle-show-more #(swap! (::results state) update-in [group :show-more] not)
+  (let [{:keys [show items]} (some-> state ::results deref group) 
         highlighted-item (or @(::highlighted-item state) first-item)
+        can-show-less? (< 0 (count visible-items))
+        can-show-more? (< (count visible-items) (count items))
+        show-less #(swap! (::results state) assoc-in [group :show] (case show :less :none :less))
+        show-more #(swap! (::results state) assoc-in [group :show] (case show :none :less :more))
         cap-highlighted-item (fn []
                                (js/console.log 
                                  "testing-capping-the-highlighted-item"
@@ -426,10 +450,18 @@
           (str "99+")
           (count items))])
       [:div {:class "flex-1"}]
-      (cond 
-        (<= (count items) GROUP-LIMIT) [:div]
-        show-more [:div {:class "hover:cursor-pointer" :on-click (fn [] (cap-highlighted-item) (toggle-show-more))} "Show less"]
-        :else [:div {:class "hover:cursor-pointer" :on-click (fn [] (toggle-show-more))} "Show more"])]
+      [:div {:class (cond-> "hover:cursor-pointer hover:underline select-none" 
+                      (not can-show-less?) (str " opacity-30 pointer-events-none")) 
+             :on-click #(show-less)} 
+       "Show less"]
+      [:div {:class (cond-> "hover:cursor-pointer hover:underline select-none" 
+                      (not can-show-more?) (str " opacity-30 pointer-events-none"))
+             :on-click #(show-more)} 
+       "Show more"]]
+      ; (cond 
+      ;   (<= (count items) GROUP-LIMIT) [:div]
+      ;   show-more [:div {:class "hover:cursor-pointer" :on-click (fn [] (cap-highlighted-item) (toggle-show-more))} "Show less"]
+      ;   :else [:div {:class "hover:cursor-pointer" :on-click (fn [] (toggle-show-more))} "Show more"])]
 
      [:div {:class ""}
       (for [item visible-items
@@ -445,8 +477,7 @@
                               :on-click (fn [e]
                                           (if highlighted?
                                             (do
-                                              (when-let [action (some-> state ::actions deref last)]
-                                                (handle-action action state item))
+                                              (handle-action :default state item)
                                               (when-let [on-click (:on-click item)]
                                                 (on-click e)))
                                             (reset! (::highlighted-item state) item)))
@@ -502,10 +533,7 @@
         "ArrowDown" (move-highlight state 1)
         "ArrowUp"   (move-highlight state -1)
         "Enter" (if shift?
-                  (when-let [action (some #{:open-block-right :open-page-right :open} @(::actions state))]
-                    (handle-action action state e))
-                  (when-let [action (some #{:open-block :open-page :filter :trigger :create :open} @(::actions state))]
-                    (handle-action action state e)))
+                  (handle-action :default state e))
         "Escape" (when (seq @(::input state))
                    (.preventDefault e)
                    (.stopPropagation e)
@@ -556,7 +584,7 @@
     ;; if not then clear that puppy out!
     ;; This was moved to a fucntional component
     (rum/use-effect! (fn [] 
-                       (when (= -1 (.indexOf all-items highlighted-item))
+                       (when (and highlighted-item (= -1 (.indexOf all-items highlighted-item)))
                          (reset! (::highlighted-item state) nil)))
                      [all-items])
     (rum/use-effect! (fn [] 
@@ -570,7 +598,7 @@
                    :border-bottom "1px solid var(--lx-gray-07)"}}
      [:input {:class "text-xl bg-transparent border-none w-full outline-none px-4 py-3" 
               :placeholder "What are you looking for?"
-              :ref #(reset! input-ref %)
+              :ref #(when-not @input-ref (reset! input-ref %))
               :on-change (partial handle-input-change state)
               :value input}]]))
 
@@ -601,6 +629,20 @@
               :on-change (partial handle-input-change state)
               :value input}]
      (shui/icon "x" {:class "text-gray-11"})]))
+
+(defn render-action-button [state highlighted-item]
+  (let [shift? @(::shift? state) 
+        alt? @(::alt? state)
+        action (state->action state)
+        text (->> [(case action :open "Open" :search "Search" :trigger "Trigger" :create "Create" :filter "Filter" nil)
+                   (when (and shift? (= :open action)) "in sidebar")
+                   (when alt? "(keep open)")]
+                  (remove nil?) 
+                  (string/join " "))] 
+    (when action
+      (shui/button {:text text
+                    :theme :color
+                    :on-click #(handle-action action state %)} (make-shui-context)))))
 
 (rum/defcs cmdk < 
   shortcut/disable-all-shortcuts 
@@ -674,8 +716,8 @@
             :style {:background "var(--lx-gray-02)"}}
       (when filter 
         (filter-row state filter))
-      (for [[group-name group-key group-items] results-ordered
-            :when (not-empty group-items)
+      (for [[group-name group-key group-count group-items] results-ordered
+            :when (not= 0 group-count)
             :when (if-not group-filter true (= group-filter group-key))]
         (result-group state group-name group-key group-items first-item))]
      [:div {:class "absolute right-4 bottom-4 shadow-gray-02"
@@ -685,8 +727,7 @@
                                      "0px 0px 78.2px rgba(0, 0, 0, 0.4), "
                                      "0px 0px 146.2px rgba(0, 0, 0, 0.323), "
                                      "0px 0px 350px rgba(0, 0, 0, 0.255) ")}}
-;
-      (shui/button {:text "Open" :theme :color} (make-shui-context))]]))
+      (render-action-button state highlighted-item)]]))
 
 (rum/defc cmdk-modal [props]
   [:div {:class "cp__cmdk__modal rounded-lg max-h-[75dvh] w-[90dvw] max-w-4xl shadow-xl relative"}

@@ -424,8 +424,8 @@
       [:.sidebar-item-list.flex-1.scrollbar-spacing.ml-2.pr-3
        (if @*anim-finished?
          [:<>
-          [:div.sidebar-drop-indicator]
-          (cmdk/cmdk-block {:sidebar? true})
+          ; [:div.sidebar-drop-indicator]
+          ; (cmdk/cmdk-block {:sidebar? true})
           (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
             (rum/with-key
               (sidebar-item repo idx db-id block-type block-count)
