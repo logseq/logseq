@@ -199,6 +199,7 @@
     ;; refs
    [:block/page :int]
    [:block/path-refs {:optional true} [:set :int]]
+   [:block/macros {:optional true} [:set :int]]
    [:block/link {:optional true} :int]
     ;; other
    [:block/marker {:optional true} :string]
@@ -255,6 +256,15 @@
    [:db/ident :keyword]
    [:db/type {:optional true} :string]])
 
+(def macro
+  [:map
+   [:db/ident :string]
+   [:block/uuid :uuid]
+   [:block/type [:= #{"macro"}]]
+   [:block/properties block-properties]
+   ;; Should this be removed?
+   [:block/tx-id {:optional true} :int]])
+
 (def DB
   "Malli schema for entities from schema/schema-for-db-based-graph. In order to
   thoroughly validate properties, the entities and this schema should be
@@ -267,4 +277,5 @@
     file-block
     schema-version
     db-ident
+    macro
     unknown-block]])

@@ -11,6 +11,7 @@
 (defn- type-of-block
   "
   TODO: use :block/type
+  FIXME: 4 isn't used. Delete it?
   | value | meaning                                        |
   |-------+------------------------------------------------|
   |     1 | normal block                                   |
@@ -26,6 +27,7 @@
     (some #{:file/content :schema/version :db/type} (keys block)) 3
     (contains? (:block/type block) "property") 6
     (:block/name block) 2
+    (contains? (set (:block/type block)) "macro") 7
     :else 5))
 
 (defn time-ms

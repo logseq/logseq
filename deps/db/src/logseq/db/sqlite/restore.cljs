@@ -80,7 +80,7 @@
                     (keep (fn [b]
                             (let [eid (assign-id-to-uuid-fn (:uuid b))]
                               (if (and (uuid-string? (:uuid b))
-                                       (not (contains?  #{3 6} (:type b)))) ; deleted blocks still refed
+                                       (= 5 (:type b)))
                                 [[eid :block/uuid (:uuid b)]
                                  [eid :block/unknown? true]]
                                 (datoms-str->eav-vec (:datoms b) eid))))

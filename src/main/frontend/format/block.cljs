@@ -14,25 +14,34 @@
             [frontend.handler.property.util :as pu]
             [lambdaisland.glogi :as log]
             [frontend.util :as util]
+            [datascript.core :as d]
             [logseq.db.frontend.property :as db-property]))
 
 (defn- update-extracted-block-properties
   "Updates DB graph blocks to ensure that built-in properties are using uuids
   for property ids"
   [blocks]
-  (let [repo (state/get-current-repo)]
-    (if (config/db-based-graph? repo)
-     (map (fn [b]
-            (if (:block/properties b)
-              (-> b
-                  (dissoc :block/properties-order)
-                  (update :block/properties
-                          (fn [props]
+  (let [repo (state/get-current-repo)
+        update-properties (fn [props]
                             (update-keys props #(if (contains? db-property/built-in-properties-keys %)
                                                   (pu/get-built-in-property-uuid repo %)
-                                                  %)))))
-              b))
-          blocks)
+                                                  %)))]
+    (if (config/db-based-graph? repo)
+     (->> blocks
+          (map (fn [b]
+                 (if (:block/properties b)
+                   (-> b
+                       (dissoc :block/properties-order)
+                       (update :block/properties update-properties))
+                   b)))
+          (map (fn [b]
+                 (if (:block/macros b)
+                   (update b :block/macros
+                           (fn [macros]
+                             (map #(-> %
+                                       (assoc :block/uuid (d/squuid))
+                                       (update :block/properties update-properties)) macros)))
+                   b))))
      blocks)))
 
 (defn extract-blocks

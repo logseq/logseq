@@ -124,7 +124,7 @@
                                (map :uuid))
           latest-journal-blocks (when (seq recent-journals)
                                   (query repo db (str "select * from blocks where type = 1 and page_uuid IN " (clj-list->sql recent-journals))))
-          init-data (query repo db "select * from blocks where type in (3, 4, 5, 6)")]
+          init-data (query repo db "select * from blocks where type in (3, 4, 5, 6, 7)")]
       {:all-pages all-pages
        :all-blocks all-block-ids
        :journal-blocks latest-journal-blocks
