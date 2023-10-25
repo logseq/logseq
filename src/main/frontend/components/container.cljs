@@ -678,7 +678,7 @@
                                   (and
                                    ;; FIXME: this does not work on CI tests
                                    util/node-test?
-                                   (:editor/editing @state/state))))
+                                   state/*editor-editing-ref)))
                           (state/close-modal!)
                           (hide-context-menu-and-clear-selection e)))))))
   [state route-match main-content]
@@ -703,7 +703,7 @@
         home? (= :home route-name)
         native-titlebar? (state/sub [:electron/user-cfgs :window/native-titlebar?])
         window-controls? (and (util/electron?) (not util/mac?) (not native-titlebar?))
-        edit? (:editor/editing @state/state)
+        edit? (some? @state/*editor-editing-ref)
         default-home (get-default-home-if-valid)
         logged? (user-handler/logged-in?)
         fold-button-on-right? (state/enable-fold-button-right?)
