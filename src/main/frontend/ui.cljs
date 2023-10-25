@@ -962,22 +962,13 @@
           :checked selected}]
         label])]))
 
-(rum/defcs tippy < rum/reactive
+(rum/defcs tippy < rum/static
   (rum/local false ::mounted?)
-  [state {:keys [fixed-position? open? in-editor? html] :as opts} child]
+  [state {:keys [fixed-position? open? html] :as opts} child]
   (let [*mounted? (::mounted? state)
         manual (not= open? nil)
-        editing-node (state/sub :editor/editing)
-        editing? (some? editing-node)
-        scrolling? (state/sub :ui/scrolling?)
         open? (if manual open? @*mounted?)
-        disabled? (boolean
-                   (or
-                    (and in-editor?
-                         ;; editing in non-preview containers or scrolling
-                         (not (util/rec-get-tippy-container editing-node))
-                         (or editing? scrolling?))
-                    (not (state/enable-tooltip?))))]
+        disabled? (not (state/enable-tooltip?))]
     (Tippy (->
             (merge {:arrow true
                     :sticky true
@@ -991,7 +982,9 @@
                     :popperOptions {:modifiers {:flip {:enabled (not fixed-position?)}
                                                 :hide {:enabled false}
                                                 :preventOverflow {:enabled false}}}
-                    :onShow #(reset! *mounted? true)
+                    :onShow #(when-not (or (some? @state/*editor-editing-ref)
+                                           @(:ui/scrolling? @state/state))
+                               (reset! *mounted? true))
                     :onHide #(reset! *mounted? false)}
                    opts)
             (assoc :html (or
@@ -1137,18 +1130,7 @@
 
 (rum/defc lazy-loading-placeholder
   [height]
-  [:div {:style {:height height}}]
-  ;; [:div.shadow.rounded-md.p-4.w-full.mx-auto.mb-5.opacity-70 {:style {:height height}}
-  ;;  ;; [:div.animate-pulse.flex.space-x-4
-  ;;  ;;  [:div.flex-1.space-y-3.py-1
-  ;;  ;;   [:div.h-2.rounded]
-  ;;  ;;   [:div.space-y-3
-  ;;  ;;    [:div.grid.grid-cols-3.gap-4
-  ;;  ;;     [:div.h-2.rounded.col-span-2]
-  ;;  ;;     [:div.h-2.rounded.col-span-1]]
-  ;;  ;;    [:div.h-2.rounded]]]]
-  ;;  ]
-  )
+  [:div {:style {:height height}}])
 
 (rum/defc lazy-visible-inner
   [visible? content-fn ref fade-in?]

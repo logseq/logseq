@@ -639,7 +639,7 @@
                                     (fn []
                                       (let [el-popup (rum/deref *el-popup)
                                             cb (fn [^js e]
-                                                 (when-not (:editor/editing @state/state)
+                                                 (when-not @state/*editor-editing-ref
                                            ;; Esc
                                                    (and (= e.which 27)
                                                         (when-let [tp (rum/deref *tippy-ref)]
@@ -2223,7 +2223,7 @@
                     (when block-id (state/set-selection-start-block! block-id))))))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
-  [block block-id slide? top? block-content?]
+  [block children block-id slide? top? block-content?]
   (let [dragging? (rum/react *dragging?)
         drag-to-block (rum/react *drag-to-block)]
     (when (and
@@ -2237,9 +2237,9 @@
              (and (not top?) (= move-to :top))
              (and block-content? (not= move-to :nested))
              (and (not block-content?)
-                  (seq (:block/_parent block))
+                  (first children)
                   (= move-to :nested)))
-         (dnd-separator move-to block-content?))))))
+          (dnd-separator move-to block-content?))))))
 
 (defn clock-summary-cp
   [block body]
@@ -2820,7 +2820,7 @@
   (let [linked-block (:block/link (db/entity (:db/id block*)))
         block (cond
                 (or (and (:custom-query? config)
-                         (empty? (:block/_parent block*))
+                         (nil? (first (:block/_parent block*)))
                          (not (and (:dsl-query? config)
                                    (string/includes? (:query config) "not"))))
                     navigated?)
@@ -2881,11 +2881,11 @@
    :did-mount (fn [state]
                 (when @(::hidden? state)
                   (reset! (::hidden? state) (hide-block? @(::ref state))))
-                (when-let [editing-node @(:editor/editing @state/state)]
+                (when-let [editing-node @state/*editor-editing-ref]
                   (let [*ref (::ref state)
                         ref @*ref
-                        editing-prev-node (:editor/editing-prev-node @state/state)
-                        editing-parent-node (:editor/editing-parent-node @state/state)]
+                        editing-prev-node @(:editor/editing-prev-node @state/state)
+                        editing-parent-node @(:editor/editing-parent-node @state/state)]
                     (when (and ref
                                (not= editing-node ref)
                                (= (gobj/get ref "id") (.-id editing-node))
@@ -2938,7 +2938,8 @@
         own-number-list? (:own-order-number-list? config)
         order-list? (boolean own-number-list?)
         selected? (when-not (:slide? config)
-                    (state/sub-block-selected? uuid))]
+                    (state/sub-block-selected? uuid))
+        children (:block/_parent block)]
     [:div.ls-block
      (cond->
       {:blockid (str uuid)
@@ -3021,12 +3022,12 @@
                            :in-block-container? true})])
 
      (when-not (or (:hide-children? config) in-whiteboard?)
-       (let [children (db/sort-by-left (:block/_parent block) block)
+       (let [children' (db/sort-by-left children block)
              config' (-> (update config :level inc)
                          (dissoc :original-block))]
-         (block-children config' block children collapsed?)))
+         (block-children config' block children' collapsed?)))
 
-     (when-not in-whiteboard? (dnd-separator-wrapper block block-id slide? false false))]))
+     (when-not in-whiteboard? (dnd-separator-wrapper block children block-id slide? false false))]))
 
 (defn- block-changed?
   [old-block new-block]

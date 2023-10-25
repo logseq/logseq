@@ -22,6 +22,8 @@
 (defonce *profile-state
   (atom {}))
 
+(defonce *editor-editing-ref (atom nil))
+
 ;; Stores main application state
 (defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
@@ -119,7 +121,9 @@
       :editor/action-data                    nil
       ;; With label or other data
       :editor/last-saved-cursor              nil
-      :editor/editing                        (atom nil)
+      :editor/ref->editing?                  (atom {})
+      :editor/editing-prev-node              (atom nil)
+      :editor/editing-parent-node            (atom nil)
       :editor/in-composition?                false
       :editor/content                        (atom {})
       :editor/block                          (atom nil)
@@ -588,11 +592,12 @@ Similar to re-frame subscriptions"
       :else    (util/react (rum/cursor state ks)))))
 
 (defn sub-editing?
-  [block-node]
-  (when block-node
+  [block-ref]
+  (when block-ref
+    (when (nil? (get @(:editor/ref->editing? @state) block-ref))
+      (swap! (:editor/ref->editing? @state) assoc block-ref (atom false)))
     (rum/react
-     (rum/derived-atom [(:editor/editing @state)] [:ui/editing block-node]
-       (fn [editing-node] (= editing-node block-node))))))
+     (get @(:editor/ref->editing? @state) block-ref))))
 
 (defn sub-config
   "Sub equivalent to get-config which should handle all sub user-config access"
@@ -944,7 +949,7 @@ Similar to re-frame subscriptions"
 
 (defn get-edit-input-id
   []
-  (when-let [node @(:editor/editing @state)]
+  (when-let [node @*editor-editing-ref]
     (some-> (dom/sel1 node "textarea")
             (gobj/get "id"))))
 
@@ -955,7 +960,7 @@ Similar to re-frame subscriptions"
 
 (defn get-edit-block-node
   []
-  @(:editor/editing @state))
+  @*editor-editing-ref)
 
 (defn editing?
   []
@@ -1250,7 +1255,9 @@ Similar to re-frame subscriptions"
 
 (defn clear-edit!
   []
-  (set-state! :editor/editing nil)
+  (when-let [prev-ref @*editor-editing-ref]
+    (reset! (get @(:editor/ref->editing? @state) prev-ref) false))
+  (reset! *editor-editing-ref nil)
   (set-state! :editor/editing-prev-node nil)
   (set-state! :editor/editing-parent-node nil)
   (swap! state merge {:cursor-range    nil
@@ -1261,7 +1268,9 @@ Similar to re-frame subscriptions"
 
 (defn into-code-editor-mode!
   []
-  (set-state! :editor/editing nil)
+  (when-let [prev-ref @*editor-editing-ref]
+    (reset! (get @(:editor/ref->editing? @state) prev-ref) false))
+  (reset! *editor-editing-ref nil)
   (swap! state merge {:cursor-range      nil
                       :editor/code-mode? true}))
 
@@ -1964,7 +1973,13 @@ Similar to re-frame subscriptions"
 
 (defn set-editing-ref!
   [ref]
-  (set-state! :editor/editing ref)
+  (let [prev-ref @*editor-editing-ref]
+    (when (and prev-ref (not= ref prev-ref))
+      (reset! (get @(:editor/ref->editing? @state) prev-ref) false)))
+  (if-let [*state (get @(:editor/ref->editing? @state) ref)]
+    (reset! *state true)
+    (swap! (:editor/ref->editing? @state) assoc ref (atom true)))
+  (reset! *editor-editing-ref ref)
   (when ref
     (when-let [prev (.-previousSibling ref)]
       (set-state! :editor/editing-prev-node prev))
