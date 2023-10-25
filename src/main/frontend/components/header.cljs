@@ -199,7 +199,7 @@
                                                   (not (:ui/left-sidebar-open? @state/state))))})
         custom-home-page? (and (state/custom-home-page?)
                                (= (state/sub-default-home-page) (state/get-current-page)))
-        sync-enabled? (file-sync-handler/enable-sync?)]
+        sync-enabled? (state/enable-sync?)]
     [:div.cp__header.drag-region#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
@@ -235,9 +235,8 @@
               (ui/icon "search" {:size ui/icon-size})])))]]
 
      [:div.r.flex.drag-region
-      (when (and current-repo
-                 (not (config/demo-graph? current-repo))
-                 (user-handler/alpha-or-beta-user?))
+      (when (and current-repo sync-enabled?
+                 (not (config/demo-graph? current-repo)))
         (fs-sync/indicator))
 
       (when (and (not= (state/get-current-route) :home)

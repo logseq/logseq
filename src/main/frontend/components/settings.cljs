@@ -812,14 +812,14 @@
            :let [color (if (<= 100 used-percent) "bg-red-500" "bg-blue-500")
                  used-percent' (if (number? used-percent) (* 100 (.toFixed used-percent 2)) 0)]]
        (ui/tippy
-         {:html (fn [] [:small.inline-flex.px-2.py-1 (str name " (" used-percent' "%)")])
+         {:html  (fn [] [:small.inline-flex.px-2.py-1 (str name " (" used-percent' "%)")])
           :arrow true}
          [:div.rounded-full.w-full.h-2.cursor-pointer.overflow-hidden
-          {:class   "bg-black/50"
+          {:class    "bg-black/50"
            :on-click (fn []
                        (state/close-modal!)
                        (route-handler/redirect-to-all-graphs))
-           :tooltip name}
+           :tooltip  name}
           [:div.rounded-full.h-2
            {:class color
             :style {:width     (str used-percent' "%")
@@ -869,7 +869,7 @@
                :else nil)
 
              [:a.pt-2
-              {:class (when refreshing? "animate-spin")
+              {:class    (when refreshing? "animate-spin")
                :on-click #(when-not refreshing?
                             (state/pub-event! [:user/fetch-info-and-graphs]))}
               (ui/icon "reload")]]]
@@ -1002,45 +1002,38 @@
                              (when (= "Enter" (util/ekey e))
                                (update-home-page e)))}]]]])
      (whiteboards-switcher-row enable-whiteboards?)
+
      (when (and (util/electron?) config/feature-plugin-system-on?)
        (plugin-system-switcher-row))
+
      (when (util/electron?)
        (http-server-switcher-row))
-     (flashcards-switcher-row enable-flashcards?)
-     (zotero-settings-row)
-     (when-not web-platform?
-       [:div.mt-1.sm:mt-0.sm:col-span-2
-        [:hr]
-        (if logged-in?
-          [:div
-           (user-handler/email)
-           [:p (ui/button (t :logout) {:class    "p-1"
-                                       :icon     "logout"
-                                       :on-click user-handler/logout!})]]
-          [:div
-           (ui/button (t :login) {:class    "p-1"
-                                  :icon     "login"
-                                  :on-click (fn []
-                                              (state/close-settings!)
-                                              (state/pub-event! [:user/login]))})
-           [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])])
 
-     (when-not web-platform?
+     (flashcards-switcher-row enable-flashcards?)
+
+     ;; sync
+     (when (and (not web-platform?) logged-in?)
        [:<>
+        (sync-switcher-row enable-sync?)
+        (when enable-sync?
+          (sync-diff-merge-switcher-row enable-sync-diff-merge?))])
+
+     ;; zotero
+     (zotero-settings-row)
+
+     ;; beta & alpha
+     (when-not web-platform?
+       [:div
+        [:hr.mt-2.mb-4]
         [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
          [:label.flex.font-medium.leading-5.self-start.mt-1
-          (ui/icon (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
-        [:div.flex.flex-col.gap-4
-         {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-         (sync-switcher-row enable-sync?)
-         (when enable-sync?
-           (sync-diff-merge-switcher-row enable-sync-diff-merge?))
-         [:div.text-sm
-          (t :settings-page/sync-desc-1)
-          [:a.mx-1 {:href   "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
-                    :target "_blank"}
-           (t :settings-page/sync-desc-2)]
-          (t :settings-page/sync-desc-3)]]])]))
+          (ui/icon (if logged-in? "lock-open" "lock") {:class "mr-1"})
+          (t :settings-page/beta-features)]]
+
+        (when (user-handler/alpha-or-beta-user?)
+          [:div.flex.flex-col.gap-4
+           [:div.text-base.pt-2.pl-1.opacity-70
+            (util/format "🎉 You're a %s user!" (if (user-handler/alpha-user?) "Alpha" "Beta"))]])])]))
 
 ;; (when-not web-platform?
 ;;   [:<>
@@ -1069,7 +1062,7 @@
   [:<>])
 
 (rum/defcs settings
-  < (rum/local [:account :account] ::active)
+  < (rum/local [:general :general] ::active)
     {:will-mount
      (fn [state]
        (state/load-app-user-cfgs)
@@ -1102,8 +1095,8 @@
         [:h1.cp__settings-modal-title (t :settings)]]
        [:ul.settings-menu
         (for [[label id text icon]
-              [[:account "account" (t :settings-page/tab-account) (ui/icon "user-circle")]
-               [:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
+              [[:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
+               [:account "account" (t :settings-page/tab-account) (ui/icon "user-circle")]
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
                [:keymap "keymap" (t :settings-page/tab-keymap) (ui/icon "keyboard")]
 
@@ -1140,11 +1133,11 @@
            (reset! *active [label label])
            nil)
 
-         :account
-         (settings-account)
-
          :general
          (settings-general current-repo)
+
+         :account
+         (settings-account)
 
          :editor
          (settings-editor current-repo)
