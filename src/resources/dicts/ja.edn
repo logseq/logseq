@@ -318,6 +318,7 @@
  :settings-page/current-version "現在のバージョン"
  :settings-page/tab-general "一般"
  :settings-page/tab-editor "エディタ"
+ :settings-page/tab-keymap "ショートカットキー"
  :settings-page/tab-version-control "バージョンコントロール"
  :settings-page/tab-account "アカウント"
  :settings-page/tab-advanced "高度な設定"
@@ -349,6 +350,18 @@
  :settings-page/update-error-1 "⚠️ なにか問題が発生しました"
  :settings-page/update-error-2 "次のリンクをご確認ください："
  :settings-permission/start-granting "認証"
+
+ :settings-account/current-plan "現在の計画"
+ :settings-account/profile "プロフィール"
+ :settings-account/manage-plan "プランを管理する"
+ :settings-account/upgrade-plan "アップグレード計画"
+ :settings-account/free "無料(Free)"
+ :settings-account/pro "高級(Pro)"
+ :settings-account/username "ユーザー名"
+ :settings-account/email "メール"
+ :settings-account/manage-profile-on-web "ウェブ上でプロフィールを管理する"
+ :settings-account/sync-usage-tip "{1} 無料のマップ（最大保存 {2})"
+ :settings-account/next-renew-date "次の更新日"
 
  :yes "はい"
 

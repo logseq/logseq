@@ -351,6 +351,18 @@
  :settings-page/update-error-2 " Please check out the "
  :settings-permission/start-granting "Grant"
 
+ :settings-account/current-plan "Current plan"
+ :settings-account/profile "Profile"
+ :settings-account/manage-plan "Manage plan"
+ :settings-account/upgrade-plan "Upgrade plan"
+ :settings-account/free "Free"
+ :settings-account/pro "Pro"
+ :settings-account/username "Username"
+ :settings-account/email "Email"
+ :settings-account/manage-profile-on-web "Manage profile on web"
+ :settings-account/sync-usage-tip "{1} synced graph (up to {2})"
+ :settings-account/next-renew-date "Next renew date"
+
  :settings-page/auto-chmod "Automatically change file permissions"
  :settings-page/auto-chmod-desc "Disable to allow editing by multiple users with permissions granted by group membership."
  :yes "Yes"

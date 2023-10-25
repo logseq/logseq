@@ -834,14 +834,14 @@
 (rum/defc settings-account-usage-graphs [_pro-account? user-info _graph-usage]
   (when-let [{:keys [GraphCountLimit StorageLimit]} user-info]
     [:span.inline-block.opacity-70.text-sm
-     (util/format "%s synced graph (up to %s)" GraphCountLimit (gigaBytesFormat StorageLimit))]))
+     (t :settings-account/sync-usage-tip GraphCountLimit (gigaBytesFormat StorageLimit))]))
 
 (rum/defc ^:large-vars/cleanup-todo settings-account < rum/reactive
   []
-  (let [current-graph-uuid (state/sub-current-file-sync-graph-uuid)
+  (let [graph-usage (state/get-remote-graph-usage)
+        current-graph-uuid (state/sub-current-file-sync-graph-uuid)
+        _current-graph-is-remote? ((set (map :uuid graph-usage)) current-graph-uuid)
         refreshing? (state/sub [:ui/loading? :user-fetching?])
-        graph-usage (state/get-remote-graph-usage)
-        current-graph-is-remote? ((set (map :uuid graph-usage)) current-graph-uuid)
         logged-in? (user-handler/logged-in?)
         user-info (state/get-user-info)
         lemon-status (:LemonStatus user-info)
@@ -857,29 +857,31 @@
       (cond
         logged-in?
         [:div.grid.grid-cols-4.gap-x-2.gap-y-8.pt-2.container-wrap
-         [:label "Current plan"]
+         [:label (t :settings-account/current-plan)]
          [:div.col-span-3
           [:div.active-plan-card
            [:div.flex.gap-4.items-center.pt-1.justify-between
             (if pro-account?
-              [:b.plan-flag "Pro"]
-              [:b.plan-flag "Free"])
+              [:b.plan-flag (t :settings-account/pro)]
+              [:b.plan-flag (t :settings-account/free)])
 
             [:span
              {:class "relative top-[-4px] flex items-center gap-3"}
              (cond
                (or pro-account? has-subscribed?)
-               (ui/button "Manage plan" {:class      "p-1 h-8 justify-center"
-                                         :icon       "upload"
-                                         :href       config/SITE-ACCOUNT-ENTRYPOINT
-                                         :icon-props {:size 14}})
+               (ui/button (t :settings-account/manage-plan)
+                          {:class      "p-1 h-8 justify-center"
+                           :icon       "upload"
+                           :href       config/SITE-ACCOUNT-ENTRYPOINT
+                           :icon-props {:size 14}})
 
                ; :on-click user-handler/upgrade})
                (not pro-account?)
-               (ui/button "Upgrade plan" {:class    "p-1 h-8 justify-center"
-                                          :icon     "upload"
-                                          :href     config/SITE-ACCOUNT-ENTRYPOINT
-                                          :on-click user-handler/upgrade})
+               (ui/button (t :settings-account/upgrade-plan)
+                          {:class    "p-1 h-8 justify-center"
+                           :icon     "upload"
+                           :href     config/SITE-ACCOUNT-ENTRYPOINT
+                           :on-click user-handler/upgrade})
                :else nil)
 
              [:a.pt-2
@@ -902,7 +904,7 @@
               (cond
                 ;; If there is no expiration date, print the renewal date
                 (and renewal-date (nil? expiration-date))
-                [:strong.font-normal "Next renew date: "
+                [:strong.font-normal (t :settings-account/next-renew-date) ": "
                  (date/get-locale-string renewal-date)]
 
                 ;; If the expiration date is in the future, word it as such
@@ -916,17 +918,17 @@
                  (date/get-locale-string expiration-date)])
               (ui/icon "external-link")]]])
 
-         [:label "Profile"]
+         [:label (t :settings-account/profile)]
          [:div.col-span-3.grid.grid-cols-3.gap-4
           [:div.flex-1.flex.flex-col.gap-2.col-span-1
-           [:label.text-sm.font-semibold "Username"]
+           [:label.text-sm.font-semibold (t :settings-account/username)]
            [:input.rounded.px-2.py-1.box-border.opacity-60
             {:class    "bg-black/10 dark:bg-black/20"
              :value    (user-handler/username)
              :disabled true}]]
 
           [:div.flex.flex-col.gap-2.col-span-2
-           [:label.text-sm.font-semibold "Email"]
+           [:label.text-sm.font-semibold (t :settings-account/email)]
            [:input.rounded.px-2.py-1.box-border.opacity-60
             {:class    "bg-black/10 dark:bg-black/20"
              :disabled true
@@ -935,15 +937,15 @@
          [:label ""]
          [:div.col-span-3.relative
           {:class "top-[-16px]"}
-          [:div.grid.grid-cols-2.gap-4
+          [:div.grid.grid-cols-1.gap-4
            [:div.col-span-2
-            (ui/button "Logout"
+            (ui/button (t :logout)
                        {:class    "p-1 h-8 justify-center w-full opacity-60 bg-gray-400 border-none hover:bg-red-400 active:bg-red-600"
                         :on-click user-handler/logout!
                         :icon     "logout"})]
            [:a.text-sm.flex.items-center.opacity-50.space-x-1.hover:opacity-80
             {:href config/SITE-ACCOUNT-ENTRYPOINT :target "_blank"}
-            [:b.font-normal "Manage profile on web"]
+            [:b.font-normal (t :settings-account/manage-profile-on-web)]
             (ui/icon "external-link" {:size 14})]]]]
 
         (not logged-in?)
