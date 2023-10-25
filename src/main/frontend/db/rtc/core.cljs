@@ -529,17 +529,47 @@
     [update-page-ops remove-ops move-ops update-ops remove-page-ops]))
 
 
+(defn- <get-N-ops
+  [repo n]
+  (go
+    (let [{:keys [ops local-tx]} (<! (p->c (op/<get-ops&local-tx repo)))
+          ops (take n ops)
+          op-keys (map first ops)
+          ops (map second ops)
+          max-op-key (apply max op-keys)]
+      {:ops ops :op-keys op-keys :max-op-key max-op-key :local-tx local-tx})))
+
+(def ^:private size-30kb (* 30 1024))
+
+(defn- <gen-remote-ops-<30kb
+  [repo & n]
+  (go
+    (let [n (or n 100)
+          {:keys [ops local-tx op-keys max-op-key]} (<! (<get-N-ops repo n))
+          ops-for-remote (apply concat (local-ops->remote-ops repo ops nil))
+          ops-for-remote-str (-> ops-for-remote
+                                 rtc-const/data-to-ws-decoder
+                                 rtc-const/data-to-ws-encoder
+                                 clj->js
+                                 js/JSON.stringify)
+          size (.-size (js/Blob. [ops-for-remote-str]))]
+      (if (<= size size-30kb)
+        {:ops-for-remote ops-for-remote
+         :local-tx local-tx
+         :op-keys op-keys
+         :max-op-key max-op-key}
+        (let [n* (int (/ n (/ size size-30kb)))]
+          (assert (pos? n*) {:n* n :n n :size size})
+          (<! (<gen-remote-ops-<30kb repo n*)))))))
+
+
 (defn- <client-op-update-handler
   [state]
   {:pre [(some? @(:*graph-uuid state))
          (some? @(:*repo state))]}
   (go
     (let [repo @(:*repo state)
-          {:keys [ops local-tx]} (<! (p->c (op/<get-ops&local-tx repo)))
-          ops* (mapv second ops)
-          op-keys (mapv first ops)
-          max-op-key (apply max op-keys)
-          ops-for-remote (apply concat (local-ops->remote-ops repo ops* nil))
+          {:keys [ops-for-remote local-tx op-keys max-op-key]} (<! (<gen-remote-ops-<30kb repo))
           r (with-sub-data-from-ws state
               (<! (ws/<send! state {:req-id (get-req-id)
                                     :action "apply-ops" :graph-uuid @(:*graph-uuid state)

@@ -38,13 +38,14 @@
               (do (idb-keyval/set key* (clj->js op) store)
                   (p/recur (inc key*) other-ops)))))))))
 
-(def ^:private add-ops-ch (async/chan 100))
-(async/go-loop []
-  (if-let [[repo ops] (async/<! add-ops-ch)]
-    (do (prn :add-ops ops)
-        (async/<! (p->c (<add-ops*! repo ops)))
-        (recur))
-    (recur)))
+(defonce ^:private add-ops-ch (async/chan 100))
+(defonce #_:clj-kondo/ignore _add-ops-loop
+  (async/go-loop []
+    (if-let [[repo ops] (async/<! add-ops-ch)]
+      (do (prn :add-ops ops)
+          (async/<! (p->c (<add-ops*! repo ops)))
+          (recur))
+      (recur))))
 
 (defn <add-ops!
   [repo ops]

@@ -4,7 +4,8 @@
             [frontend.db :as db]
             [frontend.db.rtc.op :as op]
             [clojure.set :as set]
-            [clojure.data :as data]))
+            [clojure.data :as data]
+            [clojure.core.async :as async :refer [go <!]]))
 
 
 (defn- entity-datoms=>attr->datom
@@ -138,6 +139,22 @@
                        ops)]
         ops*))))
 
+(def ^:private *ops-pending-to-store (atom []))
+
+(remove-watch *ops-pending-to-store :add-ops)
+(add-watch *ops-pending-to-store :add-ops
+           (fn [_k r _o n]
+             (when (seq n)
+               ;; the following reset! will trigger another call of this fn
+               ;; the above `when` to avoid going forward
+               (go
+                 ;; another check on the value of this atom to ensure no 2-go-threads running for same value
+                 (when (seq @r)
+                   (reset! r [])
+                   (doseq [{:keys [ops repo]} n]
+                     (prn ::add-ops ops)
+                     (<! (op/<add-ops! repo ops))))))))
+
 (defn- generate-rtc-ops
   [repo db-before db-after datoms]
   (let [same-entity-datoms-coll (->> datoms
@@ -145,7 +162,9 @@
                                      (group-by first)
                                      vals)
         ops (mapcat (partial entity-datoms=>ops repo db-before db-after) same-entity-datoms-coll)]
-    (op/<add-ops! repo ops)))
+    (when (seq ops)
+      (swap! *ops-pending-to-store conj {:ops ops :repo repo})
+      (prn :*ops-pending-to-store  @*ops-pending-to-store))))
 
 
 (defn listen-db-to-generate-ops
