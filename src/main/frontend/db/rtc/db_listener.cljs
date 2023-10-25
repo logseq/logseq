@@ -149,8 +149,9 @@
                ;; the above `when` to avoid going forward
                (go
                  ;; another check on the value of this atom to ensure no 2-go-threads running for same value
-                 (when (seq @r)
+                 (when-let [n (seq @r)]
                    (reset! r [])
+                   (prn ::n n)
                    (doseq [{:keys [ops repo]} n]
                      (prn ::add-ops ops)
                      (<! (op/<add-ops! repo ops))))))))
@@ -162,6 +163,7 @@
                                      (group-by first)
                                      vals)
         ops (mapcat (partial entity-datoms=>ops repo db-before db-after) same-entity-datoms-coll)]
+    (def xxx [repo db-before db-after datoms])
     (when (seq ops)
       (swap! *ops-pending-to-store conj {:ops ops :repo repo})
       (prn :*ops-pending-to-store  @*ops-pending-to-store))))
