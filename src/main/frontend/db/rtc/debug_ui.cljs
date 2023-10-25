@@ -146,8 +146,8 @@
                                     (when-let [graph-uuid @(::graph-uuid state)]
                                       (<! (rtc-core/<grant-graph-access-to-others
                                            s graph-uuid
-                                           :target-user-uuids [user-uuid]
-                                           :target-user-emails [user-email]))))))})
+                                           :target-user-uuids (some-> user-uuid vector)
+                                           :target-user-emails (some-> user-email vector)))))))})
 
         [:input.form-input.my-2
          {:on-change (fn [e] (reset! (::grant-access-to-user state) (util/evalue e)))
