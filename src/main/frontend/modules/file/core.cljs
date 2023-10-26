@@ -122,8 +122,9 @@
           whiteboard-page? (model/whiteboard-page? page-block)
           format (if whiteboard-page? "edn" format)
           journal-page? (date/valid-journal-title? title)
-          journal-title (date/normalize-journal-title title)
-          filename (if (and journal-page? (not (string/blank? journal-title)))
+          journal-title (date/journal-title->custom-format title)
+          journal-page? (and journal-page? (not (string/blank? journal-title)))
+          filename (if journal-page?
                      (date/date->file-name journal-title)
                      (-> (or (:block/original-name page-block) (:block/name page-block))
                          (fs-util/file-name-sanity)))

@@ -301,6 +301,7 @@
  :pdf/linked-ref "已連結的引用"
  :pdf/toggle-dashed "使用線條顯示高亮區塊"
  :pdf/hl-block-colored "使用有色標籤顯示高亮區塊"
+ :pdf/auto-open-context-menu "為選中文本自動打開上下文菜單"
  :pdf/doc-metadata "metadata 文件"
 
  :updater/new-version-install "已下載新版本。"
