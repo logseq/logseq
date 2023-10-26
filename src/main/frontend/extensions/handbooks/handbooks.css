@@ -136,6 +136,10 @@
       border-left: 4px solid var(--ls-secondary-background-color);
       background-color: var(--ls-secondary-background-color);
 
+      &[data-total="0"] {
+        @apply hidden;
+      }
+
       &:hover, &:active {
         background-color: var(--ls-primary-background-color);
       }
@@ -389,6 +393,18 @@ html[data-theme="light"] {
       .category-card {
         &:hover, &:active {
           background-color: var(--ls-tertiary-background-color);
+        }
+      }
+    }
+
+    ul {
+      list-style: unset;
+
+      ul {
+        list-style: circle;
+
+        ul {
+          list-style: square;
         }
       }
     }

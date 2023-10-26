@@ -282,10 +282,12 @@
                                          " shortcuts"]
                               :color    "#2563EB"
                               :icon     "command"})]
-        (for [{:keys [key title children color icon] :as category} categories]
+        (for [{:keys [key title children color icon] :as category} categories
+              :let [total (if counted? (count children) 0)]]
           [:button.category-card.text-left
            {:key      key
             :style    {:border-left-color (or (ui/->block-background-color color) "var(--ls-secondary-background-color)")}
+            :data-total total
             :on-click #(if (= key :ls-shortcuts)
                          (do (state/toggle! :ui/handbooks-open?)
                              (state/open-right-sidebar!)
@@ -300,7 +302,7 @@
               children
 
               :else
-              [:span (str (count children) " " (util/safe-lower-case (t :handbook/topics)))])]]))]]))
+              [:span (str total " " (util/safe-lower-case (t :handbook/topics)))])]]))]]))
 
 (rum/defc pane-settings
   [dev-watch? set-dev-watch?]
