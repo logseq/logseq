@@ -399,24 +399,28 @@
 (rum/defc property-block-value < rum/reactive
   [value block property block-cp editor-box opts page-cp editor-id]
   (let [v-block (db/entity [:block/uuid value])
-        class? (contains? (:block/type v-block) "class")]
-    (cond
-      (:block/page v-block)
-      (property-normal-block-value value block-cp editor-box)
+        class? (contains? (:block/type v-block) "class")
+        invalid-warning [:div.warning.text-sm
+                         "Invalid block value, please delete the current property."]]
+    (if v-block
+      (cond
+        (:block/page v-block)
+        (property-normal-block-value value block-cp editor-box)
 
-      (and class? (seq (:properties (:block/schema v-block))))
-      (let [template-instance-block (create-new-block-from-template! block property v-block)]
-        (property-template-value {:editor-id editor-id}
-                                 (:block/uuid template-instance-block)
-                                 opts))
+        (and class? (seq (:properties (:block/schema v-block))))
+        (let [template-instance-block (create-new-block-from-template! block property v-block)]
+          (property-template-value {:editor-id editor-id}
+                                   (:block/uuid template-instance-block)
+                                   opts))
 
-      ;; page/class/etc.
-      (:block/name v-block)
-      (page-cp {:disable-preview? true
-                :hide-close-button? true
-                :tag? class?} v-block)
-      :else
-      (js/console.error "Invalid property value: " v-block))))
+        ;; page/class/etc.
+        (:block/name v-block)
+        (page-cp {:disable-preview? true
+                  :hide-close-button? true
+                  :tag? class?} v-block)
+        :else
+        invalid-warning)
+      invalid-warning)))
 
 (rum/defc select-item
   [property type value {:keys [page-cp inline-text]}]

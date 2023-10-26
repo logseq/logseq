@@ -275,6 +275,7 @@
       (and (contains? (:block/type page) "class")
            (seq (model/get-tag-blocks repo (:block/name page))))
       {:msg "Page content deleted but unable to delete this page because blocks are tagged with this page"}
+
       (contains? (:block/type page) "property")
       (cond (seq (model/get-classes-with-property (:block/uuid page)))
             {:msg "Page content deleted but unable to delete this page because classes use this property"}
@@ -282,8 +283,10 @@
                  (filter (fn [[_ v]] (if (seq? v) (seq v) (some? v))))
                  seq)
             {:msg "Page content deleted but unable to delete this page because blocks use this property"})
-      (seq (:block/_refs page))
+
+      (or (seq (:block/_refs page)) (contains? (:block/type page) "hidden"))
       {:msg "Page content deleted but unable to delete this page because there're still references to it"})
+
     (catch :default e
       (log/error :exception e)
       (state/pub-event! [:capture-error {:error e}])
