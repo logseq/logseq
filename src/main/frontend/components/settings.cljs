@@ -955,11 +955,8 @@
 
         (not logged-in?)
         [:div.grid.grid-cols-4.gap-4.pt-2.container-wrap
-         [:label "Authentication"]
-         [:div.col-span-3.flex.flex-wrap.gap-6
-          [:div.w-full.text-gray-600.dark:text-gray-300
-           "With a Logseq account, you can access cloud-based services like"
-           [:b.inline-block.px-1 "Logseq Sync"] "and" [:b.inline-block.px-1 "Alpha/Beta features."]]
+         [:div.col-span-4.flex.flex-wrap.gap-6
+          [:div.w-full.text-gray-600.dark:text-gray-300 (t :settings-account/new-desc)]
           [:div.flex-1 (ui/button "Create account"
                                   {:class    "h-8 w-full text-center justify-center"
                                    :on-click (fn []
