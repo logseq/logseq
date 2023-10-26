@@ -305,7 +305,8 @@
                                                           (str config/page-ref-special-chars (:block/uuid tag))))
                                                       (:block/tags m))
                                                      (remove nil?)))))
-              m)]
+              m)
+          m-without-tags (if db-based? (dissoc m :block/tags) m)]
       (when id
         ;; Retract attributes to prepare for tx which rewrites block attributes
         (let [retract-attributes (when db-based?
@@ -318,10 +319,10 @@
                                            retract-attributes))))))
 
         ;; Update block's page attributes
-        (update-page-when-save-block txs-state block-entity m)
+        (update-page-when-save-block txs-state block-entity m-without-tags)
 
         ;; Remove orphaned refs from block
-        (remove-orphaned-refs-when-save txs-state block-entity m))
+        (remove-orphaned-refs-when-save txs-state block-entity m-without-tags))
 
       ;; handle others txs
       (let [other-tx (:db/other-tx m)]
@@ -329,7 +330,7 @@
           (swap! txs-state (fn [txs]
                              (vec (concat txs other-tx)))))
         (swap! txs-state conj
-               (dissoc m :db/other-tx)))
+               (dissoc m-without-tags :db/other-tx)))
 
       (create-object-when-save txs-state block-entity m structured-tags?)
 

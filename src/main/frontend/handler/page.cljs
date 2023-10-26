@@ -218,12 +218,26 @@
                                (subs q 1)
                                q))
               last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)]
+          (when (config/db-based-graph? (state/get-current-repo))
+            (let [tag (string/trim q)
+                  edit-block (state/get-edit-block)]
+              (when (and (not (string/blank? tag)) edit-block)
+                (let [tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)])]
+                  (when-not tag-entity
+                    (create! tag {:redirect? false
+                                  :create-first-block? false
+                                  :class? true}))
+                  (let [tag-entity (or tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)]))]
+                    (db/transact! [[:db/add (:db/id edit-block) :block/tags (:db/id tag-entity)]
+                                   [:db/add (:db/id edit-block) :block/refs (:db/id tag-entity)]]))))))
+
           (editor-handler/insert-command! id
                                           (str "#" (when wrapped? page-ref/left-brackets) chosen)
                                           format
                                           {:last-pattern last-pattern
                                            :end-pattern (when wrapped? page-ref/right-brackets)
                                            :command :page-ref})
+
           (when input (.focus input))))
       (fn [chosen e]
         (util/stop e)
