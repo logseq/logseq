@@ -183,7 +183,7 @@
   (vec
    (concat
     [:map
-     [:block/metadata #_{:optional true}
+     [:block/metadata
       [:map
        [:source-page-id :uuid]]]]
     page-attrs
