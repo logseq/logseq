@@ -5,7 +5,6 @@
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.route :as route-handler]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -28,9 +27,8 @@
                           (notification/show! (str "Page " page-name " was deleted successfully!")
                                               :success))
                         {:error-handler (fn [{:keys [msg]}]
-                                          (notification/show! msg :error))})
-  (state/close-modal!)
-  (route-handler/redirect-to-home!))
+                                          (notification/show! msg :warning))})
+  (state/close-modal!))
 
 (defn delete-page-dialog
   [page-name]

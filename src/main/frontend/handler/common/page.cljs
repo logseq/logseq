@@ -281,7 +281,9 @@
             (->> (model/get-block-property-values (:block/uuid page))
                  (filter (fn [[_ v]] (if (seq? v) (seq v) (some? v))))
                  seq)
-            {:msg "Unable to delete this page because blocks use this property"}))
+            {:msg "Unable to delete this page because blocks use this property"})
+      (seq (:block/_refs page))
+      {:msg "Unable to delete this page because there're still references to it"})
     (catch :default e
       (log/error :exception e)
       (state/pub-event! [:capture-error {:error e}])
@@ -294,19 +296,21 @@
                                 redirect-to-home? true
                                 persist-op? true
                                 error-handler (fn [{:keys [msg]}] (log/error :msg msg))}}]
-  (when redirect-to-home? (route-handler/redirect-to-home!))
   (when page-name
     (when-let [repo (state/get-current-repo)]
       (let [page-name (util/page-name-sanity-lc page-name)
-            blocks (db/get-page-blocks-no-cache page-name)
+            page (db/entity [:block/name page-name])
+            blocks (:block/_page page)
             truncate-blocks-tx-data (mapv
                                      (fn [block]
                                        [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
-                                     blocks)
-            page (db/entity [:block/name page-name])]
+                                     blocks)]
         (if-let [msg (and (config/db-based-graph? repo)
                           (page-unable-to-delete repo page))]
-          (error-handler msg)
+          (do
+            (db/transact! repo truncate-blocks-tx-data
+              {:outliner-op :delete-page :persist-op? persist-op?})
+            (error-handler msg))
           (let [_ (delete-file! repo page-name delete-file?)
                 ;; if other page alias this pagename,
                 ;; then just remove some attrs of this entity instead of retractEntity
@@ -326,6 +330,8 @@
             (db/transact! repo tx-data {:outliner-op :delete-page :persist-op? persist-op?})
 
             (unfavorite-page! page-name)
+
+            (when redirect-to-home? (route-handler/redirect-to-home!))
 
             (when (fn? ok-handler) (ok-handler))
             (ui-handler/re-render-root!)))))))
