@@ -1335,10 +1335,15 @@
                          (str "&page=" page)))
 
                   :else
-                  url)]
-        (if (and (coll? src)
-                 (= (first src) "youtube-player"))
-          (youtube/youtube-video (last src))
+                  ["video-file" url])]
+        (if
+         (coll? src)
+          (cond
+            (= (first src) "youtube-player")
+            (youtube/youtube-video (last src))
+            
+             (= (first src) "video-file")
+            (asset-reference nil nil (last src)))
           (when src
             (let [width (min (- (util/get-width) 96) 560)
                   height (int (* width (/ (if (string/includes? src "player.bilibili.com")
