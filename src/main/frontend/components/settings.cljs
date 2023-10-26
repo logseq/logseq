@@ -842,6 +842,7 @@
         current-graph-uuid (state/sub-current-file-sync-graph-uuid)
         _current-graph-is-remote? ((set (map :uuid graph-usage)) current-graph-uuid)
         refreshing? (state/sub [:ui/loading? :user-fetching?])
+        logging-out? (state/sub [:ui/loading? :logging-out?])
         logged-in? (user-handler/logged-in?)
         user-info (state/get-user-info)
         lemon-status (:LemonStatus user-info)
@@ -939,10 +940,14 @@
           {:class "top-[-16px]"}
           [:div.grid.grid-cols-1.gap-4
            [:div.col-span-2
-            (ui/button (t :logout)
-                       {:class    "p-1 h-8 justify-center w-full opacity-60 bg-gray-400 border-none hover:bg-red-400 active:bg-red-600"
-                        :on-click user-handler/logout!
-                        :icon     "logout"})]
+            (ui/button
+              [:span.flex.items-center
+               (if logging-out? (ui/loading "") (t :logout))]
+              {:class    "p-1 h-8 justify-center w-full opacity-60 bg-gray-400 border-none hover:bg-red-400 active:bg-red-600"
+               :disabled logging-out?
+               :on-click user-handler/logout!
+               :icon     (when-not logging-out? "logout")})]
+
            [:a.text-sm.flex.items-center.opacity-50.space-x-1.hover:opacity-80
             {:href config/SITE-ACCOUNT-ENTRYPOINT :target "_blank"}
             [:b.font-normal (t :settings-account/manage-profile-on-web)]
@@ -977,7 +982,7 @@
             [:div.font-semibold "Get started with basic syncing"]
             [:ul.text-xs.m-0.flex.flex-col.gap-0.5.pl-3.opacity-70
              [:li "Unlimited unsynced graphs"]
-             [:li "1 synced graph (up to 50MB, notes only)"]
+             [:li "1 synced graph (up to 50MB)"]
              [:li "No asset syncing"]
              [:li "Access to core Logseq features"]]]
 
@@ -988,7 +993,7 @@
             [:div.font-semibold "Unlock advanced syncing and more"]
             [:ul.text-xs.m-0.flex.flex-col.gap-0.5.pl-3.opacity-70
              [:li "Unlimited unsynced graphs"]
-             [:li "10 synced graphs (up to 5GB each)"]
+             [:li "10 synced graphs (up to 20GB each)"]
              [:li "Sync assets up to 100MB per file"]
              [:li "Early access to alpha/beta features"]
              [:li "Upcoming cloud-based features, including Logseq Publish"]]]]]

@@ -13,6 +13,7 @@
             [goog.crypt.Sha256]
             [goog.crypt.Hmac]
             [goog.crypt :as crypt]
+            [promesa.core :as p]
             [frontend.handler.notification :as notification]))
 
 (defn set-preferred-format!
@@ -205,9 +206,12 @@
           {:id-token id-token :access-token access-token :refresh-token refresh-token})))))
 
 (defn logout! []
-  (clear-tokens)
-  (state/clear-user-info!)
-  (state/pub-event! [:user/logout]))
+  (state/set-state! [:ui/loading? :logging-out?] true)
+  (-> (state/pub-event! [:user/logout])
+      (p/then (fn []
+                (clear-tokens)
+                (state/clear-user-info!)))
+      (p/finally #(state/set-state! [:ui/loading? :logging-out?] false))))
 
 (defn upgrade []
   (let [base-upgrade-url "https://logseqdemo.lemonsqueezy.com/checkout/buy/13e194b5-c927-41a8-af58-ed1a36d6000d"

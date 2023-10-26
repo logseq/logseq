@@ -122,6 +122,7 @@
   (file-sync-handler/reset-session-graphs)
   (sync/remove-all-pwd!)
   (file-sync-handler/reset-user-state!)
+  ;; return promise
   (login/sign-out!))
 
 (defmethod handle :user/login [[_ type host-ui?]]
