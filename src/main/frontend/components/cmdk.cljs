@@ -441,8 +441,8 @@
                                (when (< (dec GROUP-LIMIT) (.indexOf items highlighted-item))
                                  (reset! (::highlighted-item state) (nth items 4 nil))))] 
     [:div {:class "border-b border-gray-06 pb-1 last:border-b-0"}
-     [:div {:class "text-xs py-1.5 px-6 flex justify-between items-center gap-2 text-gray-11 bg-gray-02"} 
-      [:div {:class "font-bold text-gray-11"} title]
+     [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02"} 
+      [:div {:class "font-bold text-gray-11 pl-0.5"} title]
       (when (not= group :create)
        [:div {:class "bg-gray-05 px-1.5 py-px text-gray-12 rounded-full"
               :style {:font-size "0.6rem"}}
@@ -481,8 +481,12 @@
                                               (when-let [on-click (:on-click item)]
                                                 (on-click e)))
                                             (reset! (::highlighted-item state) item)))
+                              :on-mouse-enter (fn [e] 
+                                                (when (not highlighted?)
+                                                  (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
                               :on-highlight (fn [ref]  
-                                              (when (and ref (.-current ref) (< 2 (:item-index item)))
+                                              (when (and ref (.-current ref) (< 2 (:item-index item))
+                                                         (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
                                                 (.. ref -current (scrollIntoView #js {:block "center" 
                                                                                       :inline "nearest"
                                                                                       :behavior "smooth"}))) 
@@ -498,8 +502,10 @@
                        (make-shui-context)))]]))
 
 (defn move-highlight [state n]
+  (js/console.log "move-highlight" n)
   (let [items (mapcat last (state->results-ordered state))
-        current-item-index (some->> state ::highlighted-item deref (.indexOf items))
+        highlighted-item (some-> state ::highlighted-item deref (dissoc :mouse-enter-triggered-highlight))
+        current-item-index (some->> highlighted-item (.indexOf items))
         next-item-index (some-> (or current-item-index 0) (+ n) (mod (count items)))]
     (if-let [next-highlighted-item (nth items next-item-index nil)]
       (reset! (::highlighted-item state) next-highlighted-item)
@@ -584,7 +590,7 @@
     ;; if not then clear that puppy out!
     ;; This was moved to a fucntional component
     (rum/use-effect! (fn [] 
-                       (when (and highlighted-item (= -1 (.indexOf all-items highlighted-item)))
+                       (when (and highlighted-item (= -1 (.indexOf all-items (dissoc highlighted-item :mouse-enter-triggered-highlight))))
                          (reset! (::highlighted-item state) nil)))
                      [all-items])
     (rum/use-effect! (fn [] 
@@ -638,14 +644,17 @@
                    (when (and shift? (= :open action)) "in sidebar")
                    (when alt? "(keep open)")]
                   (remove nil?) 
-                  (string/join " "))] 
+                  (string/join " ")) 
+        theme (case action :create :color :gray)]
     (when action
       (shui/button {:text text
-                    :theme :color
-                    :on-click #(handle-action action state %)} (make-shui-context)))))
+                    :theme theme
+                    :on-click #(handle-action action state %)} (make-shui-context)
+                    :shortcut "return"))))
 
 (rum/defcs cmdk < 
   shortcut/disable-all-shortcuts 
+  rum/reactive
   (rum/local "" ::input)
   (rum/local false ::shift?)
   (rum/local false ::alt?)
@@ -703,7 +712,8 @@
         first-item (first all-items)
         highlighted-item (or @(::highlighted-item state) first-item)
         shift? @(::shift? state) 
-        alt? @(::alt? state)]
+        alt? @(::alt? state)
+        dark? (= "dark" (state/sub :ui/theme))]
     ; (rum/use-effect! #(load-results :initial state) [])
     [:div.cp__cmdk {:class (cond-> "w-full h-full relative flex flex-col justify-start"
                              (not sidebar?) (str " border border-gray-06 rounded-lg overflow-hidden"))}
@@ -720,13 +730,27 @@
             :when (not= 0 group-count)
             :when (if-not group-filter true (= group-filter group-key))]
         (result-group state group-name group-key group-items first-item))]
-     [:div {:class "absolute right-4 bottom-4 shadow-gray-02"
-            :style {:box-shadow (str "0px 0px 9.7px rgba(0, 0, 0, 0.8), "
-                                     "0px 0px 23.3px rgba(0, 0, 0, 0.575), "
-                                     "0px 0px 43.8px rgba(0, 0, 0, 0.477), "
-                                     "0px 0px 78.2px rgba(0, 0, 0, 0.4), "
-                                     "0px 0px 146.2px rgba(0, 0, 0, 0.323), "
-                                     "0px 0px 350px rgba(0, 0, 0, 0.255) ")}}
+     [:div {:class "absolute right-4 bottom-4 shadow-gray-02 rounded"
+            :style {:box-shadow (if dark?
+                                  (str "0px 0px 9.7px rgba(8, 9, 10, 0.8), "
+                                     "0px 0px 23.3px rgba(8, 9, 10, 0.575), "
+                                     "0px 0px 43.8px rgba(8, 9, 10, 0.477), "
+                                     "0px 0px 78.2px rgba(8, 9, 10, 0.4), "
+                                     "0px 0px 146.2px rgba(8, 9, 10, 0.323), "
+                                     "0px 0px 350px rgba(8, 9, 10, 0.255) ")
+                                  (str "0px 0px 9.7px 12px rgba(248,249,250, 1), "
+                                     "0px 0px 23.3px 12px rgba(248,249,250, 0.75), "
+                                     "0px 0px 43.8px 12px rgba(248,249,250, 0.6), "
+                                     "0px 0px 78.2px 12px rgba(248,249,250, 0.5), "
+                                     "0px 0px 146.2px 12px rgba(248,249,250, 0.4), "
+                                     "0px 0px 350px 12px rgba(248,249,250, 0.35), "
+                                     "0px 0px 0.5px 0.5px rgba(0,0,0,0.5)"))}}
+                                  ; (str "0px 0px 9.7px rgba(0, 0, 0, 0.3), "
+                                  ;    "0px 0px 23.3px rgba(0, 0, 0, 0.21), "
+                                  ;    "0px 0px 43.8px rgba(0, 0, 0, 0.18), "
+                                  ;    "0px 0px 78.2px rgba(0, 0, 0, 0.15), "
+                                  ;    "0px 0px 146.2px rgba(0, 0, 0, 0.12), "
+                                  ;    "0px 0px 350px rgba(0, 0, 0, 0.9) "))}}
       (render-action-button state highlighted-item)]]))
 
 (rum/defc cmdk-modal [props]

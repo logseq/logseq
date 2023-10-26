@@ -96,7 +96,7 @@
           [:span text-string])))))
 
 ;; result-item
-(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted on-highlight on-highlight-dep header on-click hoverable compact rounded] :as _props :or {hoverable true rounded true}} 
+(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted on-highlight on-highlight-dep header on-click hoverable compact rounded on-mouse-enter] :as _props :or {hoverable true rounded true}} 
                 {:keys [app-config] :as context}]
   (let [ref (rum/create-ref)
         highlight-query (partial highlight-query* app-config query)]
@@ -115,7 +115,8 @@
                     compact (str " py-1.5 px-3.5 gap-0.5")
                     (not highlighted) (str " "))
            :ref ref
-           :on-click (when on-click on-click)}
+           :on-click (when on-click on-click)
+           :on-mouse-enter (when on-mouse-enter on-mouse-enter)}
      ;; header
      (when header
       [:div.text-xs.pl-8.font-light {:class "-mt-1"

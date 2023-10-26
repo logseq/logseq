@@ -40,11 +40,11 @@
 }
 
 .shui__button-theme-gray {
-  background: or(--lx-gray-06-alpha, --ls-quaternary-background);
+  background: or(--lx-gray-06, --ls-quaternary-background);
 }
 
 .shui__button-theme-gray:hover {
-  background: or(--lx-gray-06, --ls-quaternary-background);
+  background: or(--lx-gray-05, --ls-quaternary-background);
 }
 
 .shui__button-theme-gray:active {
