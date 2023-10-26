@@ -283,23 +283,19 @@
   (-save [this txs-state]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
-    (let [m* (-> (:data this)
-                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom?
-                         :block/title :block/body :block/level)
-                 gp-util/remove-nils
-                 block-with-timestamps
-                 fix-tag-ids)
+    (let [m (-> (:data this)
+                (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom?
+                        :block/title :block/body :block/level)
+                gp-util/remove-nils
+                block-with-timestamps
+                fix-tag-ids)
           repo (state/get-current-repo)
           db-based? (config/db-based-graph? repo)
-          m (if db-based?
-              (dissoc m* :block/properties :block/properties-order)
-              m*)
           id (:db/id (:data this))
           block-entity (db/entity id)
-          structured-tags? (and (config/db-based-graph? (state/get-current-repo))
-                                (seq (:block/tags m)))
+          structured-tags? (and db-based? (seq (:block/tags m)))
           m (if (:block/content m)
-              (update m* :block/content
+              (update m :block/content
                       (fn [content]
                         (mldoc/content-without-tags content
                                                     (->>
@@ -307,7 +303,7 @@
                                                       (fn [tag]
                                                         (when (:block/uuid tag)
                                                           (str config/page-ref-special-chars (:block/uuid tag))))
-                                                       (:block/tags m))
+                                                      (:block/tags m))
                                                      (remove nil?)))))
               m)]
       (when id
