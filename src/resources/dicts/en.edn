@@ -351,6 +351,7 @@
  :settings-page/update-error-2 " Please check out the "
  :settings-permission/start-granting "Grant"
 
+ :settings-account/create "Create account"
  :settings-account/new-desc ["With a Logseq account, you can access cloud-based services like " [:b "Logseq Sync"]  " and " [:b "Alpha/Beta features."]]
  :settings-account/current-plan "Current plan"
  :settings-account/profile "Profile"
@@ -363,6 +364,20 @@
  :settings-account/manage-profile-on-web "Manage profile on web"
  :settings-account/sync-usage-tip "{1} synced graph (up to {2})"
  :settings-account/next-renew-date "Next renew date"
+
+ :settings-account/free-plan-title "Get started with basic syncing"
+ :settings-account/free-plan-desc
+ [[:li "Unlimited unsynced graphs"]
+  [:li "1 synced graph (up to 50MB)"]
+  [:li "Assets syncing"]
+  [:li "Access to core Logseq features"]]
+ :settings-account/pro-plan-title "Unlock advanced syncing and more"
+ :settings-account/pro-plan-desc
+ [[:li "Unlimited unsynced graphs"]
+  [:li "10 synced graphs (up to 20GB each)"]
+  [:li "Sync assets up to 100MB per file"]
+  [:li "Early access to alpha/beta features"]
+  [:li "Upcoming cloud-based features, including Logseq Publish"]]
 
  :settings-page/auto-chmod "Automatically change file permissions"
  :settings-page/auto-chmod-desc "Disable to allow editing by multiple users with permissions granted by group membership."

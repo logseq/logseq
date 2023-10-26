@@ -351,6 +351,8 @@
  :settings-page/update-error-2 "次のリンクをご確認ください："
  :settings-permission/start-granting "認証"
 
+ :settings-account/create "アカウントを作成する"
+ :settings-account/new-desc ["Logseqアカウントを持っていれば、 " [:b "Logseq Sync"] " や " [:b "Alpha/Beta 機能"] " などのクラウドベースのサービスにアクセスできます。"]
  :settings-account/current-plan "現在の計画"
  :settings-account/profile "プロフィール"
  :settings-account/manage-plan "プランを管理する"
@@ -362,6 +364,20 @@
  :settings-account/manage-profile-on-web "ウェブ上でプロフィールを管理する"
  :settings-account/sync-usage-tip "{1} 無料のマップ（最大保存 {2})"
  :settings-account/next-renew-date "次の更新日"
+
+ :settings-account/free-plan-title "基本な同期機能を使用する"
+ :settings-account/free-plan-desc
+ [[:li "制限のないローカルマップの数"]
+  [:li "1つのクラウドマップ（最大50MBまでのストレージ）"]
+  [:li "添付ファイルの同期をサポートします"]
+  [:li "すべてのコアエディタ機能をサポートします"]]
+ :settings-account/pro-plan-title "高度な同期サービスと追加機能"
+ :settings-account/pro-plan-desc
+ [[:li "制限のないローカルマップの数"]
+  [:li "10個のクラウドマップ（最大20GBのストレージ容量）"]
+  [:li "添付ファイルの同期をサポートします（1つのファイルの上限は100Mです）"]
+  [:li "すべてのアルファ/ベータ機能を優先的にサポートします"]
+  [:li "即将推出的基于云的功能，包括Logseq发布"]]
 
  :yes "はい"
 

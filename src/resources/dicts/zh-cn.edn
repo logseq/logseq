@@ -248,6 +248,8 @@
  :settings-page/sync "同步"
  :settings-permission/start-granting "开始授权"
 
+ :settings-account/create "创建帐户"
+ :settings-account/new-desc ["通过Logseq账户，您可以访问云服务，如 " [:b "Logseq同步"] " 和 " [:b "Alpha/Beta功能。"]]
  :settings-account/current-plan "当前计划"
  :settings-account/profile "用户信息"
  :settings-account/manage-plan "管理"
@@ -259,6 +261,20 @@
  :settings-account/manage-profile-on-web "去网站管理用户信息"
  :settings-account/sync-usage-tip "{1} 个免费图谱 (上限存储 {2})"
  :settings-account/next-renew-date "下一次续费日期"
+
+ :settings-account/free-plan-title "开始使用基本同步功能"
+ :settings-account/free-plan-desc
+ [[:li "不限制的本地图谱数量"]
+  [:li "1个云端图谱 (存储上限至50MB)"]
+  [:li "支持附件同步"]
+  [:li "支持全部核心编辑器功能"]]
+ :settings-account/pro-plan-title "解锁高级同步服务以及附加功能"
+ :settings-account/pro-plan-desc
+ [[:li "不限制的本地图谱数量"]
+  [:li "10个云端图谱 (存储上限至20GB)"]
+  [:li "支持附件同步（单个文件上限100M）"]
+  [:li "优先支持所有 alpha/beta 功能"]
+  [:li "即将推出的基于云的功能，包括Logseq发布"]]
 
  :yes "是"
  :submit "提交"

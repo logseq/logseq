@@ -957,44 +957,38 @@
         [:div.grid.grid-cols-4.gap-4.pt-2.container-wrap
          [:div.col-span-4.flex.flex-wrap.gap-6
           [:div.w-full.text-gray-600.dark:text-gray-300 (t :settings-account/new-desc)]
-          [:div.flex-1 (ui/button "Create account"
-                                  {:class    "h-8 w-full text-center justify-center"
-                                   :on-click (fn []
-                                               (state/close-settings!)
-                                               (state/pub-event! [:user/login :signUp]))})]
-          [:div.flex-1 (ui/button (t :login)
-                                  {:icon     "login"
-                                   :class    "h-8 w-full text-center justify-center opacity-80"
-                                   :intent   "logseq-2"
-                                   :on-click (fn []
-                                               (state/close-settings!)
-                                               (state/pub-event! [:user/login]))})]]
+          [:div.flex-1 (ui/button
+                         (t :settings-account/create)
+                         {:class    "h-8 w-full text-center justify-center"
+                          :on-click (fn []
+                                      (state/close-settings!)
+                                      (state/pub-event! [:user/login :signUp]))})]
+          [:div.flex-1 (ui/button
+                         (t :login)
+                         {:icon     "login"
+                          :class    "h-8 w-full text-center justify-center opacity-80"
+                          :intent   "logseq-2"
+                          :on-click (fn []
+                                      (state/close-settings!)
+                                      (state/pub-event! [:user/login]))})]]
 
          ;; pro plans
          [:div.col-span-4.flex.flex-col.gap-4.pro-plan-cards
           [:div.flex.w-full.gap-4
            [:div.card
-            [:div.flag "Free"]
+            [:div.flag (t :settings-account/free)]
             [:div [:strong.text-xl.font-medium "$0"]]
-            [:div.font-semibold "Get started with basic syncing"]
+            [:div.font-semibold (t :settings-account/free-plan-title)]
             [:ul.text-xs.m-0.flex.flex-col.gap-0.5.pl-3.opacity-70
-             [:li "Unlimited unsynced graphs"]
-             [:li "1 synced graph (up to 50MB)"]
-             [:li "No asset syncing"]
-             [:li "Access to core Logseq features"]]]
+             (t :settings-account/free-plan-desc)]]
 
            [:div.card
-            [:div.flag.pro "Pro"]
+            [:div.flag.pro (t :settings-account/pro)]
             [:div [:strong.text-xl.font-medium "$10"]
              [:span.text-xs.font-base {:class "ml-0.5"} "/ monthly"]]
-            [:div.font-semibold "Unlock advanced syncing and more"]
+            [:div.font-semibold (t :settings-account/pro-plan-title)]
             [:ul.text-xs.m-0.flex.flex-col.gap-0.5.pl-3.opacity-70
-             [:li "Unlimited unsynced graphs"]
-             [:li "10 synced graphs (up to 20GB each)"]
-             [:li "Sync assets up to 100MB per file"]
-             [:li "Early access to alpha/beta features"]
-             [:li "Upcoming cloud-based features, including Logseq Publish"]]]]]
-         ])]]))
+             (t :settings-account/pro-plan-desc)]]]]])]]))
 
 (rum/defc settings-features < rum/reactive
   []
