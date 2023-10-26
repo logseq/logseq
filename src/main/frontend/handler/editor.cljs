@@ -789,7 +789,8 @@
                                    {:outliner-op :delete-blocks}
                                     concat-prev-block?
                                     (assoc :concat-data
-                                           {:last-edit-block (:block/uuid block)}))]
+                                           {:last-edit-block (:block/uuid block)}))
+                    db-based? (config/db-based-graph? repo)]
                 (outliner-tx/transact!
                  transact-opts
                  (cond
@@ -799,23 +800,32 @@
                    nil
 
                    concat-prev-block?
-                   (if (seq (:block/_refs (db/entity (:db/id block))))
-                     (do
-                       (delete-block-fn prev-block)
-                       (save-block! repo block new-content {:editor/op :delete})
-                       (outliner-core/save-block! {:db/id (:db/id block)
-                                                   :block/uuid (:block/uuid block)
-                                                   :block/parent (:db/id (:block/parent prev-block))
-                                                   :block/left (or (:db/id (:block/left prev-block))
-                                                                   (:db/id (:block/parent prev-block)))})
-                       (when pos
-                         (util/schedule
-                          (fn []
-                            (when-let [input (state/get-input)]
-                              (cursor/move-cursor-to input pos))))))
-                     (do
-                       (delete-block-fn block)
-                       (save-block! repo prev-block new-content {:editor/op :delete})))
+                   (let [new-properties (merge (:block/properties (db/entity (:db/id prev-block)))
+                                               (:block/properties (db/entity (:db/id block))))]
+                     (if (seq (:block/_refs (db/entity (:db/id block))))
+                       (do
+                         (delete-block-fn prev-block)
+                         (save-block! repo block new-content {:editor/op :delete})
+                         (outliner-core/save-block! {:db/id (:db/id block)
+                                                     :block/uuid (:block/uuid block)
+                                                     :block/parent (:db/id (:block/parent prev-block))
+                                                     :block/left (or (:db/id (:block/left prev-block))
+                                                                     (:db/id (:block/parent prev-block)))})
+                         (when db-based?
+                           (outliner-core/save-block! {:db/id (:db/id block)
+                                                       :block/properties new-properties}))
+                         (when pos
+                           (util/schedule
+                            (fn []
+                              (when-let [input (state/get-input)]
+                                (cursor/move-cursor-to input pos))))))
+
+                       (do
+                         (delete-block-fn block)
+                         (save-block! repo prev-block new-content {:editor/op :delete})
+                         (when db-based?
+                           (outliner-core/save-block! {:db/id (:db/id prev-block)
+                                                     :block/properties new-properties})))))
 
                    :else
                    (delete-block-fn block))))))))))
@@ -2640,7 +2650,8 @@
         first-child (:data (tree/-get-down (outliner-core/block current-block)))
         next-block (if (or collapsed? (not current-block-has-children?))
                      (when right (db/pull (:db/id right)))
-                     first-child)]
+                     first-child)
+        db-based? (config/db-based-graph? repo)]
     (cond
       (nil? next-block)
       nil
@@ -2664,13 +2675,19 @@
             edit-block' (if next-block-has-refs?
                           (assoc edit-block
                                  :block/uuid (:block/uuid next-block))
-                          edit-block)]
+                          edit-block)
+            new-properties (merge
+                            (:block/properties (db/entity (:db/id next-block)))
+                            (:block/properties (db/entity (:db/id edit-block))))]
         (outliner-tx/transact!
          {:outliner-op :delete-blocks
           :concat-data {:last-edit-block (:block/uuid edit-block)
                         :end? true}}
          (delete-block-aux! next-block false)
-          (save-block! repo edit-block' new-content {:editor/op :delete}))
+         (save-block! repo edit-block' new-content {:editor/op :delete})
+         (when db-based?
+           (outliner-core/save-block! {:db/id (:db/id edit-block)
+                                       :block/properties new-properties})))
         (let [block (if next-block-has-refs? next-block edit-block)]
           (edit-block! block current-pos nil))))))
 
@@ -3769,7 +3786,7 @@
   [block-ids heading]
   (let [repo (state/get-current-repo)]
     (if (config/db-based-graph? repo)
-      (db-editor-handler/batch-set-heading! repo block-ids heading) 
+      (db-editor-handler/batch-set-heading! repo block-ids heading)
       (file-editor-handler/batch-set-heading! block-ids heading))))
 
 (defn set-heading!
