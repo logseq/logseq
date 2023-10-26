@@ -3542,6 +3542,15 @@
                                      :navigating-block *navigating-block
                                      :navigated? navigated?))]))
 
+(defn hidden-page->source-page
+  [page]
+  (or
+   (when-let [page-uuid (get-in (db/entity (:db/id page)) [:block/metadata :source-page-id])]
+     (db/entity [:block/uuid page-uuid]))
+
+   ;; FIXME: what if the source page has been deleted?
+   page))
+
 ;; headers to hiccup
 (defn ->hiccup
   [blocks config option]
@@ -3555,7 +3564,8 @@
         (for [[page blocks] blocks]
           (ui/lazy-visible
            (fn []
-             (let [alias? (:block/alias? page)
+             (let [page (hidden-page->source-page page)
+                   alias? (:block/alias? page)
                    page (db/entity (:db/id page))
                    blocks (tree/non-consecutive-blocks->vec-tree blocks)
                    parent-blocks (group-by :block/parent blocks)]
@@ -3585,7 +3595,8 @@
         (for [[page page-blocks] blocks]
           (ui/lazy-visible
            (fn []
-             (let [alias? (:block/alias? page)
+             (let [page (hidden-page->source-page page)
+                   alias? (:block/alias? page)
                    page (db/entity (:db/id page))
                    ;; FIXME: parents need to be sorted
                    parent-blocks (group-by :block/parent page-blocks)]
@@ -3614,7 +3625,8 @@
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page blocks] blocks]
-          (let [blocks (remove nil? blocks)]
+          (let [page (hidden-page->source-page page)
+                blocks (remove nil? blocks)]
             (when (seq blocks)
               (let [alias? (:block/alias? page)
                     page (db/entity (:db/id page))
