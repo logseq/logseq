@@ -123,6 +123,7 @@
                    "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})])
 
 (rum/defcs enum-item-config < rum/reactive
+  shortcut/disable-all-shortcuts
   {:init (fn [state]
            (let [{:keys [name icon description]} (first (:rum/args state))]
              (assoc state
@@ -150,7 +151,7 @@
       [:div.col-span-3
        (ui/ls-textarea
         {:on-change #(reset! *description (util/evalue %))
-         :value @*description})]]
+         :default-value @*description})]]
      [:div
       (ui/button
        "Save"
@@ -187,7 +188,7 @@
       [:div.col-span-3
        (ui/ls-textarea
         {:on-change #(reset! *description (util/evalue %))
-         :value @*description})]]
+         :default-value @*description})]]
      [:div
       (ui/button
        "Save"
@@ -307,6 +308,7 @@
     ((comp string/capitalize name) property-type)))
 
 (rum/defcs ^:large-vars/cleanup-todo property-config <
+  shortcut/disable-all-shortcuts
   rum/reactive
   (rum/local nil ::property-name)
   (rum/local nil ::property-schema)
@@ -332,8 +334,9 @@
         class? (contains? (:block/type block) "class")
         property-type (get-in property [:block/schema :type])
         save-property-fn (fn [] (update-property! property @*property-name @*property-schema))]
-    [:div.property-configure.flex.flex-1.flex-col {:on-mouse-down #(state/set-state! :editor/mouse-down-from-property-configure? true)
-                                                   :on-mouse-up #(state/set-state! :editor/mouse-down-from-property-configure? nil)}
+    [:div.property-configure.flex.flex-1.flex-col
+     {:on-mouse-down #(state/set-state! :editor/mouse-down-from-property-configure? true)
+      :on-mouse-up #(state/set-state! :editor/mouse-down-from-property-configure? nil)}
      [:div.grid.gap-2.p-1
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Name:"]
@@ -344,7 +347,7 @@
                          (when (= "Enter" (util/ekey e))
                            (save-property-fn)))
          :disabled disabled?
-         :value @*property-name}]]
+         :default-value @*property-name}]]
 
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Icon:"]
@@ -416,8 +419,9 @@
                          :value "properties"}
                         {:label "Beginning of the block"
                          :value "block-beginning"}
-                        {:label "Ending of the block"
-                         :value "block-ending"}])]
+                        ;; {:label "Ending of the block"
+                        ;;  :value "block-ending"}
+                        ])]
           [:div.grid.grid-cols-4.gap-1.items-start.leading-8
            [:label.col-span-1 "UI position:"]
            [:div.col-span-3
@@ -456,7 +460,7 @@
                           (swap! *property-schema assoc :description (util/evalue e)))
              :on-blur save-property-fn
              :disabled disabled?
-             :value (:description @*property-schema)})])]]
+             :default-value (:description @*property-schema)})])]]
 
       (when-not hide-delete?
         [:hr])
