@@ -3,13 +3,12 @@
    NOTE: This script is also used in CI to confirm our db's schema is up to date"
   (:require [logseq.db.sqlite.cli :as sqlite-cli]
             [logseq.db.sqlite.db :as sqlite-db]
-            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [datascript.core :as d]
             [clojure.string :as string]
             [nbb.core :as nbb]
-            [clojure.walk :as walk]
             [malli.core :as m]
+            [malli.util :as mu]
             [babashka.cli :as cli]
             ["path" :as node-path]
             ["os" :as os]
@@ -44,20 +43,11 @@
   "Updates the db schema to add a datascript db for property validations
    and to optionally close maps"
   [db-schema db {:keys [closed-maps]}]
-  (let [db-schema-with-property-vals (db-malli-schema/update-properties-in-schema db-schema db)]
-    (if closed-maps
-      ;; closes maps that don't have an explicit :closed option
-      (walk/postwalk (fn [e]
-                       (if (and (vector? e)
-                                (= :map (first e)))
-                         (if (map? (second e))
-                           (if (not (contains? (second e) :closed))
-                             (assoc e 1 (assoc (second e) :closed true))
-                             e)
-                           (into [:map {:closed true}] (rest e)))
-                         e))
-                     db-schema-with-property-vals)
-      db-schema-with-property-vals)))
+  (cond-> db-schema
+    true
+    (db-malli-schema/update-properties-in-schema db)
+    closed-maps
+    mu/closed-schema))
 
 (defn validate-client-db
   "Validate datascript db as a vec of entity maps"

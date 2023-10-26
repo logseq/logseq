@@ -179,11 +179,22 @@
    [true internal-property]
    [:malli.core/default user-property]])
 
+(def hidden-page
+  (vec
+   (concat
+    [:map
+     [:block/metadata #_{:optional true}
+      [:map
+       [:source-page-id :uuid]]]]
+    page-attrs
+    page-or-block-attrs)))
+
 (def page
   [:multi {:dispatch :block/type}
    [#{"property"} property-page]
    [#{"class"} class-page]
    [#{"object"} object-page]
+   [#{"hidden"} hidden-page]
    [:malli.core/default normal-page]])
 
 (def block-attrs
