@@ -649,8 +649,9 @@
     (when action
       (shui/button {:text text
                     :theme theme
-                    :on-click #(handle-action action state %)} (make-shui-context)
-                    :shortcut "return"))))
+                    :on-click #(handle-action action state %) 
+                    :shortcut ["return"]}
+                   (make-shui-context)))))
 
 (rum/defcs cmdk < 
   shortcut/disable-all-shortcuts 
