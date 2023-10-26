@@ -1,6 +1,7 @@
 (ns logseq.db.frontend.malli-schema
   "Malli schemas and fns for logseq.db.frontend.*"
   (:require [clojure.walk :as walk]
+            [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.property :as db-property]
@@ -89,6 +90,7 @@
    [:block/original-name :string]
    [:block/type {:optional true} [:enum #{"property"} #{"class"} #{"object"} #{"whiteboard"} #{"hidden"}]]
    [:block/journal? :boolean]
+   [:block/alias {:optional true} [:set :int]]
     ;; TODO: Should this be here or in common?
    [:block/path-refs {:optional true} [:set :int]]])
 
@@ -212,6 +214,7 @@
    [:block/path-refs {:optional true} [:set :int]]
    [:block/macros {:optional true} [:set :int]]
    [:block/link {:optional true} :int]
+   [:block/collapsed-properties {:optional true} [:set :int]]
     ;; other
    [:block/marker {:optional true} :string]
    [:block/priority {:optional true} :string]
@@ -290,3 +293,23 @@
     db-ident
     macro
     unknown-block]])
+
+;; Keep malli schema in sync with db schema changes
+(let [malli-many-ref-attrs (->> (concat page-attrs block-attrs page-or-block-attrs)
+                                (filter #(= (last %) [:set :int]))
+                                (map first)
+                                set)]
+  (when-let [undeclared-ref-attrs (seq (remove malli-many-ref-attrs db-schema/card-many-ref-type-attributes))]
+    (throw (ex-info (str "The malli DB schema is missing the following cardinality-many ref attributes from datascript's schema: "
+                         (string/join ", " undeclared-ref-attrs))
+                    {}))))
+
+(let [malli-one-ref-attrs (->> (concat page-attrs block-attrs page-or-block-attrs (rest normal-page))
+                               (filter #(= (last %) :int))
+                               (map first)
+                               set)
+      attrs-to-ignore #{:block/file}]
+  (when-let [undeclared-ref-attrs (seq (remove (some-fn malli-one-ref-attrs attrs-to-ignore) db-schema/card-one-ref-type-attributes))]
+    (throw (ex-info (str "The malli DB schema is missing the following cardinality-one ref attributes from datascript's schema: "
+                         (string/join ", " undeclared-ref-attrs))
+                    {}))))
