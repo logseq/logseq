@@ -521,7 +521,7 @@
  :export-save-to-file "Save to file"
  :all-graphs "All graphs"
  :all-pages "All pages"
- :all-pages/failed-to-delete-pages "Some pages did not to delete: {1}. See javascript console for more details."
+ :all-pages/failed-to-delete-pages "These pages had their content deleted but were unable to be deleted: {1}. See javascript console for more details."
  :all-whiteboards "All whiteboards"
  :all-files "All files"
  :remove-orphaned-pages "Remove orphaned pages?"
