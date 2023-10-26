@@ -309,9 +309,10 @@
   [repo tx-report]
   (let [{:keys [pages-to-add pages-to-remove-set pages-to-remove-id-set
                 blocks-to-add blocks-to-remove-set]} (get-direct-blocks-and-pages tx-report) ;; directly modified block & pages
-        updated-pages (get-indirect-pages tx-report)]
+        updated-pages (get-indirect-pages tx-report)
+        pages-to-add' (remove (comp db-model/hidden-page? :name) pages-to-add)]
     ;; update page title indice
-    (when (or (seq pages-to-add) (seq pages-to-remove-set))
+    (when (or (seq pages-to-add') (seq pages-to-remove-set))
       (swap! search-db/indices update-in [repo :pages]
              (fn [indice]
                (when indice
@@ -320,8 +321,8 @@
                             (fn [page]
                               (= (util/safe-page-name-sanity-lc page-name)
                                  (util/safe-page-name-sanity-lc (gobj/get page "original-name"))))))
-                 (when (seq pages-to-add)
-                   (doseq [page pages-to-add]
+                 (when (seq pages-to-add')
+                   (doseq [page pages-to-add']
                      (.add indice (bean/->js page)))))
                indice)))
 
