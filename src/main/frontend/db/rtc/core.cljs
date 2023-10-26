@@ -77,14 +77,54 @@
 (def transit-w (transit/writer :json))
 (def transit-r (transit/reader :json))
 
+(def ^{:private true :dynamic true} *RUNNING-TESTS* "true when running tests" false)
+(defmulti transact-db! (fn [action & _args]
+                        (keyword (str (name action) (when *RUNNING-TESTS* "-for-test")))))
+
+(defmethod transact-db! :delete-blocks [_ & args]
+  (outliner-tx/transact!
+   {:persist-op? false}
+   (apply outliner-core/delete-blocks! args)))
+
+(defmethod transact-db! :delete-blocks-for-test [_ & args]
+  (prn ::delete-block-for-test args))
+
+(defmethod transact-db! :move-blocks [_ & args]
+  (outliner-tx/transact!
+   {:persist-op? false}
+   (apply outliner-core/move-blocks! args)))
+
+(defmethod transact-db! :move-blocks-for-test [_ & args]
+  (prn ::move-blocks-for-test args))
+
+(defmethod transact-db! :insert-blocks [_ & args]
+  (outliner-tx/transact!
+   {:persist-op? false}
+   (apply outliner-core/insert-blocks! args)))
+
+(defmethod transact-db! :insert-blocks-for-test [_ & args]
+  (prn ::insert-blocks-for-test args))
+
+(defmethod transact-db! :save-block [_ & args]
+  (outliner-tx/transact!
+   {:persist-op? false}
+   (apply outliner-core/save-block! args)))
+
+(defmethod transact-db! :save-block-for-test [_ & args]
+  (prn ::save-block-for-test args))
+
+(defmethod transact-db! :raw [_ & args]
+  (apply db/transact! args))
+
+(defmethod transact-db! :raw-for-test [_ & args]
+  (prn ::raw-for-test args))
+
 (defn apply-remote-remove-ops
   [repo remove-ops]
   (prn :remove-ops remove-ops)
   (doseq [op remove-ops]
     (when-let [block (db/pull repo '[*] [:block/uuid (uuid (:block-uuid op))])]
-      (outliner-tx/transact!
-       {:persist-op? false}
-       (outliner-core/delete-blocks! [block] {:children? false}))
+      (transact-db! :delete-blocks [block] {:children? false})
       (prn :apply-remote-remove-ops (:block-uuid op)))))
 
 (defn- insert-or-move-block
@@ -98,33 +138,30 @@
           ]
       (case [(some? local-parent) (some? local-left)]
         [false true]
-        (outliner-tx/transact!
-         {:persist-op? false}
-         (if move?
-           (outliner-core/move-blocks! [b] local-left true)
-           (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content ""
-                                           :block/format :markdown}]
-                                         local-left {:sibling? true :keep-uuid? true})))
+        (if move?
+          (transact-db! :move-blocks [b] local-left true)
+          (transact-db! :insert-blocks
+                        [{:block/uuid (uuid block-uuid-str)
+                          :block/content ""
+                          :block/format :markdown}]
+                        local-left {:sibling? true :keep-uuid? true}))
 
         [true true]
         (let [sibling? (not= (:block/uuid local-parent) (:block/uuid local-left))]
-          (outliner-tx/transact!
-           {:persist-op? false}
-           (if move?
-             (outliner-core/move-blocks! [b] local-left sibling?)
-             (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content ""
-                                             :block/format :markdown}]
-                                           local-left {:sibling? sibling? :keep-uuid? true}))))
+          (if move?
+            (transact-db! :move-blocks [b] local-left sibling?)
+            (transact-db! :insert-blocks
+                          [{:block/uuid (uuid block-uuid-str) :block/content ""
+                            :block/format :markdown}]
+                          local-left {:sibling? sibling? :keep-uuid? true})))
 
         [true false]
-        (outliner-tx/transact!
-         {:persist-op? false}
-         (if move?
-           (outliner-core/move-blocks! [b] local-parent false)
-           (outliner-core/insert-blocks! [{:block/uuid (uuid block-uuid-str) :block/content ""
-                                           :block/format :markdown}]
-                                         local-parent {:sibling? false :keep-uuid? true})))
-
+        (if move?
+          (transact-db! :move-blocks [b] local-parent false)
+          (transact-db! :insert-blocks
+                        [{:block/uuid (uuid block-uuid-str) :block/content ""
+                          :block/format :markdown}]
+                        local-parent {:sibling? false :keep-uuid? true}))
         (throw (ex-info "Don't know where to insert" {:block-uuid block-uuid-str :remote-parents remote-parents
                                                       :remote-left remote-left-uuid-str}))))))
 
@@ -198,11 +235,10 @@
               ;; (contains? key-set :properties)     (assoc :block/properties
               ;;                                            (transit/read transit-r (:properties op-value)))
               )]
-        (outliner-tx/transact!
-         {:persist-op? false}
-         (outliner-core/save-block! new-block))
+        (transact-db! :save-block new-block)
         (let [properties (transit/read transit-r (:properties op-value))]
-          (db/transact! repo
+          (transact-db! :raw
+                        repo
                         [{:block/uuid block-uuid
                           :block/properties properties}]
                         {:outliner-op :save-block}))))))
