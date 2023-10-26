@@ -3073,11 +3073,6 @@
                (= c (util/nth-safe value (dec (dec current-pos))) " "))
           (state/clear-editor-action!)
 
-          ;; When you type a space after a #
-          (and (state/get-editor-show-page-search-hashtag?)
-               (= c " "))
-          (state/clear-editor-action!)
-
           :else
           (default-case-for-keyup-handler input current-pos k code is-processed? c))
 
