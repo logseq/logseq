@@ -28,7 +28,7 @@
   "Force the callback result to be nil, otherwise, ipc calls could lead to
   window crash."
   [k f]
-  (js/window.apis.on k (fn [data] (f data) nil)))
+  (js/window.apis.on (name k) (fn [data] (f data) nil)))
 
 (defn persist-dbs!
   []
@@ -154,18 +154,16 @@
                      (dom/set-text! (dom/by-id "search-in-page-placeholder") "")
                      (ui/focus-element "search-in-page-input"))))
 
-  (safe-api-call "loginCallback"
+  (safe-api-call :loginCallback
                  (fn [code]
                    (user/login-callback code)))
 
-  (safe-api-call "authCallback"
+  (safe-api-call :authCallback
                  (fn [^js payload]
                    (when-let [{:keys [session]} (bean/->clj payload)]
-                     (let [delay (if (user/logged-in?) (or (user/logout!) 2000) 0)]
-                       (-> (p/delay delay)
-                           (p/then
-                             (fn []
-                               (user/login-callback session))))))))
+                     (-> (if (user/logged-in?) (user/logout!) (p/resolved 1))
+                         (p/then (fn []
+                                   (user/login-callback session)))))))
 
   (safe-api-call "quickCapture"
                  (fn [args]

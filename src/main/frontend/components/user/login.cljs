@@ -33,14 +33,12 @@
 
 (rum/defc user-pane
   [_sign-out! user]
-  (let [session  (:signInUserSession user)
-        username (:username user)]
+  (let [session  (:signInUserSession user)]
 
     (rum/use-effect!
       (fn []
         (when session
           (user/login-callback session)
-          (notification/show! (str "Hi, " username " :)") :success)
           (state/close-modal!)))
       [])
 
