@@ -221,15 +221,15 @@
           (when (config/db-based-graph? (state/get-current-repo))
             (let [tag (string/trim q)
                   edit-block (state/get-edit-block)]
-              (when (and (not (string/blank? tag)) edit-block)
+              (when (and (not (string/blank? tag)) (:block/uuid edit-block))
                 (let [tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)])]
                   (when-not tag-entity
                     (create! tag {:redirect? false
                                   :create-first-block? false
                                   :class? true}))
                   (let [tag-entity (or tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)]))]
-                    (db/transact! [[:db/add (:db/id edit-block) :block/tags (:db/id tag-entity)]
-                                   [:db/add (:db/id edit-block) :block/refs (:db/id tag-entity)]]))))))
+                    (db/transact! [[:db/add [:block/uuid (:block/uuid edit-block)] :block/tags (:db/id tag-entity)]
+                                   [:db/add [:block/uuid (:block/uuid edit-block)] :block/refs (:db/id tag-entity)]]))))))
 
           (editor-handler/insert-command! id
                                           (str "#" (when wrapped? page-ref/left-brackets) chosen)
