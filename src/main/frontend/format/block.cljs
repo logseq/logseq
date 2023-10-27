@@ -15,7 +15,8 @@
             [lambdaisland.glogi :as log]
             [frontend.util :as util]
             [datascript.core :as d]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [cljs-bean.core :as bean]))
 
 (defn- update-extracted-block-properties
   "Updates DB graph blocks to ensure that built-in properties are using uuids
@@ -114,6 +115,16 @@ and handles unexpected failure."
        (remove nil?)
        (first)))
 
+(defn- get-db-based-parse-config
+  [format]
+  (let [db-based? (config/db-based-graph? (state/get-current-repo))]
+    (->>
+     (cond-> (gp-mldoc/default-config-map format)
+       db-based?
+       (assoc :enable_drawers false))
+     bean/->js
+     js/JSON.stringify)))
+
 (defn parse-block
   ([block]
    (parse-block block nil))
@@ -122,7 +133,8 @@ and handles unexpected failure."
    (when-not (string/blank? content)
      (let [block (dissoc block :block/pre-block?)
            format (or format :markdown)
-           ast (format/to-edn content format nil)
+           parse-config (get-db-based-parse-config format)
+           ast (format/to-edn content format parse-config)
            blocks (extract-blocks ast content format {:with-id? with-id?})
            new-block (first blocks)
            block (cond->
@@ -146,7 +158,8 @@ and handles unexpected failure."
                        (str (config/get-block-pattern format) " " (string/triml content)))]
        (if-let [result (state/get-block-ast block-uuid content)]
          result
-         (let [ast (->> (format/to-edn content format (gp-mldoc/default-config format))
+         (let [parse-config (get-db-based-parse-config format)
+               ast (->> (format/to-edn content format parse-config)
                         (map first))
                title (when (gp-block/heading-block? (first ast))
                        (:title (second (first ast))))

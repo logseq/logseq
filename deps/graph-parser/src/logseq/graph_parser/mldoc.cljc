@@ -54,9 +54,9 @@
                      config
                      (or references default-references)))
 
-(defn default-config
+(defn default-config-map
   ([format]
-   (default-config format {:export-heading-to-list? false}))
+   (default-config-map format {:export-heading-to-list? false}))
   ([format {:keys [export-heading-to-list? export-keep-properties? export-md-indent-style export-md-remove-options parse_outline_only?]}]
    (let [format (string/capitalize (name (or format :markdown)))]
      (->> {:toc false
@@ -70,9 +70,15 @@
            :export_md_remove_options
            (convert-export-md-remove-options export-md-remove-options)}
           (filter #(not (nil? (second %))))
-          (into {})
-          (bean/->js)
-          js/JSON.stringify))))
+          (into {})))))
+
+(defn default-config
+  ([format]
+   (default-config format {:export-heading-to-list? false}))
+  ([format opts]
+   (->> (default-config-map format opts)
+        bean/->js
+        js/JSON.stringify)))
 
 (defn remove-indentation-spaces
   "Remove the indentation spaces from the content. Only for markdown.

@@ -2432,6 +2432,7 @@
               current-node (outliner-core/block block)
               has-right? (-> (tree/-get-right current-node)
                              (tree/satisfied-inode?))
+              db-based? (config/db-based-graph? (state/get-current-repo))
               thing-at-point ;intern is not supported in cljs, need a more elegant solution
               (or (when (thingatpt/get-setting :admonition&src?)
                     (thingatpt/admonition&src-at-point input))
@@ -2441,7 +2442,7 @@
                     (thingatpt/block-ref-at-point input))
                   (when (thingatpt/get-setting :page-ref?)
                     (thingatpt/page-ref-at-point input))
-                  (when (thingatpt/get-setting :properties?)
+                  (when (and (not db-based?) (thingatpt/get-setting :properties?))
                     (thingatpt/properties-at-point input))
                   (when (thingatpt/get-setting :list?)
                     (and (not (cursor/beginning-of-line? input))
