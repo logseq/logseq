@@ -7,7 +7,7 @@
             [frontend.ui :as ui]
             [frontend.util.page :as page-util]
             [frontend.handler.property.util :as pu]
-            [logseq.graph-parser.mldoc :as gp-mldoc]))
+            [frontend.format.mldoc :as mldoc]))
 
 ;; Fns used between menus and commands
 (defn show-entity-data
@@ -29,7 +29,7 @@
 
 (defn show-content-ast
   [content format]
-  (let [ast-data (-> (gp-mldoc/->edn content (gp-mldoc/default-config format))
+  (let [ast-data (-> (mldoc/->edn content format)
                      pprint/pprint
                      with-out-str)]
     (println ast-data)

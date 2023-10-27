@@ -21,7 +21,6 @@
    [frontend.handler.property.file :as property-file]
    [goog.dom :as gdom]
    [lambdaisland.glogi :as log]
-   [logseq.graph-parser.mldoc :as gp-mldoc]
    [logseq.graph-parser.property :as gp-property]
    [logseq.graph-parser.util.block-ref :as block-ref]
    [logseq.graph-parser.util.page-ref :as page-ref]
@@ -192,7 +191,7 @@
   (let [block (db/entity [:block/uuid (uuid block-uuid)])
         block-content (get-blocks-contents repo (:block/uuid block))
         format (:block/format block)
-        ast (mldoc/->edn block-content (gp-mldoc/default-config format))
+        ast (mldoc/->edn block-content format)
         embed-pages-new  (get-embed-pages-from-ast ast)
         embed-blocks-new  (get-embed-blocks-from-ast ast)
         block-refs-new (get-block-refs-from-ast ast)
@@ -227,7 +226,7 @@
   (let [page-name* (util/page-name-sanity-lc page-name)
         page-content (get-page-content repo page-name*)
         format (:block/format (db/entity [:block/name page-name*]))
-        ast (mldoc/->edn page-content (gp-mldoc/default-config format))
+        ast (mldoc/->edn page-content format)
         embed-pages-new (get-embed-pages-from-ast ast)
         embed-blocks-new (get-embed-blocks-from-ast ast)
         block-refs-new (get-block-refs-from-ast ast)

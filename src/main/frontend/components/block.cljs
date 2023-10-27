@@ -961,7 +961,7 @@
    (inline-text {} format v))
   ([config format v]
    (when (string? v)
-     (let [inline-list (gp-mldoc/inline->edn v (gp-mldoc/default-config format))]
+     (let [inline-list (gp-mldoc/inline->edn v (mldoc/get-default-config format))]
        [:div.inline.mr-1 (map-inline config inline-list)]))))
 
 (defn- render-macro
@@ -969,7 +969,7 @@
   [:div.macro {:data-macro-name name}
 
    (if macro-content
-     (let [ast (->> (mldoc/->edn macro-content (gp-mldoc/default-config format))
+     (let [ast (->> (mldoc/->edn macro-content format)
                     (map first))
            paragraph? (and (= 1 (count ast))
                            (= "Paragraph" (ffirst ast)))]

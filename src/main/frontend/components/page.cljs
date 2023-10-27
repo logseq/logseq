@@ -23,6 +23,7 @@
             [frontend.extensions.graph :as graph]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.format.block :as block]
+            [frontend.format.mldoc :as mldoc]
             [frontend.handler.common :as common-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.dnd :as dnd]
@@ -502,7 +503,7 @@
             (let [nested? (and (string/includes? title page-ref/left-brackets)
                                (string/includes? title page-ref/right-brackets))]
               (cond untitled? [:span.opacity-50 (t :untitled)]
-                    nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (gp-mldoc/default-config
+                    nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (mldoc/get-default-config
                                                                                         (:block/format page))))
                     :else title))])]
         (when (and db-based? (seq (:block/tags page)))

@@ -14,7 +14,7 @@
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [goog.dom :as gdom]
             [hiccups.runtime :as h]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [frontend.format.mldoc :as mldoc]
             [promesa.core :as p]))
 
 ;;; *opml-state*
@@ -401,7 +401,7 @@
                                :remove-tags? (contains? remove-options :tag)
                                :keep-only-level<=N (:keep-only-level<=N other-options)}})
               *opml-state* *opml-state*]
-      (let [ast (gp-mldoc/->edn content (gp-mldoc/default-config format))
+      (let [ast (mldoc/->edn content format)
             ast (mapv common/remove-block-ast-pos ast)
             ast (removev common/Properties-block-ast? ast)
             keep-level<=n (get-in *state* [:export-options :keep-only-level<=N])

@@ -2064,7 +2064,7 @@
                     props (into [] (:properties block))
                     content* (str (if (= :markdown format) "- " "* ")
                                   (property-file/insert-properties-when-file-based repo format content props))
-                    ast (mldoc/->edn content* (gp-mldoc/default-config format))
+                    ast (mldoc/->edn content* format)
                     blocks (->> (block/extract-blocks ast content* format {:page-name page-name})
                                 (map wrap-parse-block))
                     fst-block (first blocks)
@@ -3351,7 +3351,7 @@
   [format content semantic?]
   (and (string/includes? content "\n")
        (if semantic?
-         (let [ast (mldoc/->edn content (gp-mldoc/default-config format))
+         (let [ast (mldoc/->edn content format)
                first-elem-type (first (ffirst ast))]
            (mldoc/block-with-title? first-elem-type))
          true)))
@@ -3379,7 +3379,7 @@
     (when content
       (when (and (string/includes? content "#+BEGIN_QUERY")
                  (string/includes? content "#+END_QUERY"))
-        (let [ast (mldoc/->edn (string/trim content) (gp-mldoc/default-config (or (:block/format entity) :markdown)))
+        (let [ast (mldoc/->edn (string/trim content) (or (:block/format entity) :markdown))
               q (mldoc/extract-first-query-from-ast ast)]
           (some? (:query (gp-util/safe-read-string q))))))))
 

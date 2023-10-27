@@ -18,7 +18,6 @@
             [frontend.handler.file-based.property.util :as property-util]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util.block-ref :as block-ref]))
 
 (defn- remove-non-existed-refs!
@@ -90,7 +89,7 @@
         content (drawer/with-logbook block content)
         content (with-timetracking block content)
         first-block? (= left page)
-        ast (mldoc/->edn (string/trim content) (gp-mldoc/default-config format))
+        ast (mldoc/->edn (string/trim content) format)
         first-elem-type (first (ffirst ast))
         first-elem-meta (second (ffirst ast))
         properties? (contains? #{"Property_Drawer" "Properties"} first-elem-type)
