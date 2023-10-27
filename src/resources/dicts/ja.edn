@@ -603,6 +603,7 @@
  :pdf/linked-ref "リンクありの参照元"
  :pdf/toggle-dashed "領域のハイライトに破線を使う"
  :pdf/hl-block-colored "ブロックをハイライトするための色付きラベル"
+ :pdf/auto-open-context-menu "自動でコンテキストメニューを開く"
  :pdf/doc-metadata "ドキュメントのメタデータ"
 
  :updater/new-version-install "新しいバージョンがダウンロードされました。"

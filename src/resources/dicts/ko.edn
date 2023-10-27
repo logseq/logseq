@@ -210,6 +210,9 @@
  :pdf/copy-text "텍스트 복사하기"
  :pdf/linked-ref "링크된 레퍼런스"
  :pdf/toggle-dashed "영역 하이라이트를 위해 Dashed style 사용"
+ :pdf/hl-block-colored "색상으로 강조된 블록입니다"
+ :pdf/auto-open-context-menu "자동으로 컨텍스트 메뉴를 엽니다"
+ :pdf/doc-metadata "메타데이터"
 
  :updater/new-version-install "새 버전이 다운로드되었습니다."
  :updater/quit-and-install "다시 시작하여 설치하십시오."
@@ -289,7 +292,6 @@
  :page/something-went-wrong "문제가 발생하였습니다."
  :page/step "스텝 {1}"
  :page/try "시도"
- :pdf/doc-metadata "메타데이터"
  :plugin.install-from-file/title "plugins.edn에서 설치"
  :plugin.install-from-file/notice "다음의 플러그인들이 교체될 것입니다:"
  :plugin.install-from-file/success "플러그인 설치 성공!"
