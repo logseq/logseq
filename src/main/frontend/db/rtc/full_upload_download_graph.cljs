@@ -51,8 +51,8 @@
         (let [r (<! (get-result-ch))]
           (if-not (:graph-uuid r)
             (ex-info "upload graph failed" r)
-            (do (<! (p->c (op/<update-graph-uuid! repo (:graph-uuid r))))
-                (<! (p->c (op/<update-local-tx! repo (:t r))))
+            (do (<! (op/<update-graph-uuid! repo (:graph-uuid r)))
+                (<! (op/<update-local-tx! repo (:t r)))
                 r)))))))
 
 (def block-type-ident->str
@@ -126,7 +126,7 @@
             blocks** (outliner-pipeline/build-upsert-blocks blocks* nil db)]
         (<! (p->c (persist-db/<new repo)))
         (<! (persist-db/<transact-data repo blocks** nil))
-        (<! (p->c (op/<update-local-tx! repo t)))))))
+        (<! (op/<update-local-tx! repo t))))))
 
 
 (defn <download-graph
@@ -142,7 +142,7 @@
         (ex-info "<download-graph failed" r)
         (let [all-blocks (transit/read transit-r body)]
           (<! (<transact-remote-all-blocks-to-sqlite all-blocks repo))
-          (<! (p->c (op/<update-graph-uuid! repo graph-uuid))))))))
+          (<! (op/<update-graph-uuid! repo graph-uuid)))))))
 
 (comment
   )

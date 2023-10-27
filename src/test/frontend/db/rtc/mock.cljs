@@ -2,7 +2,7 @@
   (:require [clojure.core.async :as async]
             [frontend.db.rtc.const :as rtc-const]))
 
-
+;;; websocket
 (defrecord Mock-WebSocket [onopen onmessage onclose onerror readyState push-data-chan ^:mutable push-data-fn]
   Object
   (close [_]
@@ -52,3 +52,18 @@
 ;; (defn mock-ws-push-data-fn
 ;;   [ws f]
 ;;   (.set-push-data-fn ws f))
+
+;;; websocket ends ;;;;
+
+
+;;; frontend.db.rtc.op mock
+;; (def *ops-store (atom {}))
+
+;; (defn <get-ops&local-tx
+;;   [repo]
+
+;;   )
+
+
+
+;;; frontend.db.rtc.op mock ends
