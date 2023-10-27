@@ -769,14 +769,6 @@
            :down)))))
 
 #?(:cljs
-   (defn rec-get-tippy-container
-     [node]
-     (if (and node (d/has-class? node "tippy-tooltip-content"))
-       node
-       (and node
-            (rec-get-tippy-container (gobj/get node "parentNode"))))))
-
-#?(:cljs
    (defn rec-get-node
      [node class]
      (if (and node (d/has-class? node class))

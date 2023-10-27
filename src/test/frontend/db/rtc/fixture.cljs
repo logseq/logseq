@@ -1,6 +1,6 @@
 (ns frontend.db.rtc.fixture
   (:require [cljs.test :as t]
-            [cljs.core.async :as async :refer [<! >! chan go go-loop]]
+            [cljs.core.async :as async :refer [<! >! chan go]]
             [frontend.db.rtc.mock :as rtc-mock]
             [frontend.db.rtc.core :as rtc-core]
             [frontend.test.helper :as test-helper]))

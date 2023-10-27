@@ -1,7 +1,6 @@
 (ns frontend.db.rtc.mock
-  (:require [spy.core :as spy]
-            [frontend.db.rtc.const :as rtc-const]
-            [clojure.core.async :as async :refer [<!]]))
+  (:require [clojure.core.async :as async]
+            [frontend.db.rtc.const :as rtc-const]))
 
 
 (defrecord Mock-WebSocket [onopen onmessage onclose onerror readyState push-data-chan ^:mutable push-data-fn]
@@ -50,6 +49,6 @@
     ws))
 
 
-(defn mock-ws-push-data-fn
-  [ws f]
-  (.set-push-data-fn ws f))
+;; (defn mock-ws-push-data-fn
+;;   [ws f]
+;;   (.set-push-data-fn ws f))
