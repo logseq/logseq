@@ -1,4 +1,4 @@
-(ns logseq.tasks.db-graph.persist-graph
+(ns ^:node-only logseq.outliner.cli.persist-graph
   "This ns allows DB graphs to persist datascript changes to their respective
   sqlite db. Since changes are persisted, this can be used to create or update graphs.
    Known limitations:
