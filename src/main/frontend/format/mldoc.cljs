@@ -3,6 +3,8 @@
   protocol for org and and markdown formats"
   (:require [clojure.string :as string]
             [frontend.format.protocol :as protocol]
+            [frontend.config :as config]
+            [frontend.state :as state]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             ["mldoc" :as mldoc :refer [Mldoc]]
@@ -11,6 +13,7 @@
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.block :as gp-block]
             [clojure.walk :as walk]
+            [cljs-bean.core :as bean]
             [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
@@ -54,16 +57,26 @@
       (log/error :edn/convert-failed e)
       [])))
 
+(defn get-default-config
+  "Gets a mldoc default config for the given format. Works for DB and file graphs"
+  [format]
+  (let [db-based? (config/db-based-graph? (state/get-current-repo))]
+    (->>
+     (cond-> (gp-mldoc/default-config-map format)
+       db-based?
+       (assoc :enable_drawers false))
+     bean/->js
+     js/JSON.stringify)))
+
 (defn ->edn
-  "Alias to gp-mldoc/->edn but could serve as a wrapper e.g. handle
-  gp-mldoc/default-config"
-  [content config]
-  (gp-mldoc/->edn content config))
+  "Wrapper around gp-mldoc/->edn that builds mldoc config given a format"
+  [content format]
+  (gp-mldoc/->edn content (get-default-config format)))
 
 (defrecord MldocMode []
   protocol/Format
   (toEdn [_this content config]
-    (->edn content config))
+    (gp-mldoc/->edn content config))
   (toHtml [_this content config references]
     (export "html" content config references))
   (exportMarkdown [_this content config references]
@@ -99,7 +112,7 @@
 (defn extract-plain
   "Extract plain elements including page refs"
   [content]
-  (let [ast (->edn content (gp-mldoc/default-config :markdown))
+  (let [ast (->edn content :markdown)
         *result (atom [])]
     (walk/prewalk
      (fn [f]
@@ -137,7 +150,7 @@
 (defn extract-tags
   "Extract tags from content"
   [content]
-  (let [ast (->edn content (gp-mldoc/default-config :markdown))
+  (let [ast (->edn content :markdown)
         *result (atom [])]
     (walk/prewalk
      (fn [f]

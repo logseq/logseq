@@ -5,7 +5,6 @@
             [clojure.set :as set]
             [frontend.config :as config]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property :refer [properties-start properties-end]]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.format.mldoc :as mldoc]
@@ -175,7 +174,7 @@
         properties (filter (fn [[k _v]] ((built-in-properties) k)) properties)]
     (if (seq properties)
       (let [lines (string/split-lines content)
-            ast (mldoc/->edn content (gp-mldoc/default-config format))
+            ast (mldoc/->edn content format)
             [title body] (if (mldoc/block-with-title? (first (ffirst ast)))
                            [(first lines) (rest lines)]
                            [nil lines])
@@ -221,7 +220,7 @@
    (insert-property format content key value false))
   ([format content key value front-matter?]
    (when (string? content)
-     (let [ast (mldoc/->edn content (gp-mldoc/default-config format))
+     (let [ast (mldoc/->edn content format)
            title? (mldoc/block-with-title? (ffirst (map first ast)))
            has-properties? (or (and title?
                                     (or (mldoc/properties? (second ast))

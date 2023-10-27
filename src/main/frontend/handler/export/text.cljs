@@ -11,7 +11,7 @@
             [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [goog.dom :as gdom]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [frontend.format.mldoc :as mldoc]
             [malli.core :as m]
             [promesa.core :as p]))
 
@@ -446,7 +446,7 @@
                                :remove-properties? (contains? remove-options :property)
                                :keep-only-level<=N (:keep-only-level<=N other-options)
                                :newline-after-block (:newline-after-block other-options)}})]
-      (let [ast (gp-mldoc/->edn content (gp-mldoc/default-config format))
+      (let [ast (mldoc/->edn content format)
             ast (mapv common/remove-block-ast-pos ast)
             ast (removev common/Properties-block-ast? ast)
             ast* (common/replace-block&page-reference&embed ast)

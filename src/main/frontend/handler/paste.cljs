@@ -3,7 +3,6 @@
             [frontend.db :as db]
             [frontend.format.block :as block]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [clojure.string :as string]
@@ -25,7 +24,7 @@
   (when-let [editing-block (state/get-edit-block)]
     (let [page-id (:db/id (:block/page editing-block))
           blocks (block/extract-blocks
-                  (mldoc/->edn text (gp-mldoc/default-config format))
+                  (mldoc/->edn text format)
                   text format
                   {:page-name (:block/name (db/entity page-id))})
           blocks' (gp-block/with-parent-and-left page-id blocks)]

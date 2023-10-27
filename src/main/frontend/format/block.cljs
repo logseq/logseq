@@ -16,7 +16,7 @@
             [frontend.util :as util]
             [datascript.core :as d]
             [logseq.db.frontend.property :as db-property]
-            [cljs-bean.core :as bean]))
+            [frontend.format.mldoc :as mldoc]))
 
 (defn- update-extracted-block-properties
   "Updates DB graph blocks to ensure that built-in properties are using uuids
@@ -72,12 +72,10 @@ and handles unexpected failure."
   ([original-page-name with-id? with-timestamp?]
    (gp-block/page-name->map original-page-name with-id? (db/get-db (state/get-current-repo)) with-timestamp? (state/get-date-formatter))))
 
-(def ^:private gp-mldoc-config (gp-mldoc/default-config :markdown))
-
 (defn extract-refs-from-text
   [text]
   (when (string? text)
-    (let [ast-refs (gp-mldoc/get-references text gp-mldoc-config)
+    (let [ast-refs (gp-mldoc/get-references text (mldoc/get-default-config :markdown))
           page-refs (map #(gp-block/get-page-reference % :markdown) ast-refs)
           block-refs (map #(gp-block/get-block-reference %) ast-refs)
           refs' (->> (concat page-refs block-refs)
@@ -115,16 +113,6 @@ and handles unexpected failure."
        (remove nil?)
        (first)))
 
-(defn- get-db-based-parse-config
-  [format]
-  (let [db-based? (config/db-based-graph? (state/get-current-repo))]
-    (->>
-     (cond-> (gp-mldoc/default-config-map format)
-       db-based?
-       (assoc :enable_drawers false))
-     bean/->js
-     js/JSON.stringify)))
-
 (defn parse-block
   ([block]
    (parse-block block nil))
@@ -133,12 +121,12 @@ and handles unexpected failure."
    (when-not (string/blank? content)
      (let [block (dissoc block :block/pre-block?)
            format (or format :markdown)
-           parse-config (get-db-based-parse-config format)
+           parse-config (mldoc/get-default-config format)
            ast (format/to-edn content format parse-config)
            blocks (extract-blocks ast content format {:with-id? with-id?})
            new-block (first blocks)
            block (cond->
-                   (merge block new-block)
+                  (merge block new-block)
                    (> (count blocks) 1)
                    (assoc :block/warning :multiple-blocks))
            block (dissoc block :block/title :block/body :block/level)]
@@ -158,7 +146,7 @@ and handles unexpected failure."
                        (str (config/get-block-pattern format) " " (string/triml content)))]
        (if-let [result (state/get-block-ast block-uuid content)]
          result
-         (let [parse-config (get-db-based-parse-config format)
+         (let [parse-config (mldoc/get-default-config format)
                ast (->> (format/to-edn content format parse-config)
                         (map first))
                title (when (gp-block/heading-block? (first ast))

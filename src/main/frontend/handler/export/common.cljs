@@ -7,11 +7,11 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.db :as db]
+            [frontend.format.mldoc :as mldoc]
             [frontend.modules.file.core :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
             [frontend.handler.property.util :as pu]
             [malli.core :as m]
@@ -78,7 +78,7 @@
     (when content
       (removev Properties-block-ast?
                (mapv remove-block-ast-pos
-                     (gp-mldoc/->edn content (gp-mldoc/default-config format)))))))
+                     (mldoc/->edn content format))))))
 
 (defn- block-uuid->ast-with-children
   [block-uuid]
@@ -87,7 +87,7 @@
     (when content
       (removev Properties-block-ast?
                (mapv remove-block-ast-pos
-                     (gp-mldoc/->edn content (gp-mldoc/default-config format)))))))
+                     (mldoc/->edn content format))))))
 
 (defn get-page-content
   ([page-name]
@@ -102,7 +102,7 @@
     (let [format :markdown]
       (removev Properties-block-ast?
                (mapv remove-block-ast-pos
-                     (gp-mldoc/->edn content (gp-mldoc/default-config format)))))))
+                     (mldoc/->edn content format))))))
 
 (defn- update-level-in-block-ast-coll
   [block-ast-coll origin-level]

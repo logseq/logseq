@@ -8,7 +8,6 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.util :as util]
             [frontend.state :as state]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.common.config-edn :as config-edn-common-handler]
@@ -75,7 +74,7 @@
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
         block (if (string/blank? content)
                 block
-                (let [ast (mldoc/->edn (string/trim content) (gp-mldoc/default-config :markdown))
+                (let [ast (mldoc/->edn (string/trim content) :markdown)
                       first-elem-type (first (ffirst ast))
                       block-with-title? (mldoc/block-with-title? first-elem-type)
                       content' (str (config/get-block-pattern :markdown) (if block-with-title? " " "\n") content)
