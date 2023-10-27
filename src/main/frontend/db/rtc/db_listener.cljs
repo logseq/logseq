@@ -163,7 +163,6 @@
                                      (group-by first)
                                      vals)
         ops (mapcat (partial entity-datoms=>ops repo db-before db-after) same-entity-datoms-coll)]
-    (def xxx [repo db-before db-after datoms])
     (when (seq ops)
       (swap! *ops-pending-to-store conj {:ops ops :repo repo})
       (prn :*ops-pending-to-store  @*ops-pending-to-store))))
