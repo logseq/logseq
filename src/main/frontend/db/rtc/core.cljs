@@ -5,7 +5,6 @@
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs.core.async :as async :refer [<! >! chan go go-loop]]
-            [cljs.core.async.interop :refer [p->c]]
             [clojure.set :as set]
             [cognitect.transit :as transit]
             [frontend.db :as db]
@@ -329,7 +328,7 @@
   (go
     (let [remote-t (:t data-from-ws)
           remote-t-before (:t-before data-from-ws)
-          {:keys [local-tx ops]} (<! (p->c (op/<get-ops&local-tx repo)))]
+          {:keys [local-tx ops]} (<! (op/<get-ops&local-tx repo))]
       (cond
         (not (and (pos? remote-t)
                   (pos? remote-t-before)))
@@ -365,7 +364,7 @@
           (util/profile :apply-remote-move-ops (apply-remote-move-ops repo sorted-move-ops))
           (util/profile :apply-remote-update-ops (apply-remote-update-ops repo update-ops))
           (util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo remove-page-ops))
-          (<! (p->c (op/<update-local-tx! repo remote-t))))
+          (<! (op/<update-local-tx! repo remote-t)))
         :else (throw (ex-info "unreachable" {:remote-t remote-t
                                              :remote-t-before remote-t-before
                                              :local-t local-tx}))))))
@@ -551,7 +550,7 @@
 (defn- <get-N-ops
   [repo n]
   (go
-    (let [{:keys [ops local-tx]} (<! (p->c (op/<get-ops&local-tx repo)))
+    (let [{:keys [ops local-tx]} (<! (op/<get-ops&local-tx repo))
           ops (take n ops)
           op-keys (map first ops)
           ops (map second ops)
@@ -609,7 +608,7 @@
           ;; else
           (throw (ex-info "Unavailable" {:remote-ex remote-ex})))
         (do (assert (pos? (:t r)) r)
-            (<! (p->c (op/<clean-ops repo op-keys)))
+            (<! (op/<clean-ops repo op-keys))
             (<! (<apply-remote-data repo (rtc-const/data-from-ws-decoder r)
                                     :max-pushed-op-key max-op-key))
             (prn :<client-op-update-handler :t (:t r)))))))
@@ -620,7 +619,7 @@
     (chan)
     (go
       (<! (async/timeout 2000))
-      (when (seq (:ops (<! (p->c (op/<get-ops&local-tx repo)))))
+      (when (seq (:ops (<! (op/<get-ops&local-tx repo))))
         true))))
 
 (defn <loop-for-rtc

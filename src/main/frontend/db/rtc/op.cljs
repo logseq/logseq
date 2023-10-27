@@ -1,9 +1,10 @@
 (ns frontend.db.rtc.op
-  "TODO"                                ; @zhiyuan
-  (:require [malli.core :as m]
+  "Wrappers for `frontend.db.rtc.ops-idb-store`"
+  (:require [cljs.core.async.interop :refer [p->c]]
             [frontend.db.rtc.ops-idb-store :as op-store]
-            [promesa.core :as p]
-            [malli.transform :as mt]))
+            [malli.core :as m]
+            [malli.transform :as mt]
+            [promesa.core :as p]))
 
 (def op-schema
   [:multi {:dispatch first}
@@ -62,34 +63,35 @@
 
 (defn <get-ops&local-tx
   [repo]
-  (p/let [all-data (op-store/<get-all-ops repo)]
-    (let [all-data-m (into {} all-data)
-          local-tx (get all-data-m "local-tx")
-          ops (->> all-data
-                   (filter (comp number? first))
-                   (sort-by first <)
-                   ops-from-store-decoder)]
-      (assert (ops-from-store-validator ops) ops)
-      {:ops ops :local-tx local-tx})))
+  (p->c
+   (p/let [all-data (op-store/<get-all-ops repo)]
+     (let [all-data-m (into {} all-data)
+           local-tx (get all-data-m "local-tx")
+           ops (->> all-data
+                    (filter (comp number? first))
+                    (sort-by first <)
+                    ops-from-store-decoder)]
+       (assert (ops-from-store-validator ops) ops)
+       {:ops ops :local-tx local-tx}))))
 
 (defn <clean-ops
   [repo keys]
-  (op-store/<clear-ops! repo keys))
+  (p->c (op-store/<clear-ops! repo keys)))
 
 
 (defn <update-local-tx!
   [repo t]
   {:pre [(pos-int? t)]}
-  (op-store/<update-local-tx! repo t))
+  (p->c (op-store/<update-local-tx! repo t)))
 
 (defn <update-graph-uuid!
   [repo graph-uuid]
   {:pre [(some? graph-uuid)]}
-  (op-store/<update-graph-uuid! repo graph-uuid))
+  (p->c (op-store/<update-graph-uuid! repo graph-uuid)))
 
 (defn <get-graph-uuid
   [repo]
-  (op-store/<get-graph-uuid repo))
+  (p->c (op-store/<get-graph-uuid repo)))
 
 (comment
   (defn <get-local-tx

@@ -3,7 +3,6 @@
   (:require-macros
    [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [cljs.core.async :as async :refer [<! go]]
-            [cljs.core.async.interop :refer [p->c]]
             [fipp.edn :as fipp]
             [frontend.db.rtc.core :as rtc-core]
             [frontend.db.rtc.full-upload-download-graph :as full-upload-download-graph]
@@ -31,7 +30,7 @@
          (<! (<start-rtc state repo))))))
   ([state repo]
    (go
-     (if-let [graph-uuid (<! (p->c (op/<get-graph-uuid repo)))]
+     (if-let [graph-uuid (<! (op/<get-graph-uuid repo))]
        (do (reset! debug-state state)
            (<! (rtc-core/<loop-for-rtc state graph-uuid repo))
            state)
@@ -82,8 +81,8 @@
                  :on-click (fn [_]
                              (go
                                (let [repo (state/get-current-repo)
-                                     {:keys [local-tx ops]} (<! (p->c (op/<get-ops&local-tx repo)))
-                                     graph-uuid (<! (p->c (op/<get-graph-uuid repo)))]
+                                     {:keys [local-tx ops]} (<! (op/<get-ops&local-tx repo))
+                                     graph-uuid (<! (op/<get-graph-uuid repo))]
                                  (reset! (::local-tx state) local-tx)
                                  (reset! (::ops state) (count ops))
                                  (reset! (::graph-uuid state) graph-uuid)
