@@ -487,14 +487,6 @@
   }
 }
 
-html[data-theme='dark'] {
-  #left-sidebar {
-    > .shade-mask {
-      background-color: rgba(0, 0, 0, .15);
-    }
-  }
-}
-
 .settings-modal {
   @apply -m-8 rounded-lg;
   /* box-shadow: inset 0 0 0 1px var(--ls-border-color); */
@@ -527,12 +519,35 @@ html[data-theme='dark'] {
     @apply fixed bottom-4 right-4 sm:right-8;
 
     > .inner {
-      @apply font-bold
-      rounded-full h-8 w-8 flex items-center justify-center font-bold
-      select-none cursor-help;
+      @apply rounded-full h-8 w-8 flex items-center justify-center
+      font-bold select-none cursor-help;
 
       background-color: var(--ls-secondary-background-color);
     }
+  }
+
+  &-menu-popup {
+    @apply fixed bottom-14 right-8 z-10 border
+    rounded-lg min-w-[260px] shadow;
+
+    background-color: var(--ls-secondary-background-color);
+    border-color: var(--ls-border-color);
+
+    > .list-wrap {
+      @apply flex flex-col pt-3;
+
+      .it {
+        color: var(--ls-primary-text-color);
+
+        &:active, &:hover {
+          background-color: var(--ls-tertiary-background-color);
+        }
+      }
+    }
+  }
+
+  &-handbook-btn {
+    @apply bottom-16;
   }
 }
 
@@ -753,4 +768,12 @@ a.ui__modal-close, a.close {
 
 a.ui__modal-close:hover, a.close:hover {
   opacity: 1;
+}
+
+html[data-theme='dark'] {
+  #left-sidebar {
+    > .shade-mask {
+      background-color: rgba(0, 0, 0, .15);
+    }
+  }
 }
