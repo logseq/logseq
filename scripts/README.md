@@ -46,15 +46,6 @@ Created graph schema!
 #### Update graph scripts
 
 For database graphs, it is possible to update graphs with the
-[logseq.tasks.db-graph.persist-graph](src/logseq/tasks/db_graph/persist_graph.cljs)
+`logseq.outliner.cli.persist-graph`.
 ns. This ns makes it easy to write scripts that update graphs using datascript
-and logseq's schema. For example, the `update_graph_to_add_todos.cljs` script
-uses this ns to update blocks with a specified query with a `TODO` task marker:
-
-```
-$ yarn -s nbb-logseq src/logseq/tasks/db_graph/update_graph_to_add_todos.cljs woot '[:find (pull ?b [*]) :where (has-property ?b :url-many)]'
-Updated 1 block(s) with a 'TODO' for graph woot!
-```
-
-This script updates a DB graph by finding all blocks that match the given
-property query and marking them as `TODO`.
+and logseq's schema. TODO
