@@ -1,6 +1,7 @@
 (ns frontend.db.rtc.mock
   (:require [clojure.core.async :as async]
-            [frontend.db.rtc.const :as rtc-const]))
+            [frontend.db.rtc.const :as rtc-const]
+            [spy.core :as spy]))
 
 ;;; websocket
 (defrecord Mock-WebSocket [onopen onmessage onclose onerror readyState push-data-chan ^:mutable push-data-fn]
@@ -13,7 +14,6 @@
                   js/JSON.parse
                   (js->clj :keywordize-keys true)
                   rtc-const/data-to-ws-decoder)]
-      (prn :got-ws-msg msg)
       (async/put! onmessage msg)))
 
   (set-push-data-fn [_ f]
@@ -32,7 +32,8 @@
 (defn mock-websocket
   [data-from-ws-chan]
   (let [stop-push-data-loop-ch (async/chan)
-        ws (->Mock-WebSocket nil (async/chan 10) nil nil js/WebSocket.OPEN data-from-ws-chan default-push-data-fn)]
+        ws (->Mock-WebSocket nil (async/chan 10) nil nil 1
+                             data-from-ws-chan (spy/spy default-push-data-fn))]
     (async/go-loop []
       (let [{:keys [stop msg]}
             (async/alt!
@@ -43,8 +44,8 @@
           (do (prn :mock-ws-loop-stop) nil)
 
           msg
-          (do (when-let [push-data-fn (.-push-data-fn ws)]
-                (push-data-fn msg (.-push-data-chan ws)))
+          (do (when-let [push-data-fn (:push-data-fn ws)]
+                (push-data-fn msg (:push-data-chan ws)))
               (recur)))))
     ws))
 

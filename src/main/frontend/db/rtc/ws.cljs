@@ -8,6 +8,9 @@
             [cljs.core.async :as async :refer [<! chan go offer!]]
             [frontend.state :as state]))
 
+(def WebSocketOPEN (if (= *target* "nodejs")
+                     1
+                     js/WebSocket.OPEN))
 
 (def ws-addr config/RTC-WS-URL)
 
@@ -24,7 +27,7 @@
 
 (defn send!
   [ws message]
-  (assert (= js/WebSocket.OPEN (.-readyState ws)))
+  (assert (= WebSocketOPEN (.-readyState ws)))
   (let [decoded-message (rtc-const/data-to-ws-decoder message)]
     (assert (rtc-const/data-to-ws-validator decoded-message) message)
     (.send ws (js/JSON.stringify (clj->js (rtc-const/data-to-ws-encoder decoded-message))))))
@@ -37,7 +40,7 @@
   (go
     (let [ws @(:*ws state)]
       (when (or (nil? ws)
-                (> (.-readyState ws) js/WebSocket.OPEN))
+                (> (.-readyState ws) WebSocketOPEN))
         (let [ws-opened-ch (chan)
               token (state/get-auth-id-token)
               ws* (ws-listen token (:data-from-ws-chan state) ws-opened-ch)]
