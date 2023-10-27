@@ -130,7 +130,7 @@
         "jszip": "3.8.0",
         "katex": "^0.16.7",
         "marked": "^5.1.2",
-        "mldoc": "1.5.7",
+        "mldoc": "^1.5.8",
         "path": "0.12.7",
         "path-complete-extname": "1.0.0",
         "pdfjs-dist": "^3.9.179",
