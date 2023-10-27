@@ -738,8 +738,10 @@
       `outliner-op`: what's the current outliner operation.
       `replace-empty-target?`: If the `target-block` is an empty block, whether
                                to replace it, it defaults to be `false`.
+      `update-timestamps?`: whether to update `blocks` timestamps.
     ``"
-  [blocks target-block {:keys [_sibling? keep-uuid? outliner-op replace-empty-target?] :as opts}]
+  [blocks target-block {:keys [_sibling? keep-uuid? outliner-op replace-empty-target? update-timestamps?] :as opts
+                        :or {update-timestamps? true}}]
   {:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]}
   (let [[target-block' sibling?] (get-target-block blocks target-block opts)
@@ -762,6 +764,8 @@
                      (blocks-with-ordered-list-props target-block sibling?))
                   (= outliner-op :paste)
                   fix-top-level-blocks
+                  update-timestamps?
+                  (mapv (fn [b] (block-with-timestamps (dissoc b :block/created-at :block/updated-at))))
                   true
                   (mapv block-with-timestamps))
         insert-opts {:sibling? sibling?
@@ -952,7 +956,8 @@
         (when-not move-parents-to-child?
           (let [first-block (first blocks)
                 {:keys [tx-data]} (insert-blocks blocks target-block {:sibling? sibling?
-                                                                      :outliner-op (or outliner-op :move-blocks)})]
+                                                                      :outliner-op (or outliner-op :move-blocks)
+                                                                      :update-timestamps? false})]
             (when (seq tx-data)
               (let [first-block-page (:db/id (:block/page first-block))
                     target-page (or (:db/id (:block/page target-block))
