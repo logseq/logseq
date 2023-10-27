@@ -30,6 +30,7 @@
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.handler.command-palette :as palette-handler]
             [frontend.modules.shortcut.core :as st]
+            [frontend.modules.shortcut.config :as shortcut-config]
             [electron.listener :as el]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -351,7 +352,7 @@
             cmd         (assoc cmd :key (string/replace (:key cmd) ":" "-"))
             key         (:key cmd)
             keybinding  (:keybinding cmd)
-            palette-cmd (and palette? (plugin-handler/simple-cmd->palette-cmd pid cmd action))
+            palette-cmd (plugin-handler/simple-cmd->palette-cmd pid cmd action)
             action'     #(state/pub-event! [:exec-plugin-cmd {:type type :key key :pid pid :cmd cmd :action action}])]
 
         ;; handle simple commands
@@ -368,8 +369,16 @@
                                  (palette-handler/invoke-command palette-cmd)
                                  (action')))
                 [mode-id id shortcut-map] (update shortcut-args 2 merge cmd {:fn dispatch-cmd :cmd palette-cmd})]
-            (println :shortcut/register-shortcut [mode-id id shortcut-map])
-            (st/register-shortcut! mode-id id shortcut-map)))))))
+
+            (cond
+              ;; FIX ME: move to register logic
+              (= mode-id :shortcut.handler/block-editing-only)
+              (shortcut-config/add-shortcut! mode-id id shortcut-map)
+
+              :else
+              (do
+                (println :shortcut/register-shortcut [mode-id id shortcut-map])
+                (st/register-shortcut! mode-id id shortcut-map)))))))))
 
 (defn ^:export unregister_plugin_simple_command
   [pid]
@@ -377,10 +386,10 @@
   (plugin-handler/unregister-plugin-simple-command pid)
 
   ;; remove palette commands
-  (let [palette-matched (->> (palette-handler/get-commands)
-                             (filter #(string/includes? (str (:id %)) (str "plugin." pid))))]
-    (when (seq palette-matched)
-      (doseq [cmd palette-matched]
+  (let [cmds-matched (->> (vals @shortcut-config/*shortcut-cmds)
+                          (filter #(string/includes? (str (:id %)) (str "plugin." pid))))]
+    (when (seq cmds-matched)
+      (doseq [cmd cmds-matched]
         (palette-handler/unregister (:id cmd))
         ;; remove keybinding commands
         (when (seq (:shortcut cmd))
