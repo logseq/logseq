@@ -1949,7 +1949,8 @@
 
 (defn- paste-block-cleanup
   [repo block page exclude-properties format content-update-fn keep-uuid?]
-  (let [new-content
+  (let [db-based? (config/db-based-graph? (state/get-current-repo))
+        new-content
         (if content-update-fn
           (content-update-fn (:block/content block))
           (:block/content block))
@@ -1958,21 +1959,23 @@
           (not keep-uuid?) (property-file/remove-property-when-file-based repo format "id")
           true             (property-file/remove-property-when-file-based repo format "custom_id"))]
     (merge (apply dissoc block (conj (when-not keep-uuid? [:block/_refs]) :block/pre-block? :block/meta))
-           {:block/page {:db/id (:db/id page)}
-            :block/format format
-            ;; only file graphs exclude properties because db graphs don't put ids in properties
-            :block/properties (if (config/db-based-graph? (state/get-current-repo))
-                                (:block/properties block)
-                                (apply dissoc (:block/properties block)
-                                       (concat
-                                        (when-not keep-uuid? [:id])
-                                        [:custom_id :custom-id]
-                                        exclude-properties)))
-            :block/properties-text-values (apply dissoc (:block/properties-text-values block)
-                                                 (concat
-                                                  (when-not keep-uuid? [:id])
-                                                  exclude-properties))
-            :block/content new-content})))
+           (cond->
+            {:block/page {:db/id (:db/id page)}
+             :block/format format
+             ;; only file graphs exclude properties because db graphs don't put ids in properties
+             :block/properties (if db-based?
+                                 (:block/properties block)
+                                 (apply dissoc (:block/properties block)
+                                        (concat
+                                         (when-not keep-uuid? [:id])
+                                         [:custom_id :custom-id]
+                                         exclude-properties)))
+             :block/content new-content}
+             (not db-based?)
+             (assoc :block/properties-text-values (apply dissoc (:block/properties-text-values block)
+                                                  (concat
+                                                   (when-not keep-uuid? [:id])
+                                                   exclude-properties)))))))
 
 (defn- edit-last-block-after-inserted!
   [result]
@@ -2044,7 +2047,7 @@
        (let [format (or (:block/format target-block') (state/get-preferred-format))
              blocks' (map (fn [block]
                             (paste-block-cleanup repo block page exclude-properties format content-update-fn keep-uuid?))
-                          blocks)
+                       blocks)
              result (outliner-core/insert-blocks! blocks' target-block' {:sibling? sibling?
                                                                          :outliner-op :paste
                                                                          :replace-empty-target? replace-empty-target?
