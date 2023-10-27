@@ -121,7 +121,9 @@
 
 (def schema-for-db-based-graph
   (merge
-   (dissoc schema :block/properties-text-values :block/pre-block? :recent/pages :file/handle :block/file)
+   (dissoc schema
+           :block/properties-text-values :block/pre-block? :recent/pages :file/handle :block/file
+           :block/properties-order)
    {:file/last-modified-at {}}))
 
 ;; TODO: some attributes shouldn't be retracted for the db version
@@ -181,3 +183,10 @@
 
 (def card-one-ref-type-attributes
   (set/difference ref-type-attributes card-many-attributes))
+
+(def db-non-ref-attributes
+  (->> schema-for-db-based-graph
+       (keep (fn [[k v]]
+               (when (not (:db/valueType v))
+                 k)))
+       set))

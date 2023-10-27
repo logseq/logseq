@@ -217,6 +217,9 @@
    [:block/collapsed-properties {:optional true} [:set :int]]
     ;; other
    [:block/marker {:optional true} :string]
+   [:block/deadline {:optional true} :int]
+   [:block/scheduled {:optional true} :int]
+   [:block/repeated? {:optional true} :boolean]
    [:block/priority {:optional true} :string]
    [:block/collapsed? {:optional true} :boolean]])
 
@@ -294,7 +297,8 @@
     macro
     unknown-block]])
 
-;; Keep malli schema in sync with db schema changes
+;; Keep malli schema in sync with db schema
+;; ========================================
 (let [malli-many-ref-attrs (->> (concat page-attrs block-attrs page-or-block-attrs)
                                 (filter #(= (last %) [:set :int]))
                                 (map first)
@@ -312,4 +316,15 @@
   (when-let [undeclared-ref-attrs (seq (remove (some-fn malli-one-ref-attrs attrs-to-ignore) db-schema/card-one-ref-type-attributes))]
     (throw (ex-info (str "The malli DB schema is missing the following cardinality-one ref attributes from datascript's schema: "
                          (string/join ", " undeclared-ref-attrs))
+                    {}))))
+
+(let [malli-non-ref-attrs (->> (concat page-attrs block-attrs page-or-block-attrs (rest normal-page))
+                               (concat (rest file-block) (rest db-ident) (rest schema-version) (rest class-page))
+                               (remove #(= (last %) [:set :int]))
+                               (map first)
+                               set)
+      attrs-to-ignore #{:ast/version}]
+  (when-let [undeclared-attrs (seq (remove (some-fn malli-non-ref-attrs attrs-to-ignore) db-schema/db-non-ref-attributes))]
+    (throw (ex-info (str "The malli DB schema is missing the following non ref attributes from datascript's schema: "
+                         (string/join ", " undeclared-attrs))
                     {}))))
