@@ -77,47 +77,30 @@
 (def transit-w (transit/writer :json))
 (def transit-r (transit/reader :json))
 
-(def ^{:private true :dynamic true} *RUNNING-TESTS* "true when running tests" false)
-(defmulti transact-db! (fn [action & _args]
-                        (keyword (str (name action) (when *RUNNING-TESTS* "-for-test")))))
+(defmulti transact-db! (fn [action & _args] action))
 
 (defmethod transact-db! :delete-blocks [_ & args]
   (outliner-tx/transact!
    {:persist-op? false}
    (apply outliner-core/delete-blocks! args)))
 
-(defmethod transact-db! :delete-blocks-for-test [_ & args]
-  (prn ::delete-block-for-test args))
-
 (defmethod transact-db! :move-blocks [_ & args]
   (outliner-tx/transact!
    {:persist-op? false}
    (apply outliner-core/move-blocks! args)))
-
-(defmethod transact-db! :move-blocks-for-test [_ & args]
-  (prn ::move-blocks-for-test args))
 
 (defmethod transact-db! :insert-blocks [_ & args]
   (outliner-tx/transact!
    {:persist-op? false}
    (apply outliner-core/insert-blocks! args)))
 
-(defmethod transact-db! :insert-blocks-for-test [_ & args]
-  (prn ::insert-blocks-for-test args))
-
 (defmethod transact-db! :save-block [_ & args]
   (outliner-tx/transact!
    {:persist-op? false}
    (apply outliner-core/save-block! args)))
 
-(defmethod transact-db! :save-block-for-test [_ & args]
-  (prn ::save-block-for-test args))
-
 (defmethod transact-db! :raw [_ & args]
   (apply db/transact! args))
-
-(defmethod transact-db! :raw-for-test [_ & args]
-  (prn ::raw-for-test args))
 
 (defn apply-remote-remove-ops
   [repo remove-ops]
@@ -641,7 +624,7 @@
         true))))
 
 (defn <loop-for-rtc
-  [state graph-uuid repo]
+  [state graph-uuid repo & {:keys [loop-started-ch]}]
   {:pre [(state-validator state)
          (some? graph-uuid)
          (some? repo)]}
@@ -662,6 +645,7 @@
         (<! (get-result-ch)))
 
       (async/sub data-from-ws-pub "push-updates" push-data-from-ws-ch)
+      (when loop-started-ch (async/close! loop-started-ch))
       (<! (go-loop [push-client-ops-ch
                     (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))]
             (let [{:keys [push-data-from-ws client-op-update stop continue]}
@@ -736,7 +720,7 @@
             versions))))))
 
 
-(defn- init-state
+(defn init-state
   [ws data-from-ws-chan]
   ;; {:post [(m/validate state-schema %)]}
   {:*rtc-state (atom :closed :validator rtc-state-validator)

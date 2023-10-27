@@ -205,3 +205,11 @@ This can be called in synchronous contexts as no async fns should be invoked"
   (f)
   (state/set-current-repo! nil)
   (destroy-test-db!))
+
+(def start-and-destroy-db-map-fixture
+  "To avoid 'Fixtures may not be of mixed types' error
+  when use together with other map-type fixtures"
+  {:before #(do (state/set-current-repo! test-db)
+                (start-test-db!))
+   :after #(do (state/set-current-repo! nil)
+               (destroy-test-db!))})
