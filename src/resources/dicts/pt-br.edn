@@ -92,7 +92,7 @@
  :settings-page/current-version "Versão atual"
  :settings-page/tab-general "Geral"
  :settings-page/tab-advanced "Avançado"
- :settings-page/tab-version-control "Controle de Versões"
+ :settings-page/tab-git "Controle de Versões"
  :yes "Sim"
  :submit "Submeter"
  :cancel "Cancelar"

@@ -1048,16 +1048,6 @@
            [:div.text-base.pt-2.pl-1.opacity-70
             (util/format "🎉 You're a %s user!" (if (user-handler/alpha-user?) "Alpha" "Beta"))]])])]))
 
-;; (when-not web-platform?
-;;   [:<>
-;;    [:hr]
-;;    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-;;     [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]]
-;;    [:div.flex.flex-col.gap-4
-;;     {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-;;     ;; features
-;;     ]])
-
 (rum/defc settings-effect
   < rum/static
   [active]
@@ -1085,7 +1075,10 @@
        (let [active-tab (first (:rum/args state))
              *active (::active state)]
          (when (keyword? active-tab)
-           (reset! *active [active-tab nil])))
+           (reset! *active [active-tab nil]))
+         (when-let [^js el (rum/dom-node state)]
+           (some-> (.querySelector el "aside.cp__settings-aside")
+                   (.focus))))
        state)
      :will-unmount
      (fn [state]
@@ -1102,7 +1095,19 @@
     [:div#settings.cp__settings-main
      (settings-effect @*active)
      [:div.cp__settings-inner
-      [:aside.md:w-64 {:style {:min-width "10rem"}}
+      [:aside.cp__settings-aside
+       {:style     {:min-width "10rem"}
+        :tab-index "-1"
+        :auto-focus "on"
+        :on-key-down (fn [^js e]
+                       (let [up? (= (.-key e) "ArrowUp")
+                             down? (= (.-key e) "ArrowDown")]
+                         (when (or up? down?)
+                           (when-let [^js active (some-> (.-target e) (.querySelector ".settings-menu-item.active"))]
+                             (when-let [^js target (if down? (.-nextSibling active) (.-previousSibling active))]
+                               (let [active (.. active -dataset -id)
+                                     target (.. target -dataset -id)]
+                                 (reset! *active (map keyword [target active]))))))))}
        [:header.cp__settings-header
         (ui/icon "settings")
         [:h1.cp__settings-modal-title (t :settings)]]
@@ -1114,7 +1119,7 @@
                [:keymap "keymap" (t :settings-page/tab-keymap) (ui/icon "keyboard")]
 
                (when (util/electron?)
-                 [:version-control "git" (t :settings-page/tab-version-control) (ui/icon "history")])
+                 [:git "git" (t :settings-page/tab-git) (ui/icon "history")])
 
                ;; (when (util/electron?)
                ;;   [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
@@ -1123,7 +1128,7 @@
                [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature")]
 
                (when plugins-of-settings
-                 [:plugins-setting "plugins" (t :settings-of-plugins) (ui/icon "puzzle")])]]
+                 [:plugins "plugins" (t :settings-of-plugins) (ui/icon "puzzle")])]]
 
           (when label
             [:li.settings-menu-item
@@ -1134,40 +1139,42 @@
 
              [:a.flex.items-center.settings-menu-link icon [:strong text]]]))]]
 
-      [:article
-       [:header.cp__settings-header
-        [:h1.cp__settings-category-title (t (keyword (str "settings-page/tab-" (name (first @*active)))))]]
+      (let [active-label (first @*active)]
+        [:article
+         [:header.cp__settings-header
+          [:h1.cp__settings-category-title
+           (when-not (= :plugins active-label)
+             (t (keyword (str "settings-page/tab-" (name (first @*active))))))]]
 
-       (case (first @*active)
+         (case active-label
+           :plugins
+           (let [label (second @*active)]
+             (state/pub-event! [:go/plugins-settings (:id (first plugins-of-settings))])
+             (reset! *active [label label])
+             nil)
 
-         :plugins-setting
-         (let [label (second @*active)]
-           (state/pub-event! [:go/plugins-settings (:id (first plugins-of-settings))])
-           (reset! *active [label label])
-           nil)
+           :general
+           (settings-general current-repo)
 
-         :general
-         (settings-general current-repo)
+           :account
+           (settings-account)
 
-         :account
-         (settings-account)
+           :editor
+           (settings-editor current-repo)
 
-         :editor
-         (settings-editor current-repo)
+           :keymap
+           (shortcut2/shortcut-keymap-x)
 
-         :keymap
-         (shortcut2/shortcut-keymap-x)
+           :git
+           (settings-git)
 
-         :version-control
-         (settings-git)
+           :assets
+           (assets/settings-content)
 
-         :assets
-         (assets/settings-content)
+           :advanced
+           (settings-advanced current-repo)
 
-         :advanced
-         (settings-advanced current-repo)
+           :features
+           (settings-features)
 
-         :features
-         (settings-features)
-
-         nil)]]]))
+           nil)])]]))

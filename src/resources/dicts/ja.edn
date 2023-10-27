@@ -319,7 +319,7 @@
  :settings-page/tab-general "一般"
  :settings-page/tab-editor "エディタ"
  :settings-page/tab-keymap "ショートカットキー"
- :settings-page/tab-version-control "バージョンコントロール"
+ :settings-page/tab-git "バージョンコントロール"
  :settings-page/tab-account "アカウント"
  :settings-page/tab-advanced "高度な設定"
  :settings-page/tab-assets "アセット"

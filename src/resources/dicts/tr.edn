@@ -319,7 +319,7 @@
  :settings-page/tab-general "Genel"
  :settings-page/tab-editor "Düzenleyici"
  :settings-page/tab-keymap "Tuş haritası"
- :settings-page/tab-version-control "Sürüm denetimi"
+ :settings-page/tab-git "Sürüm denetimi"
  :settings-page/tab-account "Hesap"
  :settings-page/tab-advanced "Gelişmiş"
  :settings-page/tab-assets "Varlıklar"

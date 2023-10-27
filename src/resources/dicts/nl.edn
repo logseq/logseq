@@ -219,7 +219,7 @@
  :settings-page/spell-checker "Spellingcontrole"
  :settings-page/tab-advanced "Geavanceerd"
  :settings-page/tab-general "Algemeen"
- :settings-page/tab-version-control "Versiebeheer"
+ :settings-page/tab-git "Versiebeheer"
 
  :text/image "Afbeelding"
 

@@ -208,7 +208,7 @@
  :settings-page/current-version "Поточна версія"
  :settings-page/tab-general "Головна"
  :settings-page/tab-editor "Редактор"
- :settings-page/tab-version-control "Контроль версій"
+ :settings-page/tab-git "Контроль версій"
  :settings-page/tab-advanced "Розширення"
  :settings-page/tab-assets "Ассети"
  :settings-page/tab-features "Функції"

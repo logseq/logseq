@@ -612,7 +612,7 @@
  :settings-page/tab-assets "Anlagen"
  :settings-page/tab-features "Funktionen"
  :settings-page/tab-general "Allgemein"
- :settings-page/tab-version-control "Versionskontrolle"
+ :settings-page/tab-git "Versionskontrolle"
 
  :text/image "Bild"
 

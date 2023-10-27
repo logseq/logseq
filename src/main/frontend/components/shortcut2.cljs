@@ -99,7 +99,7 @@
        {:placeholder (t :keymap/search)
         :ref         *search-ref
         :value       (or q "")
-        :auto-focus  true
+        :auto-focus  false
         :on-key-down #(when (= 27 (.-keyCode %))
                         (util/stop %)
                         (if (string/blank? q)

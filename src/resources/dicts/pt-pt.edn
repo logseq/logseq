@@ -183,7 +183,7 @@
  :settings-page/developer-mode-desc "O modo de desenvolvedor ajuda os contribuidores e programadores de extensões a testar as suas integrações com o Logseq mais eficientemente."
  :settings-page/current-version "Versão atual"
  :settings-page/tab-general "Geral"
- :settings-page/tab-version-control "Controlo de Versões"
+ :settings-page/tab-git "Controlo de Versões"
  :settings-page/tab-advanced "Avançado"
  :settings-page/tab-assets "Recursos"
  :settings-page/tab-features "Funcionalidades"

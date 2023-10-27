@@ -110,7 +110,7 @@
  :settings-page/developer-mode-desc "La modalità sviluppatore aiuta i contributori e gli sviluppatori di estensioni a testare le loro integrazioni con Logseq in modo più efficiente."
  :settings-page/current-version "Versione attuale"
  :settings-page/tab-general "Generale"
- :settings-page/tab-version-control "Controllo di versione"
+ :settings-page/tab-git "Controllo di versione"
  :settings-page/tab-advanced "Avanzate"
  :settings-page/plugin-system "Sistema di plugin"
  :settings-page/network-proxy "Proxy di rete"

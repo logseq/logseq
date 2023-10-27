@@ -327,7 +327,7 @@
  :settings-page/tab-general "General"
  :settings-page/tab-editor "Editor"
  :settings-page/tab-keymap "Keymap"
- :settings-page/tab-version-control "Version control"
+ :settings-page/tab-git "Version control"
  :settings-page/tab-account "Account"
  :settings-page/tab-advanced "Advanced"
  :settings-page/tab-assets "Assets"

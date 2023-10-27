@@ -235,7 +235,7 @@
  :settings-page/tab-assets "附件设置"
  :settings-page/tab-advanced "高级设置"
  :settings-page/tab-features "更多功能"
- :settings-page/tab-version-control "多版本控制"
+ :settings-page/tab-git "版本控制"
  :settings-page/tab-account "帐户"
  :settings-page/plugin-system "插件系统"
  :settings-page/network-proxy "网络代理"

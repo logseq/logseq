@@ -110,7 +110,7 @@
  :settings-page/developer-mode-desc "Utviklermodus hjelper bidragsytere og tilleggsutviklere med å teste sine integrasjoner mot Logseq mer effektivt."
  :settings-page/current-version "Nåværende versjon"
  :settings-page/tab-general "Generelt"
- :settings-page/tab-version-control "Versjonskontroll"
+ :settings-page/tab-git "Versjonskontroll"
  :settings-page/tab-advanced "Avansert"
  :settings-page/custom-global-configuration "Egendefinert global konfigurasjon"
  :settings-page/edit-global-config-edn "Rediger global config.edn"

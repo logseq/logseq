@@ -3,7 +3,7 @@
     @apply flex flex-col md:flex-row;
 
     > aside {
-      @apply bg-gray-400/5 p-4;
+      @apply bg-gray-400/5 p-4 outline-none md:w-64;
 
       > ul > li {
         > a {

@@ -113,7 +113,7 @@
  :settings-page/current-version "현재 버전"
  :settings-page/tab-general "일반"
  :settings-page/tab-editor "에디터"
- :settings-page/tab-version-control "버전 컨트롤"
+ :settings-page/tab-git "버전 컨트롤"
  :settings-page/tab-advanced "고급"
  :settings-page/plugin-system "플러그인 시스템"
  :settings-page/network-proxy "네트워크 프록시"

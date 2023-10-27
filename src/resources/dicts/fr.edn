@@ -288,7 +288,7 @@
     :settings-page/tab-editor "Éditeur"
     :settings-page/tab-features "Fonctionnalités"
     :settings-page/tab-general "Général"
-    :settings-page/tab-version-control "Contrôle de version"
+    :settings-page/tab-git "Contrôle de version"
     :text/image "Image"
     :updater/new-version-install "Une nouvelle version a été téléchargée."
     :updater/quit-and-install "Relancez pour installer"

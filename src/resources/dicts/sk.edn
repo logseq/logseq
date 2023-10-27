@@ -176,7 +176,7 @@
  :settings-page/developer-mode-desc                "Režim pre vývojárov pomáha prispievateľom a vývojárom doplnkov efektívnejšie testovať integráciu s Logseq."
  :settings-page/current-version                    "Aktuálna verzia"
  :settings-page/tab-general                        "Všeobecné"
- :settings-page/tab-version-control                "Verzovanie"
+ :settings-page/tab-git                "Verzovanie"
  :settings-page/tab-advanced                       "Pokročilé"
  :settings-page/tab-features                       "Funkcie"
  :settings-page/plugin-system                      "Doplnky"

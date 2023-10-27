@@ -225,7 +225,7 @@
  :settings-page/current-version                        "Версия"
  :settings-page/tab-general                            "Общие"
  :settings-page/tab-editor                             "Редактор"
- :settings-page/tab-version-control                    "Управление версиями"
+ :settings-page/tab-git                    "Управление версиями"
  :settings-page/tab-account                            "Аккаунт"
  :settings-page/tab-advanced                           "Продвинутые"
  :settings-page/tab-assets                             "Объекты"

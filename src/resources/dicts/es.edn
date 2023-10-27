@@ -684,7 +684,7 @@
  :settings-page/tab-features                        "Características"
  :settings-page/tab-general                         "General"
  :settings-page/tab-keymap                          "Mapa de teclado"
- :settings-page/tab-version-control                 "Control de versiones"
+ :settings-page/tab-git                 "Control de versiones"
  :settings-page/theme-dark                          "oscuro"
  :settings-page/theme-light                         "claro"
  :settings-page/theme-system                        "sistema"

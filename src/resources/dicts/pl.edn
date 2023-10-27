@@ -116,7 +116,7 @@
  :settings-page/current-version "Aktualna wersja"
  :settings-page/tab-general "Ogólne"
  :settings-page/tab-editor "Edytor"
- :settings-page/tab-version-control "Kontrola wersji"
+ :settings-page/tab-git "Kontrola wersji"
  :settings-page/tab-advanced "Zaawansowane"
  :settings-page/plugin-system "System pluginów"
  :settings-page/enable-flashcards "Fiszki"

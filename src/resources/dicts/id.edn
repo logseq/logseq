@@ -319,7 +319,7 @@
  :settings-page/tab-general "Umum"
  :settings-page/tab-editor "Penyunting"
  :settings-page/tab-keymap "Pemetaan tombol"
- :settings-page/tab-version-control "Kontrol versi"
+ :settings-page/tab-git "Kontrol versi"
  :settings-page/tab-account "Akun"
  :settings-page/tab-advanced "Lanjutan"
  :settings-page/tab-assets "Aset"
