@@ -177,7 +177,9 @@
              :options {:on-click (fn []
                                    (dev-common-handler/show-entity-data (:db/id page)))}})
 
-          (when developer-mode?
+          (when (and developer-mode?
+                     ;; Remove when we have an easy way to fetch file content for a DB graph
+                     (not (config/db-based-graph? repo)))
             {:title   (t :dev/show-page-ast)
              :options {:on-click (fn []
                                    (let [page (db/pull '[:block/format {:block/file [:file/content]}] (:db/id page))]

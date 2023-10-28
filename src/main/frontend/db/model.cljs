@@ -1352,15 +1352,16 @@ independent of format as format specific heading characters are stripped"
   "Accepts both sanitized and unsanitized namespaces"
   [repo namespace]
   (assert (string? namespace))
-  (let [namespace (util/page-name-sanity-lc namespace)]
+  (let [namespace (util/page-name-sanity-lc namespace)
+        pull-attrs (cond-> [:db/id :block/name :block/original-name :block/namespace]
+                     (not (config/db-based-graph? repo))
+                     (conj {:block/file [:db/id :file/path]}))]
     (d/q
-     '[:find [(pull ?c [:db/id :block/name :block/original-name
-                        :block/namespace
-                        {:block/file [:db/id :file/path]}]) ...]
-       :in $ % ?namespace
+     [:find [(list 'pull '?c pull-attrs) '...]
+       :in '$ '% '?namespace
        :where
-       [?p :block/name ?namespace]
-       (namespace ?p ?c)]
+       ['?p :block/name '?namespace]
+       (list 'namespace '?p '?c)]
      (conn/get-db repo)
      (:namespace rules/rules)
      namespace)))
