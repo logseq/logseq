@@ -155,6 +155,7 @@
 
 (defn normalize-journal-title
   "Normalize journal title at best effort. Return nil if title is not a valid date.
+   Return goog.date.Date.
 
    Return format: 20220812T000000"
   [title]
@@ -202,6 +203,7 @@
     (journal-title-> journal-title #(tf/unparse formatter %))))
 
 (defn date->file-name
+  "Date object to filename format"
   [date]
   (let [formatter (if-let [format (state/get-journal-file-name-format)]
                     (tf/formatter format)
