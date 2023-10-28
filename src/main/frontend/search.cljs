@@ -309,7 +309,12 @@
   [repo tx-report]
   (let [{:keys [pages-to-add pages-to-remove-set pages-to-remove-id-set
                 blocks-to-add blocks-to-remove-set]} (get-direct-blocks-and-pages tx-report) ;; directly modified block & pages
-        updated-pages (get-indirect-pages tx-report)
+        updated-pages (if (config/db-based-graph? repo)
+                        ;; FIXME: Find a way to do this for DB graphs
+                        (do
+                          (js/console.log "Fetching pages that will have content updated isn't supported in DB graphs")
+                          [])
+                        (get-indirect-pages tx-report))
         pages-to-add' (remove (comp db-model/hidden-page? :name) pages-to-add)]
     ;; update page title indice
     (when (or (seq pages-to-add') (seq pages-to-remove-set))

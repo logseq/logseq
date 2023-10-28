@@ -7,7 +7,8 @@
             [frontend.ui :as ui]
             [frontend.util.page :as page-util]
             [frontend.handler.property.util :as pu]
-            [frontend.format.mldoc :as mldoc]))
+            [frontend.format.mldoc :as mldoc]
+            [frontend.config :as config]))
 
 ;; Fns used between menus and commands
 (defn show-entity-data
@@ -61,8 +62,10 @@
     (notification/show! "No page found" :warning)))
 
 (defn ^:export show-page-ast []
-  (let [page-data (db/pull '[:block/format {:block/file [:file/content]}]
-                           (page-util/get-current-page-id))]
-    (if (get-in page-data [:block/file :file/content])
-      (show-content-ast (get-in page-data [:block/file :file/content]) (:block/format page-data))
-      (notification/show! "No page found" :warning))))
+  (if (config/db-based-graph? (state/get-current-repo))
+    (notification/show! "Command not available yet for DB graphs" :warning)
+    (let [page-data (db/pull '[:block/format {:block/file [:file/content]}]
+                             (page-util/get-current-page-id))]
+      (if (get-in page-data [:block/file :file/content])
+        (show-content-ast (get-in page-data [:block/file :file/content]) (:block/format page-data))
+        (notification/show! "No page found" :warning)))))
