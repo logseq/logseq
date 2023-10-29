@@ -549,7 +549,8 @@
         tag? (:tag? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
         untitled? (model/untitled-page? page-name)
-        display-close-button? (not (:hide-close-button? config))]
+        display-close-button? (and (not (:hide-close-button? config))
+                                   (not config/publishing?))]
     [:a.relative
      {:tabIndex "0"
       :class (cond->
