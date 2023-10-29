@@ -945,11 +945,14 @@
          (case (.-name error)
            "MissingPDFException"
            (do
-             (notification/show!
-              (str "Error: " (.-message error) "\n Is this the correct path?")
-              :error
-              false)
-             (state/set-state! :pdf/current nil))
+              (if (pdf-assets/handle-missing-pdf-error! pdf-current)
+                (set-loader-state! {:error nil})
+                (do
+                  (notification/show!
+                  (str "Error: " (.-message error) "\n Is this the correct path?")
+                  :error
+                  false)
+                  (state/set-state! :pdf/current nil))))
 
            "InvalidPDFException"
            (do
