@@ -709,6 +709,10 @@ svg.tip {
   font-size: 14px;
 }
 
+.cm-s-solarized.CodeMirror {
+  box-shadow: none;
+}
+
 /* endregion */
 
 hr {
