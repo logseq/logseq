@@ -973,22 +973,21 @@
                                       (state/pub-event! [:user/login]))})]]
 
          ;; pro plans
-         [:div.col-span-4.flex.flex-col.gap-4.pro-plan-cards
-          [:div.flex.w-full.gap-4
-           [:div.card
-            [:div.flag (t :settings-account/free)]
-            [:div [:strong.text-xl.font-medium "$0"]]
-            [:div.font-semibold (t :settings-account/free-plan-title)]
-            [:ul.text-xs.m-0.flex.flex-col.gap-0.5.pl-3.opacity-70
-             (t :settings-account/free-plan-desc)]]
+         [:div.pro-plan-cards
+          [:div.card
+           [:div.flag (t :settings-account/free)]
+           [:div [:strong.text-xl.font-medium "$0"]]
+           [:div.font-semibold (t :settings-account/free-plan-title)]
+           [:ul.text-xs.m-0.flex.flex-col.gap-0.5.pl-3.opacity-70
+            (t :settings-account/free-plan-desc)]]
 
-           [:div.card
-            [:div.flag.pro (t :settings-account/pro)]
-            [:div [:strong.text-xl.font-medium "$10"]
-             [:span.text-xs.font-base {:class "ml-0.5"} "/ monthly"]]
-            [:div.font-semibold (t :settings-account/pro-plan-title)]
-            [:ul.text-xs.m-0.flex.flex-col.gap-0.5.pl-3.opacity-70
-             (t :settings-account/pro-plan-desc)]]]]])]]))
+          [:div.card
+           [:div.flag.pro (t :settings-account/pro)]
+           [:div [:strong.text-xl.font-medium "$10"]
+            [:span.text-xs.font-base {:class "ml-0.5"} "/ monthly"]]
+           [:div.font-semibold (t :settings-account/pro-plan-title)]
+           [:ul.text-xs.m-0.flex.flex-col.gap-0.5.pl-3.opacity-70
+            (t :settings-account/pro-plan-desc)]]]])]]))
 
 (rum/defc settings-features < rum/reactive
   []

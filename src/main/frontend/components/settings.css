@@ -175,7 +175,8 @@
         }
 
         .pro-plan-cards {
-          @apply pt-6;
+          @apply pt-6 col-span-4 gap-4 space-y-4;
+          @apply sm:flex sm:space-y-0;
 
           .card {
             @apply flex-1 rounded-lg p-4 pt-10 relative flex flex-col gap-4
