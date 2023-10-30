@@ -3,7 +3,11 @@
             [cljs.core.async :as async :refer [<! >! chan go]]
             [frontend.db.rtc.mock :as rtc-mock]
             [frontend.db.rtc.core :as rtc-core]
-            [frontend.test.helper :as test-helper]))
+            [frontend.test.helper :as test-helper]
+            [datascript.core :as d]
+            [frontend.db.conn :as conn]
+            [frontend.db.rtc.db-listener :as db-listener]
+            [frontend.db.rtc.ops-idb-store :as ops-idb-store]))
 
 (def *test-rtc-state (atom nil))
 
@@ -25,7 +29,6 @@
       (rtc-core/<loop-for-rtc state graph-uuid repo :loop-started-ch loop-started-ch)
       (<! loop-started-ch))))
 
-
 (def start-and-stop-rtc-loop-fixture
   {:before
    #(t/async done
@@ -41,3 +44,22 @@
                  (>! stop-rtc-loop-chan true))
                (reset! *test-rtc-state nil)
                (done)))})
+
+
+(def listen-test-db-fixture
+  {:before
+   #(let [test-db-conn (conn/get-db test-helper/test-db false)]
+      (assert (some? test-db-conn))
+      (d/listen! test-db-conn
+                 ::gen-ops
+                 (fn [{:keys [tx-data tx-meta db-before db-after]}]
+                   (when (:persist-op? tx-meta true)
+                     (db-listener/generate-rtc-ops test-helper/test-db db-before db-after tx-data)))))
+   :after
+   #(when-let [test-db-conn (conn/get-db test-helper/test-db false)]
+      (d/unlisten! test-db-conn ::gen-ops))})
+
+
+(def clear-ops-idb-stores-fixture
+  {:before #(swap! ops-idb-store/stores dissoc test-helper/test-db)
+   :after #(swap! ops-idb-store/stores dissoc test-helper/test-db)})

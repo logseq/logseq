@@ -131,7 +131,12 @@ function close(store = getDefaultStore()) {
     return store._close();
 }
 
-exports.Store = Store;
+function newStore(dbName = 'keyval-store', storeName = 'keyval', version = 1) {
+    return new Store(dbName, storeName, version);
+}
+
+exports.newStore = newStore;
+// exports.Store = Store; // use newStore instead
 exports.get = get;
 exports.set = set;
 exports.setBatch = setBatch;

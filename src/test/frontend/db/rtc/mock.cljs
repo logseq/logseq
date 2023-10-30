@@ -55,16 +55,3 @@
 ;;   (.set-push-data-fn ws f))
 
 ;;; websocket ends ;;;;
-
-
-;;; frontend.db.rtc.op mock
-;; (def *ops-store (atom {}))
-
-;; (defn <get-ops&local-tx
-;;   [repo]
-
-;;   )
-
-
-
-;;; frontend.db.rtc.op mock ends

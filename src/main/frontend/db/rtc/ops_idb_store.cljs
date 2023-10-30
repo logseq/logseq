@@ -1,6 +1,6 @@
 (ns frontend.db.rtc.ops-idb-store
   "Fns to RW ops in indexeddb"
-  (:require ["/frontend/idbkv" :as idb-keyval :refer [Store]]
+  (:require ["/frontend/idbkv" :as idb-keyval]
             [promesa.core :as p]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
@@ -13,8 +13,10 @@
 (defn- ensure-store
   [repo]
   {:pre [(some? repo)]}
-  (swap! stores assoc repo (Store. (str "rtc-ops-" repo) "ops"))
-  (@stores repo))
+  (if-let [s (@stores repo)]
+    s
+    (do (swap! stores assoc repo (idb-keyval/newStore (str "rtc-ops-" repo) "ops"))
+        (@stores repo))))
 
 (defn <update-local-tx!
   [repo tx]
@@ -42,8 +44,7 @@
 (defonce #_:clj-kondo/ignore _add-ops-loop
   (async/go-loop []
     (if-let [[repo ops] (async/<! add-ops-ch)]
-      (do (prn :add-ops ops)
-          (async/<! (p->c (<add-ops*! repo ops)))
+      (do (async/<! (p->c (<add-ops*! repo ops)))
           (recur))
       (recur))))
 
