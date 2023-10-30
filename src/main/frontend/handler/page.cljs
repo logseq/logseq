@@ -219,7 +219,7 @@
                                q))
               last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)]
           (when (config/db-based-graph? (state/get-current-repo))
-            (let [tag (string/trim q)
+            (let [tag (string/trim chosen)
                   edit-block (state/get-edit-block)]
               (when (and (not (string/blank? tag)) (:block/uuid edit-block))
                 (let [tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)])]
