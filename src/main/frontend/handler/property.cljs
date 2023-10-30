@@ -3,6 +3,7 @@
   (:require [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.file-based.page-property :as file-page-property]
+            [frontend.handler.notification :as notification]
             [frontend.config :as config]
             [frontend.util :as util]
             [frontend.state :as state]
@@ -10,7 +11,8 @@
             [frontend.format.block :as block]
             [frontend.db.model :as model]
             [frontend.modules.outliner.core :as outliner-core]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [clojure.string :as string]))
 
 (defn remove-block-property!
   [repo block-id key]
@@ -237,6 +239,80 @@
                       outliner-core/block-with-timestamps)]
     {:page page-tx
      :blocks [new-block]}))
+
+(defn upsert-enum-item
+  [property {:keys [id name icon description]}]
+  (when (= :enum (get-in property [:block/schema :type]))
+    (let [icon-id (pu/get-pid "icon")
+          name (string/trim name)
+          property-schema (:block/schema property)
+          enum-values (get-in property-schema [:enum-config :values])
+          block-values (map (fn [id] (db/entity [:block/uuid id])) enum-values)
+          icon (when-not (and (string? icon) (string/blank? icon)) icon)
+          description (string/trim description)
+          description (when-not (string/blank? description) description)]
+      (if (some (fn [b] (and (= name (:block/content b))
+                             (not= id (:block/uuid b)))) block-values)
+        (notification/show! "Choice exists already." :warning)
+        (let [block (when id (db/entity [:block/uuid id]))
+              block-id (or id (db/new-block-id))
+              tx-data (if block
+                        [(let [properties (:block/properties block)
+                               schema (:block/schema block)]
+                           {:block/uuid id
+                            :block/content name
+                            :block/properties (if icon
+                                                (assoc properties icon-id icon)
+                                                (dissoc properties icon-id))
+                            :block/schema (if description
+                                            (assoc schema :description description)
+                                            (dissoc schema :description))})]
+                        (let [page-name (str "$$$" (:block/uuid property))
+                              page-entity (db/entity [:block/name page-name])
+                              page (or page-entity
+                                       (-> (block/page-name->map page-name true)
+                                           (assoc :block/type #{"hidden"}
+                                                  :block/format :markdown)))
+                              page-tx (when-not page-entity page)
+                              page-id [:block/uuid (:block/uuid page)]
+                              metadata {:created-from-property (:block/uuid property)}
+                              new-block (cond->
+                                         {:block/type #{"enum value"}
+                                          :block/uuid block-id
+                                          :block/format :markdown
+                                          :block/content name
+                                          :block/page page-id
+                                          :block/metadata metadata
+                                          :block/parent page-id
+                                          :block/left (or (when page-entity (model/get-block-last-direct-child (db/get-db) (:db/id page-entity)))
+                                                          page-id)}
+                                          icon
+                                          (assoc :block/properties {icon-id icon})
+
+                                          description
+                                          (assoc :block/schema {:description description})
+
+                                          true
+                                          outliner-core/block-with-timestamps)
+                              new-values (vec (conj enum-values block-id))]
+                          (->> (cons page-tx [new-block
+                                              {:db/id (:db/id property)
+                                               :block/schema (assoc property-schema :enum-config {:values new-values})}])
+                               (remove nil?))))]
+          {:block-id block-id
+           :tx-data tx-data})))))
+
+(defn delete-enum-item
+  [property item]
+  (if (seq (:block/_refs item))
+    (notification/show! "The choice can't be deleted because it's still used." :warning)
+    (let [schema (:block/schema property)
+          tx-data [[:db/retractEntity (:db/id item)]
+                   {:db/id (:db/id property)
+                    :block/schema (update-in schema [:enum-config :values]
+                                             (fn [values]
+                                               (vec (remove #{(:block/uuid item)} values))))}]]
+      (db/transact! tx-data))))
 
 (defn get-property-block-created-block
   "Get the root block that created this property block."

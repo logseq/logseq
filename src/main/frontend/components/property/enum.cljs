@@ -1,14 +1,25 @@
 (ns frontend.components.property.enum
   "Enum property config"
   (:require [rum.core :as rum]
-            [frontend.components.dnd :as dnd]
+            [clojure.string :as string]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.util :as util]
             [frontend.ui :as ui]
+            [frontend.components.dnd :as dnd]
             [frontend.components.icon :as icon-component]
-            [clojure.string :as string]
+            [frontend.components.property.util :as components-pu]
             [frontend.handler.notification :as notification]
-            [frontend.components.property.util :as components-pu]))
+            [frontend.handler.property :as property-handler]
+            [frontend.db :as db]
+            [frontend.state :as state]
+            [frontend.handler.property.util :as pu]))
+
+(defn- upsert-enum-item!
+  "Create new enum value and returns its block UUID."
+  [property item]
+  (let [{:keys [block-id tx-data]} (property-handler/upsert-enum-item property item)]
+    (when (seq tx-data) (db/transact! tx-data))
+    block-id))
 
 (rum/defc icon
   [icon {:keys [disabled? on-chosen]}]
@@ -30,11 +41,14 @@
 (rum/defcs enum-item-config < rum/reactive
   shortcut/disable-all-shortcuts
   {:init (fn [state]
-           (let [{:keys [name icon description]} (first (:rum/args state))]
-             (assoc state
-                    ::name (atom (or name ""))
-                    ::icon (atom icon)
-                    ::description (atom (or description "")))))}
+           (let [block (first (:rum/args state))]
+             (let [name (or (:block/content block) "")
+                   icon (pu/get-property block :icon)
+                   description (or (get-in block [:block/schema :description]) "")]
+               (assoc state
+                      ::name (atom name)
+                      ::icon (atom icon)
+                      ::description (atom description)))))}
   [state _item {:keys [toggle-fn on-save]}]
   (let [*name (::name state)
         *icon (::icon state)
@@ -63,10 +77,8 @@
        :on-click (fn [e]
                    (util/stop e)
                    (when-not (string/blank? @*name)
-                     (let [result (when on-save (on-save (string/trim @*name) @*icon @*description))]
-                       (if (= :value-exists result)
-                         (notification/show! (str "Choice already exist") :warning)
-                         (when toggle-fn (toggle-fn)))))))]]))
+                     (when on-save (on-save (string/trim @*name) @*icon @*description))
+                     (when toggle-fn (toggle-fn)))))]]))
 
 (rum/defcs enum-new-item <
   (rum/local "" ::name)
@@ -115,7 +127,7 @@
      {:on-mouse-over #(reset! *hover? true)
       :on-mouse-out #(reset! *hover? false)}
      [:div.flex.flex-row.items-center.gap-2
-      (icon (:icon item)
+      (icon (pu/get-property item :icon)
             {:on-chosen (fn [_e icon]
                           (update-icon icon))})
       [:a {:on-click toggle-fn}
@@ -126,66 +138,49 @@
         (ui/icon "X")])]))
 
 (rum/defc choice-item-content
-  [property item values order *property-schema *property-name dropdown-opts]
-  (let [{:keys [id name]} item]
+  [property block dropdown-opts]
+  (let [{:block/keys [uuid content]} block]
     (ui/dropdown
      (fn [opts]
        (choice-with-close
-        item
-        name
+        block
+        content
         (assoc opts
                :delete-choice
                (fn []
-                 (let [new-values (dissoc values id)
-                       new-order (vec (remove #{id} order))]
-                   (swap! *property-schema assoc :enum-config {:values new-values
-                                                               :order new-order})
-                        ;; FIXME: how to handle block properties with this value?
-                        ;; 1. delete the blocks' property that has this value
-                        ;; 2. update exist values to the default value if exists
-                        ;; 3. soft delete, users can still see it in some existing blocks,
-                        ;;    but they will not see it when adding or updating this property
-                   (components-pu/update-property! property @*property-name @*property-schema)))
+                 (property-handler/delete-enum-item property block))
                :update-icon
                (fn [icon]
-                 (let [new-values (assoc-in values [id :icon] icon)]
-                   (swap! *property-schema assoc :enum-config {:values new-values
-                                                               :order order})
-                   (components-pu/update-property! property @*property-name @*property-schema))))))
+                 (property-handler/update-property! (state/get-current-repo)
+                                                    (pu/get-pid "icon")
+                                                    icon)))))
      (fn [opts]
        (enum-item-config
-        item
+        block
         (assoc opts :on-save
                (fn [name icon description]
-                 (if (some (fn [[vid m]] (and (not= vid id) (= name (:name m)))) values)
-                   :value-exists
-                   (let [new-values (assoc values id {:name name
-                                                      :icon icon
-                                                      :description description})]
-                     (swap! *property-schema assoc :enum-config {:values new-values
-                                                                 :order order})
-                     (components-pu/update-property! property @*property-name @*property-schema)))))))
+                 (upsert-enum-item! property {:id uuid
+                                              :name name
+                                              :description description
+                                              :icon icon})))))
      dropdown-opts)))
 
 (rum/defc enum-choices
-  [property *property-name *property-schema {:keys [values order] :as _config}]
-  (let [dropdown-opts {:modal-class (util/hiccup->class
-                                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}
-        order (if (not= (count order) (count values))
-                (vec (concat order (remove (set order) (keys values))))
-                order)]
+  [property *property-name *property-schema]
+  (let [values (get-in property [:block/schema :enum-config :values])
+        dropdown-opts {:modal-class (util/hiccup->class
+                                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}]
     [:div.enum-choices.flex.flex-col
-     (let [choices (mapv (fn [id]
-                           (let [item (assoc (get values id) :id id)]
+     (let [choices (keep (fn [id]
+                           (when-let [block (db/entity [:block/uuid id])]
                              {:id (str id)
                               :value id
-                              :content (choice-item-content property item values order *property-schema *property-name dropdown-opts)}))
-                         order)]
+                              :content (choice-item-content property block dropdown-opts)}))
+                         values)]
        (dnd/items choices
-                  {:on-drag-end (fn [new-order]
-                                  (when (seq new-order)
-                                    (swap! *property-schema assoc :enum-config {:values values
-                                                                                :order new-order})
+                  {:on-drag-end (fn [new-values]
+                                  (when (seq new-values)
+                                    (swap! *property-schema assoc-in [:enum-config :values] new-values)
                                     (components-pu/update-property! property @*property-name @*property-schema)))}))
      (ui/dropdown
       (fn [{:keys [toggle-fn]}]
@@ -194,14 +189,8 @@
          "Add choice"])
       (fn [opts]
         (enum-new-item (assoc opts :on-save
-                              (fn [name description]
-                                (if (contains? (set (map :name (vals values))) name)
-                                  :value-exists
-                                  (let [id (random-uuid)
-                                        new-values (assoc values id {:name name
-                                                                     :description description})
-                                        new-order (vec (conj order id))]
-                                    (swap! *property-schema assoc :enum-config {:values new-values
-                                                                                :order new-order})
-                                    (components-pu/update-property! property @*property-name @*property-schema)))))))
+                              (fn [name icon description]
+                                (upsert-enum-item! property {:name name
+                                                             :description description
+                                                             :icon icon})))))
       dropdown-opts)]))

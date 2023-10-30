@@ -468,7 +468,7 @@
             (state/set-state! :plugin/active-readme [content item])
             (state/set-sub-modal! (fn [_] (display))))
           (p/catch #(do (js/console.warn %)
-                        (notification/show! "No README content." :warn))))
+                        (notification/show! "No README content." :warning))))
       ;; market
       (state/set-sub-modal! (fn [_] (display repo nil))))))
 

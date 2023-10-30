@@ -133,18 +133,7 @@
    ;; Just for :enum type
    [:enum-config {:optional true}
     [:map
-     [:values
-      [:map-of
-       :uuid [:map
-              [:name :string]
-              [:description :string]
-              [:icon {:optional true}
-               [:map
-                [:id :string]
-                [:name :string]
-                [:type [:enum :tabler-icon :emoji]]]]]]]
-     ;; Optional b/c built-in props don't have it set
-     [:order {:optional true} [:vector :uuid]]]]
+     [:values [:vector :uuid]]]]
    ;; Just for :enum
    [:position {:optional true} :string]
    ;; For :page and :template
@@ -232,6 +221,14 @@
      [:block/tags [:set :int]]]
     block-attrs
     (remove #(= :block/tags (first %)) page-or-block-attrs))))
+
+;; (def enum-value
+;;   "A enum item"
+;;   (vec
+;;    (concat
+;;     [:map]
+;;     [[:block/type [:= #{"enum value"}]]]
+;;     block-attrs)))
 
 (def normal-block
   "A block with content and no special type or tag behavior"

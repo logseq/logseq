@@ -110,6 +110,7 @@
 (rum/defcs ^:large-vars/cleanup-todo property-config <
   shortcut/disable-all-shortcuts
   rum/reactive
+  db-mixins/query
   (rum/local nil ::property-name)
   (rum/local nil ::property-schema)
   {:will-mount (fn [state]
@@ -204,7 +205,7 @@
         [:div.grid.grid-cols-4.gap-1.items-start.leading-8
          [:label.col-span-1 "Enum choices:"]
          [:div.col-span-3
-          (enum/enum-choices property *property-name *property-schema (:enum-config @*property-schema))]]
+          (enum/enum-choices property *property-name *property-schema)]]
 
         nil)
 
@@ -511,7 +512,9 @@
     (db/sub-block (:db/id linked-block))
     (db/sub-block (:db/id block))))
 
-(rum/defc property-cp
+(rum/defc property-cp <
+  rum/reactive
+  db-mixins/query
   [block k v {:keys [inline-text] :as opts}]
   (when (uuid? k)
     (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid k])))]
@@ -576,10 +579,8 @@
        (properties-section block hidden-properties opts))]))
 
 (rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive
-  (rum/local false ::hover?)
   [state target-block edit-input-id {:keys [in-block-container? page-configure? class-schema?] :as opts}]
-  (let [*hover? (::hover? state)
-        block (resolve-linked-block-if-exists target-block)
+  (let [block (resolve-linked-block-if-exists target-block)
         block-properties (:block/properties block)
         properties (if (and class-schema? page-configure?)
                      (let [properties (:properties (:block/schema block))]
@@ -640,15 +641,12 @@
                                 (recur (rest classes)
                                        (set/union properties (set cur-properties))
                                        (conj result [class cur-properties])))
-                              result))
-        opts (assoc opts :hover? @*hover?)]
+                              result))]
     (when-not (and (empty? block-own-properties)
                    (empty? class->properties)
                    (not new-property?)
                    (not (:page-configure? opts)))
-      [:div.ls-properties-area (cond->
-                                {:on-mouse-over #(reset! *hover? true)
-                                 :on-mouse-out #(reset! *hover? false)}
+      [:div.ls-properties-area (cond-> {}
                                  (:selected? opts)
                                  (assoc :class "select-none"))
        (properties-section block (if class-schema? properties own-properties) opts)

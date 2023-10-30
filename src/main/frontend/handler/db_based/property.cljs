@@ -223,10 +223,7 @@
                                       new-value)
                           block-properties (assoc properties property-uuid new-value)
                           refs (outliner-core/rebuild-block-refs block
-                                                                 block-properties
-                                                                 ;; enum values aren't actually blocks and shouldn't
-                                                                 ;; be referenced because they create garbage unknown blocks
-                                                                 :no-property-values? (= :enum property-type))]
+                                                                 block-properties)]
                       (db/transact! repo
                                     [[:db/retract (:db/id block) :block/refs]
                                      {:block/uuid (:block/uuid block)
