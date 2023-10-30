@@ -44,6 +44,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.export.common :as export-common-handler]
@@ -530,15 +531,14 @@
              (state/get-left-sidebar-open?))
     (ui-handler/close-left-sidebar!)))
 
-(rum/defcs page-inner <
-  (rum/local false ::mouse-down?)
+(rum/defc page-inner
   "The inner div of page reference component
 
    page-name-in-block is the overridable name of the page (legacy)
 
    All page-names are sanitized except page-name-in-block"
-  [state config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?]
-  (let [*mouse-down? (::mouse-down? state)
+  [config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?]
+  (let [[mouse-down? set-mouse-down!] (rum/use-state false) ;; avoid click event after drag
         tag? (:tag? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
         untitled? (model/untitled-page? page-name)]
@@ -551,11 +551,17 @@
       :data-ref page-name
       :draggable true
       :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name-in-block e))
-      :on-mouse-down (fn [_e] (reset! *mouse-down? true))
+      :on-mouse-down #(set-mouse-down! true)
       :on-mouse-up (fn [e]
-                     (when @*mouse-down?
-                       (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)
-                       (reset! *mouse-down? false)))
+                     (when mouse-down?
+                       ;; when page-entity is nil and page name is journal page(not the current format),
+                       ;; convert title then redirect
+                       (let [redirect-page-name (or (and (nil? page-entity)
+                                                         (date/journal-title->custom-format page-name))
+                                                    redirect-page-name)
+                             redirect-page-name (string/lower-case redirect-page-name)]
+                         (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?))
+                       (set-mouse-down! false)))
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
                            (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)))}
 
