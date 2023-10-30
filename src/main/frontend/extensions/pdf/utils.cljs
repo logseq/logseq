@@ -73,8 +73,9 @@
     (js-utils/scrollToHighlight viewer js-hl)))
 
 (defn zoom-in-viewer
-  [^js viewer]
-  (let [cur-scale (.-currentScale viewer)]
+  [^js viewer] 
+  (js/console.log "zoom-in-viewer")
+  (let [cur-scale (.-currentScale viewer)] 
     (when (< cur-scale MAX-SCALE)
       (let [new-scale (.toFixed (* cur-scale DELTA_SCALE) 2)
             new-scale (/ (js/Math.ceil (* new-scale 10)) 10)

@@ -16,7 +16,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [medley.core :as medley]
-            [promesa.core :as p]
+            [promesa.core :as p] 
             [rum.core :as rum]))
 
 (declare pdf-container system-embed-playground)
@@ -464,6 +464,29 @@
                                     (set-end! (calc-coords! (.-pageX e) (.-pageY e))))
                                   [])]
 
+  ;; zoom using touchpad
+  (rum/use-effect!
+   (fn []
+     (when-let [^js/HTMLElement root cnt-el]
+       (let [fn-wheel (fn [^js/WheelEvent e] 
+                          (let [delta (or (.-deltaY e) (.-detail e) (.-wheelDelta e))]
+                            ;; to exclude horizontal scrolling
+                            (when (not (integer? delta)) 
+                             (util/debounce
+                             2000 (if (> delta 0)
+                                         ((partial pdf-utils/zoom-out-viewer viewer))
+                                         ((partial pdf-utils/zoom-in-viewer viewer)))
+                                       )
+                              ))
+                          )]
+         (doto root
+           (.addEventListener "wheel" fn-wheel))
+
+         ;; destroy
+         #(doto root
+            (.removeEventListener "wheel" fn-wheel)))))
+   [])
+    
     (rum/use-effect!
       (fn []
         (when-let [^js/HTMLElement root cnt-el]
