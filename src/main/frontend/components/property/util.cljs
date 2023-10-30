@@ -3,7 +3,7 @@
   (:require [frontend.state :as state]
             [frontend.handler.property :as property-handler]))
 
-(defn- update-property!
+(defn update-property!
   [property property-name property-schema]
   (property-handler/update-property!
    (state/get-current-repo)
