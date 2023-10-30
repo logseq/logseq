@@ -74,7 +74,6 @@
 
 (defn zoom-in-viewer
   [^js viewer] 
-  (js/console.log "zoom-in-viewer")
   (let [cur-scale (.-currentScale viewer)] 
     (when (< cur-scale MAX-SCALE)
       (let [new-scale (.toFixed (* cur-scale DELTA_SCALE) 2)

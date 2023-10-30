@@ -16,7 +16,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [medley.core :as medley]
-            [promesa.core :as p] 
+            [promesa.core :as p]
             [rum.core :as rum]))
 
 (declare pdf-container system-embed-playground)
