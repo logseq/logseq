@@ -174,7 +174,8 @@
   (vec
    (concat
     [:map
-     [:block/metadata
+     ;; hidden pages for enum values don't have this
+     [:block/metadata {:optional true}
       [:map
        [:source-page-id :uuid]]]]
     page-attrs
@@ -193,6 +194,7 @@
   [[:block/content :string]
    [:block/left :int]
    [:block/parent :int]
+   ;; Created when blocks are used for property values
    [:block/metadata {:optional true}
     [:map
      [:created-from-block :uuid]
@@ -222,13 +224,20 @@
     block-attrs
     (remove #(= :block/tags (first %)) page-or-block-attrs))))
 
-;; (def enum-value
-;;   "A enum item"
-;;   (vec
-;;    (concat
-;;     [:map]
-;;     [[:block/type [:= #{"enum value"}]]]
-;;     block-attrs)))
+(def enum-block
+  "An enum value for enum property"
+  (vec
+   (concat
+    [:map]
+    [[:block/type [:= #{"enum value"}]]
+     [:block/schema {:optional true}
+      [:map
+       [:description :string]]]
+     [:block/metadata
+      [:map
+       [:created-from-property :uuid]]]]
+    (remove #(= :block/metadata (first %)) block-attrs)
+    page-or-block-attrs)))
 
 (def normal-block
   "A block with content and no special type or tag behavior"
@@ -242,7 +251,8 @@
   "A block has content and a page"
   [:or
    normal-block
-   object-block])
+   object-block
+   enum-block])
 
 ;; TODO: invalid macros should not generate unknown
 (def unknown-block

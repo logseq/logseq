@@ -5,7 +5,7 @@
   graph and current limitations"
   (:require [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.tasks.db-graph.persist-graph :as persist-graph]
+            [logseq.outliner.cli.persist-graph :as persist-graph]
             [logseq.db :as ldb]
             [clojure.string :as string]
             [datascript.core :as d]
