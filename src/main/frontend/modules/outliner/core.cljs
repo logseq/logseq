@@ -202,7 +202,8 @@
                                              :else
                                              nil))))
         property-refs (->> (concat property-key-refs property-value-refs)
-                           (map (fn [id-or-map] (if (uuid? id-or-map) {:block/uuid id-or-map} id-or-map))))
+                           (map (fn [id-or-map] (if (uuid? id-or-map) {:block/uuid id-or-map} id-or-map)))
+                           (remove (fn [b] (nil? (db/entity [:block/uuid (:block/uuid b)])))))
         content-refs (when-not skip-content-parsing?
                        (some-> (:block/content block) block/extract-refs-from-text))]
     (concat property-refs content-refs)))
