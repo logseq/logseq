@@ -476,25 +476,25 @@
           )
          [viewer])]
         
-  ;; zoom using touchpad
-  (rum/use-effect!
-   (fn []
-     (when-let [^js/HTMLElement root cnt-el]
-       (let [fn-wheel (fn [^js/WheelEvent e] 
+    ;; zoom using touchpad  
+    (rum/use-effect! 
+     (fn [] 
+       (when-let [^js/HTMLElement root cnt-el] 
+         (let [fn-wheel (fn [^js/WheelEvent e]  
                           (let [delta (or (.-deltaY e) (.-detail e) (.-wheelDelta e))]
-                            ;; to exclude horizontal scrolling
-                            (when (not (integer? delta))
+                            ;; to exclude horizontal scrolling 
+                            (when (not (integer? delta)) 
                               (p/do! (zoom-viewer! delta))
                               ))
-                          )]
-         (doto root
-           (.addEventListener "wheel" fn-wheel))
-
-         ;; destroy
-         #(doto root
-            (.removeEventListener "wheel" fn-wheel)))))
-   [zoom-viewer!])
-  )
+                          )] 
+           (doto root 
+             (.addEventListener "wheel" fn-wheel))
+           
+           ;; destroy 
+           #(doto root 
+              (.removeEventListener "wheel" fn-wheel))))) 
+     [zoom-viewer!])
+    )
     
     (rum/use-effect!
       (fn []
