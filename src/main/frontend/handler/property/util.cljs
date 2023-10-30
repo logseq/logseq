@@ -75,11 +75,6 @@
         (swap! *db-built-in-properties assoc repo built-in-properties)))
     (set/subset? (set properties) (get @*db-built-in-properties repo))))
 
-(defn enum-value
-  "Given an enum ent and the value's uuid, return the value's string"
-  [ent value-uuid]
-  (get-in ent [:block/schema :enum-config :values value-uuid :name]))
-
 (defn readable-properties
   "Given a DB graph's properties, returns a readable properties map with keys as
   property names and property values dereferenced where possible. A property's
@@ -92,6 +87,6 @@
                      :block/name
                      keyword)
                  (if (= :enum (get-in prop-ent [:block/schema :type]))
-                   (enum-value prop-ent v)
+                   (:block/content (db/entity [:block/uuid v]))
                    v)])))
        (into {})))

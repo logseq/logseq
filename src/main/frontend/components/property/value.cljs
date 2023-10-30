@@ -330,13 +330,16 @@
         type (:type schema)
         enum? (= :enum type)
         items (if enum?
-                (map (fn [[id {:keys [name icon]}]]
-                       {:label (if icon
-                                 [:div.flex.flex-row.gap-2
-                                  (icon-component/icon icon)
-                                  name]
-                                 name)
-                        :value id}) (get-in schema [:enum-config :values]))
+                (keep (fn [id]
+                        (when-let [block (when id (db/entity [:block/uuid id]))]
+                          (let [icon (pu/get-property block :icon)
+                                name (:block/content block)]
+                            {:label (if icon
+                                      [:div.flex.flex-row.gap-2
+                                       (icon-component/icon icon)
+                                       name]
+                                      name)
+                             :value id}))) (get-in schema [:enum-config :values]))
                 (->> (model/get-block-property-values (:block/uuid property))
                      (mapcat (fn [[_id value]]
                                (if (coll? value)
@@ -369,8 +372,8 @@
                                             (exit-edit-property)
                                             (when-let [f (:on-chosen opts)] (f)))
                                  :on-click (fn []
-                                          (when *show-new-property-config?
-                                            (reset! *show-new-property-config? false)))
+                                             (when *show-new-property-config?
+                                               (reset! *show-new-property-config? false)))
                                  :on-key-down
                                  (fn [e]
                                    (case (util/ekey e)
@@ -433,7 +436,7 @@
       invalid-warning)))
 
 (rum/defc select-item
-  [property type value {:keys [page-cp inline-text]}]
+  [type value {:keys [page-cp inline-text]}]
   (case type
     (:page :date)
     (when-let [page (db/entity [:block/uuid value])]
@@ -444,10 +447,11 @@
     [:span.number (str value)]
 
     :enum
-    (let [value (get-in (:block/schema property) [:enum-config :values value])]
-      (if-let [icon (:icon value)]
-        (icon-component/icon icon)
-        (:name value)))
+    (when-let [block (when value (db/entity [:block/uuid value]))]
+      (let [name (:block/content block)]
+        (if-let [icon (pu/get-property block :icon)]
+          (icon-component/icon icon)
+          name)))
 
     (inline-text {} :markdown (str value))))
 
@@ -506,7 +510,7 @@
     (if (and select-type? (not= type :date))
       (single-value-select block property value
                            (fn []
-                             (select-item property type value opts))
+                             (select-item type value opts))
                            select-opts
                            opts)
       (case type
@@ -589,7 +593,7 @@
                     (if (seq items)
                       (concat
                        (for [item items]
-                         (select-item property type item opts))
+                         (select-item type item opts))
                        (when date?
                          [(date-picker block property nil {:toggle-fn toggle-fn})]))
                       (when-not editing? [:div.opacity-50.pointer.text-sm "Empty"])))
