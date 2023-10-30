@@ -62,9 +62,8 @@
     (route-handler/redirect-to-page! (date/js-date->journal-title value))))
 
 (rum/defc date-picker
-  [block property value opts]
-  (let [multiple-values? (= :many (:cardinality (:block/schema property)))
-        title (when (uuid? value)
+  [value {:keys [multiple-values? on-change] :as opts}]
+  (let [title (when (uuid? value)
                 (:block/original-name (db/entity [:block/uuid value])))
         value (if title
                 (js/Date. (date/journal-title->long title))
@@ -93,21 +92,32 @@
          (when-not title (ui/icon "calendar" {:size 15}))]])
      (fn [{:keys [toggle-fn]}]
        (ui/datepicker value' {:on-change (fn [_e date]
-                                           (let [repo (state/get-current-repo)
-                                                 journal (date/js-date->journal-title date)]
+                                           (let [journal (date/js-date->journal-title date)]
                                              (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
                                                (page-handler/create! journal {:redirect? false
                                                                               :create-first-block? false}))
-                                             (when-let [page (db/entity [:block/name (util/page-name-sanity-lc journal)])]
-                                               (property-handler/set-block-property! repo (:block/uuid block)
-                                                                                     (:block/name property)
-                                                                                     (:block/uuid page)))
+                                             (when (fn? on-change)
+                                               (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
                                              (exit-edit-property)
                                              (toggle-fn)
                                              (when-let [toggle (:toggle-fn opts)]
                                                (toggle))))}))
      {:modal-class (util/hiccup->class
                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})))
+
+
+(rum/defc property-value-date-picker
+  [block property value opts]
+  (let [multiple-values? (= :many (:cardinality (:block/schema property)))]
+    (date-picker value
+                 (merge opts
+                        {:multiple-values? multiple-values?
+                         :on-change (fn [page]
+                                      (let [repo (state/get-current-repo)]
+                                        (property-handler/set-block-property! repo (:block/uuid block)
+                                                                              (:block/name property)
+                                                                              (:block/uuid page))
+                                        (exit-edit-property)))}))))
 
 (defn- create-page-if-not-exists!
   [property classes page]
@@ -333,12 +343,13 @@
                 (keep (fn [id]
                         (when-let [block (when id (db/entity [:block/uuid id]))]
                           (let [icon (pu/get-property block :icon)
-                                name (:block/content block)]
+                                value (or (:block/original-name block)
+                                          (get-in block [:block/schema :value]))]
                             {:label (if icon
                                       [:div.flex.flex-row.gap-2
                                        (icon-component/icon icon)
-                                       name]
-                                      name)
+                                       value]
+                                      value)
                              :value id}))) (get-in schema [:enum-config :values]))
                 (->> (model/get-block-property-values (:block/uuid property))
                      (mapcat (fn [[_id value]]
@@ -448,10 +459,18 @@
 
     :enum
     (when-let [block (when value (db/entity [:block/uuid value]))]
-      (let [name (:block/content block)]
-        (if-let [icon (pu/get-property block :icon)]
+      (let [value' (get-in block [:block/schema :value])
+            icon (pu/get-property block :icon)]
+        (cond
+          (:block/name block)
+          (page-cp {:disable-preview? true
+                    :hide-close-button? true} block)
+
+          icon
           (icon-component/icon icon)
-          name)))
+
+          :else
+          value')))
 
     (inline-text {} :markdown (str value))))
 
@@ -515,7 +534,7 @@
                            opts)
       (case type
         :date
-        (date-picker block property value nil)
+        (property-value-date-picker block property value nil)
 
         :checkbox
         (let [add-property! (fn []
@@ -595,7 +614,7 @@
                        (for [item items]
                          (select-item type item opts))
                        (when date?
-                         [(date-picker block property nil {:toggle-fn toggle-fn})]))
+                         [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
                       (when-not editing? [:div.opacity-50.pointer.text-sm "Empty"])))
         select-cp (fn []
                     (let [select-opts {:multiple-choices? true
@@ -627,21 +646,23 @@
 
 (rum/defc property-value < rum/reactive
   [block property v opts]
-  (let [dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
-        editor-id (str dom-id "-editor")
-        schema (:block/schema property)
-        multiple-values? (= :many (:cardinality schema))
-        editor-args {:block property
-                     :parent-block block
-                     :format :markdown}]
-    (cond
-      multiple-values?
-      (multiple-values block property v opts schema)
+  (ui/catch-error
+   (ui/block-error "Something wrong" {})
+   (let [dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
+         editor-id (str dom-id "-editor")
+         schema (:block/schema property)
+         multiple-values? (= :many (:cardinality schema))
+         editor-args {:block property
+                      :parent-block block
+                      :format :markdown}]
+     (cond
+       multiple-values?
+       (multiple-values block property v opts schema)
 
-      :else
-      (property-scalar-value block property v
-                             (merge
-                              opts
-                              {:editor-args editor-args
-                               :editor-id editor-id
-                               :dom-id dom-id})))))
+       :else
+       (property-scalar-value block property v
+                              (merge
+                               opts
+                               {:editor-args editor-args
+                                :editor-id editor-id
+                                :dom-id dom-id}))))))

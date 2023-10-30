@@ -241,26 +241,51 @@
      :blocks [new-block]}))
 
 (defn upsert-enum-item
-  [property {:keys [id name icon description]}]
+  "id should be a block UUID or nil"
+  [property {:keys [id value icon description]}]
+  (assert (or (nil? id) (uuid? id)))
   (when (= :enum (get-in property [:block/schema :type]))
     (let [icon-id (pu/get-pid "icon")
-          name (string/trim name)
+          value (if (string? value) (string/trim value) value)
           property-schema (:block/schema property)
-          enum-values (get-in property-schema [:enum-config :values])
+          enum-config (:enum-config property-schema)
+          enum-values (:values enum-config)
+          enum-type (:type enum-config)
           block-values (map (fn [id] (db/entity [:block/uuid id])) enum-values)
           icon (when-not (and (string? icon) (string/blank? icon)) icon)
           description (string/trim description)
-          description (when-not (string/blank? description) description)]
-      (if (some (fn [b] (and (= name (:block/content b))
-                             (not= id (:block/uuid b)))) block-values)
-        (notification/show! "Choice exists already." :warning)
-        (let [block (when id (db/entity [:block/uuid id]))
-              block-id (or id (db/new-block-id))
+          description (when-not (string/blank? description) description)
+          resolved-value (try
+                           (db-property-handler/convert-property-input-string (or enum-type :default) value)
+                           (catch :default e
+                             (js/console.error e)
+                             (notification/show! (str e) :error false)
+                             nil))
+          block (when id (db/entity [:block/uuid id]))
+          value-block (when (uuid? value) (db/entity [:block/uuid value]))]
+      (cond
+        (and enum-type (nil? resolved-value))
+        nil
+
+        (some (fn [b] (and (= resolved-value (get-in b [:block/metadata :value]))
+                           (not= id (:block/uuid b)))) block-values)
+        (do
+          (notification/show! "Choice already exists" :warning)
+          :value-exists)
+
+        (:block/name value-block)             ; page
+        (let [new-values (vec (conj enum-values value))]
+          {:block-id value
+           :tx-data [{:db/id (:db/id property)
+                      :block/schema (assoc-in property-schema [:enum-config :values] new-values)}]})
+
+        :else
+        (let [block-id (or id (db/new-block-id))
               tx-data (if block
                         [(let [properties (:block/properties block)
-                               schema (:block/schema block)]
+                               schema (assoc (:block/schema block)
+                                             :value resolved-value)]
                            {:block/uuid id
-                            :block/content name
                             :block/properties (if icon
                                                 (assoc properties icon-id icon)
                                                 (dissoc properties icon-id))
@@ -279,10 +304,9 @@
                               new-block (cond->
                                          {:block/type #{"enum value"}
                                           :block/uuid block-id
-                                          :block/format :markdown
-                                          :block/content name
                                           :block/page page-id
                                           :block/metadata metadata
+                                          :block/schema {:value resolved-value}
                                           :block/parent page-id
                                           :block/left (or (when page-entity (model/get-block-last-direct-child (db/get-db) (:db/id page-entity)))
                                                           page-id)}
@@ -290,14 +314,14 @@
                                           (assoc :block/properties {icon-id icon})
 
                                           description
-                                          (assoc :block/schema {:description description})
+                                          (update :block/schema assoc :description description)
 
                                           true
                                           outliner-core/block-with-timestamps)
                               new-values (vec (conj enum-values block-id))]
                           (->> (cons page-tx [new-block
                                               {:db/id (:db/id property)
-                                               :block/schema (assoc property-schema :enum-config {:values new-values})}])
+                                               :block/schema (assoc-in property-schema [:enum-config :values] new-values)}])
                                (remove nil?))))]
           {:block-id block-id
            :tx-data tx-data})))))

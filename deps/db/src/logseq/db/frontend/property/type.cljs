@@ -10,6 +10,12 @@
   "Valid schema :type for users in order they appear in the UI"
   [:default :number :date :checkbox :url :page :template :enum])
 
+(def enum-schema-types
+  "Valid schema :type for enum property"
+  ;; [:default :number :date :url :page]
+  [:default :number :date :url]         ; TODO: add :page support
+  )
+
 ;; TODO:
 ;; Validate && list fixes for non-validated values when updating property schema
 

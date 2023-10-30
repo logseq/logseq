@@ -88,6 +88,6 @@
                      :block/name
                      keyword)
                  (if (= :enum (get-in prop-ent [:block/schema :type]))
-                   (:block/content (db/entity [:block/uuid v]))
+                   (get-in (db/entity [:block/uuid v]) [:block/schema :value])
                    v)])))
        (into {})))

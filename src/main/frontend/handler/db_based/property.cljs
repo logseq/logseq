@@ -1,7 +1,6 @@
 (ns frontend.handler.db-based.property
   "Properties handler for db graphs"
-  (:require [clojure.edn :as edn]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.notification :as notification]
@@ -30,12 +29,24 @@
                  [property-type property-val-schema]))
              db-property-type/builtin-schema-types)))
 
+(defn- fail-parse-long
+  [v-str]
+  (let [result (parse-long v-str)]
+    (or result
+        (throw (js/Error. (str "Can't convert \"" v-str "\" to a number"))))))
+
+(defn- fail-parse-double
+  [v-str]
+  (let [result (parse-double v-str)]
+    (or result
+        (throw (js/Error. (str "Can't convert \"" v-str "\" to a number"))))))
+
 (defn- infer-schema-from-input-string
   [v-str]
   (try
     (cond
-      (parse-long v-str) :number
-      (parse-double v-str) :number
+      (fail-parse-long v-str) :number
+      (fail-parse-double v-str) :number
       (util/uuid-string? v-str) :page
       (gp-util/url? v-str) :url
       (contains? #{"true" "false"} (string/lower-case v-str)) :checkbox
@@ -52,7 +63,7 @@
       (if (util/uuid-string? v-str) (uuid v-str) v-str)
 
       :number
-      (edn/read-string v-str)
+      (fail-parse-double v-str)
 
       :page
       (uuid v-str)

@@ -27,7 +27,7 @@
             [frontend.components.dnd :as dnd]
             [dommy.core :as dom]
             [frontend.components.property.enum :as enum]
-            [frontend.components.property.util :as components-pu]))
+            [frontend.components.property.util :as pu-component]))
 
 (def icon enum/icon)
 
@@ -134,7 +134,7 @@
                          add-new-property?)
         class? (contains? (:block/type block) "class")
         property-type (get-in property [:block/schema :type])
-        save-property-fn (fn [] (components-pu/update-property! property @*property-name @*property-schema))]
+        save-property-fn (fn [] (pu-component/update-property! property @*property-name @*property-schema))]
     [:div.property-configure.flex.flex-1.flex-col
      {:on-mouse-down #(state/set-state! :editor/mouse-down-from-property-configure? true)
       :on-mouse-up #(state/set-state! :editor/mouse-down-from-property-configure? nil)}
@@ -180,7 +180,28 @@
                        (fn [_e v]
                          (let [type (keyword (string/lower-case v))]
                            (swap! *property-schema assoc :type type)
-                           (components-pu/update-property! property @*property-name @*property-schema)))))])]
+                           (pu-component/update-property! property @*property-name @*property-schema)))))])]
+
+      (when (= :enum (:type @*property-schema))
+        [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+         [:label.col-span-1 "Enum schema:"]
+         [:div.col-span-3
+          (let [enum-type (get-in property [:block/schema :enum-config :type])]
+            (if enum-type
+              (property-type-label enum-type)
+              (let [schema-types (->> db-property-type/enum-schema-types
+                                      (map (fn [type]
+                                             {:label (property-type-label type)
+                                              :disabled disabled?
+                                              :value type
+                                              :selected (= type (:type @*property-schema))})))]
+                (ui/select schema-types
+                           (fn [_e v]
+                             (let [type (keyword (string/lower-case v))
+                                   schema (:block/schema property)]
+                               (swap! *property-schema assoc-in [:enum-config :type] type)
+                               (db/transact! [{:db/id (:db/id property)
+                                               :block/schema (assoc-in schema [:enum-config :type] type)}])))))))]])
 
       (case (:type @*property-schema)
         :page
@@ -223,7 +244,7 @@
                         ;; {:label "Ending of the block"
                         ;;  :value "block-ending"}
                         ])]
-          [:div.grid.grid-cols-4.gap-1.items-start.leading-8
+          [:div.grid.grid-cols-4.gap-1.items-center.leading-8
            [:label.col-span-1 "UI position:"]
            [:div.col-span-3
             (ui/select choices

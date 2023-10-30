@@ -307,14 +307,14 @@
             truncate-blocks-tx-data (mapv
                                      (fn [block]
                                        [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
-                                     blocks)]
-        (if-let [msg (and (config/db-based-graph? repo)
-                          (page-unable-to-delete repo page))]
+                                     blocks)
+            db-based? (config/db-based-graph? repo)]
+        (if-let [msg (and db-based? (page-unable-to-delete repo page))]
           (do
             (db/transact! repo truncate-blocks-tx-data
-              {:outliner-op :delete-page :persist-op? persist-op?})
+                          {:outliner-op :delete-page :persist-op? persist-op?})
             (error-handler msg))
-          (let [_ (delete-file! repo page-name delete-file?)
+          (let [_ (when-not db-based? (delete-file! repo page-name delete-file?))
                 ;; if other page alias this pagename,
                 ;; then just remove some attrs of this entity instead of retractEntity
                 delete-page-tx (cond
