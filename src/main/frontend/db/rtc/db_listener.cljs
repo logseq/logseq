@@ -151,12 +151,11 @@
                  ;; another check on the value of this atom to ensure no 2-go-threads running for same value
                  (when-let [n (seq @r)]
                    (reset! r [])
-                   (prn ::n n)
                    (doseq [{:keys [ops repo]} n]
                      (prn ::add-ops ops)
                      (<! (op/<add-ops! repo ops))))))))
 
-(defn- generate-rtc-ops
+(defn generate-rtc-ops
   [repo db-before db-after datoms]
   (let [same-entity-datoms-coll (->> datoms
                                      (map vec)
@@ -164,8 +163,7 @@
                                      vals)
         ops (mapcat (partial entity-datoms=>ops repo db-before db-after) same-entity-datoms-coll)]
     (when (seq ops)
-      (swap! *ops-pending-to-store conj {:ops ops :repo repo})
-      (prn :*ops-pending-to-store  @*ops-pending-to-store))))
+      (swap! *ops-pending-to-store conj {:ops ops :repo repo}))))
 
 
 (defn listen-db-to-generate-ops

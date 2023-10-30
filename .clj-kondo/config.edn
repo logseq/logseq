@@ -162,6 +162,7 @@
            ;; src/test
            frontend.test.helper/deftest-async clojure.test/deftest
            frontend.test.helper/with-reset cljs.test/async
+           frontend.db.rtc.idb-keyval-mock/with-reset-idb-keyval-mock cljs.test/async
            frontend.react/defc clojure.core/defn}
  :skip-comments true
  :output {:progress true}}

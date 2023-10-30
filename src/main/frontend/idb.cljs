@@ -1,6 +1,6 @@
 (ns frontend.idb
   "This system component provides indexedDB functionality"
-  (:require ["/frontend/idbkv" :as idb-keyval :refer [Store]]
+  (:require ["/frontend/idbkv" :as idb-keyval]
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.storage :as storage]
@@ -11,7 +11,6 @@
 ;; offline db
 
 ;; To maintain backward compatibility
-
 
 (defonce store (atom nil))
 
@@ -81,4 +80,4 @@
 (defn start
   "This component's only responsibility is to create a Store object"
   []
-  (reset! store (Store. "localforage" "keyvaluepairs" 2)))
+  (reset! store (idb-keyval/newStore "localforage" "keyvaluepairs" 2)))
