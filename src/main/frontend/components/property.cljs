@@ -546,7 +546,10 @@
              (if @*show-new-property-config?
                (ui/dropdown
                 (fn [_opts]
-                  (pv/property-value entity property @*property-value (assoc opts :editing? true)))
+                  (pv/property-value entity property @*property-value
+                                     (assoc opts
+                                            :editing? true
+                                            :*show-new-property-config? *show-new-property-config?)))
                 (fn [{:keys [toggle-fn]}]
                   [:div.p-6
                    (property-config entity property (merge opts {:toggle-fn toggle-fn

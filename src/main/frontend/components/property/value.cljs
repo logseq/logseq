@@ -154,7 +154,9 @@
                           k f'))))
 
 (defn- select-page
-  [block property {:keys [classes multiple-choices? dropdown?] :as opts}]
+  [block property
+   {:keys [classes multiple-choices? dropdown?] :as opts}
+   {:keys [*show-new-property-config?]}]
   (let [repo (state/get-current-repo)
         tags? (= "tags" (:block/name property))
         alias? (= "alias" (:block/name property))
@@ -216,6 +218,9 @@
                :input-opts (fn [_]
                              {:on-blur (fn []
                                          (exit-edit-property))
+                              :on-click (fn []
+                                          (when *show-new-property-config?
+                                            (reset! *show-new-property-config? false)))
                               :on-key-down
                               (fn [e]
                                 (case (util/ekey e)
@@ -317,7 +322,9 @@
            nil))))})
 
 (rum/defc select < rum/reactive
-  [block property {:keys [multiple-choices? dropdown?] :as opts}]
+  [block property
+   {:keys [multiple-choices? dropdown?] :as opts}
+   {:keys [*show-new-property-config?]}]
   (let [schema (:block/schema property)
         property (db/sub-block (:db/id property))
         type (:type schema)
@@ -359,14 +366,17 @@
                   :extract-chosen-fn :value
                   :input-opts (fn [_]
                                 {:on-blur (fn []
-                                            (exit-edit-property false)
+                                            (exit-edit-property)
                                             (when-let [f (:on-chosen opts)] (f)))
+                                 :on-click (fn []
+                                          (when *show-new-property-config?
+                                            (reset! *show-new-property-config? false)))
                                  :on-key-down
                                  (fn [e]
                                    (case (util/ekey e)
                                      "Escape"
                                      (do
-                                       (exit-edit-property false)
+                                       (exit-edit-property)
                                        (when-let [f (:on-chosen opts)] (f)))
                                      nil))})}
                   enum?
@@ -442,7 +452,7 @@
     (inline-text {} :markdown (str value))))
 
 (rum/defc single-value-select
-  [block property value value-f select-opts {:keys [editing?]}]
+  [block property value value-f select-opts {:keys [editing?] :as opts}]
   (let [schema (:block/schema property)
         type (get schema :type :default)
         select-opts' (cond-> (assoc select-opts
@@ -454,10 +464,10 @@
                    [:div.property-select (cond-> {} editing? (assoc :class "h-6"))
                     (case type
                       (:number :url :date :enum)
-                      (select block property select-opts')
+                      (select block property select-opts' opts)
 
                       :page
-                      (select-page block property select-opts'))])
+                      (select-page block property select-opts' opts))])
         dropdown-opts {:modal-class (util/hiccup->class
                                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")
                        :initial-open? editing?}]
@@ -590,9 +600,11 @@
                                                     (when on-chosen (on-chosen)))}]
                       [:div.property-select (cond-> {} editing? (assoc :class "h-6"))
                        (if (= :page type)
-                         (select-page block property (assoc select-opts
-                                                            :classes (:classes schema)))
-                         (select block property select-opts))]))]
+                         (select-page block property
+                                      (assoc select-opts
+                                             :classes (:classes schema))
+                                      opts)
+                         (select block property select-opts opts))]))]
     (if (and dropdown? (not editing?))
       (ui/dropdown
        (fn [{:keys [toggle-fn]}]
