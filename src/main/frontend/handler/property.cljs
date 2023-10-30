@@ -4,6 +4,7 @@
             [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.file-based.page-property :as file-page-property]
             [frontend.handler.notification :as notification]
+            [logseq.db.frontend.property.type :as db-property-type]
             [frontend.config :as config]
             [frontend.util :as util]
             [frontend.state :as state]
@@ -150,21 +151,20 @@
      :all-classes all-classes           ; block own classes + parent classes
      :classes-properties all-properties}))
 
-(defn enum-other-position?
+(defn closed-value-other-position?
   [property-id block-properties]
   (and
    (some? (get block-properties property-id))
    (let [schema (:block/schema (db/entity [:block/uuid property-id]))]
-     (and (= :enum (:type schema))
-          (= (:position schema) "block-beginning")))))
+     (= (:position schema) "block-beginning"))))
 
-(defn get-block-enum-other-position-properties
+(defn get-block-other-position-properties
   [eid]
   (let [block (db/entity eid)
         own-properties (keys (:block/properties block))]
     (->> (:classes-properties (get-block-classes-properties eid))
          (concat own-properties)
-         (filter (fn [id] (enum-other-position? id (:block/properties block))))
+         (filter (fn [id] (closed-value-other-position? id (:block/properties block))))
          (distinct))))
 
 (defn block-has-viewable-properties?
@@ -240,23 +240,21 @@
     {:page page-tx
      :blocks [new-block]}))
 
-(defn upsert-enum-item
+(defn upsert-closed-value
   "id should be a block UUID or nil"
   [property {:keys [id value icon description]}]
   (assert (or (nil? id) (uuid? id)))
-  (when (= :enum (get-in property [:block/schema :type]))
+  (when (contains? db-property-type/closed-values-schema-types (get-in property [:block/schema :type] :default))
     (let [icon-id (pu/get-pid "icon")
           value (if (string? value) (string/trim value) value)
           property-schema (:block/schema property)
-          enum-config (:enum-config property-schema)
-          enum-values (:values enum-config)
-          enum-type (:type enum-config)
-          block-values (map (fn [id] (db/entity [:block/uuid id])) enum-values)
+          closed-values (:values property-schema)
+          block-values (map (fn [id] (db/entity [:block/uuid id])) closed-values)
           icon (when-not (and (string? icon) (string/blank? icon)) icon)
           description (string/trim description)
           description (when-not (string/blank? description) description)
           resolved-value (try
-                           (db-property-handler/convert-property-input-string (or enum-type :default) value)
+                           (db-property-handler/convert-property-input-string (:type property-schema) value)
                            (catch :default e
                              (js/console.error e)
                              (notification/show! (str e) :error false)
@@ -264,7 +262,7 @@
           block (when id (db/entity [:block/uuid id]))
           value-block (when (uuid? value) (db/entity [:block/uuid value]))]
       (cond
-        (and enum-type (nil? resolved-value))
+        (nil? resolved-value)
         nil
 
         (some (fn [b] (and (= resolved-value (get-in b [:block/metadata :value]))
@@ -274,10 +272,10 @@
           :value-exists)
 
         (:block/name value-block)             ; page
-        (let [new-values (vec (conj enum-values value))]
+        (let [new-values (vec (conj closed-values value))]
           {:block-id value
            :tx-data [{:db/id (:db/id property)
-                      :block/schema (assoc-in property-schema [:enum-config :values] new-values)}]})
+                      :block/schema (assoc property-schema :values new-values)}]})
 
         :else
         (let [block-id (or id (db/new-block-id))
@@ -302,7 +300,7 @@
                               page-id [:block/uuid (:block/uuid page)]
                               metadata {:created-from-property (:block/uuid property)}
                               new-block (cond->
-                                         {:block/type #{"enum value"}
+                                         {:block/type #{"closed value"}
                                           :block/uuid block-id
                                           :block/page page-id
                                           :block/metadata metadata
@@ -318,24 +316,24 @@
 
                                           true
                                           outliner-core/block-with-timestamps)
-                              new-values (vec (conj enum-values block-id))]
+                              new-values (vec (conj closed-values block-id))]
                           (->> (cons page-tx [new-block
                                               {:db/id (:db/id property)
-                                               :block/schema (assoc-in property-schema [:enum-config :values] new-values)}])
+                                               :block/schema (assoc property-schema :values new-values)}])
                                (remove nil?))))]
           {:block-id block-id
            :tx-data tx-data})))))
 
-(defn delete-enum-item
+(defn delete-closed-value
   [property item]
   (if (seq (:block/_refs item))
     (notification/show! "The choice can't be deleted because it's still used." :warning)
     (let [schema (:block/schema property)
           tx-data [[:db/retractEntity (:db/id item)]
                    {:db/id (:db/id property)
-                    :block/schema (update-in schema [:enum-config :values]
-                                             (fn [values]
-                                               (vec (remove #{(:block/uuid item)} values))))}]]
+                    :block/schema (update schema :values
+                                          (fn [values]
+                                            (vec (remove #{(:block/uuid item)} values))))}]]
       (db/transact! tx-data))))
 
 (defn get-property-block-created-block

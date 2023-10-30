@@ -130,10 +130,8 @@
    [:description {:optional true} :string]
    ;; For any types except for :checkbox :default :template :enum
    [:cardinality {:optional true} [:enum :one :many]]
-   ;; Just for :enum type
-   [:enum-config {:optional true}
-    [:map
-     [:values [:vector :uuid]]]]
+   ;; closed values
+   [:values {:optional true}  [:vector :uuid]]
    ;; Just for :enum
    [:position {:optional true} :string]
    ;; For :page and :template
@@ -229,7 +227,7 @@
   (vec
    (concat
     [:map]
-    [[:block/type [:= #{"enum value"}]]
+    [[:block/type [:= #{"closed value"}]]
      [:block/schema {:optional true}
       [:map
        [:description :string]]]

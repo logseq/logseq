@@ -1,4 +1,4 @@
-(ns frontend.components.property.enum
+(ns frontend.components.property.closed-value
   "Enum property config"
   (:require [rum.core :as rum]
             [clojure.string :as string]
@@ -14,10 +14,10 @@
             [frontend.state :as state]
             [frontend.handler.property.util :as pu]))
 
-(defn- upsert-enum-item!
-  "Create new enum value and returns its block UUID."
+(defn- upsert-closed-value!
+  "Create new closed value and returns its block UUID."
   [property item]
-  (let [{:keys [block-id tx-data]} (property-handler/upsert-enum-item property item)]
+  (let [{:keys [block-id tx-data]} (property-handler/upsert-closed-value property item)]
     (when (seq tx-data) (db/transact! tx-data))
     block-id))
 
@@ -38,9 +38,9 @@
    {:modal-class (util/hiccup->class
                   "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}))
 
-(rum/defc enum-item-value
-  [enum-type *value]
-  (case enum-type
+(rum/defc item-value
+  [type *value]
+  (case type
     ;; :page
     :date
     (let [value (if (string/blank? @*value) nil @*value)]
@@ -52,7 +52,7 @@
       :auto-focus true
       :on-change #(reset! *value (util/evalue %))}]))
 
-(rum/defcs enum-item-config < rum/reactive
+(rum/defcs item-config < rum/reactive
   shortcut/disable-all-shortcuts
   {:init (fn [state]
            (let [block (second (:rum/args state))
@@ -76,14 +76,14 @@
                                          @*value)]
                              (on-save value @*icon @*description)))
                          (when toggle-fn (toggle-fn))))
-        enum-type (get-in property [:block/schema :enum-config :type])]
+        property-type (get-in property [:block/schema :type])]
     [:div.flex.flex-col.gap-4.p-4.whitespace-nowrap.w-96
      {:on-key-down (fn [e]
                      (when (= e.key "Enter")
                        (save-handler e)))}
      [:div.grid.grid-cols-5.gap-1.items-center.leading-8
       [:label.col-span-2 "Value:"]
-      (enum-item-value enum-type *value)]
+      (item-value property-type *value)]
      [:div.grid.grid-cols-5.gap-1.items-center.leading-8
       [:label.col-span-2 "Icon:"]
       [:div.col-span-3
@@ -131,30 +131,30 @@
         (assoc opts
                :delete-choice
                (fn []
-                 (property-handler/delete-enum-item property block))
+                 (property-handler/delete-closed-value property block))
                :update-icon
                (fn [icon]
                  (property-handler/update-property! (state/get-current-repo)
                                                     (pu/get-pid "icon")
                                                     icon)))))
      (fn [opts]
-       (enum-item-config
+       (item-config
         property
         block
         (assoc opts :on-save
                (fn [value icon description]
-                 (upsert-enum-item! property {:id uuid
-                                              :value value
-                                              :description description
-                                              :icon icon})))))
+                 (upsert-closed-value! property {:id uuid
+                                                  :value value
+                                                  :description description
+                                                  :icon icon})))))
      dropdown-opts)))
 
-(rum/defc enum-choices
+(rum/defc choices
   [property *property-name *property-schema]
-  (let [values (get-in property [:block/schema :enum-config :values])
+  (let [values (get-in property [:block/schema :values])
         dropdown-opts {:modal-class (util/hiccup->class
                                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}]
-    [:div.enum-choices.flex.flex-col
+    [:div.closed-values.flex.flex-col
      (let [choices (keep (fn [id]
                            (when-let [block (db/entity [:block/uuid id])]
                              {:id (str id)
@@ -164,7 +164,7 @@
        (dnd/items choices
                   {:on-drag-end (fn [new-values]
                                   (when (seq new-values)
-                                    (swap! *property-schema assoc-in [:enum-config :values] new-values)
+                                    (swap! *property-schema assoc :values new-values)
                                     (pu-component/update-property! property @*property-name @*property-schema)))}))
      (ui/dropdown
       (fn [{:keys [toggle-fn]}]
@@ -172,12 +172,12 @@
          (ui/icon "plus" {:size 16})
          "Add choice"])
       (fn [opts]
-        (enum-item-config
+        (item-config
          property
          nil
          (assoc opts :on-save
                 (fn [value icon description]
-                  (upsert-enum-item! property {:value value
-                                               :description description
-                                               :icon icon})))))
+                  (upsert-closed-value! property {:value value
+                                                  :description description
+                                                  :icon icon})))))
       dropdown-opts)]))

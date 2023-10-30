@@ -2303,12 +2303,12 @@
                        :tag? true
                        :disable-preview? true) tag))]))
 
-(rum/defc block-enum-properties
+(rum/defc block-closed-values-properties
   [block]
-  (let [enum-properties (property-handler/get-block-enum-other-position-properties (:db/id block))]
-    (when (seq enum-properties)
-    [:div.enum-properties.flex.flex-row.items-center.gap-1.select-none.h-full
-     (for [pid enum-properties]
+  (let [closed-values-properties (property-handler/get-block-other-position-properties (:db/id block))]
+    (when (seq closed-values-properties)
+    [:div.closed-values-properties.flex.flex-row.items-center.gap-1.select-none.h-full
+     (for [pid closed-values-properties]
        (when-let [property (db/entity [:block/uuid pid])]
          (pv/property-value block property (get (:block/properties block) pid) {:icon? true})))])))
 
@@ -2474,7 +2474,7 @@
         repo (state/get-current-repo)
         db-based? (config/db-based-graph? repo)]
     [:div.flex.flex-1.flex-row.flex-wrap.gap-1.items-start
-     (block-enum-properties block)
+     (block-closed-values-properties block)
      (if (and edit? editor-box)
        [:div.editor-wrapper.flex.flex-1
         {:id editor-id}

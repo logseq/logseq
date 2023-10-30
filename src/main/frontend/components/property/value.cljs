@@ -21,8 +21,10 @@
             [frontend.handler.property.util :as pu]))
 
 (defn- select-type?
-  [type]
-  (contains? #{:page :number :url :date :enum} type))
+  [property type]
+  (or (contains? #{:page :number :url :date} type)
+      ;; closed values
+      (seq (get-in property [:block/schema :values]))))
 
 (defn exit-edit-property
   ([]
@@ -338,8 +340,8 @@
   (let [schema (:block/schema property)
         property (db/sub-block (:db/id property))
         type (:type schema)
-        enum? (= :enum type)
-        items (if enum?
+        closed-values? (seq (:values schema))
+        items (if closed-values?
                 (keep (fn [id]
                         (when-let [block (when id (db/entity [:block/uuid id]))]
                           (let [icon (pu/get-property block :icon)
@@ -350,7 +352,7 @@
                                        (icon-component/icon icon)
                                        value]
                                       value)
-                             :value id}))) (get-in schema [:enum-config :values]))
+                             :value id}))) (:values schema))
                 (->> (model/get-block-property-values (:block/uuid property))
                      (mapcat (fn [[_id value]]
                                (if (coll? value)
@@ -375,7 +377,7 @@
                   :items items
                   :selected-choices selected-choices
                   :dropdown? dropdown?
-                  :show-new-when-not-exact-match? (not (contains? #{:enum} type))
+                  :show-new-when-not-exact-match? (not closed-values?)
                   :input-default-placeholder "Select"
                   :extract-chosen-fn :value
                   :input-opts (fn [_]
@@ -393,7 +395,7 @@
                                        (exit-edit-property)
                                        (when-let [f (:on-chosen opts)] (f)))
                                      nil))})}
-                  enum?
+                  closed-values?
                   (assoc :extract-fn :label)
                   multiple-choices?
                   (assoc :on-apply on-chosen)
@@ -447,32 +449,34 @@
       invalid-warning)))
 
 (rum/defc select-item
-  [type value {:keys [page-cp inline-text]}]
-  (case type
-    (:page :date)
-    (when-let [page (db/entity [:block/uuid value])]
-      (page-cp {:disable-preview? true
-                :hide-close-button? true} page))
+  [property type value {:keys [page-cp inline-text]}]
+  (let [closed-values? (seq (get-in property [:block/schema :values]))]
+    (cond
+      (contains? #{:page :date} type)
+      (when-let [page (db/entity [:block/uuid value])]
+        (page-cp {:disable-preview? true
+                  :hide-close-button? true} page))
 
-    :number
-    [:span.number (str value)]
+      (= type :number)
+      [:span.number (str value)]
 
-    :enum
-    (when-let [block (when value (db/entity [:block/uuid value]))]
-      (let [value' (get-in block [:block/schema :value])
-            icon (pu/get-property block :icon)]
-        (cond
-          (:block/name block)
-          (page-cp {:disable-preview? true
-                    :hide-close-button? true} block)
+      closed-values?
+      (when-let [block (when value (db/entity [:block/uuid value]))]
+        (let [value' (get-in block [:block/schema :value])
+              icon (pu/get-property block :icon)]
+          (cond
+            (:block/name block)
+            (page-cp {:disable-preview? true
+                      :hide-close-button? true} block)
 
-          icon
-          (icon-component/icon icon)
+            icon
+            (icon-component/icon icon)
 
-          :else
-          value')))
+            :else
+            value')))
 
-    (inline-text {} :markdown (str value))))
+      :else
+      (inline-text {} :markdown (str value)))))
 
 (rum/defc single-value-select
   [block property value value-f select-opts {:keys [editing?] :as opts}]
@@ -486,7 +490,7 @@
         select-f (fn []
                    [:div.property-select (cond-> {} editing? (assoc :class "h-6"))
                     (case type
-                      (:number :url :date :enum)
+                      (:number :url :date :default)
                       (select block property select-opts' opts)
 
                       :page
@@ -524,12 +528,14 @@
         multiple-values? (= :many (:cardinality schema))
         editor-id (or editor-id (str "ls-property-" (:db/id block) "-" (:db/id property)))
         editing? (or editing? (and @*ref (state/sub-editing? @*ref)))
-        select-type? (select-type? type)
+        select-type? (select-type? property type)
+        closed-values? (seq (:values schema))
         select-opts {:on-chosen on-chosen}]
-    (if (and select-type? (not= type :date))
+    (if (and select-type?
+             (not (and (not closed-values?) (= type :date))))
       (single-value-select block property value
                            (fn []
-                             (select-item type value opts))
+                             (select-item property type value opts))
                            select-opts
                            opts)
       (case type
@@ -612,7 +618,7 @@
                     (if (seq items)
                       (concat
                        (for [item items]
-                         (select-item type item opts))
+                         (select-item property type item opts))
                        (when date?
                          [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
                       (when-not editing? [:div.opacity-50.pointer.text-sm "Empty"])))

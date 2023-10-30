@@ -70,7 +70,7 @@
 
       ;; these types don't need to be translated. :date expects uuid and other
       ;; types usually expect text
-      (:enum :url :date :any)
+      (:url :date :any)
       v-str)))
 
 (defn upsert-property!
