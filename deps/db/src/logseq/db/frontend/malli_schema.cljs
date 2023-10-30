@@ -289,6 +289,18 @@
    ;; Should this be removed?
    [:block/tx-id {:optional true} :int]])
 
+(def DB-known
+  "A stricter version of the DB schema that doesn't allow for unknown blocks.
+   When we've fixed all known causes of unknown blocks this should be the DB schema"
+  [:sequential
+   [:or
+    page
+    block
+    file-block
+    schema-version
+    db-ident
+    macro]])
+
 (def DB
   "Malli schema for entities from schema/schema-for-db-based-graph. In order to
   thoroughly validate properties, the entities and this schema should be

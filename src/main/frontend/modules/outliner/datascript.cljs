@@ -15,7 +15,8 @@
             [frontend.db.fix :as db-fix]
             [frontend.handler.file-based.property.util :as property-util]
             [cljs.pprint :as pprint]
-            [malli.core :as m]))
+            [malli.core :as m]
+            [malli.util :as mu]))
 
 (defn new-outliner-txs-state [] (atom []))
 
@@ -29,10 +30,15 @@
   "Validates the entities that have changed in the given datascript tx-report.
    Validation is only for DB graphs"
   [{:keys [db-after tx-data tx-meta]}]
-  (let [changed-ids (->> tx-data (map :e) distinct)
+  (let [{:keys [known-schema? closed-schema? fail-invalid?]} (:dev/validate-db-options (state/get-config))
+        changed-ids (->> tx-data (map :e) distinct)
         ent-maps* (->> changed-ids (mapcat #(d/datoms db-after :eavt %)) db-malli-schema/datoms->entity-maps vals)
         ent-maps (vec (db-malli-schema/update-properties-in-ents ent-maps*))
-        db-schema (db-malli-schema/update-properties-in-schema db-malli-schema/DB db-after)]
+        db-schema (cond-> (if known-schema? db-malli-schema/DB-known db-malli-schema/DB)
+                    true
+                    (db-malli-schema/update-properties-in-schema db-after)
+                    closed-schema?
+                    mu/closed-schema)]
     (js/console.log "changed eids:" changed-ids tx-meta)
     (when-let [errors (->> ent-maps
                            (m/explain db-schema)
@@ -40,8 +46,7 @@
       (js/console.error "Invalid datascript entities detected amongst changed entity ids:" changed-ids)
       (pprint/pprint {:errors errors})
       (pprint/pprint {:entity-maps ent-maps})
-      ;; (js/alert "Invalid DB!")
-      )))
+      (when fail-invalid? (js/alert "Invalid DB!")))))
 
 (defn after-transact-pipelines
   [repo {:keys [_db-before _db-after _tx-data _tempids tx-meta] :as tx-report}]
