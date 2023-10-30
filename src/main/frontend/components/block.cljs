@@ -44,7 +44,6 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.export.common :as export-common-handler]
