@@ -151,7 +151,9 @@
 
 (rum/defc choices
   [property *property-name *property-schema]
-  (let [values (get-in property [:block/schema :values])
+  (let [schema (:block/schema property)
+        property-type (:type schema)
+        values (:values schema)
         dropdown-opts {:modal-class (util/hiccup->class
                                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}]
     [:div.closed-values.flex.flex-col
@@ -172,12 +174,19 @@
          (ui/icon "plus" {:size 16})
          "Add choice"])
       (fn [opts]
-        (item-config
-         property
-         nil
-         (assoc opts :on-save
-                (fn [value icon description]
-                  (upsert-closed-value! property {:value value
-                                                  :description description
-                                                  :icon icon})))))
+        (if (= :page property-type)
+          (property-value/select-page property
+                                      {:multiple-choices? false
+                                       :dropdown? false
+                                       :close-modal? false
+                                       :on-chosen (fn [chosen]
+                                                    (upsert-closed-value! property {:value chosen}))})
+          (item-config
+           property
+           nil
+           (assoc opts :on-save
+                  (fn [value icon description]
+                    (upsert-closed-value! property {:value value
+                                                    :description description
+                                                    :icon icon}))))))
       dropdown-opts)]))

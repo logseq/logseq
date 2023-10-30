@@ -165,29 +165,31 @@
                           :items items'
                           k f'))))
 
-(defn- select-page
-  [block property
-   {:keys [classes multiple-choices? dropdown?] :as opts}
-   {:keys [*show-new-property-config?]}]
+(defn select-page
+  [property
+   {:keys [block classes multiple-choices? dropdown? input-opts on-chosen] :as opts}]
   (let [repo (state/get-current-repo)
         tags? (= "tags" (:block/name property))
         alias? (= "alias" (:block/name property))
         tags-or-alias? (or tags? alias?)
-        selected-choices (->>
-                          (if tags-or-alias?
-                            (->> (if (= "tags" (:block/name property))
-                                   (:block/tags block)
-                                   (:block/alias block))
-                                 (map (fn [e] (:block/original-name e))))
-                            (let [v (get-in block [:block/properties (:block/uuid property)])]
-                              (if (coll? v)
-                                (map (fn [id]
-                                       (:block/original-name (db/entity [:block/uuid id])))
-                                     v)
-                                [(:block/original-name (db/entity [:block/uuid v]))])))
-                          (remove nil?))
+        selected-choices (when block
+                           (->>
+                            (if tags-or-alias?
+                              (->> (if (= "tags" (:block/name property))
+                                     (:block/tags block)
+                                     (:block/alias block))
+                                   (map (fn [e] (:block/original-name e))))
+                              (when-let [v (get-in block [:block/properties (:block/uuid property)])]
+                                (if (coll? v)
+                                  (map (fn [id]
+                                         (:block/original-name (db/entity [:block/uuid id])))
+                                       v)
+                                  [(:block/original-name (db/entity [:block/uuid v]))])))
+                            (remove nil?)))
+        closed-values (seq (get-in property [:block/schema :values]))
         pages (->>
-               (if (seq classes)
+               (cond
+                 (seq classes)
                  (mapcat
                   (fn [class]
                     (if (= :logseq.class class)
@@ -196,68 +198,86 @@
                                (model/get-class-objects repo)
                                (map #(:block/original-name (db/entity %))))))
                   classes)
+
+                 (and block closed-values)
+                 (map (fn [id] (:block/original-name (db/entity [:block/uuid id]))) closed-values)
+
+                 :else
                  (model/get-all-page-original-names repo))
                distinct)
         options (map (fn [p] {:value p}) pages)
-        opts (cond->
-              {:multiple-choices? multiple-choices?
-               :items options
-               :selected-choices selected-choices
-               :dropdown? dropdown?
-               :input-default-placeholder (cond
-                                            tags?
-                                            "Set tags"
-                                            alias?
-                                            "Set alias"
-                                            multiple-choices?
-                                            "Choose pages"
-                                            :else
-                                            "Choose page")
-               :show-new-when-not-exact-match? true
-               :extract-chosen-fn :value
-               ;; Provides additional completion for inline classes on new pages
-               :transform-fn (fn [results input]
-                               (if-let [[_ new-page class-input] (and (empty? results) (re-find #"(.*)#(.*)$" input))]
-                                 (let [repo (state/get-current-repo)
-                                       class-names (map #(:block/original-name (db/entity repo [:block/uuid %])) classes)
-                                       descendent-classes (->> class-names
-                                                               (mapcat #(db/get-namespace-pages repo %))
-                                                               (map :block/original-name))]
-                                   (->> (concat class-names descendent-classes)
-                                        (filter #(string/includes? % class-input))
-                                        (mapv #(hash-map :value (str new-page "#" %)))))
-                                 results))
-               :input-opts (fn [_]
-                             {:on-blur (fn []
-                                         (exit-edit-property))
-                              :on-click (fn []
-                                          (when *show-new-property-config?
-                                            (reset! *show-new-property-config? false)))
-                              :on-key-down
-                              (fn [e]
-                                (case (util/ekey e)
-                                  "Escape"
-                                  (do
-                                    (exit-edit-property)
-                                    (when-let [f (:on-chosen opts)] (f)))
-                                  nil))})}
-               multiple-choices?
-               (assoc :on-apply (fn [choices]
-                                  (let [pages (->> choices
-                                                   (map #(create-page-if-not-exists! property classes %))
-                                                   (map first))
-                                        values (set (map #(pu/get-page-uuid repo %) pages))]
-                                    (add-property! block (:block/original-name property) values)
-                                    (when-let [f (:on-chosen opts)] (f)))))
-               (not multiple-choices?)
-               (assoc :on-chosen (fn [chosen]
-                                   (let [page* (string/trim (if (string? chosen) chosen (:value chosen)))]
-                                     (when-not (string/blank? page*)
-                                       (let [[page id] (create-page-if-not-exists! property classes page*)
-                                             id' (or id (pu/get-page-uuid repo page))]
-                                         (add-property! block (:block/original-name property) id')
-                                         (when-let [f (:on-chosen opts)] (f))))))))]
-    (select-aux block property opts)))
+        opts' (cond->
+               (merge
+                opts
+                {:multiple-choices? multiple-choices?
+                 :items options
+                 :selected-choices selected-choices
+                 :dropdown? dropdown?
+                 :input-default-placeholder (cond
+                                              tags?
+                                              "Set tags"
+                                              alias?
+                                              "Set alias"
+                                              multiple-choices?
+                                              "Choose pages"
+                                              :else
+                                              "Choose page")
+                 :show-new-when-not-exact-match? (not (and block closed-values))
+                 :extract-chosen-fn :value
+                 ;; Provides additional completion for inline classes on new pages
+                 :transform-fn (fn [results input]
+                                 (if-let [[_ new-page class-input] (and (empty? results) (re-find #"(.*)#(.*)$" input))]
+                                   (let [repo (state/get-current-repo)
+                                         class-names (map #(:block/original-name (db/entity repo [:block/uuid %])) classes)
+                                         descendent-classes (->> class-names
+                                                                 (mapcat #(db/get-namespace-pages repo %))
+                                                                 (map :block/original-name))]
+                                     (->> (concat class-names descendent-classes)
+                                          (filter #(string/includes? % class-input))
+                                          (mapv #(hash-map :value (str new-page "#" %)))))
+                                   results))
+                 :input-opts input-opts})
+                multiple-choices?
+                (assoc :on-apply (fn [choices]
+                                   (let [pages (->> choices
+                                                    (map #(create-page-if-not-exists! property classes %))
+                                                    (map first))
+                                         values (set (map #(pu/get-page-uuid repo %) pages))]
+                                     (when on-chosen (on-chosen values)))))
+                (not multiple-choices?)
+                (assoc :on-chosen (fn [chosen]
+                                    (let [page* (string/trim (if (string? chosen) chosen (:value chosen)))]
+                                      (when-not (string/blank? page*)
+                                        (let [[page id] (create-page-if-not-exists! property classes page*)
+                                              id' (or id (pu/get-page-uuid repo page))]
+                                          (when on-chosen (on-chosen id'))))))))]
+    (select-aux block property opts')))
+
+(defn property-value-select-page
+  [block property
+   {:keys [on-chosen] :as opts}
+   {:keys [*show-new-property-config?]}]
+  (let [input-opts (fn [_]
+                     {:on-blur (fn []
+                                 (exit-edit-property))
+                      :on-click (fn []
+                                  (when *show-new-property-config?
+                                    (reset! *show-new-property-config? false)))
+                      :on-key-down
+                      (fn [e]
+                        (case (util/ekey e)
+                          "Escape"
+                          (do
+                            (exit-edit-property)
+                            (when-let [f (:on-chosen opts)] (f)))
+                          nil))})
+        opts' (assoc opts
+                     :block block
+                     :input-opts input-opts
+                     :on-chosen (fn [values]
+                                  (add-property! block (:block/original-name property) values)
+                                  (when on-chosen (on-chosen))))]
+    (select-page property opts')))
 
 ;; (defn- move-cursor
 ;;   [up? opts]
@@ -494,7 +514,7 @@
                       (select block property select-opts' opts)
 
                       :page
-                      (select-page block property select-opts' opts))])
+                      (property-value-select-page block property select-opts' opts))])
         dropdown-opts {:modal-class (util/hiccup->class
                                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")
                        :initial-open? editing?}]
@@ -629,10 +649,10 @@
                                                     (when on-chosen (on-chosen)))}]
                       [:div.property-select (cond-> {} editing? (assoc :class "h-6"))
                        (if (= :page type)
-                         (select-page block property
-                                      (assoc select-opts
-                                             :classes (:classes schema))
-                                      opts)
+                         (property-value-select-page block property
+                                                     (assoc select-opts
+                                                            :classes (:classes schema))
+                                                     opts)
                          (select block property select-opts opts))]))]
     (if (and dropdown? (not editing?))
       (ui/dropdown

@@ -245,14 +245,10 @@
   [property {:keys [id value icon description]}]
   (assert (or (nil? id) (uuid? id)))
   (when (contains? db-property-type/closed-values-schema-types (get-in property [:block/schema :type] :default))
-    (let [icon-id (pu/get-pid "icon")
-          value (if (string? value) (string/trim value) value)
+    (let [value (if (string? value) (string/trim value) value)
           property-schema (:block/schema property)
           closed-values (:values property-schema)
           block-values (map (fn [id] (db/entity [:block/uuid id])) closed-values)
-          icon (when-not (and (string? icon) (string/blank? icon)) icon)
-          description (string/trim description)
-          description (when-not (string/blank? description) description)
           resolved-value (try
                            (db-property-handler/convert-property-input-string (:type property-schema) value)
                            (catch :default e
@@ -279,6 +275,10 @@
 
         :else
         (let [block-id (or id (db/new-block-id))
+              icon-id (pu/get-pid "icon")
+              icon (when-not (and (string? icon) (string/blank? icon)) icon)
+              description (string/trim description)
+              description (when-not (string/blank? description) description)
               tx-data (if block
                         [(let [properties (:block/properties block)
                                schema (assoc (:block/schema block)
