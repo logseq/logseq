@@ -42,15 +42,10 @@
    :logseq.order-list-type {:schema {:type :default}}
    :logseq.tldraw.page {:schema {:type :map}}
    :logseq.tldraw.shape {:schema {:type :map}}
+   ;; TODO: Add enums for logseq.color, logseq.table.headers and logseq.table.hover
    ;; color props
    :logseq.color {:schema
-                  {:type :enum
-                   :hide? true
-                   :enum-config
-                   {:values
-                    (into {}
-                          (map #(vector (random-uuid) {:name % :description ""})
-                               ["red" "orange" "green" "blue" "purple"]))}}
+                  {:type :default :hide? true}
                   :visible true}
    ;; table-v2 props
    :logseq.table.version {:schema {:type :number :hide? true}
@@ -58,22 +53,10 @@
    :logseq.table.compact {:schema {:type :checkbox :hide? true}
                           :visible true}
    :logseq.table.headers {:schema
-                          {:type :enum
-                           :hide? true
-                           :enum-config
-                           {:values
-                            (into {}
-                                  (map #(vector (random-uuid) {:name % :description ""})
-                                       ["uppercase" "capitalize" "capitalize-first" "lowercase"]))}}
+                          {:type :default :hide? true}
                           :visible true}
    :logseq.table.hover {:schema
-                        {:type :enum
-                         :hide? true
-                         :enum-config
-                         {:values
-                          (into {}
-                                (map #(vector (random-uuid) {:name % :description ""})
-                                     ["row" "col" "both" "none"]))}}
+                        {:type :default :hide? true}
                         :visible true}
    :logseq.table.borders {:schema {:type :checkbox :hide? true}
                           :visible true}
