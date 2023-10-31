@@ -59,9 +59,6 @@
   (if (and (not (string? v-str)) (not (object? v-str)))
     v-str
     (case schema-type
-      :default
-      (if (util/uuid-string? v-str) (uuid v-str) v-str)
-
       :number
       (fail-parse-double v-str)
 
@@ -71,7 +68,10 @@
       ;; these types don't need to be translated. :date expects uuid and other
       ;; types usually expect text
       (:url :date :any)
-      v-str)))
+      v-str
+
+      ;; :default
+      (if (util/uuid-string? v-str) (uuid v-str) v-str))))
 
 (defn upsert-property!
   [repo k-name schema {:keys [property-uuid]}]
@@ -92,6 +92,14 @@
                              (seq schema)
                              (assoc :block/schema schema)))]
                     {:outliner-op :insert-blocks}))))
+
+(defn- validate-property-value
+  [property schema value]
+  (let [values (get-in property [:block/schema :values])]
+    (if (seq values)
+      (when-not (contains? (set values) value)
+        "Value is not included in the closed values.")
+      (me/humanize (mu/explain-data schema value)))))
 
 (defn- reset-block-property-multiple-values!
   [repo block-id k-name values _opts]
@@ -131,7 +139,7 @@
                              {:block/uuid block-id
                               attribute property-value-ids}]
                             {:outliner-op :save-block}))
-            (if-let [msg (some #(me/humanize (mu/explain-data schema %)) values')]
+            (if-let [msg (some #(validate-property-value property schema %) values')]
               (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                 (notification/show! msg' :warning))
               (do
@@ -204,7 +212,7 @@
                               [[:db/add (:db/id block) attribute property-value-id]]
                               {:outliner-op :save-block}))
               (when-not (contains? (if (set? value) value #{value}) v*)
-                (if-let [msg (me/humanize (mu/explain-data schema v*))]
+                (if-let [msg (validate-property-value property schema v*)]
                   (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                     (notification/show! msg' :warning))
                   (do

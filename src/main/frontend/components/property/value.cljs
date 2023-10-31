@@ -477,9 +477,6 @@
         (page-cp {:disable-preview? true
                   :hide-close-button? true} page))
 
-      (= type :number)
-      [:span.number (str value)]
-
       closed-values?
       (when-let [block (when value (db/entity [:block/uuid value]))]
         (let [value' (get-in block [:block/schema :value])
@@ -492,8 +489,17 @@
             icon
             (icon-component/icon icon)
 
+            (= type :number)
+            [:span.number (str value')]
+
+            (= type :url)
+            (inline-text {} :markdown (str value'))
+
             :else
             value')))
+
+      (= type :number)
+      [:span.number (str value)]
 
       :else
       (inline-text {} :markdown (str value)))))
