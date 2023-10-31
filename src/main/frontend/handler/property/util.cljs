@@ -64,16 +64,17 @@
 (defn shape-block? [block]
   (= :whiteboard-shape (get-property block :ls-type)))
 
-(defonce *db-built-in-properties (atom {}))
+(defonce *hidden-built-in-properties (atom #{}))
 
-(defn all-built-in-properties?
+(defn all-hidden-built-in-properties?
+  "Checks if the given properties are all hidden built-in properties"
   [properties]
   (let [repo (state/get-current-repo)]
-    (when (empty? @*db-built-in-properties)
-      (let [built-in-properties (set (map #(get-built-in-property-uuid repo %)
-                                          db-property/built-in-properties-keys))]
-        (swap! *db-built-in-properties assoc repo built-in-properties)))
-    (set/subset? (set properties) (get @*db-built-in-properties repo))))
+    (when (empty? @*hidden-built-in-properties)
+      (let [built-in-properties (set (map #(get-built-in-property-uuid repo (name %))
+                                          db-property/hidden-built-in-properties))]
+        (reset! *hidden-built-in-properties built-in-properties)))
+    (set/subset? (set properties) @*hidden-built-in-properties)))
 
 (defn readable-properties
   "Given a DB graph's properties, returns a readable properties map with keys as

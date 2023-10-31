@@ -3396,7 +3396,7 @@
              (valid-custom-query-block? block)
              (and (config/db-based-graph? repo)
                   (seq (:block/properties block))
-                  (not (pu/all-built-in-properties? (keys (:block/properties block)))))
+                  (not (pu/all-hidden-built-in-properties? (keys (:block/properties block)))))
              (and (config/db-based-graph? repo)
                   (seq (:block/tags block)))
              (and
