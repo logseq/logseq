@@ -292,6 +292,26 @@
       (outliner-core/delete-blocks! [(get-block 6) (get-block 9)] {}))
     (is (= [3] (get-children 2)))))
 
+(deftest test-delete-non-consecutive-blocks
+  (testing "
+  [1 [[2 [[3 [[4]
+              [5]]]
+          ;[6 [[7 [[8]]]]]
+          ;[9 [[10]
+          ;    [11]]]
+          ]]
+      [12 [[13]
+           [14]
+           [15]]]
+      [16 [[17]]]]]
+"
+    (transact-tree! tree)
+    (outliner-tx/transact!
+     {:graph test-db}
+      (outliner-core/delete-blocks! [(get-block 10) (get-block 13)] {}))
+    (is (= [11] (get-children 9)))
+    (is (= [14 15] (get-children 12)))))
+
 (deftest test-move-blocks-up-down
   (testing "
   [1 [[2 [[3 [[4]
