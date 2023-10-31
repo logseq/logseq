@@ -872,7 +872,7 @@
           (tree/-save new-right-node txs-state)))
       @txs-state)))
 
-(defn delete-blocks
+(defn- delete-blocks
   "Delete blocks from the tree.
    Args:
     `children?`: whether to replace `blocks'` children too. "
@@ -904,7 +904,8 @@
                         (tree/-get-parent-id end-node))
             right-node (tree/-get-right end-node)]
         (when (tree/satisfied-inode? right-node)
-          (let [left-node-id (if sibling?
+          (let [non-consecutive? (seq (db-model/get-non-consecutive-blocks blocks))
+                left-node-id (if sibling?
                                (tree/-get-id (tree/-get-left start-node))
                                (let [end-node-left-nodes (get-left-nodes end-node (count block-ids))
                                      parents (->>
@@ -915,13 +916,19 @@
                                               (map :block/uuid)
                                               (set))
                                      result (first (set/intersection (set end-node-left-nodes) parents))]
-                                 (when-not result
+                                 (when (and (not non-consecutive?) (not result))
                                    (util/pprint {:parents parents
                                                  :end-node-left-nodes end-node-left-nodes}))
                                  result))]
-            (assert left-node-id "Can't find the left-node-id")
-            (let [new-right-node (tree/-set-left-id right-node left-node-id)]
-              (tree/-save new-right-node txs-state))))
+            (when (and (nil? left-node-id) (not non-consecutive?))
+              (assert left-node-id
+                      (str "Can't find the left-node-id: "
+                           (pr-str {:start (db/entity [:block/uuid (tree/-get-id start-node)])
+                                    :end (db/entity [:block/uuid (tree/-get-id end-node)])
+                                    :right-node (db/entity [:block/uuid (tree/-get-id right-node)])}))))
+            (when left-node-id
+              (let [new-right-node (tree/-set-left-id right-node left-node-id)]
+                (tree/-save new-right-node txs-state)))))
         (doseq [id block-ids]
           (let [node (block (db/pull id))]
             (tree/-del node txs-state true)))
