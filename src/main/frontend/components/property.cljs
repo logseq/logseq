@@ -183,15 +183,26 @@
                            (swap! *property-schema assoc :type type)
                            (pu-component/update-property! property @*property-name @*property-schema)))))])]
 
+      (when-not (contains? #{:checkbox :default :template} (:type @*property-schema))
+        [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+         [:label "Multiple values:"]
+         (let [many? (boolean (= :many (:cardinality @*property-schema)))]
+           (ui/checkbox {:checked many?
+                         :disabled disabled?
+                         :on-change (fn []
+                                      (swap! *property-schema assoc :cardinality (if many? :one :many))
+                                      (save-property-fn))}))])
+
       (case (:type @*property-schema)
         :page
-        [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-         [:label "Specify classes:"]
-         (class-select *property-schema
-                       (:classes @*property-schema)
-                       (assoc opts
-                              :disabled? disabled?
-                              :save-property-fn save-property-fn))]
+        (when (empty? (:values @*property-schema))
+          [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+           [:label "Specify classes:"]
+           (class-select *property-schema
+                         (:classes @*property-schema)
+                         (assoc opts
+                                :disabled? disabled?
+                                :save-property-fn save-property-fn))])
 
         :template
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
@@ -204,23 +215,13 @@
 
         nil)
 
-      (when-not (contains? #{:checkbox :default :template} (:type @*property-schema))
-        [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-         [:label "Multiple values:"]
-         (let [many? (boolean (= :many (:cardinality @*property-schema)))]
-           (ui/checkbox {:checked many?
-                         :disabled disabled?
-                         :on-change (fn []
-                                      (swap! *property-schema assoc :cardinality (if many? :one :many))
-                                      (save-property-fn))}))])
-
-      (when enable-closed-values?
+      (when (and enable-closed-values? (empty? (:classes @*property-schema)))
         [:div.grid.grid-cols-4.gap-1.items-start.leading-8
-         [:label.col-span-1 "Closed values:"]
+         [:label.col-span-1 "Available choices:"]
          [:div.col-span-3
           (closed-value/choices property *property-name *property-schema)]])
 
-      (when (and enable-closed-values? (seq (:values *property-schema)))
+      (when (and enable-closed-values? (seq (:values @*property-schema)))
         (let [position (:position @*property-schema)
               choices (map
                        (fn [item]
