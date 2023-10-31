@@ -468,7 +468,7 @@
   (let [zoom-viewer!
         (rum/use-callback
          (util/debounce
-          10 (fn [delta]
+          5 (fn [delta]
                 (if (> delta 0)
                   ((partial pdf-utils/zoom-out-viewer viewer))
                   ((partial pdf-utils/zoom-in-viewer viewer)))
