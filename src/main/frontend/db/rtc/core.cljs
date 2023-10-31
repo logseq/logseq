@@ -293,8 +293,8 @@
       (page-handler/delete! page-name nil {:redirect-to-home? false :persist-op? false}))))
 
 
-(defn- filter-remote-data-by-local-unpushed-ops
-  "when remote-data request client to move/update blocks,
+(defn filter-remote-data-by-local-unpushed-ops
+  "when remote-data request client to move/update/remove/... blocks,
   these updates maybe not needed, because this client just updated some of these blocks,
   so we need to filter these just-updated blocks out, according to the unpushed-local-ops in indexeddb"
   [affected-blocks-map local-unpushed-ops]
@@ -303,17 +303,22 @@
      (case (first local-op)
        "move"
        (let [block-uuids (:block-uuids (second local-op))
-             remote-ops (vals (select-keys affected-blocks-map block-uuids))
-             block-uuids-to-del-in-result
-             (keep (fn [op] (when (= :move (:op op)) (:self op))) remote-ops)]
-         (apply dissoc affected-blocks-map block-uuids-to-del-in-result))
+             remote-ops (vals (select-keys affected-blocks-map block-uuids))]
+         (reduce
+          (fn [r remote-op]
+            (case (:op remote-op)
+              :remove (dissoc r (:block-uuid remote-op))
+              :move (dissoc r (:self remote-op))
+              ;; default
+              r))
+          affected-blocks-map remote-ops))
 
        "update"
        (let [block-uuid (:block-uuid (second local-op))
              local-updated-attr-set (set (keys (:updated-attrs (second local-op))))]
          (if-let [remote-op (get affected-blocks-map block-uuid)]
            (assoc affected-blocks-map block-uuid
-                  (if (= :update-attrs (:op remote-op))
+                  (if (#{:update-attrs :move} (:op remote-op))
                     (apply dissoc remote-op local-updated-attr-set)
                     remote-op))
            affected-blocks-map))
