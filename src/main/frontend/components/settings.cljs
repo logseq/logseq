@@ -983,7 +983,7 @@
 
           [:div.card
            [:div.flag.pro (t :settings-account/pro)]
-           [:div [:strong.text-xl.font-medium "$10"]
+           [:div [:strong.text-xl.font-medium "$8"]
             [:span.text-xs.font-base {:class "ml-0.5"} "/ monthly"]]
            [:div.font-semibold (t :settings-account/pro-plan-title)]
            [:ul.text-xs.m-0.flex.flex-col.gap-0.5.pl-3.opacity-70
