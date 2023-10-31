@@ -155,8 +155,8 @@
   (let [!input (::input state)
         !results (::results state)]
     (if (empty? @!input)
-      (swap! !results assoc group {:status :success :items default-search-actions})
-      (swap! !results assoc group {:status :success :items nil}))))
+      (swap! !results update group merge {:status :success :items default-search-actions})
+      (swap! !results update group merge {:status :success :items nil}))))
 
 ;; The commands search uses the command-palette hander
 (defmethod load-results :commands [group state]
@@ -164,7 +164,7 @@
         !results (::results state)]
     (swap! !results assoc-in [group :status] :loading)
     (if (empty? @!input)
-      (swap! !results assoc group {:status :success :items default-commands})
+      (swap! !results update group merge {:status :success :items default-commands})
       (->> (cp-handler/top-commands 1000)
            (map #(assoc % :t (cp/translate t %)))
            (filter #(string/includes? (lower-case-str (pr-str %)) (lower-case-str @!input)))
@@ -177,7 +177,7 @@
                            :shortcut (:shortcut %)
                            :source-command %))
            (hash-map :status :success :items)
-           (swap! !results assoc group))))) 
+           (swap! !results update group merge))))) 
 
 ;; The pages search action uses an existing handler
 (defmethod load-results :pages [group state]
@@ -196,9 +196,9 @@
                                             :icon-theme :gray 
                                             :text % 
                                             :source-page %) non-boards)]
-      (swap! !results assoc group {:status :success :items non-board-items}
+      (swap! !results update group        merge {:status :success :items non-board-items})
       ; (swap! !results assoc :whiteboards {:status :success :items whiteboard-items}
-                            :whiteboards {:status :success :items whiteboard-items}))))
+      (swap! !results update :whiteboards merge {:status :success :items whiteboard-items}))))
 
 ;; The blocks search action uses an existing handler
 (defmethod load-results :blocks [group state]
@@ -226,8 +226,8 @@
       ; ; (js/console.log "load-results/blocks" 
       ; ;                 (clj->js blocks) 
       ; ;                 (pr-str (first blocks)))
-      (swap! !results assoc group {:status :success :items items-on-other-pages}
-                            :current-page {:status :success :items items-on-current-page}))))
+      (swap! !results update group         merge {:status :success :items items-on-other-pages})
+      (swap! !results update :current-page merge {:status :success :items items-on-current-page}))))
 
 ; (defmethod load-results :whiteboards [group state]
 ;   (let [!input (::input state)
@@ -260,7 +260,7 @@
                                      :source-recent %
                                      :source-page (when (= :page (:type %)) (:data %))
                                      :source-search (when (= :search (:type %)) (:data %)))))]
-      (swap! !results assoc group {:status :success :items items}))))
+      (swap! !results update group merge {:status :success :items items}))))
       
     ; (swap! !results assoc group {:status :success :items recent-items})))
 
@@ -289,14 +289,8 @@
                      (filter #(string/includes? (lower-case-str (pr-str %)) (lower-case-str pval)))
                      (into items)))]
     (js/console.log "load-results/filters" #js {:pkey pkey :pval pval})
-    (swap! !results assoc group {:status :success :items items})))
+    (swap! !results update group merge {:status :success :items items})))
 
-(let [[_ pkey pval] (re-matches #".*?(\S*)::\s?(\S*)" " testing for a ::val")]
-  [pkey pval])
-
-(string/includes? "adufghwrjg" "")
-
-; (search/property-search "a")
 
 ;; The default load-results function triggers all the other load-results function
 (defmethod load-results :default [_ state]
@@ -309,21 +303,7 @@
       (load-results :blocks state)
       (load-results :pages state)
       (load-results :filters state)
-      ; (load-results :files state)
       (load-results :recents state))))
-      ; ; (load-results :whiteboards state)
-
-; (def search [query]
-;   (load-results :search-actions state))
-  ; (let [repo (state/get-current-repo)
-  ;       limit 5
-  ;       current-page-db-id nil 
-  ;       opts {:limit limit}]
-  ;   (p/let [blocks (search/block-search repo q opts)
-  ;           pages (search/page-search q)
-  ;           pages-content (when current-page-db-id (search/page-content-search repo q opts))
-  ;           files (search/file-search q)
-  ;           commands])))
 
 (defn close-unless-alt! [state]
   (when-not (some-> state ::alt? deref)
@@ -485,20 +465,12 @@
                                                 (when (not highlighted?)
                                                   (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
                               :on-highlight (fn [ref]  
+                                              (reset! (::highlighted-group state) group)
                                               (when (and ref (.-current ref) (< 2 (:item-index item))
                                                          (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
                                                 (.. ref -current (scrollIntoView #js {:block "center" 
                                                                                       :inline "nearest"
-                                                                                      :behavior "smooth"}))) 
-                                              (case group 
-                                                :search-actions (reset! (::actions state) [:close :filter])
-                                                :filters        (reset! (::actions state) [:testing])
-                                                :commands       (reset! (::actions state) [:close :trigger])
-                                                :pages          (reset! (::actions state) [:close :copy-page-ref :open-page-right :open-page])
-                                                :blocks         (reset! (::actions state) [:close :copy-block-ref :open-block-right :open-block])
-                                                :create         (reset! (::actions state) [:close :create])
-                                                :recents        (reset! (::actions state) [:close :open])
-                                                (reset! (::actions state) [:close]))))
+                                                                                      :behavior "smooth"}))))) 
                        (make-shui-context)))]]))
 
 (defn move-highlight [state n]
@@ -530,20 +502,35 @@
 (defonce keydown-handler
   (fn [state e]
     (let [shift? (.-shiftKey e)
-          alt? (.-altKey e)]
+          meta? (.-metaKey e)
+          alt? (.-altKey e)
+          show-less (fn [] (swap! (::results state) update-in [@(::highlighted-group state) :show] #(case % :less :none :less)))
+          show-more (fn [] (swap! (::results state) update-in [@(::highlighted-group state) :show] #(case % :none :less :more)))]
       (reset! (::shift? state) shift?)
+      (reset! (::meta? state) meta?)
       (reset! (::alt? state) alt?)
       (when (#{"ArrowDown" "ArrowUp"} (.-key e))
         (.preventDefault e))
+      (when (and meta? (#{"ArrowLeft" "ArrowRight"} (.-key e)))
+        (.preventDefault e))
+      (when (and meta? shift? (#{"," "."} (.-key e)))
+        (.preventDefault e))
       (case (.-key e)
-        "ArrowDown" (move-highlight state 1)
-        "ArrowUp"   (move-highlight state -1)
-        "Enter" (if shift?
-                  (handle-action :default state e))
-        "Escape" (when (seq @(::input state))
-                   (.preventDefault e)
-                   (.stopPropagation e)
-                   (handle-input-change state nil ""))
+        ","           (when (and meta? shift?) (show-less))
+        "."           (when (and meta? shift?) (show-more))
+        ; "ArrowLeft"   (when meta? (show-less))
+        ; "ArrowRight"  (when meta? (show-more)) 
+        "ArrowDown"   (if meta? 
+                        (show-less)
+                        (move-highlight state 1))
+        "ArrowUp"     (if meta? 
+                        (show-more)
+                        (move-highlight state -1))
+        "Enter"       (handle-action :default state e)
+        "Escape"      (when (seq @(::input state))
+                        (.preventDefault e)
+                        (.stopPropagation e)
+                        (handle-input-change state nil ""))
         nil))))
 
 (defonce keyup-handler 
@@ -658,7 +645,9 @@
   rum/reactive
   (rum/local "" ::input)
   (rum/local false ::shift?)
+  (rum/local false ::meta?)
   (rum/local false ::alt?)
+  (rum/local nil ::highlighted-group)
   (rum/local nil ::highlighted-item)
   (rum/local nil ::keydown-handler)
   (rum/local nil ::keyup-handler)
