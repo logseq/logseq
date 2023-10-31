@@ -122,7 +122,7 @@
     (let [search-q' (subs search-q 1)]
       (page-handler/create! search-q' {:class? true
                                        :redirect? false})
-      (state/pub-event! [:class/configure (db/entity [:block/name (util/page-name-sanity-lc search-q')]) {}]))
+      (state/pub-event! [:class/configure (db/entity [:block/name (util/page-name-sanity-lc search-q')])]))
 
     :new-whiteboard
     (whiteboard-handler/create-new-whiteboard-and-redirect! search-q)
