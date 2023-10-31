@@ -37,7 +37,7 @@
     "https-proxy-agent": "7.0.2",
     "socks-proxy-agent": "8.0.2",
     "@sentry/electron": "2.5.1",
-    "posthog-js": "1.10.2",
+    "posthog-js": "1.57.2",
     "@logseq/rsapi": "0.0.73",
     "electron-deeplink": "1.0.10",
     "abort-controller": "3.0.0",
