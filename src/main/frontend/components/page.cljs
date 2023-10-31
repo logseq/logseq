@@ -659,7 +659,7 @@
          (cond
            (and class? (not show-page-properties?))
            [:div
-            [:div.mb-2 "Class Properties:"]
+            [:div.mb-2 "Class properties:"]
             [:div
              (component-block/db-properties-cp {:editor-box editor/box}
                                                page
