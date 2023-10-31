@@ -4,7 +4,7 @@
   "description": "Amplify components for Logseq",
   "license": "MIT",
   "scripts": {
-    "dev:amplify": "parcel watch ./src/amplify.ts --dist-dir ../src/main/frontend/ --no-hmr --no-source-maps",
+    "dev:amplify": "parcel watch ./src/amplify.ts --dist-dir ../static/js --no-hmr --no-source-maps",
     "dev:examples": "parcel serve ./examples/index.html",
     "build:amplify": "parcel build ./src/amplify.ts --no-source-maps",
     "postinstall": "yarn build:amplify"
