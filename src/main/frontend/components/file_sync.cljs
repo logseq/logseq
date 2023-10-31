@@ -12,7 +12,7 @@
             [frontend.db.model :as db-model]
             [frontend.fs :as fs]
             [frontend.fs.sync :as fs-sync]
-            [frontend.handler.file-sync :refer [*beta-unavailable?] :as file-sync-handler]
+            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
@@ -721,9 +721,7 @@
 
   (let [[loading? set-loading?] (rum/use-state false)]
     [:div.cp__file-sync-welcome-logseq-sync
-     [:span.head-bg
-
-      [:strong "CLOSED BETA"]]
+     [:span.head-bg]
 
      [:h1.text-2xl.font-bold.flex-col.sm:flex-row
       [:span.opacity-80 "Welcome to "]
@@ -745,7 +743,6 @@
                                (if (and (number? ex-time)
                                         (< (* ex-time 1000) (js/Date.now)))
                                  (do
-                                   (vreset! *beta-unavailable? true)
                                    (maybe-onboarding-show :unavailable))
 
                                  ;; Logseq sync available
@@ -763,15 +760,12 @@
     [:span.pr-2.dark:text-white.text-gray-800 "Logseq Sync"]
     [:span.opacity-80 "is not yet available for you. 😔 "]]
 
-   [:h2
-    "Thanks for creating an account! To ensure that our file syncing service runs well when we release it"
-    [:br]
-    "to our users, we need a little more time to test it. That’s why we decided to first roll it out only to our "
-    [:br]
-    "charitable OpenCollective sponsors and backers. We can notify you once it becomes available for you."]
+   (when-let [expire-time (:ExpireTime (state/get-user-info))]
+     (when (number? expire-time)
+       [:h2 (util/format "Expired at: %s" (js/Date. (* 1000 expire-time)))]))
 
    [:div.pt-6.flex.justify-end.space-x-2
-    (ui/button "Close" :on-click close-fn :background "gray" :class "opacity-60")]])
+    (ui/button "Close" :on-click close-fn :background "gray" :class "opacity-60 text-link")]])
 
 (rum/defc onboarding-congrats-successful-sync
   [close-fn]

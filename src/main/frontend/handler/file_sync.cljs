@@ -19,10 +19,7 @@
             [lambdaisland.glogi :as log]
             [logseq.common.path :as path]))
 
-(def *beta-unavailable? (volatile! false))
-
 (def refresh-file-sync-component (atom false))
-
 
 (defn get-current-graph-uuid []
   (state/get-current-file-sync-graph-uuid))
@@ -227,7 +224,6 @@
        (async/unsub p topic c))))
 
 (defn reset-user-state! []
-  (vreset! *beta-unavailable? false)
   (state/set-state! :file-sync/onboarding-state nil))
 
 (defn calculate-time-left

@@ -278,6 +278,10 @@ html.is-mobile {
   text-sm leading-4 font-medium rounded-[6px] text-white
   focus:outline-none transition ease-in-out duration-150;
 
+  &.bg-gray-600 {
+    color: var(--ls-primary-text-color);
+  }
+
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
