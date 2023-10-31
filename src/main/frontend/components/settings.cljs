@@ -881,8 +881,7 @@
                (ui/button (t :settings-account/upgrade-plan)
                           {:class    "p-1 h-8 justify-center"
                            :icon     "upload"
-                           :href     config/SITE-ACCOUNT-ENTRYPOINT
-                           :on-click user-handler/upgrade})
+                           :href     config/SITE-ACCOUNT-ENTRYPOINT})
                :else nil)
 
              [:a.pt-2
