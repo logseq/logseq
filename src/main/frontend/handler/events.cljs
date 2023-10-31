@@ -11,6 +11,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [frontend.commands :as commands]
+            [frontend.components.class :as class-component]
             [frontend.components.command-palette :as command-palette]
             [frontend.components.conversion :as conversion-component]
             [frontend.components.diff :as diff]
@@ -893,10 +894,10 @@
    {:id :new-db-graph
     :label "graph-setup"}))
 
-(defmethod handle :class/configure [[_ page opts]]
+(defmethod handle :class/configure [[_ page]]
   (state/set-modal!
    #(vector :<>
-            (page/configure page opts)
+            (class-component/configure page)
             (page/page-properties page {:configure? true}))
    {:id :page-configure
     :label "page-configure"
