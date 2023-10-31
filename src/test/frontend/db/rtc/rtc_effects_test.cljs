@@ -1,4 +1,7 @@
-(ns frontend.db.rtc-test
+(ns frontend.db.rtc.rtc-effects-test
+  "This ns include tests abouts rtc-part with other components.
+  These tests need to start the rtc-loop.
+  Other simple fn tests are located at `frontend.db.rtc.rtc-fns-test`"
   (:require ["/frontend/idbkv" :as idb-keyval]
             [cljs.core.async :as async :refer [<! go timeout]]
             [clojure.test :as t :refer [deftest is use-fixtures]]
