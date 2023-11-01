@@ -141,7 +141,6 @@
                            (map #(hash-map :icon "command"
                                            :icon-theme :gray
                                            :text (cp/translate t %)
-                                           :value-label (pr-str (:id %))
                                            :shortcut (:shortcut %)
                                            :source-command %)))
         favorite-pages nil
@@ -172,9 +171,6 @@
            (map #(hash-map :icon "command"
                            :icon-theme :gray
                            :text (cp/translate t %)
-                           :value-label (pr-str (:id %))
-                           ; :info (pr-str (:id %))
-                           ; :info (:desc %)
                            :shortcut (:shortcut %)
                            :source-command %))
            (hash-map :status :success :items)
