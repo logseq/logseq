@@ -2,7 +2,7 @@
   "Provides main application state, fns associated to set and state based rum
   cursors"
   (:require [cljs-bean.core :as bean]
-            [cljs.core.async :as async :refer [<!]]
+            [cljs.core.async :as async :refer [<! >!]]
             [cljs.spec.alpha :as s]
             [clojure.string :as string]
             [dommy.core :as dom]
@@ -79,15 +79,18 @@
       :ui/recent-pages                       (or (storage/get :ui/recent-pages) {})
       :ui/recent-search                      (or (storage/get :ui/recent-search) {})
 
-      ;; right sidebar
-      :ui/settings-open?                     false
-      :ui/sidebar-open?                      false
-      :ui/sidebar-width                      "40%"
-      :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
-      :ui/theme                              (or (storage/get :ui/theme) "light")
-      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
-      :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
-      :ui/wide-mode?                         (storage/get :ui/wide-mode)
+     ;; right sidebar
+     :ui/handbooks-open?                    false
+     :ui/help-open?                         false
+     :ui/fullscreen?                        false
+     :ui/settings-open?                     false
+     :ui/sidebar-open?                      false
+     :ui/sidebar-width                      "40%"
+     :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
+     :ui/theme                              (or (storage/get :ui/theme) "light")
+     :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
+     :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
+     :ui/wide-mode?                         (storage/get :ui/wide-mode)
 
       ;; ui/collapsed-blocks is to separate the collapse/expand state from db for:
       ;; 1. right sidebar
@@ -226,11 +229,12 @@
       :plugin/navs-settings?                 true
       :plugin/focused-settings               nil ;; plugin id
 
-      ;; pdf
-      :pdf/system-win?                       false
-      :pdf/current                           nil
-      :pdf/ref-highlight                     nil
-      :pdf/block-highlight-colored?          (or (storage/get "ls-pdf-hl-block-is-colored") true)
+     ;; pdf
+     :pdf/system-win?                       false
+     :pdf/current                           nil
+     :pdf/ref-highlight                     nil
+     :pdf/block-highlight-colored?          (or (storage/get "ls-pdf-hl-block-is-colored") true)
+     :pdf/auto-open-ctx-menu?               (not= false (storage/get "ls-pdf-auto-open-ctx-menu"))
 
       ;; all notification contents as k-v pairs
       :notification/contents                 {}
@@ -286,13 +290,14 @@
 
       :ui/loading?                           {}
       :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
-      :feature/enable-sync-diff-merge?       (storage/get :logseq-sync-diff-merge-enabled)
+      :feature/enable-sync-diff-merge?       ((fnil identity true) (storage/get :logseq-sync-diff-merge-enabled))
 
       :file/rename-event-chan                (async/chan 100)
       :ui/find-in-page                       nil
       :graph/importing                       nil
       :graph/importing-state                 {}
       :graph/loading?                        nil
+      :handbook/route-chan                   (async/chan (async/sliding-buffer 1))
 
       :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
       :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
@@ -2320,6 +2325,21 @@ Similar to re-frame subscriptions"
    (rum/derived-atom [(rum/cursor-in state [repo :restore/unloaded-blocks])] [::block-unloaded repo block-uuid]
      (fn [s]
        (contains? s (str block-uuid))))))
+
+(defn handbook-open?
+  []
+  (:ui/handbooks-open? @state))
+
+(defn get-handbook-route-chan
+  []
+  (:handbook/route-chan @state))
+
+(defn open-handbook-pane!
+  [k]
+  (when-not (handbook-open?)
+    (set-state! :ui/handbooks-open? true))
+  (js/setTimeout #(async/go
+                    (>! (get-handbook-route-chan) k))))
 
 (defn set-page-properties-changed!
   [page-name]
