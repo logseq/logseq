@@ -23,18 +23,19 @@
     [promesa.core :as p]
     [rum.core :as rum]
     [frontend.mixins :as mixins]
-    [logseq.graph-parser.util.block-ref :as block-ref]))
+    [logseq.graph-parser.util.block-ref :as block-ref]
+    [logseq.graph-parser.util :as gp-util]))
 
 (def GROUP-LIMIT 5)
-(def FILTER-ROW-HEIGHT 81)
 
-;; When CMDK opens, we have some default search actions we make avaialbe for quick access
-(def default-search-actions
+(def search-actions
   [{:text "Search only pages"        :info "Add filter to search" :icon-theme :gray :icon "page" :filter {:group :pages}}
    {:text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page" :filter {:group :current-page}}
    {:text "Search only blocks"       :info "Add filter to search" :icon-theme :gray :icon "block" :filter {:group :blocks}}
    ;; {:text "Search only files"        :info "Add filter to search" :icon-theme :gray :icon "file" :filter {:group :files}}
    ])
+
+(def filters search-actions)
 
 (def default-commands
   [{:text "Open settings" :icon "settings"      :icon-theme :gray}
@@ -43,8 +44,7 @@
 
 ;; The results are separated into groups, and loaded/fetched/queried separately
 (def default-results
-  {:search-actions {:status :success :show :less :items nil}
-   :recents        {:status :success :show :less :items nil}
+  {:recents        {:status :success :show :less :items nil}
    :commands       {:status :success :show :less :items nil}
    :favorites      {:status :success :show :less :items nil}
    :current-page   {:status :success :show :less :items nil}
@@ -70,21 +70,25 @@
                         (let [{:keys [items show]} (get results group)]
                           (case show
                             :more items
-                            :less (take 5 items)
-                            (take 2 items))))
+                            (take 5 items))))
         page-exists? (db/entity [:block/name (string/trim input)])
-        order (->>
-               [["Filters"        :filters        (visible-items :filters)]
-                ["Search actions" :search-actions (visible-items :search-actions)]
-                ["Commands"       :commands       (visible-items :commands)]
-                ["Pages"          :pages          (visible-items :pages)]
-                (when-not page-exists?
-                  ["Create"         :create         (create-items input)])
-                ["Current page"   :current-page   (visible-items :current-page)]
-                ["Whiteboards"    :whiteboards    (visible-items :whiteboards)]
-                ["Blocks"         :blocks         (visible-items :blocks)]
-                ["Recents"        :recents        (visible-items :recents)]]
-               (remove nil?))]
+        filter-mode? (string/includes? input " /")
+        order* (if filter-mode?
+                 [["Filters"        :filters        (visible-items :filters)]
+                  ["Pages"          :pages          (visible-items :pages)]
+                  (when-not page-exists?
+                    ["Create"         :create         (create-items input)])]
+                 (->>
+                  [["Commands"       :commands       (visible-items :commands)]
+                   ["Pages"          :pages          (visible-items :pages)]
+                   (when-not page-exists?
+                     ["Create"         :create         (create-items input)])
+                   ["Current page"   :current-page   (visible-items :current-page)]
+                   ["Whiteboards"    :whiteboards    (visible-items :whiteboards)]
+                   ["Blocks"         :blocks         (visible-items :blocks)]
+                   ["Recents"        :recents        (visible-items :recents)]]
+                  (remove nil?)))
+        order (remove nil? order*)]
     (for [[group-name group-key group-items] order]
       [group-name
        group-key
@@ -106,23 +110,8 @@
           (:source-search highlighted-item) :search
           (:source-command highlighted-item) :trigger
           (:source-create highlighted-item) :create
-          (:source-adjustment highlighted-item) :filter
-          (:source-group highlighted-item) :filter
+          (:filter highlighted-item) :filter
           :else nil)))
-
-;; Take the ordered results and the highlight index and determine which item is highlighted
-; (defn state->highlighted-item
-;   ([state] (state->highlighted-item state (state->results-ordered state)))
-;   ([state results-ordered]
-;    (let [highlight-index @(::highlight-index state)
-;          items (mapcat last results-ordered)
-;          item-count (count items)
-;          normalized-index (cond
-;                             (zero? item-count) nil
-;                             (<= 0 (mod highlight-index item-count)) (mod highlight-index item-count)
-;                             :else (- item-count (mod highlight-index item-count)))]
-;        (when normalized-index
-;          (nth items normalized-index nil)))))
 
 ;; Each result gorup has it's own load-results function
 (defmulti load-results (fn [group _state] group))
@@ -148,15 +137,6 @@
                                            :source-command %)))]
     (reset! !results (-> default-results (assoc-in [:recents :items] recent-items)
                          (assoc-in [:commands :items] command-items)))))
-
-
-;; The search-actions are only loaded when there is no query present. It's like a quick access to filters
-(defmethod load-results :search-actions [group state]
-  (let [!input (::input state)
-        !results (::results state)]
-    (if (empty? @!input)
-      (swap! !results update group merge {:status :success :items default-search-actions})
-      (swap! !results update group merge {:status :success :items nil}))))
 
 ;; The commands search uses the command-palette hander
 (defmethod load-results :commands [group state]
@@ -232,8 +212,7 @@
 
 (defmethod load-results :files [group state]
   (let [!input (::input state)
-        !results (::results state)
-        repo (state/get-current-repo)]
+        !results (::results state)]
     (swap! !results assoc-in [group :status] :loading)
     (p/let [files (search/file-search @!input 99)]
       (js/console.log "load-results/files" (clj->js files)))))
@@ -256,32 +235,14 @@
       (swap! !results update group merge {:status :success :items items}))))
 
 (defmethod load-results :filters [group state]
-  (let [!input (::input state)
-        !results (::results state)
-        has-double-colon (string/includes? @!input "::")
-        [_ pkey pval] (when has-double-colon (re-matches #"^.*?(\S*)::\s?(\S*)" @!input))
-        replace-pkey #(swap! (::input state) string/replace #"\S*::" (str % "::"))
-        replace-pval #(swap! (::input state) string/replace #"::\s?(\S*)" (str "::" %))
-        items (cond
-                (not has-double-colon) []
-                (empty? pkey) (->> (search/property-search pval)
-                                   (map #(hash-map :icon "search" :icon-theme :gray :text % :source-adjustment (partial replace-pkey %))))
-                :else (->> (search/property-value-search pval pkey)
-                           (map #(hash-map :icon "search" :icon-theme :gray :text % :source-adjustment (partial replace-pval %)))))
-                ; [{:icon "search"
-                ;   :icon-theme :gray
-                ;   :text "Testing search filters"}]
-                ; [])\]]
-        items (if-not (and has-double-colon (empty? pkey)) items
-                (->> [{:icon "search" :icon-theme :gray :text "Filter commands" :value :filter-commands :source-group :commands}
-                      {:icon "search" :icon-theme :gray :text "Filter pages" :value :filter-pages :source-group :pages}
-                      {:icon "search" :icon-theme :gray :text "Filter blocks" :value :filter-blocks :source-group :blocks}
-                      {:icon "search" :icon-theme :gray :text "Filter whiteboards" :value :filter-whiteboards :source-group :whiteboards}]
-                     (filter #(string/includes? (lower-case-str (pr-str %)) (lower-case-str pval)))
-                     (into items)))]
-    (js/console.log "load-results/filters" #js {:pkey pkey :pval pval})
-    (swap! !results update group merge {:status :success :items items})))
-
+  (let [!results (::results state)
+        !input (::input state)
+        input @!input
+        q (or (last (gp-util/split-last " /" input)) "")
+        matched-items (if (string/blank? q)
+                        filters
+                        (search/fuzzy-search filters q {:extract-fn :text}))]
+    (swap! !results update group merge {:status :success :items matched-items})))
 
 ;; The default load-results function triggers all the other load-results function
 (defmethod load-results :default [_ state]
@@ -289,7 +250,6 @@
   (if-not (some-> state ::input deref seq)
     (load-results :initial state)
     (do
-      (load-results :search-actions state)
       (load-results :commands state)
       (load-results :blocks state)
       (load-results :pages state)
@@ -365,14 +325,13 @@
     (close-unless-alt! state)))
 
 (defmethod handle-action :filter [_ state event]
-  (let [!filter (::filter state)
-        item (some-> state state->highlighted-item)]
-    (js/log "TESTING" (clj->js item))
-    (when-let [adjustment (:source-adjustment item)]
-      (adjustment)
-      (load-results :filters state))
-    (when-let [group (:source-group item)]
-      (swap! !filter assoc :group group))))
+  (let [item (some-> state state->highlighted-item)
+        !input (::input state)]
+    (reset! !input (first (gp-util/split-last " /" @!input)))
+    (let [!filter (::filter state)
+          group (get-in item [:filter :group])]
+      (swap! !filter assoc :group group)
+      (load-results group state))))
 
 (defmethod handle-action :default [_ state event]
   (when-let [action (state->action state)]
@@ -415,12 +374,10 @@
                                ;; boolean value change so manually pass in the dep
                                :on-highlight-dep highlighted-item
                                :on-click (fn [e]
-                                           (if highlighted?
-                                             (do
-                                               (handle-action :default state item)
-                                               (when-let [on-click (:on-click item)]
-                                                 (on-click e)))
-                                             (reset! (::highlighted-item state) item)))
+                                           (reset! (::highlighted-item state) item)
+                                           (handle-action :default state item)
+                                           (when-let [on-click (:on-click item)]
+                                             (on-click e)))
                                :on-mouse-enter (fn [e]
                                                  (when (not highlighted?)
                                                    (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
@@ -471,7 +428,7 @@
     (reset! (::shift? state) shift?)
     (reset! (::meta? state) meta?)
     (reset! (::alt? state) alt?)
-    (when (get #{"ArrowUp" "ArrowDown" "ArrowLeft" "ArrowRight"} (.-key e))
+    (when (get #{"ArrowUp" "ArrowDown"} (.-key e))
       (.preventDefault e))
     (case (.-key e)
       "ArrowDown"   (if meta?
@@ -483,6 +440,7 @@
       "Enter"       (handle-action :default state e)
       "Escape"      (when-not (string/blank? input)
                       (util/stop e)
+                      (reset! (::filter state) nil)
                       (handle-input-change state nil ""))
       "c"           (copy-block-ref state)
       nil)))
@@ -505,24 +463,6 @@
     :commands "Commands"
     :recents "Recents"
     (string/capitalize (name group))))
-
-(rum/defc filter-row [state filter]
-  [:div {:class "pt-3 border-b flex flex-col gap-2 bg-gray-02 border-gray-07"
-         :style {:height (- FILTER-ROW-HEIGHT 4)}}
-   [:div {:class "text-xs font-bold px-6"} "Filters"]
-   [:div {:class "flex items-center gap-2 overflow-x-auto pb-3"}
-    [:div {:class "w-4 h-1 shrink-0"}]
-    (for [group [:recents :commands :pages :whiteboards :blocks]]
-      (if (or (nil? (:group filter)) (= (:group filter) group))
-        [:div {:class "text-xs py-0.5 px-1.5 rounded bg-gray-07 hover:bg-gray-08 hover:cursor-pointer shrink-0"
-               :on-click (if (= (:group filter) group)
-                           #(swap! (::filter state) dissoc :group)
-                           #(swap! (::filter state) assoc :group group))}
-          (print-group-name group)]
-        [:div {:class "text-xs py-0.5 px-1.5 rounded bg-gray-06 hover:bg-gray-07 opacity-50 hover:opacity-75 hover:cursor-pointer shrink-0"
-               :on-click #(swap! (::filter state) assoc :group group)}
-          (print-group-name group)]))
-    [:div {:class "w-2 h-1 shrink-0"}]]])
 
 (rum/defc input-row
   [state all-items]
@@ -548,7 +488,18 @@
      [:input {:class "text-xl bg-transparent border-none w-full outline-none px-4 py-3"
               :placeholder "What are you looking for?"
               :ref #(when-not @input-ref (reset! input-ref %))
-              :on-change (partial handle-input-change state)
+              :on-change (fn [e]
+                           (when (= "" (.-value @input-ref))
+                             (reset! (::filter state) nil))
+                           (handle-input-change state e))
+              :on-key-down (fn [e]
+                             (let [value (.-value @input-ref)
+                                   last-char (last value)]
+                               (when (and (some? @(::filter state))
+                                          (or (= (util/ekey e) "/")
+                                              (and (= (util/ekey e) "Backspace")
+                                                   (= last-char "/"))))
+                                 (reset! (::filter state) nil))))
               :value input}]]))
 
 (rum/defc input-row-sidebar
@@ -590,10 +541,11 @@
                                   :muted true}
                                  (make-shui-context)))]
     (when action
-      [:div {:class "flex w-full px-4 py-2 gap-2"
+      [:div {:class "flex w-full px-4 py-2 gap-2 justify-between"
              :style {:background "var(--lx-gray-03)"
                      :border-top "1px solid var(--lx-gray-07)"}}
-       (case action
+       [:div.flex.gap-2
+        (case action
          :open
          [:<>
           (button-fn "Open" ["return"])
@@ -616,7 +568,9 @@
          [:<>
           (button-fn "Filter" ["return"])]
 
-         nil)])))
+         nil)]
+       [:div.text-sm.opacity-30.hover:opacity-90.leading-6
+        "Tip: type / to add search filters"]])))
 
 (rum/defcs cmdk <
   shortcut/disable-all-shortcuts
@@ -659,11 +613,11 @@
                      (not sidebar?) (str " pb-14"))
             :ref #(when % (some-> state ::scroll-container-ref (reset! %)))
             :style {:background "var(--lx-gray-02)"}}
-      (when filter
-        (filter-row state filter))
       (for [[group-name group-key group-count group-items] results-ordered
             :when (not= 0 group-count)
-            :when (if-not group-filter true (= group-filter group-key))]
+            :when (if-not group-filter true
+                          (or (= group-filter group-key)
+                              (and filter (= group-key :create))))]
         (result-group state group-name group-key group-items first-item))]
      (hints state)]))
 
