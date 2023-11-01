@@ -62,8 +62,8 @@
 
 (defn create-items [q]
   (when-not (string/blank? q)
-    [{:text "Create page"       :icon "new-page"       :icon-theme :color :shortcut "cmd+shift+P" :info (str "Create page called '" q "'") :source-create :page}
-     {:text "Create whiteboard" :icon "new-whiteboard" :icon-theme :color :shortcut "cmd+shift+W" :info (str "Create whiteboard called '" q "'") :source-create :whiteboard}]))
+    [{:text "Create page"       :icon "new-page"       :icon-theme :color :info (str "Create page called '" q "'") :source-create :page}
+     {:text "Create whiteboard" :icon "new-whiteboard" :icon-theme :color :info (str "Create whiteboard called '" q "'") :source-create :whiteboard}]))
 
 ;; Take the results, decide how many items to show, and order the results appropriately
 (defn state->results-ordered [state]
@@ -144,6 +144,7 @@
                                           :source-page (when (= :page (:type %)) (:data %))
                                           :source-search (when (= :search (:type %)) (:data %)))))
         command-items (->> (cp-handler/top-commands 1000)
+                           (remove (fn [c] (= :window/close (:id c))))
                            (map #(hash-map :icon "command"
                                            :icon-theme :gray
                                            :text (cp/translate t %)
@@ -152,8 +153,8 @@
         favorite-pages nil
         favorite-items nil]
     (reset! !results (-> default-results (assoc-in [:recents :items] recent-items)
-                                         (assoc-in [:commands :items] command-items)
-                                         (assoc-in [:favorites :items] favorite-items)))))
+                         (assoc-in [:commands :items] command-items)
+                         (assoc-in [:favorites :items] favorite-items)))))
 
 
 ;; The search-actions are only loaded when there is no query present. It's like a quick access to filters
@@ -342,14 +343,13 @@
       (close-unless-alt! state))))
 
 (defmethod handle-action :open-page-right [_ state event]
-  (when-let [page-uuid (some-> state state->highlighted-item :source-page model/get-page :block/uuid uuid)]
-    (js/console.log "oepn-page-right" page-uuid)
-    (editor-handler/open-block-in-sidebar! page-uuid)
+  (when-let [page-name (some-> state state->highlighted-item :source-page)]
+    (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
+      (editor-handler/open-block-in-sidebar! (:block/uuid page)))
     (close-unless-alt! state)))
 
 (defmethod handle-action :open-block-right [_ state event]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid uuid)]
-    (js/console.log "oepn-block-right" block-uuid)
     (editor-handler/open-block-in-sidebar! block-uuid)
     (close-unless-alt! state)))
 
@@ -373,13 +373,6 @@
   (when-let [action (some-> state state->highlighted-item :source-command :action)]
     (action)
     (close-unless-alt! state)))
-
-(defmethod handle-action :filter-old [_ state event]
-  (let [!filter (::filter state)
-        filter (some-> state state->highlighted-item :filter)]
-    (if filter
-      (reset! !filter filter)
-      (reset! !filter nil))))
 
 (defmethod handle-action :create [_ state event]
   (let [item (state->highlighted-item state)
@@ -415,16 +408,7 @@
         can-show-less? (< GROUP-LIMIT (count visible-items))
         can-show-more? (< (count visible-items) (count items))
         show-less #(swap! (::results state) assoc-in [group :show] :less)
-        show-more #(swap! (::results state) assoc-in [group :show] :more)
-        cap-highlighted-item (fn []
-                               (js/console.log
-                                "testing-capping-the-highlighted-item"
-                                (count items)
-                                (clj->js (drop GROUP-LIMIT items))
-                                (clj->js highlighted-item)
-                                (.indexOf items highlighted-item))
-                               (when (< (dec GROUP-LIMIT) (.indexOf items highlighted-item))
-                                 (reset! (::highlighted-item state) (nth items 4 nil))))]
+        show-more #(swap! (::results state) assoc-in [group :show] :more)]
     [:div {:class "border-b border-gray-06 pb-1 last:border-b-0"}
      [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02"}
       [:div {:class "font-bold text-gray-11 pl-0.5"} title]
@@ -492,7 +476,7 @@
 
      ;; ensure that there is a throttled version of the load-results function
      (when-not @!load-results-throttled
-       (reset! !load-results-throttled (gfun/throttle load-results 1000)))
+       (reset! !load-results-throttled (gfun/throttle load-results 100)))
 
      ;; retreive the laod-results function and update all the results
      (when-let [load-results-throttled @!load-results-throttled]
@@ -617,22 +601,44 @@
               :value input}]
      (shui/icon "x" {:class "text-gray-11"})]))
 
-(defn render-action-button [state highlighted-item]
-  (let [shift? @(::shift? state)
-        alt? @(::alt? state)
-        action (state->action state)
-        text (->> [(case action :open "Open" :search "Search" :trigger "Trigger" :create "Create" :filter "Filter" nil)
-                   (when (and shift? (= :open action)) "in sidebar")
-                   (when alt? "(keep open)")]
-                  (remove nil?)
-                  (string/join " "))
-        theme (case action :create :color :gray)]
+(rum/defc hints
+  [state]
+  (let [action (state->action state)
+        button-fn (fn [text shortcut]
+                    (shui/button {:text text
+                                  :theme :gray
+                                  :on-click #(handle-action action state %)
+                                  :shortcut shortcut
+                                  :muted true}
+                                 (make-shui-context)))]
     (when action
-      (shui/button {:text text
-                    :theme theme
-                    :on-click #(handle-action action state %)
-                    :shortcut ["return"]}
-                   (make-shui-context)))))
+      [:div {:class "flex w-full px-4 py-2 gap-2"
+             :style {:background "var(--lx-gray-03)"
+                     :border-top "1px solid var(--lx-gray-07)"}}
+       (case action
+         :open
+         [:<>
+          (button-fn "Open" ["return"])
+          (button-fn "Open in sidebar" ["shift" "return"])
+          (button-fn "Copy ref" ["⌘" "c"])]
+
+         :search
+         [:<>
+          (button-fn "Search" ["return"])]
+
+         :trigger
+         [:<>
+          (button-fn "Trigger" ["return"])]
+
+         :create
+         [:<>
+          (button-fn "Create" ["return"])]
+
+         :filter
+         [:<>
+          (button-fn "Filter" ["return"])]
+
+         nil)])))
 
 (rum/defcs cmdk <
   shortcut/disable-all-shortcuts
@@ -668,19 +674,11 @@
                 state)}
                   ; (load-results :initial state)))}
   [state {:keys [sidebar?]}]
-  (let [input @(::input state)
-        actions @(::actions state)
-        ; highlight-index @(::highlight-index state)
-        filter (not-empty @(::filter state))
+  (let [filter (not-empty @(::filter state))
         group-filter (:group filter)
         results-ordered (state->results-ordered state)
         all-items (mapcat last results-ordered)
-        first-item (first all-items)
-        highlighted-item (or @(::highlighted-item state) first-item)
-        shift? @(::shift? state)
-        alt? @(::alt? state)
-        dark? (= "dark" (state/sub :ui/theme))]
-    ; (rum/use-effect! #(load-results :initial state) [])
+        first-item (first all-items)]
     [:div.cp__cmdk {:class (cond-> "w-full h-full relative flex flex-col justify-start"
                              (not sidebar?) (str " border border-gray-06 rounded-lg"))}
      (if sidebar?
@@ -696,33 +694,13 @@
             :when (not= 0 group-count)
             :when (if-not group-filter true (= group-filter group-key))]
         (result-group state group-name group-key group-items first-item))]
-     [:div {:class "absolute right-4 bottom-4 shadow-gray-02 rounded"
-            :style {:box-shadow (if dark?
-                                  (str "0px 0px 9.7px rgba(8, 9, 10, 0.8), "
-                                       "0px 0px 23.3px rgba(8, 9, 10, 0.575), "
-                                       "0px 0px 43.8px rgba(8, 9, 10, 0.477), "
-                                       "0px 0px 78.2px rgba(8, 9, 10, 0.4), "
-                                       "0px 0px 146.2px rgba(8, 9, 10, 0.323), "
-                                       "0px 0px 350px rgba(8, 9, 10, 0.255) ")
-                                  (str "0px 0px 9.7px 12px rgba(248,249,250, 1), "
-                                       "0px 0px 23.3px 12px rgba(248,249,250, 0.75), "
-                                       "0px 0px 43.8px 12px rgba(248,249,250, 0.6), "
-                                       "0px 0px 78.2px 12px rgba(248,249,250, 0.5), "
-                                       "0px 0px 146.2px 12px rgba(248,249,250, 0.4), "
-                                       "0px 0px 350px 12px rgba(248,249,250, 0.35), "
-                                       "0px 0px 0.5px 0.5px rgba(0,0,0,0.5)"))}}
-                                  ; (str "0px 0px 9.7px rgba(0, 0, 0, 0.3), "
-                                  ;    "0px 0px 23.3px rgba(0, 0, 0, 0.21), "
-                                  ;    "0px 0px 43.8px rgba(0, 0, 0, 0.18), "
-                                  ;    "0px 0px 78.2px rgba(0, 0, 0, 0.15), "
-                                  ;    "0px 0px 146.2px rgba(0, 0, 0, 0.12), "
-                                  ;    "0px 0px 350px rgba(0, 0, 0, 0.9) "))}}
-      (render-action-button state highlighted-item)]]))
+     (hints state)]))
 
 (rum/defc cmdk-modal [props]
-  [:div {:class "cp__cmdk__modal rounded-lg max-h-[75dvh] w-[90dvw] max-w-4xl shadow-xl relative"}
+  [:div {:class "cp__cmdk__modal rounded-lg max-h-[65dvh] w-[90dvw] max-w-4xl shadow-xl relative"}
    (cmdk props)])
 
-(rum/defc cmdk-block [props]
-  [:div {:class "cp__cmdk__block rounded-md"}
-   (cmdk props)])
+(comment
+  (rum/defc cmdk-block [props]
+    [:div {:class "cp__cmdk__block rounded-md"}
+     (cmdk props)]))
