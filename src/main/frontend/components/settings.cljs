@@ -716,7 +716,10 @@
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (when (util/electron?) (auto-chmod-row t))
-     (when (and (util/electron?) (not (config/demo-graph? current-repo))) (filename-format-row))
+     (when (and (util/electron?)
+                (not (config/demo-graph? current-repo))
+                (not (config/db-based-graph? (state/get-current-repo))))
+       (filename-format-row))
      (clear-cache-row t)
 
      (ui/admonition
