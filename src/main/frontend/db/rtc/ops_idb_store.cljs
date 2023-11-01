@@ -37,8 +37,8 @@
           (p/let [old-v (idb-keyval/get key* store)]
             (if old-v
               (p/recur (inc key*) ops)
-              (do (idb-keyval/set key* (clj->js op) store)
-                  (p/recur (inc key*) other-ops)))))))))
+              (p/do! (idb-keyval/set key* (clj->js op) store)
+                     (p/recur (inc key*) other-ops)))))))))
 
 (defonce ^:private add-ops-ch (async/chan 100))
 (defonce #_:clj-kondo/ignore _add-ops-loop
