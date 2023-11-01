@@ -335,9 +335,10 @@
     (close-unless-alt! state)))
 
 (defmethod handle-action :open-block [_ state event]
-  (let [get-block-page (partial model/get-block-page (state/get-current-repo))]
-    (when-let [page (some-> state state->highlighted-item :source-block :block/uuid uuid get-block-page :block/name model/get-redirect-page-name)]
-      (route-handler/redirect-to-page! page)
+  (let [block-id (some-> state state->highlighted-item :source-block :block/uuid uuid)
+        get-block-page (partial model/get-block-page (state/get-current-repo))]
+    (when-let [page (some-> block-id get-block-page :block/name)]
+      (route-handler/redirect-to-page! page {:anchor (str "ls-block-" block-id)})
       (close-unless-alt! state))))
 
 (defmethod handle-action :open-page-right [_ state event]
