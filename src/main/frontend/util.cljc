@@ -986,7 +986,7 @@
      (when s
        (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
          (if remove-accents?
-           (removeAccents  normalize-str)
+           (removeAccents normalize-str)
            normalize-str)))))
 
 #?(:cljs

@@ -10,11 +10,6 @@
 
 (defonce indices (atom nil))
 
-(defn- sanitize
-  [content]
-  (some-> content
-          (util/search-normalize (state/enable-search-remove-accents?))))
-
 (defn- max-len
   []
   (state/block-content-max-length (state/get-current-repo)))
@@ -27,7 +22,7 @@
       {:id (:db/id block)
        :uuid (str uuid)
        :page page
-       :content (sanitize content)})))
+       :content content})))
 
 (defn page->index
   "Convert a page name to the index for searching (page content level)
@@ -40,7 +35,7 @@
         {:id   (:db/id page)
          :uuid (str uuid)
          ;; Add page name to the index
-         :content (sanitize (str "$pfts_f6ld>$ " original-name " $<pfts_f6ld$ " content))}))))
+         :content (str "$pfts_f6ld>$ " original-name " $<pfts_f6ld$ " content)}))))
 
 (defn build-blocks-indice
   ;; TODO: Remove repo effects fns further up the call stack. db fns need standardization on taking connection
@@ -73,17 +68,17 @@
      indice)))
 
 (defn process-block-avet [avet]
-  (some->> avet :v db/get-single-block-contents block->index bean/->js)) 
+  (some->> avet :v db/get-single-block-contents block->index bean/->js))
 
-(defn make-blocks-indice-non-blocking! 
+(defn make-blocks-indice-non-blocking!
   ([repo] (make-blocks-indice-non-blocking! 1000))
   ([repo chunk-size]
    (let [avets (db/get-all-block-avets)
          chunks (partition-all chunk-size avets)
          acc (atom [])
          process-chunks (fn process-recur [[curr & more]]
-                          (js/console.log "process-recur") 
-                          (when-not (empty? curr) 
+                          (js/console.log "process-recur")
+                          (when-not (empty? curr)
                             (->> (map process-block-avet curr)
                                  (remove nil?)
                                  (doall)
