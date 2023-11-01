@@ -544,8 +544,9 @@
 
    All page-names are sanitized except page-name-in-block"
   [state config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?]
-  (let [*mouse-down? (::mouse-down? state)
-        *hover? (::hover? state)
+  (let [*hover? (::hover? state)
+        ;; FIXME: Bring back fix from https://github.com/logseq/logseq/pull/10434/commits/42f68ce32e7a035e6926bc2798d46843bbd70297
+        *mouse-down? (::mouse-down? state)
         tag? (:tag? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
         untitled? (model/untitled-page? page-name)
@@ -1363,7 +1364,7 @@
                   url)]
         (if (and (coll? src)
                  (= (first src) "youtube-player"))
-          (youtube/youtube-video (last src))
+          (youtube/youtube-video (last src) nil)
           (when src
             (let [width (min (- (util/get-width) 96) 560)
                   height (int (* width (/ (if (string/includes? src "player.bilibili.com")
@@ -1500,7 +1501,7 @@
                                 :else
                                 (nth (util/safe-re-find text-util/youtube-regex url) 5))]
           (when-not (string/blank? youtube-id)
-            (youtube/youtube-video youtube-id))))
+            (youtube/youtube-video youtube-id nil))))
 
       (= name "youtube-timestamp")
       (when-let [timestamp (first arguments)]

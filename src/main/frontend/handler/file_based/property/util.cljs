@@ -11,7 +11,8 @@
             [logseq.graph-parser.text :as text]
             [frontend.db :as db]
             [frontend.state :as state]
-            [frontend.util.cursor :as cursor]))
+            [frontend.util.cursor :as cursor]
+            [frontend.util.block-content :as content]))
 
 (defn hidden-properties
   "These are properties hidden from user including built-in ones and ones
@@ -231,9 +232,7 @@
                                                              ast)))))
                                (mldoc/properties? (first ast)))
            lines (string/split-lines content)
-           [title body] (if title?
-                          [(first lines) (string/join "\n" (rest lines))]
-                          [nil (string/join "\n" lines)])
+           [title body] (content/get-title&body content format)
            scheduled (filter #(string/starts-with? % "SCHEDULED") lines)
            deadline (filter #(string/starts-with? % "DEADLINE") lines)
            body-without-timestamps (filter

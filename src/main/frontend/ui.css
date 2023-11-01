@@ -275,7 +275,7 @@ html.is-mobile {
 
 .ui__button {
   @apply inline-flex items-center px-3 py-2 border border-transparent
-  text-sm leading-4 font-medium rounded-md text-white
+  text-sm leading-4 font-medium rounded-[6px] text-white
   focus:outline-none transition ease-in-out duration-150;
 
   &:disabled {
@@ -317,8 +317,8 @@ html.is-mobile {
     border: 1px solid;
   }
 
-  &.p-1 {
-    padding: 0.25rem 0.5rem !important;
+  &.is-small {
+    @apply px-2.5 py-1;
   }
 }
 

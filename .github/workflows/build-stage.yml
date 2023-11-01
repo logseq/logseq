@@ -3,10 +3,9 @@
 name: Build-Stage
 
 on:
-#  push:
-#    branches: [master, stage]
-
   workflow_dispatch:
+  release:
+    types: [released]
 
 jobs:
   build:
