@@ -1033,7 +1033,8 @@
      (zotero-settings-row)
 
      ;; beta & alpha
-     (when-not web-platform?
+     (when (and (not web-platform?) logged-in?
+                (user-handler/alpha-or-beta-user?))
        [:div
         [:hr.mt-2.mb-4]
         [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -1041,10 +1042,9 @@
           (ui/icon (if logged-in? "lock-open" "lock") {:class "mr-1"})
           (t :settings-page/beta-features)]]
 
-        (when (user-handler/alpha-or-beta-user?)
-          [:div.flex.flex-col.gap-4
-           [:div.text-base.pt-2.pl-1.opacity-70
-            (util/format "🎉 You're a %s user!" (if (user-handler/alpha-user?) "Alpha" "Beta"))]])])]))
+        [:div.flex.flex-col.gap-4
+         [:div.text-base.pt-2.pl-1.opacity-70
+          (util/format "🎉 You're a %s user!" (if (user-handler/alpha-user?) "Alpha" "Beta"))]]])]))
 
 (rum/defc settings-effect
   < rum/static
