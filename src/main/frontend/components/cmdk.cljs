@@ -27,7 +27,8 @@
     [logseq.shui.core :as shui]
     [promesa.core :as p]
     [rum.core :as rum]
-    [frontend.mixins :as mixins]))
+    [frontend.mixins :as mixins]
+    [logseq.graph-parser.util.block-ref :as block-ref]))
 
 (def GROUP-LIMIT 5)
 (def FILTER-ROW-HEIGHT 81)
@@ -314,21 +315,16 @@
   (when-not (some-> state ::alt? deref)
     (state/close-modal!)))
 
+(defn- copy-block-ref [state]
+  (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid uuid)]
+    (editor-handler/copy-block-ref! block-uuid block-ref/->block-ref)
+    (close-unless-alt! state)))
+
 (defmulti handle-action (fn [action _state _event] action))
 
 (defmethod handle-action :close [_ state event]
   (js/console.log :handle-action/cancel)
   (state/close-modal!))
-
-(defmethod handle-action :copy-page-ref [_ state event]
-  (when-let [page-name (some-> state state->highlighted-item :source-page)]
-    (util/copy-to-clipboard! page-name)
-    (close-unless-alt! state)))
-
-(defmethod handle-action :copy-block-ref [_ state event]
-  (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid uuid)]
-    (editor-handler/copy-block-ref! block-uuid)
-    (close-unless-alt! state)))
 
 (defmethod handle-action :open-page [_ state event]
   (when-let [page-name (some-> state state->highlighted-item :source-page)]
@@ -507,6 +503,7 @@
       "Escape"      (when-not (string/blank? input)
                       (util/stop e)
                       (handle-input-change state nil ""))
+      "c"           (copy-block-ref state)
       nil)))
 
 (defn keyup-handler
@@ -620,7 +617,7 @@
          [:<>
           (button-fn "Open" ["return"])
           (button-fn "Open in sidebar" ["shift" "return"])
-          (button-fn "Copy ref" ["⌘" "c"])]
+          (when (:source-block @(::highlighted-item state)) (button-fn "Copy ref" ["⌘" "c"]))]
 
          :search
          [:<>
