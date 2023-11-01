@@ -412,7 +412,7 @@
   [state title group visible-items first-item]
   (let [{:keys [show items]} (some-> state ::results deref group)
         highlighted-item (or @(::highlighted-item state) first-item)
-        can-show-less? (< 0 (count visible-items))
+        can-show-less? (< GROUP-LIMIT (count visible-items))
         can-show-more? (< (count visible-items) (count items))
         show-less #(swap! (::results state) assoc-in [group :show] :less)
         show-more #(swap! (::results state) assoc-in [group :show] :more)
@@ -435,14 +435,12 @@
            (str "99+")
            (count items))])
       [:div {:class "flex-1"}]
-      [:div {:class (cond-> "hover:cursor-pointer hover:underline select-none"
-                      (not can-show-less?) (str " opacity-30 pointer-events-none"))
-             :on-click #(show-less)}
-       "Show less"]
-      [:div {:class (cond-> "hover:cursor-pointer hover:underline select-none"
-                      (not can-show-more?) (str " opacity-30 pointer-events-none"))
-             :on-click #(show-more)}
-       "Show more"]]
+
+      (when (or can-show-more? can-show-less?)
+        [:a.fade-link.select-node {:on-click (if (= show :more) show-less show-more)}
+         (if (= show :more)
+           "Show less"
+           "Show more")])]
       ; (cond
       ;   (<= (count items) GROUP-LIMIT) [:div]
       ;   show-more [:div {:class "hover:cursor-pointer" :on-click (fn [] (cap-highlighted-item) (toggle-show-more))} "Show less"]
