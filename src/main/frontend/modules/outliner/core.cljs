@@ -141,10 +141,14 @@
 (declare move-blocks)
 
 (defn- remove-macros-when-save
-  [txs-state block-entity]
+  [repo txs-state block-entity]
   (swap! txs-state (fn [txs]
                      (vec (concat txs
-                                  (map #(vector :db.fn/retractEntity (:db/id %)) (:block/macros block-entity)))))))
+                                  ;; Only delete if last reference
+                                  (keep #(when (<= (count (:block/_macros (db/entity repo (:db/id %))))
+                                                   1)
+                                           (vector :db.fn/retractEntity (:db/id %)))
+                                        (:block/macros block-entity)))))))
 
 (defn- create-object-when-save
   [txs-state block-entity m structured-tags?]
@@ -328,7 +332,7 @@
         ;; Update block's page attributes
         (update-page-when-save-block txs-state block-entity m-without-tags)
         ;; Remove macros as they are replaced by new ones
-        (remove-macros-when-save txs-state block-entity)
+        (remove-macros-when-save repo txs-state block-entity)
 
         ;; Remove orphaned refs from block
         (remove-orphaned-refs-when-save txs-state block-entity m-without-tags))

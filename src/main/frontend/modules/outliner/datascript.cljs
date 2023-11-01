@@ -110,7 +110,7 @@
 
 (defn update-refs-and-macros
   "When a block is deleted, refs are updated and macros associated with the block are deleted"
-  [txs opts]
+  [txs repo opts]
   (if (and (= :delete-blocks (:outliner-op opts))
            (empty? (:uuid-changed opts)))
     (let [retracted-block-ids (->> (keep (fn [tx]
@@ -143,7 +143,12 @@
                             (apply concat))
           retracted-tx' (mapcat :tx retracted-tx)
           revert-tx (mapcat :revert-tx retracted-tx)
-          macros-tx (mapcat #(map (fn [macro] [:db.fn/retractEntity (:db/id macro)]) (:block/macros %))
+          macros-tx (mapcat (fn [b]
+                              ;; Only delete if last reference
+                              (keep #(when (<= (count (:block/_macros (db/entity repo (:db/id %))))
+                                                   1)
+                                           (vector :db.fn/retractEntity (:db/id %)))
+                                        (:block/macros b)))
                             retracted-blocks)]
       (when (seq retracted-tx')
         (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)]
@@ -184,7 +189,7 @@
 
               (and (= :delete-blocks (:outliner-op opts))
                    (empty? (:uuid-changed opts)))
-              (update-refs-and-macros opts)
+              (update-refs-and-macros repo opts)
 
               true
               (distinct))]
