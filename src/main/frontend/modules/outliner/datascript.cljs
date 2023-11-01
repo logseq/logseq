@@ -108,7 +108,8 @@
       (concat txs from-refs-txs from-path-refs-txs to-refs-txs))
     txs))
 
-(defn replace-ref-with-content
+(defn update-refs-and-macros
+  "When a block is deleted, refs are updated and macros associated with the block are deleted"
   [txs opts]
   (if (and (= :delete-blocks (:outliner-op opts))
            (empty? (:uuid-changed opts)))
@@ -141,12 +142,14 @@
                                          {:tx tx :revert-tx revert-tx})) refs)))
                             (apply concat))
           retracted-tx' (mapcat :tx retracted-tx)
-          revert-tx (mapcat :revert-tx retracted-tx)]
+          revert-tx (mapcat :revert-tx retracted-tx)
+          macros-tx (mapcat #(map (fn [macro] [:db.fn/retractEntity (:db/id macro)]) (:block/macros %))
+                            retracted-blocks)]
       (when (seq retracted-tx')
         (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)]
                           {:retracted-block-ids retracted-block-ids
                            :revert-tx revert-tx}))
-      (concat txs retracted-tx'))
+      (concat txs retracted-tx' macros-tx))
     txs))
 
 (defn fix-db!
@@ -181,7 +184,7 @@
 
               (and (= :delete-blocks (:outliner-op opts))
                    (empty? (:uuid-changed opts)))
-              (replace-ref-with-content opts)
+              (update-refs-and-macros opts)
 
               true
               (distinct))]
