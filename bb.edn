@@ -116,6 +116,9 @@
   lint:ns-docstrings
   logseq.bb-tasks.lint.ns-docstrings/-main
 
+  lint:db-and-file-graphs-separate
+  logseq.tasks.dev.db-and-file-graphs/-main
+
   nbb:watch
   logseq.bb-tasks.nbb.watch/watch
 
