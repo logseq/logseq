@@ -449,8 +449,8 @@
                                :compact true
                                :rounded false
                                :highlighted highlighted?
-                              ;; for some reason, the highlight effect does not always trigger on a
-                              ;; boolean value change so manually pass in the dep
+                               ;; for some reason, the highlight effect does not always trigger on a
+                               ;; boolean value change so manually pass in the dep
                                :on-highlight-dep highlighted-item
                                :on-click (fn [e]
                                            (if highlighted?
@@ -681,7 +681,7 @@
         dark? (= "dark" (state/sub :ui/theme))]
     ; (rum/use-effect! #(load-results :initial state) [])
     [:div.cp__cmdk {:class (cond-> "w-full h-full relative flex flex-col justify-start"
-                             (not sidebar?) (str " border border-gray-06 rounded-lg overflow-hidden"))}
+                             (not sidebar?) (str " border border-gray-06 rounded-lg overflow-x-hidden"))}
      (if sidebar?
        (input-row-sidebar state all-items)
        (input-row state all-items))
@@ -726,5 +726,5 @@
                  :on-click #(state/close-modal!)})])
 
 (rum/defc cmdk-block [props]
-  [:div {:class "cp__cmdk__block rounded-md overflow-hidden"}
+  [:div {:class "cp__cmdk__block rounded-md"}
    (cmdk props)])
