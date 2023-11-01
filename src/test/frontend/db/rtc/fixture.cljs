@@ -10,6 +10,8 @@
             [frontend.db.rtc.ops-idb-store :as ops-idb-store]))
 
 (def *test-rtc-state (atom nil))
+(def test-graph-uuid "e6d04ed7-bbc4-4ed2-a91b-69f3c0b9459d")
+(def test-graph-init-local-t 1)
 
 (defn- init-state-helper
   []

@@ -4,7 +4,7 @@
             [spy.core :as spy]))
 
 ;;; websocket
-(defrecord Mock-WebSocket [onopen onmessage onclose onerror readyState push-data-chan ^:mutable push-data-fn]
+(defrecord Mock-WebSocket [onopen onmessage onclose onerror readyState push-data-to-client-chan ^:mutable handler-fn]
   Object
   (close [_]
     (prn :mock-ws :closed)
@@ -14,16 +14,16 @@
                   js/JSON.parse
                   (js->clj :keywordize-keys true)
                   rtc-const/data-to-ws-decoder)]
-      (async/put! onmessage msg)))
+      (handler-fn msg push-data-to-client-chan)))
 
-  (set-push-data-fn [_ f]
-    (set! push-data-fn f)))
+  (set-handler-fn [_ f]
+    (set! handler-fn f)))
 
-(defn default-push-data-fn
-  [msg push-data-chan]
+(defn default-handler
+  [msg push-data-to-client-chan]
   (case (:action msg)
     "register-graph-updates"
-    (async/offer! push-data-chan (select-keys msg [:req-id]))
+    (async/offer! push-data-to-client-chan (select-keys msg [:req-id]))
     ;; default
 
     nil))
@@ -31,27 +31,12 @@
 
 (defn mock-websocket
   [data-from-ws-chan]
-  (let [stop-push-data-loop-ch (async/chan)
-        ws (->Mock-WebSocket nil (async/chan 10) nil nil 1
-                             data-from-ws-chan (spy/spy default-push-data-fn))]
-    (async/go-loop []
-      (let [{:keys [stop msg]}
-            (async/alt!
-              stop-push-data-loop-ch {:stop true}
-              (.-onmessage ws) ([msg] {:msg msg}))]
-        (cond
-          (or stop (nil? msg))
-          (do (prn :mock-ws-loop-stop) nil)
-
-          msg
-          (do (when-let [push-data-fn (:push-data-fn ws)]
-                (push-data-fn msg (:push-data-chan ws)))
-              (recur)))))
-    ws))
+  (->Mock-WebSocket nil (async/chan 10) nil nil 1
+                    data-from-ws-chan (spy/spy default-handler)))
 
 
-;; (defn mock-ws-push-data-fn
+;; (defn set-ws-handler-fn
 ;;   [ws f]
-;;   (.set-push-data-fn ws f))
+;;   (.set-handler-fn ws f))
 
 ;;; websocket ends ;;;;
