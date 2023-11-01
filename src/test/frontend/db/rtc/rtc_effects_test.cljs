@@ -3,7 +3,7 @@
   These tests need to start the rtc-loop.
   Other simple fn tests are located at `frontend.db.rtc.rtc-fns-test`"
   (:require ["/frontend/idbkv" :as idb-keyval]
-            [cljs.core.async :as async :refer [<! go timeout]]
+            [cljs.core.async :as async :refer [<! go timeout >!]]
             [clojure.test :as t :refer [deftest is use-fixtures]]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
@@ -30,8 +30,8 @@
 
 (deftest rtc-loop-init-test
   (let [ws @(:*ws @rtc-fixture/*test-rtc-state)
-        push-data-fn (:push-data-fn ws)
-        last-ws-msg (first (spy/last-call push-data-fn))]
+        handler-fn (:handler-fn ws)
+        last-ws-msg (first (spy/last-call handler-fn))]
     (is (= "register-graph-updates" (:action last-ws-msg)))))
 
 
@@ -80,3 +80,32 @@
              (is (= ["update" {:block-uuid (str block-uuid2) :updated-attrs {:content nil}}] update-op-2)))))
        (reset)
        (done)))))
+
+
+
+(deftest push-data-from-ws-test-1
+  (t/async
+   done
+   (idb-keyval-mock/with-reset-idb-keyval-mock reset
+     (go
+       (let [conn (conn/get-db test-helper/test-db false)
+             ws @(:*ws @rtc-fixture/*test-rtc-state)
+             push-data-to-client-chan (:push-data-to-client-chan ws)]
+       ;; set local-t & graph-uuid in mock-indexeddb-store
+         (<! (rtc-op/<update-local-tx! test-helper/test-db rtc-fixture/test-graph-init-local-t))
+         (<! (rtc-op/<update-graph-uuid! test-helper/test-db rtc-fixture/test-graph-uuid))
+         (>! push-data-to-client-chan {:req-id "push-updates"
+                                       :t 2 :t-before 1
+                                       :affected-blocks
+                                       {"26c4b513-e251-4ce9-a421-364b774eb736"
+                                        {:op :update-page
+                                         :self "26c4b513-e251-4ce9-a421-364b774eb736"
+                                         :page-name "push-data-from-ws-test-1"
+                                         :original-name "Push-Data-From-Ws-Test-1"}}})
+         (<! (timeout 500))
+         (is (= {:block/uuid #uuid "26c4b513-e251-4ce9-a421-364b774eb736"
+                 :block/original-name "Push-Data-From-Ws-Test-1"}
+                (select-keys (d/pull @conn '[*] [:block/name "push-data-from-ws-test-1"])
+                             [:block/uuid :block/original-name])))
+         (reset)
+         (done))))))
