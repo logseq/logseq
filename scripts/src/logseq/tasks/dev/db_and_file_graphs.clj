@@ -12,7 +12,9 @@
 (def db-graph-ns
   "Namespaces or parent namespaces _only_ for DB graphs"
   (mapv escape-shell-regex
-        ["frontend.handler.db-based." "logseq.db.sqlite." "logseq.db.frontend.property"
+        ["logseq.db.sqlite." "logseq.db.frontend.property" "logseq.db.frontend.malli-schema"
+         "electron.db"
+         "frontend.handler.db-based."
          "frontend.components.property" "frontend.components.class"]))
 
 (def file-graph-ns
