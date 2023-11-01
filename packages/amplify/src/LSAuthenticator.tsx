@@ -6,8 +6,8 @@ export function LSAuthenticator({ initialState, termsLink, children }: any) {
       initialState={ initialState || 'signIn'}
       formFields={{
         signUp: {
-          email: { order: 1 },
-          username: { order: 2 },
+          email: { order: 1, isRequired: true },
+          username: { order: 2, isRequired: true },
           password: { order: 3 },
           confirm_password: { order: 4 },
         },

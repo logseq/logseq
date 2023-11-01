@@ -464,6 +464,38 @@
                                     (set-end! (calc-coords! (.-pageX e) (.-pageY e))))
                                   [])]
 
+  
+  (let [zoom-viewer!
+        (rum/use-callback
+         (util/debounce
+          5 (fn [delta]
+                (if (> delta 0)
+                  ((partial pdf-utils/zoom-out-viewer viewer))
+                  ((partial pdf-utils/zoom-in-viewer viewer)))
+                )
+          )
+         [viewer])]
+        
+    ;; zoom using touchpad  
+    (rum/use-effect! 
+     (fn [] 
+       (when-let [^js/HTMLElement root cnt-el] 
+         (let [fn-wheel (fn [^js/WheelEvent e]  
+                          (let [delta (or (.-deltaY e) (.-detail e) (.-wheelDelta e))]
+                            ;; to exclude horizontal scrolling 
+                            (when (not (integer? delta)) 
+                              (p/do! (zoom-viewer! delta))
+                              ))
+                          )] 
+           (doto root 
+             (.addEventListener "wheel" fn-wheel))
+           
+           ;; destroy 
+           #(doto root 
+              (.removeEventListener "wheel" fn-wheel))))) 
+     [zoom-viewer!])
+    )
+    
     (rum/use-effect!
       (fn []
         (when-let [^js/HTMLElement root cnt-el]
