@@ -76,19 +76,25 @@
                             :more items
                             :less (take 5 items)
                             (take 2 items))))
-        order [["Filters"        :filters        (visible-items :filters)]
-               ["Search actions" :search-actions (visible-items :search-actions)]
-               ["Commands"       :commands       (visible-items :commands)]
-               ["Pages"          :pages          (visible-items :pages)]
-               ["Create"         :create         (create-items input)]
-               ["Current page"   :current-page   (visible-items :current-page)]
-               ["Whiteboards"    :whiteboards    (visible-items :whiteboards)]
-               ["Blocks"         :blocks         (visible-items :blocks)]
-               ["Recents"        :recents        (visible-items :recents)]]]
+        page-exists? (db/entity [:block/name (string/trim input)])
+        order (->>
+               [["Filters"        :filters        (visible-items :filters)]
+                ["Search actions" :search-actions (visible-items :search-actions)]
+                ["Commands"       :commands       (visible-items :commands)]
+                ["Pages"          :pages          (visible-items :pages)]
+                (when-not page-exists?
+                  ["Create"         :create         (create-items input)])
+                ["Current page"   :current-page   (visible-items :current-page)]
+                ["Whiteboards"    :whiteboards    (visible-items :whiteboards)]
+                ["Blocks"         :blocks         (visible-items :blocks)]
+                ["Recents"        :recents        (visible-items :recents)]]
+               (remove nil?))]
     (for [[group-name group-key group-items] order]
       [group-name
        group-key
-       (count (get-in results [group-key :items]))
+       (if (= group-key :create)
+         (count group-items)
+         (count (get-in results [group-key :items])))
        (mapv #(assoc % :item-index (vswap! index inc)) group-items)])))
 
 (defn state->highlighted-item [state]
@@ -256,14 +262,11 @@
                      (filter #(string/includes? (lower-case-str (:data %)) (lower-case-str @!input)))
                      (map #(hash-map :icon (if (= :page (:type %)) "page" "history")
                                      :icon-theme :gray
-                                     ; :header (when-let [page-name])
                                      :text (:data %)
                                      :source-recent %
                                      :source-page (when (= :page (:type %)) (:data %))
                                      :source-search (when (= :search (:type %)) (:data %)))))]
       (swap! !results update group merge {:status :success :items items}))))
-
-    ; (swap! !results assoc group {:status :success :items recent-items})))
 
 (defmethod load-results :filters [group state]
   (let [!input (::input state)
@@ -437,12 +440,8 @@
          (if (= show :more)
            "Show less"
            "Show more")])]
-      ; (cond
-      ;   (<= (count items) GROUP-LIMIT) [:div]
-      ;   show-more [:div {:class "hover:cursor-pointer" :on-click (fn [] (cap-highlighted-item) (toggle-show-more))} "Show less"]
-      ;   :else [:div {:class "hover:cursor-pointer" :on-click (fn [] (toggle-show-more))} "Show more"])]
 
-     [:div {:class ""}
+     [:div
       (for [item visible-items
             :let [highlighted? (= item highlighted-item)]]
         (shui/list-item (assoc item
@@ -465,7 +464,7 @@
                                                    (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
                                :on-highlight (fn [ref]
                                                (reset! (::highlighted-group state) group)
-                                               (when (and ref (.-current ref) (< 2 (:item-index item))
+                                               (when (and ref (.-current ref)
                                                           (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
                                                  (.. ref -current (scrollIntoView #js {:block "center"
                                                                                        :inline "nearest"
@@ -480,7 +479,7 @@
         next-item-index (some-> (or current-item-index 0) (+ n) (mod (count items)))]
     (if-let [next-highlighted-item (nth items next-item-index nil)]
       (reset! (::highlighted-item state) next-highlighted-item)
-      (reset! (::highglighted-item state) nil))))
+      (reset! (::highlighted-item state) nil))))
 
 (defn handle-input-change
   ([state e] (handle-input-change state e (.. e -target -value)))
