@@ -3,21 +3,16 @@
     [clojure.string :as string]
     [frontend.components.block :as block]
     [frontend.components.command-palette :as cp]
-    [frontend.components.page :as page]
     [frontend.context.i18n :refer [t]]
-    [frontend.date :as date]
     [frontend.db :as db]
     [frontend.db.model :as model]
     [frontend.handler.command-palette :as cp-handler]
     [frontend.handler.editor :as editor-handler]
     [frontend.handler.page :as page-handler]
     [frontend.handler.route :as route-handler]
-    [frontend.handler.search :as search-handler]
     [frontend.handler.whiteboard :as whiteboard-handler]
     [frontend.modules.shortcut.core :as shortcut]
-    [frontend.modules.shortcut.data-helper :as shortcut-helper]
     [frontend.search :as search]
-    [frontend.search.db :as search-db]
     [frontend.shui :refer [make-shui-context]]
     [frontend.state :as state]
     [frontend.ui :as ui]
@@ -38,8 +33,8 @@
   [{:text "Search only pages"        :info "Add filter to search" :icon-theme :gray :icon "page" :filter {:group :pages}}
    {:text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page" :filter {:group :current-page}}
    {:text "Search only blocks"       :info "Add filter to search" :icon-theme :gray :icon "block" :filter {:group :blocks}}
-   {:text "Search only whiteboards"  :info "Add filter to search" :icon-theme :gray :icon "whiteboard" :filter {:group :whiteboards}}
-   {:text "Search only files"        :info "Add filter to search" :icon-theme :gray :icon "file" :filter {:group :files}}])
+   ;; {:text "Search only files"        :info "Add filter to search" :icon-theme :gray :icon "file" :filter {:group :files}}
+   ])
 
 (def default-commands
   [{:text "Open settings" :icon "settings"      :icon-theme :gray}
@@ -130,7 +125,7 @@
 ;          (nth items normalized-index nil)))))
 
 ;; Each result gorup has it's own load-results function
-(defmulti load-results (fn [group state] group))
+(defmulti load-results (fn [group _state] group))
 
 ;; Initially we want to load the recents into the results
 (defmethod load-results :initial [_ state]
@@ -150,12 +145,9 @@
                                            :icon-theme :gray
                                            :text (cp/translate t %)
                                            :shortcut (:shortcut %)
-                                           :source-command %)))
-        favorite-pages nil
-        favorite-items nil]
+                                           :source-command %)))]
     (reset! !results (-> default-results (assoc-in [:recents :items] recent-items)
-                         (assoc-in [:commands :items] command-items)
-                         (assoc-in [:favorites :items] favorite-items)))))
+                         (assoc-in [:commands :items] command-items)))))
 
 
 ;; The search-actions are only loaded when there is no query present. It's like a quick access to filters
@@ -238,13 +230,6 @@
       (swap! !results update group         merge {:status :success :items items-on-other-pages})
       (swap! !results update :current-page merge {:status :success :items items-on-current-page}))))
 
-; (defmethod load-results :whiteboards [group state]
-;   (let [!input (::input state)
-;         !results (::results state)
-;         repo (state/get-current-repo)]
-;     (swap! !results assoc-in [group :status] :loading)
-;     (p/let [whiteboards ()])))
-
 (defmethod load-results :files [group state]
   (let [!input (::input state)
         !results (::results state)
@@ -321,10 +306,6 @@
     (close-unless-alt! state)))
 
 (defmulti handle-action (fn [action _state _event] action))
-
-(defmethod handle-action :close [_ state event]
-  (js/console.log :handle-action/cancel)
-  (state/close-modal!))
 
 (defmethod handle-action :open-page [_ state event]
   (when-let [page-name (some-> state state->highlighted-item :source-page)]
