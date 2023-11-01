@@ -13,6 +13,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.db :as db]
             [rum.core :as rum]))
 
 (defonce debug-state (atom nil))
@@ -108,7 +109,10 @@
            :local-tx @(::local-tx state)
            :pending-ops @(::ops state)
            :remote-graphs @(::remote-graphs state)
-           :auto-push-updates? @(::auto-push-updates? state)}
+           :auto-push-updates? @(::auto-push-updates? state)
+           :current-page (state/get-current-page)
+           :blocks-count (when-let [page (state/get-current-page)]
+                           (count (:block/_page (db/entity [:block/name (util/page-name-sanity-lc page)]))))}
           (fipp/pprint {:width 20})
           with-out-str)]
      (if (or (nil? s)
