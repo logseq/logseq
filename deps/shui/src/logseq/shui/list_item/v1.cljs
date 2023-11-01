@@ -98,32 +98,34 @@
                  [:span text-string]))))))
 
 ;; result-item
-(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted on-highlight on-highlight-dep header on-click hoverable compact rounded on-mouse-enter] :as _props :or {hoverable true rounded true}}
+(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted on-highlight on-highlight-dep header on-click hoverable compact rounded on-mouse-enter component-opts] :as _props :or {hoverable true rounded true}}
                 {:keys [app-config] :as context}]
   (let [ref (rum/create-ref)
         highlight-query (partial highlight-query* app-config query)]
     (rum/use-effect!
-      (fn []
-        (when (and highlighted on-highlight)
-          (on-highlight ref)))
-      [highlighted on-highlight-dep])
-    [:div {:style {:opacity (if highlighted 1 0.8)
-                   :mix-blend-mode (if highlighted :normal :luminosity)}
-           :class (cond-> "flex flex-col grayscale"
-                    highlighted (str " !grayscale-0 !opacity-100 bg-gray-03-alpha dark:bg-gray-04-alpha")
-                    hoverable (str " transition-all duration-50 ease-in !opacity-75 hover:!opacity-100 hover:grayscale-0 hover:cursor-pointer hover:bg-gradient-to-r hover:from-gray-03-alpha hover:to-gray-01-alpha")
-                    (and hoverable rounded) (str " !rounded-lg")
-                    (not compact) (str  " py-4 px-6 gap-1")
-                    compact (str " py-1.5 px-3.5 gap-0.5")
-                    (not highlighted) (str " "))
-           :ref ref
-           :on-click (when on-click on-click)
-           :on-mouse-enter (when on-mouse-enter on-mouse-enter)}
+     (fn []
+       (when (and highlighted on-highlight)
+         (on-highlight ref)))
+     [highlighted on-highlight-dep])
+    [:div (merge
+           {:style {:opacity (if highlighted 1 0.8)
+                    :mix-blend-mode (if highlighted :normal :luminosity)}
+            :class (cond-> "flex flex-col grayscale"
+                     highlighted (str " !grayscale-0 !opacity-100 bg-gray-03-alpha dark:bg-gray-04-alpha")
+                     hoverable (str " transition-all duration-50 ease-in !opacity-75 hover:!opacity-100 hover:grayscale-0 hover:cursor-pointer hover:bg-gradient-to-r hover:from-gray-03-alpha hover:to-gray-01-alpha")
+                     (and hoverable rounded) (str " !rounded-lg")
+                     (not compact) (str  " py-4 px-6 gap-1")
+                     compact (str " py-1.5 px-3.5 gap-0.5")
+                     (not highlighted) (str " "))
+            :ref ref
+            :on-click (when on-click on-click)
+            :on-mouse-enter (when on-mouse-enter on-mouse-enter)}
+           component-opts)
      ;; header
      (when header
-      [:div.text-xs.pl-8.font-light {:class "-mt-1"
-                                     :style {:color "var(--lx-gray-11)"}}
-                                    (highlight-query header)])
+       [:div.text-xs.pl-8.font-light {:class "-mt-1"
+                                      :style {:color "var(--lx-gray-11)"}}
+        (highlight-query header)])
      ;; main row
      [:div.flex.items-center.gap-3
       [:div.w-5.h-5.rounded.flex.items-center.justify-center
@@ -152,15 +154,15 @@
         [:div {:class "flex gap-1"}
          (for [[index option] (map-indexed vector (string/split shortcut #" \| "))]
            [:<>
-             (when (< 0 index)
-               [:div.text-gray-11 "|"])
-             (for [sequence (string/split option #" ")
-                   :let [text (->> (string/split sequence #"\+")
-                                   (map print-shortcut-key)
-                                   (apply str))]]
-               (button/root {:theme :gray
-                             :interactive false
-                             :text (string/upper-case (to-string text))
-                             :tiled true}
-                            context))])])]]))
+            (when (< 0 index)
+              [:div.text-gray-11 "|"])
+            (for [sequence (string/split option #" ")
+                  :let [text (->> (string/split sequence #"\+")
+                                  (map print-shortcut-key)
+                                  (apply str))]]
+              (button/root {:theme :gray
+                            :interactive false
+                            :text (string/upper-case (to-string text))
+                            :tiled true}
+                           context))])])]]))
         ; [:span {:style} (str key)])])])

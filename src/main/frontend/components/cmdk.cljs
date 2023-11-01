@@ -26,7 +26,8 @@
     [goog.functions :as gfun]
     [logseq.shui.core :as shui]
     [promesa.core :as p]
-    [rum.core :as rum]))
+    [rum.core :as rum]
+    [frontend.mixins :as mixins]))
 
 (def GROUP-LIMIT 5)
 (def FILTER-ROW-HEIGHT 81)
@@ -60,8 +61,7 @@
   (.toLowerCase (str x)))
 
 (defn create-items [q]
-  (if-not (seq q)
-    []
+  (when-not (string/blank? q)
     [{:text "Create page"       :icon "new-page"       :icon-theme :color :shortcut "cmd+shift+P" :info (str "Create page called '" q "'") :source-create :page}
      {:text "Create whiteboard" :icon "new-whiteboard" :icon-theme :color :shortcut "cmd+shift+W" :info (str "Create whiteboard called '" q "'") :source-create :whiteboard}]))
 
@@ -73,22 +73,23 @@
         visible-items (fn [group]
                         (let [{:keys [items show]} (get results group)]
                           (case show
-                            :none (take 0 items)
                             :more items
                             :less (take 5 items)
                             (take 2 items))))
         order [["Filters"        :filters        (visible-items :filters)]
-               ["Recents"        :recents        (visible-items :recents)]
                ["Search actions" :search-actions (visible-items :search-actions)]
-               ["Current page"   :current-page   (visible-items :current-page)]
                ["Commands"       :commands       (visible-items :commands)]
                ["Pages"          :pages          (visible-items :pages)]
+               ["Create"         :create         (create-items input)]
+               ["Current page"   :current-page   (visible-items :current-page)]
                ["Whiteboards"    :whiteboards    (visible-items :whiteboards)]
                ["Blocks"         :blocks         (visible-items :blocks)]
-               ["Create"         :create         (create-items input)]]]
-    ; results
+               ["Recents"        :recents        (visible-items :recents)]]]
     (for [[group-name group-key group-items] order]
-      [group-name group-key (count (get-in results [group-key :items])) (mapv #(assoc % :item-index (vswap! index inc)) group-items)])))
+      [group-name
+       group-key
+       (count (get-in results [group-key :items]))
+       (mapv #(assoc % :item-index (vswap! index inc)) group-items)])))
 
 (defn state->highlighted-item [state]
   (or (some-> state ::highlighted-item deref)
@@ -197,7 +198,6 @@
                                             :text %
                                             :source-page %) non-boards)]
       (swap! !results update group        merge {:status :success :items non-board-items})
-      ; (swap! !results assoc :whiteboards {:status :success :items whiteboard-items}
       (swap! !results update :whiteboards merge {:status :success :items whiteboard-items}))))
 
 ;; The blocks search action uses an existing handler
@@ -414,26 +414,26 @@
         highlighted-item (or @(::highlighted-item state) first-item)
         can-show-less? (< 0 (count visible-items))
         can-show-more? (< (count visible-items) (count items))
-        show-less #(swap! (::results state) assoc-in [group :show] (case show :less :none :less))
-        show-more #(swap! (::results state) assoc-in [group :show] (case show :none :less :more))
+        show-less #(swap! (::results state) assoc-in [group :show] :less)
+        show-more #(swap! (::results state) assoc-in [group :show] :more)
         cap-highlighted-item (fn []
                                (js/console.log
-                                 "testing-capping-the-highlighted-item"
-                                 (count items)
-                                 (clj->js (drop GROUP-LIMIT items))
-                                 (clj->js highlighted-item)
-                                 (.indexOf items highlighted-item))
+                                "testing-capping-the-highlighted-item"
+                                (count items)
+                                (clj->js (drop GROUP-LIMIT items))
+                                (clj->js highlighted-item)
+                                (.indexOf items highlighted-item))
                                (when (< (dec GROUP-LIMIT) (.indexOf items highlighted-item))
                                  (reset! (::highlighted-item state) (nth items 4 nil))))]
     [:div {:class "border-b border-gray-06 pb-1 last:border-b-0"}
      [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02"}
       [:div {:class "font-bold text-gray-11 pl-0.5"} title]
       (when (not= group :create)
-       [:div {:class "bg-gray-05 px-1.5 py-px text-gray-12 rounded-full"
-              :style {:font-size "0.6rem"}}
-        (if (<= 100 (count items))
-          (str "99+")
-          (count items))])
+        [:div {:class "bg-gray-05 px-1.5 py-px text-gray-12 rounded-full"
+               :style {:font-size "0.6rem"}}
+         (if (<= 100 (count items))
+           (str "99+")
+           (count items))])
       [:div {:class "flex-1"}]
       [:div {:class (cond-> "hover:cursor-pointer hover:underline select-none"
                       (not can-show-less?) (str " opacity-30 pointer-events-none"))
@@ -451,32 +451,32 @@
      [:div {:class ""}
       (for [item visible-items
             :let [highlighted? (= item highlighted-item)]]
-       (shui/list-item (assoc item
-                              :query (when-not (= group :create) @(::input state))
-                              :compact true
-                              :rounded false
-                              :highlighted highlighted?
+        (shui/list-item (assoc item
+                               :query (when-not (= group :create) @(::input state))
+                               :compact true
+                               :rounded false
+                               :highlighted highlighted?
                               ;; for some reason, the highlight effect does not always trigger on a
                               ;; boolean value change so manually pass in the dep
-                              :on-highlight-dep highlighted-item
-                              :on-click (fn [e]
-                                          (if highlighted?
-                                            (do
-                                              (handle-action :default state item)
-                                              (when-let [on-click (:on-click item)]
-                                                (on-click e)))
-                                            (reset! (::highlighted-item state) item)))
-                              :on-mouse-enter (fn [e]
-                                                (when (not highlighted?)
-                                                  (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
-                              :on-highlight (fn [ref]
-                                              (reset! (::highlighted-group state) group)
-                                              (when (and ref (.-current ref) (< 2 (:item-index item))
-                                                         (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
-                                                (.. ref -current (scrollIntoView #js {:block "center"
-                                                                                      :inline "nearest"
-                                                                                      :behavior "smooth"})))))
-                       (make-shui-context)))]]))
+                               :on-highlight-dep highlighted-item
+                               :on-click (fn [e]
+                                           (if highlighted?
+                                             (do
+                                               (handle-action :default state item)
+                                               (when-let [on-click (:on-click item)]
+                                                 (on-click e)))
+                                             (reset! (::highlighted-item state) item)))
+                               :on-mouse-enter (fn [e]
+                                                 (when (not highlighted?)
+                                                   (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
+                               :on-highlight (fn [ref]
+                                               (reset! (::highlighted-group state) group)
+                                               (when (and ref (.-current ref) (< 2 (:item-index item))
+                                                          (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
+                                                 (.. ref -current (scrollIntoView #js {:block "center"
+                                                                                       :inline "nearest"
+                                                                                       :behavior "smooth"})))))
+                        (make-shui-context)))]]))
 
 (defn move-highlight [state n]
   (js/console.log "move-highlight" n)
@@ -504,46 +504,41 @@
      (when-let [load-results-throttled @!load-results-throttled]
        (load-results-throttled :default state)))))
 
-(defonce keydown-handler
-  (fn [state e]
-    (let [shift? (.-shiftKey e)
-          meta? (.-metaKey e)
-          alt? (.-altKey e)
-          show-less (fn [] (swap! (::results state) update-in [@(::highlighted-group state) :show] #(case % :less :none :less)))
-          show-more (fn [] (swap! (::results state) update-in [@(::highlighted-group state) :show] #(case % :none :less :more)))]
-      (reset! (::shift? state) shift?)
-      (reset! (::meta? state) meta?)
-      (reset! (::alt? state) alt?)
-      (when (#{"ArrowDown" "ArrowUp"} (.-key e))
-        (.preventDefault e))
-      (when (and meta? (#{"ArrowLeft" "ArrowRight"} (.-key e)))
-        (.preventDefault e))
-      (when (and meta? shift? (#{"," "."} (.-key e)))
-        (.preventDefault e))
-      (case (.-key e)
-        ","           (when (and meta? shift?) (show-less))
-        "."           (when (and meta? shift?) (show-more))
-        ; "ArrowLeft"   (when meta? (show-less))
-        ; "ArrowRight"  (when meta? (show-more))
-        "ArrowDown"   (if meta?
-                        (show-less)
-                        (move-highlight state 1))
-        "ArrowUp"     (if meta?
-                        (show-more)
-                        (move-highlight state -1))
-        "Enter"       (handle-action :default state e)
-        "Escape"      (when (seq @(::input state))
-                        (.preventDefault e)
-                        (.stopPropagation e)
-                        (handle-input-change state nil ""))
-        nil))))
+(defn- keydown-handler
+  [state e]
+  (let [shift? (.-shiftKey e)
+        meta? (.-metaKey e)
+        alt? (.-altKey e)
+        highlighted-group @(::highlighted-group state)
+        show-less (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :less))
+        show-more (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :more))]
+    (reset! (::shift? state) shift?)
+    (reset! (::meta? state) meta?)
+    (reset! (::alt? state) alt?)
+    (when (get #{"ArrowUp" "ArrowDown" "ArrowLeft" "ArrowRight"} (.-key e))
+      (.preventDefault e))
+    (case (.-key e)
+      "ArrowDown"   (if meta?
+                      (show-more)
+                      (move-highlight state 1))
+      "ArrowUp"     (if meta?
+                      (show-less)
+                      (move-highlight state -1))
+      "Enter"       (handle-action :default state e)
+      "Escape"      (when (seq @(::input state))
+                      (.preventDefault e)
+                      (.stopPropagation e)
+                      (handle-input-change state nil ""))
+      nil)))
 
-(defonce keyup-handler
-  (fn [state e]
-    (let [shift? (.-shiftKey e)
-          alt? (.-altKey e)]
-      (reset! (::shift? state) shift?)
-      (reset! (::alt? state) alt?))))
+(defn keyup-handler
+  [state e]
+  (let [shift? (.-shiftKey e)
+        meta? (.-metaKey e)
+        alt? (.-altKey e)]
+    (reset! (::shift? state) shift?)
+    (reset! (::alt? state) alt?)
+    (reset! (::meta? state) meta?)))
 
 (defn print-group-name [group]
   (case group
@@ -648,6 +643,14 @@
 (rum/defcs cmdk <
   shortcut/disable-all-shortcuts
   rum/reactive
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/on-key-down state {}
+                         {:all-handler (fn [e _key]
+                                         (keydown-handler state e))})
+     (mixins/on-key-up state {}
+                       {:all-handler (fn [e _key]
+                                       (keyup-handler state e))})))
   (rum/local "" ::input)
   (rum/local false ::shift?)
   (rum/local false ::meta?)
@@ -663,32 +666,6 @@
   (rum/local nil ::scroll-container-ref)
   (rum/local nil ::input-ref)
   (rum/local false ::resizing?)
-  {:did-mount (fn [state]
-                (when-not (some-> state :rum/args first :sidebar?)
-                  (let [next-keydown-handler (partial keydown-handler state)
-                        next-keyup-handler (partial keyup-handler state)]
-                    ;; remove pre existing handlers
-                    (when-let [prev-keydown-handler @(::keydown-handler state)]
-                      (js/window.removeEventListener "keydown" prev-keydown-handler))
-                    (when-let [prev-keyup-handler @(::keyup-handler state)]
-                      (js/window.removeEventListener "keyup" prev-keyup-handler))
-                    ;; add new handlers
-                    (js/window.addEventListener "keydown" next-keydown-handler true)
-                    (js/window.addEventListener "keyup" next-keyup-handler true)
-                    ;; save references to functions for cleanup later
-                    (reset! (::keydown-handler state) next-keydown-handler)
-                    (reset! (::keyup-handler state) next-keyup-handler)))
-                state)
-   :will-unmount (fn [state]
-                   ;; remove save references to key handlers
-                   (when-let [current-keydown-handler (some-> state ::keydown-handler deref)]
-                     (js/window.removeEventListener "keydown" current-keydown-handler))
-                   (when-let [current-keyup-handler (some-> state ::keyup-handler deref)]
-                     (js/window.removeEventListener "keyup" current-keyup-handler))
-                   ;; clear references to key handlers
-                   (reset! (::keydown-handler state) nil)
-                   (reset! (::keyup-handler state) nil)
-                   state)}
   {:did-mount (fn [state]
                 ; (search-db/make-blocks-indice-non-blocking! (state/get-current-repo))
                 ; (when-let [ref @(::scroll-container-ref state)]
@@ -728,18 +705,18 @@
      [:div {:class "absolute right-4 bottom-4 shadow-gray-02 rounded"
             :style {:box-shadow (if dark?
                                   (str "0px 0px 9.7px rgba(8, 9, 10, 0.8), "
-                                     "0px 0px 23.3px rgba(8, 9, 10, 0.575), "
-                                     "0px 0px 43.8px rgba(8, 9, 10, 0.477), "
-                                     "0px 0px 78.2px rgba(8, 9, 10, 0.4), "
-                                     "0px 0px 146.2px rgba(8, 9, 10, 0.323), "
-                                     "0px 0px 350px rgba(8, 9, 10, 0.255) ")
+                                       "0px 0px 23.3px rgba(8, 9, 10, 0.575), "
+                                       "0px 0px 43.8px rgba(8, 9, 10, 0.477), "
+                                       "0px 0px 78.2px rgba(8, 9, 10, 0.4), "
+                                       "0px 0px 146.2px rgba(8, 9, 10, 0.323), "
+                                       "0px 0px 350px rgba(8, 9, 10, 0.255) ")
                                   (str "0px 0px 9.7px 12px rgba(248,249,250, 1), "
-                                     "0px 0px 23.3px 12px rgba(248,249,250, 0.75), "
-                                     "0px 0px 43.8px 12px rgba(248,249,250, 0.6), "
-                                     "0px 0px 78.2px 12px rgba(248,249,250, 0.5), "
-                                     "0px 0px 146.2px 12px rgba(248,249,250, 0.4), "
-                                     "0px 0px 350px 12px rgba(248,249,250, 0.35), "
-                                     "0px 0px 0.5px 0.5px rgba(0,0,0,0.5)"))}}
+                                       "0px 0px 23.3px 12px rgba(248,249,250, 0.75), "
+                                       "0px 0px 43.8px 12px rgba(248,249,250, 0.6), "
+                                       "0px 0px 78.2px 12px rgba(248,249,250, 0.5), "
+                                       "0px 0px 146.2px 12px rgba(248,249,250, 0.4), "
+                                       "0px 0px 350px 12px rgba(248,249,250, 0.35), "
+                                       "0px 0px 0.5px 0.5px rgba(0,0,0,0.5)"))}}
                                   ; (str "0px 0px 9.7px rgba(0, 0, 0, 0.3), "
                                   ;    "0px 0px 23.3px rgba(0, 0, 0, 0.21), "
                                   ;    "0px 0px 43.8px rgba(0, 0, 0, 0.18), "
