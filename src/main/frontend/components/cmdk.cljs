@@ -660,22 +660,11 @@
   (rum/local false ::alt?)
   (rum/local nil ::highlighted-group)
   (rum/local nil ::highlighted-item)
-  (rum/local nil ::keydown-handler)
-  (rum/local nil ::keyup-handler)
   (rum/local nil ::filter)
   (rum/local default-results ::results)
   (rum/local nil ::load-results-throttled)
-  (rum/local [:close :filter] ::actions)
   (rum/local nil ::scroll-container-ref)
   (rum/local nil ::input-ref)
-  (rum/local false ::resizing?)
-  {:did-mount (fn [state]
-                ; (search-db/make-blocks-indice-non-blocking! (state/get-current-repo))
-                ; (when-let [ref @(::scroll-container-ref state)]
-                ;   (js/console.log "scrolling")
-                ;   (js/setTimeout #(set! (.-scrollTop ref) FILTER-ROW-HEIGHT)))
-                state)}
-                  ; (load-results :initial state)))}
   [state {:keys [sidebar?]}]
   (let [filter (not-empty @(::filter state))
         group-filter (:group filter)
