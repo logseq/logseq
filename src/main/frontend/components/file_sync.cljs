@@ -738,17 +738,13 @@
                  :disabled loading?
                  :on-click (fn []
                              (set-loading? true)
-                             (let [result  (:user/info @state/state)
-                                   ex-time (:ExpireTime result)]
-                               (if (and (number? ex-time)
-                                        (< (* ex-time 1000) (js/Date.now)))
-                                 (do
-                                   (maybe-onboarding-show :unavailable))
 
-                                 ;; Logseq sync available
-                                 (maybe-onboarding-show :sync-initiate))
-                               (close-fn)
-                               (set-loading? false))))]]))
+                             (if (state/expired-file-sync?)
+                               (maybe-onboarding-show :unavailable)
+                               (maybe-onboarding-show :sync-initiate))
+
+                             (close-fn)
+                             (set-loading? false)))]]))
 
 (rum/defc onboarding-unavailable-file-sync
   [close-fn]

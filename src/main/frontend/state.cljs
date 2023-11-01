@@ -2199,6 +2199,13 @@ Similar to re-frame subscriptions"
   []
   (storage/remove :user-groups))
 
+(defn expired-file-sync?
+  []
+  (when-let [{:keys [GraphCountLimit ExpireTime]} (get-user-info)]
+    (and (not= GraphCountLimit 1)
+         (number? ExpireTime)
+         (< (* ExpireTime 1000) (js/Date.now)))))
+
 (defn handbook-open?
   []
   (:ui/handbooks-open? @state))
