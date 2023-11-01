@@ -155,23 +155,12 @@
                      (prn ::add-ops ops)
                      (<! (op/<add-ops! repo ops))))))))
 
-(defn- sort-entity-datoms-coll
-  [entity-datoms-coll]
-  (let [id->datoms
-        (into {}
-              (keep (fn [datoms]
-                      (when-let [e (ffirst datoms)]
-                        [e datoms])))
-              entity-datoms-coll)]
-    (mapv second (sort-by first < id->datoms))))
-
 (defn generate-rtc-ops
   [repo db-before db-after datoms]
-  (let [same-entity-datoms-coll (->> datoms
-                                     (map vec)
-                                     (group-by first)
-                                     vals
-                                     sort-entity-datoms-coll)
+  (let [datom-vec-coll (map vec datoms)
+        id->same-entity-datoms (group-by first datom-vec-coll)
+        id-order (distinct (map first datom-vec-coll))
+        same-entity-datoms-coll (map id->same-entity-datoms id-order)
         ops (mapcat (partial entity-datoms=>ops repo db-before db-after) same-entity-datoms-coll)]
     (when (seq ops)
       (swap! *ops-pending-to-store conj {:ops ops :repo repo}))))
