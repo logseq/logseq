@@ -91,7 +91,7 @@
        (let [conn (conn/get-db test-helper/test-db false)
              ws @(:*ws @rtc-fixture/*test-rtc-state)
              push-data-to-client-chan (:push-data-to-client-chan ws)]
-       ;; set local-t & graph-uuid in mock-indexeddb-store
+         ;; set local-t & graph-uuid in mock-indexeddb-store
          (<! (rtc-op/<update-local-tx! test-helper/test-db rtc-fixture/test-graph-init-local-t))
          (<! (rtc-op/<update-graph-uuid! test-helper/test-db rtc-fixture/test-graph-uuid))
          (>! push-data-to-client-chan {:req-id "push-updates"

@@ -30,7 +30,7 @@
 (defn- <add-ops*!
   [repo ops]
   (let [store (ensure-store repo)
-        key* (tc/to-long (t/now))]
+        key* (* 1000 (tc/to-long (t/now)))]
     (p/loop [key* key* ops ops]
       (let [[op & other-ops] ops]
         (when op
@@ -42,11 +42,13 @@
 
 (defonce ^:private add-ops-ch (async/chan 100))
 (defonce #_:clj-kondo/ignore _add-ops-loop
-  (async/go-loop []
-    (if-let [[repo ops] (async/<! add-ops-ch)]
-      (do (async/<! (p->c (<add-ops*! repo ops)))
-          (recur))
-      (recur))))
+  (let [id (random-uuid)]
+    (async/go-loop []
+      (prn ::add-ops-loop id)
+      (if-let [[repo ops] (async/<! add-ops-ch)]
+        (do (async/<! (p->c (<add-ops*! repo ops)))
+            (recur))
+        (recur)))))
 
 (defn <add-ops!
   [repo ops]

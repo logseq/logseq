@@ -551,7 +551,6 @@
                          update-block-uuid->attrs)]
     [update-page-ops remove-ops move-ops update-ops remove-page-ops]))
 
-
 (defn- <get-N-ops
   [repo n]
   (go
