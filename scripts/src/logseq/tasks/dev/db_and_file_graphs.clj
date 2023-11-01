@@ -20,7 +20,11 @@
 (def file-graph-ns
   "Namespaces or parent namespaces _only_ for file graphs"
   (mapv escape-shell-regex
-        ["frontend.handler.file-based" "frontend.fs"]))
+        ["frontend.handler.file-based" "frontend.handler.conversion"
+         "frontend.fs"
+         "frontend.components.conversion"
+         "frontend.util.fs"
+         "frontend.modules.outliner.file"]))
 
 (def db-graph-paths
   "Paths _only_ for DB graphs"
@@ -30,7 +34,11 @@
 
 (def file-graph-paths
   "Paths _only_ for file graphs"
-  ["src/main/frontend/handler/file_based" "src/main/frontend/fs"])
+  ["src/main/frontend/handler/file_based" "src/main/frontend/handler/conversion.cljs"
+   "src/main/frontend/fs"
+   "src/main/frontend/components/conversion.cljs"
+   "src/main/frontend/util/fs.cljs"
+   "src/main/frontend/modules/outliner/file.cljs"])
 
 (defn- validate-db-ns-not-in-file
   []
@@ -63,16 +71,16 @@
       (println (:out res))
       (System/exit 1))))
 
-(defn- validate-file-attributes-not-in-db
+(defn- validate-file-concepts-not-in-db
   []
-  (let [file-attrs-str (str "("
-                            ;; from logseq.db.frontend.schema
-                            (->> [:block/properties-text-values :block/pre-block :recent/pages :file/handle :block/file :block/properties-order]
-                                 (map #(subs (str %) 1))
-                                 (string/join "|"))
-                            ")")
+  (let [file-concepts (->>
+                       ;; from logseq.db.frontend.schema
+                       [:block/properties-text-values :block/pre-block :recent/pages :file/handle :block/file :block/properties-order]
+                       (map str)
+                       ;; e.g. block/properties :title
+                       (into ["block/properties :"]))
         res (apply shell {:out :string :continue true}
-                   "git grep -E" file-attrs-str
+                   "git grep -E" (str "(" (string/join "|" file-concepts) ")")
                    db-graph-paths)]
     (when-not (and (= 1 (:exit res)) (= "" (:out res)))
       (println "The following files should not have contained file specific attributes:")
@@ -84,6 +92,6 @@
   []
   (validate-db-ns-not-in-file)
   (validate-file-ns-not-in-db)
-  (validate-file-attributes-not-in-db)
+  (validate-file-concepts-not-in-db)
   (validate-multi-graph-fns-not-in-file-or-db)
   (println "✅ All checks passed!"))
