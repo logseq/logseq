@@ -1,5 +1,5 @@
 (ns frontend.components.cmdk
-  (:require 
+  (:require
     [clojure.string :as string]
     [frontend.components.block :as block]
     [frontend.components.command-palette :as cp]
@@ -32,28 +32,28 @@
 (def FILTER-ROW-HEIGHT 81)
 
 ;; When CMDK opens, we have some default search actions we make avaialbe for quick access
-(def default-search-actions 
+(def default-search-actions
   [{:text "Search only pages"        :info "Add filter to search" :icon-theme :gray :icon "page" :filter {:group :pages}}
    {:text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page" :filter {:group :current-page}}
    {:text "Search only blocks"       :info "Add filter to search" :icon-theme :gray :icon "block" :filter {:group :blocks}}
    {:text "Search only whiteboards"  :info "Add filter to search" :icon-theme :gray :icon "whiteboard" :filter {:group :whiteboards}}
    {:text "Search only files"        :info "Add filter to search" :icon-theme :gray :icon "file" :filter {:group :files}}])
 
-(def default-commands 
+(def default-commands
   [{:text "Open settings" :icon "settings"      :icon-theme :gray}
    {:text "Open settings" :icon "settings"      :icon-theme :gray}
    {:text "Open settings" :icon "settings"      :icon-theme :gray}])
 
 ;; The results are separated into groups, and loaded/fetched/queried separately
-(def default-results 
-  {:search-actions {:status :success :show :less :items nil} 
+(def default-results
+  {:search-actions {:status :success :show :less :items nil}
    :recents        {:status :success :show :less :items nil}
    :commands       {:status :success :show :less :items nil}
    :favorites      {:status :success :show :less :items nil}
    :current-page   {:status :success :show :less :items nil}
    :pages          {:status :success :show :less :items nil}
-   :blocks         {:status :success :show :less :items nil} 
-   :files          {:status :success :show :less :items nil}        
+   :blocks         {:status :success :show :less :items nil}
+   :files          {:status :success :show :less :items nil}
    :filters        {:status :success :show :less :items nil}})
 
 (defn lower-case-str [x]
@@ -62,7 +62,7 @@
 (defn create-items [q]
   (if-not (seq q)
     []
-    [{:text "Create page"       :icon "new-page"       :icon-theme :color :shortcut "cmd+shift+P" :info (str "Create page called '" q "'") :source-create :page} 
+    [{:text "Create page"       :icon "new-page"       :icon-theme :color :shortcut "cmd+shift+P" :info (str "Create page called '" q "'") :source-create :page}
      {:text "Create whiteboard" :icon "new-whiteboard" :icon-theme :color :shortcut "cmd+shift+W" :info (str "Create whiteboard called '" q "'") :source-create :whiteboard}]))
 
 ;; Take the results, decide how many items to show, and order the results appropriately
@@ -70,10 +70,10 @@
   (let [results @(::results state)
         input @(::input state)
         index (volatile! -1)
-        visible-items (fn [group] 
+        visible-items (fn [group]
                         (let [{:keys [items show]} (get results group)]
-                          (case show 
-                            :none (take 0 items) 
+                          (case show
+                            :none (take 0 items)
                             :more items
                             :less (take 5 items)
                             (take 2 items))))
@@ -98,47 +98,47 @@
 
 (defn state->action [state]
   (let [highlighted-item (state->highlighted-item state)]
-    (cond (:source-page highlighted-item) :open 
+    (cond (:source-page highlighted-item) :open
           (:source-block highlighted-item) :open
           (:source-search highlighted-item) :search
-          (:source-command highlighted-item) :trigger 
+          (:source-command highlighted-item) :trigger
           (:source-create highlighted-item) :create
           (:source-adjustment highlighted-item) :filter
           (:source-group highlighted-item) :filter
           :else nil)))
 
 ;; Take the ordered results and the highlight index and determine which item is highlighted
-; (defn state->highlighted-item 
+; (defn state->highlighted-item
 ;   ([state] (state->highlighted-item state (state->results-ordered state)))
-;   ([state results-ordered] 
+;   ([state results-ordered]
 ;    (let [highlight-index @(::highlight-index state)
 ;          items (mapcat last results-ordered)
 ;          item-count (count items)
-;          normalized-index (cond 
-;                             (zero? item-count) nil 
-;                             (<= 0 (mod highlight-index item-count)) (mod highlight-index item-count) 
+;          normalized-index (cond
+;                             (zero? item-count) nil
+;                             (<= 0 (mod highlight-index item-count)) (mod highlight-index item-count)
 ;                             :else (- item-count (mod highlight-index item-count)))]
 ;        (when normalized-index
 ;          (nth items normalized-index nil)))))
-                    
+
 ;; Each result gorup has it's own load-results function
 (defmulti load-results (fn [group state] group))
 
-;; Initially we want to load the recents into the results 
+;; Initially we want to load the recents into the results
 (defmethod load-results :initial [_ state]
   (let [!results (::results state)
         recent-searches (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
         recent-pages (mapv (fn [page] {:type :page :data page}) (db/get-key-value :recent/pages))
-        recent-items (->> (concat recent-searches recent-pages) 
+        recent-items (->> (concat recent-searches recent-pages)
                           (map #(hash-map :icon (if (= :page (:type %)) "page" "history")
-                                          :icon-theme :gray 
+                                          :icon-theme :gray
                                           :text (:data %)
                                           :source-recent %
                                           :source-page (when (= :page (:type %)) (:data %))
                                           :source-search (when (= :search (:type %)) (:data %)))))
-        command-items (->> (cp-handler/top-commands 1000) 
-                           (map #(hash-map :icon "command" 
-                                           :icon-theme :gray 
+        command-items (->> (cp-handler/top-commands 1000)
+                           (map #(hash-map :icon "command"
+                                           :icon-theme :gray
                                            :text (cp/translate t %)
                                            :value-label (pr-str (:id %))
                                            :shortcut (:shortcut %)
@@ -148,7 +148,7 @@
     (reset! !results (-> default-results (assoc-in [:recents :items] recent-items)
                                          (assoc-in [:commands :items] command-items)
                                          (assoc-in [:favorites :items] favorite-items)))))
-    
+
 
 ;; The search-actions are only loaded when there is no query present. It's like a quick access to filters
 (defmethod load-results :search-actions [group state]
@@ -168,16 +168,16 @@
       (->> (cp-handler/top-commands 1000)
            (map #(assoc % :t (cp/translate t %)))
            (filter #(string/includes? (lower-case-str (pr-str %)) (lower-case-str @!input)))
-           (map #(hash-map :icon "command" 
-                           :icon-theme :gray 
+           (map #(hash-map :icon "command"
+                           :icon-theme :gray
                            :text (cp/translate t %)
                            :value-label (pr-str (:id %))
                            ; :info (pr-str (:id %))
-                           ; :info (:desc %) 
+                           ; :info (:desc %)
                            :shortcut (:shortcut %)
                            :source-command %))
            (hash-map :status :success :items)
-           (swap! !results update group merge))))) 
+           (swap! !results update group merge)))))
 
 ;; The pages search action uses an existing handler
 (defmethod load-results :pages [group state]
@@ -188,13 +188,13 @@
     (p/let [pages (search/page-search @!input)
             whiteboards (filter model/whiteboard-page? pages)
             non-boards (remove model/whiteboard-page? pages)
-            whiteboard-items (map #(hash-map :icon "page" 
-                                             :icon-theme :gray 
-                                             :text % 
+            whiteboard-items (map #(hash-map :icon "page"
+                                             :icon-theme :gray
+                                             :text %
                                              :source-page %) whiteboards)
-            non-board-items (map #(hash-map :icon "page" 
-                                            :icon-theme :gray 
-                                            :text % 
+            non-board-items (map #(hash-map :icon "page"
+                                            :icon-theme :gray
+                                            :text %
                                             :source-page %) non-boards)]
       (swap! !results update group        merge {:status :success :items non-board-items})
       ; (swap! !results assoc :whiteboards {:status :success :items whiteboard-items}
@@ -210,21 +210,26 @@
     (swap! !results assoc-in [group :status] :loading)
     (swap! !results assoc-in [:current-page :status] :loading)
     (p/let [blocks (search/block-search repo @!input opts)
-            items (map #(hash-map :icon "block" 
-                                  :icon-theme :gray 
-                                  :text (:block/content %) 
-                                  :header (some-> % :block/page db/entity :block/name)
-                                  :current-page? (some-> % :block/page #{current-page})
-                                  :source-block %) blocks)
+            blocks (remove nil? blocks)
+            items (map (fn [block]
+                         (let [id (if (uuid? (:block/uuid block))
+                                    (:block/uuid block)
+                                    (uuid (:block/uuid block)))]
+                           {:icon "block"
+                            :icon-theme :gray
+                            :text (:block/content block)
+                            :header (block/breadcrumb {:search? true} repo id {})
+                            :current-page? (some-> block :block/page #{current-page})
+                            :source-block block})) blocks)
             items-on-other-pages (remove :current-page? items)
             items-on-current-page (filter :current-page? items)]
-      ; (js/console.log "blocks" (clj->js items) current-page) 
-      ; ; (js/console.log "blocks" (clj->js items) 
-      ; ;                 (pr-str (map (comp pr-str :block/page) blocks)) 
-      ; ;                 (pr-str (map (comp :block/name :block/page) blocks)) 
+      ; (js/console.log "blocks" (clj->js items) current-page)
+      ; ; (js/console.log "blocks" (clj->js items)
+      ; ;                 (pr-str (map (comp pr-str :block/page) blocks))
+      ; ;                 (pr-str (map (comp :block/name :block/page) blocks))
       ; ;                 (pr-str (map (comp :block/name db/entity :block/page) blocks)))
-      ; ; (js/console.log "load-results/blocks" 
-      ; ;                 (clj->js blocks) 
+      ; ; (js/console.log "load-results/blocks"
+      ; ;                 (clj->js blocks)
       ; ;                 (pr-str (first blocks)))
       (swap! !results update group         merge {:status :success :items items-on-other-pages})
       (swap! !results update :current-page merge {:status :success :items items-on-current-page}))))
@@ -254,31 +259,31 @@
     (let [items (->> (concat recent-searches recent-pages)
                      (filter #(string/includes? (lower-case-str (:data %)) (lower-case-str @!input)))
                      (map #(hash-map :icon (if (= :page (:type %)) "page" "history")
-                                     :icon-theme :gray 
+                                     :icon-theme :gray
                                      ; :header (when-let [page-name])
                                      :text (:data %)
                                      :source-recent %
                                      :source-page (when (= :page (:type %)) (:data %))
                                      :source-search (when (= :search (:type %)) (:data %)))))]
       (swap! !results update group merge {:status :success :items items}))))
-      
+
     ; (swap! !results assoc group {:status :success :items recent-items})))
 
 (defmethod load-results :filters [group state]
-  (let [!input (::input state) 
+  (let [!input (::input state)
         !results (::results state)
         has-double-colon (string/includes? @!input "::")
         [_ pkey pval] (when has-double-colon (re-matches #"^.*?(\S*)::\s?(\S*)" @!input))
         replace-pkey #(swap! (::input state) string/replace #"\S*::" (str % "::"))
         replace-pval #(swap! (::input state) string/replace #"::\s?(\S*)" (str "::" %))
-        items (cond 
+        items (cond
                 (not has-double-colon) []
-                (empty? pkey) (->> (search/property-search pval) 
+                (empty? pkey) (->> (search/property-search pval)
                                    (map #(hash-map :icon "search" :icon-theme :gray :text % :source-adjustment (partial replace-pkey %))))
-                :else (->> (search/property-value-search pval pkey) 
+                :else (->> (search/property-value-search pval pkey)
                            (map #(hash-map :icon "search" :icon-theme :gray :text % :source-adjustment (partial replace-pval %)))))
-                ; [{:icon "search" 
-                ;   :icon-theme :gray 
+                ; [{:icon "search"
+                ;   :icon-theme :gray
                 ;   :text "Testing search filters"}]
                 ; [])\]]
         items (if-not (and has-double-colon (empty? pkey)) items
@@ -319,7 +324,7 @@
   (when-let [page-name (some-> state state->highlighted-item :source-page)]
     (util/copy-to-clipboard! page-name)
     (close-unless-alt! state)))
-    
+
 (defmethod handle-action :copy-block-ref [_ state event]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid uuid)]
     (editor-handler/copy-block-ref! block-uuid)
@@ -338,13 +343,13 @@
 
 (defmethod handle-action :open-page-right [_ state event]
   (when-let [page-uuid (some-> state state->highlighted-item :source-page model/get-page :block/uuid uuid)]
-    (js/console.log "oepn-page-right" page-uuid) 
+    (js/console.log "oepn-page-right" page-uuid)
     (editor-handler/open-block-in-sidebar! page-uuid)
     (close-unless-alt! state)))
 
 (defmethod handle-action :open-block-right [_ state event]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid uuid)]
-    (js/console.log "oepn-block-right" block-uuid) 
+    (js/console.log "oepn-block-right" block-uuid)
     (editor-handler/open-block-in-sidebar! block-uuid)
     (close-unless-alt! state)))
 
@@ -353,7 +358,7 @@
     (let [shift? @(::shift? state)
           page? (boolean (:source-page item))
           block? (boolean (:source-block item))]
-      (cond 
+      (cond
         (and shift? block?) (handle-action :open-block-right state event)
         (and shift? page?) (handle-action :open-page-right state event)
         block? (handle-action :open-block state event)
@@ -370,7 +375,7 @@
     (close-unless-alt! state)))
 
 (defmethod handle-action :filter-old [_ state event]
-  (let [!filter (::filter state) 
+  (let [!filter (::filter state)
         filter (some-> state state->highlighted-item :filter)]
     (if filter
       (reset! !filter filter)
@@ -382,10 +387,10 @@
         create-page? (= :page (:source-create item))
         alt? (some-> state ::alt deref)
         !input (::input state)]
-    (cond 
+    (cond
       (and create-whiteboard? alt?) (whiteboard-handler/create-new-whiteboard-page! @!input)
       (and create-whiteboard? (not alt?)) (whiteboard-handler/create-new-whiteboard-and-redirect! @!input)
-      (and create-page? alt?) (page-handler/create! @!input {:redirect? false}) 
+      (and create-page? alt?) (page-handler/create! @!input {:redirect? false})
       (and create-page? (not alt?)) (page-handler/create! @!input {:redirect? true}))
     (close-unless-alt! state)))
 
@@ -403,25 +408,25 @@
   (when-let [action (state->action state)]
     (handle-action action state event)))
 
-(rum/defc result-group < rum/reactive 
+(rum/defc result-group < rum/reactive
   [state title group visible-items first-item]
-  (let [{:keys [show items]} (some-> state ::results deref group) 
+  (let [{:keys [show items]} (some-> state ::results deref group)
         highlighted-item (or @(::highlighted-item state) first-item)
         can-show-less? (< 0 (count visible-items))
         can-show-more? (< (count visible-items) (count items))
         show-less #(swap! (::results state) assoc-in [group :show] (case show :less :none :less))
         show-more #(swap! (::results state) assoc-in [group :show] (case show :none :less :more))
         cap-highlighted-item (fn []
-                               (js/console.log 
+                               (js/console.log
                                  "testing-capping-the-highlighted-item"
                                  (count items)
-                                 (clj->js (drop GROUP-LIMIT items)) 
+                                 (clj->js (drop GROUP-LIMIT items))
                                  (clj->js highlighted-item)
                                  (.indexOf items highlighted-item))
                                (when (< (dec GROUP-LIMIT) (.indexOf items highlighted-item))
-                                 (reset! (::highlighted-item state) (nth items 4 nil))))] 
+                                 (reset! (::highlighted-item state) (nth items 4 nil))))]
     [:div {:class "border-b border-gray-06 pb-1 last:border-b-0"}
-     [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02"} 
+     [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02"}
       [:div {:class "font-bold text-gray-11 pl-0.5"} title]
       (when (not= group :create)
        [:div {:class "bg-gray-05 px-1.5 py-px text-gray-12 rounded-full"
@@ -430,15 +435,15 @@
           (str "99+")
           (count items))])
       [:div {:class "flex-1"}]
-      [:div {:class (cond-> "hover:cursor-pointer hover:underline select-none" 
-                      (not can-show-less?) (str " opacity-30 pointer-events-none")) 
-             :on-click #(show-less)} 
+      [:div {:class (cond-> "hover:cursor-pointer hover:underline select-none"
+                      (not can-show-less?) (str " opacity-30 pointer-events-none"))
+             :on-click #(show-less)}
        "Show less"]
-      [:div {:class (cond-> "hover:cursor-pointer hover:underline select-none" 
+      [:div {:class (cond-> "hover:cursor-pointer hover:underline select-none"
                       (not can-show-more?) (str " opacity-30 pointer-events-none"))
-             :on-click #(show-more)} 
+             :on-click #(show-more)}
        "Show more"]]
-      ; (cond 
+      ; (cond
       ;   (<= (count items) GROUP-LIMIT) [:div]
       ;   show-more [:div {:class "hover:cursor-pointer" :on-click (fn [] (cap-highlighted-item) (toggle-show-more))} "Show less"]
       ;   :else [:div {:class "hover:cursor-pointer" :on-click (fn [] (toggle-show-more))} "Show more"])]
@@ -446,12 +451,12 @@
      [:div {:class ""}
       (for [item visible-items
             :let [highlighted? (= item highlighted-item)]]
-       (shui/list-item (assoc item 
+       (shui/list-item (assoc item
                               :query (when-not (= group :create) @(::input state))
                               :compact true
                               :rounded false
                               :highlighted highlighted?
-                              ;; for some reason, the highlight effect does not always trigger on a 
+                              ;; for some reason, the highlight effect does not always trigger on a
                               ;; boolean value change so manually pass in the dep
                               :on-highlight-dep highlighted-item
                               :on-click (fn [e]
@@ -461,16 +466,16 @@
                                               (when-let [on-click (:on-click item)]
                                                 (on-click e)))
                                             (reset! (::highlighted-item state) item)))
-                              :on-mouse-enter (fn [e] 
+                              :on-mouse-enter (fn [e]
                                                 (when (not highlighted?)
                                                   (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
-                              :on-highlight (fn [ref]  
+                              :on-highlight (fn [ref]
                                               (reset! (::highlighted-group state) group)
                                               (when (and ref (.-current ref) (< 2 (:item-index item))
                                                          (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
-                                                (.. ref -current (scrollIntoView #js {:block "center" 
+                                                (.. ref -current (scrollIntoView #js {:block "center"
                                                                                       :inline "nearest"
-                                                                                      :behavior "smooth"}))))) 
+                                                                                      :behavior "smooth"})))))
                        (make-shui-context)))]]))
 
 (defn move-highlight [state n]
@@ -483,13 +488,13 @@
       (reset! (::highlighted-item state) next-highlighted-item)
       (reset! (::highglighted-item state) nil))))
 
-(defn handle-input-change 
+(defn handle-input-change
   ([state e] (handle-input-change state e (.. e -target -value)))
   ([state _ input]
    (let [!input (::input state)
          !load-results-throttled (::load-results-throttled state)]
      ;; update the input value in the UI
-     (reset! !input input) 
+     (reset! !input input)
 
      ;; ensure that there is a throttled version of the load-results function
      (when-not @!load-results-throttled
@@ -519,11 +524,11 @@
         ","           (when (and meta? shift?) (show-less))
         "."           (when (and meta? shift?) (show-more))
         ; "ArrowLeft"   (when meta? (show-less))
-        ; "ArrowRight"  (when meta? (show-more)) 
-        "ArrowDown"   (if meta? 
+        ; "ArrowRight"  (when meta? (show-more))
+        "ArrowDown"   (if meta?
                         (show-less)
                         (move-highlight state 1))
-        "ArrowUp"     (if meta? 
+        "ArrowUp"     (if meta?
                         (show-more)
                         (move-highlight state -1))
         "Enter"       (handle-action :default state e)
@@ -533,9 +538,9 @@
                         (handle-input-change state nil ""))
         nil))))
 
-(defonce keyup-handler 
+(defonce keyup-handler
   (fn [state e]
-    (let [shift? (.-shiftKey e) 
+    (let [shift? (.-shiftKey e)
           alt? (.-altKey e)]
       (reset! (::shift? state) shift?)
       (reset! (::alt? state) alt?))))
@@ -551,15 +556,15 @@
     (string/capitalize (name group))))
 
 (rum/defc filter-row [state filter]
-  [:div {:class "pt-3 border-b flex flex-col gap-2 bg-gray-02 border-gray-07" 
-         :style {:height (- FILTER-ROW-HEIGHT 4)}} 
+  [:div {:class "pt-3 border-b flex flex-col gap-2 bg-gray-02 border-gray-07"
+         :style {:height (- FILTER-ROW-HEIGHT 4)}}
    [:div {:class "text-xs font-bold px-6"} "Filters"]
    [:div {:class "flex items-center gap-2 overflow-x-auto pb-3"}
     [:div {:class "w-4 h-1 shrink-0"}]
     (for [group [:recents :commands :pages :whiteboards :blocks]]
       (if (or (nil? (:group filter)) (= (:group filter) group))
         [:div {:class "text-xs py-0.5 px-1.5 rounded bg-gray-07 hover:bg-gray-08 hover:cursor-pointer shrink-0"
-               :on-click (if (= (:group filter) group) 
+               :on-click (if (= (:group filter) group)
                            #(swap! (::filter state) dissoc :group)
                            #(swap! (::filter state) assoc :group group))}
           (print-group-name group)]
@@ -568,7 +573,7 @@
           (print-group-name group)]))
     [:div {:class "w-2 h-1 shrink-0"}]]])
 
-(rum/defc input-row 
+(rum/defc input-row
   [state all-items]
   (let [highlighted-item @(::highlighted-item state)
         input @(::input state)
@@ -576,26 +581,26 @@
     ;; use-effect [results-ordered input] to check whether the highlighted item is still in the results,
     ;; if not then clear that puppy out!
     ;; This was moved to a fucntional component
-    (rum/use-effect! (fn [] 
+    (rum/use-effect! (fn []
                        (when (and highlighted-item (= -1 (.indexOf all-items (dissoc highlighted-item :mouse-enter-triggered-highlight))))
                          (reset! (::highlighted-item state) nil)))
                      [all-items])
-    (rum/use-effect! (fn [] 
+    (rum/use-effect! (fn []
                        (load-results :default state))
                      [])
-    (rum/use-effect! (fn [] 
+    (rum/use-effect! (fn []
                        (js/setTimeout #(when (some-> input-ref deref) (.focus @input-ref)) 0))
                      [])
     [:div {:class ""
            :style {:background "var(--lx-gray-02)"
                    :border-bottom "1px solid var(--lx-gray-07)"}}
-     [:input {:class "text-xl bg-transparent border-none w-full outline-none px-4 py-3" 
+     [:input {:class "text-xl bg-transparent border-none w-full outline-none px-4 py-3"
               :placeholder "What are you looking for?"
               :ref #(when-not @input-ref (reset! input-ref %))
               :on-change (partial handle-input-change state)
               :value input}]]))
 
-(rum/defc input-row-sidebar 
+(rum/defc input-row-sidebar
   [state all-items]
   (let [highlighted-item @(::highlighted-item state)
         input @(::input state)
@@ -603,20 +608,20 @@
     ;; use-effect [results-ordered input] to check whether the highlighted item is still in the results,
     ;; if not then clear that puppy out!
     ;; This was moved to a fucntional component
-    (rum/use-effect! (fn [] 
+    (rum/use-effect! (fn []
                        (when (= -1 (.indexOf all-items highlighted-item))
                          (reset! (::highlighted-item state) nil)))
                      [all-items])
-    (rum/use-effect! (fn [] 
+    (rum/use-effect! (fn []
                        (load-results :default state))
                      [])
-    (rum/use-effect! (fn [] 
+    (rum/use-effect! (fn []
                        (js/setTimeout #(when (some-> input-ref deref) (.focus @input-ref)) 0))
                      [])
     [:div {:class "bg-gray-04 text-white flex items-center px-2 gap-2"}
      (ui/rotating-arrow false)
      (shui/icon "search" {:class "text-gray-12"})
-     [:input {:class "text-base bg-transparent border-none w-full outline-none py-2" 
+     [:input {:class "text-base bg-transparent border-none w-full outline-none py-2"
               :placeholder "What are you looking for?"
               :ref #(reset! input-ref %)
               :on-change (partial handle-input-change state)
@@ -624,24 +629,24 @@
      (shui/icon "x" {:class "text-gray-11"})]))
 
 (defn render-action-button [state highlighted-item]
-  (let [shift? @(::shift? state) 
+  (let [shift? @(::shift? state)
         alt? @(::alt? state)
         action (state->action state)
         text (->> [(case action :open "Open" :search "Search" :trigger "Trigger" :create "Create" :filter "Filter" nil)
                    (when (and shift? (= :open action)) "in sidebar")
                    (when alt? "(keep open)")]
-                  (remove nil?) 
-                  (string/join " ")) 
+                  (remove nil?)
+                  (string/join " "))
         theme (case action :create :color :gray)]
     (when action
       (shui/button {:text text
                     :theme theme
-                    :on-click #(handle-action action state %) 
+                    :on-click #(handle-action action state %)
                     :shortcut ["return"]}
                    (make-shui-context)))))
 
-(rum/defcs cmdk < 
-  shortcut/disable-all-shortcuts 
+(rum/defcs cmdk <
+  shortcut/disable-all-shortcuts
   rum/reactive
   (rum/local "" ::input)
   (rum/local false ::shift?)
@@ -654,11 +659,11 @@
   (rum/local nil ::filter)
   (rum/local default-results ::results)
   (rum/local nil ::load-results-throttled)
-  (rum/local [:close :filter] ::actions) 
+  (rum/local [:close :filter] ::actions)
   (rum/local nil ::scroll-container-ref)
   (rum/local nil ::input-ref)
   (rum/local false ::resizing?)
-  {:did-mount (fn [state] 
+  {:did-mount (fn [state]
                 (when-not (some-> state :rum/args first :sidebar?)
                   (let [next-keydown-handler (partial keydown-handler state)
                         next-keyup-handler (partial keyup-handler state)]
@@ -674,17 +679,17 @@
                     (reset! (::keydown-handler state) next-keydown-handler)
                     (reset! (::keyup-handler state) next-keyup-handler)))
                 state)
-   :will-unmount (fn [state] 
+   :will-unmount (fn [state]
                    ;; remove save references to key handlers
-                   (when-let [current-keydown-handler (some-> state ::keydown-handler deref)] 
+                   (when-let [current-keydown-handler (some-> state ::keydown-handler deref)]
                      (js/window.removeEventListener "keydown" current-keydown-handler))
-                   (when-let [current-keyup-handler (some-> state ::keyup-handler deref)] 
+                   (when-let [current-keyup-handler (some-> state ::keyup-handler deref)]
                      (js/window.removeEventListener "keyup" current-keyup-handler))
                    ;; clear references to key handlers
                    (reset! (::keydown-handler state) nil)
                    (reset! (::keyup-handler state) nil)
                    state)}
-  {:did-mount (fn [state] 
+  {:did-mount (fn [state]
                 ; (search-db/make-blocks-indice-non-blocking! (state/get-current-repo))
                 ; (when-let [ref @(::scroll-container-ref state)]
                 ;   (js/console.log "scrolling")
@@ -701,7 +706,7 @@
         all-items (mapcat last results-ordered)
         first-item (first all-items)
         highlighted-item (or @(::highlighted-item state) first-item)
-        shift? @(::shift? state) 
+        shift? @(::shift? state)
         alt? @(::alt? state)
         dark? (= "dark" (state/sub :ui/theme))]
     ; (rum/use-effect! #(load-results :initial state) [])
@@ -712,9 +717,9 @@
        (input-row state all-items))
      [:div {:class (cond-> "w-full flex-1 overflow-y-auto max-h-[65dvh]"
                      (not sidebar?) (str " pb-14"))
-            :ref #(when % (some-> state ::scroll-container-ref (reset! %))) 
+            :ref #(when % (some-> state ::scroll-container-ref (reset! %)))
             :style {:background "var(--lx-gray-02)"}}
-      (when filter 
+      (when filter
         (filter-row state filter))
       (for [[group-name group-key group-count group-items] results-ordered
             :when (not= 0 group-count)
@@ -753,4 +758,3 @@
 (rum/defc cmdk-block [props]
   [:div {:class "cp__cmdk__block rounded-md overflow-hidden"}
    (cmdk props)])
-
