@@ -489,7 +489,8 @@
         alt? (.-altKey e)
         highlighted-group @(::highlighted-group state)
         show-less (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :less))
-        show-more (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :more))]
+        show-more (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :more))
+        input @(::input state)]
     (reset! (::shift? state) shift?)
     (reset! (::meta? state) meta?)
     (reset! (::alt? state) alt?)
@@ -503,9 +504,8 @@
                       (show-less)
                       (move-highlight state -1))
       "Enter"       (handle-action :default state e)
-      "Escape"      (when (seq @(::input state))
-                      (.preventDefault e)
-                      (.stopPropagation e)
+      "Escape"      (when-not (string/blank? input)
+                      (util/stop e)
                       (handle-input-change state nil ""))
       nil)))
 
@@ -643,14 +643,17 @@
 (rum/defcs cmdk <
   shortcut/disable-all-shortcuts
   rum/reactive
+  {:init (fn [state]
+           (assoc state ::ref (atom nil)))}
   (mixins/event-mixin
    (fn [state]
-     (mixins/on-key-down state {}
-                         {:all-handler (fn [e _key]
-                                         (keydown-handler state e))})
-     (mixins/on-key-up state {}
-                       {:all-handler (fn [e _key]
-                                       (keyup-handler state e))})))
+     (let [ref @(::ref state)]
+       (mixins/on-key-down state {}
+                           {:target ref
+                            :all-handler (fn [e _key] (keydown-handler state e))})
+       (mixins/on-key-up state {}
+                         {:target ref
+                          :all-handler (fn [e _key] (keyup-handler state e))}))))
   (rum/local "" ::input)
   (rum/local false ::shift?)
   (rum/local false ::meta?)
@@ -679,7 +682,8 @@
         results-ordered (state->results-ordered state)
         all-items (mapcat last results-ordered)
         first-item (first all-items)]
-    [:div.cp__cmdk {:class (cond-> "w-full h-full relative flex flex-col justify-start"
+    [:div.cp__cmdk {:ref #(when-not @(::ref state) (reset! (::ref state) %))
+                    :class (cond-> "w-full h-full relative flex flex-col justify-start"
                              (not sidebar?) (str " border border-gray-06 rounded-lg"))}
      (if sidebar?
        (input-row-sidebar state all-items)
