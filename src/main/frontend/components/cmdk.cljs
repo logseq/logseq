@@ -681,7 +681,7 @@
         dark? (= "dark" (state/sub :ui/theme))]
     ; (rum/use-effect! #(load-results :initial state) [])
     [:div.cp__cmdk {:class (cond-> "w-full h-full relative flex flex-col justify-start"
-                             (not sidebar?) (str " border border-gray-06 rounded-lg overflow-x-hidden"))}
+                             (not sidebar?) (str " border border-gray-06 rounded-lg"))}
      (if sidebar?
        (input-row-sidebar state all-items)
        (input-row state all-items))
@@ -720,10 +720,7 @@
 
 (rum/defc cmdk-modal [props]
   [:div {:class "cp__cmdk__modal rounded-lg max-h-[75dvh] w-[90dvw] max-w-4xl shadow-xl relative"}
-   (cmdk props)
-   (ui/icon "x" {:class "absolute -right-[0.6rem] -top-[0.6rem] text-gray-11 hover:text-gray-12 cursor-pointer bg-gray-06 rounded-full p-1 text-sm hover:shadow-lg hover:scale-110 transition-all ease-in duration-100"
-                 :size "16"
-                 :on-click #(state/close-modal!)})])
+   (cmdk props)])
 
 (rum/defc cmdk-block [props]
   [:div {:class "cp__cmdk__block rounded-md"}
