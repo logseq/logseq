@@ -697,9 +697,8 @@
      (auto-push-row t current-repo enable-git-auto-push?)]))
 
 (rum/defcs settings-input < rum/reactive
-  [_state current-repo]
+  [_state _current-repo]
   (let [pen-mode-default? (state/pen-mode-default?)]
-
     [:div.panel-wrap.is-input
       (pen-mode-default-row t pen-mode-default?)]))
 
