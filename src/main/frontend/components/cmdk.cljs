@@ -365,7 +365,8 @@
       [:div {:class "flex-1"}]
 
       (when (or can-show-more? can-show-less?)
-        [:a.fade-link.select-node {:on-click (if (= show :more) show-less show-more)}
+        [:a.text-link.select-node.opacity-50.hover:opacity-90
+         {:on-click (if (= show :more) show-less show-more)}
          (if (= show :more)
            [:div.flex.flex-row.gap-1.items-center
             "Show less"
@@ -382,6 +383,7 @@
                                :compact true
                                :rounded false
                                :highlighted highlighted?
+                               :display-shortcut-on-highlight? true
                                ;; for some reason, the highlight effect does not always trigger on a
                                ;; boolean value change so manually pass in the dep
                                :on-highlight-dep highlighted-item

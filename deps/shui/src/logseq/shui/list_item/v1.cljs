@@ -71,7 +71,11 @@
                  :else
                  [:span text-string]))))))
 
-(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted on-highlight on-highlight-dep header on-click hoverable compact rounded on-mouse-enter component-opts] :as _props :or {hoverable true rounded true}}
+(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value
+                        title highlighted on-highlight on-highlight-dep header on-click
+                        hoverable compact rounded on-mouse-enter component-opts
+                        display-shortcut-on-highlight?] :as _props
+                 :or {hoverable true rounded true}}
                 {:keys [app-config] :as context}]
   (let [ref (rum/create-ref)
         highlight-query (partial highlight-query* app-config query)]
@@ -123,7 +127,9 @@
            [:span.text-gray-11 (str (to-string value-label))])
          (when value
            [:span.text-gray-11 (to-string value)])])
-      (when shortcut
+      (when (and shortcut
+                 (or (and display-shortcut-on-highlight? highlighted)
+                     (not display-shortcut-on-highlight?)))
         [:div {:class "flex gap-1"
                :style {:opacity (if highlighted 1 0.5)}}
          (shortcut/root shortcut context)])]]))
