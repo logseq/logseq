@@ -7,7 +7,8 @@
 
 (rum/defcs root < rum/reactive
   {:init (fn [state]
-           (assoc state ::theme (atom (:theme (first (:rum/args state))))))}
+           (assoc state ::theme (atom
+                                 (or (:theme (first (:rum/args state))) :color))))}
   [state {:keys [theme hover-theme color text depth size icon interactive shortcut tiled on-click muted class href comp-opts]
           :or {theme :color depth 1 size :md interactive true muted false class ""}} context]
   (let [*theme (::theme state)
