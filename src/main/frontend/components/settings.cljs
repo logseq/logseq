@@ -159,11 +159,15 @@
    ;; right column
    [:div.mt-1.sm:mt-0.sm:col-span-2.flex.items-center
     {:style {:gap "0.5rem"}}
-    [:div (if action action (ui/button
-                              button-label
-                              :class    "text-sm p-1"
-                              :href     href
-                              :on-click on-click))]
+    [:div (cond
+            action
+            action
+            button-label
+            (ui/button
+             button-label
+             :class    "text-sm p-1"
+             :href     href
+             :on-click on-click))]
     (when-not (or (util/mobile?)
                   (mobile-util/native-platform?))
       [:div.text-sm.flex desc])]])
@@ -740,10 +744,12 @@
                (file-sync-handler/set-sync-diff-merge-enabled! (not enabled?)))
              true))
 
-(defn sync-switcher-row [enabled?]
+(defn sync-switcher-row [repo enabled?]
   (row-with-button-action
-   {:left-label (t :settings-page/sync)
-    :action (sync-enabled-switcher enabled?)}))
+   (cond-> {:left-label (t :settings-page/sync)
+            :action (sync-enabled-switcher enabled?)}
+     (config/db-based-graph? repo)
+     (merge {:action nil :desc "Not available yet for database graphs"}))))
 
 (defn sync-diff-merge-switcher-row [enabled?]
   (row-with-button-action
@@ -1015,8 +1021,8 @@
           (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
         [:div.flex.flex-col.gap-4
          {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-         (sync-switcher-row enable-sync?)
-         (when enable-sync?
+         (sync-switcher-row current-repo enable-sync?)
+         (when (and enable-sync? (not (config/db-based-graph? current-repo)))
            (sync-diff-merge-switcher-row enable-sync-diff-merge?))
          [:div.text-sm
           (t :settings-page/sync-desc-1)

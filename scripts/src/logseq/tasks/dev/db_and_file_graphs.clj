@@ -20,9 +20,9 @@
 (def file-graph-ns
   "Namespaces or parent namespaces _only_ for file graphs"
   (mapv escape-shell-regex
-        ["frontend.handler.file-based" "frontend.handler.conversion"
+        ["frontend.handler.file-based" "frontend.handler.conversion" "frontend.handler.file-sync"
          "frontend.fs"
-         "frontend.components.conversion"
+         "frontend.components.conversion" "frontend.components.file-sync"
          "frontend.util.fs"
          "frontend.modules.outliner.file"]))
 
@@ -30,13 +30,14 @@
   "Paths _only_ for DB graphs"
   ["src/main/frontend/handler/db_based"
    "src/main/frontend/components/class.cljs"
-   "src/main/frontend/components/property.cljs"])
+   "src/main/frontend/components/property.cljs"
+   "src/electron/electron/db.cljs"])
 
 (def file-graph-paths
   "Paths _only_ for file graphs"
-  ["src/main/frontend/handler/file_based" "src/main/frontend/handler/conversion.cljs"
+  ["src/main/frontend/handler/file_based" "src/main/frontend/handler/conversion.cljs" "src/main/frontend/handler/file_sync.cljs"
    "src/main/frontend/fs"
-   "src/main/frontend/components/conversion.cljs"
+   "src/main/frontend/components/conversion.cljs" "src/main/frontend/components/file_sync.cljs"
    "src/main/frontend/util/fs.cljs"
    "src/main/frontend/modules/outliner/file.cljs"])
 

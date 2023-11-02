@@ -237,6 +237,7 @@
      [:div.r.flex.drag-region
       (when (and current-repo
                  (not (config/demo-graph? current-repo))
+                 (not (config/db-based-graph? current-repo))
                  (user-handler/alpha-or-beta-user?))
         (fs-sync/indicator))
 
