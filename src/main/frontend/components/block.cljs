@@ -544,7 +544,7 @@
         config (assoc config :whiteboard-page? whiteboard-page?)
         untitled? (model/untitled-page? page-name)]
         ; gradient-styles (state/sub-color-gradient-text-styles :09)]
-        
+
     [:a
      {:tabIndex "0"
       :class (cond-> (if tag? "tag" "page-ref")
@@ -688,14 +688,16 @@
           inner (page-inner config
                             page-name-in-block
                             page-name
-                            redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?)]
+                            redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?)
+          modal? (:modal/show? @state/state)]
       (cond
         (:breadcrumb? config)
         (or (:block/original-name page)
             (:block/name page))
 
         (and (not (util/mobile?))
-             (not preview?))
+             (not preview?)
+             (not modal?))
         (page-preview-trigger (assoc config :children inner) page-name)
 
         :else
@@ -918,7 +920,10 @@
                       ;; default open block page
                       :else (route-handler/redirect-to-page! id))))))}
 
-           (if (and (not (util/mobile?)) (not (:preview? config)) (nil? block-type))
+           (if (and (not (util/mobile?))
+                    (not (:preview? config))
+                    (not (:modal/show? @state/state))
+                    (nil? block-type))
              (ui/tippy {:html        (fn []
                                        [:div.tippy-wrapper.overflow-y-auto.p-4
                                         {:style {:width      735
