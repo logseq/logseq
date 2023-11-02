@@ -30,6 +30,10 @@
   @apply h-6 w-6;
 }
 
+.shui__button-tiled.shui__button-size-sm .shui__button__tile {
+    @apply h-4 w-4;
+}
+
 .shui__button__tile-separator {
   @apply w-px h-full bg-gray-08-alpha;
 }

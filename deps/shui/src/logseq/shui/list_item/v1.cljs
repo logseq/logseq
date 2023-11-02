@@ -151,11 +151,12 @@
          (when value
            [:span.text-gray-11 (to-string value)])])
       (when shortcut
-        [:div {:class "flex gap-1"}
+        [:div {:class "flex gap-1"
+               :style {:opacity (if highlighted 1 0.5)}}
          (for [[index option] (map-indexed vector (string/split shortcut #" \| "))]
            [:<>
             (when (< 0 index)
-              [:div.text-gray-11 "|"])
+              [:div.text-gray-11.text-sm "|"])
             (for [sequence (string/split option #" ")
                   :let [text (->> (string/split sequence #"\+")
                                   (map print-shortcut-key)
@@ -163,6 +164,6 @@
               (button/root {:theme :gray
                             :interactive false
                             :text (string/upper-case (to-string text))
-                            :tiled true}
+                            :tiled true
+                            :size :sm}
                            context))])])]]))
-        ; [:span {:style} (str key)])])])
