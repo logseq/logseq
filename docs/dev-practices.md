@@ -109,6 +109,18 @@ $ typos -w
 
 To configure it e.g. for dealing with false positives, see `typos.toml`.
 
+### Separate DB and File Graph Code
+
+There is a growing number of code and features that are only for file or DB graphs. Run this linter to
+ensure that code you add or modify keeps with existing conventions:
+
+```
+$ bb lint:db-and-file-graphs-separate
+✅ All checks passed!
+```
+
+The main convention is that file and db specific files go under directories named `file_based` and `db_based` respectively. To see the full list of file and db specific namespaces and files see the top of [the script](/scripts/src/logseq/tasks/dev/db_and_file_graphs.clj).
+
 ## Testing
 
 We have unit, performance and end to end tests.

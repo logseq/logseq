@@ -1,0 +1,2 @@
+;; API fn
+logseq.outliner.cli.persist-graph/add-listener

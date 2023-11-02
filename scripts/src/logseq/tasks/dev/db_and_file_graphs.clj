@@ -10,7 +10,7 @@
           ["." "?"]))
 
 (def db-graph-ns
-  "Namespaces or parent namespaces _only_ for DB graphs"
+  "Namespaces or parent namespaces _only_ for DB graphs. Use a '.' at end of a namespace for parent namespaces"
   (mapv escape-shell-regex
         ["logseq.db.sqlite." "logseq.db.frontend.property" "logseq.db.frontend.malli-schema"
          "electron.db"
