@@ -647,9 +647,6 @@
                hl-fn                   #(when-let [page-info (pdf-utils/get-page-from-range sel-range)]
                                           (when-let [sel-rects (pdf-utils/get-range-rects<-page-cnt sel-range (:page-el page-info))]
                                             (let [page         (int (:page-number page-info))
-                                                  sel-rects    (if (> (count sel-rects) 1)
-                                                                 (rest sel-rects)
-                                                                 sel-rects)
                                                   ^js bounding (pdf-utils/get-bounding-rect sel-rects)
                                                   vw-pos       {:bounding bounding :rects sel-rects :page page}
                                                   sc-pos       (pdf-utils/vw-to-scaled-pos viewer vw-pos)]
