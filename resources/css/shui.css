@@ -1,7 +1,7 @@
 .shui__button {
   @apply font-medium relative flex items-center justify-center gap-1;
   border-radius: 0.25rem;
-  /* box-shadow: inset 0 2px 0 0px rgba(255, 255, 255, 0.2), */ 
+  /* box-shadow: inset 0 2px 0 0px rgba(255, 255, 255, 0.2), */
   /*             inset 0 -2px 0 0px rgba(0, 0, 0, 0.1); */
   /* background-image: linear-gradient(white, white), */
   /*                   linear-gradient(to bottom, green, gold); */
@@ -27,7 +27,7 @@
 }
 
 .shui__button-tiled.shui__button-size-md .shui__button__tile {
-  @apply h-6 w-6;       
+  @apply h-6 w-6;
 }
 
 .shui__button__tile-separator {
@@ -144,17 +144,17 @@
 /* } */
 
 .shui__button-depth-1 {
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.15), 
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
               inset 0 -1px 0 0 rgba(0, 0, 0, 0.15);
 }
 
 .shui__button-depth-1:hover {
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.15), 
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
               inset 0 -2px 0 0 rgba(0, 0, 0, 0.15);
 }
 
 .shui__button-depth-2 {
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.2), 
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.2),
               inset 0 -1px 0 0 rgba(0, 0, 0, 0.2);
 }
 
@@ -239,60 +239,60 @@
 .shui__button-theme-gray.shui__button-color-custom  { background-color: var(--ls-tertiary-background-color); color: white; }
 .shui__button-theme-color.shui__button-color-custom  { background-color: var(--color-indigo-600); color: white; }
 
-.shui__button-theme-color.shui__button-color-lime    { color: white; background-color: var(--rx-lime-09); &:hover { background-color: var(--rx-lime-10); } &:active { background-color: var(--rx-lime-08); }} 
-.shui__button-theme-color.shui__button-color-orange  { color: white; background-color: var(--rx-orange-09); &:hover { background-color: var(--rx-orange-10); } &:active { background-color: var(--rx-orange-08); }} 
-.shui__button-theme-color.shui__button-color-gray    { color: white; background-color: var(--rx-gray-09); &:hover { background-color: var(--rx-gray-10); } &:active { background-color: var(--rx-gray-08); }} 
-.shui__button-theme-color.shui__button-color-sand    { color: white; background-color: var(--rx-sand-09); &:hover { background-color: var(--rx-sand-10); } &:active { background-color: var(--rx-sand-08); }} 
-.shui__button-theme-color.shui__button-color-crimson { color: white; background-color: var(--rx-crimson-09); &:hover { background-color: var(--rx-crimson-10); } &:active { background-color: var(--rx-crimson-08); }} 
-.shui__button-theme-color.shui__button-color-yellow  { color: white; background-color: var(--rx-yellow-09); &:hover { background-color: var(--rx-yellow-10); } &:active { background-color: var(--rx-yellow-08); }} 
-.shui__button-theme-color.shui__button-color-green   { color: white; background-color: var(--rx-green-09); &:hover { background-color: var(--rx-green-10); } &:active { background-color: var(--rx-green-08); }} 
-.shui__button-theme-color.shui__button-color-indigo  { color: white; background-color: var(--rx-indigo-09); &:hover { background-color: var(--rx-indigo-10); } &:active { background-color: var(--rx-indigo-08); }} 
-.shui__button-theme-color.shui__button-color-cyan    { color: white; background-color: var(--rx-cyan-09); &:hover { background-color: var(--rx-cyan-10); } &:active { background-color: var(--rx-cyan-08); }} 
-.shui__button-theme-color.shui__button-color-violet  { color: white; background-color: var(--rx-violet-09); &:hover { background-color: var(--rx-violet-10); } &:active { background-color: var(--rx-violet-08); }} 
-.shui__button-theme-color.shui__button-color-bronze  { color: white; background-color: var(--rx-bronze-09); &:hover { background-color: var(--rx-bronze-10); } &:active { background-color: var(--rx-bronze-08); }} 
-.shui__button-theme-color.shui__button-color-slate   { color: white; background-color: var(--rx-slate-09); &:hover { background-color: var(--rx-slate-10); } &:active { background-color: var(--rx-slate-08); }} 
-.shui__button-theme-color.shui__button-color-gold    { color: white; background-color: var(--rx-gold-09); &:hover { background-color: var(--rx-gold-10); } &:active { background-color: var(--rx-gold-08); }} 
-.shui__button-theme-color.shui__button-color-sage    { color: white; background-color: var(--rx-sage-09); &:hover { background-color: var(--rx-sage-10); } &:active { background-color: var(--rx-sage-08); }} 
-.shui__button-theme-color.shui__button-color-mauve   { color: white; background-color: var(--rx-mauve-09); &:hover { background-color: var(--rx-mauve-10); } &:active { background-color: var(--rx-mauve-08); }} 
-.shui__button-theme-color.shui__button-color-mint    { color: white; background-color: var(--rx-mint-09); &:hover { background-color: var(--rx-mint-10); } &:active { background-color: var(--rx-mint-08); }} 
-.shui__button-theme-color.shui__button-color-red     { color: white; background-color: var(--rx-red-09); &:hover { background-color: var(--rx-red-10); } &:active { background-color: var(--rx-red-08); }} 
-.shui__button-theme-color.shui__button-color-blue    { color: white; background-color: var(--rx-blue-09); &:hover { background-color: var(--rx-blue-10); } &:active { background-color: var(--rx-blue-08); }} 
-.shui__button-theme-color.shui__button-color-grass   { color: white; background-color: var(--rx-grass-09); &:hover { background-color: var(--rx-grass-10); } &:active { background-color: var(--rx-grass-08); }} 
-.shui__button-theme-color.shui__button-color-plum    { color: white; background-color: var(--rx-plum-09); &:hover { background-color: var(--rx-plum-10); } &:active { background-color: var(--rx-plum-08); }} 
-.shui__button-theme-color.shui__button-color-pink    { color: white; background-color: var(--rx-pink-09); &:hover { background-color: var(--rx-pink-10); } &:active { background-color: var(--rx-pink-08); }} 
-.shui__button-theme-color.shui__button-color-teal    { color: white; background-color: var(--rx-teal-09); &:hover { background-color: var(--rx-teal-10); } &:active { background-color: var(--rx-teal-08); }} 
-.shui__button-theme-color.shui__button-color-amber   { color: white; background-color: var(--rx-amber-09); &:hover { background-color: var(--rx-amber-10); } &:active { background-color: var(--rx-amber-08); }} 
-.shui__button-theme-color.shui__button-color-purple  { color: white; background-color: var(--rx-purple-09); &:hover { background-color: var(--rx-purple-10); } &:active { background-color: var(--rx-purple-08); }} 
-.shui__button-theme-color.shui__button-color-brown   { color: white; background-color: var(--rx-brown-09); &:hover { background-color: var(--rx-brown-10); } &:active { background-color: var(--rx-brown-08); }} 
-.shui__button-theme-color.shui__button-color-sky     { color: white; background-color: var(--rx-sky-09); &:hover { background-color: var(--rx-sky-10); } &:active { background-color: var(--rx-sky-08); }} 
-.shui__button-theme-color.shui__button-color-olive   { color: white; background-color: var(--rx-olive-09); &:hover { background-color: var(--rx-olive-10); } &:active { background-color: var(--rx-olive-08); }} 
-.shui__button-theme-color.shui__button-color-tomato  { color: white; background-color: var(--rx-tomato-09); &:hover { background-color: var(--rx-tomato-10); } &:active { background-color: var(--rx-tomato-08); }} 
+.shui__button-theme-color.shui__button-color-lime    { color: white; background-color: var(--rx-lime-09); &:hover { background-color: var(--rx-lime-10); } &:active { background-color: var(--rx-lime-08); }}
+.shui__button-theme-color.shui__button-color-orange  { color: white; background-color: var(--rx-orange-09); &:hover { background-color: var(--rx-orange-10); } &:active { background-color: var(--rx-orange-08); }}
+.shui__button-theme-color.shui__button-color-gray    { color: white; background-color: var(--rx-gray-09); &:hover { background-color: var(--rx-gray-10); } &:active { background-color: var(--rx-gray-08); }}
+.shui__button-theme-color.shui__button-color-sand    { color: white; background-color: var(--rx-sand-09); &:hover { background-color: var(--rx-sand-10); } &:active { background-color: var(--rx-sand-08); }}
+.shui__button-theme-color.shui__button-color-crimson { color: white; background-color: var(--rx-crimson-09); &:hover { background-color: var(--rx-crimson-10); } &:active { background-color: var(--rx-crimson-08); }}
+.shui__button-theme-color.shui__button-color-yellow  { color: white; background-color: var(--rx-yellow-09); &:hover { background-color: var(--rx-yellow-10); } &:active { background-color: var(--rx-yellow-08); }}
+.shui__button-theme-color.shui__button-color-green   { color: white; background-color: var(--rx-green-09); &:hover { background-color: var(--rx-green-10); } &:active { background-color: var(--rx-green-08); }}
+.shui__button-theme-color.shui__button-color-indigo  { color: white; background-color: var(--rx-indigo-09); &:hover { background-color: var(--rx-indigo-10); } &:active { background-color: var(--rx-indigo-08); }}
+.shui__button-theme-color.shui__button-color-cyan    { color: white; background-color: var(--rx-cyan-09); &:hover { background-color: var(--rx-cyan-10); } &:active { background-color: var(--rx-cyan-08); }}
+.shui__button-theme-color.shui__button-color-violet  { color: white; background-color: var(--rx-violet-09); &:hover { background-color: var(--rx-violet-10); } &:active { background-color: var(--rx-violet-08); }}
+.shui__button-theme-color.shui__button-color-bronze  { color: white; background-color: var(--rx-bronze-09); &:hover { background-color: var(--rx-bronze-10); } &:active { background-color: var(--rx-bronze-08); }}
+.shui__button-theme-color.shui__button-color-slate   { color: white; background-color: var(--rx-slate-09); &:hover { background-color: var(--rx-slate-10); } &:active { background-color: var(--rx-slate-08); }}
+.shui__button-theme-color.shui__button-color-gold    { color: white; background-color: var(--rx-gold-09); &:hover { background-color: var(--rx-gold-10); } &:active { background-color: var(--rx-gold-08); }}
+.shui__button-theme-color.shui__button-color-sage    { color: white; background-color: var(--rx-sage-09); &:hover { background-color: var(--rx-sage-10); } &:active { background-color: var(--rx-sage-08); }}
+.shui__button-theme-color.shui__button-color-mauve   { color: white; background-color: var(--rx-mauve-09); &:hover { background-color: var(--rx-mauve-10); } &:active { background-color: var(--rx-mauve-08); }}
+.shui__button-theme-color.shui__button-color-mint    { color: white; background-color: var(--rx-mint-09); &:hover { background-color: var(--rx-mint-10); } &:active { background-color: var(--rx-mint-08); }}
+.shui__button-theme-color.shui__button-color-red     { color: white; background-color: var(--rx-red-09); &:hover { background-color: var(--rx-red-10); } &:active { background-color: var(--rx-red-08); }}
+.shui__button-theme-color.shui__button-color-blue    { color: white; background-color: var(--rx-blue-09); &:hover { background-color: var(--rx-blue-10); } &:active { background-color: var(--rx-blue-08); }}
+.shui__button-theme-color.shui__button-color-grass   { color: white; background-color: var(--rx-grass-09); &:hover { background-color: var(--rx-grass-10); } &:active { background-color: var(--rx-grass-08); }}
+.shui__button-theme-color.shui__button-color-plum    { color: white; background-color: var(--rx-plum-09); &:hover { background-color: var(--rx-plum-10); } &:active { background-color: var(--rx-plum-08); }}
+.shui__button-theme-color.shui__button-color-pink    { color: white; background-color: var(--rx-pink-09); &:hover { background-color: var(--rx-pink-10); } &:active { background-color: var(--rx-pink-08); }}
+.shui__button-theme-color.shui__button-color-teal    { color: white; background-color: var(--rx-teal-09); &:hover { background-color: var(--rx-teal-10); } &:active { background-color: var(--rx-teal-08); }}
+.shui__button-theme-color.shui__button-color-amber   { color: white; background-color: var(--rx-amber-09); &:hover { background-color: var(--rx-amber-10); } &:active { background-color: var(--rx-amber-08); }}
+.shui__button-theme-color.shui__button-color-purple  { color: white; background-color: var(--rx-purple-09); &:hover { background-color: var(--rx-purple-10); } &:active { background-color: var(--rx-purple-08); }}
+.shui__button-theme-color.shui__button-color-brown   { color: white; background-color: var(--rx-brown-09); &:hover { background-color: var(--rx-brown-10); } &:active { background-color: var(--rx-brown-08); }}
+.shui__button-theme-color.shui__button-color-sky     { color: white; background-color: var(--rx-sky-09); &:hover { background-color: var(--rx-sky-10); } &:active { background-color: var(--rx-sky-08); }}
+.shui__button-theme-color.shui__button-color-olive   { color: white; background-color: var(--rx-olive-09); &:hover { background-color: var(--rx-olive-10); } &:active { background-color: var(--rx-olive-08); }}
+.shui__button-theme-color.shui__button-color-tomato  { color: white; background-color: var(--rx-tomato-09); &:hover { background-color: var(--rx-tomato-10); } &:active { background-color: var(--rx-tomato-08); }}
 
-.dark .shui__button-theme-color.shui__button-color-lime    { background-color: var(--rx-lime-09); &:hover { background-color: var(--rx-lime-08); } &:active { background-color: var(--rx-lime-07); }} 
-.dark .shui__button-theme-color.shui__button-color-orange  { background-color: var(--rx-orange-09); &:hover { background-color: var(--rx-orange-08); } &:active { background-color: var(--rx-orange-07); }} 
-.dark .shui__button-theme-color.shui__button-color-gray    { background-color: var(--rx-gray-09); &:hover { background-color: var(--rx-gray-08); } &:active { background-color: var(--rx-gray-07); }} 
-.dark .shui__button-theme-color.shui__button-color-sand    { background-color: var(--rx-sand-09); &:hover { background-color: var(--rx-sand-08); } &:active { background-color: var(--rx-sand-07); }} 
-.dark .shui__button-theme-color.shui__button-color-crimson { background-color: var(--rx-crimson-09); &:hover { background-color: var(--rx-crimson-08); } &:active { background-color: var(--rx-crimson-07); }} 
-.dark .shui__button-theme-color.shui__button-color-yellow  { background-color: var(--rx-yellow-09); &:hover { background-color: var(--rx-yellow-08); } &:active { background-color: var(--rx-yellow-07); }} 
-.dark .shui__button-theme-color.shui__button-color-green   { background-color: var(--rx-green-09); &:hover { background-color: var(--rx-green-08); } &:active { background-color: var(--rx-green-07); }} 
-.dark .shui__button-theme-color.shui__button-color-indigo  { background-color: var(--rx-indigo-09); &:hover { background-color: var(--rx-indigo-08); } &:active { background-color: var(--rx-indigo-07); }} 
-.dark .shui__button-theme-color.shui__button-color-cyan    { background-color: var(--rx-cyan-09); &:hover { background-color: var(--rx-cyan-08); } &:active { background-color: var(--rx-cyan-07); }} 
-.dark .shui__button-theme-color.shui__button-color-violet  { background-color: var(--rx-violet-09); &:hover { background-color: var(--rx-violet-08); } &:active { background-color: var(--rx-violet-07); }} 
-.dark .shui__button-theme-color.shui__button-color-bronze  { background-color: var(--rx-bronze-09); &:hover { background-color: var(--rx-bronze-08); } &:active { background-color: var(--rx-bronze-07); }} 
-.dark .shui__button-theme-color.shui__button-color-slate   { background-color: var(--rx-slate-09); &:hover { background-color: var(--rx-slate-08); } &:active { background-color: var(--rx-slate-07); }} 
-.dark .shui__button-theme-color.shui__button-color-gold    { background-color: var(--rx-gold-09); &:hover { background-color: var(--rx-gold-08); } &:active { background-color: var(--rx-gold-07); }} 
-.dark .shui__button-theme-color.shui__button-color-sage    { background-color: var(--rx-sage-09); &:hover { background-color: var(--rx-sage-08); } &:active { background-color: var(--rx-sage-07); }} 
-.dark .shui__button-theme-color.shui__button-color-mauve   { background-color: var(--rx-mauve-09); &:hover { background-color: var(--rx-mauve-08); } &:active { background-color: var(--rx-mauve-07); }} 
-.dark .shui__button-theme-color.shui__button-color-mint    { background-color: var(--rx-mint-09); &:hover { background-color: var(--rx-mint-08); } &:active { background-color: var(--rx-mint-07); }} 
-.dark .shui__button-theme-color.shui__button-color-red     { background-color: var(--rx-red-09); &:hover { background-color: var(--rx-red-08); } &:active { background-color: var(--rx-red-07); }} 
-.dark .shui__button-theme-color.shui__button-color-blue    { background-color: var(--rx-blue-09); &:hover { background-color: var(--rx-blue-08); } &:active { background-color: var(--rx-blue-07); }} 
-.dark .shui__button-theme-color.shui__button-color-grass   { background-color: var(--rx-grass-09); &:hover { background-color: var(--rx-grass-08); } &:active { background-color: var(--rx-grass-07); }} 
-.dark .shui__button-theme-color.shui__button-color-plum    { background-color: var(--rx-plum-09); &:hover { background-color: var(--rx-plum-08); } &:active { background-color: var(--rx-plum-07); }} 
-.dark .shui__button-theme-color.shui__button-color-pink    { background-color: var(--rx-pink-09); &:hover { background-color: var(--rx-pink-08); } &:active { background-color: var(--rx-pink-07); }} 
-.dark .shui__button-theme-color.shui__button-color-teal    { background-color: var(--rx-teal-09); &:hover { background-color: var(--rx-teal-08); } &:active { background-color: var(--rx-teal-07); }} 
-.dark .shui__button-theme-color.shui__button-color-amber   { background-color: var(--rx-amber-09); &:hover { background-color: var(--rx-amber-08); } &:active { background-color: var(--rx-amber-07); }} 
-.dark .shui__button-theme-color.shui__button-color-purple  { background-color: var(--rx-purple-09); &:hover { background-color: var(--rx-purple-08); } &:active { background-color: var(--rx-purple-07); }} 
-.dark .shui__button-theme-color.shui__button-color-brown   { background-color: var(--rx-brown-09); &:hover { background-color: var(--rx-brown-08); } &:active { background-color: var(--rx-brown-07); }} 
-.dark .shui__button-theme-color.shui__button-color-sky     { background-color: var(--rx-sky-09); &:hover { background-color: var(--rx-sky-08); } &:active { background-color: var(--rx-sky-07); }} 
-.dark .shui__button-theme-color.shui__button-color-olive   { background-color: var(--rx-olive-09); &:hover { background-color: var(--rx-olive-08); } &:active { background-color: var(--rx-olive-07); }} 
-.dark .shui__button-theme-color.shui__button-color-tomato  { background-color: var(--rx-tomato-09); &:hover { background-color: var(--rx-tomato-08); } &:active { background-color: var(--rx-tomato-07); }} 
+.dark .shui__button-theme-color.shui__button-color-lime    { background-color: var(--rx-lime-09); &:hover { background-color: var(--rx-lime-08); } &:active { background-color: var(--rx-lime-07); }}
+.dark .shui__button-theme-color.shui__button-color-orange  { background-color: var(--rx-orange-09); &:hover { background-color: var(--rx-orange-08); } &:active { background-color: var(--rx-orange-07); }}
+.dark .shui__button-theme-color.shui__button-color-gray    { background-color: var(--rx-gray-09); &:hover { background-color: var(--rx-gray-08); } &:active { background-color: var(--rx-gray-07); }}
+.dark .shui__button-theme-color.shui__button-color-sand    { background-color: var(--rx-sand-09); &:hover { background-color: var(--rx-sand-08); } &:active { background-color: var(--rx-sand-07); }}
+.dark .shui__button-theme-color.shui__button-color-crimson { background-color: var(--rx-crimson-09); &:hover { background-color: var(--rx-crimson-08); } &:active { background-color: var(--rx-crimson-07); }}
+.dark .shui__button-theme-color.shui__button-color-yellow  { background-color: var(--rx-yellow-09); &:hover { background-color: var(--rx-yellow-08); } &:active { background-color: var(--rx-yellow-07); }}
+.dark .shui__button-theme-color.shui__button-color-green   { background-color: var(--rx-green-09); &:hover { background-color: var(--rx-green-08); } &:active { background-color: var(--rx-green-07); }}
+.dark .shui__button-theme-color.shui__button-color-indigo  { background-color: var(--rx-indigo-09); &:hover { background-color: var(--rx-indigo-08); } &:active { background-color: var(--rx-indigo-07); }}
+.dark .shui__button-theme-color.shui__button-color-cyan    { background-color: var(--rx-cyan-09); &:hover { background-color: var(--rx-cyan-08); } &:active { background-color: var(--rx-cyan-07); }}
+.dark .shui__button-theme-color.shui__button-color-violet  { background-color: var(--rx-violet-09); &:hover { background-color: var(--rx-violet-08); } &:active { background-color: var(--rx-violet-07); }}
+.dark .shui__button-theme-color.shui__button-color-bronze  { background-color: var(--rx-bronze-09); &:hover { background-color: var(--rx-bronze-08); } &:active { background-color: var(--rx-bronze-07); }}
+.dark .shui__button-theme-color.shui__button-color-slate   { background-color: var(--rx-slate-09); &:hover { background-color: var(--rx-slate-08); } &:active { background-color: var(--rx-slate-07); }}
+.dark .shui__button-theme-color.shui__button-color-gold    { background-color: var(--rx-gold-09); &:hover { background-color: var(--rx-gold-08); } &:active { background-color: var(--rx-gold-07); }}
+.dark .shui__button-theme-color.shui__button-color-sage    { background-color: var(--rx-sage-09); &:hover { background-color: var(--rx-sage-08); } &:active { background-color: var(--rx-sage-07); }}
+.dark .shui__button-theme-color.shui__button-color-mauve   { background-color: var(--rx-mauve-09); &:hover { background-color: var(--rx-mauve-08); } &:active { background-color: var(--rx-mauve-07); }}
+.dark .shui__button-theme-color.shui__button-color-mint    { background-color: var(--rx-mint-09); &:hover { background-color: var(--rx-mint-08); } &:active { background-color: var(--rx-mint-07); }}
+.dark .shui__button-theme-color.shui__button-color-red     { background-color: var(--rx-red-09); &:hover { background-color: var(--rx-red-08); } &:active { background-color: var(--rx-red-07); }}
+.dark .shui__button-theme-color.shui__button-color-blue    { background-color: var(--rx-blue-09); &:hover { background-color: var(--rx-blue-08); } &:active { background-color: var(--rx-blue-07); }}
+.dark .shui__button-theme-color.shui__button-color-grass   { background-color: var(--rx-grass-09); &:hover { background-color: var(--rx-grass-08); } &:active { background-color: var(--rx-grass-07); }}
+.dark .shui__button-theme-color.shui__button-color-plum    { background-color: var(--rx-plum-09); &:hover { background-color: var(--rx-plum-08); } &:active { background-color: var(--rx-plum-07); }}
+.dark .shui__button-theme-color.shui__button-color-pink    { background-color: var(--rx-pink-09); &:hover { background-color: var(--rx-pink-08); } &:active { background-color: var(--rx-pink-07); }}
+.dark .shui__button-theme-color.shui__button-color-teal    { background-color: var(--rx-teal-09); &:hover { background-color: var(--rx-teal-08); } &:active { background-color: var(--rx-teal-07); }}
+.dark .shui__button-theme-color.shui__button-color-amber   { background-color: var(--rx-amber-09); &:hover { background-color: var(--rx-amber-08); } &:active { background-color: var(--rx-amber-07); }}
+.dark .shui__button-theme-color.shui__button-color-purple  { background-color: var(--rx-purple-09); &:hover { background-color: var(--rx-purple-08); } &:active { background-color: var(--rx-purple-07); }}
+.dark .shui__button-theme-color.shui__button-color-brown   { background-color: var(--rx-brown-09); &:hover { background-color: var(--rx-brown-08); } &:active { background-color: var(--rx-brown-07); }}
+.dark .shui__button-theme-color.shui__button-color-sky     { background-color: var(--rx-sky-09); &:hover { background-color: var(--rx-sky-08); } &:active { background-color: var(--rx-sky-07); }}
+.dark .shui__button-theme-color.shui__button-color-olive   { background-color: var(--rx-olive-09); &:hover { background-color: var(--rx-olive-08); } &:active { background-color: var(--rx-olive-07); }}
+.dark .shui__button-theme-color.shui__button-color-tomato  { background-color: var(--rx-tomato-09); &:hover { background-color: var(--rx-tomato-08); } &:active { background-color: var(--rx-tomato-07); }}

@@ -536,7 +536,8 @@
   (let [action (state->action state)
         button-fn (fn [text shortcut]
                     (shui/button {:text text
-                                  :theme :gray
+                                  :theme :text
+                                  :hover-theme :gray
                                   :on-click #(handle-action action state %)
                                   :shortcut shortcut
                                   :muted true}
@@ -545,6 +546,9 @@
       [:div {:class "flex w-full px-4 py-2 gap-2 justify-between"
              :style {:background "var(--lx-gray-03)"
                      :border-top "1px solid var(--lx-gray-07)"}}
+       [:div.text-sm.opacity-30.hover:opacity-90.leading-6
+        "Tip: type / to add search filters"]
+
        [:div.flex.gap-2
         (case action
          :open
@@ -569,9 +573,7 @@
          [:<>
           (button-fn "Filter" ["return"])]
 
-         nil)]
-       [:div.text-sm.opacity-30.hover:opacity-90.leading-6
-        "Tip: type / to add search filters"]])))
+         nil)]])))
 
 (rum/defcs cmdk <
   shortcut/disable-all-shortcuts
