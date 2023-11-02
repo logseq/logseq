@@ -39,5 +39,6 @@
                   :get-block-and-children db/get-block-and-children
                   :get-block-children db/get-block-children
                   :get-page-blocks-no-cache db/get-page-blocks-no-cache
-                  :get-page db/get-page})))
+                  :get-page db/get-page
+                  :linear-gradient colors/linear-gradient})))
   
