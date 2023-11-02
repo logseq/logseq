@@ -78,8 +78,10 @@
                           (case show
                             :more items
                             (take 5 items))))
-        page-exists? (db/entity [:block/name (string/trim input)])
-        filter-mode? (string/includes? input " /")
+        page-exists? (when-not (string/blank? input)
+                       (db/entity [:block/name (string/trim input)]))
+        filter-mode? (or (string/includes? input " /")
+                         (string/starts-with? input "/"))
         order* (if filter-mode?
                  [["Filters"        :filters        (visible-items :filters)]
                   ["Pages"          :pages          (visible-items :pages)]
@@ -241,11 +243,17 @@
                                      :source-search (when (= :search (:type %)) (:data %)))))]
       (swap! !results update group merge {:status :success :items items}))))
 
+(defn- get-filter-q
+  [input]
+  (or (when (string/starts-with? input "/")
+        (subs input 1))
+      (last (gp-util/split-last " /" input))))
+
 (defmethod load-results :filters [group state]
   (let [!results (::results state)
         !input (::input state)
         input @!input
-        q (or (last (gp-util/split-last " /" input)) "")
+        q (or (get-filter-q input) "")
         matched-items (if (string/blank? q)
                         filters
                         (search/fuzzy-search filters q {:extract-fn :text}))]
@@ -331,10 +339,20 @@
       (and create-page? (not alt?)) (page-handler/create! @!input {:redirect? true}))
     (close-unless-alt! state)))
 
+(defn- get-filter-user-input
+  [input]
+  (cond
+    (string/includes? input " /")
+    (first (gp-util/split-last " /" input))
+    (string/starts-with? input "/")
+    ""
+    :else
+    input))
+
 (defmethod handle-action :filter [_ state event]
   (let [item (some-> state state->highlighted-item)
         !input (::input state)]
-    (reset! !input (first (gp-util/split-last " /" @!input)))
+    (reset! !input (get-filter-user-input @!input))
     (let [!filter (::filter state)
           group (get-in item [:filter :group])]
       (swap! !filter assoc :group group)
@@ -600,6 +618,17 @@
 
           nil)]])))
 
+(rum/defc search-only
+  [state group-name]
+  [:div.flex.flex-row.gap-1.items-center
+   [:div "Search only:"]
+   [:div group-name]
+   (button/root {:icon "x"
+                 :theme :text
+                 :hover-theme :gray
+                 :size :sm
+                 :on-click (fn []
+                             (reset! (::filter state) nil))})])
 (rum/defcs cmdk <
   shortcut/disable-all-shortcuts
   rum/reactive
@@ -626,8 +655,7 @@
   (rum/local nil ::scroll-container-ref)
   (rum/local nil ::input-ref)
   [state {:keys [sidebar?]}]
-  (let [filter (not-empty @(::filter state))
-        group-filter (:group filter)
+  (let [group-filter (:group @(::filter state))
         results-ordered (state->results-ordered state)
         all-items (mapcat last results-ordered)
         first-item (first all-items)]
@@ -641,23 +669,24 @@
                      (not sidebar?) (str " pb-14"))
             :ref #(when % (some-> state ::scroll-container-ref (reset! %)))
             :style {:background "var(--lx-gray-02)"}}
-      (for [[group-name group-key group-count group-items] results-ordered
-            :when (not= 0 group-count)
-            :when (if-not group-filter true
-                          (or (= group-filter group-key)
-                              (and filter (= group-key :create))))]
-        (let [title (if (= group-filter group-key)
-                      [:div.flex.flex-row.gap-1.items-center
-                       [:div "Search only:"]
-                       [:div group-name]
-                       (button/root {:icon "x"
-                                     :theme :text
-                                     :hover-theme :gray
-                                     :size :sm
-                                     :on-click (fn []
-                                                 (reset! (::filter state) nil))})]
-                      group-name)]
-          (result-group state title group-key group-items first-item)))]
+      (let [items (filter
+                   (fn [[_group-name group-key group-count _group-items]]
+                     (and (not= 0 group-count)
+                          (if-not group-filter true
+                                  (or (= group-filter group-key)
+                                      (and group-filter (= group-key :create))))))
+                   results-ordered)]
+        (if (seq items)
+          (for [[group-name group-key _group-count group-items] items]
+            (let [title (if (= group-filter group-key)
+                          (search-only state group-name)
+                          group-name)]
+              (result-group state title group-key group-items first-item)))
+          [:div.flex.flex-col.p-4.gap-2.opacity-50
+           (when group-filter
+             [:div.text-sm
+              (search-only state (string/capitalize (name group-filter)))])
+           "No matched results"]))]
      (hints state)]))
 
 (rum/defc cmdk-modal [props]
