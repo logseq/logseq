@@ -410,9 +410,9 @@
                                            (handle-action :default state item)
                                            (when-let [on-click (:on-click item)]
                                              (on-click e)))
-                               :on-mouse-enter (fn [e]
-                                                 (when (not highlighted?)
-                                                   (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
+                               ;; :on-mouse-enter (fn [e]
+                               ;;                   (when (not highlighted?)
+                               ;;                     (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
                                :on-highlight (fn [ref]
                                                (reset! (::highlighted-group state) group)
                                                (when (and ref (.-current ref)
