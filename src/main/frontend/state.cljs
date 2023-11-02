@@ -281,7 +281,7 @@
 
      :ui/loading?                           {}
      :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
-     :feature/enable-sync-diff-merge?       (storage/get :logseq-sync-diff-merge-enabled)
+     :feature/enable-sync-diff-merge?       ((fnil identity true) (storage/get :logseq-sync-diff-merge-enabled))
 
      :file/rename-event-chan                (async/chan 100)
      :ui/find-in-page                       nil
