@@ -367,8 +367,12 @@
       (when (or can-show-more? can-show-less?)
         [:a.fade-link.select-node {:on-click (if (= show :more) show-less show-more)}
          (if (= show :more)
-           "Show less"
-           "Show more")])]
+           [:div.flex.flex-row.gap-1.items-center
+            "Show less"
+            (shui/shortcut "mod up" nil)]
+           [:div.flex.flex-row.gap-1.items-center
+            "Show more"
+            (shui/shortcut "mod down" nil)])])]
 
      [:div
       (for [item visible-items
