@@ -130,6 +130,7 @@
       (when (and shortcut
                  (or (and display-shortcut-on-highlight? highlighted)
                      (not display-shortcut-on-highlight?)))
-        [:div {:class "flex gap-1"
+        [:div {:class (str "flex gap-1"
+                           (when display-shortcut-on-highlight? " fade-in"))
                :style {:opacity (if highlighted 1 0.5)}}
          (shortcut/root shortcut context)])]]))
