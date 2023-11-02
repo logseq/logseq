@@ -24,16 +24,22 @@
     [rum.core :as rum]
     [frontend.mixins :as mixins]
     [logseq.graph-parser.util.block-ref :as block-ref]
-    [logseq.graph-parser.util :as gp-util]))
+    [logseq.graph-parser.util :as gp-util]
+    [logseq.shui.button.v2 :as button]))
 
 (def GROUP-LIMIT 5)
 
 (def search-actions
-  [{:text "Search only pages"        :info "Add filter to search" :icon-theme :gray :icon "page" :filter {:group :pages}}
-   {:text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page" :filter {:group :current-page}}
-   {:text "Search only blocks"       :info "Add filter to search" :icon-theme :gray :icon "block" :filter {:group :blocks}}
-   {:text "Search only commands"     :info "Add filter to search" :icon-theme :gray :icon "command" :filter {:group :commands}}
-   ;; {:text "Search only files"        :info "Add filter to search" :icon-theme :gray :icon "file" :filter {:group :files}}
+  [{:text "Search only pages"        :info "Add filter to search" :icon-theme :gray :icon "page" :filter {:mode "search"
+                                                                                                          :group :pages}}
+   {:text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page" :filter {:mode "search"
+                                                                                                          :group :current-page}}
+   {:text "Search only blocks"       :info "Add filter to search" :icon-theme :gray :icon "block" :filter {:mode "search"
+                                                                                                           :group :blocks}}
+   {:text "Search only commands"     :info "Add filter to search" :icon-theme :gray :icon "command" :filter {:mode "search"
+                                                                                                             :group :commands}}
+   ;; {:text "Search only files"        :info "Add filter to search" :icon-theme :gray :icon "file" :filter {:mode "search"
+   ;;                                                                                                        :group :files}}
    ])
 
 (def filters search-actions)
@@ -355,6 +361,7 @@
          (if (<= 100 (count items))
            (str "99+")
            (count items))])
+
       [:div {:class "flex-1"}]
 
       (when (or can-show-more? can-show-less?)
@@ -441,8 +448,9 @@
       "Enter"       (handle-action :default state e)
       "Escape"      (when-not (string/blank? input)
                       (util/stop e)
-                      (reset! (::filter state) nil)
-                      (handle-input-change state nil ""))
+                      (let [filter @(::filter state)]
+                        (reset! (::filter state) nil)
+                        (when-not filter (handle-input-change state nil ""))))
       "c"           (copy-block-ref state)
       nil)))
 
@@ -483,8 +491,7 @@
     (rum/use-effect! (fn []
                        (js/setTimeout #(when (some-> input-ref deref) (.focus @input-ref)) 0))
                      [])
-    [:div {:class ""
-           :style {:background "var(--lx-gray-02)"
+    [:div {:style {:background "var(--lx-gray-02)"
                    :border-bottom "1px solid var(--lx-gray-07)"}}
      [:input {:class "text-xl bg-transparent border-none w-full outline-none px-4 py-3"
               :placeholder "What are you looking for?"
@@ -531,6 +538,16 @@
               :value input}]
      (shui/icon "x" {:class "text-gray-11"})]))
 
+(rum/defc tip
+  [state]
+  (let [filter @(::filter state)]
+    (cond
+      filter
+      "type ESC to exit search only"
+
+      :else
+      "type / to add search filters")))
+
 (rum/defc hints
   [state]
   (let [action (state->action state)
@@ -547,33 +564,35 @@
              :style {:background "var(--lx-gray-03)"
                      :border-top "1px solid var(--lx-gray-07)"}}
        [:div.text-sm.opacity-30.hover:opacity-90.leading-6
-        "Tip: type / to add search filters"]
+        [:div.flex.flex-row.gap-1.items-center
+         [:div "Tip:"]
+         [:div (tip state)]]]
 
        [:div.flex.gap-2
         (case action
-         :open
-         [:<>
-          (button-fn "Open" ["return"])
-          (button-fn "Open in sidebar" ["shift" "return"])
-          (when (:source-block @(::highlighted-item state)) (button-fn "Copy ref" ["⌘" "c"]))]
+          :open
+          [:<>
+           (button-fn "Open" ["return"])
+           (button-fn "Open in sidebar" ["shift" "return"])
+           (when (:source-block @(::highlighted-item state)) (button-fn "Copy ref" ["⌘" "c"]))]
 
-         :search
-         [:<>
-          (button-fn "Search" ["return"])]
+          :search
+          [:<>
+           (button-fn "Search" ["return"])]
 
-         :trigger
-         [:<>
-          (button-fn "Trigger" ["return"])]
+          :trigger
+          [:<>
+           (button-fn "Trigger" ["return"])]
 
-         :create
-         [:<>
-          (button-fn "Create" ["return"])]
+          :create
+          [:<>
+           (button-fn "Create" ["return"])]
 
-         :filter
-         [:<>
-          (button-fn "Filter" ["return"])]
+          :filter
+          [:<>
+           (button-fn "Filter" ["return"])]
 
-         nil)]])))
+          nil)]])))
 
 (rum/defcs cmdk <
   shortcut/disable-all-shortcuts
@@ -621,7 +640,18 @@
             :when (if-not group-filter true
                           (or (= group-filter group-key)
                               (and filter (= group-key :create))))]
-        (result-group state group-name group-key group-items first-item))]
+        (let [title (if (= group-filter group-key)
+                      [:div.flex.flex-row.gap-1.items-center
+                       [:div "Search only:"]
+                       [:div group-name]
+                       (button/root {:icon "x"
+                                     :theme :text
+                                     :hover-theme :gray
+                                     :size :sm
+                                     :on-click (fn []
+                                                 (reset! (::filter state) nil))})]
+                      group-name)]
+          (result-group state title group-key group-items first-item)))]
      (hints state)]))
 
 (rum/defc cmdk-modal [props]

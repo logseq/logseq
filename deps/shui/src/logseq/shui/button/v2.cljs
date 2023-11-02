@@ -8,7 +8,7 @@
 (rum/defcs root < rum/reactive
   {:init (fn [state]
            (assoc state ::theme (atom (:theme (first (:rum/args state))))))}
-  [state {:keys [theme hover-theme color text depth size icon interactive shortcut tiled on-click muted class href]
+  [state {:keys [theme hover-theme color text depth size icon interactive shortcut tiled on-click muted class href comp-opts]
           :or {theme :color depth 1 size :md interactive true muted false class ""}} context]
   (let [*theme (::theme state)
         color-string (or (some-> color name) (some-> context :state rum/react :ui/radix-color name) "custom")
@@ -18,10 +18,12 @@
         muted-class (when muted "shui__button-muted")
         size-class  (str "shui__button-size-" (name size))
         tiled-class (when tiled "shui__button-tiled")]
-    [:button.shui__button {:class (str theme-class " " depth-class " " color-class " " size-class " " tiled-class " " muted-class " " class)
-                           :on-click (cond on-click on-click href #(js/window.open href "_blank"))
-                           :on-mouse-over #(when hover-theme (reset! *theme hover-theme))
-                           :on-mouse-out #(reset! *theme theme)}
+    [:button.shui__button (merge
+                           comp-opts
+                           {:class (str theme-class " " depth-class " " color-class " " size-class " " tiled-class " " muted-class " " class)
+                            :on-click (cond on-click on-click href #(js/window.open href "_blank"))
+                            :on-mouse-over #(when hover-theme (reset! *theme hover-theme))
+                            :on-mouse-out #(reset! *theme theme)})
      (if-not tiled text
              (for [[index tile] (map-indexed vector (rest (string/split text #"")))]
                [:<>
