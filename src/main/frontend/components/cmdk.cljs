@@ -567,10 +567,10 @@
   (let [filter @(::filter state)]
     (cond
       filter
-      "type ESC to exit search only"
+      "type ESC to clear search filter"
 
       :else
-      "type / to add search filters")))
+      "type / to filter search results")))
 
 (rum/defc hints
   [state]
