@@ -113,7 +113,7 @@
      :on-click (fn []
                  (let [{:keys [start end]} @*between-dates]
                    (when (and start end)
-                     (let [clause [:between start end]]
+                     (let [clause [:between [:page-ref start] [:page-ref end]]]
                        (append-tree! tree opts loc clause)
                        (reset! *between-dates {}))))))])
 
