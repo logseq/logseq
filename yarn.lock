@@ -491,10 +491,10 @@
     "@jridgewell/resolve-uri" "^3.1.0"
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
-"@logseq/capacitor-file-sync@5.0.0":
-  version "5.0.0"
-  resolved "https://registry.yarnpkg.com/@logseq/capacitor-file-sync/-/capacitor-file-sync-5.0.0.tgz#bd340e63119c6bb548844195f2802150621b23d1"
-  integrity sha512-x1Yi1GJRINIa4joeKIURDYuaTXZ3d/HV4PeLQaura1dTkYxQHhes40mNO+bGPSykHWzds8InN+/o7G2TzwSKKA==
+"@logseq/capacitor-file-sync@5.0.1":
+  version "5.0.1"
+  resolved "https://registry.yarnpkg.com/@logseq/capacitor-file-sync/-/capacitor-file-sync-5.0.1.tgz#e154f715597785518ccd7d058f353acb67fbc2b8"
+  integrity sha512-C1fLSS53orxsUWBsNb6LKwuOdlEU9ZhxkweMjNKG9VaSkLFTFqpjFG36OTso23WQ7hC5e45jjXq79aoWuqJaKA==
 
 "@logseq/diff-merge@0.2.2":
   version "0.2.2"
@@ -2667,10 +2667,10 @@ electron-to-chromium@^1.4.526:
   resolved "https://registry.yarnpkg.com/electron-to-chromium/-/electron-to-chromium-1.4.528.tgz#7c900fd73d9d2e8bb0dab0e301f25f0f4776ef2c"
   integrity sha512-UdREXMXzLkREF4jA8t89FQjA8WHI6ssP38PMY4/4KhXFQbtImnghh4GkCgrtiZwLKUKVD2iTVXvDVQjfomEQuA==
 
-electron@26.4.2:
-  version "26.4.2"
-  resolved "https://registry.yarnpkg.com/electron/-/electron-26.4.2.tgz#2f976a3c30558f09ced3f5876862b4c21172c02c"
-  integrity sha512-BOfQUOIvsq5NnssWOMqcZnA5M0ull620wvQoJq3WhXN1wJAsWu+cdjHvREyxnHbArPkV+F+x3YAi5Dt+UKoqhw==
+electron@25.9.3:
+  version "25.9.3"
+  resolved "https://registry.yarnpkg.com/electron/-/electron-25.9.3.tgz#cdd53a30fb914adadcfbd34124237fb38b1c07d0"
+  integrity sha512-dacaHg/PuwVcFRgPDCM5j7UDzqGJWOsbBRdS5wPKLNS/ejPeccIjuNUT1cqcrpvCJKAFW8swHWg9kdizNSEDHQ==
   dependencies:
     "@electron/get" "^2.0.0"
     "@types/node" "^18.11.18"

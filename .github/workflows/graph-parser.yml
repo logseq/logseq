@@ -24,7 +24,7 @@ defaults:
     working-directory: deps/graph-parser
 
 env:
-  CLOJURE_VERSION: '1.10.1.763'
+  CLOJURE_VERSION: '1.11.1.1413'
   # This is the same as 1.8.
   JAVA_VERSION: '11'
   # This is the latest node version we can run.
