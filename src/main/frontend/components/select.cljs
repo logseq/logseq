@@ -38,7 +38,7 @@
    * :items - Vec of things to select from. Assumes a vec of maps with :value key by default. Required option
    * :limit - Limit number of items to search. Default is 100
    * :on-chosen - Optional fn to perform an action with chosen item
-   * :extract-fn - Fn applied to each item during search. Default is :value
+   * :extract-fn - Fn applied to each item during fuzzy search. Default is :value
    * :extract-chosen-fn - Fn applied to each item when choosing an item. Default is identity
    * :show-new-when-not-exact-match? - Boolean to allow new values be entered. Default is false
    * :exact-match-exclude-items - A set of strings that can't be added as a new item. Default is #{}

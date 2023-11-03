@@ -37,9 +37,8 @@
    (select items on-chosen {}))
   ([items on-chosen options]
    (component-select/select (merge
-                             {:items items
-                              :on-chosen on-chosen
-                              :extract-fn identity}
+                             {:items (map #(hash-map :value %) items)
+                              :on-chosen on-chosen}
                              options))))
 
 (defn append-tree!
@@ -128,7 +127,7 @@
        "namespace"
        (let [items (sort (db-model/get-all-namespace-parents repo))]
          (select items
-                 (fn [value]
+                 (fn [{:keys [value]}]
                    (append-tree! *tree opts loc [:namespace value]))))
 
        "tags"
@@ -136,20 +135,20 @@
                         (map second)
                         sort)]
          (select items
-                 (fn [value]
+                 (fn [{:keys [value]}]
                    (append-tree! *tree opts loc [:page-tags value]))))
 
        "property"
        (let [properties (search/get-all-properties)]
          (select properties
-                 (fn [value]
+                 (fn [{:keys [value]}]
                    (reset! *mode "property-value")
                    (reset! *property (keyword value)))))
 
        "property-value"
        (let [values (cons "Select all" (db-model/get-property-values @*property))]
          (select values
-                 (fn [value]
+                 (fn [{:keys [value]}]
                    (let [x (if (= value "Select all")
                              [(if (= @*find :page) :page-property :property) @*property]
                              [(if (= @*find :page) :page-property :property) @*property value])]
@@ -158,12 +157,12 @@
 
        "sample"
        (select (range 1 101)
-               (fn [value]
+               (fn [{:keys [value]}]
                  (append-tree! *tree opts loc [:sample (util/safe-parse-int value)])))
 
        "task"
        (select db-default/built-in-markers
-               (fn [value]
+               (fn [{:keys [value]}]
                  (when (seq value)
                    (append-tree! *tree opts loc (vec (cons :task value)))))
                {:multiple-choices? true
@@ -175,25 +174,25 @@
 
        "priority"
        (select db-default/built-in-priorities
-         (fn [value]
-           (when (seq value)
-             (append-tree! *tree opts loc (vec (cons :priority value)))))
-         {:multiple-choices? true
-          :selected-choices #{}
-          :prompt-key :select/default-select-multiple
-          :close-modal? false
-          :on-apply (:toggle-fn opts)})
+               (fn [{:keys [value]}]
+                 (when (seq value)
+                   (append-tree! *tree opts loc (vec (cons :priority value)))))
+               {:multiple-choices? true
+                :selected-choices #{}
+                :prompt-key :select/default-select-multiple
+                :close-modal? false
+                :on-apply (:toggle-fn opts)})
 
        "page"
        (let [pages (sort (db-model/get-all-page-original-names repo))]
          (select pages
-                 (fn [value]
+                 (fn [{:keys [value]}]
                    (append-tree! *tree opts loc [:page value]))))
 
        "page reference"
        (let [pages (sort (db-model/get-all-page-original-names repo))]
          (select pages
-                 (fn [value]
+                 (fn [{:keys [value]}]
                    (append-tree! *tree opts loc [:page-ref value]))
                  {}))
 
@@ -234,18 +233,19 @@
         (when-not @*find
           [:hr.m-0])
         (select
-          (map name filters-and-ops)
-          (fn [value]
-            (cond
-              (= value "all page tags")
-              (append-tree! *tree opts loc [:all-page-tags])
+         (map name filters-and-ops)
+         (fn [{:keys [value]}]
+           (cond
+             (= value "all page tags")
+             (append-tree! *tree opts loc [:all-page-tags])
 
-              (operator? value)
-              (append-tree! *tree opts loc [(keyword value)])
+             (operator? value)
+             (append-tree! *tree opts loc [(keyword value)])
 
-              :else
-              (reset! *mode value)))
-          {:input-default-placeholder "Add filter/operator"})])]))
+             :else
+             (do (reset! *mode value)
+                 ((:toggle-fn opts)))))
+         {:input-default-placeholder "Add filter/operator"})])]))
 
 (rum/defc add-filter
   [*find *tree loc clause]
