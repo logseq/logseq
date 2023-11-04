@@ -154,7 +154,7 @@
     ;; If it's a journal title or journal file name, translate the title
     :new-page
     (if-let [journal-title (date/journal-title->custom-format search-q)]
-        (page-handler/create! journal-title {:redirect? true})
+        (page-handler/create! journal-title {:redirect? true :journal? true})
         (page-handler/create! search-q {:redirect? true}))
 
     :new-whiteboard
