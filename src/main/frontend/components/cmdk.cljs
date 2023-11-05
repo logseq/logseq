@@ -154,16 +154,17 @@
     (swap! !results assoc-in [group :status] :loading)
     (if (empty? @!input)
       (swap! !results update group merge {:status :success :items default-commands})
-      (->> (cp-handler/top-commands 1000)
-           (map #(assoc % :t (cp/translate t %)))
-           (filter #(string/includes? (lower-case-str (pr-str %)) (lower-case-str @!input)))
-           (map #(hash-map :icon "command"
-                           :icon-theme :gray
-                           :text (cp/translate t %)
-                           :shortcut (:shortcut %)
-                           :source-command %))
-           (hash-map :status :success :items)
-           (swap! !results update group merge)))))
+      (let [commands (->> (cp-handler/top-commands 1000)
+                          (map #(assoc % :t (cp/translate t %))))
+            search-results (search/fuzzy-search commands @!input {:extract-fn :t})]
+        (->> search-results
+             (map #(hash-map :icon "command"
+                             :icon-theme :gray
+                             :text (cp/translate t %)
+                             :shortcut (:shortcut %)
+                             :source-command %))
+             (hash-map :status :success :items)
+             (swap! !results update group merge))))))
 
 ;; The pages search action uses an existing handler
 (defmethod load-results :pages [group state]
