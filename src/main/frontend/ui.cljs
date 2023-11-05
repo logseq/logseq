@@ -595,7 +595,7 @@
 
 (rum/defc modal-panel
   [show? panel-content transition-state close-fn fullscreen? close-btn? panel?]
-  [:div.transform.transition-all.sm:min-w-lg.sm
+  [:div.cp__modal-panel.transform.transition-all.sm:min-w-lg.sm
    {:class (cond-> (case transition-state
                      "entering" "ease-out duration-300 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
                      "entered" "ease-out duration-300 opacity-100 translate-y-0 sm:scale-100"

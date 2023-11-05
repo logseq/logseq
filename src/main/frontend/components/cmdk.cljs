@@ -369,7 +369,8 @@
         can-show-less? (< GROUP-LIMIT (count visible-items))
         can-show-more? (< (count visible-items) (count items))
         show-less #(swap! (::results state) assoc-in [group :show] :less)
-        show-more #(swap! (::results state) assoc-in [group :show] :more)]
+        show-more #(swap! (::results state) assoc-in [group :show] :more)
+        context (make-shui-context)]
     [:div {:class "border-b border-gray-06 pb-1 last:border-b-0"}
      [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02"}
       [:div {:class "font-bold text-gray-11 pl-0.5"} title]
@@ -388,10 +389,10 @@
          (if (= show :more)
            [:div.flex.flex-row.gap-1.items-center
             "Show less"
-            (shui/shortcut "mod up" nil)]
+            (shui/shortcut "mod up" context)]
            [:div.flex.flex-row.gap-1.items-center
             "Show more"
-            (shui/shortcut "mod down" nil)])])]
+            (shui/shortcut "mod down" context)])])]
 
      [:div
       (for [item visible-items
@@ -420,7 +421,7 @@
                                                  (.. ref -current (scrollIntoView #js {:block "center"
                                                                                        :inline "nearest"
                                                                                        :behavior "smooth"})))))
-                        (make-shui-context)))]]))
+                        context))]]))
 
 (defn move-highlight [state n]
   (js/console.log "move-highlight" n)
@@ -661,7 +662,7 @@
         first-item (first all-items)]
     [:div.cp__cmdk {:ref #(when-not @(::ref state) (reset! (::ref state) %))
                     :class (cond-> "w-full h-full relative flex flex-col justify-start"
-                             (not sidebar?) (str " border border-gray-06 rounded-lg"))}
+                             (not sidebar?) (str " rounded-lg"))}
      (if sidebar?
        (input-row-sidebar state all-items)
        (input-row state all-items))
