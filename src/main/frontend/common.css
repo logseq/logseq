@@ -103,6 +103,7 @@ html[data-theme='dark'] {
   --ls-success-background-color: var(--color-green-900);
   --ls-focus-ring-color: rgba(18, 98, 119, 0.5);
   --ls-header-button-background: #dee4ea;
+  --logseq-og-left-sidebar-text-color: var(--lx-gray-11);
   --color-level-1: var(--ls-secondary-background-color);
   --color-level-2: var(--ls-tertiary-background-color);
   --color-level-3: var(--ls-quaternary-background-color);
@@ -181,6 +182,7 @@ html[data-theme='light'] {
   --ls-success-background-color: var(--color-green-100);
   --ls-focus-ring-color: rgba(66, 133, 244, 0.5);
   --ls-header-button-background: rgba(15, 20, 25, 1);
+  --logseq-og-left-sidebar-text-color: var(--lx-gray-12);
   --color-level-1: var(--ls-secondary-background-color);
   --color-level-2: var(--ls-tertiary-background-color);
   --color-level-3: var(--ls-quaternary-background-color);
@@ -680,7 +682,7 @@ a.tag {
   text-decoration: none;
   display: inline-block;
   cursor: pointer;
-  padding: 0 2px; 
+  padding: 0 2px;
   border-radius: 4px;
   background: or(--logseq-og-tag-background, --lx-accent-05, transparent);
   color: or(--logseq-og-tag-text, --lx-accent-11, --ls-tag-text-color, #045591);

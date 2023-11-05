@@ -79,7 +79,7 @@
   overflow: auto;
 }
 
-.dark .left-sidebar-inner { 
+.dark .left-sidebar-inner {
   background-color: or(--lx-gray-01, --ls-primary-background);
 }
 
@@ -212,10 +212,6 @@
       .ui__icon {
         @apply flex justify-center;
         width: 20px;
-      }
-
-      a {
-        opacity: .7;
       }
 
       .more {
@@ -384,7 +380,7 @@
     @apply opacity-90 hover:opacity-100;
     transition: all 120ms ease-out;
 
-    color: or(--logseq-og-left-sidebar-text-color, --lx-gray-11, --ls-header-button-background);
+    color: or(--logseq-og-left-sidebar-text-color, --ls-header-button-background);
   }
 
   > .left-sidebar-inner {
