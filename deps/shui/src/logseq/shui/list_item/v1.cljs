@@ -109,8 +109,8 @@
        {:style {:background (when (#{:gradient} icon-theme) "linear-gradient(-65deg, #8AE8FF, #5373E7, #369EFF, #00B1CC)")
                 :box-shadow (when (#{:color :gradient} icon-theme) "inset 0 0 0 1px rgba(255,255,255,0.3) ")}
         :class (cond-> "w-5 h-5 rounded flex items-center justify-center"
-                 (= icon-theme :color) (str " bg-accent-10 dark:bg-accent-09 text-white")
-                 (= icon-theme :gray) (str " bg-gray-05 dark:bg-gray-05 text-white"))}
+                 (= icon-theme :color) (str " bg-accent-10 dark:bg-accent-09 dark:text-white")
+                 (= icon-theme :gray) (str " bg-gray-05 dark:bg-gray-05 dark:text-white"))}
        (icon/root icon {:size "14"
                         :class ""})]
       [:div.flex.flex-1.flex-col
