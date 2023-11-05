@@ -153,11 +153,11 @@
                           (search-db/make-pages-title-indice!))
                result (->> (.search indice q (clj->js {:limit limit}))
                            (bean/->clj))]
-           ;; TODO: add indexes for highlights
-           (->> (map
-                  (fn [{:keys [item]}]
-                    (:original-name item))
-                 result)
+           (->> result
+                (util/distinct-by (fn [i] (string/trim (get-in i [:item :name]))))
+                (map
+                 (fn [{:keys [item]}]
+                   (:original-name item)))
                 (remove nil?)
                 (map string/trim)
                 (distinct)
