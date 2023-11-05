@@ -113,7 +113,7 @@
   }
 
   &-panel {
-    @apply relative rounded-md shadow-xl;
+    @apply relative rounded-md shadow-xl border-none;
 
     overflow: hidden;
     background: or(--lx-gray-04, --ls-secondary-background-color);
@@ -429,8 +429,4 @@ html.is-mobile {
 
 .ui__toggle-background-off {
   background: or(--logseq-og-toggle-off-background, --lx-gray-08, rgb(212, 212, 212));
-}
-
-.ui__modal, .cp__modal-panel {
-    border: none;
 }

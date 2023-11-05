@@ -594,14 +594,13 @@
   (panel-content close-fn))
 
 (rum/defc modal-panel
-  [show? panel-content transition-state close-fn fullscreen? close-btn? panel?]
-  [:div.cp__modal-panel.transform.transition-all.sm:min-w-lg.sm
-   {:class (cond-> (case transition-state
-                     "entering" "ease-out duration-300 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                     "entered" "ease-out duration-300 opacity-100 translate-y-0 sm:scale-100"
-                     "exiting" "ease-in duration-200 opacity-100 translate-y-0 sm:scale-100"
-                     "exited" "ease-in duration-200 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95")
-             panel? (str " ui__modal-panel"))}
+  [show? panel-content transition-state close-fn fullscreen? close-btn?]
+  [:div.ui__modal-panel.transform.transition-all.sm:min-w-lg.sm
+   {:class (case transition-statess
+             "entering" "ease-out duration-300 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+             "entered" "ease-out duration-300 opacity-100 translate-y-0 sm:scale-100"
+             "exiting" "ease-in duration-200 opacity-100 translate-y-0 sm:scale-100"
+             "exited" "ease-in duration-200 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95")}
    [:div.ui__modal-close-wrap
     (when-not (false? close-btn?)
       [:a.ui__modal-close
@@ -640,7 +639,6 @@
   []
   (let [modal-panel-content (state/sub :modal/panel-content)
         fullscreen? (state/sub :modal/fullscreen?)
-        panel? (state/sub :modal/panel?)
         close-btn? (state/sub :modal/close-btn?)
         close-backdrop? (state/sub :modal/close-backdrop?)
         show? (state/sub :modal/show?)
@@ -659,7 +657,7 @@
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
-        (modal-panel show? modal-panel-content state close-fn fullscreen? close-btn? panel?)))]))
+        (modal-panel show? modal-panel-content state close-fn fullscreen? close-btn?)))]))
 
 (defn make-confirm-modal
   [{:keys [tag title sub-title sub-checkbox? on-cancel on-confirm]
