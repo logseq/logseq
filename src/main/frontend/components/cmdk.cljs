@@ -692,7 +692,7 @@
      (hints state)]))
 
 (rum/defc cmdk-modal [props]
-  [:div {:class "cp__cmdk__modal rounded-lg max-h-[65dvh] w-[90dvw] max-w-4xl shadow-xl relative"}
+  [:div {:class "cp__cmdk__modal rounded-lg w-[90dvw] max-w-4xl shadow-xl relative"}
    (cmdk props)])
 
 (comment
