@@ -395,7 +395,8 @@
         (.on js/window.apis event function))
 
       (p/then (ipc/ipc :getAppBaseInfo) #(let [{:keys [isFullScreen isMaximized]} (js->clj % :keywordize-keys true)]
-                                           (when isFullScreen ((.add cl "is-fullscreen")
+                                           (when isFullScreen (do
+                                                               (.add cl "is-fullscreen")
                                                                (state/set-state! :electron/window-fullscreen? true)))
                                            (when isMaximized (state/set-state! :electron/window-maximized? true)))))))
 
