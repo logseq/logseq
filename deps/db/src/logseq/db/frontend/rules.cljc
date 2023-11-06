@@ -146,7 +146,14 @@
   "Rules used by frontend.query.dsl for db graphs"
   (merge
    query-dsl-rules
-   {:has-page-property
+   {:page-tags
+   '[(page-tags ?p ?tags)
+     [?p :block/tags ?t]
+     [?t :block/name ?tag]
+     [(missing? $ ?p :block/link)]
+     [(contains? ?tags ?tag)]]
+
+    :has-page-property
     '[(has-page-property ?p ?prop)
       [?p :block/name]
       [?p :block/properties ?bp]
