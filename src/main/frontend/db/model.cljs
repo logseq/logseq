@@ -92,7 +92,7 @@
   (d/q '[:find ?page-name ?tag
          :where
          [?page :block/tags ?e]
-         [?e :block/name ?tag]
+         [?e :block/original-name ?tag]
          [?page :block/name ?page-name]]
        (conn/get-db repo)))
 
@@ -102,7 +102,7 @@
          :where
          [?page :block/name ?page-name]
          [?page :block/namespace ?e]
-         [?e :block/name ?parent]]
+         [?e :block/original-name ?parent]]
     (conn/get-db repo)))
 
 (defn get-all-namespace-parents
@@ -1204,7 +1204,6 @@ independent of format as format specific heading characters are stripped"
             %)
          refs)))
 
-;; FIXME: property values for db version
 (defn get-property-values
   [property]
   (let [pred (fn [_db properties text-properties]
@@ -1227,6 +1226,43 @@ independent of format as format specific heading characters are stripped"
      (remove string/blank?)
      (distinct)
      (sort))))
+
+(defn get-db-property-values
+  "Returns all property values of a given property for use in a simple query.
+   Property values that are references are displayed as page references"
+  [repo property]
+  (->> (d/q
+        '[:find ?prop-type ?v
+          :in $ ?prop-name
+          :where
+          [?b :block/properties ?bp]
+          [?prop-b :block/name ?prop-name]
+          [?prop-b :block/uuid ?prop-uuid]
+          [?prop-b :block/schema ?prop-schema]
+          [(get ?prop-schema :type) ?prop-type]
+          [(get ?bp ?prop-uuid) ?v]]
+        (conn/get-db repo)
+        (name property))
+       (map (fn [[prop-type v]] [prop-type (if (coll? v) v [v])]))
+       (mapcat (fn [[prop-type vals]]
+                 (case prop-type
+                   :enum
+                   (map #(:block/content (db-utils/entity repo [:block/uuid %])) vals)
+                   :default
+                   ;; Remove multi-block properties as there isn't a supported approach to query them yet
+                   (map str (remove uuid? vals))
+                   (:page :date)
+                   (map #(page-ref/->page-ref (:block/original-name (db-utils/entity repo [:block/uuid %])))
+                        vals)
+                   :number
+                   vals
+                   ;; Checkboxes returned as strings as builder doesn't display boolean values correctly
+                   (map str vals))))
+       ;; Remove blanks as they match on everything
+       (remove string/blank?)
+       (distinct)
+       (sort)))
+
 
 (defn get-block-property-values
   "Get blocks which have this property."

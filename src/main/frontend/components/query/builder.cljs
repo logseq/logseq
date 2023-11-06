@@ -1,7 +1,8 @@
 (ns frontend.components.query.builder
   "DSL query builder."
-  (:require [frontend.ui :as ui]
+  (:require [frontend.config :as config]
             [frontend.date :as date]
+            [frontend.ui :as ui]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
@@ -146,7 +147,9 @@
                    (reset! *property (keyword value)))))
 
        "property-value"
-       (let [values (cons "Select all" (db-model/get-property-values @*property))]
+       (let [values (cons "Select all" (if (config/db-based-graph? repo)
+                                         (db-model/get-db-property-values repo @*property)
+                                         (db-model/get-property-values @*property)))]
          (select values
                  (fn [{:keys [value]}]
                    (let [x (if (= value "Select all")
