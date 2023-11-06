@@ -292,14 +292,20 @@
 
 (defmethod handle-action :open-page [_ state event]
   (when-let [page-name (some-> state state->highlighted-item :source-page)]
-    (route-handler/redirect-to-page! page-name)
+    (let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
+      (if (= (:block/type page) "whiteboard")
+        (route-handler/redirect-to-whiteboard! page-name)
+        (route-handler/redirect-to-page! page-name)))
     (close-unless-alt! state)))
 
 (defmethod handle-action :open-block [_ state event]
   (let [block-id (some-> state state->highlighted-item :source-block :block/uuid uuid)
         get-block-page (partial model/get-block-page (state/get-current-repo))]
-    (when-let [page (some-> block-id get-block-page :block/name)]
-      (route-handler/redirect-to-page! page {:anchor (str "ls-block-" block-id)})
+    (when-let [page (some-> block-id get-block-page)]
+      (let [page-name (:block/name page)]
+        (if (= (:block/type page) "whiteboard")
+          (route-handler/redirect-to-whiteboard! page-name {:block-id block-id})
+          (route-handler/redirect-to-page! page-name {:anchor (str "ls-block-" block-id)})))
       (close-unless-alt! state))))
 
 (defmethod handle-action :open-page-right [_ state event]
