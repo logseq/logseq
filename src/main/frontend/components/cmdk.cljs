@@ -45,9 +45,8 @@
                                                                                                            :group :blocks}}
    {:text "Search only commands"     :info "Add filter to search" :icon-theme :gray :icon "command" :filter {:mode "search"
                                                                                                              :group :commands}}
-   ;; {:text "Search only files"        :info "Add filter to search" :icon-theme :gray :icon "file" :filter {:mode "search"
-   ;;                                                                                                        :group :files}}
-   ])
+   {:text "Search only files"        :info "Add filter to search" :icon-theme :gray :icon "file" :filter {:mode "search"
+                                                                                                          :group :files}}])
 
 (def filters search-actions)
 
@@ -113,6 +112,7 @@
                      ["Create"         :create         (create-items input)])
                    ["Current page"   :current-page   (visible-items :current-page)]
                    ["Blocks"         :blocks         (visible-items :blocks)]
+                   ["Files"          :files          (visible-items :files)]
                    ["Recents"        :recents        (visible-items :recents)]]
                   (remove nil?)))
         order (remove nil? order*)]
@@ -134,6 +134,7 @@
   (let [highlighted-item (state->highlighted-item state)]
     (cond (:source-page highlighted-item) :open
           (:source-block highlighted-item) :open
+          (:file-path highlighted-item) :open
           (:source-search highlighted-item) :search
           (:source-command highlighted-item) :trigger
           (:source-create highlighted-item) :create
@@ -239,8 +240,15 @@
   (let [!input (::input state)
         !results (::results state)]
     (swap! !results assoc-in [group :status] :loading)
-    (p/let [files (search/file-search @!input 99)]
-      (js/console.log "load-results/files" (clj->js files)))))
+    (p/let [files (search/file-search @!input 99)
+            items (map
+                   (fn [file]
+                     (hash-map :icon "file"
+                               :icon-theme :gray
+                               :text file
+                               :file-path file))
+                    files)]
+      (swap! !results update group        merge {:status :success :items items}))))
 
 (defmethod load-results :recents [group state]
   (let [!input (::input state)
@@ -285,6 +293,7 @@
       (load-results :blocks state)
       (load-results :pages state)
       (load-results :filters state)
+      (load-results :files state)
       (load-results :recents state))))
 
 (defn close-unless-alt! [state]
@@ -335,6 +344,10 @@
           search-mode (:search/mode @state/state)
           graph-view? (= search-mode :graph)]
       (cond
+        (:file-path item) (do
+                            (route-handler/redirect! {:to :file
+                                                      :path-params {:path (:file-path item)}})
+                            (state/close-modal!))
         (and graph-view? page? (not shift?)) (do
                                                (state/add-graph-search-filter! @(::input state))
                                                (reset! (::input state) ""))
