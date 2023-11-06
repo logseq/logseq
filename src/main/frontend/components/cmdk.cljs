@@ -141,7 +141,7 @@
           (:filter highlighted-item) :filter
           :else nil)))
 
-;; Each result gorup has it's own load-results function
+;; Each result group has it's own load-results function
 (defmulti load-results (fn [group _state] group))
 
 ;; Initially we want to load the recents into the results
@@ -166,7 +166,7 @@
     (reset! !results (-> default-results (assoc-in [:recents :items] recent-items)
                          (assoc-in [:commands :items] command-items)))))
 
-;; The commands search uses the command-palette hander
+;; The commands search uses the command-palette handler
 (defmethod load-results :commands [group state]
   (let [!input (::input state)
         !results (::results state)]
@@ -501,7 +501,7 @@
        (when-not @!load-results-throttled
          (reset! !load-results-throttled (gfun/throttle load-results 50)))
 
-     ;; retreive the laod-results function and update all the results
+     ;; retrieve the load-results function and update all the results
        (when-let [load-results-throttled @!load-results-throttled]
          (load-results-throttled :default state))))))
 
@@ -561,7 +561,7 @@
         input-ref (::input-ref state)]
     ;; use-effect [results-ordered input] to check whether the highlighted item is still in the results,
     ;; if not then clear that puppy out!
-    ;; This was moved to a fucntional component
+    ;; This was moved to a functional component
     (rum/use-effect! (fn []
                        (when (and highlighted-item (= -1 (.indexOf all-items (dissoc highlighted-item :mouse-enter-triggered-highlight))))
                          (reset! (::highlighted-item state) nil)))
@@ -599,7 +599,7 @@
         input-ref (::input-ref state)]
     ;; use-effect [results-ordered input] to check whether the highlighted item is still in the results,
     ;; if not then clear that puppy out!
-    ;; This was moved to a fucntional component
+    ;; This was moved to a functional component
     (rum/use-effect! (fn []
                        (when (= -1 (.indexOf all-items highlighted-item))
                          (reset! (::highlighted-item state) nil)))

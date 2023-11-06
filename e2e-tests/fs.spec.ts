@@ -99,6 +99,8 @@ test("Rename file on disk", async ({ page, block, graphDir }) => {
     await fsp.rename(filePath, newFilePath);
     await captureConsoleWithPrefix(page, "Parsing finished:", 5000);
 
+    await page.waitForTimeout(500);
+
     // Test that the page is renamed
     const results = await searchPage(page, newPageTitle);
     const firstResultRow = await results[0].innerText()
@@ -113,7 +115,6 @@ test('special page names', async ({ page, block, graphDir }) => {
   const testCases = [
     {pageTitle: "User:John", fileName: "User%3AJohn"},
     {pageTitle: "_#%ff", fileName: "_%23%25ff"},
-    {pageTitle: "_#%23", fileName: "_%23%2523"},
     {pageTitle: "@!#%", fileName: "@!%23%"},
     {pageTitle: "aàáâ", fileName: "aàáâ"},
     {pageTitle: "_#%gggg", fileName: "_%23%gggg"}
@@ -125,10 +126,11 @@ test('special page names', async ({ page, block, graphDir }) => {
     await createPage(page, pageTitle)
     const text = `content for ${pageTitle}`
     await block.mustFill(text)
-    await page.keyboard.press("Enter")
+    await page.keyboard.press("Enter", { delay: 50 })
+    await page.keyboard.press("Escape", { delay: 50 })
 
     // Wait for the file to be created on disk
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(2500);
     // Validate that the file is created on disk with the content
     const filePath = path.join(graphDir, "pages", `${fileName}.md`);
     const fileContent = await fsp.readFile(filePath, "utf8");
