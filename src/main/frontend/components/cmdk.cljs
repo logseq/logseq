@@ -72,11 +72,18 @@
 (defn state->results-ordered [state]
   (let [results @(::results state)
         input @(::input state)
+        filter @(::filter state)
         index (volatile! -1)
         visible-items (fn [group]
                         (let [{:keys [items show]} (get results group)]
-                          (case show
-                            :more items
+                          (cond
+                            (= group (:group filter))
+                            items
+
+                            (= :more show)
+                            items
+
+                            :else
                             (take 5 items))))
         page-exists? (when-not (string/blank? input)
                        (db/entity [:block/name (string/trim input)]))
@@ -381,6 +388,7 @@
   [state title group visible-items first-item]
   (let [{:keys [show items]} (some-> state ::results deref group)
         highlighted-item (or @(::highlighted-item state) first-item)
+        filter @(::filter state)
         can-show-less? (< GROUP-LIMIT (count visible-items))
         can-show-more? (< (count visible-items) (count items))
         show-less #(swap! (::results state) assoc-in [group :show] :less)
@@ -398,7 +406,7 @@
 
       [:div {:class "flex-1"}]
 
-      (when (or can-show-more? can-show-less?)
+      (when (and (or can-show-more? can-show-less?) (empty? filter))
         [:a.text-link.select-node.opacity-50.hover:opacity-90
          {:on-click (if (= show :more) show-less show-more)}
          (if (= show :more)
@@ -412,29 +420,32 @@
      [:div
       (for [item visible-items
             :let [highlighted? (= item highlighted-item)]]
-        (shui/list-item (assoc item
-                               :query (when-not (= group :create) @(::input state))
-                               :compact true
-                               :rounded false
-                               :highlighted highlighted?
-                               :display-shortcut-on-highlight? true
+        (ui/lazy-visible
+         (fn []
+           (shui/list-item (assoc item
+                                  :query (when-not (= group :create) @(::input state))
+                                  :compact true
+                                  :rounded false
+                                  :highlighted highlighted?
+                                  :display-shortcut-on-highlight? true
                                ;; for some reason, the highlight effect does not always trigger on a
                                ;; boolean value change so manually pass in the dep
-                               :on-highlight-dep highlighted-item
-                               :on-click (fn [e]
-                                           (reset! (::highlighted-item state) item)
-                                           (handle-action :default state item)
-                                           (when-let [on-click (:on-click item)]
-                                             (on-click e)))
+                                  :on-highlight-dep highlighted-item
+                                  :on-click (fn [e]
+                                              (reset! (::highlighted-item state) item)
+                                              (handle-action :default state item)
+                                              (when-let [on-click (:on-click item)]
+                                                (on-click e)))
                                ;; :on-mouse-enter (fn [e]
                                ;;                   (when (not highlighted?)
                                ;;                     (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
-                               :on-highlight (fn [ref]
-                                               (reset! (::highlighted-group state) group)
-                                               (when (and ref (.-current ref)
-                                                          (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
-                                                 (scroll-into-view-when-invisible state (.-current ref)))))
-                        context))]]))
+                                  :on-highlight (fn [ref]
+                                                  (reset! (::highlighted-group state) group)
+                                                  (when (and ref (.-current ref)
+                                                             (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
+                                                    (scroll-into-view-when-invisible state (.-current ref)))))
+                           context))
+         {:trigger-once? true}))]]))
 
 (defn move-highlight [state n]
   (js/console.log "move-highlight" n)
@@ -669,7 +680,8 @@
   (rum/local nil ::scroll-container-ref)
   (rum/local nil ::input-ref)
   [state {:keys [sidebar?]}]
-  (let [group-filter (:group @(::filter state))
+  (let [*input (::input state)
+        group-filter (:group @(::filter state))
         results-ordered (state->results-ordered state)
         all-items (mapcat last results-ordered)
         first-item (first all-items)]
@@ -701,7 +713,8 @@
            (when group-filter
              [:div.text-sm
               (search-only state (string/capitalize (name group-filter)))])
-           "No matched results"]))]
+           (when-not (string/blank? @*input)
+             "No matched results")]))]
      (hints state)]))
 
 (rum/defc cmdk-modal [props]
