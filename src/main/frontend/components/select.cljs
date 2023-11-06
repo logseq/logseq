@@ -26,6 +26,7 @@
       (when multiple-choices?
         (ui/checkbox {:checked (boolean (selected-choices (:value result)))
                       :style {:margin-right 4}
+                      :readOnly true
                       :on-click (fn [e]
                                   (.preventDefault e))}))
       value]

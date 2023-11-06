@@ -47,6 +47,7 @@
 (rum/defc page-children
   [page-id parent-children-map namespace-page-map options]
   [:.ml-4.mb-2
+   {:key (str "page-children-" page-id)}
    (->> (parent-children-map page-id)
         (sort-by #(get-in namespace-page-map [% :block/original-name]))
         (map #(let [child-name (get-in namespace-page-map [% :block/original-name])]
