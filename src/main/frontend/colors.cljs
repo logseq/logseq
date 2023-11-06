@@ -35,7 +35,7 @@
                           "--ls-secondary-border-color: var(--rx-" (name color) "-05); "
                           "--ls-page-checkbox-color: var(--rx-" (name gray) "-07); "
                           "--ls-selection-background-color: var(--rx-" (name gray) "-04-alpha); "
-                          "--ls-block-highlight-color: var(--rx-" (name gray) "-04-alpha); "
+                          "--ls-block-highlight-color: var(--rx-" (name gray) "-04); "
                           "--ls-focus-ring-color: var(--rx-" (name color) "-09); "
                           "--ls-table-tr-even-background-color: var(--rx-" (name gray) "-04); "
                           "--ls-page-properties-background-color: var(--rx-" (name gray) "-04); "

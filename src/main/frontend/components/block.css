@@ -569,7 +569,7 @@
 
     font-size: 14px;
 
-    background-color: or(--logseq-og-block-bullet-color, --lx-gray-07, --ls-block-bullet-color, #394b59) !important;
+    background-color: or(--logseq-og-block-bullet-color, --lx-gray-07, --ls-block-bullet-color, #394b59);
     transition: transform 0.2s;
 
     > * {
@@ -597,7 +597,7 @@
   color: var(--ls-primary-text-color);
 
   &:hover > .bullet-container .bullet {
-    transform: scale(1.4);
+    transform: scale(1.2);
     background-color: or(--logseq-og-buller-border-color-typed-list, --lx-gray-08, inherit) !important;
   }
 
