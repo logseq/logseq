@@ -100,7 +100,6 @@
                    (when-not page-exists?
                      ["Create"         :create         (create-items input)])
                    ["Current page"   :current-page   (visible-items :current-page)]
-                   ["Whiteboards"    :whiteboards    (visible-items :whiteboards)]
                    ["Blocks"         :blocks         (visible-items :blocks)]
                    ["Recents"        :recents        (visible-items :recents)]]
                   (remove nil?)))
@@ -178,20 +177,17 @@
   (let [!input (::input state)
         !results (::results state)]
     (swap! !results assoc-in [group :status] :loading)
-    (swap! !results assoc-in [:whiteboards :status] :loading)
     (p/let [pages (search/page-search @!input)
-            whiteboards (filter model/whiteboard-page? pages)
-            non-boards (remove model/whiteboard-page? pages)
-            whiteboard-items (map #(hash-map :icon "page"
-                                             :icon-theme :gray
-                                             :text %
-                                             :source-page %) whiteboards)
-            non-board-items (map #(hash-map :icon "page"
-                                            :icon-theme :gray
-                                            :text %
-                                            :source-page %) non-boards)]
-      (swap! !results update group        merge {:status :success :items non-board-items})
-      (swap! !results update :whiteboards merge {:status :success :items whiteboard-items}))))
+            items (map
+                   (fn [page]
+                     (let [entity (db/entity [:block/name (util/page-name-sanity-lc page)])
+                           whiteboard? (= (:block/type entity) "whiteboard")]
+                       (hash-map :icon (if whiteboard? "whiteboard" "page")
+                                 :icon-theme :gray
+                                 :text page
+                                 :source-page page)))
+                   pages)]
+      (swap! !results update group        merge {:status :success :items items}))))
 
 ;; The blocks search action uses an existing handler
 (defmethod load-results :blocks [group state]
@@ -523,7 +519,6 @@
     :current-page "Current page"
     :blocks "Blocks"
     :pages "Pages"
-    :whiteboards "Whiteboards"
     :commands "Commands"
     :recents "Recents"
     (string/capitalize (name group))))
