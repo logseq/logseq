@@ -235,7 +235,7 @@
                                :icon-theme :gray
                                :text file
                                :file-path file))
-                    files)]
+                   files)]
       (swap! !results update group        merge {:status :success :items items}))))
 
 (defmethod load-results :recents [group state]
@@ -560,8 +560,9 @@
     (rum/use-effect! (fn []
                        (js/setTimeout #(when (some-> input-ref deref) (.focus @input-ref)) 0))
                      [])
-    [:div {:style {:background "var(--lx-gray-02)"
-                   :border-bottom "1px solid var(--lx-gray-07)"}}
+    ; [:div {:style {:background "var(--lx-gray-02)"
+    ;                :border-bottom "1px solid var(--lx-gray-07)"}}]
+    [:div {:class "with-[bg-cmdk-input-row] bg-gray-02 border border-1 border-gray-07"}
      [:input#search
       {:class "text-xl bg-transparent border-none w-full outline-none px-3 py-3"
        :placeholder (input-placeholder false)
