@@ -449,35 +449,35 @@
             "Show more"
             (shui/shortcut "mod down" context)])])]
 
-     [:div
+     [:div.search-results
       (for [item visible-items
             :let [highlighted? (= item highlighted-item)]]
-        (ui/lazy-visible
-         (fn []
-           (shui/list-item (assoc item
-                                  :query (when-not (= group :create) @(::input state))
-                                  :compact true
-                                  :rounded false
-                                  :highlighted highlighted?
-                                  :display-shortcut-on-highlight? true
+        (let [item (shui/list-item (assoc item
+                                          :query (when-not (= group :create) @(::input state))
+                                          :compact true
+                                          :rounded false
+                                          :highlighted highlighted?
+                                          :display-shortcut-on-highlight? true
                                ;; for some reason, the highlight effect does not always trigger on a
                                ;; boolean value change so manually pass in the dep
-                                  :on-highlight-dep highlighted-item
-                                  :on-click (fn [e]
-                                              (reset! (::highlighted-item state) item)
-                                              (handle-action :default state item)
-                                              (when-let [on-click (:on-click item)]
-                                                (on-click e)))
+                                          :on-highlight-dep highlighted-item
+                                          :on-click (fn [e]
+                                                      (reset! (::highlighted-item state) item)
+                                                      (handle-action :default state item)
+                                                      (when-let [on-click (:on-click item)]
+                                                        (on-click e)))
                                ;; :on-mouse-enter (fn [e]
                                ;;                   (when (not highlighted?)
                                ;;                     (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
-                                  :on-highlight (fn [ref]
-                                                  (reset! (::highlighted-group state) group)
-                                                  (when (and ref (.-current ref)
-                                                             (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
-                                                    (scroll-into-view-when-invisible state (.-current ref)))))
-                           context))
-         {:trigger-once? true}))]]))
+                                          :on-highlight (fn [ref]
+                                                          (reset! (::highlighted-group state) group)
+                                                          (when (and ref (.-current ref)
+                                                                     (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
+                                                            (scroll-into-view-when-invisible state (.-current ref)))))
+                                   context)]
+          (if (= group :blocks)
+            (ui/lazy-visible (fn [] item) {:trigger-once? true})
+            item)))]]))
 
 (defn move-highlight [state n]
   (let [items (mapcat last (state->results-ordered state (:search/mode @state/state)))

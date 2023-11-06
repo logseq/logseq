@@ -60,5 +60,5 @@ export async function searchPage(page: Page, query: string): Promise<ElementHand
     await page.fill('[placeholder="What are you looking for?"]', query)
     await page.waitForTimeout(2000) // wait longer for search contents to render
 
-    return page.$$('#ui__ac-inner>div');
+    return page.$$('.search-results>div');
 }
