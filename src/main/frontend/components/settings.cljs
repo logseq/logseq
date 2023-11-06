@@ -332,15 +332,16 @@
                         [:div {:class "w-2 h-2 rounded-full transition ease-in duration-100"
                                :style {:background-color (str "var(--rx-" (name color) "-07)")
                                        :opacity (if active? 1 0)}}]]])
-                    [:div.col-span-5
-                     (shui/button {:text "Use custom theme"
-                                   :theme :gray
-                                   :on-click (fn [_e] (state/unset-color-accent!))}
-                                  (make-shui-context nil nil))]]]
+                    (when color-accent
+                      [:div.col-span-5
+                       (shui/button {:text "Back to default color"
+                                     :theme :gray
+                                     :on-click (fn [_e] (state/unset-color-accent!))}
+                                    (make-shui-context nil nil))])]]
 
     [:<>
      (row-with-button-action {:left-label "Accent color"
-                              :description "Choosing an accent color will override any theme you have selected. To use a custom theme, click the button below."
+                              :description "Choosing an accent color will override any theme you have selected."
                               :-for       "toggle_radix_theme"
                               :stretch    true
                               :action     pick-theme})]))
