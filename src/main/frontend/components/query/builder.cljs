@@ -162,23 +162,25 @@
 
        "task"
        (select db-default/built-in-markers
-               (fn [{:keys [value]}]
+               (fn [value]
                  (when (seq value)
                    (append-tree! *tree opts loc (vec (cons :task value)))))
                {:multiple-choices? true
                 ;; Need the existing choices later to improve the UX
                 :selected-choices #{}
+                :extract-chosen-fn :value
                 :prompt-key :select/default-select-multiple
                 :close-modal? false
                 :on-apply (:toggle-fn opts)})
 
        "priority"
        (select db-default/built-in-priorities
-               (fn [{:keys [value]}]
+               (fn [value]
                  (when (seq value)
                    (append-tree! *tree opts loc (vec (cons :priority value)))))
                {:multiple-choices? true
                 :selected-choices #{}
+                :extract-chosen-fn :value
                 :prompt-key :select/default-select-multiple
                 :close-modal? false
                 :on-apply (:toggle-fn opts)})
