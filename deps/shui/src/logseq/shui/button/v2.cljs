@@ -18,13 +18,18 @@
         color-class (str "shui__button-color-" color-string)
         muted-class (when muted "shui__button-muted")
         size-class  (str "shui__button-size-" (name size))
-        tiled-class (when tiled "shui__button-tiled")]
+        tiled-class (when tiled "shui__button-tiled")
+        on-click (fn [e]
+                   (when href (set! (.-href js/window.location) href))
+                   (when on-click (on-click e)))]
     [:button.shui__button (merge
                            comp-opts
-                           {:class (str theme-class " " depth-class " " color-class " " size-class " " tiled-class " " muted-class " " class)
-                            :on-click (cond on-click on-click href #(js/window.open href "_blank"))
-                            :on-mouse-over #(when hover-theme (reset! *theme hover-theme))
-                            :on-mouse-out #(reset! *theme theme)})
+                           (cond->
+                            {:class (str theme-class " " depth-class " " color-class " " size-class " " tiled-class " " muted-class " " class)
+                             :on-mouse-over #(when hover-theme (reset! *theme hover-theme))
+                             :on-mouse-out #(reset! *theme theme)}
+                             on-click
+                             (assoc :on-click on-click)))
      (if-not tiled text
              (for [[index tile] (map-indexed vector (rest (string/split text #"")))]
                [:<>

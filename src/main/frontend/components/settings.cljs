@@ -169,47 +169,42 @@
      (if action action (shui/button {:text button-label
                                      :href href
                                      :on-click on-click}
-                                    (make-shui-context nil nil)))]
-     ; (if action action (ui/button
-     ;                      button-label
-     ;                      :class    "text-sm p-1"
-     ;                      :href     href
-     ;                      :on-click on-click))]
+                         (make-shui-context)))]
     (when-not (or (util/mobile?)
                   (mobile-util/native-platform?))
       [:div.text-sm.flex desc])]])
 
 (defn edit-config-edn []
   (row-with-button-action
-    {:left-label   (t :settings-page/custom-configuration)
-     :button-label (t :settings-page/edit-config-edn)
-     :href         (rfe/href :file {:path (config/get-repo-config-path)})
-     :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
-     :-for         "config_edn"}))
+   {:left-label   (t :settings-page/custom-configuration)
+    :button-label (t :settings-page/edit-config-edn)
+    :href         (rfe/href :file {:path (config/get-repo-config-path)})
+    :on-click     ui-handler/toggle-settings-modal!
+    :-for         "config_edn"}))
 
 (defn edit-global-config-edn []
   (row-with-button-action
     {:left-label   (t :settings-page/custom-global-configuration)
      :button-label (t :settings-page/edit-global-config-edn)
      :href         (rfe/href :file {:path (global-config-handler/global-config-path)})
-     :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
+     :on-click     ui-handler/toggle-settings-modal!
      :-for         "global_config_edn"}))
 
 (defn edit-custom-css []
   (row-with-button-action
-    {:left-label   (t :settings-page/custom-theme)
-     :button-label (t :settings-page/edit-custom-css)
-     :href         (rfe/href :file {:path (config/get-custom-css-path)})
-     :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
-     :-for         "customize_css"}))
+   {:left-label   (t :settings-page/custom-theme)
+    :button-label (t :settings-page/edit-custom-css)
+    :href         (rfe/href :file {:path (config/get-custom-css-path)})
+    :on-click     ui-handler/toggle-settings-modal!
+    :-for         "customize_css"}))
 
 (defn edit-export-css []
   (row-with-button-action
    {:left-label   (t :settings-page/export-theme)
     :button-label (t :settings-page/edit-export-css)
     :href         (rfe/href :file {:path (config/get-export-css-path)})
-    :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
-    :-for         "customize_css"}))
+    :on-click     ui-handler/toggle-settings-modal!
+    :-for         "export_css"}))
 
 (defn show-brackets-row [t show-brackets?]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
