@@ -167,10 +167,10 @@
         view-f (and view-fn (sci/eval-string (pr-str view-fn)))
         dsl-page-query? (and dsl-query?
                              (false? (:blocks? (query-dsl/parse-query query))))
-        ;; FIXME: This isn't getting set for full-text searches
         full-text-search? (and dsl-query?
                                (util/electron?)
-                               (symbol? (gp-util/safe-read-string query)))
+                               (string? query)
+                               (re-matches #"\".*\"" query))
         result (when (or built-in-collapsed? (not collapsed?'))
                  (query-result/get-query-result config q *query-error current-block-uuid {:table? table?}))
         query-time (:query-time (meta result))
@@ -192,6 +192,7 @@
         [:div.custom-query (get config :attr {})
          (when-not built-in?
            [:div.th
+            {:title (str "Query: " query)}
             (if dsl-query?
               [:div.flex.flex-1.flex-row
                (ui/icon "search" {:size 14})
@@ -201,7 +202,7 @@
             (when (or (not dsl-query?) (not collapsed?'))
               [:div.flex.flex-row.items-center.fade-in
                (when (> (count result) 0)
-                 [:span.results-count
+                 [:span.results-count.pl-2
                   (let [result-count (if (and (not table?) (map? result))
                                        (apply + (map (comp count val) result))
                                        (count result))]
