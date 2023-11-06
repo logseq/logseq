@@ -2,7 +2,7 @@
   "Provides main application state, fns associated to set and state based rum
   cursors"
   (:require [cljs-bean.core :as bean]
-            [cljs.core.async :as async :refer [<!]]
+            [cljs.core.async :as async :refer [<! >!]]
             [cljs.spec.alpha :as s]
             [clojure.string :as string]
             [dommy.core :as dom]
@@ -75,6 +75,9 @@
      :ui/navigation-item-collapsed?         {}
 
      ;; right sidebar
+     :ui/handbooks-open?                    false
+     :ui/help-open?                         false
+     :ui/fullscreen?                        false
      :ui/settings-open?                     false
      :ui/sidebar-open?                      false
      :ui/sidebar-width                      "40%"
@@ -222,6 +225,7 @@
      :pdf/current                           nil
      :pdf/ref-highlight                     nil
      :pdf/block-highlight-colored?          (or (storage/get "ls-pdf-hl-block-is-colored") true)
+     :pdf/auto-open-ctx-menu?               (not= false (storage/get "ls-pdf-auto-open-ctx-menu"))
 
      ;; all notification contents as k-v pairs
      :notification/contents                 {}
@@ -279,12 +283,14 @@
 
      :ui/loading?                           {}
      :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
-     :feature/enable-sync-diff-merge?       (storage/get :logseq-sync-diff-merge-enabled)
+     :feature/enable-sync-diff-merge?       ((fnil identity true) (storage/get :logseq-sync-diff-merge-enabled))
 
      :file/rename-event-chan                (async/chan 100)
      :ui/find-in-page                       nil
      :graph/importing                       nil
      :graph/importing-state                 {}
+
+     :handbook/route-chan                   (async/chan (async/sliding-buffer 1))
 
      :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
      :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
@@ -2209,6 +2215,21 @@ Similar to re-frame subscriptions"
     (if next-color
       (set-color-accent! next-color)
       (unset-color-accent!))))
+
+(defn handbook-open?
+  []
+  (:ui/handbooks-open? @state))
+
+(defn get-handbook-route-chan
+  []
+  (:handbook/route-chan @state))
+
+(defn open-handbook-pane!
+  [k]
+  (when-not (handbook-open?)
+    (set-state! :ui/handbooks-open? true))
+  (js/setTimeout #(async/go
+                    (>! (get-handbook-route-chan) k))))
 
 (defn set-page-properties-changed!
   [page-name]

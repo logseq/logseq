@@ -1,35 +1,36 @@
 (ns frontend.extensions.srs
-  (:require [frontend.template :as template]
-            [frontend.db.query-dsl :as query-dsl]
-            [frontend.db.query-react :as query-react]
-            [frontend.util :as util]
-            [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.util.page-ref :as page-ref]
-            [frontend.util.property :as property]
-            [frontend.util.drawer :as drawer]
-            [frontend.util.persist-var :as persist-var]
-            [frontend.db :as db]
-            [frontend.db.model :as db-model]
-            [frontend.db-mixins :as db-mixins]
-            [frontend.state :as state]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.handler.editor.property :as editor-property]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [cljs-time.local :as tl]
+            [clojure.string :as string]
+            [frontend.commands :as commands]
             [frontend.components.block :as component-block]
+            [frontend.components.editor :as editor]
             [frontend.components.macro :as component-macro]
             [frontend.components.select :as component-select]
             [frontend.components.svg :as svg]
-            [frontend.ui :as ui]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
-            [frontend.commands :as commands]
-            [frontend.components.editor :as editor]
-            [cljs-time.core :as t]
-            [cljs-time.local :as tl]
-            [cljs-time.coerce :as tc]
-            [clojure.string :as string]
-            [rum.core :as rum]
+            [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
+            [frontend.db.model :as db-model]
+            [frontend.db.query-dsl :as query-dsl]
+            [frontend.db.query-react :as query-react]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.property :as editor-property]
             [frontend.modules.shortcut.core :as shortcut]
+            [frontend.state :as state]
+            [frontend.template :as template]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [frontend.util.block-content :as content]
+            [frontend.util.drawer :as drawer]
+            [frontend.util.persist-var :as persist-var]
+            [frontend.util.property :as property]
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [medley.core :as medley]
-            [frontend.context.i18n :refer [t]]))
+            [rum.core :as rum]))
 
 ;;; ================================================================
 ;;; Commentary
@@ -770,30 +771,32 @@
                                   "Create a cloze"])
 
 ;; handlers
+(defn add-card-tag-to-block
+  "given a block struct, adds the #card to title and returns
+   a seq of [original-block new-content-string]"
+  [block]
+    (when-let [content (:block/content block)]
+      (let [format (:block/format block)
+            content (-> (property/remove-built-in-properties format content)
+                        (drawer/remove-logbook))
+            [title body] (content/get-title&body content format)]
+        [block (str title " #" card-hash-tag "\n" body)])))
+
 (defn make-block-a-card!
   [block-id]
   (when-let [block (db/entity [:block/uuid block-id])]
-    (when-let [content (:block/content block)]
-      (let [content (-> (property/remove-built-in-properties (:block/format block) content)
-                        (drawer/remove-logbook))]
-        (editor-handler/save-block!
-         (state/get-current-repo)
-         block-id
-         (str (string/trim content) " #" card-hash-tag))))))
+    (let [block-content (add-card-tag-to-block block)
+          new-content (get block-content 1)]
+      (editor-handler/save-block! (state/get-current-repo) block-id new-content))))
 
 (defn batch-make-cards!
   ([] (batch-make-cards! (state/get-selection-block-ids)))
   ([block-ids]
-   (let [block-content-fn (fn [block]
-                            [block (-> (property/remove-built-in-properties (:block/format block) (:block/content block))
-                                       (drawer/remove-logbook)
-                                       string/trim
-                                       (str " #" card-hash-tag))])
-         blocks (->> block-ids
-                     (map #(db/entity [:block/uuid %]))
-                     (remove card-block?)
-                     (map #(db/pull [:block/uuid (:block/uuid %)]))
-                     (map block-content-fn))]
+   (let [valid-blocks (->> block-ids
+                           (map #(db/entity [:block/uuid %]))
+                           (remove card-block?)
+                           (map #(db/pull [:block/uuid (:block/uuid %)])))
+         blocks (map add-card-tag-to-block valid-blocks)]
      (when-not (empty? blocks)
        (editor-handler/save-blocks! blocks)))))
 
