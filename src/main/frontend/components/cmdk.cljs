@@ -298,7 +298,7 @@
 
 (defmulti handle-action (fn [action _state _event] action))
 
-(defmethod handle-action :open-page [_ state event]
+(defmethod handle-action :open-page [_ state _event]
   (when-let [page-name (some-> state state->highlighted-item :source-page)]
     (let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
       (if (= (:block/type page) "whiteboard")
@@ -306,7 +306,7 @@
         (route-handler/redirect-to-page! page-name)))
     (close-unless-alt! state)))
 
-(defmethod handle-action :open-block [_ state event]
+(defmethod handle-action :open-block [_ state _event]
   (let [block-id (some-> state state->highlighted-item :source-block :block/uuid uuid)
         get-block-page (partial model/get-block-page (state/get-current-repo))]
     (when-let [page (some-> block-id get-block-page)]
@@ -316,13 +316,13 @@
           (route-handler/redirect-to-page! page-name {:anchor (str "ls-block-" block-id)})))
       (close-unless-alt! state))))
 
-(defmethod handle-action :open-page-right [_ state event]
+(defmethod handle-action :open-page-right [_ state _event]
   (when-let [page-name (some-> state state->highlighted-item :source-page)]
     (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
       (editor-handler/open-block-in-sidebar! (:block/uuid page)))
     (close-unless-alt! state)))
 
-(defmethod handle-action :open-block-right [_ state event]
+(defmethod handle-action :open-block-right [_ state _event]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid uuid)]
     (editor-handler/open-block-in-sidebar! block-uuid)
     (close-unless-alt! state)))
@@ -343,17 +343,17 @@
         block? (handle-action :open-block state event)
         page? (handle-action :open-page state event)))))
 
-(defmethod handle-action :search [_ state event]
+(defmethod handle-action :search [_ state _event]
   (when-let [item (some-> state state->highlighted-item)]
     (let [search-query (:source-search item)]
       (reset! (::input state) search-query))))
 
-(defmethod handle-action :trigger [_ state event]
+(defmethod handle-action :trigger [_ state _event]
   (when-let [action (some-> state state->highlighted-item :source-command :action)]
     (action)
     (close-unless-alt! state)))
 
-(defmethod handle-action :create [_ state event]
+(defmethod handle-action :create [_ state _event]
   (let [item (state->highlighted-item state)
         create-whiteboard? (= :whiteboard (:source-create item))
         create-page? (= :page (:source-create item))
@@ -376,7 +376,7 @@
     :else
     input))
 
-(defmethod handle-action :filter [_ state event]
+(defmethod handle-action :filter [_ state _event]
   (let [item (some-> state state->highlighted-item)
         !input (::input state)]
     (reset! !input (get-filter-user-input @!input))
@@ -477,19 +477,20 @@
 
 (defn handle-input-change
   ([state e] (handle-input-change state e (.. e -target -value)))
-  ([state _ input]
-   (let [!input (::input state)
-         !load-results-throttled (::load-results-throttled state)]
+  ([state e input]
+   (when-not (util/onchange-event-is-composing? e)
+     (let [!input (::input state)
+           !load-results-throttled (::load-results-throttled state)]
      ;; update the input value in the UI
-     (reset! !input input)
+       (reset! !input input)
 
      ;; ensure that there is a throttled version of the load-results function
-     (when-not @!load-results-throttled
-       (reset! !load-results-throttled (gfun/throttle load-results 50)))
+       (when-not @!load-results-throttled
+         (reset! !load-results-throttled (gfun/throttle load-results 50)))
 
      ;; retreive the laod-results function and update all the results
-     (when-let [load-results-throttled @!load-results-throttled]
-       (load-results-throttled :default state)))))
+       (when-let [load-results-throttled @!load-results-throttled]
+         (load-results-throttled :default state))))))
 
 (defn- keydown-handler
   [state e]
@@ -530,19 +531,9 @@
     (reset! (::alt? state) alt?)
     (reset! (::meta? state) meta?)))
 
-(defn print-group-name [group]
-  (case group
-    :current-page "Current page"
-    :blocks "Blocks"
-    :pages "Pages"
-    :commands "Commands"
-    :recents "Recents"
-    (string/capitalize (name group))))
-
 (defn- input-placeholder
   [sidebar?]
   (let [search-mode (:search/mode @state/state)]
-    (prn :debug :search-mode search-mode)
     (cond
       (and (= search-mode :graph) (not sidebar?))
       "Add graph filter"
@@ -570,22 +561,23 @@
                      [])
     [:div {:style {:background "var(--lx-gray-02)"
                    :border-bottom "1px solid var(--lx-gray-07)"}}
-     [:input {:class "text-xl bg-transparent border-none w-full outline-none px-4 py-3"
-              :placeholder (input-placeholder false)
-              :ref #(when-not @input-ref (reset! input-ref %))
-              :on-change (fn [e]
-                           (when (= "" (.-value @input-ref))
-                             (reset! (::filter state) nil))
-                           (handle-input-change state e))
-              :on-key-down (fn [e]
-                             (let [value (.-value @input-ref)
-                                   last-char (last value)]
-                               (when (and (some? @(::filter state))
-                                          (or (= (util/ekey e) "/")
-                                              (and (= (util/ekey e) "Backspace")
-                                                   (= last-char "/"))))
-                                 (reset! (::filter state) nil))))
-              :value input}]]))
+     [:input#search
+      {:class "text-xl bg-transparent border-none w-full outline-none px-4 py-3"
+       :placeholder (input-placeholder false)
+       :ref #(when-not @input-ref (reset! input-ref %))
+       :on-change (fn [e]
+                    (when (= "" (.-value @input-ref))
+                      (reset! (::filter state) nil))
+                    (handle-input-change state e))
+       :on-key-down (fn [e]
+                      (let [value (.-value @input-ref)
+                            last-char (last value)]
+                        (when (and (some? @(::filter state))
+                                   (or (= (util/ekey e) "/")
+                                       (and (= (util/ekey e) "Backspace")
+                                            (= last-char "/"))))
+                          (reset! (::filter state) nil))))
+       :value input}]]))
 
 (rum/defc input-row-sidebar
   [state all-items]

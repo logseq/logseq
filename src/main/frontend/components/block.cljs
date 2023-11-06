@@ -10,7 +10,6 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [dommy.core :as dom]
-            [frontend.colors :as colors]
             [frontend.commands :as commands]
             [frontend.components.block.macros :as block-macros]
             [frontend.components.datetime :as datetime-comp]

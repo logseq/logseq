@@ -67,28 +67,6 @@
      (swap! indices assoc-in [repo :blocks] indice)
      indice)))
 
-(defn process-block-avet [avet]
-  (some->> avet :v db/get-single-block-contents block->index bean/->js))
-
-(defn make-blocks-indice-non-blocking!
-  ([repo] (make-blocks-indice-non-blocking! 1000))
-  ([repo chunk-size]
-   (let [avets (db/get-all-block-avets)
-         chunks (partition-all chunk-size avets)
-         acc (atom [])
-         process-chunks (fn process-recur [[curr & more]]
-                          (js/console.log "process-recur")
-                          (when-not (empty? curr)
-                            (->> (map process-block-avet curr)
-                                 (remove nil?)
-                                 (doall)
-                                 (swap! acc concat)))
-                          (if (empty? more)
-                            (make-blocks-indice! repo @acc)
-                            (js/setTimeout #(process-recur more) 0)))]
-     (js/console.log "process-make-blocks-indice-non-blocking!" (count avets))
-     (process-chunks chunks))))
-
 (defn original-page-name->index
   [p]
   (when p

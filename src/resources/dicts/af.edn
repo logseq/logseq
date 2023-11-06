@@ -45,7 +45,6 @@
  :cancel "Kanselleer"
  :re-index "Herindekseer"
  :export-json "Uitvoer as JSON"
- :search "Soek"
  :graph "Grafiek"
  :all-pages "Alle blaaie"
  :all-files "Alle lêers"

@@ -12,14 +12,6 @@
             [electron.ipc :as ipc]
             [dommy.core :as dom]))
 
-(defn add-search-to-recent!
-  [repo q]
-  (when-not (string/blank? q)
-    (let [items (or (db/get-key-value repo :recent/search)
-                    '())
-          new-items (take 10 (distinct (cons q items)))]
-      (db/set-key-value repo :recent/search new-items))))
-
 (defn sanity-search-content
   "Convert a block to the display contents for searching"
   [format content]

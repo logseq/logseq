@@ -159,15 +159,15 @@
     [:label.block.text-sm.font-medium.leading-5.opacity-70
      {:for -for}
      left-label]
-    (when description 
+    (when description
       [:div.text-xs.text-gray-10 description])]
 
    ;; right column
    [:div.mt-1.sm:mt-0.sm:col-span-2.flex.items-center
     {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
-    [:div {:style (when stretch {:width "100%"})} 
+    [:div {:style (when stretch {:width "100%"})}
      (if action action (shui/button {:text button-label
-                                     :href href 
+                                     :href href
                                      :on-click on-click}
                                     (make-shui-context nil nil)))]
      ; (if action action (ui/button
@@ -318,48 +318,37 @@
                              :action     pick-theme
                              :desc       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))})))
 
-(defn accent-color-row [t dark?]
+(defn accent-color-row []
   (let [color-accent (state/sub :ui/radix-color)
-        pick-theme [:div.grid {:style {:grid-template-columns "repeat(5, 1fr)" 
+        pick-theme [:div.grid {:style {:grid-template-columns "repeat(5, 1fr)"
                                        :gap "0.75rem"
                                        :width "100%"
                                        :max-width "16rem"}}
                     (for [color colors/color-list
-                          :let [gray (get colors/gray-pairing-map color)
-                                active? (= color color-accent)
-                                default-classes "w-5 h-5 rounded-full flex justify-center items-center border transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"
-                                bg (if active? (str "bg-" (name color) "-09 opacity-100") 
-                                               (str "bg-" (name color) "-09 opacity-50"))
-                                border (if active? (str "border-" (name color) "-07 opacity-100") 
-                                                   (str "border-" (name color) "-06 opacity-50"))]]
+                          :let [active? (= color color-accent)]]
                       [:div.flex.items-center {:style {:height 28}}
-                       [:div {;;:class (string/join " " [default-classes bg border]) 
-                              :class "w-5 h-5 rounded-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"
-                              :style {:background-color (colors/variable color :09) 
+                       [:div {:class "w-5 h-5 rounded-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"
+                              :style {:background-color (colors/variable color :09)
                                       :outline-color (colors/variable color (if active? :07 :06))
                                       :outline-width (if active? "4px" "1px")
                                       :outline-style :solid
                                       :opacity (if active? 1 0.5)}
-                              :on-click (fn [e] (state/set-color-accent! color))}
-                        [:div {:class "w-2 h-2 rounded-full transition ease-in duration-100" 
+                              :on-click (fn [_e] (state/set-color-accent! color))}
+                        [:div {:class "w-2 h-2 rounded-full transition ease-in duration-100"
                                :style {:background-color (str "var(--rx-" (name color) "-07)")
                                        :opacity (if active? 1 0)}}]]])
-                      ; (shui/button {:text (name color) 
-                      ;               :color color 
-                      ;               :muted (not= color-accent color)}
-                      ;              (make-shui-context nil nil)))
                     [:div.col-span-5
                      (shui/button {:text "Use custom theme"
                                    :theme :gray
-                                   :on-click (fn [e] (state/unset-color-accent!))}
-                                  (make-shui-context nil nil))]]] 
-                                  
+                                   :on-click (fn [_e] (state/unset-color-accent!))}
+                                  (make-shui-context nil nil))]]]
+
     [:<>
      (row-with-button-action {:left-label "Accent color"
                               :description "Choosing an accent color will override any theme you have selected. To use a custom theme, click the button below."
                               :-for       "toggle_radix_theme"
                               :stretch    true
-                              :action     pick-theme})])) 
+                              :action     pick-theme})]))
 
 (defn file-format-row [t preferred-format]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -697,14 +686,13 @@
         dark? (= "dark" theme)
         show-radix-themes? true
         system-theme? (state/sub :ui/system-theme?)
-        switch-theme (if dark? "light" "dark")
-        color-accent (state/sub :ui/radix-color)]
+        switch-theme (if dark? "light" "dark")]
     [:div.panel-wrap.is-general
      (version-row t version)
      (language-row t preferred-language)
      (theme-modes-row t switch-theme system-theme? dark?)
      (when (and (util/electron?) (not util/mac?)) (native-titlebar-row t))
-     (when show-radix-themes? (accent-color-row t dark?))
+     (when show-radix-themes? (accent-color-row))
      (when (config/global-config-enabled?) (edit-global-config-edn))
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))

@@ -161,7 +161,7 @@
   {:fr #{:port :type :help/docs :search-item/page :shortcut.category/navigating :text/image
          :settings-of-plugins :code :on-boarding/section-pages :paginates/pages :right-side-bar/history-global
          :shortcut.category/plugins :whiteboard/rectangle :whiteboard/triangle}
-   :de #{:graph :host :plugins :port :right-side-bar/whiteboards :search-item/block
+   :de #{:graph :host :plugins :port :right-side-bar/whiteboards
          :settings-of-plugins :search-item/whiteboard :shortcut.category/navigating
          :settings-page/enable-tooltip :settings-page/enable-whiteboards :settings-page/plugin-system}
    :es #{:settings-page/tab-general :settings-page/tab-editor :whiteboard/color :right-side-bar/history-global}

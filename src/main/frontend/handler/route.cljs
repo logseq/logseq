@@ -195,9 +195,6 @@
     (state/set-search-mode! search-mode))
   (state/pub-event! [:go/search]))
 
-(defn go-to-cmdk! []
-  (state/pub-event! [:go/search]))
-
 (defn sidebar-journals!
   []
   (state/sidebar-add-block!

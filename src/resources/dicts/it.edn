@@ -26,9 +26,6 @@
  :help/block-reference "Riferimento di blocco"
  :help/open-link-in-sidebar "Apri il link nella barra laterale"
 
- :more "Altro"
- :search/result-for "Cerca i risultati per "
- :search/items "oggetti"
  :search/page-names "Cerca pagine per nome"
  :help/context-menu "Menu contestuale del blocco"
  :help/markdown-syntax "Sintassi Markdown"
@@ -131,10 +128,6 @@
  :sync-from-local-files-detail "Importa cambiamenti da un file locale"
  :sync-from-local-changes-detected "Il ricaricamento rileva ed elabora i file modificati sul disco e divergenti dal contenuto effettivo della pagina Logseq. Continuare?"
 
- :search/publishing "Cerca"
- :search "Cerca o crea una pagina"
- :page-search "Cerca nella pagina corrente"
- :graph-search "Cerca nel grafo"
  :new-graph "Aggiungi nuovo grafo"
  :graph "Grafo"
  :graph/persist "Logseq sta sincronizzando lo stato interno, per favore attendi alcuni secondi."

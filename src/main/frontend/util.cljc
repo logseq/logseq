@@ -1026,17 +1026,6 @@
                      (d/set-attr! :media "all"))]
            (d/append! parent-node link))))))
 
-(defn ->platform-shortcut
-  [keyboard-shortcut]
-  (let [result (or keyboard-shortcut "")
-        result (string/replace result "left" "←")
-        result (string/replace result "right" "→")]
-    (if mac?
-      (-> result
-          (string/replace "Ctrl" "Cmd")
-          (string/replace "Alt" "Opt"))
-      result)))
-
 (defn remove-common-preceding
   [col1 col2]
   (if (and (= (first col1) (first col2))

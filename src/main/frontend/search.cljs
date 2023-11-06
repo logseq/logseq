@@ -4,7 +4,6 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [logseq.graph-parser.config :as gp-config]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.regex :as regex]
@@ -105,13 +104,6 @@
           q (if (util/electron?) q (escape-str q))]
       (when-not (string/blank? q)
         (protocol/query-page engine q option)))))
-
-(defn asset-search
-  "Based off of frontend.handler.editor/ensure-assets-dir!"
-  [repo q]
-  (p/let [repo-dir (config/get-repo-dir repo)
-          assets-dir "assets"
-          [repo-dir assets-dir] ( repo)]))
 
 (defn- transact-blocks!
   [repo data]

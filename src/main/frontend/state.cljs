@@ -902,10 +902,6 @@ Similar to re-frame subscriptions"
   [range]
   (set-state! :cursor-range range))
 
-(defn set-q!
-  [value]
-  (set-state! :search/q value))
-
 (defn set-search-mode!
   [value]
   (set-state! :search/mode value))

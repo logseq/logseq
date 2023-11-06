@@ -9,7 +9,6 @@
             [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.shui :refer [make-shui-context]]
             [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.components.svg :as svg]
@@ -729,7 +728,7 @@
          (css-transition
           {:in show? :timeout 0}
           (fn [state]
-            (modal-panel show? modal-panel-content state close-fn false close-btn? false)))]))))
+            (modal-panel show? modal-panel-content state close-fn false close-btn?)))]))))
 
 (defn loading
   ([] (loading (t :loading)))

@@ -13,8 +13,6 @@
             :or {limit 20}}]
   (let [indice (or (get-in @indices [repo :blocks])
                    (search-db/make-blocks-indice! repo))
-                   ; (search-db/make-blocks-indice-non-blocking! repo))
-
         result
         (if page
           (.search indice

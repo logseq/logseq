@@ -2,7 +2,6 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.block :as block]
-            [frontend.components.cmdk :as cmdk]
             [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
             [frontend.components.shortcut :as shortcut]
