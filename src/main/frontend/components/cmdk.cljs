@@ -363,6 +363,20 @@
   (when-let [action (state->action state)]
     (handle-action action state event)))
 
+(defn- scroll-into-view-when-invisible
+  [state target]
+  (let [*container-ref (::scroll-container-ref state)
+        container-rect (.getBoundingClientRect @*container-ref)
+        t1 (.-top container-rect)
+        b1 (.-bottom container-rect)
+        target-rect (.getBoundingClientRect target)
+        t2 (.-top target-rect)
+        b2 (.-bottom target-rect)]
+    (when-not (<= t1 t2 b2 b1)          ; not visible
+      (.scrollIntoView target
+                       #js {:inline "nearest"
+                            :behavior "smooth"}))))
+
 (rum/defc result-group < rum/reactive
   [state title group visible-items first-item]
   (let [{:keys [show items]} (some-> state ::results deref group)
@@ -419,9 +433,7 @@
                                                (reset! (::highlighted-group state) group)
                                                (when (and ref (.-current ref)
                                                           (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
-                                                 (.. ref -current (scrollIntoView #js {:block "center"
-                                                                                       :inline "nearest"
-                                                                                       :behavior "smooth"})))))
+                                                 (scroll-into-view-when-invisible state (.-current ref)))))
                         context))]]))
 
 (defn move-highlight [state n]
@@ -669,7 +681,8 @@
        (input-row state all-items))
      [:div {:class (cond-> "w-full flex-1 overflow-y-auto max-h-[65dvh]"
                      (not sidebar?) (str " pb-14"))
-            :ref #(when % (some-> state ::scroll-container-ref (reset! %)))
+            :ref #(let [*ref (::scroll-container-ref state)]
+                    (when-not @*ref (reset! *ref %)))
             :style {:background "var(--lx-gray-02)"}}
       (let [items (filter
                    (fn [[_group-name group-key group-count _group-items]]
