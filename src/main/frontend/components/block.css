@@ -183,7 +183,7 @@
 }
 
 .block-children-left-border:hover {
-  background-color: or(--lx-gray-11, --ls-primary-text-color);
+  background-color: or(--logseq-og-block-left-color, --lx-gray-11, --ls-primary-text-color);
 }
 
 .block-children {
@@ -296,10 +296,10 @@
 }
 
 .page-ref {
-  color: or(--lx-accent-11, --ls-link-ref-text-color);
+  color: or(--logseq-og-page-ref-text-color, --lx-accent-11, --ls-link-ref-text-color);
 
   &:hover {
-    color: or(--lx-accent-12, --ls-link-ref-text-hover-color);
+    color: or(--logseq-og-page-ref-text-color-hover, --lx-accent-12, --ls-link-ref-text-hover-color);
   }
 }
 
@@ -569,7 +569,7 @@
 
     font-size: 14px;
 
-    background-color: or(--lx-gray-07, --ls-block-bullet-color, #394b59) !important;
+    background-color: or(--logseq-og-block-bullet-color, --lx-gray-07, --ls-block-bullet-color, #394b59) !important;
     transition: transform 0.2s;
 
     > * {
@@ -598,11 +598,11 @@
 
   &:hover > .bullet-container .bullet {
     transform: scale(1.4);
-    background-color: or(--lx-gray-08, inherit) !important;
+    background-color: or(--logseq-og-buller-border-color-typed-list, --lx-gray-08, inherit) !important;
   }
 
   &:hover > .bullet-container:not(.typed-list) {
-    background-color: or(--lx-gray-04-alpha, --ls-block-bullet-border-color, #ced9e0);
+    background-color: or(--logseq-og-bullet-border-color, --lx-gray-04-alpha, --ls-block-bullet-border-color, #ced9e0);
   }
 }
 

@@ -35,7 +35,7 @@
 
       &:not(.chosen):hover {
         background-color: unset !important;
-        color: or(--lx-gray-12, --ls-primary-text-color);
+        color: or(--logseq-og-autocomplete-color-hover, --lx-gray-12, --ls-primary-text-color);
       }
     }
   }
@@ -107,8 +107,8 @@
   }
 
   &-overlay div {
-    --from: or(--lx-gray-03, --ls-primary-background-color);
-    --to: or(--lx-gray-06, --ls-quaternary-background-color);
+    --from: or(--logseq-og-modal-overlay-gradient-start, --lx-gray-03, --ls-primary-background-color);
+    --to: or(--logseq-og-modal-overlay-gradient-end, --lx-gray-06, --ls-quaternary-background-color);
     background-image: linear-gradient(to bottom, var(--from), var(--to));
   }
 
@@ -116,7 +116,7 @@
     @apply relative rounded-md shadow-xl border-none;
 
     overflow: hidden;
-    background: or(--lx-gray-04, --ls-secondary-background-color);
+    background: or(--logseq-og-modal-panel-color, --lx-gray-04, --ls-secondary-background-color);
 
     .panel-content {
       overflow-y: auto;
@@ -282,8 +282,8 @@ html.is-mobile {
 
   /* background-color: or(--lx-accent-04, --color-indigo-600); */
   /* color: or(--lx-accent-11, white); */
-  background-color: or(--lx-accent-07, --color-indigo-600);
-  color: or(--lx-accent-12, white);
+  background-color: or(--logseq-og-button-background-color, --lx-accent-07, --color-indigo-600);
+  color: or(--logseq-og-button-text-color, --lx-accent-12, white);
 
   &:disabled {
     opacity: 0.5;
@@ -293,7 +293,7 @@ html.is-mobile {
   &:hover:not([disabled]) {
     /* opacity: or(--lx-accent-01, 0.8); */
     opacity: 1;
-    background-color: or(--lx-accent-06, --color-indigo-700);
+    background-color: or(--logseq-og-button-background-color-hover, --lx-accent-06, --color-indigo-700);
   }
 
   &.is-link {
@@ -303,22 +303,22 @@ html.is-mobile {
   &[intent='logseq'] {
     @apply focus:border-gray-500 dark:hover:text-gray-200;
 
-    color: or(--logseq-of-notification-clear-button-text, --lx-gray-12, --ls-primary-text-color);
+    color: or(--logseq-og-notification-clear-button-text, --lx-gray-12, --ls-primary-text-color);
     background: or(--logseq-og-notification-clear-button-background, --lx-gray-04, --ls-secondary-background-color);
 
     &:hover {
-      color: or(--lx-accent-11, --ls-link-text-color);
+      color: or(--logseq-og-notification-clear-button-text-hover, --lx-accent-11, --ls-link-text-color);
     }
   }
 
   &[intent='link'], &[intent='border-link'] {
     @apply focus:border-gray-500 dark:hover:text-gray-200;
 
-    color: or(--lx-gray-12, --ls-primary-text-color);
+    color: or(--logseq-og-link-text-color, --lx-gray-12, --ls-primary-text-color);
     background: transparent;
 
     &:hover {
-      color: or(--lx-accent-11, --ls-link-text-color);
+      color: or(--logseq-og-link-text-color-hover, --lx-accent-11, --ls-link-text-color);
     }
   }
 
@@ -355,10 +355,10 @@ html.is-mobile {
   @apply block w-full pl-3 pr-10 py-2 text-base leading-6 rounded
   border-gray-300 focus:outline-none sm:text-sm sm:leading-5;
 
-  background-color: or(--lx-gray-03, --ls-primary-background-color, transparent);
+  background-color: or(--logseq-og-form-select-background-color, --lx-gray-03, --ls-primary-background-color, transparent);
   background-repeat: no-repeat;
   border-width: 1px;
-  border-color: or(--lx-gray-07, --ls-border-color);
+  border-color: or(--logseq-og-form-select-border-color, --lx-gray-07, --ls-border-color);
 
   &.is-small {
     @apply pl-2 py-1.5 sm:leading-4 sm:text-xs;
@@ -370,7 +370,7 @@ html.is-mobile {
   sm:text-sm sm:leading-5 rounded;
 
   border-width: 1px;
-  border-color: or(--lx-gray-07, --ls-border-color);
+  border-color: or(--logseq-og-form-input-border-color, --lx-gray-07, --ls-border-color);
 
   &:focus {
     box-shadow: 0 0 0 2px rgba(164, 202, 254, 0.45);
@@ -390,7 +390,7 @@ html.is-mobile {
 }
 
 .bg-quaternary {
-  background-color: or(--lx-gray-06, --ls-quaternary-background-color);
+  background-color: or(--logseq-og-bg-quaternary, --lx-gray-06, --ls-quaternary-background-color);
 }
 
 .ui__icon {
@@ -403,9 +403,9 @@ html.is-mobile {
   width: 24px;
   height: 24px;
   flex-shrink: 0;
-  border-color: or(--lx-gray-03, --ls-primary-background-color);
+  border-color: or(--logseq-og-type-icon-border-color, --lx-gray-03, --ls-primary-background-color);
   overflow: hidden;
-  color: or(--lx-gray-12, --ls-primary-text-color);
+  color: or(--logseq-og-type-icon-text-color, --lx-gray-12, --ls-primary-text-color);
 
   .ti,
   .tie {
@@ -414,7 +414,7 @@ html.is-mobile {
 
   &:before {
     @apply block absolute inset-0 ;
-    background: or(--lx-gray-03, --ls-primary-background-color);
+    background: or(--logseq-og-type-icon-before-color, --lx-gray-03, --ls-primary-background-color);
     content: " ";
   }
 }

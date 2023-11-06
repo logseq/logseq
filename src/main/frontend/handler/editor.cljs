@@ -196,16 +196,9 @@
        (state/set-edit-content! edit-id new-value)
        (cursor/move-cursor-to input (+ cur-pos forward-pos))))))
 
-(-> (random-uuid) str)
-
 (defn open-block-in-sidebar!
   [block-id]
   ; (assert (uuid? block-id) "frontend.handler.editor/open-block-in-sidebar! expects block-id to be of type uuid")
-  (js/console.log "db-entity/block" block-id)
-  (js/console.log "db-entity/entity" (db/entity [:block/uuid block-id]))
-  ; (js/console.log "db-entity/types" (str block-id) (uuid block-id))
-  ; (js/console.log "db-entity/string" (db/entity [:block/uuid (str block-id)]))
-  ; (js/console.log "db-entity/uuid" (db/entity [:block/uuid (uuid block-id)]))
   (when block-id
     (when-let [block (db/entity (if (number? block-id) block-id [:block/uuid block-id]))]
       (let [page? (nil? (:block/page block))]

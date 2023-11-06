@@ -5,7 +5,7 @@
     > header {
       padding: 10px;
       padding-top: 0;
-      border-bottom: 1px solid or(--lx-gray-06, --ls-quaternary-background-color);
+      border-bottom: 1px solid or(--logseq-og-settings-header-border-color, --lx-gray-06, --ls-quaternary-background-color);
 
       h1 {
         font-size: 22px;

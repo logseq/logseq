@@ -80,7 +80,7 @@
 }
 
 .dark .left-sidebar-inner {
-  background-color: or(--lx-gray-01, --ls-primary-background);
+  background-color: or(--logseq-og-left-sidebar-background-color, --lx-gray-01, --ls-primary-background);
 }
 
 .left-sidebar-inner {
@@ -90,9 +90,9 @@
   width: var(--ls-left-sidebar-sm-width);
   overflow-y: auto;
   overflow-x: hidden;
-  background-color: or(--lx-gray-02, --ls-primary-background-color);
+  background-color: or(--logseq-og-left-sidebar-background-color, --lx-gray-02, --ls-primary-background-color);
   background-color: var(--ls-primary-background-color);
-  border-right: 1px solid or(--lx-gray-03, --ls-tertiary-background-color);
+  border-right: 1px solid or(--logseq-og-left-sidebar-border-color, --lx-gray-03, --ls-tertiary-background-color);
   transition: transform .3s;
   transform: translate3d(-100%, 0, 0);
   z-index: 3;
@@ -220,7 +220,7 @@
       }
 
       &:hover {
-        background-color: or(--lx-gray-04, --ls-tertiary-background-color);
+        background-color: or(--logseq-og-nav-item-hover, --lx-gray-04, --ls-tertiary-background-color);
 
         * {
           opacity: 1 !important;
@@ -275,7 +275,7 @@
           }
 
           &:hover {
-            background-color: or(--lx-gray-04, --ls-quaternary-background-color);
+            background-color: or(--logseq-og-recessed-nav-item-hover, --lx-gray-04, --ls-quaternary-background-color);
             opacity: 1;
             background-color: var(--ls-quaternary-background-color);
           }
@@ -327,21 +327,21 @@
 
     #create-button {
       @apply flex items-center justify-center p-2 text-sm font-medium rounded-md w-full border;
-      background-color: or(--lx-gray-03, --ls-secondary-background-color) !important;
+      background-color: or(--logseq-og-create-button-color, --lx-gray-03, --ls-secondary-background-color) !important;
       border-color: transparent;
 
       &:hover,
       &:focus {
         border-color: var(--ls-border-color);
-        background-color: or(--lx-gray-03, --ls-primary-background-color) !important;
+        background-color: or(--logseq-og-create-button-color-focus, --lx-gray-03, --ls-primary-background-color) !important;
       }
 
       @screen sm {
-        background-color: or(--lx-gray-03, --ls-primary-background-color) !important;
+        background-color: or(--logseq-og-create-button-color-sm, --lx-gray-03, --ls-primary-background-color) !important;
 
         &:hover,
         &:focus {
-          background-color: or(--lx-gray-04, --ls-secondary-background-color) !important;
+          background-color: or(--logseq-og-create-button-color-sm-focus, --lx-gray-04, --ls-secondary-background-color) !important;
         }
       }
     }
@@ -350,7 +350,7 @@
   @screen sm {
     padding-top: 0;
     width: var(--ls-left-sidebar-width);
-    background-color: or(--lx-gray-02, --ls-secondary-background-color);
+    background-color: or(--logseq-og-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color);
 
     .dark & {
       background-color: or(--logseq-og-left-sidebar-background, --lx-gray-01, --ls-secondary-background-color);
@@ -457,7 +457,7 @@
     transition: width .3s;
 
     &:before {
-      background-color: or(--lx-gray-02, --ls-secondary-background-color);
+      background-color: or(--logseq-og-left-sidebar-container-sm, --lx-gray-02, --ls-secondary-background-color);
       width: 0;
       overflow: hidden;
     }
@@ -552,7 +552,7 @@
       @apply rounded-full h-8 w-8 flex items-center justify-center
       font-bold select-none cursor-help;
 
-      background-color: or(--lx-gray-01, --ls-secondary-background-color);
+      background-color: or(--logseq-og-left-sidebar-help-background, --lx-gray-01, --ls-secondary-background-color);
     }
   }
 
@@ -584,7 +584,7 @@
 .cp__right-sidebar {
   z-index: var(--ls-z-index-level-1);
   transition: width 0.3s;
-  background-color: or(--lx-gray-01, --ls-secondary-background-color, #d8e1e8);
+  background-color: or(--logseq-og-right-ridebar-color, --lx-gray-01, --ls-secondary-background-color, #d8e1e8);
   position: relative;
   user-select: none;
 
@@ -602,7 +602,7 @@
     &:hover,
     &:focus,
     &:active {
-      background-color: or(--lx-gray-08-alpha, --ls-active-primary-color);
+      background-color: or(--logseq-og-right-sidebar-resizer-color, --lx-gray-08-alpha, --ls-active-primary-color);
     }
   }
 
@@ -645,7 +645,7 @@
     top: 0;
     left: 0;
     right: 0;
-    background-color: or(--lx-gray-01, --ls-secondary-background-color, #d8e1e8);
+    background-color: or(--logseq-og-right-sidebar-topbar-color, --lx-gray-01, --ls-secondary-background-color, #d8e1e8);
     z-index: 999;
     user-select: none;
     -webkit-app-region: drag;

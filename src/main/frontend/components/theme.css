@@ -12,17 +12,17 @@
 
 html {
   ::-webkit-scrollbar-thumb {
-    background-color: or(--lx-gray-05, --ls-scrollbar-foreground-color);
+    background-color: or(--logseq-og-scrollbar-thumb-color, --lx-gray-05, --ls-scrollbar-foreground-color);
   }
 
   ::-webkit-scrollbar {
-    background-color: or(--lx-gray-02, --ls-scrollbar-background-color);
+    background-color: or(--logseq-og-scrollbar-color, --lx-gray-02, --ls-scrollbar-background-color);
     width: var(--ls-scrollbar-width);
     height: 8px;
   }
 
   ::-webkit-scrollbar-thumb:active {
-    background-color: or(--lx-gray-06, --ls-scrollbar-thumb-hover-color);
+    background-color: or(--logseq-og-scrollbar-thumb-color-active, --lx-gray-06, --ls-scrollbar-thumb-hover-color);
   }
   
   ::-webkit-scrollbar-corner {
