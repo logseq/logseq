@@ -41,8 +41,6 @@
        :blocks
        [{:block/content "default property block" :properties {:default "haha"}}
         {:block/content "url property block" :properties {:url "https://logseq.com"}}
-      ;; TODO: Add a default many example with blocks
-        #_{:block/content "default-many property block" :properties {:default-many #{"woo" "hoo"}}}
         {:block/content "url-many property block" :properties {:url-many #{"https://logseq.com" "https://docs.logseq.com"}}}
         {:block/content "checkbox property block" :properties {:checkbox true}}
         {:block/content "number property block" :properties {:number 5}}
@@ -56,13 +54,14 @@
        :blocks
        [{:block/content "{{query (property :default \"haha\")}}"}
         {:block/content "{{query (property :url \"https://logseq.com\")}}"}
-        #_{:block/content "{{query (property :default-many \"woo\")}}"}
         {:block/content "{{query (property :url-many \"https://logseq.com\")}}"}
         {:block/content "{{query (property :checkbox true)}}"}
         {:block/content "{{query (property :number 5)}}"}
         {:block/content "{{query (property :number-many 10)}}"}
-        {:block/content "{{query (property :page \"Page 1\")}}"}
-        {:block/content "{{query (property :page-many \"Page 2\")}}"}]}
+        {:block/content "{{query (property :page [[Page 1]])}}"}
+        {:block/content "{{query (property :page-many [[Page 2]])}}"}
+        {:block/content (str "{{query (property :date [[" (string/capitalize (date-journal-title today)) "]])}}")}
+        {:block/content (str "{{query (property :date-many [[" (string/capitalize (date-journal-title yesterday)) "]])}}")}]}
       {:page {:block/name "page 1"}
        :blocks
        [{:block/content "yee"}
