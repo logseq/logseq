@@ -214,7 +214,6 @@
  :paginates/prev "Precedente"
  :paginates/next "Successivo"
 
- :command-palette/prompt "Digita un comando"
  :select/default-prompt "Selezionane uno"
  :select.graph/prompt "Seleziona un grafo"
  :select.graph/empty-placeholder-description "Non ci sono grafi corrispondenti. Vuoi aggiungerne uno nuovo?"
@@ -291,7 +290,6 @@
  :command.editor/zoom-in                 "Ingrandisci blocco di modifica / Avanti altrimenti"
  :command.editor/zoom-out                "Rimpicciolisci il blocco di modifica / Indietro altrimenti"
  :command.ui/toggle-brackets             "Selezionare se visualizzare le parentesi"
- :command.go/search-in-page              "Cerca nella pagina attuale"
  :command.go/search                      "Ricerca testo completo"
  :command.go/journals                    "Vai ai diari"
  :command.go/backward                    "Indietro"
@@ -299,7 +297,6 @@
  :command.search/re-index                "Ricostruisci indice di ricerca"
  :command.sidebar/open-today-page        "Apri la pagina di oggi nella barra laterale destra"
  :command.sidebar/clear                  "Pulisci tutto nella barra laterale destra"
- :command.command-palette/toggle         "Attiva/disattiva tavolozza comandi"
  :command.graph/open                     "Seleziona il diagramma da aprire"
  :command.graph/remove                   "Rimuovi un diagramma"
  :command.graph/add                      "Aggiungi un diagramma"

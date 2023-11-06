@@ -601,8 +601,8 @@
              "entered" "ease-out duration-300 opacity-100 translate-y-0 sm:scale-100"
              "exiting" "ease-in duration-200 opacity-100 translate-y-0 sm:scale-100"
              "exited" "ease-in duration-200 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95")}
-   [:div.ui__modal-close-wrap
-    (when-not (false? close-btn?)
+   (when-not (false? close-btn?)
+     [:div.ui__modal-close-wrap
       [:a.ui__modal-close
        {:aria-label "Close"
         :type       "button"
@@ -613,8 +613,7 @@
          {:d               "M6 18L18 6M6 6l12 12"
           :stroke-width    "2"
           :stroke-linejoin "round"
-          :stroke-linecap  "round"}]]])]
-
+          :stroke-linecap  "round"}]]]])
    (when show?
      [:div {:class (if fullscreen? "" "panel-content")}
       (modal-panel-content panel-content close-fn)])])

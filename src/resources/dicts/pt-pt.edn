@@ -310,7 +310,6 @@
  :paginates/prev "Ant."
  :paginates/next "Próx."
 
- :command-palette/prompt "Introduza um comando"
  :select/default-prompt "Selecione um"
  :select/default-select-multiple "Selecione um ou vários"
  :select.graph/prompt "Selecione um grafo"
@@ -349,7 +348,6 @@
  :command.ui/toggle-help                  "Alternar ajuda"
  :command.git/commit                      "Confirmar"
  :command.go/search                       "Pesquisar no grafo"
- :command.go/search-in-page               "Pesquisar na página atual"
  :command.ui/toggle-document-mode         "Alternar modo de documento"
  :command.ui/toggle-contents              "Alternar Conteúdo na barra lateral"
  :command.ui/toggle-theme                 "Alternar entre tema claro/escuro"
@@ -399,7 +397,6 @@
  :command.cards/toggle-answers            "Cartões: mostrar/esconder as respostas/clozes"
  :command.command/run                     "Execute o comando Git"
  :command.command/toggle-favorite         "Adicionar aos/remover dos favoritos"
- :command.command-palette/toggle          "Editar atalhos"
  :command.date-picker/complete            "Escolher data: Escolha o dia selecionado"
  :command.date-picker/next-day            "Escolher data: Selecione o próximo dia"
  :command.date-picker/next-week           "Escolher data: Selecione a próxima semana"

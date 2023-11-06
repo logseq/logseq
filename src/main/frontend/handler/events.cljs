@@ -13,7 +13,6 @@
             [frontend.commands :as commands]
             [frontend.components.block :as block]
             [frontend.components.cmdk :as cmdk]
-            [frontend.components.command-palette :as command-palette]
             [frontend.components.conversion :as conversion-component]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
@@ -21,7 +20,6 @@
             [frontend.components.git :as git-component]
             [frontend.components.page :as page]
             [frontend.components.plugins :as plugin]
-            [frontend.components.search :as component-search]
             [frontend.components.shell :as shell]
             [frontend.components.whiteboard :as whiteboard]
             [frontend.components.user.login :as login]
@@ -37,7 +35,6 @@
             [frontend.fs.nfs :as nfs]
             [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as fs-watcher]
-            [frontend.handler.command-palette :as cp]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
@@ -389,18 +386,6 @@
           _ (repo-handler/graph-ready! repo)
           _ (fs-watcher/load-graph-files! repo loaded-homepage-files)]))
 
-    ;; TODO(junyi): Notify user to update filename format when the UX is smooth enough
-    ;; (when-not config/test?
-    ;;   (js/setTimeout
-    ;;    (fn []
-    ;;      (let [filename-format (state/get-filename-format repo)]
-    ;;        (when (and (util/electron?)
-    ;;                   (not (util/ci?))
-    ;;                   (not (config/demo-graph?))
-    ;;                   (not= filename-format :triple-lowbar))
-    ;;          (state/pub-event! [:ui/notify-outdated-filename-format []]))))
-    ;;    3000))
-
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
 
@@ -409,18 +394,11 @@
     (state/set-modal! shell/shell)))
 
 (defmethod handle :go/search [_]
-  (state/set-modal! component-search/search-modal
-                    {:fullscreen? false
+  (state/set-modal! cmdk/cmdk-modal
+                    {:fullscreen? true
                      :close-btn?  false
+                     :panel?      false
                      :label "ls-modal-search"}))
-
-(defmethod handle :go/cmdk [_]
-  (when-not (= cmdk/cmdk (:modal/panel-content @state/state))
-    (state/set-modal! cmdk/cmdk-modal
-                      {:fullscreen? true
-                       :panel? false
-                       :close-btn?  false 
-                       :label "ls-modal-cmdk"}))) 
 
 (defmethod handle :go/plugins [_]
   (plugin/open-plugins-modal!))
@@ -715,12 +693,6 @@
                   opts))
    {:center? true :close-btn? false :close-backdrop? false}))
 
-(defmethod handle :modal/command-palette [_]
-  (state/set-modal!
-   #(command-palette/command-palette {:commands (cp/get-commands)})
-   {:fullscreen? false
-    :close-btn?  false}))
-
 (defmethod handle :journal/insert-template [[_ page-name]]
   (let [page-name (util/page-name-sanity-lc page-name)]
     (when-let [page (db/pull [:block/name page-name])]
@@ -997,4 +969,3 @@
   (def new-repo (string/replace deprecated-repo deprecated-app-id current-app-id))
 
   (update-file-path deprecated-repo new-repo deprecated-app-id current-app-id))
-  

@@ -192,7 +192,7 @@ export interface BlockEntity {
   level?: number
   meta?: { timestamps: any; properties: any; startPos: number; endPos: number }
   title?: Array<any>
-	marker?: string
+        marker?: string
 }
 
 /**
@@ -275,7 +275,6 @@ export type ExternalCommandType =
   | 'logseq.go/next-journal'
   | 'logseq.go/prev-journal'
   | 'logseq.go/search'
-  | 'logseq.go/search-in-page'
   | 'logseq.go/tomorrow'
   | 'logseq.go/backward'
   | 'logseq.go/forward'
@@ -294,7 +293,6 @@ export type ExternalCommandType =
   | 'logseq.ui/toggle-settings'
   | 'logseq.ui/toggle-theme'
   | 'logseq.ui/toggle-wide-mode'
-  | 'logseq.command-palette/toggle'
 
 export type UserProxyTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets'
 

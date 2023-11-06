@@ -203,7 +203,6 @@
  :paginates/prev "Forrige"
  :paginates/next "Neste"
 
- :command-palette/prompt "Skriv en kommando"
  :select/default-prompt "Velg en"
  :select.graph/prompt "Velg en graf"
  :select.graph/empty-placeholder-description "Ingen grafer matcher. Vil du legge til en ny?"
@@ -367,7 +366,6 @@
  :command.ui/toggle-help                  "Vis hjelp"
  :command.git/commit                      "Git commit beskjed"
  :command.go/search                       "Fulltekst søk"
- :command.go/search-in-page               "Søk på nåværende side"
  :command.ui/toggle-document-mode         "Aktiver dokumentmodus"
  :command.ui/toggle-contents              "Åpne favoritter i sidestolpen"
  :command.ui/toggle-theme                 "Veksle mellom lyst og mørkt tema"
@@ -417,7 +415,6 @@
  :command.cards/toggle-answers "Kort: vis/skjul svar/clozes"
  :command.command/run "Kjør git kommando"
  :command.command/toggle-favorite "Legg til eller fjern fra favoritter"
- :command.command-palette/toggle "Veksle kommandolinje"
  :command.date-picker/complete "Datovelger: Bruk valgt dag"
  :command.date-picker/next-day "Datovelger: Velg neste dag"
  :command.date-picker/next-week "Datovelger: Velg neste uke"
@@ -632,7 +629,7 @@
  :window/maximize "Maksimer"
  :window/minimize "Minimer"
  :window/restore "Gjenopprett"
- 
+
  :loading "Laster..."
  :logout-user "Logg av ({1})"
  :new-page "Ny side:"
@@ -735,8 +732,6 @@
  :plugin/title "Tittel ({1})"
  :plugin/up-to-date "Den er oppdatert {1}"
  :plugin/update-plugin "Oppdater utvidelse: {1} - {2}"
- :search/command-palette-tip-1 "Tips: "
- :search/command-palette-tip-2 " for å åpne kommandopaletten"
  :settings-page/app-updated "Appen er oppdatert 🎉"
  :settings-page/auto-expand-block-refs-tip "Dette valget styrer om blokkreferansen automatisk ekspanderes dersom du zoomer inn."
  :settings-page/changelog "Hva er nytt?"

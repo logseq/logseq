@@ -60,7 +60,6 @@
 
  :block/name "Pagina naam"
 
- :command-palette/prompt "Type een commando"
 
  :content/click-to-edit "Klik om te bewerken"
  :editor/copy "Kopieer"
@@ -238,7 +237,6 @@
  :command.cards/toggle-answers           "Kaarten: toon/verberg antwoorden/clozes"
  :command.command/run                    "Voer git commando uit"
  :command.command/toggle-favorite        "Toevoegen aan/verwijderen uit favorieten"
- :command.command-palette/toggle         "Schakel commando lijn"
  :command.date-picker/complete           "Datumkiezer: Kies de geselecteerde dag"
  :command.date-picker/next-day           "Datumkiezer: Volgende dag kiezen"
  :command.date-picker/next-week          "Datumkiezer: Volgende week kiezen"
@@ -308,7 +306,6 @@
  :command.go/next-journal                "Ga naar volgende journaal"
  :command.go/prev-journal                "Ga naar vorige journaal"
  :command.go/search                      "Zoeken in volledige tekst"
- :command.go/search-in-page              "Zoeken in de huidige pagina"
  :command.go/tomorrow                    "Ga naar morgen"
  :command.graph/add                      "Voeg een grafiek toe"
  :command.graph/open                     "Selecteer grafiek om te openen"

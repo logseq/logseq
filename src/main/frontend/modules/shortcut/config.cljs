@@ -341,20 +341,10 @@
    :ui/toggle-brackets                      {:binding "mod+c mod+b"
                                              :fn      config-handler/toggle-ui-show-brackets!}
 
-   :go/search-in-page                       {:binding "mod+shift+k"
-                                             :fn      #(do
-                                                         (editor-handler/escape-editing)
-                                                         (route-handler/go-to-search! :page))}
-
    :go/search                               {:binding "mod+k"
                                              :fn      #(do
                                                          (editor-handler/escape-editing false)
                                                          (route-handler/go-to-search! :global))}
-
-   :go/cmdk                                 {:binding "mod+j"
-                                             :fn      #(do
-                                                         (editor-handler/escape-editing false)
-                                                         (route-handler/go-to-cmdk!))}
 
    :go/electron-find-in-page                {:binding  "mod+f"
                                              :inactive (not (util/electron?))
@@ -393,11 +383,6 @@
 
    :misc/copy                               {:binding "mod+c"
                                              :fn      (fn [] (js/document.execCommand "copy"))}
-
-   :command-palette/toggle                  {:binding "mod+shift+p"
-                                             :fn      #(do
-                                                         (editor-handler/escape-editing)
-                                                         (state/pub-event! [:modal/command-palette]))}
 
    :graph/export-as-html                    {:fn      #(export-handler/download-repo-as-html!
                                                          (state/get-current-repo))
@@ -527,10 +512,10 @@
    :editor/toggle-open-blocks               {:binding "t o"
                                              :fn      editor-handler/toggle-open!}
 
-   :ui/cycle-color-off                      {:binding "c o" 
+   :ui/cycle-color-off                      {:binding "c o"
                                              :fn      state/unset-color-accent!}
 
-   :ui/cycle-color                          {:binding "c c" 
+   :ui/cycle-color                          {:binding "c c"
                                              :fn      state/cycle-color!}
 
    :ui/toggle-cards                         {:binding "t c"
@@ -684,19 +669,16 @@
                    :editor/undo
                    :editor/redo
                    :ui/toggle-brackets
-                   :go/search-in-page
                    :go/search
                    :go/electron-find-in-page
                    :go/electron-jump-to-the-next
                    :go/electron-jump-to-the-previous
                    :go/backward
-                   :go/cmdk
                    :go/forward
                    :search/re-index
                    :sidebar/open-today-page
                    :sidebar/clear
                    :command/run
-                   :command-palette/toggle
                    :window/close])
                 (with-meta {:before m/prevent-default-behavior}))
 
@@ -759,7 +741,6 @@
              :editor/select-all-blocks
              :editor/select-parent
              :go/search
-             :go/search-in-page
              :go/electron-find-in-page
              :go/electron-jump-to-the-next
              :go/electron-jump-to-the-previous
@@ -890,7 +871,6 @@
              :pdf/find
              :command/toggle-favorite
              :command/run
-             :command-palette/toggle
              :graph/export-as-html
              :graph/open
              :graph/remove

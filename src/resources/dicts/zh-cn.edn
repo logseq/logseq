@@ -470,8 +470,6 @@
  :paginates/prev "上一页"
  :paginates/next "下一页"
 
- :command-palette/prompt "输入指令"
-
  :file-sync/other-user-graph "当前本地图谱绑定在其他用户的远程图谱上。因此无法启动同步。"
  :file-sync/graph-deleted "当前远程图谱已经删除"
  :file-sync/rsapi-cannot-upload-err "无法同步，请检查本机时间是否准确"
@@ -515,7 +513,6 @@
  :command.cards/toggle-answers            "卡片：显示/隐藏 答案/填空"
  :command.command/run                     "运行 git 命令"
  :command.command/toggle-favorite         "切换收藏"
- :command.command-palette/toggle          "切换命令面板"
  :command.date-picker/complete            "日期选择：选择当前天"
  :command.date-picker/next-day            "日期选择：下一天"
  :command.date-picker/next-week           "日期选择：下一周"
@@ -582,7 +579,6 @@
  :command.go/search                       "搜索页面和块"
  :command.go/backward                     "回退"
  :command.go/forward                      "前进"
- :command.go/search-in-page               "在当前页面搜索块"
  :command.go/electron-find-in-page        "在当前页面查找文本"
  :command.ui/toggle-document-mode         "切换文档模式"
  :command.ui/toggle-contents              "打开/关闭目录"

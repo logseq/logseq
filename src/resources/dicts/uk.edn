@@ -341,7 +341,6 @@
  :paginates/prev "Попередня"
  :paginates/next "Наступна"
 
- :command-palette/prompt "Введіть команду"
  :select/default-prompt "Виберіть один"
  :select/default-select-multiple "Виберіть один або кілька"
  :select.graph/prompt "Виберіть графік"
@@ -462,7 +461,6 @@
  :command.whiteboard/ungroup                               "Розгрупувати"
  :command.whiteboard/toggle-grid                           "Переключити відображення сітки"
  :command.ui/toggle-brackets                               "Показати/Сховати квадратні дужки"
- :command.go/search-in-page                                "Пошук блоків на поточній сторінці"
  :command.go/electron-find-in-page                         "Знайти текст на сторінці"
  :command.go/electron-jump-to-the-next                     "Шукати далі"
  :command.go/electron-jump-to-the-previous                 "Шукати назад"
@@ -475,7 +473,6 @@
  :command.sidebar/close-top                                "Закрити верхній елемент на правій бічній панелі"
  :command.sidebar/clear                                    "Очистити усе на правій бічній панелі"
  :command.misc/copy                                        "Копіювати"
- :command.command-palette/toggle                           "Показати/Сховати список команд"
  :command.graph/export-as-html                             "Експортувати загальнодоступні сторінки графіків у форматі HTML"
  :command.graph/open                                       "Виберіть графік, яку потрібно відкрити"
  :command.graph/remove                                     "Видалити графік"

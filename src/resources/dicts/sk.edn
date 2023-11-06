@@ -300,7 +300,6 @@
  :paginates/prev                                   "Predchádzajúca"
  :paginates/next                                   "Ďalšia"
 
- :command-palette/prompt                           "Zadať príkaz"
  :select/default-prompt                            "Vybrať jeden"
  :select.graph/prompt                              "Vybrať graf"
  :select.graph/empty-placeholder-description       "Žiadne zodpovedajúce grafy. Chcete pridať ďalší?"
@@ -392,7 +391,6 @@
  :command.editor/zoom-in                                   "Priblížiť upravovaný blok/Inak vpred"
  :command.editor/zoom-out                                  "Oddialiť upravaný blok/Inak dozadu"
  :command.ui/toggle-brackets                               "Prepnúť, či sa majú zobraziť hranaté zátvorky"
- :command.go/search-in-page                                "Hľadať bloky na aktuálnej stránke"
  :command.go/electron-find-in-page                         "Nájsť text na stránke"
  :command.go/electron-jump-to-the-next                     "Preskočiť na ďalšiu zhodu s vyhľadávaním v Paneli hľadania"
  :command.go/electron-jump-to-the-previous                 "Preskočiť na predchádzajúcu zhodu s vyhľadávaním v Paneli hľadania"
@@ -405,7 +403,6 @@
  :command.sidebar/close-top                                "Zavri hornú položku na pravom bočnom paneli"
  :command.sidebar/clear                                    "Vymazať všetko na pravom bočnom paneli"
  :command.misc/copy                                        "Kopírovať"
- :command.command-palette/toggle                           "Zobraziť/Skryť zoznam príkazov"
  :command.graph/export-as-html                             "Exportovať verejné stránky grafu ako HTML"
  :command.graph/open                                       "Vybrať graf na otvorenie"
  :command.graph/remove                                     "Odstrániť graf"

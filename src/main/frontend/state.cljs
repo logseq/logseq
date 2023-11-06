@@ -51,7 +51,7 @@
      :journals-length                       3
 
      :search/q                              ""
-     :search/mode                           :global  ;; inner page or full graph? {:page :global}
+     :search/mode                           nil ; nil -> global mode, :graph -> add graph filter, etc.
      :search/result                         nil
      :search/graph-filters                  []
      :search/engines                        {}
@@ -2207,11 +2207,11 @@ Similar to re-frame subscriptions"
 
 (defn cycle-color! []
   (let [current-color (get-color-accent)
-        next-color (->> (cons nil colors/color-list) 
-                        (drop-while #(not= % current-color)) 
+        next-color (->> (cons nil colors/color-list)
+                        (drop-while #(not= % current-color))
                         (second))]
-    (if next-color 
-      (set-color-accent! next-color) 
+    (if next-color
+      (set-color-accent! next-color)
       (unset-color-accent!))))
 
 (defn set-page-properties-changed!

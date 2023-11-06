@@ -2,7 +2,6 @@
   (:require
     [clojure.string :as string]
     [frontend.components.block :as block]
-    [frontend.components.command-palette :as cp]
     [frontend.context.i18n :refer [t]]
     [frontend.db :as db]
     [frontend.db.model :as model]
@@ -25,7 +24,15 @@
     [frontend.mixins :as mixins]
     [logseq.graph-parser.util.block-ref :as block-ref]
     [logseq.graph-parser.util :as gp-util]
-    [logseq.shui.button.v2 :as button]))
+    [logseq.shui.button.v2 :as button]
+    [frontend.modules.shortcut.utils :as shortcut-utils]))
+
+(defn translate [t {:keys [id desc]}]
+  (when id
+    (let [desc-i18n (t (shortcut-utils/decorate-namespace id))]
+      (if (string/starts-with? desc-i18n "{Missing key")
+        desc
+        desc-i18n))))
 
 (def GROUP-LIMIT 5)
 
@@ -69,7 +76,7 @@
      {:text "Create whiteboard" :icon "new-whiteboard" :icon-theme :color :info (str "Create whiteboard called '" q "'") :source-create :whiteboard}]))
 
 ;; Take the results, decide how many items to show, and order the results appropriately
-(defn state->results-ordered [state]
+(defn state->results-ordered [state search-mode]
   (let [results @(::results state)
         input @(::input state)
         filter @(::filter state)
@@ -89,11 +96,16 @@
                        (db/entity [:block/name (string/trim input)]))
         filter-mode? (or (string/includes? input " /")
                          (string/starts-with? input "/"))
-        order* (if filter-mode?
+        order* (cond
+                 (= search-mode :graph)
+                 [["Pages"          :pages          (visible-items :pages)]]
+
+                 filter-mode?
                  [["Filters"        :filters        (visible-items :filters)]
                   ["Pages"          :pages          (visible-items :pages)]
                   (when-not page-exists?
                     ["Create"         :create         (create-items input)])]
+                 :else
                  (->>
                   [["Pages"          :pages          (visible-items :pages)]
                    ["Commands"       :commands       (visible-items :commands)]
@@ -114,7 +126,7 @@
 
 (defn state->highlighted-item [state]
   (or (some-> state ::highlighted-item deref)
-      (some->> (state->results-ordered state)
+      (some->> (state->results-ordered state (:search/mode @state/state))
                (mapcat last)
                (first))))
 
@@ -147,7 +159,7 @@
                            (remove (fn [c] (= :window/close (:id c))))
                            (map #(hash-map :icon "command"
                                            :icon-theme :gray
-                                           :text (cp/translate t %)
+                                           :text (translate t %)
                                            :shortcut (:shortcut %)
                                            :source-command %)))]
     (reset! !results (-> default-results (assoc-in [:recents :items] recent-items)
@@ -161,12 +173,12 @@
     (if (empty? @!input)
       (swap! !results update group merge {:status :success :items default-commands})
       (let [commands (->> (cp-handler/top-commands 1000)
-                          (map #(assoc % :t (cp/translate t %))))
+                          (map #(assoc % :t (translate t %))))
             search-results (search/fuzzy-search commands @!input {:extract-fn :t})]
         (->> search-results
              (map #(hash-map :icon "command"
                              :icon-theme :gray
-                             :text (cp/translate t %)
+                             :text (translate t %)
                              :shortcut (:shortcut %)
                              :source-command %))
              (hash-map :status :success :items)
@@ -319,8 +331,13 @@
   (when-let [item (some-> state state->highlighted-item)]
     (let [shift? @(::shift? state)
           page? (boolean (:source-page item))
-          block? (boolean (:source-block item))]
+          block? (boolean (:source-block item))
+          search-mode (:search/mode @state/state)
+          graph-view? (= search-mode :graph)]
       (cond
+        (and graph-view? page? (not shift?)) (do
+                                               (state/add-graph-search-filter! @(::input state))
+                                               (reset! (::input state) ""))
         (and shift? block?) (handle-action :open-block-right state event)
         (and shift? page?) (handle-action :open-page-right state event)
         block? (handle-action :open-block state event)
@@ -450,8 +467,7 @@
          {:trigger-once? true}))]]))
 
 (defn move-highlight [state n]
-  (js/console.log "move-highlight" n)
-  (let [items (mapcat last (state->results-ordered state))
+  (let [items (mapcat last (state->results-ordered state (:search/mode @state/state)))
         highlighted-item (some-> state ::highlighted-item deref (dissoc :mouse-enter-triggered-highlight))
         current-item-index (some->> highlighted-item (.indexOf items))
         next-item-index (some-> (or current-item-index 0) (+ n) (mod (count items)))]
@@ -523,6 +539,17 @@
     :recents "Recents"
     (string/capitalize (name group))))
 
+(defn- input-placeholder
+  [sidebar?]
+  (let [search-mode (:search/mode @state/state)]
+    (prn :debug :search-mode search-mode)
+    (cond
+      (and (= search-mode :graph) (not sidebar?))
+      "Add graph filter"
+
+      :else
+      "What are you looking for?")))
+
 (rum/defc input-row
   [state all-items]
   (let [highlighted-item @(::highlighted-item state)
@@ -544,7 +571,7 @@
     [:div {:style {:background "var(--lx-gray-02)"
                    :border-bottom "1px solid var(--lx-gray-07)"}}
      [:input {:class "text-xl bg-transparent border-none w-full outline-none px-4 py-3"
-              :placeholder "What are you looking for?"
+              :placeholder (input-placeholder false)
               :ref #(when-not @input-ref (reset! input-ref %))
               :on-change (fn [e]
                            (when (= "" (.-value @input-ref))
@@ -582,7 +609,7 @@
      (ui/rotating-arrow false)
      (shui/icon "search" {:class "text-gray-12"})
      [:input {:class "text-base bg-transparent border-none w-full outline-none py-2"
-              :placeholder "What are you looking for?"
+              :placeholder (input-placeholder true)
               :ref #(reset! input-ref %)
               :on-change (partial handle-input-change state)
               :value input}]
@@ -659,7 +686,10 @@
   shortcut/disable-all-shortcuts
   rum/reactive
   {:init (fn [state]
-           (assoc state ::ref (atom nil)))}
+           (assoc state ::ref (atom nil)))
+   :will-unmount (fn [state]
+                   (state/set-state! :search/mode nil)
+                   state)}
   (mixins/event-mixin
    (fn [state]
      (let [ref @(::ref state)]
@@ -682,8 +712,9 @@
   (rum/local nil ::input-ref)
   [state {:keys [sidebar?]}]
   (let [*input (::input state)
+        search-mode (:search/mode @state/state)
         group-filter (:group @(::filter state))
-        results-ordered (state->results-ordered state)
+        results-ordered (state->results-ordered state search-mode)
         all-items (mapcat last results-ordered)
         first-item (first all-items)]
     [:div.cp__cmdk {:ref #(when-not @(::ref state) (reset! (::ref state) %))

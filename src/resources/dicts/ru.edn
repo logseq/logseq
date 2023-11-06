@@ -474,7 +474,6 @@
 
  :tips/all-done                                        "Всё готово!"
 
- :command-palette/prompt                               "Введите команду"
  :select/default-prompt                                "Выберите"
  :select/default-select-multiple                       "Выберите один или несколько"
  :select.graph/prompt                                  "Выберите граф"
@@ -606,7 +605,6 @@
  :command.whiteboard/ungroup                           "Разгруппировать выбранное"
  :command.whiteboard/toggle-grid                       "Переключить отображение сетки"
  :command.ui/toggle-brackets                           "Переключить отображение скобок"
- :command.go/search-in-page                            "Поиск блоков на текущей странице"
  :command.go/electron-find-in-page                     "Поиск текста на странице"
  :command.go/electron-jump-to-the-next                 "Перейти к следующему совпадению в строке поиска"
  :command.go/electron-jump-to-the-previous             "Перейти к предыдущему совпадению в строке поиска"
@@ -619,7 +617,6 @@
  :command.sidebar/close-top                            "Закрыть верхний элемент на правой боковой панели"
  :command.sidebar/clear                                "Очистить всё на правой боковой панели"
  :command.misc/copy                                    "Копировать"
- :command.command-palette/toggle                       "Показать палитру команд"
  :command.graph/export-as-html                         "Экспорт публичных страниц графов в формате html"
  :command.graph/open                                   "Выберите граф для открытия"
  :command.graph/remove                                 "Удалить граф"

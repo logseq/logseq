@@ -113,8 +113,6 @@
  :search/page-names "ページ名で検索"
  :search/recent "最近の検索："
  :search/blocks-in-page "ページ内のブロックを検索："
- :search/command-palette-tip-1 "お役立ち情報："
- :search/command-palette-tip-2 "でコマンドパレットを開けます"
  :search/cache-outdated "キャッシュが古くなっています。グラフのドロップダウンメニューにある「インデックス再構築」ボタンをクリックしてください。"
  :search-item/whiteboard "ホワイトボード"
  :search-item/page "ページ"
@@ -614,7 +612,6 @@
 
  :tips/all-done "全て完了しました"
 
- :command-palette/prompt "コマンドを入力"
  :select/default-prompt "選択してください"
  :select/default-select-multiple "一つもしくは複数選択してください"
  :select.graph/prompt "グラフを選んでください"
@@ -750,7 +747,6 @@
  :command.whiteboard/ungroup "選択範囲のグループ化解除"
  :command.whiteboard/toggle-grid "キャンバスの格子の表示を切り替える"
  :command.ui/toggle-brackets "ブラケットの表示／非表示"
- :command.go/search-in-page "ページ内を検索"
  :command.go/electron-find-in-page "ページ内で文字列検索"
  :command.go/electron-jump-to-the-next "文字列検索で次を検索"
  :command.go/electron-jump-to-the-previous "文字列検索で前を検索"
@@ -763,7 +759,6 @@
  :command.sidebar/close-top "右サイドバーの一番上の項目を閉じる"
  :command.sidebar/clear "右サイドバーの内容を全てクリア"
  :command.misc/copy "コピー"
- :command.command-palette/toggle "コマンドパレットを開く"
  :command.graph/export-as-html "公開グラフのページをHTMLとしてエクスポート"
  :command.graph/open "グラフを選択して開く"
  :command.graph/remove "グラフを削除"

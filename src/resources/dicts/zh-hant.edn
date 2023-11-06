@@ -310,7 +310,6 @@
  :paginates/prev "上一頁"
  :paginates/next "下一頁"
 
- :command-palette/prompt "請輸入指令"
  :select/default-prompt "請選擇提示"
  :select.graph/prompt "請選擇圖表"
  :select.graph/empty-placeholder-description "沒有符合的圖表，您要新增另一個嗎？"

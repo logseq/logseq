@@ -218,7 +218,6 @@
  :paginates/prev "이전"
  :paginates/next "다음"
 
- :command-palette/prompt "커맨드를 입력하십시오"
  :select/default-prompt "하나를 선택하십시오"
  :select.graph/prompt "그래프를 선택하십시오."
  :select.graph/empty-placeholder-description "일치하는 그래프가 없습니다. 새로 추가하시겠습니까?"
@@ -357,7 +356,6 @@
  :command.go/next-journal                 "다음 일지로 이동"
  :command.go/prev-journal                 "이전 일지로 이동"
  :command.go/keyboard-shortcuts           "키보드 단축키로 이동"
- :command.go/search-in-page               "페이지 안에서 검색"
  :command.ui/toggle-document-mode         "문서 모드 토글"
  :command.ui/toggle-contents              "목차 토글"
  :command.ui/toggle-theme                 "테마 토글"
@@ -401,7 +399,6 @@
  :command.pdf/next-page                   "다음 페이지"
  :command.pdf/previous-page               "이전 페이지"
  :command.command/run                             "Git 명령 실행"
- :command.command-palette/toggle                  "명령 팔레트 토글"
  :command.graph/open                              "그래프 열기"
  :command.graph/remove                            "그래프 제거"
  :command.graph/add                               "그래프 추가"
