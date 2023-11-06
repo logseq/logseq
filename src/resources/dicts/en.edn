@@ -129,7 +129,7 @@
  :code "Code"
  :untitled "Untitled"
  :right-side-bar/help "Help"
- :right-side-bar/switch-theme "Theme modes"
+ :right-side-bar/switch-theme "Theme"
  :right-side-bar/contents "Contents"
  :right-side-bar/page-graph "Page graph"
  :right-side-bar/history "(Dev) Undo/Redo history"

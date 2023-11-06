@@ -549,7 +549,6 @@
                (:property? config)
                (str " page-property-key block-property")
                untitled? (str " opacity-50"))
-      :style {:color "var(--lx-accent-10)"}
       :data-ref page-name
       :draggable true
       :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name-in-block e))
@@ -765,8 +764,7 @@
                               (.stopPropagation e))}
        (excalidraw s block-uuid)]
       [:span.page-reference
-       {:data-ref s
-        :style {:color "var(--lx-accent-09)"}}
+       {:data-ref s}
        (when (and (or show-brackets? nested-link?)
                   (not html-export?)
                   (not contents-page?))
