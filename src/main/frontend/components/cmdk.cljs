@@ -467,7 +467,7 @@
 
      ;; ensure that there is a throttled version of the load-results function
      (when-not @!load-results-throttled
-       (reset! !load-results-throttled (gfun/throttle load-results 100)))
+       (reset! !load-results-throttled (gfun/throttle load-results 50)))
 
      ;; retreive the laod-results function and update all the results
      (when-let [load-results-throttled @!load-results-throttled]
