@@ -95,8 +95,8 @@
                   (when-not page-exists?
                     ["Create"         :create         (create-items input)])]
                  (->>
-                  [["Commands"       :commands       (visible-items :commands)]
-                   ["Pages"          :pages          (visible-items :pages)]
+                  [["Pages"          :pages          (visible-items :pages)]
+                   ["Commands"       :commands       (visible-items :commands)]
                    (when-not page-exists?
                      ["Create"         :create         (create-items input)])
                    ["Current page"   :current-page   (visible-items :current-page)]
