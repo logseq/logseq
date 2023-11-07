@@ -36,7 +36,7 @@ const lx = override => ({
   'gray-07': 'or(' + override + ', --lx-gray-07, --ls-border-color)',
   'gray-08': 'or(' + override + ', --lx-gray-08, --ls-secondary-border-color)',
   'gray-09': 'or(' + override + ', --lx-gray-09, --color-level-5)',
-  'gray-10': 'or(' + override + ', --lx-gray-10, --color-level-6)',
+  'gray-10': 'or(' + override + ', --lx-gray-10, --ls-title-text-color)',
   'gray-11': 'or(' + override + ', --lx-gray-11, --ls-primary-text-color)',
   'gray-12': 'or(' + override + ', --lx-gray-12, --ls-secondary-text-color)',
   'gray-01-alpha': 'or(' + override + ', --lx-gray-01-alpha, --ls-primary-background-color)',
