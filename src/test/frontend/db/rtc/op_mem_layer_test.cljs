@@ -1,0 +1,174 @@
+(ns frontend.db.rtc.op-mem-layer-test
+  (:require [cljs.test :as t :refer [deftest is testing]]
+            [clojure.core.async :as async :refer [<! go]]
+            [cljs.core.async.interop :refer [p->c]]
+            [frontend.db.rtc.idb-keyval-mock :include-macros true :as idb-keyval-mock]
+            [frontend.db.rtc.op-idb-layer :as op-idb-layer]
+            [frontend.db.rtc.op-mem-layer :as op-layer]
+            #_:clj-kondo/ignore ["/frontend/idbkv" :as idb-keyval]))
+
+(deftest add-ops-to-block-uuid->ops-test
+  (testing "case1"
+    (let [ops [["move" {:block-uuid "f4abd682-fb9e-4f1a-84bf-5fe11fe7844b" :epoch 1}]
+               ["move" {:block-uuid "8e6d8355-ded7-4500-afaa-6f721f3b0dc6" :epoch 2}]]
+          {:keys [block-uuid->ops epoch->block-uuid-sorted-map]}
+          (op-layer/add-ops-to-block-uuid->ops (op-layer/ops-coercer ops) {} (sorted-map-by <))]
+      (is (= [{#uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b"
+               {:move ["move" {:block-uuid #uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b", :epoch 1}]},
+               #uuid"8e6d8355-ded7-4500-afaa-6f721f3b0dc6"
+               {:move ["move" {:block-uuid #uuid"8e6d8355-ded7-4500-afaa-6f721f3b0dc6", :epoch 2}]}}
+              {1 #uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b", 2 #uuid"8e6d8355-ded7-4500-afaa-6f721f3b0dc6"}]
+             [block-uuid->ops epoch->block-uuid-sorted-map]))))
+
+  (testing "case2"
+    (let [ops [["move" {:block-uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02" :epoch 1}]
+               ["update" {:block-uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02" :epoch 2
+                          :updated-attrs {:content nil}}]
+               ["update" {:block-uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02" :epoch 4
+                          :updated-attrs {:type {:add #{"type2" "type3"} :retract #{"type1"}}}}]
+               ["update" {:block-uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02" :epoch 3
+                          :updated-attrs {:type {:add #{"type1"}}}}]]
+          {:keys [block-uuid->ops epoch->block-uuid-sorted-map]}
+          (op-layer/add-ops-to-block-uuid->ops (op-layer/ops-coercer ops) {} (sorted-map-by <))]
+      (is (= [{#uuid"f639f13e-ef6f-4ba5-83b4-67527d27cd02"
+               {:move
+                ["move" {:block-uuid #uuid"f639f13e-ef6f-4ba5-83b4-67527d27cd02", :epoch 1}],
+                :update
+                ["update" {:block-uuid #uuid"f639f13e-ef6f-4ba5-83b4-67527d27cd02",
+                           :updated-attrs
+                           {:content nil, :type {:add #{"type2" "type3"}, :retract #{"type1"}}},
+                           :epoch 4}]}}
+              {1 #uuid"f639f13e-ef6f-4ba5-83b4-67527d27cd02"}]
+             [block-uuid->ops epoch->block-uuid-sorted-map])))))
+
+
+(deftest process-test
+  (let [repo "process-test"
+        ops1 [["move" {:block-uuid "f4abd682-fb9e-4f1a-84bf-5fe11fe7844b" :epoch 1}]
+              ["move" {:block-uuid "8e6d8355-ded7-4500-afaa-6f721f3b0dc6" :epoch 2}]]
+        ops2 [["update" {:block-uuid "f4abd682-fb9e-4f1a-84bf-5fe11fe7844b" :epoch 3
+                         :updated-attrs {:content nil}}]]
+        ops3 [["update" {:block-uuid "f4abd682-fb9e-4f1a-84bf-5fe11fe7844b" :epoch 4
+                         :updated-attrs {:type {:add #{"type1"}}}}]]]
+    (op-layer/init-empty-ops-store! repo)
+    (op-layer/new-branch! repo)
+    (let [{:keys [current-branch old-branch]} (@@#'op-layer/*ops-store repo)]
+      (is (= current-branch old-branch)))
+    (op-layer/add-ops! repo ops1)
+    (op-layer/add-ops! repo ops2)
+    (op-layer/update-local-tx! repo 10)
+    (op-layer/update-graph-uuid! repo "b82c6c92-2d0f-4214-9411-3e9bdc2cefa6")
+    (let [{:keys [current-branch old-branch]} (@@#'op-layer/*ops-store repo)]
+      (is (not= (:local-tx current-branch) (:local-tx old-branch)))
+      (is (= {#uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b"
+              {:move
+               ["move"
+                {:block-uuid #uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b", :epoch 1}],
+               :update
+               ["update"
+                {:block-uuid #uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b",
+                 :epoch 3,
+                 :updated-attrs {:content nil}}]},
+              #uuid"8e6d8355-ded7-4500-afaa-6f721f3b0dc6"
+              {:move
+               ["move"
+                {:block-uuid #uuid"8e6d8355-ded7-4500-afaa-6f721f3b0dc6", :epoch 2}]}}
+             (:block-uuid->ops current-branch)))
+      (is (= {1 #uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b" 2 #uuid"8e6d8355-ded7-4500-afaa-6f721f3b0dc6"}
+             (:epoch->block-uuid-sorted-map current-branch))))
+    (let [min-epoch-block-ops (op-layer/get-min-epoch-block-ops repo)]
+      (is (= {:ops {:move ["move" {:block-uuid #uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b", :epoch 1}]
+                    :update ["update" {:block-uuid #uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b", :epoch 3,
+                                       :updated-attrs {:content nil}}]}
+              :block-uuid #uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b"}
+             min-epoch-block-ops)))
+    (op-layer/remove-block-ops! repo #uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b")
+    (let [{:keys [current-branch]} (@@#'op-layer/*ops-store repo)]
+      (is (= {#uuid"8e6d8355-ded7-4500-afaa-6f721f3b0dc6"
+              {:move ["move" {:block-uuid #uuid"8e6d8355-ded7-4500-afaa-6f721f3b0dc6", :epoch 2}]}}
+             (:block-uuid->ops current-branch)))
+      (is (= {2 #uuid"8e6d8355-ded7-4500-afaa-6f721f3b0dc6"}
+             (:epoch->block-uuid-sorted-map current-branch))))
+    (op-layer/add-ops! repo ops3)
+    (let [{:keys [current-branch old-branch]} (@@#'op-layer/*ops-store repo)]
+      (is (= {#uuid"8e6d8355-ded7-4500-afaa-6f721f3b0dc6"
+              {:move
+               ["move"
+                {:block-uuid #uuid"8e6d8355-ded7-4500-afaa-6f721f3b0dc6", :epoch 2}]},
+              #uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b"
+              {:update
+               ["update"
+                {:block-uuid #uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b",
+                 :epoch 4,
+                 :updated-attrs {:type {:add #{"type1"}}}}]}}
+             (:block-uuid->ops current-branch)))
+      (is (= {2 #uuid"8e6d8355-ded7-4500-afaa-6f721f3b0dc6"
+              4 #uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b"}
+             (:epoch->block-uuid-sorted-map current-branch)))
+      (is (= {#uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b"
+              {:move
+               ["move"
+                {:block-uuid #uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b", :epoch 1}],
+               :update
+               ["update"
+                {:block-uuid #uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b",
+                 :updated-attrs
+                 {:content nil, :type {:add #{"type1"}}},
+                 :epoch 4}]},
+              #uuid"8e6d8355-ded7-4500-afaa-6f721f3b0dc6"
+              {:move
+               ["move"
+                {:block-uuid #uuid"8e6d8355-ded7-4500-afaa-6f721f3b0dc6", :epoch 2}]}}
+             (:block-uuid->ops old-branch)))
+      (is (= {1 #uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b"
+              2 #uuid"8e6d8355-ded7-4500-afaa-6f721f3b0dc6"}
+             (:epoch->block-uuid-sorted-map old-branch)))
+      (op-layer/rollback! repo)
+      (let [{current-branch* :current-branch} (@@#'op-layer/*ops-store repo)]
+        (is (= current-branch* old-branch))))
+    (op-layer/remove-ops-store! repo)))
+
+
+
+(deftest load-from&sync-to-idb-test
+  (t/async
+   done
+   (idb-keyval-mock/with-reset-idb-keyval-mock reset
+     (go
+       (let [repo "load-from&sync-to-idb-test"
+             ops [["move" {:block-uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02" :epoch 1}]
+                  ["update" {:block-uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02" :epoch 2
+                             :updated-attrs {:content nil}}]
+                  ["update" {:block-uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02" :epoch 4
+                             :updated-attrs {:type {:add #{"type2" "type3"} :retract #{"type1"}}}}]
+                  ["update" {:block-uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02" :epoch 3
+                             :updated-attrs {:type {:add #{"type1"}}
+                                             :tags {:add #{#uuid "b0bed412-ad52-4d87-8a08-80ac537e1b61"}}}}]]]
+         (swap! op-idb-layer/stores dissoc repo)
+         (op-layer/init-empty-ops-store! repo)
+         (op-layer/add-ops! repo ops)
+         (let [repo-ops-store1 (@@#'op-layer/*ops-store repo)]
+           (<! (op-layer/<sync-to-idb-layer! repo))
+           (op-layer/remove-ops-store! repo)
+           (<! (p->c (op-layer/<init-load-from-indexeddb! repo)))
+           (let [repo-ops-store2 (@@#'op-layer/*ops-store repo)]
+             (is (= {:current-branch
+                     {:block-uuid->ops
+                      {#uuid"f639f13e-ef6f-4ba5-83b4-67527d27cd02"
+                       {:move
+                        ["move"
+                         {:epoch 1, :block-uuid #uuid"f639f13e-ef6f-4ba5-83b4-67527d27cd02"}],
+                        :update
+                        ["update"
+                         {:block-uuid #uuid"f639f13e-ef6f-4ba5-83b4-67527d27cd02",
+                          :updated-attrs
+                          {:content nil,
+                           :type {:add #{"type3" "type2"}, :retract #{"type1"}}
+                           :tags {:add #{#uuid "b0bed412-ad52-4d87-8a08-80ac537e1b61"}}},
+                          :epoch 4}]}},
+                      :epoch->block-uuid-sorted-map
+                      {1 #uuid"f639f13e-ef6f-4ba5-83b4-67527d27cd02"}}}
+                    repo-ops-store1))
+             (is (= repo-ops-store1 repo-ops-store2)))))
+       (reset)
+       (done)))))

@@ -6,9 +6,11 @@
 (defmacro with-reset-idb-keyval-mock
   [reset & body]
   `(test-helper/with-reset ~reset
-     [idb-keyval/set frontend.db.rtc.idb-keyval-mock/set
-      idb-keyval/get frontend.db.rtc.idb-keyval-mock/get
-      idb-keyval/del frontend.db.rtc.idb-keyval-mock/del
-      idb-keyval/keys frontend.db.rtc.idb-keyval-mock/keys
+     [idb-keyval/set      frontend.db.rtc.idb-keyval-mock/set
+      idb-keyval/setBatch frontend.db.rtc.idb-keyval-mock/set-batch
+      idb-keyval/get      frontend.db.rtc.idb-keyval-mock/get
+      idb-keyval/del      frontend.db.rtc.idb-keyval-mock/del
+      idb-keyval/keys     frontend.db.rtc.idb-keyval-mock/keys
+      idb-keyval/clear    frontend.db.rtc.idb-keyval-mock/clear
       idb-keyval/newStore frontend.db.rtc.idb-keyval-mock/new-store]
      ~@body))

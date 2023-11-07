@@ -36,7 +36,8 @@
             [logseq.common.path :as path]
             [logseq.common.config :as common-config]
             [frontend.db.react :as react]
-            [frontend.db.listener :as db-listener]))
+            [frontend.db.listener :as db-listener]
+            [frontend.db.rtc.op-mem-layer :as op-mem-layer]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -405,6 +406,7 @@
   [repo]
   (p/do!
    (state/set-db-restoring! true)
+   (op-mem-layer/<init-load-from-indexeddb! repo)
    (db-restore/restore-graph! repo)
    (repo-config-handler/restore-repo-config! repo)
    (when (config/global-config-enabled?)
@@ -540,6 +542,7 @@
 
 (defn- create-db [full-graph-name]
   (p/let [_ (persist-db/<new full-graph-name)
+          _ (op-mem-layer/<init-load-from-indexeddb! full-graph-name)
           _ (start-repo-db-if-not-exists! full-graph-name)
           _ (state/add-repo! {:url full-graph-name})
           _ (route-handler/redirect-to-home!)

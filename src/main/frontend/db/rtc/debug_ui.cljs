@@ -4,16 +4,16 @@
    [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [cljs.core.async :as async :refer [<! go]]
             [fipp.edn :as fipp]
+            [frontend.db :as db]
             [frontend.db.rtc.core :as rtc-core]
             [frontend.db.rtc.full-upload-download-graph :as full-upload-download-graph]
-            [frontend.db.rtc.op :as op]
+            [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.db.rtc.ws :as ws]
             [frontend.handler.notification :as notification]
             [frontend.handler.user :as user]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.db :as db]
             [rum.core :as rum]))
 
 (defonce debug-state (atom nil))
@@ -31,7 +31,7 @@
          (<! (<start-rtc state repo))))))
   ([state repo]
    (go
-     (if-let [graph-uuid (<! (op/<get-graph-uuid repo))]
+     (if-let [graph-uuid (op-mem-layer/get-graph-uuid repo)]
        (do (reset! debug-state state)
            (<! (rtc-core/<loop-for-rtc state graph-uuid repo))
            state)
@@ -64,7 +64,7 @@
   rum/reactive
   (rum/local nil ::graph-uuid)
   (rum/local nil ::local-tx)
-  (rum/local nil ::ops)
+  (rum/local nil ::unpushed-block-update-count)
   (rum/local nil ::ws-state)
   (rum/local nil ::download-graph-to-repo)
   (rum/local nil ::remote-graphs)
@@ -82,10 +82,11 @@
                  :on-click (fn [_]
                              (go
                                (let [repo (state/get-current-repo)
-                                     {:keys [local-tx ops]} (<! (op/<get-ops&local-tx repo))
-                                     graph-uuid (<! (op/<get-graph-uuid repo))]
+                                     local-tx (op-mem-layer/get-local-tx repo)
+                                     unpushed-block-update-count (op-mem-layer/get-unpushed-block-update-count repo)
+                                     graph-uuid (op-mem-layer/get-graph-uuid repo)]
                                  (reset! (::local-tx state) local-tx)
-                                 (reset! (::ops state) (count ops))
+                                 (reset! (::unpushed-block-update-count state) unpushed-block-update-count)
                                  (reset! (::graph-uuid state) graph-uuid)
                                  (reset! (::ws-state state) (and s (ws/get-state @(:*ws s))))
                                  (reset! (::auto-push-updates? state) (and s @(:*auto-push-client-ops? s)))))))
@@ -107,7 +108,7 @@
            :rtc-state rtc-state
            :ws (and s (ws/get-state @(:*ws s)))
            :local-tx @(::local-tx state)
-           :pending-ops @(::ops state)
+           :pending-block-update-count @(::unpushed-block-update-count state)
            :remote-graphs @(::remote-graphs state)
            :auto-push-updates? @(::auto-push-updates? state)
            :current-page (state/get-current-page)

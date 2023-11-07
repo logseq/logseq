@@ -46,7 +46,8 @@
             [frontend.mobile.core :as mobile]
             [frontend.db.listener :as db-listener]
             [cljs-bean.core :as bean]
-            [frontend.handler.test :as test]))
+            [frontend.handler.test :as test]
+            [frontend.db.rtc.op-mem-layer :as op-mem-layer]))
 
 (defn- set-global-error-notification!
   []
@@ -85,9 +86,10 @@
 (defn restore-and-setup!
   [repos]
   (when-let [repo (or (state/get-current-repo) (:url (first repos)))]
-    (-> (db-restore/restore-graph! repo)
+    (-> (op-mem-layer/<init-load-from-indexeddb! repo)
         (p/then
          (fn []
+           (db-restore/restore-graph! repo)
            (db-listener/listen-and-persist! repo)
            ;; try to load custom css only for current repo
            (ui-handler/add-style-if-exists!)

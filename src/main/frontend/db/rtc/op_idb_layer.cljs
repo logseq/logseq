@@ -1,0 +1,44 @@
+(ns frontend.db.rtc.op-idb-layer
+  (:require ["/frontend/idbkv" :as idb-keyval]
+            [cljs.core.async.interop :refer [p->c]]
+            [promesa.core :as p]))
+
+(def stores (atom {}))
+
+(defn- ensure-store
+  [repo]
+  {:pre [(some? repo)]}
+  (if-let [s (@stores repo)]
+    s
+    (do (swap! stores assoc repo (idb-keyval/newStore (str "rtc-ops-" repo) "ops"))
+        (@stores repo))))
+
+
+(defn- ops=>idb-items
+  [ops]
+  (keep
+   (fn [op]
+     (when-let [key (:epoch (second op))]
+       {:key key :value op}))
+   ops))
+
+(defn <reset!
+  [repo ops graph-uuid local-tx]
+  (p->c
+   (let [store (ensure-store repo)
+         idb-items (ops=>idb-items ops)]
+     (p/do!
+      (idb-keyval/clear store)
+      (idb-keyval/setBatch (clj->js idb-items) store)
+      (when graph-uuid
+        (idb-keyval/set "graph-uuid" graph-uuid store))
+      (when local-tx
+        (idb-keyval/set "local-tx" local-tx store))))))
+
+
+(defn <read
+  [repo]
+  (p/let [store (ensure-store repo)
+          idb-keys (idb-keyval/keys store)]
+    (-> (p/all (mapv (fn [k] (p/chain (idb-keyval/get k store) (partial vector k))) idb-keys))
+        (p/then (fn [items] (mapv #(js->clj % :keywordize-keys true) items))))))

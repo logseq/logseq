@@ -9,7 +9,7 @@
             [cognitect.transit :as transit]
             [frontend.db :as db]
             [frontend.db.rtc.const :as rtc-const]
-            [frontend.db.rtc.op :as op]
+            [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.db.rtc.ws :as ws]
             [frontend.handler.page :as page-handler]
             [frontend.handler.user :as user]
@@ -18,7 +18,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [malli.core :as m]
-            [malli.util :as mu]))
+            [malli.util :as mu]
+            [spy.core :as spy]))
 
 
 ;;                     +-------------+
@@ -296,22 +297,20 @@
 (defn filter-remote-data-by-local-unpushed-ops
   "when remote-data request client to move/update/remove/... blocks,
   these updates maybe not needed, because this client just updated some of these blocks,
-  so we need to filter these just-updated blocks out, according to the unpushed-local-ops in indexeddb"
+  so we need to filter these just-updated blocks out, according to the unpushed-local-ops"
   [affected-blocks-map local-unpushed-ops]
+  ;; (assert (op-mem-layer/ops-coercer local-unpushed-ops) local-unpushed-ops)
   (reduce
    (fn [affected-blocks-map local-op]
      (case (first local-op)
        "move"
-       (let [block-uuids (:block-uuids (second local-op))
-             remote-ops (vals (select-keys affected-blocks-map block-uuids))]
-         (reduce
-          (fn [r remote-op]
-            (case (:op remote-op)
-              :remove (dissoc r (:block-uuid remote-op))
-              :move (dissoc r (:self remote-op))
-              ;; default
-              r))
-          affected-blocks-map remote-ops))
+       (let [block-uuid (:block-uuid (second local-op))
+             remote-op (get affected-blocks-map block-uuid)]
+         (case (:op remote-op)
+           :remove (dissoc affected-blocks-map (:block-uuid remote-op))
+           :move (dissoc affected-blocks-map (:self remote-op))
+           ;; default
+           affected-blocks-map))
 
        "update"
        (let [block-uuid (:block-uuid (second local-op))
@@ -328,12 +327,12 @@
 
 
 (defn <apply-remote-data
-  [repo data-from-ws & {:keys [max-pushed-op-key]}]
+  [repo data-from-ws]
   (assert (rtc-const/data-from-ws-validator data-from-ws) data-from-ws)
   (go
     (let [remote-t (:t data-from-ws)
           remote-t-before (:t-before data-from-ws)
-          {:keys [local-tx ops]} (<! (op/<get-ops&local-tx repo))]
+          local-tx (op-mem-layer/get-local-tx repo)]
       (cond
         (not (and (pos? remote-t)
                   (pos? remote-t-before)))
@@ -348,8 +347,7 @@
 
         (<= remote-t-before local-tx remote-t)
         (let [affected-blocks-map (:affected-blocks data-from-ws)
-              unpushed-ops (when max-pushed-op-key
-                             (keep (fn [[key op]] (when (> key max-pushed-op-key) op)) ops))
+              unpushed-ops (op-mem-layer/get-all-ops repo)
               affected-blocks-map* (if unpushed-ops
                                      (filter-remote-data-by-local-unpushed-ops
                                       affected-blocks-map unpushed-ops)
@@ -369,7 +367,7 @@
           (util/profile :apply-remote-move-ops (apply-remote-move-ops repo sorted-move-ops))
           (util/profile :apply-remote-update-ops (apply-remote-update-ops repo update-ops))
           (util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo remove-page-ops))
-          (<! (op/<update-local-tx! repo remote-t)))
+          (op-mem-layer/update-local-tx! repo remote-t))
         :else (throw (ex-info "unreachable" {:remote-t remote-t
                                              :remote-t-before remote-t-before
                                              :local-t local-tx}))))))
@@ -383,206 +381,179 @@
         r))))
 
 
-(defn- ^:large-vars/cleanup-todo local-ops->remote-ops
-  [repo sorted-ops _verbose?]
-  (let [[remove-block-uuid-set move-block-uuid-set update-page-uuid-set remove-page-uuid-set update-block-uuid->attrs]
-        (reduce
-         (fn [[remove-block-uuid-set move-block-uuid-set update-page-uuid-set
-               remove-page-uuid-set update-block-uuid->attrs]
-              op]
-           (case (first op)
-             "move"
-             (let [block-uuids (set (:block-uuids (second op)))
-                   move-block-uuid-set (set/union move-block-uuid-set block-uuids)
-                   remove-block-uuid-set (set/difference remove-block-uuid-set block-uuids)]
-               [remove-block-uuid-set move-block-uuid-set update-page-uuid-set
-                remove-page-uuid-set update-block-uuid->attrs])
+(defn- remove-non-exist-block-uuids-in-add-retract-map
+  [repo add-retract-map]
+  (let [{:keys [add retract]} add-retract-map
+        add* (->> add
+                  (map (fn [x] [:block/uuid x]))
+                  (db/pull-many repo [:block/uuid])
+                  (keep :block/uuid))]
+    (cond-> {}
+      (seq add*) (assoc :add add*)
+      (seq retract) (assoc :retract retract))))
 
-             "remove"
-             (let [block-uuids (set (:block-uuids (second op)))
-                   move-block-uuid-set (set/difference move-block-uuid-set block-uuids)
-                   remove-block-uuid-set (set/union remove-block-uuid-set block-uuids)]
-               [remove-block-uuid-set move-block-uuid-set update-page-uuid-set
-                remove-page-uuid-set update-block-uuid->attrs])
+(defn- local-block-ops->remote-ops*
+  [repo block-ops]
+  (let [*depend-on-block-uuid-set (atom #{})
+        *remote-ops (atom [])
+        {move-op :move remove-op :remove update-op :update update-page-op :update-page remove-page-op :remove-page}
+        block-ops]
+    (when-let [block-uuid
+               (some (comp :block-uuid second) [move-op update-op update-page-op])]
+      (when-let [block (db/pull repo
+                                '[{:block/left [:block/uuid]} {:block/parent [:block/uuid]} *]
+                                [:block/uuid block-uuid])]
+        (let [left-uuid (some-> block :block/left :block/uuid)
+              parent-uuid (some-> block :block/parent :block/uuid)]
+          (when (and left-uuid parent-uuid)
+            ;; remote-move-op
+            (when move-op
+              (swap! *remote-ops conj
+                     [:move {:block-uuid block-uuid :target-uuid left-uuid :sibling? (not= left-uuid parent-uuid)}])
+              (swap! *depend-on-block-uuid-set conj left-uuid))
 
-             "update-page"
-             (let [block-uuid (:block-uuid (second op))
-                   update-page-uuid-set (conj update-page-uuid-set block-uuid)]
-               [remove-block-uuid-set move-block-uuid-set update-page-uuid-set
-                remove-page-uuid-set update-block-uuid->attrs])
+            ;; remote-update-op
+            (when update-op
+              (let [attr-map (:updated-attrs (second update-op))
+                    attr-alias-map (when (contains? attr-map :alias)
+                                     (remove-non-exist-block-uuids-in-add-retract-map repo (:alias attr-map)))
+                    attr-tags-map (when (contains? attr-map :tags)
+                                    (remove-non-exist-block-uuids-in-add-retract-map repo (:tags attr-map)))
+                    attr-type-map (when (contains? attr-map :type)
+                                    (let [{:keys [add retract]} (:type attr-map)
+                                          current-type-value (set (:block/type block))
+                                          add (set/intersection add current-type-value)
+                                          retract (set/difference retract current-type-value)]
+                                      (cond-> {}
+                                        (seq add)     (assoc :add add)
+                                        (seq retract) (assoc :retract retract))))
+                    attr-properties-map (when (contains? attr-map :properties)
+                                          (let [{:keys [add retract]} (:properties attr-map)
+                                                properties (:block/properties block)
+                                                add* (into []
+                                                           (update-vals (select-keys properties add)
+                                                                        (partial transit/write transit-w)))]
+                                            (cond-> {}
+                                              (seq add*) (assoc :add add*)
+                                              (seq retract) (assoc :retract retract))))]
+                (swap! *remote-ops conj
+                       [:update
+                        (cond-> {:block-uuid block-uuid}
+                          (:block/updated-at block)       (assoc :updated-at (:block/updated-at block))
+                          (:block/created-at block)       (assoc :created-at (:block/created-at block))
+                          (contains? attr-map :schema)    (assoc :schema
+                                                                 (transit/write transit-w (:block/schema block)))
+                          attr-alias-map               (assoc :alias attr-alias-map)
+                          attr-type-map (assoc :type attr-type-map)
+                          attr-tags-map (assoc :tags attr-tags-map)
+                          attr-properties-map (assoc :properties attr-properties-map)
+                          (and (contains? attr-map :content)
+                               (:block/content block)) (assoc :content (:block/content block))
+                          true (assoc :target-uuid left-uuid
+                                      :sibling? (not= left-uuid parent-uuid)))])))))
+        ;; remote-update-page-op
+        (when update-page-op
+          (when-let [{page-name :block/name
+                      original-name :block/original-name}
+                     (db/pull repo [:block/name :block/original-name] [:block/uuid block-uuid])]
+            (swap! *remote-ops conj
+                   [:update-page {:block-uuid block-uuid
+                                  :page-name page-name
+                                  :original-name (or original-name page-name)}])))))
+    ;; remote-remove-op
+    (when remove-op
+      (when-let [block-uuid (:block-uuid (second remove-op))]
+        (when (nil? (db/pull repo [:block/uuid] [:block/uuid block-uuid]))
+          (swap! *remote-ops conj [:remove {:block-uuids [block-uuid]}]))))
 
-             "remove-page"
-             (let [block-uuid (:block-uuid (second op))
-                   remove-page-uuid-set (conj remove-page-uuid-set block-uuid)]
-               [remove-block-uuid-set move-block-uuid-set update-page-uuid-set
-                remove-page-uuid-set update-block-uuid->attrs])
+    ;; remote-remove-page-op
+    (when remove-page-op
+      (when-let [block-uuid (:block-uuid (second remove-page-op))]
+        (when (nil? (db/pull repo [:block/uuid] [:block/uuid block-uuid]))
+          (swap! *remote-ops conj [:remove-page {:block-uuid block-uuid}]))))
 
-             "update"
-             (let [{:keys [block-uuid updated-attrs]} (second op)
-                   attr-map (update-block-uuid->attrs block-uuid)
-                   {{old-alias-add :add old-alias-retract :retract} :alias
-                    {old-tags-add :add old-tags-retract :retract}   :tags
-                    {old-type-add :add old-type-retract :retract}   :type
-                    {old-prop-add :add old-prop-retract :retract}   :properties} attr-map
-                   {{new-alias-add :add new-alias-retract :retract} :alias
-                    {new-tags-add :add new-tags-retract :retract}   :tags
-                    {new-type-add :add new-type-retract :retract}   :type
-                    {new-prop-add :add new-prop-retract :retract}   :properties} updated-attrs
-                   new-attr-map
-                   (cond-> (merge (select-keys updated-attrs [:content :schema])
-                                  (select-keys attr-map [:content :schema]))
-                     ;; alias
-                     (or old-alias-add new-alias-add)
-                     (assoc-in [:alias :add] (set/union old-alias-add new-alias-add))
-                     (or old-alias-retract new-alias-retract)
-                     (assoc-in [:alias :retract] (set/difference (set/union old-alias-retract new-alias-retract)
-                                                                 old-alias-add new-alias-add))
-                     ;; tags
-                     (or old-tags-add new-tags-add)
-                     (assoc-in [:tags :add] (set/union old-tags-add new-tags-add))
-                     (or old-tags-retract new-tags-retract)
-                     (assoc-in [:tags :retract] (set/difference (set/union old-tags-retract new-tags-retract)
-                                                                old-tags-add new-tags-add))
-                     ;; type
-                     (or old-type-add new-type-add)
-                     (assoc-in [:type :add] (set/union old-type-add new-type-add))
-                     (or old-type-retract new-type-retract)
-                     (assoc-in [:type :retract] (set/difference (set/union old-type-retract new-type-retract)
-                                                                old-type-add new-type-retract))
+    {:remote-ops @*remote-ops
+     :depend-on-block-uuids @*depend-on-block-uuid-set}))
+(def local-block-ops->remote-ops (spy/spy local-block-ops->remote-ops*))
 
-                     ;; properties
-                     (or old-prop-add new-prop-add)
-                     (assoc-in [:properties :add] (set/union old-prop-add new-prop-add))
-                     (or old-prop-retract new-prop-retract)
-                     (assoc-in [:properties :retract] (set/difference (set/union old-prop-retract new-prop-retract)
-                                                                      old-prop-add new-prop-retract)))
-                   update-block-uuid->attrs (assoc update-block-uuid->attrs block-uuid new-attr-map)]
-               [remove-block-uuid-set move-block-uuid-set update-page-uuid-set
-                remove-page-uuid-set update-block-uuid->attrs])
-             (throw (ex-info "unknown op type" op))))
-         [#{} #{} #{} #{} {}] sorted-ops)
-        move-ops (keep
-                  (fn [block-uuid]
-                    (when-let [block (db/pull repo '[{:block/left [:block/uuid]}
-                                                     {:block/parent [:block/uuid]}]
-                                              [:block/uuid (uuid block-uuid)])]
-                      (let [left-uuid (some-> block :block/left :block/uuid str)
-                            parent-uuid (some-> block :block/parent :block/uuid str)]
-                        (when (and left-uuid parent-uuid)
-                          [:move
-                           {:block-uuid block-uuid :target-uuid left-uuid :sibling? (not= left-uuid parent-uuid)}]))))
-                  move-block-uuid-set)
-        remove-block-uuid-set
-        (filter (fn [block-uuid] (nil? (db/pull [:block/uuid] repo [:block/uuid (uuid block-uuid)]))) remove-block-uuid-set)
-        remove-ops (when (seq remove-block-uuid-set) [[:remove {:block-uuids remove-block-uuid-set}]])
-        update-page-ops (keep (fn [block-uuid]
-                                (when-let [{page-name :block/name
-                                            original-name :block/original-name}
-                                           (db/pull repo [:block/name :block/original-name] [:block/uuid (uuid block-uuid)])]
-                                  [:update-page {:block-uuid block-uuid
-                                                 :page-name page-name
-                                                 :original-name (or original-name page-name)}]))
-                              update-page-uuid-set)
-        remove-page-ops (keep (fn [block-uuid]
-                                (when (nil? (db/pull repo [:block/uuid] [:block/uuid (uuid block-uuid)]))
-                                  [:remove-page {:block-uuid block-uuid}]))
-                              remove-page-uuid-set)
-        update-ops (keep (fn [[block-uuid attr-map]]
-                           (when-let [b (db/pull repo '[{:block/left [:block/uuid]}
-                                                        {:block/parent [:block/uuid]}
-                                                        *]
-                                                 [:block/uuid (uuid block-uuid)])]
-                             (let [key-set (set (keys attr-map))
-                                   left-uuid (some-> b :block/left :block/uuid str)
-                                   parent-uuid (some-> b :block/parent :block/uuid str)
-                                   attr-alias-map (when (contains? key-set :alias)
-                                                    (let [{:keys [add retract]} (:alias attr-map)
-                                                          add-uuids (->> add
-                                                                         (map (fn [x] [:block/uuid x]))
-                                                                         (db/pull-many repo [:block/uuid])
-                                                                         (keep :block/uuid)
-                                                                         (map str))
-                                                          retract-uuids (map str retract)]
-                                                      (cond-> {}
-                                                        (seq add-uuids)     (assoc :add add-uuids)
-                                                        (seq retract-uuids) (assoc :retract retract-uuids))))
-                                   attr-type-map (when (contains? key-set :type)
-                                                   (let [{:keys [add retract]} (:type attr-map)
-                                                         current-type-value (set (:block/type b))
-                                                         add (set/intersection add current-type-value)
-                                                         retract (set/difference retract current-type-value)]
-                                                     (cond-> {}
-                                                       (seq add)     (assoc :add add)
-                                                       (seq retract) (assoc :retract retract))))
-                                   attr-tags-map (when (contains? key-set :tags)
-                                                   (let [{:keys [add retract]} (:tags attr-map)
-                                                         add-uuids (->> add
-                                                                        (map (fn [x] [:block/uuid x]))
-                                                                        (db/pull-many repo [:block/uuid])
-                                                                        (keep :block/uuid)
-                                                                        (map str))
-                                                         retract-uuids (map str retract)]
-                                                     (cond-> {}
-                                                       (seq add-uuids) (assoc :add add-uuids)
-                                                       (seq retract-uuids) (assoc :retract retract-uuids))))
-                                   attr-properties-map (when (contains? key-set :properties)
-                                                         (let [{:keys [add retract]} (:properties attr-map)
-                                                               properties (:block/properties b)
-                                                               add* (into []
-                                                                          (update-vals (select-keys properties add)
-                                                                                       (partial transit/write transit-w)))]
-                                                           (cond-> {}
-                                                             (seq add*)    (assoc :add add*)
-                                                             (seq retract) (assoc :retract retract))))]
+(defn gen-block-uuid->remote-ops
+  [repo & {:keys [n] :or {n 50}}]
+  (loop [current-handling-block-ops nil
+         current-handling-block-uuid nil
+         depend-on-block-uuid-coll nil
+         r {}]
+    (cond
+      (and (empty? current-handling-block-ops)
+           (empty? depend-on-block-uuid-coll)
+           (>= (count r) n))
+      r
 
-                               [:update
-                                (cond-> {:block-uuid block-uuid}
-                                  (:block/updated-at b)       (assoc :updated-at (:block/updated-at b))
-                                  (:block/created-at b)       (assoc :created-at (:block/created-at b))
-                                  (contains? key-set :schema) (assoc :schema (transit/write transit-w (:block/schema b)))
-                                  attr-type-map               (assoc :type attr-type-map)
-                                  attr-alias-map              (assoc :alias attr-alias-map)
-                                  attr-tags-map               (assoc :tags attr-tags-map)
-                                  attr-properties-map         (assoc :properties attr-properties-map)
-                                  (and (contains? key-set :content)
-                                       (:block/content b))    (assoc :content (:block/content b))
-                                  (and left-uuid parent-uuid) (assoc :target-uuid left-uuid
-                                                                     :sibling? (not= left-uuid parent-uuid)))])))
-                         update-block-uuid->attrs)]
-    [update-page-ops remove-ops move-ops update-ops remove-page-ops]))
+      (and (empty? current-handling-block-ops)
+           (empty? depend-on-block-uuid-coll))
+      (if-let [{min-epoch-block-ops :ops block-uuid :block-uuid} (op-mem-layer/get-min-epoch-block-ops repo)]
+        (do (assert (not (contains? r block-uuid)) {:r r :block-uuid block-uuid})
+            (op-mem-layer/remove-block-ops! repo block-uuid)
+            (recur min-epoch-block-ops block-uuid depend-on-block-uuid-coll r))
+        ;; finish
+        r)
 
-(defn- <get-N-ops
-  [repo n]
-  (go
-    (let [{:keys [ops local-tx]} (<! (op/<get-ops&local-tx repo))
-          ops (take n ops)
-          op-keys (map first ops)
-          ops (map second ops)
-          max-op-key (apply max op-keys)]
-      {:ops ops :op-keys op-keys :max-op-key max-op-key :local-tx local-tx})))
+      (and (empty? current-handling-block-ops)
+           (seq depend-on-block-uuid-coll))
+      (let [[block-uuid & other-block-uuids] depend-on-block-uuid-coll
+            block-ops (op-mem-layer/get-block-ops repo block-uuid)]
+        (op-mem-layer/remove-block-ops! repo block-uuid)
+        (recur block-ops block-uuid other-block-uuids r))
 
-(def ^:private size-30kb (* 30 1024))
+      (seq current-handling-block-ops)
+      (let [{:keys [remote-ops depend-on-block-uuids]}
+            (local-block-ops->remote-ops repo current-handling-block-ops)]
+        (recur nil nil
+               (set/union (set depend-on-block-uuid-coll)
+                          (op-mem-layer/intersection-block-uuids repo depend-on-block-uuids))
+               (assoc r current-handling-block-uuid (into {} remote-ops)))))))
 
-(defn- <gen-remote-ops-<30kb
-  [repo & n]
-  (go
-    (let [n (or n 100)
-          {:keys [ops local-tx op-keys max-op-key]} (<! (<get-N-ops repo n))
-          ops-for-remote (apply concat (local-ops->remote-ops repo ops nil))
-          ops-for-remote-str (-> ops-for-remote
-                                 rtc-const/data-to-ws-decoder
-                                 rtc-const/data-to-ws-encoder
-                                 clj->js
-                                 js/JSON.stringify)
-          size (.-size (js/Blob. [ops-for-remote-str]))]
-      (if (<= size size-30kb)
-        {:ops-for-remote ops-for-remote
-         :local-tx local-tx
-         :op-keys op-keys
-         :max-op-key max-op-key}
-        (let [n* (int (/ n (/ size size-30kb)))]
-          (assert (pos? n*) {:n* n :n n :size size})
-          (<! (<gen-remote-ops-<30kb repo n*)))))))
+(defn sort-remote-ops
+  [block-uuid->remote-ops]
+  (let [block-uuid->dep-uuid
+        (into {}
+              (keep (fn [[block-uuid remote-ops]]
+                      (when-let [move-op (get remote-ops :move)]
+                        [block-uuid (:target-uuid move-op)])))
+              block-uuid->remote-ops)
+        all-move-uuids (set (keys block-uuid->dep-uuid))
+        sorted-uuids
+        (loop [r []
+               rest-uuids all-move-uuids
+               uuid (first rest-uuids)]
+          (if-not uuid
+            r
+            (let [dep-uuid (block-uuid->dep-uuid uuid)]
+              (if-let [next-uuid (get rest-uuids dep-uuid)]
+                (recur r rest-uuids next-uuid)
+                (let [rest-uuids* (disj rest-uuids uuid)]
+                  (recur (conj r uuid) rest-uuids* (first rest-uuids*)))))))
+        sorted-move-ops (keep
+                         (fn [block-uuid]
+                           (some->> (get-in block-uuid->remote-ops [block-uuid :move])
+                                    (vector :move)))
+                         sorted-uuids)
+        remove-ops (keep
+                    (fn [[_ remote-ops]]
+                      (some->> (:remove remote-ops) (vector :remove)))
+                    block-uuid->remote-ops)
+        update-ops (keep
+                    (fn [[_ remote-ops]]
+                      (some->> (:update remote-ops) (vector :update)))
+                    block-uuid->remote-ops)
+        update-page-ops (keep
+                         (fn [[_ remote-ops]]
+                           (some->> (:update-page remote-ops) (vector :update-page)))
+                         block-uuid->remote-ops)
+        remove-page-ops (keep
+                         (fn [[_ remote-ops]]
+                           (some->> (:remove-page remote-ops) (vector :remove-page)))
+                         block-uuid->remote-ops)]
+    (concat update-page-ops remove-ops sorted-move-ops update-ops remove-page-ops)))
 
 
 (defn- <client-op-update-handler
@@ -591,7 +562,9 @@
          (some? @(:*repo state))]}
   (go
     (let [repo @(:*repo state)
-          {:keys [ops-for-remote local-tx op-keys max-op-key]} (<! (<gen-remote-ops-<30kb repo))
+          _ (op-mem-layer/new-branch! repo)
+          ops-for-remote (sort-remote-ops (gen-block-uuid->remote-ops repo))
+          local-tx (op-mem-layer/get-local-tx repo)
           r (with-sub-data-from-ws state
               (<! (ws/<send! state {:req-id (get-req-id)
                                     :action "apply-ops" :graph-uuid @(:*graph-uuid state)
@@ -603,18 +576,20 @@
           ;; and try to send ops later
           "graph-lock-failed"
           (do (prn :graph-lock-failed)
+              (op-mem-layer/rollback! repo)
               nil)
           ;; this case means something wrong in remote-graph data,
           ;; nothing to do at client-side
           "graph-lock-missing"
           (do (prn :graph-lock-missing)
+              (op-mem-layer/rollback! repo)
               nil)
           ;; else
-          (throw (ex-info "Unavailable" {:remote-ex remote-ex})))
+          (do (op-mem-layer/rollback! repo)
+              (throw (ex-info "Unavailable" {:remote-ex remote-ex}))))
         (do (assert (pos? (:t r)) r)
-            (<! (op/<clean-ops repo op-keys))
-            (<! (<apply-remote-data repo (rtc-const/data-from-ws-decoder r)
-                                    :max-pushed-op-key max-op-key))
+            (op-mem-layer/commit! repo)
+            (<! (<apply-remote-data repo (rtc-const/data-from-ws-decoder r)))
             (prn :<client-op-update-handler :t (:t r)))))))
 
 (defn- make-push-client-ops-timeout-ch
@@ -623,8 +598,7 @@
     (chan)
     (go
       (<! (async/timeout 2000))
-      (when (seq (:ops (<! (op/<get-ops&local-tx repo))))
-        true))))
+      (pos? (op-mem-layer/get-unpushed-block-update-count repo)))))
 
 (defn <loop-for-rtc
   [state graph-uuid repo & {:keys [loop-started-ch]}]
