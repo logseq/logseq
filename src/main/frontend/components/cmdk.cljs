@@ -514,9 +514,9 @@
                       (show-less)
                       (move-highlight state -1))
       "Enter"       (handle-action :default state e)
-      "Escape"      (when-not (string/blank? input)
-                      (util/stop e)
-                      (let [filter @(::filter state)]
+      "Escape"      (let [filter @(::filter state)]
+                      (when (or filter (not (string/blank? input)))
+                        (util/stop e)
                         (reset! (::filter state) nil)
                         (when-not filter (handle-input-change state nil ""))))
       "c"           (copy-block-ref state)
@@ -562,7 +562,7 @@
     [:div {:style {:background "var(--lx-gray-02)"
                    :border-bottom "1px solid var(--lx-gray-07)"}}
      [:input#search
-      {:class "text-xl bg-transparent border-none w-full outline-none px-4 py-3"
+      {:class "text-xl bg-transparent border-none w-full outline-none px-3 py-3"
        :placeholder (input-placeholder false)
        :ref #(when-not @input-ref (reset! input-ref %))
        :on-change (fn [e] (handle-input-change state e))
@@ -626,7 +626,7 @@
                                   :muted true}
                                  (make-shui-context)))]
     (when action
-      [:div {:class "flex w-full px-4 py-2 gap-2 justify-between"
+      [:div {:class "flex w-full px-3 py-2 gap-2 justify-between"
              :style {:background "var(--lx-gray-03)"
                      :border-top "1px solid var(--lx-gray-07)"}}
        [:div.text-sm.opacity-30.hover:opacity-90.leading-6
@@ -701,6 +701,7 @@
   (rum/local nil ::input-ref)
   [state {:keys [sidebar?]}]
   (let [*input (::input state)
+        *filter (::filter state)
         search-mode (:search/mode @state/state)
         group-filter (:group @(::filter state))
         results-ordered (state->results-ordered state search-mode)
@@ -717,6 +718,11 @@
             :ref #(let [*ref (::scroll-container-ref state)]
                     (when-not @*ref (reset! *ref %)))
             :style {:background "var(--lx-gray-02)"}}
+
+      (when-let [group (:group @*filter)]
+        [:div.flex.flex-col.p-3.opacity-50.text-sm
+         (search-only state (name group))])
+
       (let [items (filter
                    (fn [[_group-name group-key group-count _group-items]]
                      (and (not= 0 group-count)
@@ -724,18 +730,14 @@
                                   (or (= group-filter group-key)
                                       (and (= group-filter :blocks)
                                            (= group-key :current-page))
-                                      (and group-filter (= group-key :create))))))
+                                      (and (contains? #{:pages :create} group-filter)
+                                           (= group-key :create))))))
                    results-ordered)]
         (if (seq items)
           (for [[group-name group-key _group-count group-items] items]
-            (let [title (if (= group-filter group-key)
-                          (search-only state group-name)
-                          group-name)]
+            (let [title group-name]
               (result-group state title group-key group-items first-item)))
-          [:div.flex.flex-col.p-4.gap-2.opacity-50
-           (when group-filter
-             [:div.text-sm
-              (search-only state (string/capitalize (name group-filter)))])
+          [:div.flex.flex-col.p-4.opacity-50
            (when-not (string/blank? @*input)
              "No matched results")]))]
      (hints state)]))
