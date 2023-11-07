@@ -220,14 +220,6 @@
                             :source-block block})) blocks)
             items-on-other-pages (remove :current-page? items)
             items-on-current-page (filter :current-page? items)]
-      ; (js/console.log "blocks" (clj->js items) current-page)
-      ; ; (js/console.log "blocks" (clj->js items)
-      ; ;                 (pr-str (map (comp pr-str :block/page) blocks))
-      ; ;                 (pr-str (map (comp :block/name :block/page) blocks))
-      ; ;                 (pr-str (map (comp :block/name db/entity :block/page) blocks)))
-      ; ; (js/console.log "load-results/blocks"
-      ; ;                 (clj->js blocks)
-      ; ;                 (pr-str (first blocks)))
       (swap! !results update group         merge {:status :success :items items-on-other-pages})
       (swap! !results update :current-page merge {:status :success :items items-on-current-page}))))
 
@@ -730,6 +722,8 @@
                      (and (not= 0 group-count)
                           (if-not group-filter true
                                   (or (= group-filter group-key)
+                                      (and (= group-filter :blocks)
+                                           (= group-key :current-page))
                                       (and group-filter (= group-key :create))))))
                    results-ordered)]
         (if (seq items)
