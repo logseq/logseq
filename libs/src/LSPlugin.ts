@@ -235,9 +235,10 @@ export type BlockCursorPosition = {
   rect: DOMRect
 }
 
+export type Keybinding = string | Array<string>
 export type SimpleCommandKeybinding = {
   mode?: 'global' | 'non-editing' | 'editing'
-  binding: string
+  binding: Keybinding
   mac?: string // special for Mac OS
 }
 

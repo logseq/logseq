@@ -171,7 +171,7 @@ const app: Partial<IAppProxy> = {
 
     const { binding } = keybinding
     const group = '$shortcut$'
-    const key = group + safeSnakeCase(binding)
+    const key = opts.key || (group + safeSnakeCase(binding?.toString()))
 
     return registerSimpleCommand.call(
       this,

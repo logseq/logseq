@@ -297,7 +297,8 @@
   [pid key keybinding]
   (let [id      (keyword (str "plugin." pid "/" key))
         binding (:binding keybinding)
-        binding (some->> (if (string? binding) [binding] (seq binding))
+        binding (some->> (if (string? binding) [binding] (vec binding))
+                         (remove string/blank?)
                          (map shortcut-utils/undecorate-binding))
         binding (if util/mac?
                   (or (:mac keybinding) binding) binding)
