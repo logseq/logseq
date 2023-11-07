@@ -74,11 +74,12 @@
   (let [results @(::results state)
         input @(::input state)
         filter @(::filter state)
+        filter-group (:group filter)
         index (volatile! -1)
         visible-items (fn [group]
                         (let [{:keys [items show]} (get results group)]
                           (cond
-                            (= group (:group filter))
+                            (= group filter-group)
                             items
 
                             (= :more show)
@@ -103,7 +104,7 @@
                  (->>
                   [["Pages"          :pages          (visible-items :pages)]
                    ["Commands"       :commands       (visible-items :commands)]
-                   (when-not page-exists?
+                   (when-not (or page-exists? (= :blocks filter-group))
                      ["Create"         :create         (create-items input)])
                    ["Current page"   :current-page   (visible-items :current-page)]
                    ["Blocks"         :blocks         (visible-items :blocks)]
