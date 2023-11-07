@@ -50,11 +50,6 @@
 
 (def filters search-actions)
 
-(def default-commands
-  [{:text "Open settings" :icon "settings"      :icon-theme :gray}
-   {:text "Open settings" :icon "settings"      :icon-theme :gray}
-   {:text "Open settings" :icon "settings"      :icon-theme :gray}])
-
 ;; The results are separated into groups, and loaded/fetched/queried separately
 (def default-results
   {:recents        {:status :success :show :less :items nil}
@@ -171,19 +166,19 @@
   (let [!input (::input state)
         !results (::results state)]
     (swap! !results assoc-in [group :status] :loading)
-    (if (empty? @!input)
-      (swap! !results update group merge {:status :success :items default-commands})
-      (let [commands (->> (cp-handler/top-commands 1000)
-                          (map #(assoc % :t (translate t %))))
-            search-results (search/fuzzy-search commands @!input {:extract-fn :t})]
-        (->> search-results
-             (map #(hash-map :icon "command"
-                             :icon-theme :gray
-                             :text (translate t %)
-                             :shortcut (:shortcut %)
-                             :source-command %))
-             (hash-map :status :success :items)
-             (swap! !results update group merge))))))
+    (let [commands (->> (cp-handler/top-commands 1000)
+                        (map #(assoc % :t (translate t %))))
+          search-results (if (string/blank? @!input)
+                           commands
+                           (search/fuzzy-search commands @!input {:extract-fn :t}))]
+      (->> search-results
+           (map #(hash-map :icon "command"
+                           :icon-theme :gray
+                           :text (translate t %)
+                           :shortcut (:shortcut %)
+                           :source-command %))
+           (hash-map :status :success :items)
+           (swap! !results update group merge)))))
 
 ;; The pages search action uses an existing handler
 (defmethod load-results :pages [group state]
@@ -578,10 +573,7 @@
       {:class "text-xl bg-transparent border-none w-full outline-none px-4 py-3"
        :placeholder (input-placeholder false)
        :ref #(when-not @input-ref (reset! input-ref %))
-       :on-change (fn [e]
-                    (when (= "" (.-value @input-ref))
-                      (reset! (::filter state) nil))
-                    (handle-input-change state e))
+       :on-change (fn [e] (handle-input-change state e))
        :on-key-down (fn [e]
                       (let [value (.-value @input-ref)
                             last-char (last value)]
