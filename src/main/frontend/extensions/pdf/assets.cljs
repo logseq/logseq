@@ -153,7 +153,7 @@
   (when-let [page-name (util/trim-safe (:key pdf-current))]
     (let [page-name (str "hls__" page-name)
           page (db-model/get-page page-name)
-          file-path (:original-path pdf-current)
+          file-path (clojure.string/replace (:original-path pdf-current) #"^file://" "")
           format (state/get-preferred-format)
           repo-dir (config/get-repo-dir (state/get-current-repo))
           asset-dir (util/node-path.join repo-dir gp-config/local-assets-dir)
