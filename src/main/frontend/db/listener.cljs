@@ -73,5 +73,5 @@
     (d/unlisten! conn :persistence)
     (repo-listen-to-tx! repo conn)
     (d/unlisten! conn :gen-ops)
-    (when (config/db-based-graph? repo)
+    (when (and (config/db-based-graph? repo) (state/enable-rtc? repo))
       (rtc-db-listener/listen-db-to-generate-ops repo conn))))

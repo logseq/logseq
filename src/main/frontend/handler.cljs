@@ -86,20 +86,23 @@
 (defn restore-and-setup!
   [repos]
   (when-let [repo (or (state/get-current-repo) (:url (first repos)))]
-    (-> (op-mem-layer/<init-load-from-indexeddb! repo)
+    (-> (db-restore/restore-graph! repo)
+        (p/do!
+         (repo-config-handler/start {:repo repo})
+         ;; Load after config since it is configurable
+         (op-mem-layer/<init-load-from-indexeddb! repo))
         (p/then
          (fn []
-           (db-restore/restore-graph! repo)
            (db-listener/listen-and-persist! repo)
            ;; try to load custom css only for current repo
            (ui-handler/add-style-if-exists!)
 
            (->
-            (p/do! (repo-config-handler/start {:repo repo})
-                   (when (config/global-config-enabled?)
-                     (global-config-handler/start {:repo repo}))
-                   (when (config/plugin-config-enabled?)
-                     (plugin-config-handler/start)))
+            (p/do!
+             (when (config/global-config-enabled?)
+               (global-config-handler/start {:repo repo}))
+             (when (config/plugin-config-enabled?)
+               (plugin-config-handler/start)))
             (p/finally
               (fn []
                 ;; install after config is restored

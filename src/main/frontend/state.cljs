@@ -657,6 +657,10 @@ Similar to re-frame subscriptions"
   ([repo]
    (not (false? (:feature/enable-whiteboards? (sub-config repo))))))
 
+(defn enable-rtc?
+  [repo]
+  (:feature/enable-rtc? (sub-config repo)))
+
 (defn enable-git-auto-push?
   [repo]
   (not (false? (:git-auto-push (sub-config repo)))))
