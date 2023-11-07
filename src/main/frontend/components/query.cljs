@@ -1,21 +1,20 @@
 (ns frontend.components.query
-  (:require [rum.core :as rum]
-            [frontend.ui :as ui]
-            [frontend.context.i18n :refer [t]]
-            [frontend.util :as util]
-            [frontend.state :as state]
-            [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
-            [clojure.string :as string]
-            [frontend.db.query-dsl :as query-dsl]
+  (:require [clojure.string :as string]
             [frontend.components.query-table :as query-table]
             [frontend.components.query.result :as query-result]
-            [lambdaisland.glogi :as log]
+            [frontend.context.i18n :refer [t]]
+            [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
+            [frontend.db.query-dsl :as query-dsl]
             [frontend.extensions.sci :as sci]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
-            [logseq.graph-parser.util :as gp-util]))
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [lambdaisland.glogi :as log]
+            [rum.core :as rum]))
 
 (defn built-in-custom-query?
   [title]

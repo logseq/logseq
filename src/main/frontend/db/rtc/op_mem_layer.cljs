@@ -1,13 +1,13 @@
 (ns frontend.db.rtc.op-mem-layer
   "Store client-ops in memory.
   And sync these ops to indexedDb automatically."
-  (:require [clojure.set :as set]
+  (:require [clojure.core.async :as async :refer [<! go-loop timeout]]
+            [clojure.set :as set]
             [frontend.db.rtc.op-idb-layer :as op-idb-layer]
+            [frontend.state :as state]
             [malli.core :as m]
             [malli.transform :as mt]
-            [promesa.core :as p]
-            [clojure.core.async :as async :refer [go-loop go <! timeout]]
-            [frontend.state :as state]))
+            [promesa.core :as p]))
 
 (def op-schema
   [:multi {:dispatch first}

@@ -1,4 +1,5 @@
 (ns frontend.db.rtc.op-idb-layer
+  "Fns to read/write client-ops from/into indexeddb."
   (:require ["/frontend/idbkv" :as idb-keyval]
             [cljs.core.async.interop :refer [p->c]]
             [promesa.core :as p]))

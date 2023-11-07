@@ -1,15 +1,14 @@
 (ns frontend.db.rtc.rtc-fns-test
   (:require [clojure.test :as t :refer [deftest is testing]]
-            [frontend.db.rtc.core :as rtc-core]
-            [frontend.state :as state]
-            [frontend.test.helper :as test-helper]
-            [frontend.modules.outliner.transaction :as outliner-tx]
-            [frontend.modules.outliner.core :as outliner-core]
-            [frontend.handler.page :as page-handler]
-            [frontend.db.conn :as conn]
             [datascript.core :as d]
-            [frontend.db :as db]
-            [frontend.db.rtc.op-mem-layer :as op-mem-layer]))
+            [frontend.db.conn :as conn]
+            [frontend.db.rtc.core :as rtc-core]
+            [frontend.db.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.handler.page :as page-handler]
+            [frontend.modules.outliner.core :as outliner-core]
+            [frontend.modules.outliner.transaction :as outliner-tx]
+            [frontend.state :as state]
+            [frontend.test.helper :as test-helper]))
 
 
 (deftest filter-remote-data-by-local-unpushed-ops-test
