@@ -240,7 +240,7 @@
   opacity: 1;
 }
 
-.shui__button-theme-gray.shui__button-color-custom  { background-color: var(--ls-tertiary-background-color); color: white; }
+.shui__button-theme-gray.shui__button-color-custom  { background-color: var(--ls-tertiary-background-color); color: var(--ls-secondary-text-color, white); }
 .shui__button-theme-color.shui__button-color-custom  { background-color: var(--color-blue-600); color: white; }
 
 .shui__button-theme-color.shui__button-color-lime    { color: white; background-color: var(--rx-lime-09); &:hover { background-color: var(--rx-lime-10); } &:active { background-color: var(--rx-lime-08); }}
