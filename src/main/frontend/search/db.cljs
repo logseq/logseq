@@ -14,6 +14,11 @@
   []
   (state/block-content-max-length (state/get-current-repo)))
 
+(defn- sanitize
+  [content]
+  (some-> content
+          (util/search-normalize (state/enable-search-remove-accents?))))
+
 (defn block->index
   "Convert a block to the index for searching"
   [{:block/keys [uuid page content] :as block}]
@@ -22,7 +27,7 @@
       {:id (:db/id block)
        :uuid (str uuid)
        :page page
-       :content content})))
+       :content (sanitize content)})))
 
 (defn page->index
   "Convert a page name to the index for searching (page content level)
@@ -35,7 +40,7 @@
         {:id   (:db/id page)
          :uuid (str uuid)
          ;; Add page name to the index
-         :content (str "$pfts_f6ld>$ " original-name " $<pfts_f6ld$ " content)}))))
+         :content (sanitize (str "$pfts_f6ld>$ " original-name " $<pfts_f6ld$ " content))}))))
 
 (defn build-blocks-indice
   ;; TODO: Remove repo effects fns further up the call stack. db fns need standardization on taking connection

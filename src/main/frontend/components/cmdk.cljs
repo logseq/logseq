@@ -103,9 +103,9 @@
                  :else
                  (->>
                   [["Pages"          :pages          (visible-items :pages)]
-                   ["Commands"       :commands       (visible-items :commands)]
                    (when-not (or page-exists? (= :blocks filter-group))
                      ["Create"         :create         (create-items input)])
+                   ["Commands"       :commands       (visible-items :commands)]
                    ["Current page"   :current-page   (visible-items :current-page)]
                    ["Blocks"         :blocks         (visible-items :blocks)]
                    ["Files"          :files          (visible-items :files)]

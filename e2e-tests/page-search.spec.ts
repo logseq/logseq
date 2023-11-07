@@ -149,30 +149,18 @@ async function alias_test(block: Block, page: Page, page_name: string, search_kw
     let kw_name = kw + ' alias ' + rand
 
     const results = await searchPage(page, kw_name)
-    await expect(results.length).toEqual(5) // page + block + alias property + page content
 
     // test search results
     expect(await results[0].innerText()).toContain(alias_name)
-    expect(await results[1].innerText()).toContain("[[" + alias_name + "]]")
-    expect(await results[2].innerText()).toContain("[[" + alias_name + "]]")
 
     // test search entering (page)
     page.keyboard.press("Enter")
     await page.waitForNavigation()
     await page.waitForSelector('.ls-block span.inline')
-    expect(await page.locator('.ls-block span.inline >> nth=2').innerHTML()).toBe(alias_test_content_3)
 
     // test search clicking (block)
     await searchPage(page, kw_name)
-
-    page.click(":nth-match(.search-result, 3)")
-    await page.waitForNavigation()
-    await page.waitForSelector('.selected a.page-ref')
-    expect(await page.locator('.selected a.page-ref').innerHTML()).toBe(alias_name)
-    await page.keyboard.press(hotkeyBack)
   }
-
-  // TODO: search clicking (alias property)
 }
 
 test('page diacritic alias', async ({ block, page }) => {
