@@ -29,13 +29,13 @@
   (let [[before-text highlighted-text after-text] (split-text-on-highlight text query normal-text normal-query)]
     [:span
      (when-not (string/blank? before-text) [:span before-text])
-     (when-not (string/blank? highlighted-text) [:span {:class "bg-accent-06 dark:bg-accent-08-alpha"} highlighted-text])
+     (when-not (string/blank? highlighted-text) [:span {:class "shui__list-item-highlighted-span bg-accent-06 dark:bg-accent-08-alpha"} highlighted-text])
      (when-not (string/blank? after-text) [:span after-text])]))
 
 (defn span-with-multiple-highlight-tokens [app-config text normal-query]
   (let [normalized-text (normalize-text app-config text)]
     (loop [[query-token & more] (string/split normal-query #" ")
-          result [[:text (to-string text)]]]
+           result [[:text (to-string text)]]]
      (if-not query-token
        (->> result
             (map (fn [[type value]]

@@ -300,3 +300,11 @@
 .dark .shui__button-theme-color.shui__button-color-sky     { background-color: var(--rx-sky-09); &:hover { background-color: var(--rx-sky-08); } &:active { background-color: var(--rx-sky-07); }}
 .dark .shui__button-theme-color.shui__button-color-olive   { background-color: var(--rx-olive-09); &:hover { background-color: var(--rx-olive-08); } &:active { background-color: var(--rx-olive-07); }}
 .dark .shui__button-theme-color.shui__button-color-tomato  { background-color: var(--rx-tomato-09); &:hover { background-color: var(--rx-tomato-08); } &:active { background-color: var(--rx-tomato-07); }}
+
+.shui__list-item-highlighted-span {
+  background-color: or(--lx-accent-06, --color-level-4);
+}
+
+.dark .shui__list-item-highlighted-span {
+  background-color: or(--lx-accent-08-alpha, --color-level-4);
+}
