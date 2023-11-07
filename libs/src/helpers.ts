@@ -553,3 +553,8 @@ export function mergeSettingsWithSchema(
   // shadow copy
   return Object.assign(defaults, settings)
 }
+
+export function normalizeKeyStr(s: string) {
+  if (typeof s !== 'string') return
+  return s.trim().replace(/\s/g, '_').toLowerCase()
+}
