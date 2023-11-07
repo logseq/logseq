@@ -18,8 +18,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [malli.core :as m]
-            [malli.util :as mu]
-            [spy.core :as spy]))
+            [malli.util :as mu]))
 
 
 ;;                     +-------------+
@@ -392,7 +391,7 @@
       (seq add*) (assoc :add add*)
       (seq retract) (assoc :retract retract))))
 
-(defn- local-block-ops->remote-ops*
+(defn- local-block-ops->remote-ops
   [repo block-ops]
   (let [*depend-on-block-uuid-set (atom #{})
         *remote-ops (atom [])
@@ -474,7 +473,7 @@
 
     {:remote-ops @*remote-ops
      :depend-on-block-uuids @*depend-on-block-uuid-set}))
-(def local-block-ops->remote-ops (spy/spy local-block-ops->remote-ops*))
+
 
 (defn gen-block-uuid->remote-ops
   [repo & {:keys [n] :or {n 50}}]
