@@ -74,42 +74,42 @@
    [:t-before {:optional true} :int]
    [:failed-ops {:optional true} [:sequential op-schema]]
    [:affected-blocks {:optional true}
-    [:map-of :string
+    [:map-of :uuid
      [:multi {:dispatch :op :decode/string #(update % :op keyword)}
       [:move
        (apply conj
               [:map {:closed true}
                [:op :keyword]
-               [:self :string]
-               [:parents [:sequential :string]]
-               [:left :string]
+               [:self :uuid]
+               [:parents [:sequential :uuid]]
+               [:left :uuid]
                [:content {:optional true} :string]]
               general-attrs-schema-coll)]
       [:remove
        [:map {:closed true}
         [:op :keyword]
-        [:block-uuid :string]]]
+        [:block-uuid :uuid]]]
       [:update-attrs
        (apply conj
               [:map {:closed true}
                [:op :keyword]
-               [:self :string]
-               [:parents {:optional true} [:sequential :string]]
-               [:left {:optional true} :string]
+               [:self :uuid]
+               [:parents {:optional true} [:sequential :uuid]]
+               [:left {:optional true} :uuid]
                [:content {:optional true} :string]]
               general-attrs-schema-coll)]
       [:update-page
        (apply conj
               [:map {:closed true}
                [:op :keyword]
-               [:self :string]
+               [:self :uuid]
                [:page-name :string]
                [:original-name :string]]
               general-attrs-schema-coll)]
       [:remove-page
        [:map {:closed true}
         [:op :keyword]
-        [:block-uuid :string]]]]]]])
+        [:block-uuid :uuid]]]]]]])
 (def data-from-ws-decoder (m/decoder data-from-ws-schema mt/string-transformer))
 (def data-from-ws-validator (m/validator data-from-ws-schema))
 
