@@ -763,6 +763,19 @@
                      :disabled    false}
                     (svg/info))}))
 
+(rum/defc rtc-enabled-switcher
+  [enabled?]
+  (ui/toggle enabled?
+             (fn []
+               (let [value (not enabled?)]
+                 (config-handler/set-config! :feature/enable-rtc? value)))
+             true))
+
+(defn rtc-switcher-row [enabled?]
+  (row-with-button-action
+   {:left-label "RTC"
+    :action (rtc-enabled-switcher enabled?)}))
+
 (rum/defc whiteboards-enabled-switcher
   [enabled?]
   (ui/toggle enabled?
@@ -1021,6 +1034,8 @@
           (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
         [:div.flex.flex-col.gap-4
          {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
+         (when (config/db-based-graph? current-repo)
+           (rtc-switcher-row (state/enable-rtc? current-repo)))
          (sync-switcher-row current-repo enable-sync?)
          (when (and enable-sync? (not (config/db-based-graph? current-repo)))
            (sync-diff-merge-switcher-row enable-sync-diff-merge?))

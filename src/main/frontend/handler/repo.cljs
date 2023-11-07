@@ -406,9 +406,9 @@
   [repo]
   (p/do!
    (state/set-db-restoring! true)
-   (op-mem-layer/<init-load-from-indexeddb! repo)
    (db-restore/restore-graph! repo)
    (repo-config-handler/restore-repo-config! repo)
+   (op-mem-layer/<init-load-from-indexeddb! repo)
    (when (config/global-config-enabled?)
      (global-config-handler/restore-global-config!))
     ;; Don't have to unlisten the old listener, as it will be destroyed with the conn
