@@ -565,6 +565,7 @@
     [:div {:class "bg-gray-02 border-b border-1 border-gray-07"}
      [:input#search
       {:class "text-xl bg-transparent border-none w-full outline-none px-3 py-3"
+       :autoComplete "off"
        :placeholder (input-placeholder false)
        :ref #(when-not @input-ref (reset! input-ref %))
        :on-change (fn [e] (handle-input-change state e))
@@ -600,6 +601,7 @@
      (ui/rotating-arrow false)
      (shui/icon "search" {:class "text-gray-12"})
      [:input {:class "text-base bg-transparent border-none w-full outline-none py-2"
+              :autoComplete "off"
               :placeholder (input-placeholder true)
               :ref #(reset! input-ref %)
               :on-change (partial handle-input-change state)
