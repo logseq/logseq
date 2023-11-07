@@ -2,16 +2,16 @@
   "- upload local graph to remote
   - download remote graph"
   (:require-macros [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
-  (:require [frontend.db.conn :as conn]
-            [datascript.core :as d]
-            [frontend.db.rtc.ws :refer [<send!]]
-            [cljs.core.async :as async :refer [go <!]]
+  (:require [cljs-http.client :as http]
+            [cljs.core.async :as async :refer [<! go]]
             [cljs.core.async.interop :refer [p->c]]
-            [cljs-http.client :as http]
             [cognitect.transit :as transit]
-            [logseq.db.frontend.schema :as db-schema]
+            [datascript.core :as d]
+            [frontend.db.conn :as conn]
+            [frontend.db.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.db.rtc.ws :refer [<send!]]
             [frontend.persist-db :as persist-db]
-            [frontend.db.rtc.op :as op]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.outliner.pipeline :as outliner-pipeline]))
 
 (def transit-r (transit/reader :json))
@@ -51,8 +51,8 @@
         (let [r (<! (get-result-ch))]
           (if-not (:graph-uuid r)
             (ex-info "upload graph failed" r)
-            (do (<! (op/<update-graph-uuid! repo (:graph-uuid r)))
-                (<! (op/<update-local-tx! repo (:t r)))
+            (do (op-mem-layer/update-graph-uuid! repo (:graph-uuid r))
+                (op-mem-layer/update-local-tx! repo (:t r))
                 r)))))))
 
 (def block-type-ident->str
@@ -126,7 +126,7 @@
             blocks** (outliner-pipeline/build-upsert-blocks blocks* nil db)]
         (<! (p->c (persist-db/<new repo)))
         (<! (persist-db/<transact-data repo blocks** nil))
-        (<! (op/<update-local-tx! repo t))))))
+        (op-mem-layer/update-local-tx! repo t)))))
 
 
 (defn <download-graph
@@ -141,8 +141,8 @@
       (if (not= 200 status)
         (ex-info "<download-graph failed" r)
         (let [all-blocks (transit/read transit-r body)]
+          (<! (p->c (op-mem-layer/<init-load-from-indexeddb! repo)))
           (<! (<transact-remote-all-blocks-to-sqlite all-blocks repo))
-          (<! (op/<update-graph-uuid! repo graph-uuid)))))))
-
-(comment
-  )
+          (op-mem-layer/update-graph-uuid! repo graph-uuid)
+          (prn ::download-graph (@@#'op-mem-layer/*ops-store repo))
+          (<! (op-mem-layer/<sync-to-idb-layer! repo)))))))

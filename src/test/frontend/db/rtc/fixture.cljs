@@ -7,7 +7,7 @@
             [datascript.core :as d]
             [frontend.db.conn :as conn]
             [frontend.db.rtc.db-listener :as db-listener]
-            [frontend.db.rtc.ops-idb-store :as ops-idb-store]))
+            [frontend.db.rtc.op-mem-layer :as op-mem-layer]))
 
 (def *test-rtc-state (atom nil))
 (def test-graph-uuid "e6d04ed7-bbc4-4ed2-a91b-69f3c0b9459d")
@@ -62,6 +62,7 @@
       (d/unlisten! test-db-conn ::gen-ops))})
 
 
-(def clear-ops-idb-stores-fixture
-  {:before #(swap! ops-idb-store/stores dissoc test-helper/test-db)
-   :after #(swap! ops-idb-store/stores dissoc test-helper/test-db)})
+(def clear-op-mem-stores-fixture
+  {:before #(do (op-mem-layer/remove-ops-store! test-helper/test-db)
+                (op-mem-layer/init-empty-ops-store! test-helper/test-db))
+   :after #(op-mem-layer/remove-ops-store! test-helper/test-db)})

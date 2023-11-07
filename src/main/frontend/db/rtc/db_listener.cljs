@@ -1,11 +1,12 @@
 (ns frontend.db.rtc.db-listener
   "listen datascript changes, infer operations from the db tx-report"
-  (:require [datascript.core :as d]
-            [frontend.db :as db]
-            [frontend.db.rtc.op :as op]
+  (:require [clojure.data :as data]
             [clojure.set :as set]
-            [clojure.data :as data]
-            [clojure.core.async :as async :refer [go <!]]))
+            [datascript.core :as d]
+            [frontend.db :as db]
+            [frontend.db.rtc.op-mem-layer :as op-mem-layer]
+            [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]))
 
 
 (defn- entity-datoms=>attr->datom
@@ -129,31 +130,15 @@
             ops* (keep (fn [op]
                          (let [block-uuid (some-> (db/entity repo e) :block/uuid str)]
                            (case (first op)
-                             :move        (when block-uuid ["move" {:block-uuids [block-uuid]}])
+                             :move        (when block-uuid ["move" {:block-uuid block-uuid}])
                              :update      (when block-uuid
                                             ["update" (cond-> {:block-uuid block-uuid}
                                                         (second op) (conj [:updated-attrs (second op)]))])
                              :update-page (when block-uuid ["update-page" {:block-uuid block-uuid}])
-                             :remove      ["remove" {:block-uuids [(str (second op))]}]
+                             :remove      ["remove" {:block-uuid (str (second op))}]
                              :remove-page ["remove-page" {:block-uuid (str (second op))}])))
                        ops)]
         ops*))))
-
-(def ^:private *ops-pending-to-store (atom []))
-
-(remove-watch *ops-pending-to-store :add-ops)
-(add-watch *ops-pending-to-store :add-ops
-           (fn [_k r _o n]
-             (when (seq n)
-               ;; the following reset! will trigger another call of this fn
-               ;; the above `when` to avoid going forward
-               (go
-                 ;; another check on the value of this atom to ensure no 2-go-threads running for same value
-                 (when-let [n (seq @r)]
-                   (reset! r [])
-                   (doseq [{:keys [ops repo]} n]
-                     (prn ::add-ops ops)
-                     (<! (op/<add-ops! repo ops))))))))
 
 (defn generate-rtc-ops
   [repo db-before db-after datoms]
@@ -161,9 +146,12 @@
         id->same-entity-datoms (group-by first datom-vec-coll)
         id-order (distinct (map first datom-vec-coll))
         same-entity-datoms-coll (map id->same-entity-datoms id-order)
-        ops (mapcat (partial entity-datoms=>ops repo db-before db-after) same-entity-datoms-coll)]
-    (when (seq ops)
-      (swap! *ops-pending-to-store conj {:ops ops :repo repo}))))
+        ops (mapcat (partial entity-datoms=>ops repo db-before db-after) same-entity-datoms-coll)
+        now-epoch*1000 (* 1000 (tc/to-long (t/now)))
+        ops* (map-indexed (fn [idx op]
+                            [(first op) (assoc (second op) :epoch (+ idx now-epoch*1000))]) ops)]
+    (when (seq ops*)
+      (op-mem-layer/add-ops! repo ops*))))
 
 
 (defn listen-db-to-generate-ops
