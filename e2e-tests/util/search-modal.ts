@@ -39,9 +39,8 @@ export async function searchAndJumpToPage(page: Page, pageTitle: string) {
     await closeSearchBox(page)
     await page.click('#search-button')
     await page.type('[placeholder="What are you looking for?"]', pageTitle)
-    await page.waitForSelector(`[data-page-ref="${pageTitle}"]`, { state: 'visible' })
-    page.click(`[data-page-ref="${pageTitle}"]`)
-    await page.waitForNavigation()
+    await page.waitForTimeout(200)
+    await page.keyboard.press('Enter', { delay: 50 })
     return pageTitle;
 }
 

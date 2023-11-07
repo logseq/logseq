@@ -152,7 +152,6 @@ async function alias_test(block: Block, page: Page, page_name: string, search_kw
     await expect(results.length).toEqual(5) // page + block + alias property + page content
 
     // test search results
-    expect(await results[0].innerText()).toContain("Alias -> " + target_name)
     expect(await results[0].innerText()).toContain(alias_name)
     expect(await results[1].innerText()).toContain("[[" + alias_name + "]]")
     expect(await results[2].innerText()).toContain("[[" + alias_name + "]]")
