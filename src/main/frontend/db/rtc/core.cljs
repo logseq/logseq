@@ -105,17 +105,17 @@
   [repo remove-ops]
   (prn :remove-ops remove-ops)
   (doseq [op remove-ops]
-    (when-let [block (db/pull repo '[*] [:block/uuid (uuid (:block-uuid op))])]
+    (when-let [block (db/pull repo '[*] [:block/uuid (:block-uuid op)])]
       (transact-db! :delete-blocks [block] {:children? false})
       (prn :apply-remote-remove-ops (:block-uuid op)))))
 
 (defn- insert-or-move-block
-  [repo block-uuid-str remote-parents remote-left-uuid-str move?]
-  (when (and (seq remote-parents) remote-left-uuid-str)
-    (let [local-left (db/pull repo '[*] [:block/uuid (uuid remote-left-uuid-str)])
+  [repo block-uuid remote-parents remote-left-uuid move?]
+  (when (and (seq remote-parents) remote-left-uuid)
+    (let [local-left (db/pull repo '[*] [:block/uuid remote-left-uuid])
           first-remote-parent (first remote-parents)
-          local-parent (db/pull repo '[*] [:block/uuid (uuid first-remote-parent)])
-          b {:block/uuid (uuid block-uuid-str)}
+          local-parent (db/pull repo '[*] [:block/uuid first-remote-parent])
+          b {:block/uuid block-uuid}
           ;; b-ent (db/entity repo [:block/uuid (uuid block-uuid-str)])
           ]
       (case [(some? local-parent) (some? local-left)]
@@ -123,7 +123,7 @@
         (if move?
           (transact-db! :move-blocks [b] local-left true)
           (transact-db! :insert-blocks
-                        [{:block/uuid (uuid block-uuid-str)
+                        [{:block/uuid block-uuid
                           :block/content ""
                           :block/format :markdown}]
                         local-left {:sibling? true :keep-uuid? true}))
@@ -133,7 +133,7 @@
           (if move?
             (transact-db! :move-blocks [b] local-left sibling?)
             (transact-db! :insert-blocks
-                          [{:block/uuid (uuid block-uuid-str) :block/content ""
+                          [{:block/uuid block-uuid :block/content ""
                             :block/format :markdown}]
                           local-left {:sibling? sibling? :keep-uuid? true})))
 
@@ -141,11 +141,11 @@
         (if move?
           (transact-db! :move-blocks [b] local-parent false)
           (transact-db! :insert-blocks
-                        [{:block/uuid (uuid block-uuid-str) :block/content ""
+                        [{:block/uuid block-uuid :block/content ""
                           :block/format :markdown}]
                         local-parent {:sibling? false :keep-uuid? true}))
-        (throw (ex-info "Don't know where to insert" {:block-uuid block-uuid-str :remote-parents remote-parents
-                                                      :remote-left remote-left-uuid-str}))))))
+        (throw (ex-info "Don't know where to insert" {:block-uuid block-uuid :remote-parents remote-parents
+                                                      :remote-left remote-left-uuid}))))))
 
 (defn- move-ops-map->sorted-move-ops
   [move-ops-map]
@@ -171,18 +171,18 @@
   (move-ops-map->sorted-move-ops move-ops-map))
 
 (defn- check-block-pos
-  [repo block-uuid-str remote-parents remote-left-uuid-str]
+  [repo block-uuid remote-parents remote-left-uuid]
   (let [local-b (db/pull repo '[{:block/left [:block/uuid]}
                                 {:block/parent [:block/uuid]}
                                 *]
-                         [:block/uuid (uuid block-uuid-str)])
-        remote-parent-uuid-str (first remote-parents)]
+                         [:block/uuid block-uuid])
+        remote-parent-uuid (first remote-parents)]
     (cond
       (nil? local-b)
       :not-exist
 
-      (not (and (= (str (:block/uuid (:block/parent local-b))) remote-parent-uuid-str)
-                (= (str (:block/uuid (:block/left local-b))) remote-left-uuid-str)))
+      (not (and (= (:block/uuid (:block/parent local-b)) remote-parent-uuid)
+                (= (:block/uuid (:block/left local-b)) remote-left-uuid)))
       :wrong-pos
       :else nil)))
 
@@ -237,7 +237,7 @@
         (insert-or-move-block repo self parents left true)
         nil                             ; do nothing
         nil)
-      (update-block-attrs repo (uuid self) op-value)
+      (update-block-attrs repo self op-value)
       (prn :apply-remote-move-ops self r parents left))))
 
 
@@ -253,24 +253,24 @@
           :wrong-pos
           (insert-or-move-block repo self parents left true)
           nil)))
-    (update-block-attrs repo (uuid self) op-value)
+    (update-block-attrs repo self op-value)
     (prn :apply-remote-update-ops self)))
 
 (defn apply-remote-update-page-ops
   [repo update-page-ops]
   (doseq [{:keys [self page-name original-name] :as op-value} update-page-ops]
     (let [old-page-original-name (:block/original-name
-                                  (db/pull repo [:block/original-name] [:block/uuid (uuid self)]))
+                                  (db/pull repo [:block/original-name] [:block/uuid self]))
           exist-page (db/pull repo [:block/uuid] [:block/name page-name])]
       (cond
           ;; same name but different uuid
           ;; remote page has same block/name as local's, but they don't have same block/uuid.
           ;; 1. rename local page's name to '<origin-name>-<ms-epoch>-Conflict'
           ;; 2. create page, name=<origin-name>, uuid=remote-uuid
-        (and exist-page (not= (:block/uuid exist-page) (uuid self)))
+        (and exist-page (not= (:block/uuid exist-page) self))
         (do (page-handler/rename! original-name (util/format "%s-%s-CONFLICT" original-name (tc/to-long (t/now))))
             (page-handler/create! original-name {:redirect? false :create-first-block? false
-                                                 :uuid (uuid self) :persist-op? false}))
+                                                 :uuid self :persist-op? false}))
 
           ;; a client-page has same uuid as remote but different page-names,
           ;; then we need to rename the client-page to remote-page-name
@@ -281,15 +281,15 @@
           ;; just create-page
         :else
         (page-handler/create! original-name {:redirect? false :create-first-block? false
-                                             :uuid (uuid self) :persist-op? false}))
+                                             :uuid self :persist-op? false}))
 
-      (update-block-attrs repo (uuid self) op-value))))
+      (update-block-attrs repo self op-value))))
 
 (defn apply-remote-remove-page-ops
   [repo remove-page-ops]
   (doseq [op remove-page-ops]
     (when-let [page-name (:block/name
-                          (db/pull repo [:block/name] [:block/uuid (uuid (:block-uuid op))]))]
+                          (db/pull repo [:block/name] [:block/uuid (:block-uuid op)]))]
       (page-handler/delete! page-name nil {:redirect-to-home? false :persist-op? false}))))
 
 
