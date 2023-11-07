@@ -93,4 +93,4 @@ frontend.db.sync/export-as-blocks
 ;; Initial loaded
 frontend.ui/_emoji-init-data
 ;; placeholder var for defonce
-frontend.db.rtc.ops-idb-store/_add-ops-loop
+frontend.db.rtc.op-mem-layer/_sync-loop
