@@ -145,7 +145,6 @@
  :page/add-to-favorites "添加收藏"
  :page/unfavorite "取消收藏"
  :page/show-journals "显示日志"
- :page/show-whiteboards "显示白板"
  :block/name "页面名称"
  :page/earlier "之前"
  :file/name "文件名"

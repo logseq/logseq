@@ -182,7 +182,6 @@
  :page/add-to-favorites "Tambahkan ke Favorit"
  :page/unfavorite "Hapus dari Favorit"
  :page/show-journals "Tampilkan jurnal"
- :page/show-whiteboards "Tampilkan papan tulis"
  :block/name "Nama Halaman"
  :page/earlier "Lebih awal"
  :page/copy-page-url "Salin URL halaman"

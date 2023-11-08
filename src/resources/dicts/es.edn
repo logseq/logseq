@@ -499,7 +499,6 @@
  :page/open-with-default-app                        "Abrir con la aplicación predeterminada"
  :page/page-already-exists                          "¡La página “{1}” ya existe!"
  :page/show-journals                                "Mostrar diarios"
- :page/show-whiteboards                             "Mostrar pizarras"
  :page/slide-view                                   "Ver como diapositivas"
  :page/slide-view-tip-go-fullscreen (fn [] [[:span.opacity-70 "Consejo: presiona "] [:code "f"] [:span.opacity-70 " para ir a pantalla completa"]])
  :page/something-went-wrong                         "Algo malió sal"

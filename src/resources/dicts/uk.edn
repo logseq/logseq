@@ -88,7 +88,6 @@
  :page/add-to-favorites "Додати до обраного"
  :page/unfavorite "Вилучити сторінку з обраного"
  :page/show-journals "Показати журнали"
- :page/show-whiteboards "Показати дошки"
  :block/name "Назва сторінки"
  :page/earlier "Раніше"
  :page/copy-page-url "Скопіювати URL сторінки"

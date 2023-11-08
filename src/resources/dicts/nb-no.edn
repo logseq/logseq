@@ -306,7 +306,6 @@
  :on-boarding/welcome-whiteboard-modal-start "Start med whiteboard"
  :on-boarding/welcome-whiteboard-modal-title "Et nytt lerret for dine tanker."
  :page/logseq-is-having-a-problem "Logseq har et problem. Prøver å få den tilbake ..."
- :page/show-whiteboards "Vis whiteboards"
  :page/something-went-wrong "Noe gikk galt"
  :page/step "Steg {1}"
  :page/try "Prøv"

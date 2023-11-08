@@ -287,7 +287,6 @@
  :linked-references/filter-search "링크된 페이지에서 검색"
  :notification/clear-all "모두 제거"
  :page/logseq-is-having-a-problem "Logseq에 문제가 발생하였습니다. 작업 환경으로 돌아가기 위해서는 다음 지시를 따라주십시오."
- :page/show-whiteboards "화이트보드"
  :page/something-went-wrong "문제가 발생하였습니다."
  :page/step "스텝 {1}"
  :page/try "시도"

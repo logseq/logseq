@@ -191,7 +191,6 @@
  :page/add-to-favorites "Add to Favorites"
  :page/unfavorite "Unfavorite page"
  :page/show-journals "Show journals"
- :page/show-whiteboards "Show whiteboards"
  :block/name "Page name"
  :page/earlier "Earlier"
  :page/copy-page-url "Copy page URL"

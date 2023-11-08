@@ -182,7 +182,6 @@
  :page/add-to-favorites "お気に入りへ追加"
  :page/unfavorite "お気に入りを解除"
  :page/show-journals "日誌を表示"
- :page/show-whiteboards "ホワイトボードを表示"
  :block/name "ページ名"
  :page/earlier "もっと前へ"
  :page/copy-page-url "ページの URL をコピー"

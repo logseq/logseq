@@ -291,7 +291,6 @@
  :on-boarding/welcome-whiteboard-modal-skip "Pular"
  :on-boarding/welcome-whiteboard-modal-start "Iniciar quadro branco"
  :on-boarding/welcome-whiteboard-modal-title "Um novo quadro para seus pensamentos."
- :page/show-whiteboards "Mostrar quadros brancos"
  :pdf/doc-metadata "Metadados do documento"
  :pdf/hl-block-colored "Rótulo colorido para bloco de destaque"
  :plugin.install-from-file/menu-title "Instalar de plugins.edn"
