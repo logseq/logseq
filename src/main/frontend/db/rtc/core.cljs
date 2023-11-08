@@ -18,7 +18,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [malli.core :as m]
-            [malli.util :as mu]))
+            [malli.util :as mu]
+            [frontend.config :as config]))
 
 
 ;;                     +-------------+

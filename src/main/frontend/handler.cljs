@@ -86,10 +86,8 @@
 (defn restore-and-setup!
   [repos]
   (when-let [repo (or (state/get-current-repo) (:url (first repos)))]
-    (-> (db-restore/restore-graph! repo)
-        (p/do!
-         (repo-config-handler/start {:repo repo})
-         ;; Load after config since it is configurable
+    (-> (p/do!
+         (db-restore/restore-graph! repo)
          (op-mem-layer/<init-load-from-indexeddb! repo))
         (p/then
          (fn []

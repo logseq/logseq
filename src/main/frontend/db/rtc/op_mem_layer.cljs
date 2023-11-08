@@ -7,7 +7,8 @@
             [frontend.state :as state]
             [malli.core :as m]
             [malli.transform :as mt]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.config :as config]))
 
 (def op-schema
   [:multi {:dispatch first}
@@ -359,27 +360,27 @@
 
 (defn <init-load-from-indexeddb!
   [repo]
-  (when (state/enable-rtc? repo)
-   (p/let [all-data (op-idb-layer/<read repo)
-           all-data-m (into {} all-data)
-           local-tx (get all-data-m "local-tx")
-           graph-uuid (get all-data-m "graph-uuid")
-           ops (->> all-data
-                    (filter (comp number? first))
-                    (sort-by first <)
-                    ops-from-store-coercer
-                    (map second))
-           {:keys [block-uuid->ops epoch->block-uuid-sorted-map]}
-           (add-ops-to-block-uuid->ops ops {} (sorted-map-by <))
-           r (cond-> {:block-uuid->ops block-uuid->ops
-                      :epoch->block-uuid-sorted-map epoch->block-uuid-sorted-map}
-               graph-uuid (assoc :graph-uuid graph-uuid)
-               local-tx (assoc :local-tx local-tx))]
-     (assert (ops-validator ops) ops)
-     (swap! *ops-store update repo #(-> %
-                                        (assoc :current-branch r)
-                                        (dissoc :old-branch)))
-     (prn ::<init-load-from-indexeddb! repo))))
+  (p/let [all-data (op-idb-layer/<read repo)
+          all-data-m (into {} all-data)
+          local-tx (get all-data-m "local-tx")]
+    (when local-tx
+      (let [graph-uuid (get all-data-m "graph-uuid")
+            ops (->> all-data
+                     (filter (comp number? first))
+                     (sort-by first <)
+                     ops-from-store-coercer
+                     (map second))
+            {:keys [block-uuid->ops epoch->block-uuid-sorted-map]}
+            (add-ops-to-block-uuid->ops ops {} (sorted-map-by <))
+            r (cond-> {:block-uuid->ops block-uuid->ops
+                       :epoch->block-uuid-sorted-map epoch->block-uuid-sorted-map}
+                graph-uuid (assoc :graph-uuid graph-uuid)
+                local-tx (assoc :local-tx local-tx))]
+        (assert (ops-validator ops) ops)
+        (swap! *ops-store update repo #(-> %
+                                           (assoc :current-branch r)
+                                           (dissoc :old-branch)))
+        (prn ::<init-load-from-indexeddb! repo)))))
 
 (defn <sync-to-idb-layer!
   [repo]
@@ -393,5 +394,14 @@
          (go-loop []
            (<! (timeout 3000))
            (when-let [repo (state/get-current-repo)]
-             (<! (<sync-to-idb-layer! repo)))
+             (when (and (config/db-based-graph? repo)
+                        (contains? (@*ops-store repo) :current-branch))
+               (<! (<sync-to-idb-layer! repo))))
            (recur)))
+
+
+(defn rtc-db-graph?
+  "Is db-graph & RTC enabled"
+  [repo]
+  (and (config/db-based-graph? repo)
+       (some? (get-local-tx repo))))
