@@ -181,7 +181,7 @@
  :page/make-public "Torná-lo público para publicação"
  :page/version-history "Ver histórico da página"
  :page/open-backup-directory "Abrir diretório de backups de página"
- :page/make-private "Torná-lo privado"
+ :page/make-private "Tornar privado"
  :page/delete "Excluir página"
  :page/add-to-favorites "Adicionar aos Favoritos"
  :page/unfavorite "Remover dos favoritos"
