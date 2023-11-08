@@ -5,7 +5,6 @@
             [frontend.db.rtc.idb-keyval-mock :include-macros true :as idb-keyval-mock]
             [frontend.db.rtc.op-idb-layer :as op-idb-layer]
             [frontend.db.rtc.op-mem-layer :as op-layer]
-            [frontend.state :as state]
             #_:clj-kondo/ignore ["/frontend/idbkv" :as idb-keyval]))
 
 (deftest add-ops-to-block-uuid->ops-test
@@ -151,8 +150,7 @@
          (let [repo-ops-store1 (@@#'op-layer/*ops-store repo)]
            (<! (op-layer/<sync-to-idb-layer! repo))
            (op-layer/remove-ops-store! repo)
-           (<! (p->c (with-redefs [state/enable-rtc? (constantly true)]
-                       (op-layer/<init-load-from-indexeddb! repo))))
+           (<! (p->c (op-layer/<init-load-from-indexeddb! repo)))
            (let [repo-ops-store2 (@@#'op-layer/*ops-store repo)]
              (is (= {:current-branch
                      {:block-uuid->ops
