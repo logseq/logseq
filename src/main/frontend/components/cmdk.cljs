@@ -18,6 +18,7 @@
     [frontend.util :as util]
     [frontend.util.page :as page-util]
     [goog.functions :as gfun]
+    [goog.object :as gobj]
     [logseq.shui.core :as shui]
     [promesa.core :as p]
     [rum.core :as rum]
@@ -479,17 +480,19 @@
 (defn handle-input-change
   ([state e] (handle-input-change state e (.. e -target -value)))
   ([state e input]
-   (when-not (util/onchange-event-is-composing? e)
-     (let [!input (::input state)
-           !load-results-throttled (::load-results-throttled state)]
+   (let [composing? (util/onchange-event-is-composing? e)
+         e-type (gobj/getValueByKeys e "type")
+         !input (::input state)
+         !load-results-throttled (::load-results-throttled state)]
      ;; update the input value in the UI
-       (reset! !input input)
+     (reset! !input input)
 
-     ;; ensure that there is a throttled version of the load-results function
-       (when-not @!load-results-throttled
-         (reset! !load-results-throttled (gfun/throttle load-results 50)))
+       ;; ensure that there is a throttled version of the load-results function
+     (when-not @!load-results-throttled
+       (reset! !load-results-throttled (gfun/throttle load-results 50)))
 
-     ;; retrieve the load-results function and update all the results
+       ;; retrieve the load-results function and update all the results
+     (when (or (not composing?) (= e-type "compositionend"))
        (when-let [load-results-throttled @!load-results-throttled]
          (load-results-throttled :default state))))))
 
@@ -569,6 +572,7 @@
        :placeholder (input-placeholder false)
        :ref #(when-not @input-ref (reset! input-ref %))
        :on-change (fn [e] (handle-input-change state e))
+       :on-composition-end (fn [e] (handle-input-change state e))
        :on-key-down (fn [e]
                       (let [value (.-value @input-ref)
                             last-char (last value)]
@@ -605,6 +609,7 @@
               :placeholder (input-placeholder true)
               :ref #(reset! input-ref %)
               :on-change (partial handle-input-change state)
+              :on-composition-end (fn [e] (handle-input-change state e))
               :value input}]
      (shui/icon "x" {:class "text-gray-11"})]))
 
