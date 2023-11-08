@@ -5,7 +5,12 @@
             [frontend.db.rtc.idb-keyval-mock :include-macros true :as idb-keyval-mock]
             [frontend.db.rtc.op-idb-layer :as op-idb-layer]
             [frontend.db.rtc.op-mem-layer :as op-layer]
-            #_:clj-kondo/ignore ["/frontend/idbkv" :as idb-keyval]))
+            #_:clj-kondo/ignore ["/frontend/idbkv" :as idb-keyval]
+            [frontend.config :as config]))
+
+(defn- make-db-graph-repo-name
+  [s]
+  (str config/db-version-prefix s))
 
 (deftest add-ops-to-block-uuid->ops-test
   (testing "case1"
@@ -43,7 +48,7 @@
 
 
 (deftest process-test
-  (let [repo "process-test"
+  (let [repo (make-db-graph-repo-name "process-test")
         ops1 [["move" {:block-uuid "f4abd682-fb9e-4f1a-84bf-5fe11fe7844b" :epoch 1}]
               ["move" {:block-uuid "8e6d8355-ded7-4500-afaa-6f721f3b0dc6" :epoch 2}]]
         ops2 [["update" {:block-uuid "f4abd682-fb9e-4f1a-84bf-5fe11fe7844b" :epoch 3
@@ -135,7 +140,7 @@
    done
    (idb-keyval-mock/with-reset-idb-keyval-mock reset
      (go
-       (let [repo "load-from&sync-to-idb-test"
+       (let [repo (make-db-graph-repo-name "load-from&sync-to-idb-test")
              ops [["move" {:block-uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02" :epoch 1}]
                   ["update" {:block-uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02" :epoch 2
                              :updated-attrs {:content nil}}]
@@ -147,6 +152,7 @@
          (swap! op-idb-layer/stores dissoc repo)
          (op-layer/init-empty-ops-store! repo)
          (op-layer/add-ops! repo ops)
+         (op-layer/update-local-tx! repo 1)
          (let [repo-ops-store1 (@@#'op-layer/*ops-store repo)]
            (<! (op-layer/<sync-to-idb-layer! repo))
            (op-layer/remove-ops-store! repo)
@@ -167,7 +173,8 @@
                            :tags {:add #{#uuid "b0bed412-ad52-4d87-8a08-80ac537e1b61"}}},
                           :epoch 4}]}},
                       :epoch->block-uuid-sorted-map
-                      {1 #uuid"f639f13e-ef6f-4ba5-83b4-67527d27cd02"}}}
+                      {1 #uuid"f639f13e-ef6f-4ba5-83b4-67527d27cd02"}
+                      :local-tx 1}}
                     repo-ops-store1))
              (is (= repo-ops-store1 repo-ops-store2)))))
        (reset)
