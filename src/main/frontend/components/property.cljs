@@ -371,7 +371,7 @@
                          :close-modal? false
                          :show-new-when-not-exact-match? true
                          :exact-match-exclude-items exclude-properties
-                         :input-default-placeholder "Add a property"
+                         :input-default-placeholder "Add property"
                          :on-chosen (fn [{:keys [value]}]
                                       (reset! *property-key value)
                                       (add-property-from-dropdown entity value (assoc opts :*show-new-property-config? *show-new-property-config?)))
