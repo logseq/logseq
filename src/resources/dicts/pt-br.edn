@@ -1,5 +1,5 @@
 {:accessibility/skip-to-main-content "Pular para o conteúdo principal"
- :tutorial/text #resource "tutoriais/tutorial-pt-br.md"
+ :tutorial/text #resource "tutorials/tutorial-pt-br.md"
  :tutorial/dummy-notes #resource "tutoriais/dummy-notes-pt-br.md"
  :on-boarding/demo-graph "Este é um grafo de demonstração, as alterações não serão salvas até que você abra uma pasta local."
  :on-boarding/add-graph "Adicionar um grafo"
