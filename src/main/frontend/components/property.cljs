@@ -387,6 +387,7 @@
 (rum/defcs new-property < rum/reactive
   (rum/local nil ::property-key)
   (rum/local nil ::property-value)
+  (rum/local false ::enter-key-down-triggered?)
   (mixins/event-mixin
    (fn [state]
      (mixins/hide-when-esc-or-outside
@@ -397,21 +398,25 @@
       :node (js/document.getElementById "edit-new-property"))
      (mixins/on-key-down state
                          ;; enter
-                         {13 (fn [e]
-                               (reset! *last-new-property-input-id (:ui/new-property-input-id @state/state)))})
+                         {13 (fn [_e]
+                               (reset! *last-new-property-input-id (:ui/new-property-input-id @state/state))
+                               (reset! (::enter-key-down-triggered? state) true))})
      (mixins/on-enter state
                       {:on-enter (fn [e]
                                    (when-not (or (state/editing?)
                                                  (state/selection?))
-                                     (when (or (= "main-content-container" (.-id (.-target e)))
-                                               (= (.-tagName (.-target e)) "BODY"))
+                                     (when (and
+                                            @(::enter-key-down-triggered? state)
+                                            (or (= "main-content-container" (.-id (.-target e)))
+                                                (= (.-tagName (.-target e)) "BODY")))
                                        (let [nodes (dom/by-class "add-property")
                                              last-input-id @*last-new-property-input-id
                                              node (if last-input-id
                                                     (some (fn [node]
                                                             (when (dom/has-class? node last-input-id) node)) nodes)
                                                     (first nodes))]
-                                         (when node (.click node))))))
+                                         (when node (.click node)))
+                                       (reset! (::enter-key-down-triggered? state) false))))
                        :node js/window})))
   [state block edit-input-id new-property? opts]
   [:div.ls-new-property
