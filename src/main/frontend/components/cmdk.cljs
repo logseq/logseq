@@ -650,7 +650,7 @@
                      :border-top "1px solid var(--lx-gray-07)"}}
        [:div.text-sm.leading-6
         [:div.flex.flex-row.gap-1.items-center
-         [:div.font-medium {:style {:color "var(--lx-gray-12)"}} "Tip:"]
+         [:div.font-medium.text-gray-12 "Tip:"]
          (tip state context)]]
 
        [:div.flex.gap-2 {:style {:margin-right -6}}
