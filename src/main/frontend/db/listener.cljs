@@ -1,15 +1,16 @@
 (ns frontend.db.listener
   "DB listeners"
-  (:require [frontend.db.conn :as conn]
-            [frontend.db.utils :as db-utils]
+  (:require [datascript.core :as d]
+            [electron.ipc :as ipc]
+            [frontend.config :as config]
+            [frontend.db.conn :as conn]
             [frontend.db.persist :as db-persist]
+            [frontend.db.rtc.db-listener :as rtc-db-listener]
+            [frontend.db.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util]
-            [promesa.core :as p]
-            [electron.ipc :as ipc]
-            [datascript.core :as d]
-            [frontend.config :as config]
-            [frontend.db.rtc.db-listener :as rtc-db-listener]))
+            [promesa.core :as p]))
 
 ;; persisting DBs between page reloads
 (defn persist! [repo]
@@ -73,5 +74,5 @@
     (d/unlisten! conn :persistence)
     (repo-listen-to-tx! repo conn)
     (d/unlisten! conn :gen-ops)
-    (when (and (config/db-based-graph? repo) (state/enable-rtc? repo))
+    (when (op-mem-layer/rtc-db-graph? repo)
       (rtc-db-listener/listen-db-to-generate-ops repo conn))))
