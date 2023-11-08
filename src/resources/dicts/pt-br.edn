@@ -178,7 +178,7 @@
  :page/delete-confirmation "Tem certeza de que deseja excluir esta página e seu arquivo?"
  :page/open-in-finder "Abrir no diretório"
  :page/open-with-default-app "Abrir com o aplicativo padrão"
- :page/make-public "Torná-lo público para publicação"
+ :page/make-public "Torná-la público para publicação"
  :page/version-history "Ver histórico da página"
  :page/open-backup-directory "Abrir diretório de backups de página"
  :page/make-private "Tornar privado"
