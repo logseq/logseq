@@ -8,7 +8,7 @@ title: Como fazer anotações fictícias?
 :END:
     - Eu sou um bloco filho!
     - Eu sou outro bloco filho!
-- Ei, sou outro bloco!
+- Ei, eu sou outro bloco!
 :PROPERTIES:
 :id: 5f713ea8-8cba-403d-ac00-9964b1ec7190
 :END:
