@@ -420,8 +420,8 @@
      [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02"}
       [:div {:class "font-bold text-gray-11 pl-0.5"} title]
       (when (not= group :create)
-        [:div {:class "bg-gray-05 px-1.5 py-px text-gray-12 rounded-full"
-               :style {:font-size "0.6rem"}}
+        [:div {:class "pl-1.5 text-gray-12 rounded-full"
+               :style {:font-size "0.7rem"}}
          (if (<= 100 (count items))
            (str "99+")
            (count items))])
