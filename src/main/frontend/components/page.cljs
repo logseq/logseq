@@ -580,26 +580,47 @@
                                               page
                                               (str edit-input-id-prefix "-page")
                                               (assoc configure-opts :class-schema? false))])
-         [:div.flex.flex-col.gap-4
-          (when has-class-properties?
-            [:div
-             (when has-viewable-properties?
-               [:div.mb-1.opacity-70.font-medium.text-sm "Class properties:"])
-             (component-block/db-properties-cp {:editor-box editor/box}
-                                               page
-                                               (str edit-input-id-prefix "-schema")
-                                               (assoc configure-opts :class-schema? true))])
+         (if config/publishing?
+           [:div.flex.flex-col.gap-4
+            (when has-viewable-properties?
+              [:div
+               (when has-class-properties?
+                 [:div.mb-1.opacity-70.font-medium.text-sm "Page properties:"])
+               (component-block/db-properties-cp {:editor-box editor/box}
+                                                 page
+                                                 (str edit-input-id-prefix "-page")
+                                                 {:selected? false
+                                                  :page-configure? false
+                                                  :class-schema? false})])
+            (when has-class-properties?
+              [:div
+               (when has-viewable-properties?
+                 [:div.mb-1.opacity-70.font-medium.text-sm "Class properties:"])
+               (component-block/db-properties-cp {:editor-box editor/box}
+                                                 page
+                                                 (str edit-input-id-prefix "-schema")
+                                                 (assoc configure-opts :class-schema? true))])]
 
-          (when has-viewable-properties?
-            [:div
-             (when has-class-properties?
-               [:div.mb-1.opacity-70.font-medium.text-sm "Page properties:"])
-             (component-block/db-properties-cp {:editor-box editor/box}
-                                              page
-                                              (str edit-input-id-prefix "-page")
-                                              {:selected? false
-                                               :page-configure? false
-                                               :class-schema? false})])])])))
+           [:div.flex.flex-col.gap-4
+            (when has-class-properties?
+              [:div
+               (when has-viewable-properties?
+                 [:div.mb-1.opacity-70.font-medium.text-sm "Class properties:"])
+               (component-block/db-properties-cp {:editor-box editor/box}
+                                                 page
+                                                 (str edit-input-id-prefix "-schema")
+                                                 (assoc configure-opts :class-schema? true))])
+
+            (when has-viewable-properties?
+              [:div
+               (when has-class-properties?
+                 [:div.mb-1.opacity-70.font-medium.text-sm "Page properties:"])
+               (component-block/db-properties-cp {:editor-box editor/box}
+                                                 page
+                                                 (str edit-input-id-prefix "-page")
+                                                 {:selected? false
+                                                  :page-configure? false
+                                                  :class-schema? false})])]))])))
 
 (rum/defc page-properties-react < rum/reactive
   [page* page-opts]
