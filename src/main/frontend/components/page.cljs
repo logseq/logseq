@@ -377,7 +377,8 @@
 
      (when (and class-or-property?
                 (not (property-handler/block-has-viewable-properties? page))
-                (not config/publishing?))
+                (not config/publishing?)
+                (empty? (:properties (:block/schema page))))
        [:a.fade-link.flex.flex-row.items-center.gap-1.text-sm
         {:on-click #(swap! *show-page-properties? not)}
         (ui/icon (if @*show-page-properties?
