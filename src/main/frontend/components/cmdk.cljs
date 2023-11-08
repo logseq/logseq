@@ -409,6 +409,7 @@
   [state title group visible-items first-item]
   (let [{:keys [show items]} (some-> state ::results deref group)
         highlighted-item (or @(::highlighted-item state) first-item)
+        highlighted-group @(::highlighted-group state)
         filter @(::filter state)
         can-show-less? (< GROUP-LIMIT (count visible-items))
         can-show-more? (< (count visible-items) (count items))
@@ -427,7 +428,9 @@
 
       [:div {:class "flex-1"}]
 
-      (when (and (or can-show-more? can-show-less?) (empty? filter))
+      (when (and (= group highlighted-group)
+                 (or can-show-more? can-show-less?)
+                 (empty? filter))
         [:a.text-link.select-node.opacity-50.hover:opacity-90
          {:on-click (if (= show :more) show-less show-more)}
          (if (= show :more)
