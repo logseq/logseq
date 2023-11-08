@@ -383,6 +383,7 @@
                                           (pv/exit-edit-property)
                                           nil))}})]])]))
 
+(defonce *last-new-property-input-id (atom nil))
 (rum/defcs new-property < rum/reactive
   (rum/local nil ::property-key)
   (rum/local nil ::property-value)
@@ -394,15 +395,24 @@
                  (when-not (:editor/property-configure? @state/state)
                    (property-handler/set-editing-new-property! nil)))
       :node (js/document.getElementById "edit-new-property"))
-     (mixins/on-enter state {:on-enter (fn [e]
-                                         ;; FIXME: modal
-                                         (when-not (or (state/editing?)
-                                                       (state/selection?))
-                                           (when (or (= "main-content-container" (.-id (.-target e)))
-                                                     (= (.-tagName (.-target e)) "BODY"))
-                                             (when-let [node (first (dom/by-class "add-property"))]
-                                               (.click node)))))
-                             :node js/window})))
+     (mixins/on-key-down state
+                         ;; enter
+                         {13 (fn [e]
+                               (reset! *last-new-property-input-id (:ui/new-property-input-id @state/state)))})
+     (mixins/on-enter state
+                      {:on-enter (fn [e]
+                                   (when-not (or (state/editing?)
+                                                 (state/selection?))
+                                     (when (or (= "main-content-container" (.-id (.-target e)))
+                                               (= (.-tagName (.-target e)) "BODY"))
+                                       (let [nodes (dom/by-class "add-property")
+                                             last-input-id @*last-new-property-input-id
+                                             node (if last-input-id
+                                                    (some (fn [node]
+                                                            (when (dom/has-class? node last-input-id) node)) nodes)
+                                                    (first nodes))]
+                                         (when node (.click node))))))
+                       :node js/window})))
   [state block edit-input-id new-property? opts]
   [:div.ls-new-property
    (let [*property-key (::property-key state)
@@ -417,13 +427,14 @@
             (not config/publishing?)
             (not (:in-block-container? opts)))
        [:a.fade-link.flex.add-property
-        {:on-click (fn []
+        {:class edit-input-id
+         :on-click (fn []
                      (property-handler/set-editing-new-property! edit-input-id)
                      (reset! *property-key nil)
                      (reset! *property-value nil))}
-        [:div.flex.flex-row.items-center.py-1
-         (ui/icon "circle-plus" {:size 15})
-         [:div.ml-1.text-sm "Add property"]]]
+        [:div.flex.flex-row.items-center {:style {:padding-left 1}}
+         (ui/icon "plus" {:size 15})
+         [:div.ml-1.text-sm {:style {:padding-left 2}} "Add property"]]]
 
        :else
        [:div {:style {:height 28}}]))])
