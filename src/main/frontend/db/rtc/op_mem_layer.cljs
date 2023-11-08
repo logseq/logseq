@@ -67,6 +67,9 @@
 (def ops-from-store-coercer (m/coercer ops-from-store-schema mt/json-transformer))
 (def ops-validator (m/validator ops-schema))
 (def ops-coercer (m/coercer ops-schema mt/json-transformer))
+(def ops-encoder (m/encoder ops-schema mt/json-transformer))
+
+
 (def ops-store-value-schema
   [:map
    [:graph-uuid {:optional true} :string]
@@ -386,8 +389,9 @@
   [repo]
   (let [repo-ops-store (get @*ops-store repo)
         {:keys [block-uuid->ops local-tx graph-uuid]} (:current-branch repo-ops-store)
-        ops (mapcat vals (vals block-uuid->ops))]
-    (op-idb-layer/<reset! repo ops graph-uuid local-tx)))
+        ops (mapcat vals (vals block-uuid->ops))
+        ops* (ops-encoder ops)]
+    (op-idb-layer/<reset! repo ops* graph-uuid local-tx)))
 
 
 (defonce #_:clj-kondo/ignore _sync-loop
