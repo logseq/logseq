@@ -3364,7 +3364,7 @@
                (let [properties (:block/properties macro)
                      macro-name (pu/lookup properties :logseq.macro-name)
                      macro-arguments (pu/lookup properties :logseq.macro-arguments)]
-                 (when-let [query-body (and (= "query" macro-name) (first macro-arguments))]
+                 (when-let [query-body (and (= "query" macro-name) (not-empty (string/join " " macro-arguments)))]
                   (seq (:query
                         (try
                           (query-dsl/parse-query query-body)
@@ -3372,7 +3372,7 @@
                             nil))))))))))
 
 (defn- valid-custom-query-block?
-  "Whether block has a valid customl query."
+  "Whether block has a valid custom query."
   [block]
   (let [entity (db/entity (:db/id block))
         content (:block/content entity)]
