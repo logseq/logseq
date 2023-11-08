@@ -614,18 +614,25 @@
      (shui/icon "x" {:class "text-gray-11"})]))
 
 (rum/defc tip
-  [state]
+  [state context]
   (let [filter @(::filter state)]
     (cond
       filter
-      "type ESC to clear search filter"
+      [:div.flex.flex-row.gap-1.items-center
+       [:div.opacity-30 "Type"]
+       (shui/shortcut "esc" context {:tiled false})
+       [:div.opacity-30 "to clear search filter"]]
 
       :else
-      "type / to filter search results")))
+      [:div.flex.flex-row.gap-1.items-center
+       [:div.opacity-30 "Type"]
+       (shui/shortcut "/" context)
+       [:div.opacity-30 "to filter search results"]])))
 
 (rum/defc hints
   [state]
-  (let [action (state->action state)
+  (let [context (make-shui-context)
+        action (state->action state)
         button-fn (fn [text shortcut]
                     (shui/button {:text text
                                   :theme :text
@@ -633,15 +640,15 @@
                                   :on-click #(handle-action action state %)
                                   :shortcut shortcut
                                   :muted true}
-                                 (make-shui-context)))]
+                                 context))]
     (when action
       [:div {:class "flex w-full px-3 py-2 gap-2 justify-between"
              :style {:background "var(--lx-gray-03)"
                      :border-top "1px solid var(--lx-gray-07)"}}
-       [:div.text-sm.opacity-30.hover:opacity-90.leading-6
+       [:div.text-sm.leading-6
         [:div.flex.flex-row.gap-1.items-center
-         [:div "Tip:"]
-         [:div (tip state)]]]
+         [:div.font-medium {:style {:color "var(--lx-gray-12)"}} "Tip:"]
+         (tip state context)]]
 
        [:div.flex.gap-2
         (case action

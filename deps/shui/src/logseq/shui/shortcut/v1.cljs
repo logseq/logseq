@@ -33,7 +33,9 @@
     :else (pr-str input)))
 
 (rum/defc root
-  [shortcut context]
+  [shortcut context & {:keys [tiled size]
+                       :or {tiled true
+                            size :sm}}]
   [:<>
    (for [[index option] (map-indexed vector (string/split shortcut #" \| "))]
      [:<>
@@ -46,7 +48,7 @@
         (button/root {:theme :gray
                       :interactive false
                       :text (string/upper-case (to-string text))
-                      :tiled true
-                      :size :sm
+                      :tiled tiled
+                      :size size
                       :mused true}
                      context))])])
