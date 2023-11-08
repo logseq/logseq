@@ -1011,6 +1011,7 @@
      (flashcards-switcher-row enable-flashcards?)
      (zotero-settings-row)
      (when (config/db-based-graph? current-repo)
+       ;; FIXME: Wire this up again to RTC init calls
        (rtc-switcher-row (state/enable-rtc? current-repo)))
      (when-not web-platform?
        [:div.mt-1.sm:mt-0.sm:col-span-2

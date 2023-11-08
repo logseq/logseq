@@ -27,6 +27,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.idb :as idb]
@@ -87,6 +88,7 @@
   (when-let [repo (or (state/get-current-repo) (:url (first repos)))]
     (-> (p/do!
          (db-restore/restore-graph! repo)
+         (repo-config-handler/start {:repo repo})
          (op-mem-layer/<init-load-from-indexeddb! repo))
         (p/then
          (fn []

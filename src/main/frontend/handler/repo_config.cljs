@@ -57,10 +57,9 @@
   ([repo-url config-content]
    (set-repo-config-state! repo-url config-content)))
 
-;; comment this fn out to make linter happy
-;; (defn start
-;;   "This component only has one responsibility on start, to manage db and ui state
-;;   from repo config. It does not manage the repo directory, logseq/, as that is
-;;   loosely done by repo-handler"
-;;   [{:keys [repo]}]
-;;   (restore-repo-config! repo))
+(defn start
+  "This component only has one responsibility on start, to manage db and ui state
+  from repo config. It does not manage the repo directory, logseq/, as that is
+  loosely done by repo-handler"
+  [{:keys [repo]}]
+  (restore-repo-config! repo))
