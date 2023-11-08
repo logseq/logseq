@@ -275,62 +275,6 @@ html.is-mobile {
   }
 }
 
-.ui__button {
-  @apply inline-flex items-center px-3 py-2 border border-transparent
-  text-sm leading-4 font-medium rounded-[6px] text-white
-  focus:outline-none transition ease-in-out duration-150;
-
-  /* background-color: or(--lx-accent-04, --color-indigo-600); */
-  /* color: or(--lx-accent-11, white); */
-  background-color: or(--logseq-og-button-background-color, --lx-accent-07, --color-indigo-600);
-  color: or(--logseq-og-button-text-color, --lx-accent-12, white);
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  &:hover:not([disabled]) {
-    /* opacity: or(--lx-accent-01, 0.8); */
-    opacity: 1;
-    background-color: or(--logseq-og-button-background-color-hover, --lx-accent-06, --color-indigo-700);
-  }
-
-  &.is-link {
-    @apply text-white;
-  }
-
-  &[intent='logseq'] {
-    @apply focus:border-gray-500 dark:hover:text-gray-200;
-
-    color: or(--logseq-og-notification-clear-button-text, --lx-gray-12, --ls-primary-text-color);
-    background: or(--logseq-og-notification-clear-button-background, --lx-gray-04, --ls-secondary-background-color);
-
-    &:hover {
-      color: or(--logseq-og-notification-clear-button-text-hover, --lx-accent-11, --ls-link-text-color);
-    }
-  }
-
-  &[intent='link'], &[intent='border-link'] {
-    @apply focus:border-gray-500 dark:hover:text-gray-200;
-
-    color: or(--logseq-og-link-text-color, --lx-gray-12, --ls-primary-text-color);
-    background: transparent;
-
-    &:hover {
-      color: or(--logseq-og-link-text-color-hover, --lx-accent-11, --ls-link-text-color);
-    }
-  }
-
-  &[intent='border-link'] {
-    border: 1px solid;
-  }
-
-  &.is-small {
-    @apply px-2.5 py-1;
-  }
-}
-
 .dropdown-wrapper {
   background-color: or(--logseq-og-dropdown-background, --lx-gray-03, --ls-primary-background-color, #fff);
   border: 1px solid or(--logseq-og-dropdown-border-color, --lx-gray-05, --ls-tertiary-background-color);

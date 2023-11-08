@@ -41,7 +41,7 @@
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for label-for}
     name]
@@ -151,9 +151,10 @@
            :height 500}]]])
 
 (defn row-with-button-action
-  [{:keys [left-label description action button-label href on-click desc -for stretch]}]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-
+  [{:keys [left-label description action button-label href on-click desc -for stretch center?]
+    :or {center? true}}]
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4
+   {:class (if center? "sm:items-center" "sm:items-start")}
    ;; left column
    [:div.flex.flex-col
     [:label.block.text-sm.font-medium.leading-5.opacity-70
@@ -207,7 +208,7 @@
     :-for         "export_css"}))
 
 (defn show-brackets-row [t show-brackets?]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "show_brackets"}
     (t :settings-page/show-brackets)]
@@ -223,7 +224,7 @@
 (rum/defcs switch-spell-check-row < rum/reactive
   [state t]
   (let [enabled? (state/sub [:electron/user-cfgs :spell-check])]
-    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
       (t :settings-page/spell-checker)]
      [:div
@@ -240,7 +241,7 @@
 (rum/defcs switch-git-auto-commit-row < rum/reactive
   [state t]
   (let [enabled? (state/get-git-auto-commit-enabled?)]
-    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
       (t :settings-page/git-switcher-label)]
      [:div
@@ -255,7 +256,7 @@
 (rum/defcs git-auto-commit-seconds < rum/reactive
   [state t]
   (let [secs (or (state/sub [:electron/user-cfgs :git/auto-commit-seconds]) 60)]
-    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
       (t :settings-page/git-commit-delay)]
      [:div.mt-1.sm:mt-0.sm:col-span-2
@@ -347,7 +348,7 @@
                               :action     pick-theme})]))
 
 (defn file-format-row [t preferred-format]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "preferred_format"}
     (t :settings-page/preferred-file-format)]
@@ -364,7 +365,7 @@
         [:option {:key format :value format} (string/capitalize format)])]]]])
 
 (defn date-format-row [t preferred-date-format]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "custom_date_format"}
     (t :settings-page/custom-date-format)
@@ -390,7 +391,7 @@
         [:option {:key format} format])]]]])
 
 (defn workflow-row [t preferred-workflow]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "preferred_workflow"}
     (t :settings-page/preferred-workflow)]
@@ -512,7 +513,7 @@
 ;;               (config-handler/set-config! :feature/enable-block-timestamps? value)))))
 
 (defn zotero-settings-row []
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "zotero_settings"}
     "Zotero"]
@@ -571,15 +572,12 @@
         on-toggle #(let [v (not on?)]
                      (set-on? v)
                      (storage/set ::storage-spec/lsp-core-enabled v))]
-    [:div.flex.items-center
+    [:div.flex.items-center.gap-2
      (ui/toggle on? on-toggle true)
      (when (not= (boolean value) on?)
-       [:div.relative.opacity-70
-        [:span.absolute.whitespace-nowrap
-         {:style {:top -18 :left 10}}
-         (ui/button (t :plugin/restart)
-                    :on-click #(js/logseq.api.relaunch)
-           :small? true :intent "logseq")]])]))
+       (ui/button (t :plugin/restart)
+                  :on-click #(js/logseq.api.relaunch)
+                  :small? true :intent "logseq"))]))
 
 (rum/defc http-server-enabled-switcher
   [t]
@@ -588,15 +586,12 @@
         on-toggle #(let [v (not on?)]
                      (set-on? v)
                      (storage/set ::storage-spec/http-server-enabled v))]
-    [:div.flex.items-center
+    [:div.flex.items-center.gap-2
      (ui/toggle on? on-toggle true)
      (when (not= (boolean value) on?)
-       [:div.relative.opacity-70
-        [:span.absolute.whitespace-nowrap
-         {:style {:top -18 :left 10}}
-         (ui/button (t :plugin/restart)
-                    :on-click #(js/logseq.api.relaunch)
-                    :small? true :intent "logseq")]])]))
+       (ui/button (t :plugin/restart)
+                  :on-click #(js/logseq.api.relaunch)
+                  :small? true :intent "logseq"))]))
 
 (rum/defc flashcards-enabled-switcher
   [enable-flashcards?]
@@ -1018,7 +1013,7 @@
     [:div.panel-wrap.is-features.mb-8
      (journal-row enable-journals?)
      (when (not enable-journals?)
-       [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+       [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
         [:label.block.text-sm.font-medium.leading-5.opacity-70
          {:for "default page"}
          (t :settings-page/home-default-page)]
@@ -1056,7 +1051,7 @@
 
      (when-not web-platform?
        [:<>
-        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
          [:label.flex.font-medium.leading-5.self-start.mt-1
           (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
         [:div.flex.flex-col.gap-4
@@ -1074,7 +1069,7 @@
      ;; (when-not web-platform?
      ;;   [:<>
      ;;    [:hr]
-     ;;    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+;;    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      ;;     [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]]
      ;;    [:div.flex.flex-col.gap-4
      ;;     {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}

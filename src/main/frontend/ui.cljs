@@ -34,7 +34,9 @@
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.shui.core :as shui]
+            [frontend.shui :refer [make-shui-context]]))
 
 (declare icon)
 
@@ -1010,56 +1012,38 @@
              :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
              :on-tweet-load-success #(reset! *loading? false)})]]))
 
-(def get-adapt-icon-class
-  (memoize (fn [klass] (r/adapt-class klass))))
-
 (defn tabler-icon
   [name]
   (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase name))))
 
-(rum/defc icon
-  ([name] (icon name nil))
-  ([name {:keys [extension? font? class] :as opts}]
-   (when-not (string/blank? name)
-     (let [^js jsTablerIcons (gobj/get js/window "tablerIcons")]
-       (if (or extension? font? (not jsTablerIcons))
-         [:span.ui__icon (merge {:class
-                                 (util/format
-                                   (str "%s-" name
-                                        (when (:class opts)
-                                          (str " " (string/trim (:class opts)))))
-                                   (if extension? "tie tie" "ti ti"))}
-                                (dissoc opts :class :extension? :font?))]
+(def icon shui/icon)
 
-         ;; tabler svg react
-         (when-let [klass (tabler-icon name)]
-           (let [f (get-adapt-icon-class klass)]
-             [:span.ui__icon.ti
-              {:class (str "ls-icon-" name " " class)}
-              (f (merge {:size 18} (r/map-keys->camel-case (dissoc opts :class))))])))))))
+(rum/defc button-inner
+  [text & {:keys [background href class intent on-click small? title icon icon-props disabled?]
+           :or   {small? false}}]
+  (let [opts {:text text
+              :theme (when (contains? #{"link" "border-link"} intent) :text)
+              :href href
+              :on-click on-click
+              :size (if small? :sm :md)
+              :icon icon
+              :icon-props icon-props
+              :button-props (when title {:title title})
+              :class (if (= intent "border-link") (str class " border") class)
+              :muted disabled?
+              :disabled? disabled?}]
+    (shui/button (cond->
+                  opts
+                   background
+                   (assoc :color background))
+      (make-shui-context))))
 
-(rum/defc button
-  [text & {:keys [background href class intent on-click small? large? title icon icon-props disabled?]
-           :or   {small? false large? false}
-           :as   option}]
-  (let [klass (if-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center" intent)
-        klass (if background (string/replace klass "indigo" background) klass)
-        klass (if small? (str klass ".is-small") klass)
-        klass (if large? (str klass ".text-base") klass)
-        klass (if disabled? (str klass "disabled:opacity-75") klass)]
-    [:button.ui__button
-     (merge
-      {:type  "button"
-       :title title
-       :disabled disabled?
-       :class (str (util/hiccup->class klass) " " class)}
-      (dissoc option :background :class :small? :large? :disabled?)
-      (when href
-        {:on-click (fn []
-                     (util/open-url href)
-                     (when (fn? on-click) (on-click)))}))
-     (when icon (frontend.ui/icon icon (merge icon-props {:class (when-not (empty? text) "mr-1")})))
-     text]))
+(defn button
+  [text & {:keys []
+           :as opts}]
+  (if (map? text)
+    (button-inner nil text)
+    (button-inner text opts)))
 
 (rum/defc point
   ([] (point "bg-red-600" 5 nil))

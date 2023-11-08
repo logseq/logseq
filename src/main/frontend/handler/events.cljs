@@ -626,8 +626,7 @@
       (t :yes)
       :autoFocus "on"
       :class "ui__modal-enter"
-      :large? true
-      :on-click (fn []
+       :on-click (fn []
                   (state/close-modal!)
                   (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))
 
@@ -676,7 +675,6 @@
          (t :yes)
          :autoFocus "on"
          :class "ui__modal-enter"
-         :large? true
          :on-click (fn []
                      (state/close-modal!)
                      (state/pub-event! [:graph/re-index])))]])))
