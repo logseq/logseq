@@ -8,6 +8,7 @@
 (def stores (atom {}))
 
 (defn- ensure-store
+  "Return nil when 'repo' is not a db-graph"
   [repo]
   {:pre [(some? repo)]}
   (when (config/db-based-graph? repo)
@@ -28,20 +29,24 @@
 (defn <reset!
   [repo ops graph-uuid local-tx]
   (p->c
-   (when-let [store (ensure-store repo)]
-     (let [idb-items (ops=>idb-items ops)]
-       (p/do!
-        (idb-keyval/clear store)
-        (idb-keyval/setBatch (clj->js idb-items) store)
-        (when graph-uuid
-          (idb-keyval/set "graph-uuid" graph-uuid store))
-        (when local-tx
-          (idb-keyval/set "local-tx" local-tx store)))))))
+   ;; ensure return a promise
+   (p/do!
+    (when-let [store (ensure-store repo)]
+      (let [idb-items (ops=>idb-items ops)]
+        (p/do!
+         (idb-keyval/clear store)
+         (idb-keyval/setBatch (clj->js idb-items) store)
+         (when graph-uuid
+           (idb-keyval/set "graph-uuid" graph-uuid store))
+         (when local-tx
+           (idb-keyval/set "local-tx" local-tx store))))))))
 
 
 (defn <read
   [repo]
-  (when-let [store (ensure-store repo)]
-    (p/let [idb-keys (idb-keyval/keys store)]
-      (-> (p/all (mapv (fn [k] (p/chain (idb-keyval/get k store) (partial vector k))) idb-keys))
-          (p/then (fn [items] (mapv #(js->clj % :keywordize-keys true) items)))))))
+  ;; ensure return a promise
+  (p/do!
+   (when-let [store (ensure-store repo)]
+     (p/let [idb-keys (idb-keyval/keys store)]
+       (-> (p/all (mapv (fn [k] (p/chain (idb-keyval/get k store) (partial vector k))) idb-keys))
+           (p/then (fn [items] (mapv #(js->clj % :keywordize-keys true) items))))))))
