@@ -67,8 +67,12 @@
 
 (defn create-items [q]
   (when-not (string/blank? q)
-    [{:text "Create page"       :icon "new-page"       :icon-theme :color :info (str "Create page called '" q "'") :source-create :page}
-     {:text "Create whiteboard" :icon "new-whiteboard" :icon-theme :color :info (str "Create whiteboard called '" q "'") :source-create :whiteboard}]))
+    [{:text "Create page"       :icon "new-page"
+      :icon-theme :color
+      :info (str "Create page called '" q "'") :source-create :page}
+     {:text "Create whiteboard" :icon "new-whiteboard"
+      :icon-theme :color
+      :info (str "Create whiteboard called '" q "'") :source-create :whiteboard}]))
 
 ;; Take the results, decide how many items to show, and order the results appropriately
 (defn state->results-ordered [state search-mode]
