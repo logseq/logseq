@@ -558,33 +558,47 @@
         edit-input-id-prefix (str "edit-block-" (:block/uuid page))
         configure-opts {:selected? false
                         :page-configure? true}
-        has-viewable-properties? (property-handler/block-has-viewable-properties? page)]
-    (when (or has-viewable-properties? configure?)
+        has-viewable-properties? (property-handler/block-has-viewable-properties? page)
+        has-class-properties? (seq (:properties (:block/schema page)))]
+    (when (or configure? has-viewable-properties? has-class-properties?)
       [:div.ls-page-properties.mb-4 {:style {:padding 2}}
        (if configure?
          (cond
-           (and class? (not show-page-properties?))
+           (and class? (not show-page-properties?) (not has-class-properties?))
            [:div
-            [:div.mb-2 "Class properties:"]
-            [:div
-             (component-block/db-properties-cp {:editor-box editor/box}
-                                               page
-                                               (str edit-input-id-prefix "-schema")
-                                               (assoc configure-opts :class-schema? true))]]
+            [:div.mb-1 "Class properties:"]
+            (component-block/db-properties-cp {:editor-box editor/box}
+                                              page
+                                              (str edit-input-id-prefix "-schema")
+                                              (assoc configure-opts :class-schema? true))]
 
            (not (property-handler/block-has-viewable-properties? page))
            [:div
-            [:div.mb-2 "Page properties:"]
+            [:div.mb-1 "Page properties:"]
             (component-block/db-properties-cp {:editor-box editor/box}
                                               page
                                               (str edit-input-id-prefix "-page")
                                               (assoc configure-opts :class-schema? false))])
-         (component-block/db-properties-cp {:editor-box editor/box}
-                                           page
-                                           (str edit-input-id-prefix "-page")
-                                           {:selected? false
-                                            :page-configure? false
-                                            :class-schema? false}))])))
+         [:div.flex.flex-col.gap-4
+          (when has-class-properties?
+            [:div
+             (when has-viewable-properties?
+               [:div.mb-1.opacity-70.font-medium.text-sm "Class properties:"])
+             (component-block/db-properties-cp {:editor-box editor/box}
+                                               page
+                                               (str edit-input-id-prefix "-schema")
+                                               (assoc configure-opts :class-schema? true))])
+
+          (when has-viewable-properties?
+            [:div
+             (when has-class-properties?
+               [:div.mb-1.opacity-70.font-medium.text-sm "Page properties:"])
+             (component-block/db-properties-cp {:editor-box editor/box}
+                                              page
+                                              (str edit-input-id-prefix "-page")
+                                              {:selected? false
+                                               :page-configure? false
+                                               :class-schema? false})])])])))
 
 (rum/defc page-properties-react < rum/reactive
   [page* page-opts]
@@ -686,8 +700,7 @@
                [:div.mb-4
                 (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
-           (when (and db-based?
-                      (not block?))
+           (when (and db-based? (not block?) (not preview?) (not sidebar?))
              (page-properties-react page {:configure? false}))
 
            ;; blocks
