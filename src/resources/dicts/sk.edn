@@ -79,7 +79,6 @@
  :page/add-to-favorites                            "Pridať medzi obľúbené"
  :page/unfavorite                                  "Odobrať z obľubených"
  :page/show-journals                               "Zobraziť denníky"
- :page/show-whiteboards                            "Zobraziť tabule"
  :block/name                                       "Názav stránky"
  :page/earlier                                     "Skôr"
  :page/copy-page-url                               "Kopírovať URL stránky"

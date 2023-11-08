@@ -83,7 +83,6 @@
  :page/add-to-favorites "Adicionar aos Favoritos"
  :page/unfavorite "Remover dos Favoritos"
  :page/show-journals "Mostrar Págs. Diárias"
- :page/show-whiteboards "Mostrar quadros brancos"
  :block/name "Nome da página"
  :page/earlier "Antes"
  :page/copy-page-url "Copiar URL da página"

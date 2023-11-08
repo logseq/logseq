@@ -191,7 +191,6 @@
     :page/open-backup-directory "Ouvrir le dossier de sauvegarde de la page"
     :page/open-in-finder "Ouvrir dans l'explorateur de fichiers"
     :page/open-with-default-app "Ouvrir avec l'application par défaut"
-    :page/show-whiteboards "Montrer les tableaux blancs"
     :page/unfavorite "Retirer la page des favoris"
     :page/updated-at "Mise à jour le"
     :page/version-history "Consulter l'historique de la page"

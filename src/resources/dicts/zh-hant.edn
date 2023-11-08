@@ -85,7 +85,6 @@
  :page/add-to-favorites "加入我的最愛"
  :page/unfavorite "從我的最愛移除"
  :page/show-journals "顯示日記頁面"
- :page/show-whiteboards "顯示白板"
  :block/name "頁面名稱"
  :page/earlier "最近"
  :page/copy-page-url "複製頁面連結"

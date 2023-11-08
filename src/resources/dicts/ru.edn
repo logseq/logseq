@@ -97,7 +97,6 @@
  :page/add-to-favorites                                "Добавить в Избранное"
  :page/unfavorite                                      "Удалить из Избранного"
  :page/show-journals                                   "Показать журналы"
- :page/show-whiteboards                                "Показать интерактивные доски"
  :block/name                                           "Имя страницы"
  :page/earlier                                         "Ранее"
  :page/copy-page-url                                   "Копировать URL страницы"
