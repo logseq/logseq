@@ -653,7 +653,7 @@
          [:div.font-medium {:style {:color "var(--lx-gray-12)"}} "Tip:"]
          (tip state context)]]
 
-       [:div.flex.gap-2
+       [:div.flex.gap-2 {:style {:margin-right -6}}
         (case action
           :open
           [:<>
