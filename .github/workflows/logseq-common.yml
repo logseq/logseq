@@ -20,7 +20,7 @@ defaults:
     working-directory: deps/common
 
 env:
-  CLOJURE_VERSION: '1.10.1.763'
+  CLOJURE_VERSION: '1.11.1.1413'
   JAVA_VERSION: '11'
   # This is the latest node version we can run.
   NODE_VERSION: '18'
