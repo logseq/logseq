@@ -17,6 +17,7 @@
             [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.async-util :include-macros true :refer [<? go-try]]
             [malli.core :as m]
             [malli.util :as mu]))
 
@@ -560,36 +561,43 @@
   {:pre [(some? @(:*graph-uuid state))
          (some? @(:*repo state))]}
   (go
-    (let [repo @(:*repo state)
-          _ (op-mem-layer/new-branch! repo)
-          ops-for-remote (sort-remote-ops (gen-block-uuid->remote-ops repo))
-          local-tx (op-mem-layer/get-local-tx repo)
-          r (with-sub-data-from-ws state
-              (<! (ws/<send! state {:req-id (get-req-id)
-                                    :action "apply-ops" :graph-uuid @(:*graph-uuid state)
-                                    :ops ops-for-remote :t-before (or local-tx 1)}))
-              (<! (get-result-ch)))]
-      (if-let [remote-ex (:ex-data r)]
-        (case (:type remote-ex)
-          ;; conflict-update remote-graph, keep these local-pending-ops
-          ;; and try to send ops later
-          "graph-lock-failed"
-          (do (prn :graph-lock-failed)
-              (op-mem-layer/rollback! repo)
-              nil)
-          ;; this case means something wrong in remote-graph data,
-          ;; nothing to do at client-side
-          "graph-lock-missing"
-          (do (prn :graph-lock-missing)
-              (op-mem-layer/rollback! repo)
-              nil)
-          ;; else
-          (do (op-mem-layer/rollback! repo)
-              (throw (ex-info "Unavailable" {:remote-ex remote-ex}))))
-        (do (assert (pos? (:t r)) r)
-            (op-mem-layer/commit! repo)
-            (<! (<apply-remote-data repo (rtc-const/data-from-ws-decoder r)))
-            (prn :<client-op-update-handler :t (:t r)))))))
+    (let [repo @(:*repo state)]
+      (op-mem-layer/new-branch! repo)
+      (try
+        (let [ops-for-remote (sort-remote-ops (gen-block-uuid->remote-ops repo))
+              local-tx (op-mem-layer/get-local-tx repo)
+              r (<? (ws/<send&receive state {:action "apply-ops" :graph-uuid @(:*graph-uuid state)
+                                             :ops ops-for-remote :t-before (or local-tx 1)}))]
+          (if-let [remote-ex (:ex-data r)]
+            (case (:type remote-ex)
+            ;; conflict-update remote-graph, keep these local-pending-ops
+            ;; and try to send ops later
+              :graph-lock-failed
+              (do (prn :graph-lock-failed)
+                  (op-mem-layer/rollback! repo)
+                  nil)
+            ;; this case means something wrong in remote-graph data,
+            ;; nothing to do at client-side
+              :graph-lock-missing
+              (do (prn :graph-lock-missing)
+                  (op-mem-layer/rollback! repo)
+                  nil)
+
+              :get-s3-object-failed
+              (do (prn ::get-s3-object-failed r)
+                  (op-mem-layer/rollback! repo)
+                  nil)
+            ;; else
+              (do (op-mem-layer/rollback! repo)
+                  (throw (ex-info "Unavailable" {:remote-ex remote-ex}))))
+            (do (assert (pos? (:t r)) r)
+                (op-mem-layer/commit! repo)
+                (<! (<apply-remote-data repo r))
+                (prn :<client-op-update-handler :t (:t r)))))
+        (catch :default e
+          (prn ::unknown-ex e)
+          (op-mem-layer/rollback! repo)
+          nil)))))
 
 (defn- make-push-client-ops-timeout-ch
   [repo never-timeout?]
@@ -608,7 +616,7 @@
     (reset! (:*repo state) repo)
     (reset! (:*rtc-state state) :open)
     (let [{:keys [data-from-ws-pub _client-op-update-chan]} state
-          push-data-from-ws-ch (chan (async/sliding-buffer 100) (map rtc-const/data-from-ws-decoder))
+          push-data-from-ws-ch (chan (async/sliding-buffer 100) (map rtc-const/data-from-ws-coercer))
           stop-rtc-loop-chan (chan)
           *auto-push-client-ops? (:*auto-push-client-ops? state)
           force-push-client-ops-ch (:force-push-client-ops-chan state)

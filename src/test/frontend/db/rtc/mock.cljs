@@ -13,7 +13,7 @@
     (let [msg (-> s
                   js/JSON.parse
                   (js->clj :keywordize-keys true)
-                  rtc-const/data-to-ws-decoder)]
+                  rtc-const/data-to-ws-coercer)]
       (handler-fn msg push-data-to-client-chan)))
 
   (set-handler-fn [_ f]

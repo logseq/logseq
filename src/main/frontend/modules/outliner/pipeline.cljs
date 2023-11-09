@@ -1,19 +1,19 @@
 (ns frontend.modules.outliner.pipeline
-  (:require [frontend.config :as config]
-            [frontend.db :as db]
-            [frontend.db.react :as react]
-            [frontend.modules.outliner.file :as file]
-            [logseq.outliner.datascript-report :as ds-report]
-            [logseq.outliner.pipeline :as outliner-pipeline]
-            [frontend.state :as state]
-            [frontend.util :as util]
-            [promesa.core :as p]
-            [frontend.persist-db :as persist-db]
+  (:require [clojure.core.async :as async :refer [<! go]]
             [clojure.string :as string]
             [datascript.core :as d]
+            [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.db.react :as react]
             [frontend.handler.file-based.property.util :as property-util]
+            [frontend.modules.outliner.file :as file]
+            [frontend.persist-db :as persist-db]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
             [frontend.util.drawer :as drawer]
-            [frontend.util.cursor :as cursor]))
+            [logseq.outliner.datascript-report :as ds-report]
+            [logseq.outliner.pipeline :as outliner-pipeline]))
 
 (defn updated-page-hook
   [tx-report page]
@@ -120,11 +120,12 @@
                                                 :update-tx-ids? true}))
             (when (config/db-based-graph? repo)
               (when-not config/publishing?
-                (p/let [_transact-result (persist-db/<transact-data repo upsert-blocks deleted-block-uuids)
+                (go
+                  (let [_transact-result (<! (persist-db/<transact-data repo upsert-blocks deleted-block-uuids))
                         _ipc-result (comment ipc/ipc :db-transact-data repo
                                              (pr-str
                                               {:blocks upsert-blocks
-                                               :deleted-block-uuids deleted-block-uuids}))])))))
+                                               :deleted-block-uuids deleted-block-uuids}))]))))))
 
         (when (and (not (:delete-files? tx-meta))
                    (not replace?))
