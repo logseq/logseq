@@ -3,12 +3,12 @@
   (:require-macros
    [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [cljs-http.client :as http]
-            [cljs.core.async :as async :refer [<! chan go offer!]]
+            [cljs.core.async :as async :refer [<! chan offer!]]
+            [frontend.async-util :include-macros true :refer [<? go-try]]
             [frontend.config :as config]
             [frontend.db.rtc.const :as rtc-const]
             [frontend.state :as state]
-            [frontend.util :as util]
-            [frontend.async-util :include-macros true :refer [go-try <?]]))
+            [frontend.util :as util]))
 
 (def WebSocketOPEN (if (= *target* "nodejs")
                      1

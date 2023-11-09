@@ -1,4 +1,6 @@
-(ns frontend.async-util)
+(ns frontend.async-util
+  "Some cljs.core.async relate macros and fns.
+  see also: https://gist.github.com/vvvvalvalval/f1250cec76d3719a8343")
 
 (defmacro go-try
   [& body]
