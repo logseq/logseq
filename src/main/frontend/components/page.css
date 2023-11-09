@@ -76,7 +76,7 @@
       > span {
         @apply text-sm;
 
-        color: or(--logseq-og-all-pages-table-text, --lx-gray-11, rgb(115, 115, 115));
+        color: or(--ls-all-pages-table-text, --lx-gray-11, rgb(115, 115, 115));
 
         padding: 6px 8px;
       }
@@ -101,14 +101,14 @@
 
   .actions {
     position: sticky;
-    background-color: or(--logseq-og-all-pages-table, --lx-gray-01, --ls-primary-background-color);
+    background-color: or(--ls-all-pages-table, --lx-gray-01, --ls-primary-background-color);
     white-space: nowrap;
     top: -18px;
     padding-bottom: 10px;
     z-index: 1;
 
     .dark & {
-        background-color: or(--logseq-og-all-pages-table, --lx-gray-02, --ls-primary-background-color);
+        background-color: or(--ls-all-pages-table, --lx-gray-02, --ls-primary-background-color);
     }
 
     @screen md {

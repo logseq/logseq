@@ -281,12 +281,12 @@ html[data-theme='light'] {
   color: var(--ls-primary-text-color);
 
   &:hover {
-    background-color: or(--logseq-og-whiteboard-button-background-hover, --lx-gray-06, --ls-primary-background-color);
+    background-color: or(--ls-whiteboard-button-background-hover, --lx-gray-06, --ls-primary-background-color);
   }
 
   &[data-selected='true'] {
-    background-color: or(--logseq-og-whiteboard-button-background-selected, --lx-accent-09, --color-selectedFill);
-    color: or(--logseq-og-whiteboard-button-text-selected, --lx-gray-12, --color-selectedContrast);
+    background-color: or(--ls-whiteboard-button-background-selected, --lx-accent-09, --color-selectedFill);
+    color: or(--ls-whiteboard-button-text-selected, --lx-gray-12, --color-selectedContrast);
   }
 }
 
@@ -354,7 +354,7 @@ button.tl-select-input-trigger {
   }
 
   &[data-state='checked'] {
-    background-color: or(--logseq-og-whiteboard-select-background-selected, --lx-accent-09, --color-indigo-500);
+    background-color: or(--ls-whiteboard-select-background-selected, --lx-accent-09, --color-indigo-500);
     color: #fff;
   }
 }
@@ -820,8 +820,8 @@ html[data-theme='light'] {
 html[data-theme='dark'] {
   .tl-type-tag[data-active='true'] {
     background: linear-gradient(0deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)),
-                or(--logseq-og-whiteboard-logseq-button-border, --lx-accent-09, #338fff);
-    border: 1px solid or(--logseq-og-whiteboard-logseq-button-border, --lx-accent-09, #338fff);
+                or(--ls-whiteboard-logseq-button-border, --lx-accent-09, #338fff);
+    border: 1px solid or(--ls-whiteboard-logseq-button-border, --lx-accent-09, #338fff);
     color: var(--ls-secondary-text-color);
   }
 }
@@ -1129,7 +1129,7 @@ button.tl-shape-links-panel-item-remove-button {
 
 .tl-quick-links-row:nth-child(1) {
   @apply rounded bg-indigo-600;
-  background: or(--logseq-og-whiteboard-quick-links-background, --lx-accent-09, --color-indigo-600);
+  background: or(--ls-whiteboard-quick-links-background, --lx-accent-09, --color-indigo-600);
   color: #fff;
 }
 
@@ -1147,7 +1147,7 @@ button.tl-shape-links-panel-item-remove-button {
     @apply opacity-50;
   }
   .tl-quick-links-row:nth-child(1):hover {
-    background: or(--logseq-og-whiteboard-quick-links-background-hover, --lx-accent-08, --color-indigo-500);
+    background: or(--ls-whiteboard-quick-links-background-hover, --lx-accent-08, --color-indigo-500);
   }
 }
 
@@ -1160,8 +1160,8 @@ button.tl-shape-links-panel-item-remove-button {
   padding: 10px 15px;
   font-size: 15px;
   line-height: 1;
-  color: or(--logseq-og-whiteboard-tooltip-text, --lx-gray-12, --ls-secondary-text-color);
-  background-color: or(--logseq-og-whiteboard-tooltip-background, --lx-gray-05, --ls-secondary-background-color);
+  color: or(--ls-whiteboard-tooltip-text, --lx-gray-12, --ls-secondary-text-color);
+  background-color: or(--ls-whiteboard-tooltip-background, --lx-gray-05, --ls-secondary-background-color);
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   user-select: none;
   animation-duration: 700ms;

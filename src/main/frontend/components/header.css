@@ -187,7 +187,7 @@
     background: none;
 
     @screen md {
-      background: or(--logseq-og-header-button-hover, --lx-gray-04, --ls-tertiary-background-color);
+      background: or(--ls-header-button-hover, --lx-gray-04, --ls-tertiary-background-color);
     }
   }
 

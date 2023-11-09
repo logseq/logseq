@@ -242,11 +242,11 @@
 
 .shui__button-theme-gray.shui__button-color-custom  { background-color: var(--ls-tertiary-background-color);
                                                       color: var(--ls-secondary-text-color, white); }
-.shui__button-theme-color.shui__button-color-custom  { background-color: hsl(var(--logseq-og-button-background-hsl) / 0.9);
+.shui__button-theme-color.shui__button-color-custom  { background-color: hsl(var(--ls-button-background-hsl) / 0.9);
                                                        color: white; }
 
 .shui__button-color-custom:hover, .dark .shui__button-color-custom:hover {
-    background: var(--logseq-og-button-background);
+    background: var(--ls-button-background);
 }
 
 .shui__button-theme-color.shui__button-color-lime    { color: white; background-color: var(--rx-lime-09); &:hover { background-color: var(--rx-lime-10); } &:active { background-color: var(--rx-lime-08); }}
