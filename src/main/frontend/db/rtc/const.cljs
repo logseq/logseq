@@ -73,6 +73,7 @@
    [:t {:optional true} :int]
    [:t-before {:optional true} :int]
    [:failed-ops {:optional true} [:sequential op-schema]]
+   [:s3-presign-url {:optional true} :string]
    [:affected-blocks {:optional true}
     [:map-of :uuid
      [:multi {:dispatch :op :decode/string #(update % :op keyword)}
@@ -109,8 +110,11 @@
       [:remove-page
        [:map {:closed true}
         [:op :keyword]
-        [:block-uuid :uuid]]]]]]])
+        [:block-uuid :uuid]]]]]]
+   [:ex-data {:optional true} [:map [:type :keyword]]]
+   [:ex-message {:optional true} :any]])
 (def data-from-ws-decoder (m/decoder data-from-ws-schema mt/string-transformer))
+(def data-from-ws-coercer (m/coercer data-from-ws-schema mt/string-transformer))
 (def data-from-ws-validator (m/validator data-from-ws-schema))
 
 
@@ -163,6 +167,5 @@
       [:action :string]
       [:graph-uuid :string]
       [:block-uuids [:sequential :uuid]]]]]))
-(def data-to-ws-decoder (m/decoder data-to-ws-schema mt/string-transformer))
 (def data-to-ws-encoder (m/encoder data-to-ws-schema mt/string-transformer))
-(def data-to-ws-validator (m/validator data-to-ws-schema))
+(def data-to-ws-coercer (m/coercer data-to-ws-schema mt/string-transformer))

@@ -279,8 +279,7 @@
   use `commit` to remove old-branch."
   [repo]
   (let [{:keys [current-branch old-branch]} (get @*ops-store repo)]
-    (assert (and (some? current-branch)
-                 (nil? old-branch)))
+    (assert (some? current-branch) repo)
     (swap! *ops-store assoc-in [repo :old-branch] current-branch)))
 
 (defn rollback!
