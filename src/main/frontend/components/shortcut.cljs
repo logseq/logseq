@@ -1,4 +1,5 @@
 (ns frontend.components.shortcut
+  "This namespace will be replaced later with frontend.components.shortcut2."
   (:require [clojure.string :as str]
             [frontend.context.i18n :refer [t]]
             [frontend.modules.shortcut.core :as shortcut]

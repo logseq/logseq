@@ -368,7 +368,7 @@ html.is-mobile {
 }
 
 .ui__toggle-background-on {
-  background: or(--logseq-og-toggle-on-background, --lx-accent-09, rgb(2, 132, 199));
+  background: or(--logseq-og-toggle-on-background, --lx-accent-09, --logseq-og-button-background);
 }
 
 .ui__toggle-background-off {
