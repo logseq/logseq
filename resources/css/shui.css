@@ -247,6 +247,7 @@
 
 .shui__button-color-custom:hover, .dark .shui__button-color-custom:hover {
     background: var(--ls-button-background);
+    color: white;
 }
 
 .shui__button-theme-color.shui__button-color-lime    { color: white; background-color: var(--rx-lime-09); &:hover { background-color: var(--rx-lime-10); } &:active { background-color: var(--rx-lime-08); }}
