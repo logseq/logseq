@@ -113,7 +113,7 @@
         [:block-uuid :uuid]]]]]]
    [:ex-data {:optional true} [:map [:type :keyword]]]
    [:ex-message {:optional true} :any]])
-(def data-from-ws-decoder (m/decoder data-from-ws-schema mt/string-transformer))
+
 (def data-from-ws-coercer (m/coercer data-from-ws-schema mt/string-transformer))
 (def data-from-ws-validator (m/validator data-from-ws-schema))
 

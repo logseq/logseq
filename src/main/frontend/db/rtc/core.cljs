@@ -17,7 +17,7 @@
             [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.async-util :include-macros true :refer [<? go-try]]
+            [frontend.async-util :include-macros true :refer [<?]]
             [malli.core :as m]
             [malli.util :as mu]))
 
