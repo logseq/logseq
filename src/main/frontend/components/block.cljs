@@ -1856,7 +1856,7 @@
                         "NOW" "LATER"
                         "LATER" "NOW"
                         "TODO" "DOING"
-                        "DOING" "TODO")]
+                        "DOING" "DONE")]
       [:a
        {:class (str "marker-switch block-marker " marker)
         :title (util/format "Change from %s to %s" marker next-marker)
