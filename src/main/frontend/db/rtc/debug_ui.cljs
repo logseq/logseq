@@ -5,7 +5,9 @@
   (:require [cljs.core.async :as async :refer [<! go]]
             [fipp.edn :as fipp]
             [frontend.db :as db]
+            [frontend.db.conn :as conn]
             [frontend.db.rtc.core :as rtc-core]
+            [frontend.db.rtc.db-listener :as db-listener]
             [frontend.db.rtc.full-upload-download-graph :as full-upload-download-graph]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.db.rtc.ws :as ws]
@@ -58,7 +60,9 @@
   (go
     (let [state (<! (rtc-core/<init-state))
           repo (state/get-current-repo)]
-      (<! (full-upload-download-graph/<upload-graph state repo)))))
+      (<! (full-upload-download-graph/<upload-graph state repo))
+      (let [conn (conn/get-db repo false)]
+        (db-listener/listen-db-to-generate-ops repo conn)))))
 
 (rum/defcs ^:large-vars/cleanup-todo rtc-debug-ui <
   rum/reactive

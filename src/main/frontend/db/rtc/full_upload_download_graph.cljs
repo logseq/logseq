@@ -51,8 +51,10 @@
         (let [r (<! (get-result-ch))]
           (if-not (:graph-uuid r)
             (ex-info "upload graph failed" r)
-            (do (op-mem-layer/update-graph-uuid! repo (:graph-uuid r))
+            (do (op-mem-layer/init-empty-ops-store! repo)
+                (op-mem-layer/update-graph-uuid! repo (:graph-uuid r))
                 (op-mem-layer/update-local-tx! repo (:t r))
+                (<! (op-mem-layer/<sync-to-idb-layer! repo))
                 r)))))))
 
 (def block-type-ident->str
