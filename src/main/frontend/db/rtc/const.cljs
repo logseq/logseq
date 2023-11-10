@@ -13,13 +13,14 @@
    [:schema {:optional true} [:maybe :string]]
    [:tags {:optional true} [:maybe [:sequential :uuid]]]
    [:properties {:optional true} [:maybe :string ; transit-json-string
-                                  ]]])
+                                  ]]
+   [:link {:optional true} :uuid]])
 
 (def general-attr-set
   (into #{} (map first) general-attrs-schema-coll))
 
 (def block-type-schema [:enum "property" "class" "whiteboard" "object" "hidden" "enum value"])
-(def op-schema
+(def to-ws-op-schema
   [:multi {:dispatch first :decode/string #(update % 0 keyword)}
    [:move
     [:cat :keyword
@@ -55,7 +56,8 @@
       [:properties {:optional true} [:map
                                      [:add {:optional true} [:sequential [:cat :uuid :string ;; transit-string
                                                                           ]]]
-                                     [:retract {:optional true} [:set :uuid]]]]]]]
+                                     [:retract {:optional true} [:set :uuid]]]]
+      [:link {:optional true} :uuid]]]]
    [:update-page
     [:cat :keyword
      [:map
@@ -72,7 +74,7 @@
    [:req-id :string]
    [:t {:optional true} :int]
    [:t-before {:optional true} :int]
-   [:failed-ops {:optional true} [:sequential op-schema]]
+   [:failed-ops {:optional true} [:sequential to-ws-op-schema]]
    [:s3-presign-url {:optional true} :string]
    [:affected-blocks {:optional true}
     [:map-of :uuid
@@ -138,7 +140,7 @@
       [:req-id :string]
       [:action :string]
       [:graph-uuid :string]
-      [:ops [:sequential op-schema]]
+      [:ops [:sequential to-ws-op-schema]]
       [:t-before :int]]]
     ["presign-put-temp-s3-obj"
      [:map
