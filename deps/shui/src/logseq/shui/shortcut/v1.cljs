@@ -5,7 +5,7 @@
 
 (defn print-shortcut-key [key]
   (case key
-    ("cmd" "command" "mod" "⌘") "⌘"
+    ("cmd" "command" "mod" "⌘" "meta") "⌘"
     ("return" "enter" "⏎") "⏎"
     ("shift" "⇧") "⇧"
     ("alt" "option" "opt" "⌥") "⌥"
@@ -17,7 +17,23 @@
     ("right" "→") "→"
     ("disabled" "Disabled") ""
     ("backspace" "delete") ""
-    ("tab") ""
+    ("tab") "⇥"
+    ("open-square-bracket") "["
+    ("close-square-bracket") "]"
+    ("dash") "-"
+    ("semicolon") ";"
+    ("equals") "="
+    ("single-quote") "'"
+    ("backslash") "\\"
+    ("comma") ","
+    ("period") "."
+    ("slash") "/"
+    ("grave-accent") "`"
+    ("insert") ""
+    ("home") ""
+    ("end") ""
+    ("page-up") ""
+    ("page-down") ""
     (nil) ""
     (name key)))
 
@@ -36,19 +52,26 @@
   [shortcut context & {:keys [tiled size]
                        :or {tiled true
                             size :sm}}]
+  (js/console.log "::root.shortcut-seq" shortcut)
   [:<>
    (for [[index option] (map-indexed vector (string/split shortcut #" \| "))]
      [:<>
       (when (< 0 index)
         [:div.text-gray-11.text-sm "|"])
-      (for [sequence (string/split option #" ")
-            :let [text (->> (string/split sequence #"\+")
-                            (map print-shortcut-key)
-                            (apply str))]]
-        (button/root {:theme :gray
-                      :interactive false
-                      :text (string/upper-case (to-string text))
-                      :tiled tiled
-                      :size size
-                      :mused true}
-                     context))])])
+      (let [[system-default option] (if (.startsWith option "system default: ")
+                                        [true (subs option 16)]
+                                        [false option])]
+        [:<>
+         (when system-default 
+           [:div.mr-1.text-xs "system default: "])
+         (for [sequence (string/split option #" ")
+               :let [text (->> (string/split sequence #"\+")
+                               (map print-shortcut-key)
+                               (apply str))]]
+           (button/root {:theme :gray
+                         :interactive false
+                         :text (string/upper-case (to-string text))
+                         :tiled tiled
+                         :size size
+                         :mused true}
+                        context))])])])

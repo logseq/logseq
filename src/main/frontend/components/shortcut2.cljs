@@ -14,7 +14,9 @@
             [frontend.modules.shortcut.data-helper :as dh]
             [frontend.util :as util]
             [frontend.modules.shortcut.utils :as shortcut-utils]
-            [frontend.modules.shortcut.config :as shortcut-config])
+            [frontend.modules.shortcut.config :as shortcut-config]
+            [logseq.shui.core :as shui]
+            [frontend.shui :refer [make-shui-context]])
   (:import [goog.events KeyHandler]))
 
 (defonce categories
@@ -473,8 +475,10 @@
                                             (shortcut-utils/decorate-binding %)) user-binding)))))]
 
                         (not unset?)
-                        (for [x binding]
-                          [:code.tracking-wide
-                           {:key (str x)}
-                           (dh/binding-for-display id x)]))
-                      ]]))))])])]]))
+                        [:code.flex.items-center.bg-transparent
+                         (shui/shortcut-v1 (string/join " | " (map #(dh/binding-for-display id %) binding)) (make-shui-context))])]]))))])])]]))
+                        ; (for [x binding]
+                        ;   [:code.tracking-wide
+                        ;    {:key (str x)}
+                        ;    (dh/binding-for-display id x)]))]]))))])])]]))
+                      

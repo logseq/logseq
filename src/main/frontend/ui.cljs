@@ -186,7 +186,8 @@
                        (if (= "meta" key')
                         (util/meta-key-name)
                         key')]))
-                  sequence)]))
+                  sequence)]
+    (shui/shortcut-v1 (string/join "+" sequence) (make-shui-context))))
 
 (rum/defc menu-link
   [{:keys [only-child? no-padding? class shortcut] :as options} child]
