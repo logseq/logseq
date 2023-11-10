@@ -222,6 +222,18 @@
           &.mode-system {
             background-position-x: -194px;
           }
+
+          &.mode-dark.radix {
+            background: url('../img/dark-theme.png') no-repeat center / cover;
+          }
+
+          &.mode-light.radix {
+            background: url('../img/light-theme.png') no-repeat center / cover;
+          }
+
+          &.mode-system.radix {
+            background: url('../img/system-theme.png') no-repeat center / cover;
+          }
         }
 
         > strong {

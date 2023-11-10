@@ -302,13 +302,14 @@
                              :action     action})))
 
 (defn theme-modes-row [t switch-theme system-theme? dark?]
-  (let [pick-theme [:ul.theme-modes-options
+  (let [color-accent (state/sub :ui/radix-color)
+        pick-theme [:ul.theme-modes-options
                     [:li {:on-click (partial state/use-theme-mode! "light")
-                          :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light] [:strong (t :settings-page/theme-light)]]
+                          :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light {:class (when color-accent "radix")}] [:strong (t :settings-page/theme-light)]]
                     [:li {:on-click (partial state/use-theme-mode! "dark")
-                          :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark] [:strong (t :settings-page/theme-dark)]]
+                          :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark {:class (when color-accent "radix")}] [:strong (t :settings-page/theme-dark)]]
                     [:li {:on-click (partial state/use-theme-mode! "system")
-                          :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong (t :settings-page/theme-system)]]]]
+                          :class    (classnames [{:active system-theme?}])} [:i.mode-system {:class (when color-accent "radix")}] [:strong (t :settings-page/theme-system)]]]]
     (row-with-button-action {:left-label (t :right-side-bar/switch-theme (string/capitalize switch-theme))
                              :-for       "toggle_theme"
                              :action     pick-theme
