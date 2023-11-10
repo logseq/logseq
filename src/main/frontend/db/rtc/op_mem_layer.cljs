@@ -33,6 +33,7 @@
                [:map {:closed true}
                 [:schema {:optional true} :nil]
                 [:content {:optional true} :nil]
+                [:link {:optional true} :nil]
                 [:alias {:optional true} [:map
                                           [:add {:optional true} [:set :uuid]]
                                           [:retract {:optional true} [:set :uuid]]]]

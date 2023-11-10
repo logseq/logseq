@@ -401,7 +401,10 @@
     (when-let [block-uuid
                (some (comp :block-uuid second) [move-op update-op update-page-op])]
       (when-let [block (db/pull repo
-                                '[{:block/left [:block/uuid]} {:block/parent [:block/uuid]} *]
+                                '[{:block/left [:block/uuid]}
+                                  {:block/parent [:block/uuid]}
+                                  {:block/link [:block/uuid]}
+                                  *]
                                 [:block/uuid block-uuid])]
         (let [left-uuid (some-> block :block/left :block/uuid)
               parent-uuid (some-> block :block/parent :block/uuid)]
@@ -443,12 +446,16 @@
                           (:block/created-at block)       (assoc :created-at (:block/created-at block))
                           (contains? attr-map :schema)    (assoc :schema
                                                                  (transit/write transit-w (:block/schema block)))
-                          attr-alias-map               (assoc :alias attr-alias-map)
-                          attr-type-map (assoc :type attr-type-map)
-                          attr-tags-map (assoc :tags attr-tags-map)
-                          attr-properties-map (assoc :properties attr-properties-map)
+                          attr-alias-map                  (assoc :alias attr-alias-map)
+                          attr-type-map                   (assoc :type attr-type-map)
+                          attr-tags-map                   (assoc :tags attr-tags-map)
+                          attr-properties-map             (assoc :properties attr-properties-map)
                           (and (contains? attr-map :content)
-                               (:block/content block)) (assoc :content (:block/content block))
+                               (:block/content block))
+                          (assoc :content (:block/content block))
+                          (and (contains? attr-map :link)
+                               (:block/uuid (:block/link block)))
+                          (assoc :link (:block/uuid (:block/link block)))
                           true (assoc :target-uuid left-uuid
                                       :sibling? (not= left-uuid parent-uuid)))])))))
         ;; remote-update-page-op
