@@ -248,7 +248,6 @@
         !results (::results state)
         recent-searches (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
         recent-pages (mapv (fn [page] {:type :page :data page}) (db/get-key-value :recent/pages))]
-    (js/console.log "recents" (clj->js recent-searches) (clj->js recent-pages))
     (swap! !results assoc-in [group :status] :loading)
     (let [items (->> (concat recent-searches recent-pages)
                      (filter #(string/includes? (lower-case-str (:data %)) (lower-case-str @!input)))
@@ -508,30 +507,35 @@
   (let [shift? (.-shiftKey e)
         meta? (.-metaKey e)
         alt? (.-altKey e)
+        ctrl? (.-ctrlKey e)
+        keyname (.-key e)
         highlighted-group @(::highlighted-group state)
         show-less (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :less))
         show-more (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :more))
-        input @(::input state)]
+        input @(::input state)
+        as-keydown? (or (= keyname "ArrowDown") (and ctrl? (= keyname "n")))
+        as-keyup? (or (= keyname "ArrowUp") (and ctrl? (= keyname "p")))]
     (reset! (::shift? state) shift?)
     (reset! (::meta? state) meta?)
     (reset! (::alt? state) alt?)
-    (when (get #{"ArrowUp" "ArrowDown"} (.-key e))
+    (when (or as-keydown? as-keyup?)
       (.preventDefault e))
-    (case (.-key e)
-      "ArrowDown"   (if meta?
-                      (show-more)
-                      (move-highlight state 1))
-      "ArrowUp"     (if meta?
-                      (show-less)
-                      (move-highlight state -1))
-      "Enter"       (handle-action :default state e)
-      "Escape"      (let [filter @(::filter state)]
-                      (when (or filter (not (string/blank? input)))
-                        (util/stop e)
-                        (reset! (::filter state) nil)
-                        (when-not filter (handle-input-change state nil ""))))
-      "c"           (copy-block-ref state)
-      nil)))
+
+    (cond
+      as-keydown? (if meta?
+                    (show-more)
+                    (move-highlight state 1))
+      as-keyup? (if meta?
+                  (show-less)
+                  (move-highlight state -1))
+      (= keyname "Enter") (handle-action :default state e)
+      (= keyname "Escape") (let [filter @(::filter state)]
+                             (when (or filter (not (string/blank? input)))
+                               (util/stop e)
+                               (reset! (::filter state) nil)
+                               (when-not filter (handle-input-change state nil ""))))
+      (= keyname "c") (copy-block-ref state)
+      :else nil)))
 
 (defn keyup-handler
   [state e]
