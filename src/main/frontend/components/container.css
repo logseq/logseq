@@ -170,7 +170,7 @@
     }
 
     &.active, &:active {
-      background-color: or(--ls-left-sidebar-active-background, --lx-gray-05, --ls-quaternary-background-color);
+      background-color: or(--ls-left-sidebar-active-background, --lx-gray-04, --ls-quaternary-background-color);
       color: or(--ls-left-sidebar-active-text-color, --lx-gray-12);
       .ui__icon {
         opacity: .9;
