@@ -419,71 +419,85 @@
                        #js {:inline "nearest"
                             :behavior "smooth"}))))
 
-(rum/defc result-group < rum/reactive
-  [state title group visible-items first-item]
+(rum/defc mouse-active-effect!
+  [*mouse-active? deps]
+  (rum/use-effect!
+    #(reset! *mouse-active? false)
+    deps)
+  nil)
+
+(rum/defcs result-group
+  < rum/reactive
+  (rum/local false ::mouse-active?)
+  [state' state title group visible-items first-item]
   (let [{:keys [show items]} (some-> state ::results deref group)
         highlighted-item (or @(::highlighted-item state) first-item)
         highlighted-group @(::highlighted-group state)
+        *mouse-active? (::mouse-active? state')
         filter @(::filter state)
         can-show-less? (< GROUP-LIMIT (count visible-items))
         can-show-more? (< (count visible-items) (count items))
         show-less #(swap! (::results state) assoc-in [group :show] :less)
         show-more #(swap! (::results state) assoc-in [group :show] :more)
         context (make-shui-context)]
-    [:div {:class "border-b border-gray-06 pb-1 last:border-b-0"}
-     [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02"}
-      [:div {:class "font-bold text-gray-11 pl-0.5"} title]
-      (when (not= group :create)
-        [:div {:class "pl-1.5 text-gray-12 rounded-full"
-               :style {:font-size "0.7rem"}}
-         (if (<= 100 (count items))
-           (str "99+")
-           (count items))])
+    [:<>
+     (mouse-active-effect! *mouse-active? [highlighted-item])
+     [:div {:class         "border-b border-gray-06 pb-1 last:border-b-0"
+            :on-mouse-move #(reset! *mouse-active? true)}
+      [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02"}
+       [:div {:class "font-bold text-gray-11 pl-0.5"} title]
+       (when (not= group :create)
+         [:div {:class "pl-1.5 text-gray-12 rounded-full"
+                :style {:font-size "0.7rem"}}
+          (if (<= 100 (count items))
+            (str "99+")
+            (count items))])
 
-      [:div {:class "flex-1"}]
+       [:div {:class "flex-1"}]
 
-      (when (and (= group highlighted-group)
-                 (or can-show-more? can-show-less?)
-                 (empty? filter))
-        [:a.text-link.select-node.opacity-50.hover:opacity-90
-         {:on-click (if (= show :more) show-less show-more)}
-         (if (= show :more)
-           [:div.flex.flex-row.gap-1.items-center
-            "Show less"
-            (shui/shortcut "mod up" context)]
-           [:div.flex.flex-row.gap-1.items-center
-            "Show more"
-            (shui/shortcut "mod down" context)])])]
+       (when (and (= group highlighted-group)
+               (or can-show-more? can-show-less?)
+               (empty? filter))
+         [:a.text-link.select-node.opacity-50.hover:opacity-90
+          {:on-click (if (= show :more) show-less show-more)}
+          (if (= show :more)
+            [:div.flex.flex-row.gap-1.items-center
+             "Show less"
+             (shui/shortcut "mod up" context)]
+            [:div.flex.flex-row.gap-1.items-center
+             "Show more"
+             (shui/shortcut "mod down" context)])])]
 
-     [:div.search-results
-      (for [item visible-items
-            :let [highlighted? (= item highlighted-item)]]
-        (let [item (shui/list-item (assoc item
-                                          :query (when-not (= group :create) @(::input state))
-                                          :compact true
-                                          :rounded false
-                                          :highlighted highlighted?
-                                          :display-shortcut-on-highlight? true
-                               ;; for some reason, the highlight effect does not always trigger on a
-                               ;; boolean value change so manually pass in the dep
-                                          :on-highlight-dep highlighted-item
-                                          :on-click (fn [e]
-                                                      (reset! (::highlighted-item state) item)
-                                                      (handle-action :default state item)
-                                                      (when-let [on-click (:on-click item)]
-                                                        (on-click e)))
-                               ;; :on-mouse-enter (fn [e]
-                               ;;                   (when (not highlighted?)
-                               ;;                     (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
-                                          :on-highlight (fn [ref]
-                                                          (reset! (::highlighted-group state) group)
-                                                          (when (and ref (.-current ref)
-                                                                     (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
-                                                            (scroll-into-view-when-invisible state (.-current ref)))))
-                                   context)]
-          (if (= group :blocks)
-            (ui/lazy-visible (fn [] item) {:trigger-once? true})
-            item)))]]))
+      [:div.search-results
+       (for [item visible-items
+             :let [highlighted? (= item highlighted-item)]]
+         (let [item (shui/list-item (assoc item
+                                      :query (when-not (= group :create) @(::input state))
+                                      :compact true
+                                      :rounded false
+                                      :hoverable @*mouse-active?
+                                      :highlighted highlighted?
+                                      :display-shortcut-on-highlight? true
+                                      ;; for some reason, the highlight effect does not always trigger on a
+                                      ;; boolean value change so manually pass in the dep
+                                      :on-highlight-dep highlighted-item
+                                      :on-click (fn [e]
+                                                  (reset! (::highlighted-item state) item)
+                                                  (handle-action :default state item)
+                                                  (when-let [on-click (:on-click item)]
+                                                    (on-click e)))
+                                      ;; :on-mouse-enter (fn [e]
+                                      ;;                   (when (not highlighted?)
+                                      ;;                     (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
+                                      :on-highlight (fn [ref]
+                                                      (reset! (::highlighted-group state) group)
+                                                      (when (and ref (.-current ref)
+                                                              (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
+                                                        (scroll-into-view-when-invisible state (.-current ref)))))
+                      context)]
+           (if (= group :blocks)
+             (ui/lazy-visible (fn [] item) {:trigger-once? true})
+             item)))]]]))
 
 (defn move-highlight [state n]
   (let [items (mapcat last (state->results-ordered state (:search/mode @state/state)))
