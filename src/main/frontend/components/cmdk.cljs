@@ -105,10 +105,21 @@
                   ["Pages"          :pages          (visible-items :pages)]
                   (when-not page-exists?
                     ["Create"         :create         (create-items input)])]
+
+                 filter-group
+                 [(when (= filter-group :blocks)
+                    ["Current page"   :current-page   (visible-items :current-page)])
+                  [(if (= filter-group :current-page) "Current page" (name filter-group))
+                   filter-group
+                   (visible-items filter-group)]
+                  (when (= filter-group :pages)
+                    (when-not page-exists?
+                      ["Create"         :create         (create-items input)]))]
+
                  :else
                  (->>
                   [["Pages"          :pages          (visible-items :pages)]
-                   (when-not (or page-exists? (= :blocks filter-group))
+                   (when-not page-exists?
                      ["Create"         :create         (create-items input)])
                    ["Commands"       :commands       (visible-items :commands)]
                    ["Current page"   :current-page   (visible-items :current-page)]
