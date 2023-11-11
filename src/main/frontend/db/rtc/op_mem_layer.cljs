@@ -3,12 +3,12 @@
   And sync these ops to indexedDb automatically."
   (:require [clojure.core.async :as async :refer [<! go-loop timeout]]
             [clojure.set :as set]
+            [frontend.config :as config]
             [frontend.db.rtc.op-idb-layer :as op-idb-layer]
             [frontend.state :as state]
             [malli.core :as m]
             [malli.transform :as mt]
-            [promesa.core :as p]
-            [frontend.config :as config]))
+            [promesa.core :as p]))
 
 (def op-schema
   [:multi {:dispatch first}
@@ -118,8 +118,8 @@
             tags (merge-add-retract-maps (:tags updated-attrs1) (:tags updated-attrs2))
             properties (merge-add-retract-maps (:properties updated-attrs1) (:properties updated-attrs2))
             updated-attrs
-            (cond-> (merge (select-keys updated-attrs1 [:schema :content])
-                           (select-keys updated-attrs2 [:schema :content]))
+            (cond-> (merge (select-keys updated-attrs1 [:schema :content :link])
+                           (select-keys updated-attrs2 [:schema :content :link]))
               alias (assoc :alias alias)
               type (assoc :type type)
               tags (assoc :tags tags)
@@ -259,6 +259,7 @@
                       (assoc old-branch
                              :block-uuid->ops old-branch-block-uuid->ops
                              :epoch->block-uuid-sorted-map old-epoch->block-uuid-sorted-map)))))))
+
 
 (defn update-local-tx!
   [repo t]
