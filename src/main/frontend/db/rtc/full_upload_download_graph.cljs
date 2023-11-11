@@ -7,6 +7,7 @@
             [cljs.core.async.interop :refer [p->c]]
             [cognitect.transit :as transit]
             [datascript.core :as d]
+            [frontend.async-util :include-macros true :refer [<? go-try]]
             [frontend.db.conn :as conn]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.db.rtc.ws :refer [<send!]]
@@ -116,35 +117,35 @@
 
 (defn- <transact-remote-all-blocks-to-sqlite
   [all-blocks repo]
-  (go
-    (let [{:keys [t blocks]} all-blocks
-          conn (d/create-conn db-schema/schema-for-db-based-graph)
-          blocks* (replace-db-id-with-temp-id blocks)
-          blocks-with-page-id (fill-block-fields blocks*)]
-      (d/transact! conn blocks-with-page-id)
-      (let [db (d/db conn)
-            blocks*
-            (d/pull-many db '[*] (keep (fn [b] (when-let [uuid (:block/uuid b)] [:block/uuid uuid])) blocks))
-            blocks** (outliner-pipeline/build-upsert-blocks blocks* nil db)]
-        (<! (p->c (persist-db/<new repo)))
-        (<! (persist-db/<transact-data repo blocks** nil))
-        (op-mem-layer/update-local-tx! repo t)))))
+  (go-try
+   (let [{:keys [t blocks]} all-blocks
+         conn (d/create-conn db-schema/schema-for-db-based-graph)
+         blocks* (replace-db-id-with-temp-id blocks)
+         blocks-with-page-id (fill-block-fields blocks*)]
+     (d/transact! conn blocks-with-page-id)
+     (let [db (d/db conn)
+           blocks*
+           (d/pull-many db '[*] (keep (fn [b] (when-let [uuid (:block/uuid b)] [:block/uuid uuid])) blocks))
+           blocks** (outliner-pipeline/build-upsert-blocks blocks* nil db)]
+       (<? (p->c (persist-db/<new repo)))
+       (<? (persist-db/<transact-data repo blocks** nil))
+       (op-mem-layer/update-local-tx! repo t)))))
 
 
 (defn <download-graph
   [state repo graph-uuid]
-  (go
-    (let [{:keys [url]}
-          (with-sub-data-from-ws state
-            (<send! state {:req-id (get-req-id) :action "full-download-graph" :graph-uuid graph-uuid})
-            (<! (get-result-ch)))
-          {:keys [status body] :as r} (<! (http/get url))
-          repo (str "logseq_db_rtc-" repo)]
-      (if (not= 200 status)
-        (ex-info "<download-graph failed" r)
-        (let [all-blocks (transit/read transit-r body)]
-          (op-mem-layer/init-empty-ops-store! repo)
-          (<! (<transact-remote-all-blocks-to-sqlite all-blocks repo))
-          (op-mem-layer/update-graph-uuid! repo graph-uuid)
-          (prn ::download-graph (@@#'op-mem-layer/*ops-store repo))
-          (<! (op-mem-layer/<sync-to-idb-layer! repo)))))))
+  (go-try
+   (let [{:keys [url]}
+         (with-sub-data-from-ws state
+           (<send! state {:req-id (get-req-id) :action "full-download-graph" :graph-uuid graph-uuid})
+           (<! (get-result-ch)))
+         {:keys [status body] :as r} (<! (http/get url))
+         repo (str "logseq_db_rtc-" repo)]
+     (if (not= 200 status)
+       (ex-info "<download-graph failed" r)
+       (let [all-blocks (transit/read transit-r body)]
+         (<? (<transact-remote-all-blocks-to-sqlite all-blocks repo))
+         (op-mem-layer/init-empty-ops-store! repo)
+         (op-mem-layer/update-graph-uuid! repo graph-uuid)
+         (prn ::download-graph (@@#'op-mem-layer/*ops-store repo))
+         (<! (op-mem-layer/<sync-to-idb-layer! repo)))))))
