@@ -29,6 +29,11 @@
             [clojure.data :as data]
             [medley.core :as medley]))
 
+(defn- search
+  [mode]
+  (editor-handler/escape-editing false)
+  (route-handler/go-to-search! mode))
+
 ;; TODO: Namespace all-default-keyboard-shortcuts keys with `:command` e.g.
 ;; `:command.date-picker/complete`. They are namespaced in translation but
 ;; almost everywhere else they are not which could cause needless conflicts
@@ -342,9 +347,12 @@
                                              :fn      config-handler/toggle-ui-show-brackets!}
 
    :go/search                               {:binding "mod+k"
-                                             :fn      #(do
-                                                         (editor-handler/escape-editing false)
-                                                         (route-handler/go-to-search! :global))}
+                                             :fn      #(search :global)}
+   :command-palette/toggle                  {:binding "mod+shift+p"
+                                             :fn      #(search :commands)}
+   :go/search-in-page                       {:binding "mod+shift+k"
+                                             :fn      #(search :current-page)}
+
 
    :go/electron-find-in-page                {:binding  "mod+f"
                                              :inactive (not (util/electron?))
@@ -384,8 +392,9 @@
    :misc/copy                               {:binding "mod+c"
                                              :fn      (fn [] (js/document.execCommand "copy"))}
 
+
    :graph/export-as-html                    {:fn      #(export-handler/download-repo-as-html!
-                                                         (state/get-current-repo))
+                                                        (state/get-current-repo))
                                              :binding []}
 
    :graph/open                              {:fn      #(do
@@ -670,6 +679,8 @@
                    :editor/redo
                    :ui/toggle-brackets
                    :go/search
+                   :go/search-in-page
+                   :command-palette/toggle
                    :go/electron-find-in-page
                    :go/electron-jump-to-the-next
                    :go/electron-jump-to-the-previous
@@ -732,179 +743,181 @@
 ;; a description for it in frontend.dicts.en/dicts
 ;; Full list of categories for docs purpose
 (defonce ^:large-vars/data-var *category
-         (atom
-           {:shortcut.category/basics
-            [:editor/new-block
-             :editor/new-line
-             :editor/indent
-             :editor/outdent
-             :editor/select-all-blocks
-             :editor/select-parent
-             :go/search
-             :go/electron-find-in-page
-             :go/electron-jump-to-the-next
-             :go/electron-jump-to-the-previous
-             :editor/undo
-             :editor/redo
-             :editor/copy
-             :editor/copy-text
-             :editor/cut]
+  (atom
+   {:shortcut.category/basics
+    [:editor/new-block
+     :editor/new-line
+     :editor/indent
+     :editor/outdent
+     :editor/select-all-blocks
+     :editor/select-parent
+     :go/search
+     :go/search-in-page
+     :command-palette/toggle
+     :go/electron-find-in-page
+     :go/electron-jump-to-the-next
+     :go/electron-jump-to-the-previous
+     :editor/undo
+     :editor/redo
+     :editor/copy
+     :editor/copy-text
+     :editor/cut]
 
-            :shortcut.category/formatting
-            [:editor/bold
-             :editor/insert-link
-             :editor/italics
-             :editor/strike-through
-             :editor/highlight]
+    :shortcut.category/formatting
+    [:editor/bold
+     :editor/insert-link
+     :editor/italics
+     :editor/strike-through
+     :editor/highlight]
 
-            :shortcut.category/navigating
-            [:editor/up
-             :editor/down
-             :editor/left
-             :editor/right
-             :editor/collapse-block-children
-             :editor/expand-block-children
-             :editor/toggle-open-blocks
-             :go/backward
-             :go/forward
-             :go/home
-             :go/journals
-             :go/all-pages
-             :go/graph-view
-             :go/all-graphs
-             :go/whiteboards
-             :go/flashcards
-             :go/tomorrow
-             :go/next-journal
-             :go/prev-journal
-             :go/keyboard-shortcuts]
+    :shortcut.category/navigating
+    [:editor/up
+     :editor/down
+     :editor/left
+     :editor/right
+     :editor/collapse-block-children
+     :editor/expand-block-children
+     :editor/toggle-open-blocks
+     :go/backward
+     :go/forward
+     :go/home
+     :go/journals
+     :go/all-pages
+     :go/graph-view
+     :go/all-graphs
+     :go/whiteboards
+     :go/flashcards
+     :go/tomorrow
+     :go/next-journal
+     :go/prev-journal
+     :go/keyboard-shortcuts]
 
-            :shortcut.category/block-editing
-            [:editor/backspace
-             :editor/delete
-             :editor/indent
-             :editor/outdent
-             :editor/new-block
-             :editor/new-line
-             :editor/zoom-in
-             :editor/zoom-out
-             :editor/cycle-todo
-             :editor/follow-link
-             :editor/open-link-in-sidebar
-             :editor/move-block-up
-             :editor/move-block-down
-             :editor/escape-editing]
+    :shortcut.category/block-editing
+    [:editor/backspace
+     :editor/delete
+     :editor/indent
+     :editor/outdent
+     :editor/new-block
+     :editor/new-line
+     :editor/zoom-in
+     :editor/zoom-out
+     :editor/cycle-todo
+     :editor/follow-link
+     :editor/open-link-in-sidebar
+     :editor/move-block-up
+     :editor/move-block-down
+     :editor/escape-editing]
 
-            :shortcut.category/block-command-editing
-            [:editor/backspace
-             :editor/clear-block
-             :editor/kill-line-before
-             :editor/kill-line-after
-             :editor/beginning-of-block
-             :editor/end-of-block
-             :editor/forward-word
-             :editor/backward-word
-             :editor/forward-kill-word
-             :editor/backward-kill-word
-             :editor/replace-block-reference-at-point
-             :editor/copy-embed
-             :editor/paste-text-in-one-block-at-point
-             :editor/select-up
-             :editor/select-down]
+    :shortcut.category/block-command-editing
+    [:editor/backspace
+     :editor/clear-block
+     :editor/kill-line-before
+     :editor/kill-line-after
+     :editor/beginning-of-block
+     :editor/end-of-block
+     :editor/forward-word
+     :editor/backward-word
+     :editor/forward-kill-word
+     :editor/backward-kill-word
+     :editor/replace-block-reference-at-point
+     :editor/copy-embed
+     :editor/paste-text-in-one-block-at-point
+     :editor/select-up
+     :editor/select-down]
 
-            :shortcut.category/block-selection
-            [:editor/open-edit
-             :editor/select-all-blocks
-             :editor/select-parent
-             :editor/select-block-up
-             :editor/select-block-down
-             :editor/delete-selection]
+    :shortcut.category/block-selection
+    [:editor/open-edit
+     :editor/select-all-blocks
+     :editor/select-parent
+     :editor/select-block-up
+     :editor/select-block-down
+     :editor/delete-selection]
 
-            :shortcut.category/toggle
-            [:ui/toggle-help
-             :editor/toggle-open-blocks
-             :editor/toggle-undo-redo-mode
-             :editor/toggle-number-list
-             :ui/toggle-wide-mode
-             :ui/toggle-cards
-             :ui/toggle-document-mode
-             :ui/toggle-brackets
-             :ui/toggle-theme
-             :ui/toggle-left-sidebar
-             :ui/toggle-right-sidebar
-             :ui/toggle-settings
-             :ui/toggle-contents
-             :ui/cycle-color-off
-             :ui/cycle-color]
+    :shortcut.category/toggle
+    [:ui/toggle-help
+     :editor/toggle-open-blocks
+     :editor/toggle-undo-redo-mode
+     :editor/toggle-number-list
+     :ui/toggle-wide-mode
+     :ui/toggle-cards
+     :ui/toggle-document-mode
+     :ui/toggle-brackets
+     :ui/toggle-theme
+     :ui/toggle-left-sidebar
+     :ui/toggle-right-sidebar
+     :ui/toggle-settings
+     :ui/toggle-contents
+     :ui/cycle-color-off
+     :ui/cycle-color]
 
-            :shortcut.category/whiteboard
-            [:editor/new-whiteboard
-             :whiteboard/select
-             :whiteboard/pan
-             :whiteboard/portal
-             :whiteboard/pencil
-             :whiteboard/highlighter
-             :whiteboard/eraser
-             :whiteboard/connector
-             :whiteboard/text
-             :whiteboard/rectangle
-             :whiteboard/ellipse
-             :whiteboard/reset-zoom
-             :whiteboard/zoom-to-fit
-             :whiteboard/zoom-to-selection
-             :whiteboard/zoom-out
-             :whiteboard/zoom-in
-             :whiteboard/send-backward
-             :whiteboard/send-to-back
-             :whiteboard/bring-forward
-             :whiteboard/bring-to-front
-             :whiteboard/lock
-             :whiteboard/unlock
-             :whiteboard/group
-             :whiteboard/ungroup
-             :whiteboard/toggle-grid]
+    :shortcut.category/whiteboard
+    [:editor/new-whiteboard
+     :whiteboard/select
+     :whiteboard/pan
+     :whiteboard/portal
+     :whiteboard/pencil
+     :whiteboard/highlighter
+     :whiteboard/eraser
+     :whiteboard/connector
+     :whiteboard/text
+     :whiteboard/rectangle
+     :whiteboard/ellipse
+     :whiteboard/reset-zoom
+     :whiteboard/zoom-to-fit
+     :whiteboard/zoom-to-selection
+     :whiteboard/zoom-out
+     :whiteboard/zoom-in
+     :whiteboard/send-backward
+     :whiteboard/send-to-back
+     :whiteboard/bring-forward
+     :whiteboard/bring-to-front
+     :whiteboard/lock
+     :whiteboard/unlock
+     :whiteboard/group
+     :whiteboard/ungroup
+     :whiteboard/toggle-grid]
 
-            :shortcut.category/others
-            [:pdf/previous-page
-             :pdf/next-page
-             :pdf/close
-             :pdf/find
-             :command/toggle-favorite
-             :command/run
-             :graph/export-as-html
-             :graph/open
-             :graph/remove
-             :graph/add
-             :graph/save
-             :graph/re-index
-             :sidebar/close-top
-             :sidebar/clear
-             :sidebar/open-today-page
-             :search/re-index
-             :editor/insert-youtube-timestamp
-             :editor/open-file-in-default-app
-             :editor/open-file-in-directory
-             :editor/copy-page-url
-             :window/close
-             :auto-complete/prev
-             :auto-complete/next
-             :auto-complete/complete
-             :auto-complete/shift-complete
-             :auto-complete/open-link
-             :date-picker/prev-day
-             :date-picker/next-day
-             :date-picker/prev-week
-             :date-picker/next-week
-             :date-picker/complete
-             :git/commit
-             :dev/show-block-data
-             :dev/show-block-ast
-             :dev/show-page-data
-             :dev/show-page-ast
-             :ui/clear-all-notifications]
+    :shortcut.category/others
+    [:pdf/previous-page
+     :pdf/next-page
+     :pdf/close
+     :pdf/find
+     :command/toggle-favorite
+     :command/run
+     :graph/export-as-html
+     :graph/open
+     :graph/remove
+     :graph/add
+     :graph/save
+     :graph/re-index
+     :sidebar/close-top
+     :sidebar/clear
+     :sidebar/open-today-page
+     :search/re-index
+     :editor/insert-youtube-timestamp
+     :editor/open-file-in-default-app
+     :editor/open-file-in-directory
+     :editor/copy-page-url
+     :window/close
+     :auto-complete/prev
+     :auto-complete/next
+     :auto-complete/complete
+     :auto-complete/shift-complete
+     :auto-complete/open-link
+     :date-picker/prev-day
+     :date-picker/next-day
+     :date-picker/prev-week
+     :date-picker/next-week
+     :date-picker/complete
+     :git/commit
+     :dev/show-block-data
+     :dev/show-block-ast
+     :dev/show-page-data
+     :dev/show-page-ast
+     :ui/clear-all-notifications]
 
-            :shortcut.category/plugins
-            []}))
+    :shortcut.category/plugins
+    []}))
 
 (let [category-maps {::category       (set (keys @*category))
                      ::dicts/category dicts/categories}]

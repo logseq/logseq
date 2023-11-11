@@ -728,7 +728,15 @@
   shortcut/disable-all-shortcuts
   rum/reactive
   {:init (fn [state]
-           (assoc state ::ref (atom nil)))
+           (let [search-mode (:search/mode @state/state)
+                 opts (last (:rum/args state))]
+             (assoc state
+                    ::ref (atom nil)
+                    ::filter (if (and search-mode
+                                      (not (contains? #{:global :graph} search-mode))
+                                      (not (:sidebar? opts)))
+                               (atom {:group search-mode})
+                               (atom nil)))))
    :will-unmount (fn [state]
                    (state/set-state! :search/mode nil)
                    state)}
@@ -747,14 +755,12 @@
   (rum/local false ::alt?)
   (rum/local nil ::highlighted-group)
   (rum/local nil ::highlighted-item)
-  (rum/local nil ::filter)
   (rum/local default-results ::results)
   (rum/local nil ::load-results-throttled)
   (rum/local nil ::scroll-container-ref)
   (rum/local nil ::input-ref)
   [state {:keys [sidebar?]}]
   (let [*input (::input state)
-        *filter (::filter state)
         search-mode (:search/mode @state/state)
         group-filter (:group @(::filter state))
         results-ordered (state->results-ordered state search-mode)
@@ -772,9 +778,9 @@
                     (when-not @*ref (reset! *ref %)))
             :style {:background "var(--lx-gray-02)"}}
 
-      (when-let [group (:group @*filter)]
+      (when group-filter
         [:div.flex.flex-col.p-3.opacity-50.text-sm
-         (search-only state (name group))])
+         (search-only state (name group-filter))])
 
       (let [items (filter
                    (fn [[_group-name group-key group-count _group-items]]
