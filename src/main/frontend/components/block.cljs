@@ -1049,10 +1049,12 @@
       (cond
         (util/electron?)
         [:a.asset-ref.is-pdf
-         {:on-click (fn [event]
-                      (when-let [current (pdf-assets/inflate-asset s)]
-                        (state/set-current-pdf! current)
-                        (util/stop event)))
+         {:data-href s
+          :on-click (fn [^js e]
+                      (when-let [s (some-> (.-target e) (.-dataset) (.-href))]
+                        (when-let [current (pdf-assets/inflate-asset s)]
+                          (state/set-current-pdf! current)
+                          (util/stop e))))
           :draggable true
           :on-drag-start #(.setData (gobj/get % "dataTransfer") "file" s)}
          (or label-text
