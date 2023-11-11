@@ -413,10 +413,13 @@
 (defn- assign-temp-id
   [blocks replace-empty-target? target-block]
   (map-indexed (fn [idx block]
-                 (let [db-id (if (and replace-empty-target? (zero? idx))
+                 (let [replacing-block? (and replace-empty-target? (zero? idx))
+                       db-id (if replacing-block?
                                (:db/id target-block)
                                (dec (- idx)))]
-                   (assoc block :db/id db-id))) blocks))
+                   (cond-> (assoc block :db/id db-id)
+                     (and replacing-block? (:block/uuid target-block))
+                     (assoc :block/uuid (:block/uuid target-block))))) blocks))
 
 (defn- find-outdented-block-prev-hop
   [outdented-block blocks]
