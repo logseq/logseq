@@ -708,7 +708,8 @@
                  :hover-theme :gray
                  :size :sm
                  :on-click (fn []
-                             (reset! (::filter state) nil))})])
+                             (reset! (::filter state) nil))}
+                (make-shui-context))])
 (rum/defcs cmdk <
   shortcut/disable-all-shortcuts
   rum/reactive
