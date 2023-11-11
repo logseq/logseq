@@ -44,7 +44,20 @@
                            {:content nil, :type {:add #{"type2" "type3"}, :retract #{"type1"}}},
                            :epoch 4}]}}
               {1 #uuid"f639f13e-ef6f-4ba5-83b4-67527d27cd02"}]
-             [block-uuid->ops epoch->block-uuid-sorted-map])))))
+             [block-uuid->ops epoch->block-uuid-sorted-map]))))
+  (testing "case3: :link"
+    (let [ops [["move" {:block-uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02" :epoch 1}]
+               ["update" {:block-uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02" :epoch 2
+                          :updated-attrs {:content nil}}]
+               ["update" {:block-uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02" :epoch 4
+                          :updated-attrs {:content nil :link nil}}]]
+          {:keys [block-uuid->ops epoch->block-uuid-sorted-map]}
+          (op-layer/add-ops-to-block-uuid->ops (op-layer/ops-coercer ops) {} (sorted-map-by <))]
+      (is (= ["update"
+              {:block-uuid #uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02"
+               :updated-attrs {:content nil :link nil}
+               :epoch 4}]
+             (:update (block-uuid->ops #uuid"f639f13e-ef6f-4ba5-83b4-67527d27cd02")))))))
 
 
 (deftest process-test
