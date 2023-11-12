@@ -4,7 +4,7 @@
             [frontend.components.block :as block]
             [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
-            [frontend.components.shortcut :as shortcut]
+            [frontend.components.shortcut-help :as shortcut]
             [frontend.components.cmdk :as cmdk]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]

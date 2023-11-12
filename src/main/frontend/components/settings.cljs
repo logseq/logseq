@@ -26,7 +26,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
-            [frontend.components.shortcut2 :as shortcut2]
+            [frontend.components.shortcut :as shortcut]
             [frontend.spec.storage :as storage-spec]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -1178,7 +1178,7 @@
          (settings-editor current-repo)
 
          :keymap
-         (shortcut2/shortcut-keymap-x)
+         (shortcut/shortcut-keymap-x)
 
          :version-control
          (settings-git)

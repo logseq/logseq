@@ -1,4 +1,4 @@
-(ns frontend.components.shortcut2
+(ns frontend.components.shortcut
   (:require [clojure.string :as string]
             [rum.core :as rum]
             [frontend.context.i18n :refer [t]]
@@ -477,8 +477,3 @@
                         (not unset?)
                         [:code.flex.items-center.bg-transparent
                          (shui/shortcut-v1 (string/join " | " (map #(dh/binding-for-display id %) binding)) (make-shui-context))])]]))))])])]]))
-                        ; (for [x binding]
-                        ;   [:code.tracking-wide
-                        ;    {:key (str x)}
-                        ;    (dh/binding-for-display id x)]))]]))))])])]]))
-                      
