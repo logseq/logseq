@@ -245,9 +245,8 @@
 .shui__button-theme-color.shui__button-color-custom  { background-color: hsl(var(--ls-button-background-hsl) / 0.9);
                                                        color: white; }
 
-.shui__button-color-custom:hover, .dark .shui__button-color-custom:hover {
+.shui__button-theme-color.shui__button-color-custom:hover {
     background: var(--ls-button-background);
-    color: white;
 }
 
 .shui__button-theme-color.shui__button-color-lime    { color: white; background-color: var(--rx-lime-09); &:hover { background-color: var(--rx-lime-10); } &:active { background-color: var(--rx-lime-08); }}
