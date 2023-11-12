@@ -58,18 +58,18 @@
       (when (< 0 index)
         [:div.text-gray-11.text-sm "|"])
       (let [[system-default option] (if (.startsWith option "system default: ")
-                                        [true (subs option 16)]
-                                        [false option])]
+                                      [true (subs option 16)]
+                                      [false option])]
         [:<>
          (when system-default
-           [:div.mr-1.text-xs "system default: "])
+           [:div.mr-1.text-xs "System default: "])
          (for [sequence (string/split option #" ")
                :let [text (->> (string/split sequence #"\+")
                                (map print-shortcut-key)
                                (apply str))]]
            (button/root {:theme :gray
                          :interactive false
-                         :text (string/upper-case (to-string text))
+                         :text (to-string text)
                          :tiled tiled
                          :size size
                          :mused true}
