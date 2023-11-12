@@ -286,7 +286,18 @@
                               result))))]
       (distinct (mapcat get-parents filtered-ref-blocks)))))
 
-(defn get-idx-of-order-list-block
+(defn convert-index
+  [idx delta]
+  (cond
+    (zero? delta) idx
+
+    (= delta 1)
+    (some-> (util/convert-to-letters idx) util/safe-lower-case)
+
+    :else
+    (util/convert-to-roman idx)))
+
+(defn get-raw-idx-and-delta-of-order-list-block
   [block order-list-type]
   (let [order-block-fn? #(some-> % :block/properties :logseq.order-list-type (= order-list-type))
         prev-block-fn   #(some->> (:db/id %) (db-model/get-prev-sibling (state/get-current-repo)))
@@ -304,19 +315,29 @@
                             (count (order-sibling-list block)) 1)
             order-parents-count (dec (count (order-parent-list block)))
             delta (if (neg? order-parents-count) 0 (mod order-parents-count 3))]
-        (cond
-          (zero? delta) idx
+        [idx delta]))))
 
-          (= delta 1)
-          (some-> (util/convert-to-letters idx) util/safe-lower-case)
-
-          :else
-          (util/convert-to-roman idx))))))
+(defn get-max-raw-index-of-order-list-block
+  [block order-list-type current-idx]
+  (let [order-block-fn? #(some-> % :block/properties :logseq.order-list-type (= order-list-type))
+        next-block-fn   #(some->> (:db/id %) (db-model/get-right-sibling (state/get-current-repo)))]
+    (letfn [(page-fn? [b] (some-> b :block/name some?))
+            (order-sibling-list [b]
+              (lazy-seq
+               (when (and (not (page-fn? b)) (order-block-fn? b))
+                 (cons b (order-sibling-list (next-block-fn b))))))]
+      (let [idx (dec (+ current-idx (count (order-sibling-list block))))]
+        idx))))
 
 (defn attach-order-list-state
   [config block]
   (let [own-order-list-type  (some-> block :block/properties :logseq.order-list-type str string/lower-case)
-        own-order-list-index (some->> own-order-list-type (get-idx-of-order-list-block block))]
-    (assoc config :own-order-list-type own-order-list-type
+        [own-order-list-raw-index own-order-list-delta] (get-raw-idx-and-delta-of-order-list-block block own-order-list-type)
+        own-order-list-max-raw-index (get-max-raw-index-of-order-list-block block own-order-list-type own-order-list-raw-index)
+        own-order-list-index (convert-index own-order-list-raw-index own-order-list-delta)
+        own-order-list-max-index (convert-index own-order-list-max-raw-index own-order-list-delta)] 
+
+        (assoc config :own-order-list-type own-order-list-type
                   :own-order-list-index own-order-list-index
+                  :own-order-list-max-index own-order-list-max-index
                   :own-order-number-list? (= own-order-list-type "number"))))

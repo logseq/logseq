@@ -1740,6 +1740,7 @@
         own-number-list?   (:own-order-number-list? config)
         order-list?        (boolean own-number-list?)
         order-list-idx     (:own-order-list-index config)
+        order-list-max-idx (:own-order-list-max-index config)
         collapsable?       (editor-handler/collapsable? uuid {:semantic? true})]
     [:div.block-control-wrap.flex.flex-row.items-center
      {:class (util/classnames [{:is-order-list order-list?
@@ -1774,7 +1775,11 @@
                                  (when (and (:document/mode? config)
                                             (not collapsed?))
                                    " hide-inner-bullet")
-                                 (when order-list? " as-order-list typed-list"))}
+                                 (when order-list? " as-order-list typed-list")
+                                 )
+                     :style (when order-list?
+                              {:width (str (count (str order-list-max-idx)) "ch")})
+                     }
 
                     [:span.bullet {:blockid (str uuid)}
                      (when order-list?
@@ -2942,7 +2947,7 @@
    :should-update (fn [old-state new-state]
                     (let [compare-keys        [:block/uuid :block/content :block/parent :block/collapsed?
                                                :block/properties :block/left :block/children :block/_refs :block.temp/bottom? :block.temp/top?]
-                          config-compare-keys [:show-cloze? :own-order-list-type :own-order-list-index]
+                          config-compare-keys [:show-cloze? :own-order-list-type :own-order-list-index :own-order-list-max-index]
                           b1                  (second (:rum/args old-state))
                           b2                  (second (:rum/args new-state))
                           result              (or
