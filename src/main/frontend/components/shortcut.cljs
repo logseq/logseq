@@ -218,9 +218,9 @@
           ;; parse current binding conflicts
           (if-let [current-conflicts (seq (dh/parse-conflicts-from-binding current-binding keystroke))]
             (notification/show!
-              (str "Shortcut conflicts from existing binding: "
-                   (pr-str (some->> current-conflicts (map #(shortcut-utils/decorate-binding %)))))
-              :error true :shortcut-conflicts/warning 5000)
+             (str "Shortcut conflicts from existing binding: "
+                  (pr-str (some->> current-conflicts (map #(shortcut-utils/decorate-binding %)))))
+             :error true :shortcut-conflicts/warning 5000)
 
             ;; get conflicts from the existed bindings map
             (let [conflicts-map (dh/get-conflicts-by-keys keystroke handler-id)]
@@ -233,46 +233,46 @@
                 (set-key-conflicts! conflicts-map)))))]
 
     (rum/use-effect!
-      (fn []
-        (let [mid (state/sub :modal/id)
-              mid' (some-> (state/sub :modal/subsets) (last) (:modal/id))
-              el (rum/deref *ref-el)]
-          (when (or (and (not mid') (= mid modal-id))
-                    (= mid' modal-id))
-            (some-> el (.focus))
-            (js/setTimeout
-              #(some-> (.querySelector el ".shortcut-record-control a.submit")
-                       (.click)) 200))))
-      [modal-life])
+     (fn []
+       (let [mid (state/sub :modal/id)
+             mid' (some-> (state/sub :modal/subsets) (last) (:modal/id))
+             el (rum/deref *ref-el)]
+         (when (or (and (not mid') (= mid modal-id))
+                   (= mid' modal-id))
+           (some-> el (.focus))
+           (js/setTimeout
+            #(some-> (.querySelector el ".shortcut-record-control a.submit")
+                     (.click)) 200))))
+     [modal-life])
 
     (rum/use-effect!
-      (fn []
-        (let [^js el (rum/deref *ref-el)
-              key-handler (KeyHandler. el)
+     (fn []
+       (let [^js el (rum/deref *ref-el)
+             key-handler (KeyHandler. el)
 
-              teardown-global!
-              (when-not @*global-listener-setup?
-                (shortcut/unlisten-all! true)
-                (reset! *global-listener-setup? true)
-                (fn []
-                  (shortcut/listen-all!)
-                  (reset! *global-listener-setup? false)))]
+             teardown-global!
+             (when-not @*global-listener-setup?
+               (shortcut/unlisten-all! true)
+               (reset! *global-listener-setup? true)
+               (fn []
+                 (shortcut/listen-all!)
+                 (reset! *global-listener-setup? false)))]
 
           ;; setup
-          (events/listen key-handler "key"
-                         (fn [^js e]
-                           (.preventDefault e)
-                           (set-key-conflicts! nil)
-                           (set-keystroke! #(util/trim-safe (str % (shortcut/keyname e))))))
+         (events/listen key-handler "key"
+                        (fn [^js e]
+                          (.preventDefault e)
+                          (set-key-conflicts! nil)
+                          (set-keystroke! #(util/trim-safe (str % (shortcut/keyname e))))))
 
           ;; active
-          (.focus el)
+         (.focus el)
 
           ;; teardown
-          #(do (some-> teardown-global! (apply nil))
-               (.dispose key-handler)
-               (swap! *customize-modal-life-sentry inc))))
-      [])
+         #(do (some-> teardown-global! (apply nil))
+              (.dispose key-handler)
+              (swap! *customize-modal-life-sentry inc))))
+     [])
 
     [:div.cp__shortcut-page-x-record-dialog-inner
      {:class     (util/classnames [{:keypressed keypressed? :dirty dirty?}])
@@ -291,7 +291,7 @@
           [:code.tracking-wider
            (-> x (string/trim) (string/lower-case) (shortcut-utils/decorate-binding))
            [:a.x {:on-click (fn [] (set-current-binding!
-                                     (->> current-binding (remove #(= x %)) (into []))))}
+                                    (->> current-binding (remove #(= x %)) (into []))))}
             (ui/icon "x" {:size 12})]])]
 
        ;; add shortcut
@@ -320,32 +320,29 @@
 
      [:div.action-btns.text-right.mt-6.flex.justify-between.items-center
       ;; restore default
-      (when (sequential? binding)
-        [:a.flex.items-center.space-x-1.text-sm.opacity-70.hover:opacity-100
-         {:on-click #(set-current-binding! binding)}
+      (if (and dirty? (or user-binding binding))
+        [:a.flex.items-center.space-x-1.text-sm.fade-link
+         {:on-click #(set-current-binding! (or user-binding binding))}
          (t :keymap/restore-to-default)
-         (for [it (some->> binding (map #(some->> % (dh/mod-key) (shortcut-utils/decorate-binding))))]
-           [:span.keyboard-shortcut.ml-1 [:code it]])])
+         (for [it (some->> (or binding user-binding) (map #(some->> % (dh/mod-key) (shortcut-utils/decorate-binding))))]
+           [:span.keyboard-shortcut.ml-1 [:code it]])]
+        [:div])
 
-      [:span
+      [:div.flex.flex-row.items-center.gap-2
        (ui/button
-         (t :save)
-         :disabled (not dirty?)
-         :on-click (fn []
+        (t :save)
+        :disabled (not dirty?)
+        :on-click (fn []
                      ;; TODO: check conflicts for the single same leader key
-                     (let [binding' (if (nil? current-binding) [] current-binding)
-                           conflicts (dh/get-conflicts-by-keys binding' handler-id {:exclude-ids #{k}})]
-                       (if (seq conflicts)
-                         (set-key-conflicts! conflicts)
-                         (let [binding' (if (= binding binding') nil binding')]
-                           (shortcut/persist-user-shortcut! k binding')
+                    (let [binding' (if (nil? current-binding) [] current-binding)
+                          conflicts (dh/get-conflicts-by-keys binding' handler-id {:exclude-ids #{k}})]
+                      (if (seq conflicts)
+                        (set-key-conflicts! conflicts)
+                        (let [binding' (if (= binding binding') nil binding')]
+                          (shortcut/persist-user-shortcut! k binding')
                            ;(notification/show! "Saved!" :success)
-                           (state/close-modal!)
-                           (saved-cb))))))
-
-       [:a.reset-btn
-        {:on-click (fn [] (set-current-binding! (or user-binding binding)))}
-        (t :reset)]]]]))
+                          (state/close-modal!)
+                          (saved-cb))))))]]]))
 
 (defn build-categories-map
   []

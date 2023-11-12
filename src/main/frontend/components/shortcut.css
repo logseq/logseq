@@ -163,16 +163,6 @@
         @apply rounded-[3px];
       }
     }
-
-    .reset-btn {
-      @apply ml-4 opacity-50 cursor-default;
-    }
-
-    &.dirty {
-      .reset-btn {
-        @apply opacity-100 cursor-pointer;
-      }
-    }
   }
 }
 
