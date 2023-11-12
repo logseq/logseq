@@ -539,6 +539,7 @@
         ctrl? (.-ctrlKey e)
         keyname (.-key e)
         enter? (= keyname "Enter")
+        esc? (= keyname "Escape")
         highlighted-group @(::highlighted-group state)
         show-less (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :less))
         show-more (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :more))
@@ -550,6 +551,7 @@
     (reset! (::alt? state) alt?)
     (when (or as-keydown? as-keyup?)
       (.preventDefault e))
+    (when-not esc? (util/stop-propagation e))
 
     (cond
       (and meta? enter?
@@ -565,11 +567,11 @@
                   (show-less)
                   (move-highlight state -1))
       enter? (handle-action :default state e)
-      (= keyname "Escape") (let [filter @(::filter state)]
-                             (when (or filter (not (string/blank? input)))
-                               (util/stop e)
-                               (reset! (::filter state) nil)
-                               (when-not filter (handle-input-change state nil ""))))
+      esc? (let [filter @(::filter state)]
+             (when (or filter (not (string/blank? input)))
+               (util/stop e)
+               (reset! (::filter state) nil)
+               (when-not filter (handle-input-change state nil ""))))
       (= keyname "c") (copy-block-ref state)
       :else nil)))
 
@@ -716,8 +718,18 @@
                              (reset! (::filter state) nil))}
                 (make-shui-context))])
 (rum/defcs cmdk <
-  shortcut/disable-all-shortcuts
   rum/reactive
+  {:will-mount
+   (fn [state]
+     (when-not (:sidebar? (last (:rum/args state)))
+       (shortcut/unlisten-all!))
+     state)
+
+   :will-unmount
+   (fn [state]
+     (when-not (:sidebar? (last (:rum/args state)))
+       (shortcut/listen-all!))
+     state)}
   {:init (fn [state]
            (let [search-mode (:search/mode @state/state)
                  opts (last (:rum/args state))]
