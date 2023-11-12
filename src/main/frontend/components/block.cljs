@@ -3486,9 +3486,7 @@
                    page (db/entity (:db/id page))
                    blocks (tree/non-consecutive-blocks->vec-tree blocks)
                    parent-blocks (group-by :block/parent blocks)]
-               [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                            (:ref? config)
-                            (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
+               [:div.custom-query-page-result.color-level {:key (str "page-" (:db/id page))}
                 (ui/foldable
                  [:div
                   (page-cp config page)
@@ -3514,9 +3512,7 @@
                    page (db/entity (:db/id page))
                    ;; FIXME: parents need to be sorted
                    parent-blocks (group-by :block/parent page-blocks)]
-               [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                            (:ref? config)
-                            (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
+               [:div.my-2 {:key (str "page-" (:db/id page))}
                 (ui/foldable
                  [:div
                   (page-cp config page)
@@ -3544,9 +3540,7 @@
               (let [alias? (:block/alias? page)
                     page (db/entity (:db/id page))
                     whiteboard? (model/whiteboard-page? page)]
-                [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                             (:ref? config)
-                             (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
+                [:div.my-2 {:key (str "page-" (:db/id page))}
                  (ui/foldable
                   [:div
                    (page-cp config page)

@@ -128,12 +128,15 @@
 
   .nav-header a {
     .keyboard-shortcut {
-      @apply w-0 opacity-0;
-      transition: opacity 0.3s;
+        @apply w-0 opacity-0;
+        visibility: hidden;
     }
 
     &:hover {
       .keyboard-shortcut {
+        visibility: visible;
+        transition: opacity 1s;
+        transition-delay: 2s;
         width: auto;
         opacity: 1;
       }
