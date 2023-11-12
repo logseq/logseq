@@ -17,7 +17,7 @@ http://ethanschoonover.com/lsradix/img/lsradix-palette.png
 .lsradix.base0         { color: or(--lx-gray-09, #839496); }
 .lsradix.base1         { color: or(--lx-gray-10, #93a1a1); }
 .lsradix.base2         { color: or(--lx-gray-11, #eee8d5); }
-.lsradix.base3         { color: or(--lx-gray-12, #fdf6e3); }
+.lsradix.base3         { color: or(--lx-gray-11, #fdf6e3); }
 .lsradix.solar-yellow  { color: or(--rx-yellow-11, #b58900); }
 .lsradix.solar-orange  { color: or(--rx-orange-11, #cb4b16); }
 .lsradix.solar-red     { color: or(--rx-red-11, #dc322f); }

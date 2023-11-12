@@ -151,10 +151,10 @@
   (let [tmp (cond
               (false? binding)
               (cond
-                (and util/mac? (= k :editor/kill-line-after)) "system default: ctrl+k"
-                (and util/mac? (= k :editor/beginning-of-block)) "system default: ctrl+a"
-                (and util/mac? (= k :editor/end-of-block)) "system default: ctrl+e"
-                (and util/mac? (= k :editor/backward-kill-word)) "system default: opt+delete"
+                (and util/mac? (= k :editor/kill-line-after)) "system default: ctrl k"
+                (and util/mac? (= k :editor/beginning-of-block)) "system default: ctrl a"
+                (and util/mac? (= k :editor/end-of-block)) "system default: ctrl e"
+                (and util/mac? (= k :editor/backward-kill-word)) "system default: opt delete"
                 :else (t :keymap/disabled))
 
               (string? binding)
@@ -244,7 +244,7 @@
                               (mapv into-conflict-refs)
                               (remove #(empty? (second (second %1))))
                               (into {}))]))))
-                     
+
           (remove #(empty? (vals (second %1))))
           (into {})))))
 

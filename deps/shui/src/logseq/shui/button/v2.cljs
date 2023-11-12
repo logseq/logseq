@@ -38,7 +38,7 @@
                [:<>
                 (when (< 0 index)
                   [:div.shui__button__tile-separator])
-                [:div.shui__button__tile {:class ""} tile]]))
+                [:div.shui__button__tile tile]]))
 
      (when icon
        (icon/root icon icon-props))

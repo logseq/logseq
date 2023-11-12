@@ -16,7 +16,7 @@
 
 #root {
   > div {
-    color: or(--ls-document-text-color, --lx-gray-12, --ls-primary-text-color, #24292e);
+    color: or(--ls-document-text-color, --lx-gray-11, --ls-primary-text-color, #24292e);
     font-size: var(--ls-page-text-size);
   }
 }
@@ -170,7 +170,7 @@
     }
 
     &.active, &:active {
-      background-color: or(--ls-left-sidebar-active-background, --lx-gray-05, --ls-quaternary-background-color);
+      background-color: or(--ls-left-sidebar-active-background, --lx-gray-04, --ls-quaternary-background-color);
       color: or(--ls-left-sidebar-active-text-color, --lx-gray-12);
       .ui__icon {
         opacity: .9;

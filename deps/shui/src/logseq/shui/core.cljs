@@ -14,7 +14,7 @@
 
 ;; shortcut
 (def shortcut shui.shortcut.v1/root)
-(def shortcut-v2 shui.shortcut.v1/root)
+(def shortcut-v1 shui.shortcut.v1/root)
 
 ;; button component
 (def button shui.button.v2/root)

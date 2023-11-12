@@ -178,15 +178,7 @@
                        (string/split  #" "))
                    sequence)]
     [:span.keyboard-shortcut
-     (map-indexed (fn [i key]
-                    (let [key' (shortcut-utils/decorate-binding (str key))]
-                      [:code {:key i}
-                      ;; Display "cmd" rather than "meta" to the user to describe the Mac
-                      ;; mod key, because that's what the Mac keyboards actually say.
-                       (if (= "meta" key')
-                        (util/meta-key-name)
-                        key')]))
-                  sequence)]))
+     (shui/shortcut-v1 sequence (make-shui-context))]))
 
 (rum/defc menu-link
   [{:keys [only-child? no-padding? class shortcut] :as options} child]

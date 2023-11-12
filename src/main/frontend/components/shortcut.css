@@ -163,16 +163,6 @@
         @apply rounded-[3px];
       }
     }
-
-    .reset-btn {
-      @apply ml-4 opacity-50 cursor-default;
-    }
-
-    &.dirty {
-      .reset-btn {
-        @apply opacity-100 cursor-pointer;
-      }
-    }
   }
 }
 
@@ -190,4 +180,13 @@
       }
     }
   }
+}
+
+.sidebar-item .cp__shortcut-page-x {
+    padding: 12px 0 0 0;
+    background-color: var(--color-level-2);
+}
+
+.sidebar-item article {
+    max-height: unset;
 }
