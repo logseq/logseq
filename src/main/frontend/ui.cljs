@@ -571,11 +571,13 @@
       {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
        :aria-hidden "true"}]]]))
 
-(defn keyboard-shortcut-from-config [shortcut-name]
+(defn keyboard-shortcut-from-config [shortcut-name & {:keys [pick-first?]}]
   (let [built-in-binding (:binding (get shortcut-config/all-built-in-keyboard-shortcuts shortcut-name))
         custom-binding  (when (state/shortcuts) (get (state/shortcuts) shortcut-name))
         binding         (or custom-binding built-in-binding)]
-    (shortcut-utils/decorate-binding binding)))
+    (if (and pick-first? (coll? binding))
+      (first binding)
+      (shortcut-utils/decorate-binding binding))))
 
 (rum/defc modal-overlay
   [state close-fn close-backdrop?]

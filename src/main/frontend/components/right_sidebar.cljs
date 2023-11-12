@@ -279,9 +279,9 @@
                     :aria-labelledby (str "sidebar-panel-header-" idx)
                     :class (util/classnames [{:hidden collapsed?
                                               :initial (not collapsed?)
-                                              :p-4 (not (contains? #{:page :block :contents :search} block-type))
-                                              :pt-4 (not (contains? #{:search} block-type))
-                                              :p-1 (not (contains? #{:search} block-type))}])}
+                                              :p-4 (not (contains? #{:page :block :contents :search :shortcut-settings} block-type))
+                                              :pt-4 (not (contains? #{:search :shortcut-settings} block-type))
+                                              :p-1 (not (contains? #{:search :shortcut-settings} block-type))}])}
               (inner-component component (not drag-from))]
              (when drag-from (drop-area idx))])]
          (drop-indicator idx drag-to)]))))

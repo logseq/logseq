@@ -451,11 +451,8 @@
    :go/prev-journal                         {:binding "g p"
                                              :fn      journal-handler/go-to-prev-journal!}
 
-   :go/flashcards                           {:binding "g f"
-                                             :fn      (fn []
-                                                        (if (state/modal-opened?)
-                                                          (state/close-modal!)
-                                                          (state/pub-event! [:modal/show-cards])))}
+   :go/flashcards                           {:binding ["g f" "t c"]
+                                             :fn      ui-handler/toggle-cards!}
 
    :ui/toggle-document-mode                 {:binding "t d"
                                              :fn      state/toggle-document-mode!}
@@ -526,9 +523,6 @@
 
    :ui/cycle-color                          {:binding "c c"
                                              :fn      state/cycle-color!}
-
-   :ui/toggle-cards                         {:binding "t c"
-                                             :fn      ui-handler/toggle-cards!}
 
    :git/commit                              {:binding  "mod+g c"
                                              :inactive (not (util/electron?))
@@ -723,7 +717,6 @@
                    :ui/goto-plugins
                    :ui/install-plugins-from-file
                    :editor/toggle-open-blocks
-                   :ui/toggle-cards
                    :ui/clear-all-notifications
                    :git/commit
                    :sidebar/close-top
@@ -839,7 +832,6 @@
      :editor/toggle-undo-redo-mode
      :editor/toggle-number-list
      :ui/toggle-wide-mode
-     :ui/toggle-cards
      :ui/toggle-document-mode
      :ui/toggle-brackets
      :ui/toggle-theme

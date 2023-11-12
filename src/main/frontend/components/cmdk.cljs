@@ -369,7 +369,7 @@
   (let [command (some-> state state->highlighted-item :source-command)]
     (when-let [action (:action command)]
       (action)
-      (when-not (contains? #{:graph/open :graph/remove} (:id command))
+      (when-not (contains? #{:graph/open :graph/remove :ui/toggle-settings :go/flashcards} (:id command))
         (close-unless-alt! state)))))
 
 (defmethod handle-action :create [_ state _event]

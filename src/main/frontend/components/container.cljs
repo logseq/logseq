@@ -207,7 +207,9 @@
                    (state/pub-event! [:modal/show-cards]))}
      (ui/icon "infinity")
      [:span.flex-1 (t :right-side-bar/flashcards)]
-     [:span.ml-1 (ui/render-keyboard-shortcut (ui/keyboard-shortcut-from-config :go/flashcards))]
+     [:span.ml-1 (ui/render-keyboard-shortcut
+                  (ui/keyboard-shortcut-from-config :go/flashcards
+                                                    {:pick-first? true}))]
      (when (and num (not (zero? num)))
        [:span.ml-1.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])]))
 
