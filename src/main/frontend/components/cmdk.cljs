@@ -76,7 +76,8 @@
 
 ;; Take the results, decide how many items to show, and order the results appropriately
 (defn state->results-ordered [state search-mode]
-  (let [results @(::results state)
+  (let [sidebar? (:sidebar? (last (:rum/args state)))
+        results @(::results state)
         input @(::input state)
         filter @(::filter state)
         filter-group (:group filter)
@@ -84,7 +85,7 @@
         visible-items (fn [group]
                         (let [{:keys [items show]} (get results group)]
                           (cond
-                            (= group filter-group)
+                            (or sidebar? (= group filter-group))
                             items
 
                             (= :more show)
@@ -429,7 +430,7 @@
 (rum/defcs result-group
   < rum/reactive
   (rum/local false ::mouse-active?)
-  [state' state title group visible-items first-item]
+  [state' state title group visible-items first-item sidebar?]
   (let [{:keys [show items]} (some-> state ::results deref group)
         highlighted-item (or @(::highlighted-item state) first-item)
         highlighted-group @(::highlighted-group state)
@@ -457,7 +458,8 @@
 
        (when (and (= group highlighted-group)
                (or can-show-more? can-show-less?)
-               (empty? filter))
+               (empty? filter)
+               (not sidebar?))
          [:a.text-link.select-node.opacity-50.hover:opacity-90
           {:on-click (if (= show :more) show-less show-more)}
           (if (= show :more)
@@ -534,6 +536,7 @@
         alt? (.-altKey e)
         ctrl? (.-ctrlKey e)
         keyname (.-key e)
+        enter? (= keyname "Enter")
         highlighted-group @(::highlighted-group state)
         show-less (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :less))
         show-more (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :more))
@@ -547,13 +550,19 @@
       (.preventDefault e))
 
     (cond
+      (and meta? shift? enter?
+           (not (string/blank? input)))
+      (let [repo (state/get-current-repo)]
+        (state/close-modal!)
+        (state/sidebar-add-block! repo input :search))
+
       as-keydown? (if meta?
                     (show-more)
                     (move-highlight state 1))
       as-keyup? (if meta?
                   (show-less)
                   (move-highlight state -1))
-      (= keyname "Enter") (handle-action :default state e)
+      enter? (handle-action :default state e)
       (= keyname "Escape") (let [filter @(::filter state)]
                              (when (or filter (not (string/blank? input)))
                                (util/stop e)
@@ -618,36 +627,6 @@
                                             (= last-char "/"))))
                           (reset! (::filter state) nil))))
        :value input}]]))
-
-(rum/defc input-row-sidebar
-  [state all-items]
-  (let [highlighted-item @(::highlighted-item state)
-        input @(::input state)
-        input-ref (::input-ref state)]
-    ;; use-effect [results-ordered input] to check whether the highlighted item is still in the results,
-    ;; if not then clear that puppy out!
-    ;; This was moved to a functional component
-    (rum/use-effect! (fn []
-                       (when (= -1 (.indexOf all-items highlighted-item))
-                         (reset! (::highlighted-item state) nil)))
-                     [all-items])
-    (rum/use-effect! (fn []
-                       (load-results :default state))
-                     [])
-    (rum/use-effect! (fn []
-                       (js/setTimeout #(when (some-> input-ref deref) (.focus @input-ref)) 0))
-                     [])
-    [:div {:class "bg-gray-04 text-white flex items-center px-2 gap-2"}
-     (ui/rotating-arrow false)
-     (shui/icon "search" {:class "text-gray-12"})
-     [:input {:class "text-base bg-transparent border-none w-full outline-none py-2"
-              :autoComplete "off"
-              :placeholder (input-placeholder true)
-              :ref #(reset! input-ref %)
-              :on-change (partial handle-input-change state)
-              :on-composition-end (fn [e] (handle-input-change state e))
-              :value input}]
-     (shui/icon "x" {:class "text-gray-11"})]))
 
 (rum/defc tip
   [state context]
@@ -736,10 +715,18 @@
                                       (not (contains? #{:global :graph} search-mode))
                                       (not (:sidebar? opts)))
                                (atom {:group search-mode})
-                               (atom nil)))))
+                               (atom nil))
+                    ::input (atom (or (:initial-input opts) "")))))
    :will-unmount (fn [state]
                    (state/set-state! :search/mode nil)
-                   state)}
+                   state)
+   :did-mount (fn [state]
+                (let [opts (last (:rum/args state))]
+                  (when (and (:sidebar? opts)
+                             (not (string/blank? @(::input state))))
+                    ;; trigger search
+                    (load-results :default state)))
+                state)}
   (mixins/event-mixin
    (fn [state]
      (let [ref @(::ref state)]
@@ -749,7 +736,6 @@
        (mixins/on-key-up state {}
                          {:target ref
                           :all-handler (fn [e _key] (keyup-handler state e))}))))
-  (rum/local "" ::input)
   (rum/local false ::shift?)
   (rum/local false ::meta?)
   (rum/local false ::alt?)
@@ -761,6 +747,7 @@
   (rum/local nil ::input-ref)
   [state {:keys [sidebar?]}]
   (let [*input (::input state)
+        _input (rum/react *input)
         search-mode (:search/mode @state/state)
         group-filter (:group (rum/react (::filter state)))
         results-ordered (state->results-ordered state search-mode)
@@ -769,9 +756,7 @@
     [:div.cp__cmdk {:ref #(when-not @(::ref state) (reset! (::ref state) %))
                     :class (cond-> "w-full h-full relative flex flex-col justify-start"
                              (not sidebar?) (str " rounded-lg"))}
-     (if sidebar?
-       (input-row-sidebar state all-items)
-       (input-row state all-items))
+     (when-not sidebar? (input-row state all-items))
      [:div {:class (cond-> "w-full flex-1 overflow-y-auto min-h-[65dvh] max-h-[65dvh]"
                      (not sidebar?) (str " pb-14"))
             :ref #(let [*ref (::scroll-container-ref state)]
@@ -795,17 +780,16 @@
         (if (seq items)
           (for [[group-name group-key _group-count group-items] items]
             (let [title group-name]
-              (result-group state title group-key group-items first-item)))
+              (result-group state title group-key group-items first-item sidebar?)))
           [:div.flex.flex-col.p-4.opacity-50
-           (when-not (string/blank? @*input)
+           (when-not (string/blank? (rum/react *input))
              "No matched results")]))]
-     (hints state)]))
+     (when-not sidebar? (hints state))]))
 
 (rum/defc cmdk-modal [props]
   [:div {:class "cp__cmdk__modal rounded-lg w-[90dvw] max-w-4xl relative"}
    (cmdk props)])
 
-(comment
-  (rum/defc cmdk-block [props]
-    [:div {:class "cp__cmdk__block rounded-md"}
-     (cmdk props)]))
+(rum/defc cmdk-block [props]
+  [:div {:class "cp__cmdk__block rounded-md"}
+   (cmdk props)])

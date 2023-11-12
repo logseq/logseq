@@ -5,6 +5,7 @@
             [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
             [frontend.components.shortcut :as shortcut]
+            [frontend.components.cmdk :as cmdk]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -133,8 +134,8 @@
     #_:clj-kondo/ignore
     (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
       (when-let [block (db/entity repo lookup)]
-       [(t :right-side-bar/block-ref)
-        (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
+        [(t :right-side-bar/block-ref)
+         (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
 
     :block
     #_:clj-kondo/ignore
@@ -152,6 +153,13 @@
           (ui/icon (if (= "whiteboard" (:block/type page)) "whiteboard" "page") {:class "text-md mr-2"}))
         [:span.overflow-hidden.text-ellipsis (db-model/get-page-original-name page-name)]]
        (page-cp repo page-name)])
+
+    :search
+    [[:.flex.items-center.page-title
+      (ui/icon "search" {:class "text-md mr-2"})
+      [:span.overflow-hidden.text-ellipsis db-id]]
+     (cmdk/cmdk-block {:initial-input db-id
+                       :sidebar? true})]
 
     :page-slide-view
     (let [page-name (:block/name (db/entity db-id))]
@@ -271,7 +279,7 @@
                                           :aria-labelledby (str "sidebar-panel-header-" idx)
                                           :class (util/classnames [{:hidden collapsed?
                                                                     :initial (not collapsed?)
-                                                                    :p-4 (not (contains? #{:page :block :contents} block-type))}])}
+                                                                    :p-4 (not (contains? #{:page :block :contents :search} block-type))}])}
               (inner-component component (not drag-from))]
              (when drag-from (drop-area idx))])]
          (drop-indicator idx drag-to)]))))
@@ -422,13 +430,10 @@
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.ml-2.pr-3
        (if @*anim-finished?
-         [:<>
-          ; [:div.sidebar-drop-indicator]
-          ; (cmdk/cmdk-block {:sidebar? true})
-          (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
+         (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
             (rum/with-key
               (sidebar-item repo idx db-id block-type block-count)
-              (str "sidebar-block-" db-id)))]
+              (str "sidebar-block-" db-id)))
          [:div.p-4
           [:span.font-medium.opacity-50 "Loading ..."]])]]]))
 
