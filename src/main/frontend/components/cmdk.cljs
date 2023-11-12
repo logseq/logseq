@@ -366,9 +366,11 @@
       (reset! (::input state) search-query))))
 
 (defmethod handle-action :trigger [_ state _event]
-  (when-let [action (some-> state state->highlighted-item :source-command :action)]
-    (action)
-    (close-unless-alt! state)))
+  (let [command (some-> state state->highlighted-item :source-command)]
+    (when-let [action (:action command)]
+      (action)
+      (when-not (contains? #{:graph/open :graph/remove} (:id command))
+        (close-unless-alt! state)))))
 
 (defmethod handle-action :create [_ state _event]
   (let [item (state->highlighted-item state)
