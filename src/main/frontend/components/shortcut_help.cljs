@@ -2,13 +2,13 @@
   "Shortcut help"
   (:require [frontend.context.i18n :refer [t]]
             [frontend.state :as state]
-            [frontend.ui :as ui]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.highlight :as highlight]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [rum.core :as rum]
-            [frontend.components.shortcut :as shortcut]))
+            [frontend.components.shortcut :as shortcut]
+            [logseq.shui.core :as shui]))
 
 (rum/defc trigger-table []
   [:table
@@ -21,8 +21,9 @@
      [:td.text-left (t :help/slash-autocomplete)]
      [:td.text-right [:code "/"]]]
     [:tr
-     [:td.text-left (t :help/block-content-autocomplete)]
-     [:td.text-right [:code "<"]]]
+     [:td.text-left (t :command.go/search)]
+     [:td.text-right [:div.float-right
+                      (shui/shortcut ["mod" "k"] (shui/make-context))]]]
     [:tr
      [:td.text-left (t :help/reference-autocomplete)]
      [:td.text-right [:code page-ref/left-and-right-brackets]]]
@@ -31,10 +32,10 @@
      [:td.text-right [:code block-ref/left-and-right-parens]]]
     [:tr
      [:td.text-left (t :help/open-link-in-sidebar)]
-     [:td.text-right [:code "Shift Click"]]]
+     [:td.text-right [:code "Shift click reference"]]]
     [:tr
      [:td.text-left (t :help/context-menu)]
-     [:td.text-right [:code "Right Click"]]]]])
+     [:td.text-right [:code "Right click bullet"]]]]])
 
 (defn markdown-and-orgmode-syntax []
   (let [list [:bold :italics :del :mark :latex :code :link :pre :img]

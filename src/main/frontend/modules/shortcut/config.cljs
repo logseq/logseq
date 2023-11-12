@@ -745,13 +745,13 @@
 (defonce ^:large-vars/data-var *category
   (atom
    {:shortcut.category/basics
-    [:editor/new-block
+    [:go/search
+     :editor/new-block
      :editor/new-line
      :editor/indent
      :editor/outdent
      :editor/select-all-blocks
      :editor/select-parent
-     :go/search
      :go/search-in-page
      :command-palette/toggle
      :go/electron-find-in-page
