@@ -762,7 +762,7 @@
   [state {:keys [sidebar?]}]
   (let [*input (::input state)
         search-mode (:search/mode @state/state)
-        group-filter (:group @(::filter state))
+        group-filter (:group (rum/react (::filter state)))
         results-ordered (state->results-ordered state search-mode)
         all-items (mapcat last results-ordered)
         first-item (first all-items)]
@@ -772,7 +772,7 @@
      (if sidebar?
        (input-row-sidebar state all-items)
        (input-row state all-items))
-     [:div {:class (cond-> "w-full flex-1 overflow-y-auto max-h-[65dvh]"
+     [:div {:class (cond-> "w-full flex-1 overflow-y-auto min-h-[65dvh] max-h-[65dvh]"
                      (not sidebar?) (str " pb-14"))
             :ref #(let [*ref (::scroll-container-ref state)]
                     (when-not @*ref (reset! *ref %)))
