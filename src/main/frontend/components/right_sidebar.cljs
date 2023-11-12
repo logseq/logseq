@@ -4,7 +4,7 @@
             [frontend.components.block :as block]
             [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
-            [frontend.components.shortcut-help :as shortcut]
+            [frontend.components.shortcut-help :as shortcut-help]
             [frontend.components.cmdk :as cmdk]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -56,7 +56,7 @@
 (rum/defc shortcut-settings
   []
   [:div.contents.flex-col.flex.ml-3
-   (shortcut/shortcut-page {:show-title? false})])
+   (shortcut-help/shortcut-page {:show-title? false})])
 
 (defn- block-with-breadcrumb
   [repo block idx sidebar-key ref?]

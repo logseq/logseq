@@ -178,7 +178,7 @@
                        (string/split  #" "))
                    sequence)]
     [:span.keyboard-shortcut
-     (shui/shortcut-v1 (string/join "+" sequence) (make-shui-context))]))
+     (shui/shortcut-v1 sequence (make-shui-context))]))
 
 (rum/defc menu-link
   [{:keys [only-child? no-padding? class shortcut] :as options} child]

@@ -31,10 +31,10 @@
      [:td.text-right [:code block-ref/left-and-right-parens]]]
     [:tr
      [:td.text-left (t :help/open-link-in-sidebar)]
-     [:td.text-right (ui/render-keyboard-shortcut ["shift" "click"])]]
+     [:td.text-right [:code "Shift Click"]]]
     [:tr
      [:td.text-left (t :help/context-menu)]
-     [:td.text-right (ui/render-keyboard-shortcut ["right" "click"])]]]])
+     [:td.text-right [:code "Right Click"]]]]])
 
 (defn markdown-and-orgmode-syntax []
   (let [list [:bold :italics :del :mark :latex :code :link :pre :img]

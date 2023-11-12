@@ -476,4 +476,6 @@
 
                         (not unset?)
                         [:code.flex.items-center.bg-transparent
-                         (shui/shortcut-v1 (string/join " | " (map #(dh/binding-for-display id %) binding)) (make-shui-context))])]]))))])])]]))
+                         (shui/shortcut-v1 (string/join " | " (map #(dh/binding-for-display id %) binding))
+                                           (make-shui-context)
+                                           {:size :md})])]]))))])])]]))
