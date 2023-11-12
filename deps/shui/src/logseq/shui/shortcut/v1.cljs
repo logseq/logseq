@@ -52,7 +52,6 @@
   [shortcut context & {:keys [tiled size]
                        :or {tiled true
                             size :sm}}]
-  (js/console.log "::root.shortcut-seq" shortcut)
   [:<>
    (for [[index option] (map-indexed vector (string/split shortcut #" \| "))]
      [:<>
@@ -62,7 +61,7 @@
                                         [true (subs option 16)]
                                         [false option])]
         [:<>
-         (when system-default 
+         (when system-default
            [:div.mr-1.text-xs "system default: "])
          (for [sequence (string/split option #" ")
                :let [text (->> (string/split sequence #"\+")
