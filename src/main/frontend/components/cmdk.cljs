@@ -550,7 +550,7 @@
       (.preventDefault e))
 
     (cond
-      (and meta? shift? enter?
+      (and meta? enter?
            (not (string/blank? input)))
       (let [repo (state/get-current-repo)]
         (state/close-modal!)
