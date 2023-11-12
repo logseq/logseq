@@ -628,21 +628,31 @@
                           (reset! (::filter state) nil))))
        :value input}]]))
 
-(rum/defc tip
-  [state context]
+(defn rand-tip
+  [context]
+  (rand-nth
+   [[:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
+     [:div "Type"]
+     (shui/shortcut "/" context)
+     [:div "to filter search results"]]
+    [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
+     (shui/shortcut "mod enter" context)
+     [:div "to open search in the sidebar"]]]))
+
+(rum/defcs tip <
+  {:init (fn [state]
+           (assoc state ::rand-tip (rand-tip (last (:rum/args state)))))}
+  [inner-state state context]
   (let [filter @(::filter state)]
     (cond
       filter
-      [:div.flex.flex-row.gap-1.items-center
-       [:div.opacity-30 "Type"]
+      [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
+       [:div "Type"]
        (shui/shortcut "esc" context {:tiled false})
-       [:div.opacity-30 "to clear search filter"]]
+       [:div "to clear search filter"]]
 
       :else
-      [:div.flex.flex-row.gap-1.items-center
-       [:div.opacity-30 "Type"]
-       (shui/shortcut "/" context)
-       [:div.opacity-30 "to filter search results"]])))
+      (::rand-tip inner-state))))
 
 (rum/defc hints
   [state]
