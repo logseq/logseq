@@ -1226,11 +1226,11 @@
       [:div.tabs-inner.flex.items-center
        (ui/button [:span.it (t :plugin/installed)]
                   :on-click #(set-active! :installed)
-                  :intent "logseq" :class (if-not market? "active" ""))
+                  :intent (if-not market? "" "link"))
 
        (ui/button [:span.mk (svg/apps 16) (t :plugin/marketplace)]
                   :on-click #(set-active! :marketplace)
-                  :intent "logseq" :class (if market? "active" ""))]]
+                  :intent (if market? "" "link"))]]
 
      [:div.panels
       (if market?

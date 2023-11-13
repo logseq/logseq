@@ -6,14 +6,12 @@
     [clojure.string :as string]))
 
 (rum/defcs root < rum/reactive
-  {:init (fn [state]
-           (assoc state ::theme (atom
-                                 (or (:theme (first (:rum/args state))) :color))))}
+  (rum/local nil ::hover-theme)
   [state {:keys [theme hover-theme color text depth size icon interactive shortcut tiled on-click muted disabled? class href button-props icon-props]
           :or {theme :color depth 1 size :md interactive true muted false class ""}} context]
-  (let [*theme (::theme state)
+  (let [*hover-theme (::hover-theme state)
         color-string (or (some-> color name) (some-> context :state rum/react :ui/radix-color name) "custom")
-        theme (rum/react *theme)
+        theme (or @*hover-theme theme)
         theme-class (str "shui__button-theme-" (if (keyword? theme) (name theme) "color"))
         depth-class (when-not (= :text theme) (str "shui__button-depth-" depth))
         color-class (str "shui__button-color-" color-string)
@@ -29,8 +27,8 @@
       (cond->
        {:class (str theme-class " " depth-class " " color-class " " size-class " " tiled-class " " muted-class " " class)
         :disabled (boolean disabled?)
-        :on-mouse-over #(when hover-theme (reset! *theme hover-theme))
-        :on-mouse-out #(reset! *theme theme)}
+        :on-mouse-over #(when hover-theme (reset! *hover-theme hover-theme))
+        :on-mouse-out #(reset! *hover-theme nil)}
         on-click
         (assoc :on-click on-click)))
      (if-not tiled text
