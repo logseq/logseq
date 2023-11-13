@@ -7,7 +7,7 @@
 (def mac? goog.userAgent/MAC)
 (defn print-shortcut-key [key]
   (case key
-    ("cmd" "command" "mod" "⌘" "meta") (if mac? "⌘" "⊞ win")
+    ("cmd" "command" "mod" "⌘" "meta") "⌘"
     ("return" "enter" "⏎") "⏎"
     ("shift" "⇧") "⇧"
     ("alt" "option" "opt" "⌥") "⌥"

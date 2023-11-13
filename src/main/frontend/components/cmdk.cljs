@@ -677,7 +677,7 @@
          [:div.font-medium.text-gray-12 "Tip:"]
          (tip state context)]]
 
-       [:div.flex.gap-2 {:style {:margin-right -6}}
+       [:div.flex.gap-2.hidden.md:block {:style {:margin-right -6}}
         (case action
           :open
           [:<>
