@@ -192,7 +192,7 @@
     (reset! (:editor/create-page? @state/state) false)))
 
 (defn rebuild-block-refs
-  [block new-properties & {:keys [skip-content-parsing?]}]
+  [repo block new-properties & {:keys [skip-content-parsing?]}]
   (let [property-key-refs (keys new-properties)
         property-value-refs (->> (vals new-properties)
                                  (mapcat (fn [v]
@@ -201,7 +201,10 @@
                                              v
 
                                              (uuid? v)
-                                             [v]
+                                             (if (get-in (db/entity repo [:block/uuid v]) [:block/metadata :created-from-property])
+                                               ;; don't reference hidden block property values
+                                               []
+                                               [v])
 
                                              (and (coll? v) (string? (first v)))
                                              (mapcat block/extract-refs-from-text v)
@@ -219,9 +222,9 @@
     (concat property-refs content-refs)))
 
 (defn- rebuild-refs
-  [txs-state block m]
-  (when (config/db-based-graph? (state/get-current-repo))
-    (let [refs (->> (rebuild-block-refs block (:block/properties block)
+  [repo txs-state block m]
+  (when (config/db-based-graph? repo)
+    (let [refs (->> (rebuild-block-refs repo block (:block/properties block)
                                         :skip-content-parsing? true)
                     (concat (:block/refs m)))]
       (swap! txs-state (fn [txs] (concat txs [{:db/id (:db/id block)
@@ -347,7 +350,7 @@
 
       (create-object-when-save txs-state block-entity m structured-tags?)
 
-      (rebuild-refs txs-state block-entity m)
+      (rebuild-refs repo txs-state block-entity m)
 
       this))
 
