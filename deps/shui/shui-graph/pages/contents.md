@@ -195,7 +195,7 @@
     - We want to switch to radix variables
     - We want to make it easy to customize with themes
     - We want to support as much old themes as possible
-    - var(--shui-button-color,
+    - var(--ui-button-color,
       collapsed:: true
         - var(--logseq-button-primary-color,
           collapsed:: true

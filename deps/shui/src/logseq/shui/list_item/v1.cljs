@@ -29,7 +29,7 @@
   (let [[before-text highlighted-text after-text] (split-text-on-highlight text query normal-text normal-query)]
     [:span
      (when-not (string/blank? before-text) [:span before-text])
-     (when-not (string/blank? highlighted-text) [:span {:class "shui__list-item-highlighted-span bg-accent-06 dark:bg-accent-08-alpha"} highlighted-text])
+     (when-not (string/blank? highlighted-text) [:span {:class "ui__list-item-highlighted-span bg-accent-06 dark:bg-accent-08-alpha"} highlighted-text])
      (when-not (string/blank? after-text) [:span after-text])]))
 
 (defn span-with-multiple-highlight-tokens [app-config text normal-query]
@@ -41,7 +41,7 @@
              (map (fn [[type value]]
                     (if (= type :text)
                       [:span value]
-                      [:span {:class "shui__list-item-highlighted-span"} value])))
+                      [:span {:class "ui__list-item-highlighted-span"} value])))
              (into [:span]))
         (->> result
              (mapcat (fn [[type value]]

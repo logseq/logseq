@@ -12,16 +12,16 @@
   (let [*hover-theme (::hover-theme state)
         color-string (or (some-> color name) (some-> context :state rum/react :ui/radix-color name) "custom")
         theme (or @*hover-theme theme)
-        theme-class (str "shui__button-theme-" (if (keyword? theme) (name theme) "color"))
-        depth-class (when-not (= :text theme) (str "shui__button-depth-" depth))
-        color-class (str "shui__button-color-" color-string)
-        muted-class (when muted "shui__button-muted")
-        size-class  (str "shui__button-size-" (name size))
-        tiled-class (when tiled "shui__button-tiled")
+        theme-class (str "ui__button-theme-" (if (keyword? theme) (name theme) "color"))
+        depth-class (when-not (= :text theme) (str "ui__button-depth-" depth))
+        color-class (str "ui__button-color-" color-string)
+        muted-class (when muted "ui__button-muted")
+        size-class  (str "ui__button-size-" (name size))
+        tiled-class (when tiled "ui__button-tiled")
         on-click (fn [e]
                    (when href (set! (.-href js/window.location) href))
                    (when on-click (on-click e)))]
-    [:button.ui__button.shui__button
+    [:button.ui__button
      (merge
       button-props
       (cond->
@@ -35,14 +35,14 @@
              (for [[index tile] (map-indexed vector (rest (string/split text #"")))]
                [:<>
                 (when (< 0 index)
-                  [:div.shui__button__tile-separator])
-                [:div.shui__button__tile tile]]))
+                  [:div.ui__button__tile-separator])
+                [:div.ui__button__tile tile]]))
 
      (when icon
        (icon/root icon icon-props))
      (when (not-empty shortcut)
        (for [key shortcut]
-         [:div.shui__button-shortcut-key
+         [:div.ui__button-shortcut-key
           (case key
             "cmd" [:div "⌘"]
             "shift" [:div "⇧"]
