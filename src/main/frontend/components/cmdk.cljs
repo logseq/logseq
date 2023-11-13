@@ -618,7 +618,7 @@
                     (handle-input-change state e)
                     (when-let [on-change (:on-input-change opts)]
                       (on-change (.-value (.-target e)))))
-       :on-blur (fn [e]
+       :on-blur (fn [_e]
                   (when-let [on-blur (:on-input-blur opts)]
                     (on-blur input)))
        :on-composition-end (fn [e] (handle-input-change state e))
