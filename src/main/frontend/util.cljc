@@ -1282,10 +1282,6 @@
   (re-matches (re-pattern (regex-escape "$u^8(d)+w.*[dw]d?")) "$u^8(d)+w.*[dw]d?"))
 
 #?(:cljs
-   (defn meta-key-name []
-     (if mac? "Cmd" "Ctrl")))
-
-#?(:cljs
    (defn meta-key? [e]
      (if mac?
        (gobj/get e "metaKey")

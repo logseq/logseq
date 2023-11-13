@@ -21,7 +21,7 @@
      [:td.text-left (t :help/slash-autocomplete)]
      [:td.text-right [:code "/"]]]
     [:tr
-     [:td.text-left (t :command.go/search)]
+     [:td.text-left (t :help/search)]
      [:td.text-right [:div.float-right
                       (shui/shortcut ["mod" "k"] (shui/make-context))]]]
     [:tr

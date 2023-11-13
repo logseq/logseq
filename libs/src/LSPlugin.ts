@@ -284,7 +284,6 @@ export type ExternalCommandType =
   | 'logseq.ui/goto-plugins'
   | 'logseq.ui/select-theme-color'
   | 'logseq.ui/toggle-brackets'
-  | 'logseq.ui/toggle-cards'
   | 'logseq.ui/toggle-contents'
   | 'logseq.ui/toggle-document-mode'
   | 'logseq.ui/toggle-help'

@@ -80,7 +80,6 @@
  :graph/save-success "Opslaan succesvol"
 
  :help/about "Over Logseq"
- :help/block-content-autocomplete "Blokinhoud (brontekst, citaten, zoekopdrachten, enz.) autocomplete"
  :help/block-reference "Blok referentie"
  :help/bug "Rapporteer een fout"
  :help/changelog "Verander logboek"
@@ -316,7 +315,6 @@
  :command.ui/goto-plugins                "Ga naar plugins dashboard"
  :command.ui/select-theme-color          "Selecteer beschikbare themakleuren"
  :command.ui/toggle-brackets             "Toggle tussen het weergeven van beugels"
- :command.ui/toggle-cards                "Toggle kaarten"
  :command.ui/toggle-contents             "Toggle inhoud in zijbalk"
  :command.ui/toggle-document-mode        "Schakel tussen documentmodus"
  :command.ui/toggle-left-sidebar         "Toggle linker zijbalk"

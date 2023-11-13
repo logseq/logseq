@@ -193,7 +193,6 @@
  :header/toggle-left-sidebar "Linke Seitenleiste umschalten"
 
  :help/about "Über Logseq"
- :help/block-content-autocomplete "Blockinhalt (Quelltext, Zitate, Abfragen, etc.) Autovervollständigung"
  :help/block-reference "Blockverweis"
  :help/blog "Logseq Blog"
  :help/bug "Fehlerbericht"
@@ -739,7 +738,6 @@
  :command.ui/install-plugins-from-file   "Plugins aus plugins.edn installieren"
  :command.ui/select-theme-color          "Verfügbare Themenfarben auswählen"
  :command.ui/toggle-brackets             "Umschalten, ob Klammern angezeigt werden sollen"
- :command.ui/toggle-cards                "Karten umschalten"
  :command.ui/toggle-contents             "Inhalt in Seitenleiste umschalten"
  :command.ui/toggle-document-mode        "Dokumentenmodus umschalten"
  :command.ui/toggle-help                 "Hilfe aktivieren"

@@ -31,7 +31,6 @@
  :help/shortcuts-triggers "觸發"
  :help/shortcut "快捷鍵"
  :help/slash-autocomplete "Slash 自動"
- :help/block-content-autocomplete "區塊內容自動完成"
  :help/reference-autocomplete "頁面引用自動完成"
  :help/block-reference "區塊引用"
  :help/open-link-in-sidebar "在側邊欄開啟連結r"

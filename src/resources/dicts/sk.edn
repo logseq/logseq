@@ -31,7 +31,6 @@
  :help/shortcuts-triggers                          "Akcie"
  :help/shortcut                                    "Skratky"
  :help/slash-autocomplete                          "Automatické dopĺňanie s lomítkom"
- :help/block-content-autocomplete                  "Automatické dopĺňanie obsahu bloku"
  :help/reference-autocomplete                      "Automatické dopĺňanie referencie na stránku"
  :help/block-reference                             "Referencia na blok"
  :help/open-link-in-sidebar                        "Otvoriť odkaz v bočnom paneli"
@@ -426,5 +425,4 @@
  :command.ui/goto-plugins                                  "Prejsť na zoznam doplnkov"
  :command.ui/install-plugins-from-file                     "Inštalovať doplnky z plugins.edn"
  :command.editor/toggle-open-blocks                        "Prepnúť otvorené bloky (zbaliť alebo rozbaliť všetky bloky)"
- :command.ui/toggle-cards                                  "Zobraziť/Skryť karty"
  :command.git/commit                                       "Spusiť príkaz git commit so správou"}
