@@ -279,9 +279,7 @@
       (contains? (:block/type page) "property")
       (cond (seq (model/get-classes-with-property (:block/uuid page)))
             {:msg "Page content deleted but unable to delete this page because classes use this property"}
-            (->> (model/get-block-property-values (:block/uuid page))
-                 (filter (fn [[_ v]] (if (seq? v) (seq v) (some? v))))
-                 seq)
+            (seq (model/get-block-property-values (:block/uuid page)))
             {:msg "Page content deleted but unable to delete this page because blocks use this property"})
 
       (or (seq (:block/_refs page)) (contains? (:block/type page) "hidden"))

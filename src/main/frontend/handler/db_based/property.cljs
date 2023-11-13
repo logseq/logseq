@@ -249,8 +249,11 @@
                               properties]}]
   {:pre [(uuid? property-uuid)]}
   (when-let [property (db/entity [:block/uuid property-uuid])]
-    (let [type (get-in property [:block/schema :type])]
-      (when-not (and type (:type property-schema) (not= type (:type property-schema))) ; property type changed
+    (let [type (get-in property [:block/schema :type])
+          type-changed? (and type (:type property-schema) (not= type (:type property-schema)))]
+      (when (or (not type-changed?)
+                ;; only change type if property hasn't been used yet
+                (empty? (model/get-block-property-values property-uuid)))
         (when (and (= :many (:cardinality property-schema))
                    (not= :many (:cardinality (:block/schema property))))
           ;; cardinality changed from :one to :many

@@ -7,7 +7,7 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
-            [frontend.db.model :as db-model]
+            [frontend.db.model :as model]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
@@ -58,7 +58,7 @@
                   [:a.text-sm (str "#" page-name)]))))]
          [:div.opacity-50.pointer.text-sm "Empty"])])
     (fn [{:keys [toggle-fn]}]
-      (let [classes (db-model/get-all-classes (state/get-current-repo))
+      (let [classes (model/get-all-classes (state/get-current-repo))
             options (cond->> (map (fn [[name id]]
                                     {:label name :value id})
                                   classes)
@@ -173,14 +173,17 @@
                                        :disabled disabled?
                                        :value type
                                        :selected (= type (:type @*property-schema))})))]
-         [:div.col-span-2
-          (if property-type
-            (property-type-label property-type)
+         (if (and property-type
+                  (seq (model/get-block-property-values (:block/uuid property))))
+           [:div.col-span-2
+            {:title "Type can only edited if property is not used anywhere"}
+            (property-type-label property-type)]
+           [:div.col-span-2
             (ui/select schema-types
                        (fn [_e v]
                          (let [type (keyword (string/lower-case v))]
                            (swap! *property-schema assoc :type type)
-                           (components-pu/update-property! property @*property-name @*property-schema)))))])]
+                           (components-pu/update-property! property @*property-name @*property-schema))))]))]
 
       (case (:type @*property-schema)
         :page

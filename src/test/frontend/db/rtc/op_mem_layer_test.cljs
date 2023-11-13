@@ -51,7 +51,7 @@
                           :updated-attrs {:content nil}}]
                ["update" {:block-uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02" :epoch 4
                           :updated-attrs {:content nil :link nil}}]]
-          {:keys [block-uuid->ops epoch->block-uuid-sorted-map]}
+          {:keys [block-uuid->ops]}
           (op-layer/add-ops-to-block-uuid->ops (op-layer/ops-coercer ops) {} (sorted-map-by <))]
       (is (= ["update"
               {:block-uuid #uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02"
