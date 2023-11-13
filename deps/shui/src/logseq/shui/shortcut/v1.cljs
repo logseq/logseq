@@ -46,9 +46,10 @@
     :else (pr-str input)))
 
 (rum/defc root
-  [shortcut context & {:keys [tiled size]
+  [shortcut context & {:keys [tiled size theme]
                        :or {tiled true
-                            size :sm}}]
+                            size :sm
+                            theme :gray}}]
   (when (seq shortcut)
     (if (coll? shortcut)
       (let [texts (map print-shortcut-key shortcut)
@@ -56,7 +57,7 @@
         (if tiled?
           [:div.flex.flex-row
            (for [text texts]
-             (button/root {:theme :gray
+             (button/root {:theme theme
                            :interactive false
                            :text (to-string text)
                            :tiled tiled?
@@ -64,7 +65,7 @@
                            :mused true}
                           context))]
           (let [text' (string/join " " texts)]
-            (button/root {:theme :gray
+            (button/root {:theme theme
                           :interactive false
                           :text text'
                           :tiled false
@@ -91,7 +92,7 @@
                                  (string/lower-case text))
                               false
                               tiled)]
-                 (button/root {:theme :gray
+                 (button/root {:theme theme
                                :interactive false
                                :text (to-string text)
                                :tiled tiled?

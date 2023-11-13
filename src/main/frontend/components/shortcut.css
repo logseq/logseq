@@ -190,3 +190,7 @@
 .sidebar-item article {
     max-height: unset;
 }
+
+.keyboard-shortcut {
+    @apply inline-flex;
+}

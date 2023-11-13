@@ -170,15 +170,15 @@
           (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class {:z-index z-index}))))]))
 
 ;; `sequence` can be a list of symbols, a list of strings, or a string
-(defn render-keyboard-shortcut [sequence]
+(defn render-keyboard-shortcut [sequence & {:as opts}]
   (let [sequence (if (string? sequence)
                    (-> sequence ;; turn string into sequence
                        (string/trim)
                        (string/lower-case)
-                       (string/split  #" "))
+                       (string/split #" "))
                    sequence)]
     [:span.keyboard-shortcut
-     (shui/shortcut-v1 sequence (make-shui-context))]))
+     (shui/shortcut-v1 sequence (make-shui-context) opts)]))
 
 (rum/defc menu-link
   [{:keys [only-child? no-padding? class shortcut] :as options} child]
@@ -1013,7 +1013,7 @@
 (def icon shui/icon)
 
 (rum/defc button-inner
-  [text & {:keys [background href class intent on-click small? title icon icon-props disabled?]
+  [text & {:keys [background href class intent on-click small? title icon icon-props disabled? button-props]
            :or   {small? false}}]
   (let [opts {:text text
               :theme (when (contains? #{"link" "border-link"} intent) :text)
@@ -1022,7 +1022,7 @@
               :size (if small? :sm :md)
               :icon icon
               :icon-props icon-props
-              :button-props (when title {:title title})
+              :button-props (merge button-props (when title {:title title}))
               :class (if (= intent "border-link") (str class " border") class)
               :muted disabled?
               :disabled? disabled?}]
@@ -1030,7 +1030,7 @@
                   opts
                    background
                    (assoc :color background))
-      (make-shui-context))))
+                 (make-shui-context))))
 
 (defn button
   [text & {:keys []
