@@ -612,8 +612,6 @@
     (rum/use-effect! (fn []
                        (js/setTimeout #(when (some-> input-ref deref) (.focus @input-ref)) 0))
                      [])
-    ; [:div {:style {:background "var(--lx-gray-02)"
-    ;                :border-bottom "1px solid var(--lx-gray-07)"}}]
     [:div {:class "bg-gray-02 border-b border-1 border-gray-07"}
      [:input#search
       {:class "text-xl bg-transparent border-none w-full outline-none px-3 py-3"

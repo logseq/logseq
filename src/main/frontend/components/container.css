@@ -168,12 +168,12 @@
     }
 
     &:hover {
-      background-color: or(--ls-left-sidebar-hover-background, --lx-gray-04, --ls-tertiary-background-color);
+      background-color: or(--ls-left-sidebar-hover-background, --lx-gray-04, --ls-primary-background-color);
       color: or(--ls-left-sidebar-text-color-hover, --lx-gray-12);
     }
 
     &.active, &:active {
-      background-color: or(--ls-left-sidebar-active-background, --lx-gray-04, --ls-quaternary-background-color);
+      background-color: or(--ls-left-sidebar-active-background, --lx-gray-04, --ls-primary-background-color);
       color: or(--ls-left-sidebar-active-text-color, --lx-gray-12);
       .ui__icon {
         opacity: .9;

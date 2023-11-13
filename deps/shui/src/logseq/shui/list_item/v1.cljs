@@ -36,26 +36,26 @@
   (let [normalized-text (normalize-text app-config text)]
     (loop [[query-token & more] (string/split normal-query #" ")
            result [[:text (to-string text)]]]
-     (if-not query-token
-       (->> result
-            (map (fn [[type value]]
-                   (if (= type :text)
-                     [:span value]
-                     [:span {:style {:background "var(--lx-accent-09)"}} value])))
-            (into [:span]))
-       (->> result
-            (mapcat (fn [[type value]]
-                      (let [include-token? (and (= type :text) (string? value)
-                                                (string/includes? normalized-text query-token))]
-                        (if include-token?
-                          (let [normal-value (normalize-text app-config value)
-                                normal-query-token (normalize-text app-config query-token)
-                                [before-text highlighted-text after-text] (split-text-on-highlight value query-token normal-value normal-query-token)]
-                            [[:text before-text]
-                             [:match highlighted-text]
-                             [:text after-text]])
-                          [[type value]]))))
-            (recur more))))))
+      (if-not query-token
+        (->> result
+             (map (fn [[type value]]
+                    (if (= type :text)
+                      [:span value]
+                      [:span {:class "shui__list-item-highlighted-span"} value])))
+             (into [:span]))
+        (->> result
+             (mapcat (fn [[type value]]
+                       (let [include-token? (and (= type :text) (string? value)
+                                                 (string/includes? normalized-text query-token))]
+                         (if include-token?
+                           (let [normal-value (normalize-text app-config value)
+                                 normal-query-token (normalize-text app-config query-token)
+                                 [before-text highlighted-text after-text] (split-text-on-highlight value query-token normal-value normal-query-token)]
+                             [[:text before-text]
+                              [:match highlighted-text]
+                              [:text after-text]])
+                           [[type value]]))))
+             (recur more))))))
 
 (defn highlight-query* [app-config query text]
   (if (vector? text)                    ; hiccup
