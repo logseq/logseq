@@ -19,6 +19,7 @@ html[data-theme=light] {
   margin-top: -8px;
   padding-bottom: 150px;
   height: calc(100vh - 48px);
+  background-color: or(--ls-right-ridebar-color, --lx-gray-01, --ls-secondary-background-color, #d8e1e8);
 }
 
 

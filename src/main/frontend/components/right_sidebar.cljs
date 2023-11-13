@@ -430,7 +430,7 @@
                                                                        (state/sidebar-add-block! repo "history" :history))}
             (t :right-side-bar/history)]])]]
 
-      [:.sidebar-item-list.flex-1.scrollbar-spacing.ml-2.pr-3
+      [:.sidebar-item-list.flex-1.scrollbar-spacing.ml-2
        (if @*anim-finished?
          (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
             (rum/with-key

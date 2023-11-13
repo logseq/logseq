@@ -587,7 +587,6 @@
 .cp__right-sidebar {
   z-index: var(--ls-z-index-level-1);
   transition: width 0.3s;
-  background-color: or(--ls-right-ridebar-color, --lx-gray-01, --ls-secondary-background-color, #d8e1e8);
   position: relative;
   user-select: none;
 
