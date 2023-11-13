@@ -15,8 +15,8 @@
 (defonce *quitting? (atom false))
 
 (def MAIN_WINDOW_ENTRY (if dev?
-                         ;;"http://localhost:3001"
-                         (str "file://" (node-path/join js/__dirname "index.html"))
+                         "http://localhost:3001"
+                         ;(str "file://" (node-path/join js/__dirname "index.html"))
                          (str "file://" (node-path/join js/__dirname "electron.html"))))
 
 (defn create-main-window!
