@@ -580,26 +580,47 @@
                                               page
                                               (str edit-input-id-prefix "-page")
                                               (assoc configure-opts :class-schema? false))])
-         [:div.flex.flex-col.gap-4
-          (when has-class-properties?
-            [:div
-             (when has-viewable-properties?
-               [:div.mb-1.opacity-70.font-medium.text-sm "Class properties:"])
-             (component-block/db-properties-cp {:editor-box editor/box}
-                                               page
-                                               (str edit-input-id-prefix "-schema")
-                                               (assoc configure-opts :class-schema? true))])
+         (if config/publishing?
+           [:div.flex.flex-col.gap-4
+            (when has-viewable-properties?
+              [:div
+               (when has-class-properties?
+                 [:div.mb-1.opacity-70.font-medium.text-sm "Page properties:"])
+               (component-block/db-properties-cp {:editor-box editor/box}
+                                                 page
+                                                 (str edit-input-id-prefix "-page")
+                                                 {:selected? false
+                                                  :page-configure? false
+                                                  :class-schema? false})])
+            (when has-class-properties?
+              [:div
+               (when has-viewable-properties?
+                 [:div.mb-1.opacity-70.font-medium.text-sm "Class properties:"])
+               (component-block/db-properties-cp {:editor-box editor/box}
+                                                 page
+                                                 (str edit-input-id-prefix "-schema")
+                                                 (assoc configure-opts :class-schema? true))])]
 
-          (when has-viewable-properties?
-            [:div
-             (when has-class-properties?
-               [:div.mb-1.opacity-70.font-medium.text-sm "Page properties:"])
-             (component-block/db-properties-cp {:editor-box editor/box}
-                                              page
-                                              (str edit-input-id-prefix "-page")
-                                              {:selected? false
-                                               :page-configure? false
-                                               :class-schema? false})])])])))
+           [:div.flex.flex-col.gap-4
+            (when has-class-properties?
+              [:div
+               (when has-viewable-properties?
+                 [:div.mb-1.opacity-70.font-medium.text-sm "Class properties:"])
+               (component-block/db-properties-cp {:editor-box editor/box}
+                                                 page
+                                                 (str edit-input-id-prefix "-schema")
+                                                 (assoc configure-opts :class-schema? true))])
+
+            (when has-viewable-properties?
+              [:div
+               (when has-class-properties?
+                 [:div.mb-1.opacity-70.font-medium.text-sm "Page properties:"])
+               (component-block/db-properties-cp {:editor-box editor/box}
+                                                 page
+                                                 (str edit-input-id-prefix "-page")
+                                                 {:selected? false
+                                                  :page-configure? false
+                                                  :class-schema? false})])]))])))
 
 (rum/defc page-properties-react < rum/reactive
   [page* page-opts]
@@ -1175,8 +1196,7 @@
   (rum/local {} ::checks)
   (rum/local :block/updated-at ::sort-by-item)
   (rum/local true ::desc?)
-  (rum/local false ::journals)
-  (rum/local false ::whiteboards)
+  (rum/local {:journals? false :page-type ""} ::filters)
   (rum/local nil ::filter-fn)
   (rum/local 1 ::current-page)
   [state]
@@ -1184,8 +1204,7 @@
         per-page-num 40
         *sort-by-item (get state ::sort-by-item)
         *desc? (::desc? state)
-        *journal? (::journals state)
-        *whiteboard? (::whiteboards state)
+        *filters (::filters state)
         *results (::results state)
         *results-all (::results-all state)
         *checks (::checks state)
@@ -1240,19 +1259,19 @@
                                                              :block/backlinks (count (:block/_refs (db/entity (:db/id page))))
                                                              :block/idx idx))))]
            (reset! *filter-fn
-                   (memoize (fn [sort-by-item desc? journal? whiteboard?]
+                   (memoize (fn [sort-by-item desc? {:keys [journal? page-type]}]
                               (->> pages
                                    (filter #(and
                                              (or (boolean journal?)
                                                  (= false (boolean (:block/journal? %))))
-                                             (or (boolean whiteboard?)
-                                                 (not (contains? (:block/type %) "whiteboard")))))
+                                             (or (empty? page-type)
+                                                 (contains? (set (:block/type %)) page-type))))
                                    (sort-pages-by sort-by-item desc?)))))
            (reset! *pages pages)))
 
        ;; filter results
        (when @*filter-fn
-         (let [pages (@*filter-fn @*sort-by-item @*desc? @*journal? @*whiteboard?)
+         (let [pages (@*filter-fn @*sort-by-item @*desc? @*filters)
 
                ;; search key
                pages (if-not (string/blank? @*search-key)
@@ -1318,20 +1337,23 @@
 
          [:div.r.flex.items-center.justify-between
           [:div
-           (ui/tippy
-            {:html  [:small (t :page/show-whiteboards)]
-             :arrow true}
-            [:a.button.whiteboard
-             {:class    (util/classnames [{:active (boolean @*whiteboard?)}])
-              :on-click #(reset! *whiteboard? (not @*whiteboard?))}
-             (ui/icon "whiteboard" {:extension? true :style {:fontSize ui/icon-size}})])]
+           (ui/select (->> (if (config/db-based-graph? current-repo)
+                             ["" "class" "property" "object" "whiteboard"]
+                             ["" "whiteboard"])
+                           (map (fn [block-type]
+                                  {:label (if (seq block-type) (string/capitalize block-type) "Filter by page type")
+                                   :selected (= block-type type)
+                                   :disabled config/publishing?
+                                   :value block-type})))
+                      (fn [_e value]
+                        (swap! *filters assoc :page-type value)))]
           [:div
            (ui/tippy
             {:html  [:small (t :page/show-journals)]
              :arrow true}
             [:a.button.journal
-             {:class    (util/classnames [{:active (boolean @*journal?)}])
-              :on-click #(reset! *journal? (not @*journal?))}
+             {:class    (util/classnames [{:active (boolean (:journal? @*filters))}])
+              :on-click #(swap! *filters update :journal? not)}
              (ui/icon "calendar" {:size ui/icon-size})])]
 
           [:div.paginates

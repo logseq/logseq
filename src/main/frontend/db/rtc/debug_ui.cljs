@@ -4,8 +4,11 @@
    [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [cljs.core.async :as async :refer [<! go]]
             [fipp.edn :as fipp]
+            [frontend.async-util :include-macros true :refer [<? go-try]]
             [frontend.db :as db]
+            [frontend.db.conn :as conn]
             [frontend.db.rtc.core :as rtc-core]
+            [frontend.db.rtc.db-listener :as db-listener]
             [frontend.db.rtc.full-upload-download-graph :as full-upload-download-graph]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.db.rtc.ws :as ws]
@@ -49,16 +52,18 @@
 
 (defn- <download-graph
   [repo graph-uuid]
-  (go
-    (let [state (<! (rtc-core/<init-state))]
-      (<! (full-upload-download-graph/<download-graph state repo graph-uuid)))))
+  (go-try
+   (let [state (<! (rtc-core/<init-state))]
+     (<? (full-upload-download-graph/<download-graph state repo graph-uuid)))))
 
 (defn- <upload-graph
   []
   (go
     (let [state (<! (rtc-core/<init-state))
           repo (state/get-current-repo)]
-      (<! (full-upload-download-graph/<upload-graph state repo)))))
+      (<! (full-upload-download-graph/<upload-graph state repo))
+      (let [conn (conn/get-db repo false)]
+        (db-listener/listen-db-to-generate-ops repo conn)))))
 
 (rum/defcs ^:large-vars/cleanup-todo rtc-debug-ui <
   rum/reactive
@@ -168,8 +173,12 @@
                                 (when-let [repo @(::download-graph-to-repo state)]
                                   (when-let [graph-uuid @(::graph-uuid-to-download state)]
                                     (prn :download-graph graph-uuid :to repo)
-                                    (<! (<download-graph repo graph-uuid))
-                                    (notification/show! "download graph successfully")))))})
+                                    (try
+                                      (<? (<download-graph repo graph-uuid))
+                                      (notification/show! "download graph successfully")
+                                      (catch :default e
+                                        (notification/show! "download graph failed" :error)
+                                        (prn ::download-graph-failed e)))))))})
       [:div.flex.flex-col
        [:select
         {:on-change (fn [e]

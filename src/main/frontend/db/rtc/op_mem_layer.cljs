@@ -3,6 +3,7 @@
   And sync these ops to indexedDb automatically."
   (:require [clojure.core.async :as async :refer [<! go-loop timeout]]
             [clojure.set :as set]
+            [frontend.config :as config]
             [frontend.db.rtc.op-idb-layer :as op-idb-layer]
             [frontend.state :as state]
             [malli.core :as m]
@@ -32,6 +33,7 @@
                [:map {:closed true}
                 [:schema {:optional true} :nil]
                 [:content {:optional true} :nil]
+                [:link {:optional true} :nil]
                 [:alias {:optional true} [:map
                                           [:add {:optional true} [:set :uuid]]
                                           [:retract {:optional true} [:set :uuid]]]]
@@ -66,6 +68,9 @@
 (def ops-from-store-coercer (m/coercer ops-from-store-schema mt/json-transformer))
 (def ops-validator (m/validator ops-schema))
 (def ops-coercer (m/coercer ops-schema mt/json-transformer))
+(def ops-encoder (m/encoder ops-schema mt/json-transformer))
+
+
 (def ops-store-value-schema
   [:map
    [:graph-uuid {:optional true} :string]
@@ -113,8 +118,8 @@
             tags (merge-add-retract-maps (:tags updated-attrs1) (:tags updated-attrs2))
             properties (merge-add-retract-maps (:properties updated-attrs1) (:properties updated-attrs2))
             updated-attrs
-            (cond-> (merge (select-keys updated-attrs1 [:schema :content])
-                           (select-keys updated-attrs2 [:schema :content]))
+            (cond-> (merge (select-keys updated-attrs1 [:schema :content :link])
+                           (select-keys updated-attrs2 [:schema :content :link]))
               alias (assoc :alias alias)
               type (assoc :type type)
               tags (assoc :tags tags)
@@ -255,6 +260,7 @@
                              :block-uuid->ops old-branch-block-uuid->ops
                              :epoch->block-uuid-sorted-map old-epoch->block-uuid-sorted-map)))))))
 
+
 (defn update-local-tx!
   [repo t]
   (assert (contains? (@*ops-store repo) :current-branch))
@@ -274,9 +280,8 @@
   use `rollback` to replace current-branch with old-branch.
   use `commit` to remove old-branch."
   [repo]
-  (let [{:keys [current-branch old-branch]} (get @*ops-store repo)]
-    (assert (and (some? current-branch)
-                 (nil? old-branch)))
+  (let [{:keys [current-branch]} (get @*ops-store repo)]
+    (assert (some? current-branch) repo)
     (swap! *ops-store assoc-in [repo :old-branch] current-branch)))
 
 (defn rollback!
@@ -359,39 +364,49 @@
 
 (defn <init-load-from-indexeddb!
   [repo]
-  (when (state/enable-rtc? repo)
-   (p/let [all-data (op-idb-layer/<read repo)
-           all-data-m (into {} all-data)
-           local-tx (get all-data-m "local-tx")
-           graph-uuid (get all-data-m "graph-uuid")
-           ops (->> all-data
-                    (filter (comp number? first))
-                    (sort-by first <)
-                    ops-from-store-coercer
-                    (map second))
-           {:keys [block-uuid->ops epoch->block-uuid-sorted-map]}
-           (add-ops-to-block-uuid->ops ops {} (sorted-map-by <))
-           r (cond-> {:block-uuid->ops block-uuid->ops
-                      :epoch->block-uuid-sorted-map epoch->block-uuid-sorted-map}
-               graph-uuid (assoc :graph-uuid graph-uuid)
-               local-tx (assoc :local-tx local-tx))]
-     (assert (ops-validator ops) ops)
-     (swap! *ops-store update repo #(-> %
-                                        (assoc :current-branch r)
-                                        (dissoc :old-branch)))
-     (prn ::<init-load-from-indexeddb! repo))))
+  (p/let [all-data (op-idb-layer/<read repo)
+          all-data-m (into {} all-data)
+          local-tx (get all-data-m "local-tx")]
+    (when local-tx
+      (let [graph-uuid (get all-data-m "graph-uuid")
+            ops (->> all-data
+                     (filter (comp number? first))
+                     (sort-by first <)
+                     ops-from-store-coercer
+                     (map second))
+            {:keys [block-uuid->ops epoch->block-uuid-sorted-map]}
+            (add-ops-to-block-uuid->ops ops {} (sorted-map-by <))
+            r (cond-> {:block-uuid->ops block-uuid->ops
+                       :epoch->block-uuid-sorted-map epoch->block-uuid-sorted-map}
+                graph-uuid (assoc :graph-uuid graph-uuid)
+                local-tx (assoc :local-tx local-tx))]
+        (assert (ops-validator ops) ops)
+        (swap! *ops-store update repo #(-> %
+                                           (assoc :current-branch r)
+                                           (dissoc :old-branch)))
+        (prn ::<init-load-from-indexeddb! repo)))))
 
 (defn <sync-to-idb-layer!
   [repo]
   (let [repo-ops-store (get @*ops-store repo)
         {:keys [block-uuid->ops local-tx graph-uuid]} (:current-branch repo-ops-store)
-        ops (mapcat vals (vals block-uuid->ops))]
-    (op-idb-layer/<reset! repo ops graph-uuid local-tx)))
+        ops (mapcat vals (vals block-uuid->ops))
+        ops* (ops-encoder ops)]
+    (op-idb-layer/<reset! repo ops* graph-uuid local-tx)))
 
 
 (defonce #_:clj-kondo/ignore _sync-loop
          (go-loop []
            (<! (timeout 3000))
            (when-let [repo (state/get-current-repo)]
-             (<! (<sync-to-idb-layer! repo)))
+             (when (and (config/db-based-graph? repo)
+                        (contains? (@*ops-store repo) :current-branch))
+               (<! (<sync-to-idb-layer! repo))))
            (recur)))
+
+
+(defn rtc-db-graph?
+  "Is db-graph & RTC enabled"
+  [repo]
+  (and (config/db-based-graph? repo)
+       (some? (get-local-tx repo))))

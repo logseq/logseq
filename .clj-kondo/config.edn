@@ -99,6 +99,7 @@
              frontend.idb idb
              frontend.loader loader
              frontend.mixins mixins
+             frontend.modules.outliner.core outliner-core
              frontend.mobile.util mobile-util
              frontend.page page
              frontend.schema.handler.common-config common-config-schema

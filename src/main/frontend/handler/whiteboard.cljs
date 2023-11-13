@@ -9,7 +9,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.property.util :as pu]
             [frontend.modules.editor.undo-redo :as history]
-            [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
             [frontend.config :as config]
@@ -21,7 +20,8 @@
             [goog.object :as gobj]
             [clojure.set :as set]
             [clojure.string :as string]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn js->clj-keywordize
   [obj]
@@ -115,10 +115,6 @@
                               (mapv (fn [b] (pu/get-property b :logseq.tldraw.shape)))
                               (remove nil?)))
         deleted-shapes-tx (mapv (fn [id] [:db/retractEntity [:block/uuid (uuid id)]]) deleted-ids)
-        with-timestamps (fn [block]
-                          (if (contains? created-ids (str (:block/uuid block)))
-                            (assoc block :block/updated-at (util/time-ms))
-                            (outliner/block-with-timestamps block)))
         changed-shapes (set/difference upsert-shapes created-shapes)
         prev-changed-blocks (when (seq changed-shapes)
                               (db/pull-many repo '[*] (mapv (fn [shape]
@@ -126,7 +122,7 @@
     {:page-block (build-page-block page-name tl-page assets shapes-index)
      :upserted-blocks (->> upsert-shapes
                            (map #(shape->block % page-name))
-                           (map with-timestamps))
+                           (map sqlite-util/block-with-timestamps))
      :delete-blocks deleted-shapes-tx
      :metadata {:whiteboard/transact? (not replace?)
                 :replace? replace?
@@ -194,7 +190,7 @@
   [page-name id]
   (let [properties {(pu/get-pid :ls-type) :whiteboard-page,
                     (pu/get-pid :logseq.tldraw.page)
-                    {:id id,
+                    {:id (str id),
                      :name page-name,
                      :ls-type :whiteboard-page,
                      :bindings {},
@@ -205,6 +201,8 @@
              :original-name page-name
              :type "whiteboard",
              :properties properties,
+             :journal? false
+             :format :markdown
              :updated-at (util/time-ms),
              :created-at (util/time-ms)}]))
 
@@ -217,7 +215,7 @@
   ([name]
    (let [uuid (or (and name (parse-uuid name)) (d/squuid))
          name (or name (str uuid))]
-     (db/transact! (get-default-new-whiteboard-tx name (str uuid)))
+     (db/transact! (get-default-new-whiteboard-tx name uuid))
      (let [page-entity (get-whiteboard-entity name)]
        (when (and page-entity
                   (nil? (:block/file page-entity))
@@ -292,13 +290,14 @@
   (let [uuid (d/squuid)
         page-entity (model/get-page page-name)
         last-root-block (or (get-last-root-block page-name) page-entity)
-        tx {:block/left (select-keys last-root-block [:db/id])
-            :block/uuid uuid
-            :block/content (or content "")
-            :block/format :markdown
-            :block/page {:block/name (util/page-name-sanity-lc page-name)
-                         :block/original-name page-name}
-            :block/parent {:block/name page-name}}]
+        tx (sqlite-util/block-with-timestamps
+            {:block/left (select-keys last-root-block [:db/id])
+             :block/uuid uuid
+             :block/content (or content "")
+             :block/format :markdown
+             :block/page {:block/name (util/page-name-sanity-lc page-name)
+                          :block/original-name page-name}
+             :block/parent {:block/name page-name}})]
     (db-utils/transact! [tx])
     uuid))
 

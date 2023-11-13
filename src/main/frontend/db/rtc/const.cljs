@@ -13,14 +13,15 @@
    [:schema {:optional true} [:maybe :string]]
    [:tags {:optional true} [:maybe [:sequential :uuid]]]
    [:properties {:optional true} [:maybe :string ; transit-json-string
-                                  ]]])
+                                  ]]
+   [:link {:optional true} [:maybe :uuid]]])
 
 (def general-attr-set
   (into #{} (map first) general-attrs-schema-coll))
 
 (def block-type-schema [:enum "property" "class" "whiteboard" "object" "hidden" "closed value"])
 
-(def op-schema
+(def to-ws-op-schema
   [:multi {:dispatch first :decode/string #(update % 0 keyword)}
    [:move
     [:cat :keyword
@@ -56,7 +57,8 @@
       [:properties {:optional true} [:map
                                      [:add {:optional true} [:sequential [:cat :uuid :string ;; transit-string
                                                                           ]]]
-                                     [:retract {:optional true} [:set :uuid]]]]]]]
+                                     [:retract {:optional true} [:set :uuid]]]]
+      [:link {:optional true} :uuid]]]]
    [:update-page
     [:cat :keyword
      [:map
@@ -73,7 +75,8 @@
    [:req-id :string]
    [:t {:optional true} :int]
    [:t-before {:optional true} :int]
-   [:failed-ops {:optional true} [:sequential op-schema]]
+   [:failed-ops {:optional true} [:sequential to-ws-op-schema]]
+   [:s3-presign-url {:optional true} :string]
    [:affected-blocks {:optional true}
     [:map-of :uuid
      [:multi {:dispatch :op :decode/string #(update % :op keyword)}
@@ -110,8 +113,11 @@
       [:remove-page
        [:map {:closed true}
         [:op :keyword]
-        [:block-uuid :uuid]]]]]]])
-(def data-from-ws-decoder (m/decoder data-from-ws-schema mt/string-transformer))
+        [:block-uuid :uuid]]]]]]
+   [:ex-data {:optional true} [:map [:type :keyword]]]
+   [:ex-message {:optional true} :any]])
+
+(def data-from-ws-coercer (m/coercer data-from-ws-schema mt/string-transformer))
 (def data-from-ws-validator (m/validator data-from-ws-schema))
 
 (def data-to-ws-schema
@@ -131,7 +137,7 @@
       [:req-id :string]
       [:action :string]
       [:graph-uuid :string]
-      [:ops [:sequential op-schema]]
+      [:ops [:sequential to-ws-op-schema]]
       [:t-before :int]]]
     ["presign-put-temp-s3-obj"
      [:map
@@ -160,6 +166,5 @@
       [:action :string]
       [:graph-uuid :string]
       [:block-uuids [:sequential :uuid]]]]]))
-(def data-to-ws-decoder (m/decoder data-to-ws-schema mt/string-transformer))
 (def data-to-ws-encoder (m/encoder data-to-ws-schema mt/string-transformer))
-(def data-to-ws-validator (m/validator data-to-ws-schema))
+(def data-to-ws-coercer (m/coercer data-to-ws-schema mt/string-transformer))

@@ -182,7 +182,6 @@
  :page/add-to-favorites "Sık kullanılanlara ekle"
  :page/unfavorite "Sayfayı sık kullanılanlardan kaldır"
  :page/show-journals "Günlükleri göster"
- :page/show-whiteboards "Beyaz tahtaları göster"
  :block/name "Sayfa adı"
  :page/earlier "Daha önce"
  :page/copy-page-url "Sayfa URL adresini kopyala"

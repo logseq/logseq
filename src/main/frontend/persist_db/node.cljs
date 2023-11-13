@@ -1,6 +1,7 @@
 (ns frontend.persist-db.node
   "Electron ipc based persistent db"
-  (:require [electron.ipc :as ipc]
+  (:require [cljs.core.async.interop :refer [p->c]]
+            [electron.ipc :as ipc]
             [frontend.persist-db.protocol :as protocol]
             [promesa.core :as p]))
 
@@ -17,10 +18,11 @@
     (p/resolved nil))
   (<transact-data [_this repo added-blocks deleted-block-uuids]
     ;; (prn ::transact-data repo added-blocks deleted-block-uuids)
-    (ipc/ipc :db-transact-data repo
-             (pr-str
-              {:blocks added-blocks
-               :deleted-block-uuids deleted-block-uuids})))
+    (p->c
+     (ipc/ipc :db-transact-data repo
+              (pr-str
+               {:blocks added-blocks
+                :deleted-block-uuids deleted-block-uuids}))))
   (<fetch-initital-data [_this repo _opts]
     (prn ::fetch-initial repo)
     (ipc/ipc :get-initial-data repo))

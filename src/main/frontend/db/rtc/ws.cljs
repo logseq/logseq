@@ -2,11 +2,13 @@
   "Websocket related util-fns"
   (:require-macros
    [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
-  (:require [frontend.config :as config]
-            [frontend.util :as util]
+  (:require [cljs-http.client :as http]
+            [cljs.core.async :as async :refer [<! chan offer!]]
+            [frontend.async-util :include-macros true :refer [<? go-try]]
+            [frontend.config :as config]
             [frontend.db.rtc.const :as rtc-const]
-            [cljs.core.async :as async :refer [<! chan go offer!]]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.util :as util]))
 
 (def WebSocketOPEN (if (= *target* "nodejs")
                      1
@@ -28,8 +30,7 @@
 (defn send!
   [ws message]
   (assert (= WebSocketOPEN (.-readyState ws)))
-  (let [decoded-message (rtc-const/data-to-ws-decoder message)]
-    (assert (rtc-const/data-to-ws-validator decoded-message) message)
+  (let [decoded-message (rtc-const/data-to-ws-coercer message)]
     (.send ws (js/JSON.stringify (clj->js (rtc-const/data-to-ws-encoder decoded-message))))))
 
 (declare <send!)
@@ -37,26 +38,47 @@
   "ensure websocket in state is OPEN, if not, make a connection, and
   call init 'register-graph-updates' message"
   [state]
-  (go
-    (let [ws @(:*ws state)]
-      (when (or (nil? ws)
-                (> (.-readyState ws) WebSocketOPEN))
-        (let [ws-opened-ch (chan)
-              token (state/get-auth-id-token)
-              ws* (ws-listen token (:data-from-ws-chan state) ws-opened-ch)]
-          (<! ws-opened-ch)
-          (reset! (:*ws state) ws*)
-          (when-let [graph-uuid @(:*graph-uuid state)]
-            (with-sub-data-from-ws state
-              (<! (<send! state {:action "register-graph-updates" :req-id (get-req-id) :graph-uuid graph-uuid}))
-              (<! (get-result-ch)))))))))
+  (go-try
+   (let [ws @(:*ws state)]
+     (when (or (nil? ws)
+               (> (.-readyState ws) WebSocketOPEN))
+       (let [ws-opened-ch (chan)
+             token (state/get-auth-id-token)
+             ws* (ws-listen token (:data-from-ws-chan state) ws-opened-ch)]
+         (<! ws-opened-ch)
+         (reset! (:*ws state) ws*)
+         (when-let [graph-uuid @(:*graph-uuid state)]
+           (with-sub-data-from-ws state
+             (<? (<send! state {:action "register-graph-updates" :req-id (get-req-id) :graph-uuid graph-uuid}))
+             (<! (get-result-ch)))))))))
 
 (defn <send!
   "ensure ws state=open, then send messages"
   [state message]
-  (go
-    (<! (<ensure-ws-open! state))
-    (send! @(:*ws state) message)))
+  (go-try
+   (<? (<ensure-ws-open! state))
+   (send! @(:*ws state) message)))
+
+
+(defn <send&receive
+  "Send 'message' to ws, and return response of this request.
+  When this response is too huge, backend will put it in s3 and return the presigned-url,
+  this fn will handle this case."
+  [state message]
+  (go-try
+   (with-sub-data-from-ws state
+     (<? (<send! state (assoc message :req-id (get-req-id))))
+     (let [resp (<! (get-result-ch))
+           resp*
+           (if-let [s3-presign-url (:s3-presign-url resp)]
+             (let [{:keys [status body]} (<! (http/get s3-presign-url {:with-credentials? false}))]
+               (if (http/unexceptional-status? status)
+                 (js->clj (js/JSON.parse body) :keywordize-keys true)
+                 {:req-id (get-req-id)
+                  :ex-message "get s3 object failed"
+                  :ex-data {:type :get-s3-object-failed :status status :body body}}))
+             resp)]
+       (rtc-const/data-from-ws-coercer resp*)))))
 
 
 (defn stop
