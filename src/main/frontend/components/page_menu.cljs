@@ -75,8 +75,8 @@
           developer-mode? (state/sub [:ui/developer-mode?])
           file-rpath (when (util/electron?) (page-util/get-page-file-rpath page-name))
           _ (state/sub :auth/id-token)
-          file-sync-graph-uuid (and (user-handler/logged-in?)
-                                    (file-sync-handler/enable-sync?)
+          file-sync-graph-uuid (and (state/enable-sync?)
+                                    (user-handler/logged-in?)
                                     (file-sync-handler/get-current-graph-uuid))]
       (when (and page (not block?))
         (->>

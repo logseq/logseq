@@ -3,7 +3,7 @@
 set -ex
 
 unset LOGSEQ_APP_SERVER_URL
-export ENABLE_FILE_SYNC_PRODUCTION=true
+export LOGSEQ_SYNC_ENV_PROD=true
 
 # yarn clean
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 yarn install --force

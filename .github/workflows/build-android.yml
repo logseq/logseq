@@ -105,7 +105,7 @@ jobs:
 
       - name: Set Build Environment Variables
         run: |
-          echo "ENABLE_FILE_SYNC_PRODUCTION=${{ inputs.enable-file-sync-production || github.event.inputs.enable-file-sync-production || inputs.build-target == '' }}" >> $GITHUB_ENV
+          echo "LOGSEQ_SYNC_ENV_PROD=${{ inputs.enable-file-sync-production || github.event.inputs.enable-file-sync-production || inputs.build-target == '' }}" >> $GITHUB_ENV
 
       - name: Compile CLJS - app variant, use es6 instead of es-next
         run: yarn install && yarn release-app

@@ -7,9 +7,9 @@
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
+            [frontend.compile-config :as cconfig]
             [frontend.context.i18n :refer [t]]
             [frontend.handler :as handler]
-            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.components.file-sync :as fs-sync]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
@@ -41,7 +41,7 @@
   []
   (let [_ (state/sub :auth/id-token)
         loading? (state/sub [:ui/loading? :login])
-        sync-enabled? (file-sync-handler/enable-sync?)
+        sync-enabled? (state/enable-sync?)
         logged? (user-handler/logged-in?)]
     (when-not (or config/publishing?
                   logged?
@@ -66,7 +66,7 @@
   (let [ua (.-userAgent js/navigator)
         safe-ua (string/replace ua #"[^_/a-zA-Z0-9\.\(\)]+" " ")
         platform (str "App Version: " version "\n"
-                      "Git Revision: " config/REVISION "\n"
+                      "Git Revision: " cconfig/REVISION "\n"
                       "Platform: " safe-ua "\n"
                       "Language: " (.-language js/navigator) "\n"
                       "Plugins: " (string/join ", " (map (fn [[k v]]
@@ -199,7 +199,7 @@
                                                   (not (:ui/left-sidebar-open? @state/state))))})
         custom-home-page? (and (state/custom-home-page?)
                                (= (state/sub-default-home-page) (state/get-current-page)))
-        sync-enabled? (file-sync-handler/enable-sync?)]
+        sync-enabled? (state/enable-sync?)]
     [:div.cp__header.drag-region#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
@@ -235,7 +235,8 @@
               (ui/icon "search" {:size ui/icon-size})])))]]
 
      [:div.r.flex.drag-region
-      (when (and current-repo
+      (when (and sync-enabled?
+                 current-repo
                  (not (config/demo-graph? current-repo))
                  (user-handler/alpha-or-beta-user?))
         (fs-sync/indicator))

@@ -33,7 +33,7 @@
 
 (rum/defc ^:large-vars/cleanup-todo graph-picker-cp
   [{:keys [onboarding-and-home? logged? native-icloud?] :as opts}]
-  (let [can-logseq-sync? (and logged? (state/enable-sync?))
+  (let [can-logseq-sync? (and (state/enable-sync?) logged?)
         [step set-step!] (rum/use-state :init)
         [sync-mode set-sync-mode!] (rum/use-state
                                     (cond

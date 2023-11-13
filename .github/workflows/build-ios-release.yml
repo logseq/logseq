@@ -53,7 +53,7 @@ jobs:
 
       - name: Set Build Environment Variables
         run: |
-          echo "ENABLE_FILE_SYNC_PRODUCTION=true" >> $GITHUB_ENV
+          echo "LOGSEQ_SYNC_ENV_PROD=true" >> $GITHUB_ENV
 
       - name: Compile CLJS
         run: yarn install && yarn release-app
