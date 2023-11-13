@@ -113,7 +113,7 @@
                 (history-stack (t :right-side-bar/history-redos) (rum/react (:redo-stack state)))]]]))
 
 (defn build-sidebar-item
-  [repo idx db-id block-type]
+  [repo idx db-id block-type *db-id init-key]
   (case (keyword block-type)
     :contents
     [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :right-side-bar/contents)]
@@ -157,9 +157,18 @@
     :search
     [[:.flex.items-center.page-title
       (ui/icon "search" {:class "text-md mr-2"})
-      [:span.overflow-hidden.text-ellipsis db-id]]
-     (cmdk/cmdk-block {:initial-input db-id
-                       :sidebar? true})]
+      (let [input (rum/react *db-id)
+            input' (if (string/blank? input) "Blank input" input)]
+        [:span.overflow-hidden.text-ellipsis input'])]
+     (rum/with-key
+       (cmdk/cmdk-block {:initial-input db-id
+                         :sidebar? true
+                         :on-input-change (fn [new-value]
+                                            (reset! *db-id new-value))
+                         :on-input-blur (fn [new-value]
+                                            (state/sidebar-replace-block! [repo db-id block-type]
+                                                                          [repo new-value block-type]))})
+       (str init-key))]
 
     :page-slide-view
     (let [page-name (:block/name (db/entity db-id))]
@@ -223,11 +232,16 @@
   [component _should-update?]
   component)
 
-(rum/defc sidebar-item < rum/reactive
-  [repo idx db-id block-type block-count]
+(rum/defcs sidebar-item < rum/reactive
+  {:init (fn [state] (assoc state
+                            ::db-id (atom (nth (:rum/args state) 2))
+                            ::init-key (random-uuid)))}
+  [state repo idx db-id block-type block-count]
   (let [drag-from (rum/react *drag-from)
         drag-to (rum/react *drag-to)
-        item (build-sidebar-item repo idx db-id block-type)]
+        item (build-sidebar-item repo idx db-id block-type
+                                 (::db-id state)
+                                 (::init-key state))]
     (when item
       (let [collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
         [:<>

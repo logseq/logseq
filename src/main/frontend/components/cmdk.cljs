@@ -595,7 +595,7 @@
       "What are you looking for?")))
 
 (rum/defc input-row
-  [state all-items]
+  [state all-items opts]
   (let [highlighted-item @(::highlighted-item state)
         input @(::input state)
         input-ref (::input-ref state)]
@@ -606,19 +606,21 @@
                        (when (and highlighted-item (= -1 (.indexOf all-items (dissoc highlighted-item :mouse-enter-triggered-highlight))))
                          (reset! (::highlighted-item state) nil)))
                      [all-items])
-    (rum/use-effect! (fn []
-                       (load-results :default state))
-                     [])
-    (rum/use-effect! (fn []
-                       (js/setTimeout #(when (some-> input-ref deref) (.focus @input-ref)) 0))
-                     [])
+    (rum/use-effect! (fn [] (load-results :default state)) [])
     [:div {:class "bg-gray-02 border-b border-1 border-gray-07"}
      [:input#search
       {:class "text-xl bg-transparent border-none w-full outline-none px-3 py-3"
+       :auto-focus true
        :autoComplete "off"
        :placeholder (input-placeholder false)
        :ref #(when-not @input-ref (reset! input-ref %))
-       :on-change (fn [e] (handle-input-change state e))
+       :on-change (fn [e]
+                    (handle-input-change state e)
+                    (when-let [on-change (:on-input-change opts)]
+                      (on-change (.-value (.-target e)))))
+       :on-blur (fn [e]
+                  (when-let [on-blur (:on-input-blur opts)]
+                    (on-blur input)))
        :on-composition-end (fn [e] (handle-input-change state e))
        :on-key-down (fn [e]
                       (let [value (.-value @input-ref)
@@ -715,7 +717,8 @@
                  :on-click (fn []
                              (reset! (::filter state) nil))}
                 (make-shui-context))])
-(rum/defcs cmdk <
+
+(rum/defcs cmdk < rum/static
   rum/reactive
   {:will-mount
    (fn [state]
@@ -741,14 +744,7 @@
                     ::input (atom (or (:initial-input opts) "")))))
    :will-unmount (fn [state]
                    (state/set-state! :search/mode nil)
-                   state)
-   :did-mount (fn [state]
-                (let [opts (last (:rum/args state))]
-                  (when (and (:sidebar? opts)
-                             (not (string/blank? @(::input state))))
-                    ;; trigger search
-                    (load-results :default state)))
-                state)}
+                   state)}
   (mixins/event-mixin
    (fn [state]
      (let [ref @(::ref state)]
@@ -767,7 +763,7 @@
   (rum/local nil ::load-results-throttled)
   (rum/local nil ::scroll-container-ref)
   (rum/local nil ::input-ref)
-  [state {:keys [sidebar?]}]
+  [state {:keys [sidebar?] :as opts}]
   (let [*input (::input state)
         _input (rum/react *input)
         search-mode (:search/mode @state/state)
@@ -778,7 +774,7 @@
     [:div.cp__cmdk {:ref #(when-not @(::ref state) (reset! (::ref state) %))
                     :class (cond-> "w-full h-full relative flex flex-col justify-start"
                              (not sidebar?) (str " rounded-lg"))}
-     (input-row state all-items)
+     (input-row state all-items opts)
      [:div {:class (cond-> "w-full flex-1 overflow-y-auto min-h-[65dvh] max-h-[65dvh]"
                      (not sidebar?) (str " pb-14"))
             :ref #(let [*ref (::scroll-container-ref state)]
