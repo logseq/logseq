@@ -1,0 +1,316 @@
+.ui__button {
+  @apply font-medium relative flex items-center justify-center gap-1;
+  border-radius: 0.25rem;
+  /* box-shadow: inset 0 2px 0 0px rgba(255, 255, 255, 0.2), */
+  /*             inset 0 -2px 0 0px rgba(0, 0, 0, 0.1); */
+  /* background-image: linear-gradient(white, white), */
+  /*                   linear-gradient(to bottom, green, gold); */
+  /* background-origin: border-box; */
+  /* background-clip: content-box, border-box; */
+}
+
+.ui__button-size-sm {
+  @apply text-xs py-1 px-2;
+}
+
+.ui__button-size-md {
+  @apply text-sm py-1 px-3;
+}
+
+.ui__button-tiled {
+  padding: 0 !important;
+  gap: 0 !important;
+}
+
+.ui__button-tiled .ui__button__tile {
+  @apply flex items-center justify-center text-center;
+}
+
+.ui__button-tiled.ui__button-size-md .ui__button__tile {
+  @apply h-6 w-6;
+}
+
+.ui__button-tiled.ui__button-size-sm .ui__button__tile {
+    @apply h-4 w-4;
+}
+
+.ui__button__tile-separator {
+  @apply w-px h-full bg-gray-08-alpha;
+}
+
+.ui__button-theme-text {
+  background: none;
+  box-shadow: none;
+}
+
+.ui__button-theme-gray {
+  background: or(--lx-gray-06, --ls-quaternary-background);
+}
+
+.ui__button-theme-gray:hover {
+  background: or(--lx-gray-05, --ls-quaternary-background);
+}
+
+.ui__button-theme-gray:active {
+  background: or(--lx-gray-04, --ls-quaternary-background);
+}
+
+.dark .ui__button-theme,
+.dark .ui__button-theme-color {
+  background: or(--lx-accent-09, --rx-blue-09);
+}
+
+.dark .ui__button-theme:hover,
+.dark .ui__button-theme-color:hover {
+  background: or(--lx-accent-10, --rx-blue-10);
+}
+
+.dark .ui__button-theme:active,
+.dark .ui__button-theme-color:active {
+  background: or(--lx-accent-08, --rx-blue-08);
+}
+
+.dark .ui__button-theme-gray {
+  background: or(--lx-gray-05, --ls-quaternary-background);
+}
+
+.dark .ui__button-theme-gray:hover {
+  background: or(--lx-gray-06, --ls-quaternary-background);
+}
+
+.dark .ui__button-theme-gray:active {
+  background: or(--lx-gray-04, --ls-quaternary-background);
+}
+
+.ui__button-theme-gradient {
+  --depth-shadow-from: rgba(2, 23, 53, 0.70);
+  --depth-shadow-to: rgba(2, 23, 53, 0.00);
+}
+
+.ui__button-theme-gradient:hover {
+  --depth-shadow-from: rgba(2, 23, 53, 0.30);
+  --depth-shadow-to: rgba(2, 23, 53, 0.00);
+}
+
+.ui__button-theme-gradient:active {
+  --depth-shadow-from: rgba(0, 0, 0, 0);
+  --depth-shadow-to: rgba(0, 0, 0, 0);
+}
+
+.ui__button-theme-gradient.ui__button-,
+.ui__button-theme-gradient.ui__button-custom,
+.ui__button-theme-gradient.ui__button-indigo,
+.ui__button-theme-gradient.ui__button-blue,
+.ui__button-theme-gradient.ui__button-sky,
+.ui__button-theme-gradient.ui__button-cyan {
+  background: linear-gradient(37deg, var(--depth-shadow-from) 0%, var(--depth-shadow-to) 100%),
+              linear-gradient(135deg, var(--rx-indigo-09) 0%, var(--rx-blue-09) 33.85%, var(--rx-sky-09) 64.06%, var(--rx-cyan-09) 100%);
+}
+
+.ui__button-theme-gradient.ui__button-tomato,
+.ui__button-theme-gradient.ui__button-red,
+.ui__button-theme-gradient.ui__button-crimson,
+.ui__button-theme-gradient.ui__button-pink,
+.ui__button-theme-gradient.ui__button-plum,
+.ui__button-theme-gradient.ui__button-purple,
+.ui__button-theme-gradient.ui__button-violet {
+  background: linear-gradient(37deg, var(--depth-shadow-from) 0%, var(--depth-shadow-to) 100%),
+              linear-gradient(135deg, var(--rx-tomato-09) 0%, var(--rx-red-09) 16.66%, var(--rx-crimson-09) 33.33%, var(--rx-pink-09) 50%, var(--rx-plum-09) 66.66%, var(--rx-purple-09) 83.33%, var(--rx-violet-09) 100%);
+}
+
+.ui__button-theme-gradient.ui__button-green,
+.ui__button-theme-gradient.ui__button-mint,
+.ui__button-theme-gradient.ui__button-teal {
+  background: linear-gradient(37deg, var(--depth-shadow-from) 0%, var(--depth-shadow-to) 100%),
+              linear-gradient(135deg, var(--rx-teal-09) 0%, var(--rx-mint-09) 50%, var(--rx-green-09) 100%);
+}
+
+.ui__button-theme-gradient.ui__button-grass,
+.ui__button-theme-gradient.ui__button-lime {
+  background: linear-gradient(37deg, var(--depth-shadow-from) 0%, var(--depth-shadow-to) 100%),
+              linear-gradient(135deg, var(--rx-grass-09) 0%, var(--rx-lime-09) 100%);
+}
+
+.ui__button-theme-gradient.ui__button-yellow,
+.ui__button-theme-gradient.ui__button-amber,
+.ui__button-theme-gradient.ui__button-orange,
+.ui__button-theme-gradient.ui__button-brown {
+  background: linear-gradient(37deg, var(--depth-shadow-from) 0%, var(--depth-shadow-to) 100%),
+              linear-gradient(135deg, var(--rx-yellow-09) 0%, var(--rx-amber-09) 33.33%, var(--rx-orange-09) 66.66%, var(--rx-brown-09) 100%);
+}
+
+/* .ui__button-theme-gradient:hover { */
+  /* background: linear-gradient(37deg, rgba(2, 23, 53, 0.30) 0%, rgba(2, 23, 53, 0.00) 100%), linear-gradient(135deg, #8AE8FF 0%, #5373E7 33.85%, #369EFF 64.06%, #00B1CC 100%); */
+/* } */
+
+/* Shadow/xs */
+/* box-shadow: 0px 1px 2px 0px rgba(16, 24, 40, 0.05); */
+/* } */
+
+.ui__button-depth-1 {
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
+              inset 0 -1px 0 0 rgba(0, 0, 0, 0.15);
+}
+
+.ui__button-depth-1:hover {
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
+              inset 0 -2px 0 0 rgba(0, 0, 0, 0.15);
+}
+
+.ui__button-depth-2 {
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.2),
+              inset 0 -1px 0 0 rgba(0, 0, 0, 0.2);
+}
+
+/* .ui__button-depth-1:before { */
+/*   @apply absolute inset-0; */
+/*   border-radius: 0.25rem; */
+/*   content: ""; */
+/*   padding: 1px; */
+/*   background: linear-gradient(to bottom, rgba(255,255,255,0.3), transparent); */
+/*   -webkit-mask: linear-gradient(#fff 0 0) content-box, */
+/*                 linear-gradient(#fff 0 0); */
+/*   -webkit-mask-composite: xor; */
+/*   mask-composite: exclude; */
+/* } */
+
+/* .ui__button-depth-1:after { */
+/*   @apply absolute inset-0; */
+/*   border-radius: 0.25rem; */
+/*   content: ""; */
+/*   padding: 1px; */
+/*   background: linear-gradient(to top, rgba(0,0,0,0.2), transparent); */
+/*   -webkit-mask: linear-gradient(#fff 0 0) content-box, */
+/*                 linear-gradient(#fff 0 0); */
+/*   -webkit-mask-composite: xor; */
+/*   mask-composite: exclude; */
+/* } */
+
+/* .ui__button-depth-2:before { */
+/*   @apply absolute inset-0; */
+/*   border-radius: 0.25rem; */
+/*   content: ""; */
+/*   padding: 1px; */
+/*   background: linear-gradient(to bottom, rgba(255,255,255,0.6), transparent); */
+/*   -webkit-mask: linear-gradient(#fff 0 0) content-box, */
+/*                 linear-gradient(#fff 0 0); */
+/*   -webkit-mask-composite: xor; */
+/*   mask-composite: exclude; */
+/* } */
+
+/* .ui__button-depth-2:after { */
+/*   @apply absolute inset-0; */
+/*   border-radius: 0.25rem; */
+/*   content: ""; */
+/*   padding: 1px; */
+/*   background: linear-gradient(to top, rgba(0,0,0,0.4), transparent); */
+/*   -webkit-mask: linear-gradient(#fff 0 0) content-box, */
+/*                 linear-gradient(#fff 0 0); */
+/*   -webkit-mask-composite: xor; */
+/*   mask-composite: exclude; */
+/* } */
+
+.ui__button-shortcut-key:first-of-type {
+  @apply ml-2;
+}
+
+.ui__button-shortcut-key {
+  @apply text-xs font-normal h-5 w-5 flex items-center justify-center rounded bg-gray-06-alpha;
+}
+
+.ui__cmdk-quick-capture-glow::before {
+  @apply absolute inset-0;
+  pointer-events: none;
+  border-radius: 0.25rem;
+  content: "";
+  padding: 1px;
+  background: linear-gradient(to bottom, var(--lx-accent-10), transparent);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box,
+                linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.ui__button-muted {
+  transition: opacity 200 ease-in;
+  opacity: 0.4;
+}
+
+.ui__button-muted:hover {
+  opacity: 1;
+}
+
+.ui__button-theme-gray.ui__button-color-custom  { background-color: var(--ls-tertiary-background-color);
+                                                      color: var(--ls-secondary-text-color, white); }
+.ui__button-theme-color.ui__button-color-custom  { background-color: hsl(var(--ls-button-background-hsl) / 0.9);
+                                                       color: white; }
+
+.ui__button-theme-color.ui__button-color-custom:hover {
+    background: var(--ls-button-background);
+}
+
+.ui__button-theme-color.ui__button-color-lime    { color: white; background-color: var(--rx-lime-09); &:hover { background-color: var(--rx-lime-10); } &:active { background-color: var(--rx-lime-08); }}
+.ui__button-theme-color.ui__button-color-orange  { color: white; background-color: var(--rx-orange-09); &:hover { background-color: var(--rx-orange-10); } &:active { background-color: var(--rx-orange-08); }}
+.ui__button-theme-color.ui__button-color-gray    { color: white; background-color: var(--rx-gray-09); &:hover { background-color: var(--rx-gray-10); } &:active { background-color: var(--rx-gray-08); }}
+.ui__button-theme-color.ui__button-color-sand    { color: white; background-color: var(--rx-sand-09); &:hover { background-color: var(--rx-sand-10); } &:active { background-color: var(--rx-sand-08); }}
+.ui__button-theme-color.ui__button-color-crimson { color: white; background-color: var(--rx-crimson-09); &:hover { background-color: var(--rx-crimson-10); } &:active { background-color: var(--rx-crimson-08); }}
+.ui__button-theme-color.ui__button-color-yellow  { color: white; background-color: var(--rx-yellow-09); &:hover { background-color: var(--rx-yellow-10); } &:active { background-color: var(--rx-yellow-08); }}
+.ui__button-theme-color.ui__button-color-green   { color: white; background-color: var(--rx-green-09); &:hover { background-color: var(--rx-green-10); } &:active { background-color: var(--rx-green-08); }}
+.ui__button-theme-color.ui__button-color-indigo  { color: white; background-color: var(--rx-indigo-09); &:hover { background-color: var(--rx-indigo-10); } &:active { background-color: var(--rx-indigo-08); }}
+.ui__button-theme-color.ui__button-color-cyan    { color: white; background-color: var(--rx-cyan-09); &:hover { background-color: var(--rx-cyan-10); } &:active { background-color: var(--rx-cyan-08); }}
+.ui__button-theme-color.ui__button-color-violet  { color: white; background-color: var(--rx-violet-09); &:hover { background-color: var(--rx-violet-10); } &:active { background-color: var(--rx-violet-08); }}
+.ui__button-theme-color.ui__button-color-bronze  { color: white; background-color: var(--rx-bronze-09); &:hover { background-color: var(--rx-bronze-10); } &:active { background-color: var(--rx-bronze-08); }}
+.ui__button-theme-color.ui__button-color-slate   { color: white; background-color: var(--rx-slate-09); &:hover { background-color: var(--rx-slate-10); } &:active { background-color: var(--rx-slate-08); }}
+.ui__button-theme-color.ui__button-color-gold    { color: white; background-color: var(--rx-gold-09); &:hover { background-color: var(--rx-gold-10); } &:active { background-color: var(--rx-gold-08); }}
+.ui__button-theme-color.ui__button-color-sage    { color: white; background-color: var(--rx-sage-09); &:hover { background-color: var(--rx-sage-10); } &:active { background-color: var(--rx-sage-08); }}
+.ui__button-theme-color.ui__button-color-mauve   { color: white; background-color: var(--rx-mauve-09); &:hover { background-color: var(--rx-mauve-10); } &:active { background-color: var(--rx-mauve-08); }}
+.ui__button-theme-color.ui__button-color-mint    { color: white; background-color: var(--rx-mint-09); &:hover { background-color: var(--rx-mint-10); } &:active { background-color: var(--rx-mint-08); }}
+.ui__button-theme-color.ui__button-color-red     { color: white; background-color: var(--rx-red-09); &:hover { background-color: var(--rx-red-10); } &:active { background-color: var(--rx-red-08); }}
+.ui__button-theme-color.ui__button-color-blue    { color: white; background-color: var(--rx-blue-09); &:hover { background-color: var(--rx-blue-10); } &:active { background-color: var(--rx-blue-08); }}
+.ui__button-theme-color.ui__button-color-grass   { color: white; background-color: var(--rx-grass-09); &:hover { background-color: var(--rx-grass-10); } &:active { background-color: var(--rx-grass-08); }}
+.ui__button-theme-color.ui__button-color-plum    { color: white; background-color: var(--rx-plum-09); &:hover { background-color: var(--rx-plum-10); } &:active { background-color: var(--rx-plum-08); }}
+.ui__button-theme-color.ui__button-color-pink    { color: white; background-color: var(--rx-pink-09); &:hover { background-color: var(--rx-pink-10); } &:active { background-color: var(--rx-pink-08); }}
+.ui__button-theme-color.ui__button-color-teal    { color: white; background-color: var(--rx-teal-09); &:hover { background-color: var(--rx-teal-10); } &:active { background-color: var(--rx-teal-08); }}
+.ui__button-theme-color.ui__button-color-amber   { color: white; background-color: var(--rx-amber-09); &:hover { background-color: var(--rx-amber-10); } &:active { background-color: var(--rx-amber-08); }}
+.ui__button-theme-color.ui__button-color-purple  { color: white; background-color: var(--rx-purple-09); &:hover { background-color: var(--rx-purple-10); } &:active { background-color: var(--rx-purple-08); }}
+.ui__button-theme-color.ui__button-color-brown   { color: white; background-color: var(--rx-brown-09); &:hover { background-color: var(--rx-brown-10); } &:active { background-color: var(--rx-brown-08); }}
+.ui__button-theme-color.ui__button-color-sky     { color: white; background-color: var(--rx-sky-09); &:hover { background-color: var(--rx-sky-10); } &:active { background-color: var(--rx-sky-08); }}
+.ui__button-theme-color.ui__button-color-olive   { color: white; background-color: var(--rx-olive-09); &:hover { background-color: var(--rx-olive-10); } &:active { background-color: var(--rx-olive-08); }}
+.ui__button-theme-color.ui__button-color-tomato  { color: white; background-color: var(--rx-tomato-09); &:hover { background-color: var(--rx-tomato-10); } &:active { background-color: var(--rx-tomato-08); }}
+
+.dark .ui__button-theme-color.ui__button-color-lime    { background-color: var(--rx-lime-09); &:hover { background-color: var(--rx-lime-08); } &:active { background-color: var(--rx-lime-07); }}
+.dark .ui__button-theme-color.ui__button-color-orange  { background-color: var(--rx-orange-09); &:hover { background-color: var(--rx-orange-08); } &:active { background-color: var(--rx-orange-07); }}
+.dark .ui__button-theme-color.ui__button-color-gray    { background-color: var(--rx-gray-09); &:hover { background-color: var(--rx-gray-08); } &:active { background-color: var(--rx-gray-07); }}
+.dark .ui__button-theme-color.ui__button-color-sand    { background-color: var(--rx-sand-09); &:hover { background-color: var(--rx-sand-08); } &:active { background-color: var(--rx-sand-07); }}
+.dark .ui__button-theme-color.ui__button-color-crimson { background-color: var(--rx-crimson-09); &:hover { background-color: var(--rx-crimson-08); } &:active { background-color: var(--rx-crimson-07); }}
+.dark .ui__button-theme-color.ui__button-color-yellow  { background-color: var(--rx-yellow-09); &:hover { background-color: var(--rx-yellow-08); } &:active { background-color: var(--rx-yellow-07); }}
+.dark .ui__button-theme-color.ui__button-color-green   { background-color: var(--rx-green-09); &:hover { background-color: var(--rx-green-08); } &:active { background-color: var(--rx-green-07); }}
+.dark .ui__button-theme-color.ui__button-color-indigo  { background-color: var(--rx-indigo-09); &:hover { background-color: var(--rx-indigo-08); } &:active { background-color: var(--rx-indigo-07); }}
+.dark .ui__button-theme-color.ui__button-color-cyan    { background-color: var(--rx-cyan-09); &:hover { background-color: var(--rx-cyan-08); } &:active { background-color: var(--rx-cyan-07); }}
+.dark .ui__button-theme-color.ui__button-color-violet  { background-color: var(--rx-violet-09); &:hover { background-color: var(--rx-violet-08); } &:active { background-color: var(--rx-violet-07); }}
+.dark .ui__button-theme-color.ui__button-color-bronze  { background-color: var(--rx-bronze-09); &:hover { background-color: var(--rx-bronze-08); } &:active { background-color: var(--rx-bronze-07); }}
+.dark .ui__button-theme-color.ui__button-color-slate   { background-color: var(--rx-slate-09); &:hover { background-color: var(--rx-slate-08); } &:active { background-color: var(--rx-slate-07); }}
+.dark .ui__button-theme-color.ui__button-color-gold    { background-color: var(--rx-gold-09); &:hover { background-color: var(--rx-gold-08); } &:active { background-color: var(--rx-gold-07); }}
+.dark .ui__button-theme-color.ui__button-color-sage    { background-color: var(--rx-sage-09); &:hover { background-color: var(--rx-sage-08); } &:active { background-color: var(--rx-sage-07); }}
+.dark .ui__button-theme-color.ui__button-color-mauve   { background-color: var(--rx-mauve-09); &:hover { background-color: var(--rx-mauve-08); } &:active { background-color: var(--rx-mauve-07); }}
+.dark .ui__button-theme-color.ui__button-color-mint    { background-color: var(--rx-mint-09); &:hover { background-color: var(--rx-mint-08); } &:active { background-color: var(--rx-mint-07); }}
+.dark .ui__button-theme-color.ui__button-color-red     { background-color: var(--rx-red-09); &:hover { background-color: var(--rx-red-08); } &:active { background-color: var(--rx-red-07); }}
+.dark .ui__button-theme-color.ui__button-color-blue    { background-color: var(--rx-blue-09); &:hover { background-color: var(--rx-blue-08); } &:active { background-color: var(--rx-blue-07); }}
+.dark .ui__button-theme-color.ui__button-color-grass   { background-color: var(--rx-grass-09); &:hover { background-color: var(--rx-grass-08); } &:active { background-color: var(--rx-grass-07); }}
+.dark .ui__button-theme-color.ui__button-color-plum    { background-color: var(--rx-plum-09); &:hover { background-color: var(--rx-plum-08); } &:active { background-color: var(--rx-plum-07); }}
+.dark .ui__button-theme-color.ui__button-color-pink    { background-color: var(--rx-pink-09); &:hover { background-color: var(--rx-pink-08); } &:active { background-color: var(--rx-pink-07); }}
+.dark .ui__button-theme-color.ui__button-color-teal    { background-color: var(--rx-teal-09); &:hover { background-color: var(--rx-teal-08); } &:active { background-color: var(--rx-teal-07); }}
+.dark .ui__button-theme-color.ui__button-color-amber   { background-color: var(--rx-amber-09); &:hover { background-color: var(--rx-amber-08); } &:active { background-color: var(--rx-amber-07); }}
+.dark .ui__button-theme-color.ui__button-color-purple  { background-color: var(--rx-purple-09); &:hover { background-color: var(--rx-purple-08); } &:active { background-color: var(--rx-purple-07); }}
+.dark .ui__button-theme-color.ui__button-color-brown   { background-color: var(--rx-brown-09); &:hover { background-color: var(--rx-brown-08); } &:active { background-color: var(--rx-brown-07); }}
+.dark .ui__button-theme-color.ui__button-color-sky     { background-color: var(--rx-sky-09); &:hover { background-color: var(--rx-sky-08); } &:active { background-color: var(--rx-sky-07); }}
+.dark .ui__button-theme-color.ui__button-color-olive   { background-color: var(--rx-olive-09); &:hover { background-color: var(--rx-olive-08); } &:active { background-color: var(--rx-olive-07); }}
+.dark .ui__button-theme-color.ui__button-color-tomato  { background-color: var(--rx-tomato-09); &:hover { background-color: var(--rx-tomato-08); } &:active { background-color: var(--rx-tomato-07); }}
+
+.ui__list-item-highlighted-span {
+  background-color: or(--lx-accent-06, --color-level-4);
+}
+
+.dark .ui__list-item-highlighted-span {
+  background-color: or(--lx-accent-08-alpha, --color-level-4);
+}

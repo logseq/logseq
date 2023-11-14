@@ -13,7 +13,7 @@
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
             [lambdaisland.glogi :as log]
             [goog.functions :refer [debounce]])
-  (:import [goog.events KeyCodes KeyHandler KeyNames]
+  (:import [goog.events KeyCodes KeyNames]
            [goog.ui KeyboardShortcutHandler]))
 
 (defonce *installed-handlers (atom {}))
@@ -272,42 +272,6 @@
       nil nil
       ("ctrl" "shift" "alt" "esc") nil
       (str " " (name-with-meta e)))))
-
-(defn record! []
-  {:did-mount
-   (fn [state]
-     (let [handler (KeyHandler. js/document)
-           keystroke (:rum/local state)]
-
-       (doseq [id (keys @*installed-handlers)]
-         (uninstall-shortcut-handler! id))
-
-       (events/listen handler "key"
-                      (fn [e]
-                        (.preventDefault e)
-                        (swap! keystroke #(str % (keyname e)))))
-
-       (assoc state ::key-record-handler handler)))
-
-   :will-unmount
-   (fn [{:rum/keys [args local action] :as state}]
-     (let [k (first args)
-           keystroke (str/trim @local)]
-       (when (and (= @action :save)
-                  (seq keystroke))
-         (config-handler/set-config!
-           :shortcuts
-           (merge
-             (:shortcuts (state/get-config))
-             {k keystroke}))))
-
-     (when-let [^js handler (::key-record-handler state)]
-       (.dispose handler))
-
-     ;; force re-install shortcut handlers
-     (js/setTimeout #(refresh!) 500)
-
-     (dissoc state ::key-record-handler))})
 
 (defn persist-user-shortcut!
   [id binding]

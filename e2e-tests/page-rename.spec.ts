@@ -72,9 +72,9 @@ test('page rename test', async ({ page }) => {
   await page_rename_test(page, "DcBA_", "dCBA_")
   const results = await searchPage(page, "DcBA_")
   // search result 0 is the new page & 1 is the new whiteboard
-  const thirdResultRow = await results[2].innerText()
-  expect(thirdResultRow).toContain("dCBA_");
-  expect(thirdResultRow).not.toContain("DcBA_");
+  const resultRow = await results[0].innerText()
+  expect(resultRow).toContain("dCBA_");
+  expect(resultRow).not.toContain("DcBA_");
   await closeSearchBox(page)
 })
 

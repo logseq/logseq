@@ -149,14 +149,14 @@
      [:span.flex.items-center
       (ui/icon "puzzle")
       (t :plugins) (when (vector? total-nums) (str " (" (first total-nums) ")"))]
-     :intent "logseq"
+     :intent "link"
      :on-click #(on-action :plugins)
      :class (if (= category :plugins) "active" ""))
    (ui/button
      [:span.flex.items-center
       (ui/icon "palette")
       (t :themes) (when (vector? total-nums) (str " (" (last total-nums) ")"))]
-     :intent "logseq"
+     :intent "link"
      :on-click #(on-action :themes)
      :class (if (= category :themes) "active" ""))])
 
@@ -382,7 +382,7 @@
     (t :plugin/contribute)
     :href "https://github.com/logseq/marketplace"
     :class "contribute"
-    :intent "logseq"
+    :intent "link"
     :target "_blank"))
 
 (rum/defc user-proxy-settings-panel
@@ -492,11 +492,11 @@
          (ui/tippy {:html  [:div (t :plugin/unpacked-tips)]
                     :arrow true}
                    (ui/button
-                     [:span.flex.items-center
-                      (ui/icon "upload") (t :plugin/load-unpacked)]
-                     :intent "logseq"
+                    (t :plugin/load-unpacked)
+                    {:icon "upload"
+                     :intent "link"
                      :class "load-unpacked"
-                     :on-click plugin-handler/load-unpacked-plugin))
+                     :on-click plugin-handler/load-unpacked-plugin}))
 
          (unpacked-plugin-loader selected-unpacked-pkg)])]
 
@@ -504,11 +504,11 @@
       ;; extra info
       (when-let [proxy-val (state/http-proxy-enabled-or-val?)]
         (ui/button
-          [:span.flex.items-center.text-indigo-500
-           (ui/icon "world-download") proxy-val]
-          :small? true
-          :intent "link"
-          :on-click #(state/pub-event! [:go/proxy-settings agent-opts])))
+         [:span.flex.items-center.text-indigo-500
+          (ui/icon "world-download") proxy-val]
+         :small? true
+         :intent "link"
+         :on-click #(state/pub-event! [:go/proxy-settings agent-opts])))
 
       ;; search
       (panel-tab-search search-key *search-key *search-ref)
@@ -516,105 +516,105 @@
       ;; sorter & filter
       (let [aim-icon #(if (= filter-by %) "check" "circle")]
         (ui/dropdown-with-links
-          (fn [{:keys [toggle-fn]}]
-            (ui/button
-              (ui/icon "filter")
-              :class (str (when-not (contains? #{:default} filter-by) "picked ") "sort-or-filter-by")
-              :on-click toggle-fn
-              :intent "link"))
-
-          (if market?
-            [{:title   (t :plugin/all)
-              :options {:on-click #(reset! *filter-by :default)}
-              :icon    (ui/icon (aim-icon :default))}
-
-             {:title   (t :plugin/installed)
-              :options {:on-click #(reset! *filter-by :installed)}
-              :icon    (ui/icon (aim-icon :installed))}
-
-             {:title   (t :plugin/not-installed)
-              :options {:on-click #(reset! *filter-by :not-installed)}
-              :icon    (ui/icon (aim-icon :not-installed))}]
-
-            [{:title   (t :plugin/all)
-              :options {:on-click #(reset! *filter-by :default)}
-              :icon    (ui/icon (aim-icon :default))}
-
-             {:title   (t :plugin/enabled)
-              :options {:on-click #(reset! *filter-by :enabled)}
-              :icon    (ui/icon (aim-icon :enabled))}
-
-             {:title   (t :plugin/disabled)
-              :options {:on-click #(reset! *filter-by :disabled)}
-              :icon    (ui/icon (aim-icon :disabled))}
-
-             {:title   (t :plugin/unpacked)
-              :options {:on-click #(reset! *filter-by :unpacked)}
-              :icon    (ui/icon (aim-icon :unpacked))}
-
-             {:title   (t :plugin/update-available)
-              :options {:on-click #(reset! *filter-by :update-available)}
-              :icon    (ui/icon (aim-icon :update-available))}])
-          nil))
-
-      (when market?
-        (ui/dropdown-with-links
-          (fn [{:keys [toggle-fn]}]
-            (ui/button
-              (ui/icon "arrows-sort")
-              :class (str (when-not (contains? #{:default :downloads} sort-by) "picked ") "sort-or-filter-by")
-              :on-click toggle-fn
-              :intent "link"))
-          (let [aim-icon #(if (= sort-by %) "check" "circle")]
-            [{:title   (t :plugin/downloads)
-              :options {:on-click #(reset! *sort-by :downloads)}
-              :icon    (ui/icon (aim-icon :downloads))}
-
-             {:title   (t :plugin/stars)
-              :options {:on-click #(reset! *sort-by :stars)}
-              :icon    (ui/icon (aim-icon :stars))}
-
-             {:title   (t :plugin/title "A - Z")
-              :options {:on-click #(reset! *sort-by :letters)}
-              :icon    (ui/icon (aim-icon :letters))}])
-          {}))
-
-      ;; more - updater
-      (ui/dropdown-with-links
-        (fn [{:keys [toggle-fn]}]
-          (ui/button
-            (ui/icon "dots-vertical")
-            :class "more-do"
+         (fn [{:keys [toggle-fn]}]
+           (ui/button
+            (ui/icon "filter")
+            :class (str (when-not (contains? #{:default} filter-by) "picked ") "sort-or-filter-by")
             :on-click toggle-fn
             :intent "link"))
 
-        (concat (if market?
-                  [{:title   [:span.flex.items-center (ui/icon "rotate-clockwise") (t :plugin/refresh-lists)]
-                    :options {:on-click #(reload-market-fn)}}]
-                  [{:title   [:span.flex.items-center (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
-                    :options {:on-click #(plugin-handler/user-check-enabled-for-updates! (not= :plugins category))}}])
+         (if market?
+           [{:title   (t :plugin/all)
+             :options {:on-click #(reset! *filter-by :default)}
+             :icon    (ui/icon (aim-icon :default))}
 
-                [{:title   [:span.flex.items-center (ui/icon "world") (t :settings-page/network-proxy)]
-                  :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}]
+            {:title   (t :plugin/installed)
+             :options {:on-click #(reset! *filter-by :installed)}
+             :icon    (ui/icon (aim-icon :installed))}
 
-                [{:title   [:span.flex.items-center (ui/icon "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
-                  :options {:on-click plugin-config-handler/open-replace-plugins-modal}}]
+            {:title   (t :plugin/not-installed)
+             :options {:on-click #(reset! *filter-by :not-installed)}
+             :icon    (ui/icon (aim-icon :not-installed))}]
 
-                (when (state/developer-mode?)
-                  [{:hr true}
-                   {:title   [:span.flex.items-center (ui/icon "file-code") (t :plugin/open-preferences)]
-                    :options {:on-click
-                              #(p/let [root (plugin-handler/get-ls-dotdir-root)]
-                                 (js/apis.openPath (str root "/preferences.json")))}}
-                   {:title   [:span.flex.items-center.whitespace-nowrap.space-x-1 (ui/icon "bug") (t :plugin/open-logseq-dir) [:code "~/.logseq"]]
-                    :options {:on-click
-                              #(p/let [root (plugin-handler/get-ls-dotdir-root)]
-                                 (js/apis.openPath root))}}])
+           [{:title   (t :plugin/all)
+             :options {:on-click #(reset! *filter-by :default)}
+             :icon    (ui/icon (aim-icon :default))}
 
-                [{:hr true :key "dropdown-more"}
-                 {:title   (auto-check-for-updates-control)
-                  :options {:no-padding? true}}])
-        {})
+            {:title   (t :plugin/enabled)
+             :options {:on-click #(reset! *filter-by :enabled)}
+             :icon    (ui/icon (aim-icon :enabled))}
+
+            {:title   (t :plugin/disabled)
+             :options {:on-click #(reset! *filter-by :disabled)}
+             :icon    (ui/icon (aim-icon :disabled))}
+
+            {:title   (t :plugin/unpacked)
+             :options {:on-click #(reset! *filter-by :unpacked)}
+             :icon    (ui/icon (aim-icon :unpacked))}
+
+            {:title   (t :plugin/update-available)
+             :options {:on-click #(reset! *filter-by :update-available)}
+             :icon    (ui/icon (aim-icon :update-available))}])
+         nil))
+
+      (when market?
+        (ui/dropdown-with-links
+         (fn [{:keys [toggle-fn]}]
+           (ui/button
+            (ui/icon "arrows-sort")
+            :class (str (when-not (contains? #{:default :downloads} sort-by) "picked ") "sort-or-filter-by")
+            :on-click toggle-fn
+            :intent "link"))
+         (let [aim-icon #(if (= sort-by %) "check" "circle")]
+           [{:title   (t :plugin/downloads)
+             :options {:on-click #(reset! *sort-by :downloads)}
+             :icon    (ui/icon (aim-icon :downloads))}
+
+            {:title   (t :plugin/stars)
+             :options {:on-click #(reset! *sort-by :stars)}
+             :icon    (ui/icon (aim-icon :stars))}
+
+            {:title   (t :plugin/title "A - Z")
+             :options {:on-click #(reset! *sort-by :letters)}
+             :icon    (ui/icon (aim-icon :letters))}])
+         {}))
+
+      ;; more - updater
+      (ui/dropdown-with-links
+       (fn [{:keys [toggle-fn]}]
+         (ui/button
+          (ui/icon "dots-vertical")
+          :class "more-do"
+          :on-click toggle-fn
+          :intent "link"))
+
+       (concat (if market?
+                 [{:title   [:span.flex.items-center (ui/icon "rotate-clockwise") (t :plugin/refresh-lists)]
+                   :options {:on-click #(reload-market-fn)}}]
+                 [{:title   [:span.flex.items-center (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
+                   :options {:on-click #(plugin-handler/user-check-enabled-for-updates! (not= :plugins category))}}])
+
+               [{:title   [:span.flex.items-center (ui/icon "world") (t :settings-page/network-proxy)]
+                 :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}]
+
+               [{:title   [:span.flex.items-center (ui/icon "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
+                 :options {:on-click plugin-config-handler/open-replace-plugins-modal}}]
+
+               (when (state/developer-mode?)
+                 [{:hr true}
+                  {:title   [:span.flex.items-center (ui/icon "file-code") (t :plugin/open-preferences)]
+                   :options {:on-click
+                             #(p/let [root (plugin-handler/get-ls-dotdir-root)]
+                                (js/apis.openPath (str root "/preferences.json")))}}
+                  {:title   [:span.flex.items-center.whitespace-nowrap.space-x-1 (ui/icon "bug") (t :plugin/open-logseq-dir) [:code "~/.logseq"]]
+                   :options {:on-click
+                             #(p/let [root (plugin-handler/get-ls-dotdir-root)]
+                                (js/apis.openPath root))}}])
+
+               [{:hr true :key "dropdown-more"}
+                {:title   (auto-check-for-updates-control)
+                 :options {:no-padding? true}}])
+       {})
 
       ;; developer
       (panel-tab-developer)]]))
@@ -1226,11 +1226,11 @@
       [:div.tabs-inner.flex.items-center
        (ui/button [:span.it (t :plugin/installed)]
                   :on-click #(set-active! :installed)
-                  :intent "logseq" :class (if-not market? "active" ""))
+                  :intent (if-not market? "" "link"))
 
        (ui/button [:span.mk (svg/apps 16) (t :plugin/marketplace)]
                   :on-click #(set-active! :marketplace)
-                  :intent "logseq" :class (if market? "active" ""))]]
+                  :intent (if market? "" "link"))]]
 
      [:div.panels
       (if market?
