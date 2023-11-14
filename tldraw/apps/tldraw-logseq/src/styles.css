@@ -17,8 +17,8 @@
   --color-text: var(--ls-primary-text-color);
   --color-text-inverted: var(--ls-tertiary-background-color);
   --color-hover: var(--ls-secondary-background-color);
-  --color-selectedStroke: var(--color-indigo-900);
-  --color-selectedFill: var(--color-indigo-500);
+  --color-selectedStroke: var(--ls-button-background);
+  --color-selectedFill: hsl(var(--ls-button-background-hsl) / 0.9);
   --color-selectedContrast: #fff;
   --shadow-small: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-medium: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
