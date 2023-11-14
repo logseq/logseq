@@ -23,7 +23,7 @@
 
 (defn filtered-refs
   [page-name filters filters-atom filtered-references]
-  [:div.flex.gap-1.flex-wrap
+  [:div.flex.gap-2.flex-wrap
    (for [[ref-name ref-count] filtered-references]
      (when ref-name
        (let [lc-reference (string/lower-case ref-name)]

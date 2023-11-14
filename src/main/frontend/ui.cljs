@@ -9,7 +9,6 @@
             ["@emoji-mart/data" :as emoji-data]
             ;; ["@emoji-mart/react" :as Picker]
             ["emoji-mart" :as emoji-mart]
-            [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -37,7 +36,9 @@
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.shui.core :as shui]
+            [frontend.shui :refer [make-shui-context]]))
 
 (declare icon)
 
@@ -187,23 +188,15 @@
           (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class {:z-index z-index}))))]))
 
 ;; `sequence` can be a list of symbols, a list of strings, or a string
-(defn render-keyboard-shortcut [sequence]
+(defn render-keyboard-shortcut [sequence & {:as opts}]
   (let [sequence (if (string? sequence)
                    (-> sequence ;; turn string into sequence
                        (string/trim)
                        (string/lower-case)
-                       (string/split  #" "))
+                       (string/split #" "))
                    sequence)]
     [:span.keyboard-shortcut
-     (map-indexed (fn [i key]
-                    (let [key' (shortcut-utils/decorate-binding (str key))]
-                      [:code {:key i}
-                      ;; Display "cmd" rather than "meta" to the user to describe the Mac
-                      ;; mod key, because that's what the Mac keyboards actually say.
-                       (if (= "meta" key')
-                        (util/meta-key-name)
-                        key')]))
-                  sequence)]))
+     (shui/shortcut-v1 sequence (make-shui-context) opts)]))
 
 (rum/defc menu-link
   [{:keys [only-child? no-padding? class shortcut] :as options} child]
@@ -589,16 +582,18 @@
                                           (on-click e)))}
     [:span.wrapper.transition-colors.ease-in-out.duration-200
      {:aria-checked (if on? "true" "false"), :tab-index "0", :role "checkbox"
-      :class        (if on? "bg-indigo-600" "bg-gray-300")}
+      :class        (if on? "ui__toggle-background-on" "ui__toggle-background-off")}
      [:span.switcher.transform.transition.ease-in-out.duration-200
       {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
        :aria-hidden "true"}]]]))
 
-(defn keyboard-shortcut-from-config [shortcut-name]
+(defn keyboard-shortcut-from-config [shortcut-name & {:keys [pick-first?]}]
   (let [built-in-binding (:binding (get shortcut-config/all-built-in-keyboard-shortcuts shortcut-name))
         custom-binding  (when (state/shortcuts) (get (state/shortcuts) shortcut-name))
         binding         (or custom-binding built-in-binding)]
-    (shortcut-utils/decorate-binding binding)))
+    (if (and pick-first? (coll? binding))
+      (first binding)
+      (shortcut-utils/decorate-binding binding))))
 
 (rum/defc modal-overlay
   [state close-fn close-backdrop?]
@@ -640,7 +635,6 @@
           :stroke-width    "2"
           :stroke-linejoin "round"
           :stroke-linecap  "round"}]]])]
-
    (when show?
      [:div (cond-> {:class (if fullscreen? "" "panel-content")}
              (seq style)
@@ -1029,64 +1023,34 @@
              :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
              :on-tweet-load-success #(reset! *loading? false)})]]))
 
-(def get-adapt-icon-class
-  (memoize (fn [klass] (r/adapt-class klass))))
+(def icon shui/icon)
 
-(defn tabler-icon
-  [name]
-  (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase name))))
+(rum/defc button-inner
+  [text & {:keys [background href class intent on-click small? title icon icon-props disabled? button-props]
+           :or   {small? false}}]
+  (let [opts {:text text
+              :theme (when (contains? #{"link" "border-link"} intent) :text)
+              :href href
+              :on-click on-click
+              :size (if small? :sm :md)
+              :icon icon
+              :icon-props icon-props
+              :button-props (merge button-props (when title {:title title}))
+              :class (if (= intent "border-link") (str class " border") class)
+              :muted disabled?
+              :disabled? disabled?}]
+    (shui/button (cond->
+                  opts
+                   background
+                   (assoc :color background))
+                 (make-shui-context))))
 
-(rum/defc icon
-  ([name] (icon name nil))
-  ([name {:keys [extension? font? class size] :as opts}]
-   (when-not (string/blank? name)
-     (let [^js jsTablerIcons (gobj/get js/window "tablerIcons")]
-       (if (or extension? font? (not jsTablerIcons))
-         (let [opts (merge {:class
-                            (util/format
-                             (str "%s-" name
-                                  (when (:class opts)
-                                    (str " " (string/trim (:class opts)))))
-                             (if extension? "tie tie" "ti ti"))}
-                           (dissoc opts :class :extension? :font?))
-               opts' (cond
-                      (and size (:style opts))
-                      (assoc opts :style (assoc (:style opts) :font-size size))
-                      size
-                      (assoc opts :style {:font-size size})
-                      :else
-                      opts)]
-           [:span.ui__icon opts'])
-
-         ;; tabler svg react
-         (when-let [klass (tabler-icon name)]
-           (let [f (get-adapt-icon-class klass)]
-             [:span.ui__icon.ti
-              {:class (str "ls-icon-" name " " class)}
-              (f (merge {:size (or size 18)} (r/map-keys->camel-case (dissoc opts :class))))])))))))
-
-(rum/defc button
-  [text & {:keys [background href class intent on-click small? large? title icon icon-props disabled?]
-           :or   {small? false large? false}
-           :as   option}]
-  (let [klass (if-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center" intent)
-        klass (if background (string/replace klass "indigo" background) klass)
-        klass (if small? (str klass ".is-small") klass)
-        klass (if large? (str klass ".text-base") klass)
-        klass (if disabled? (str klass "disabled:opacity-75") klass)]
-    [:button.ui__button
-     (merge
-      {:type  "button"
-       :title title
-       :disabled disabled?
-       :class (str (util/hiccup->class klass) " " class)}
-      (dissoc option :background :class :small? :large? :disabled?)
-      (when href
-        {:on-click (fn []
-                     (util/open-url href)
-                     (when (fn? on-click) (on-click)))}))
-     (when icon (frontend.ui/icon icon (merge icon-props {:class (when-not (empty? text) "mr-1")})))
-     text]))
+(defn button
+  [text & {:keys []
+           :as opts}]
+  (if (map? text)
+    (button-inner nil text)
+    (button-inner text opts)))
 
 (rum/defc point
   ([] (point "bg-red-600" 5 nil))

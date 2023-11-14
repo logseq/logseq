@@ -11,14 +11,14 @@
 
 (defonce indices (atom nil))
 
+(defn- max-len
+  []
+  (state/block-content-max-length (state/get-current-repo)))
+
 (defn- sanitize
   [content]
   (some-> content
           (util/search-normalize (state/enable-search-remove-accents?))))
-
-(defn- max-len
-  []
-  (state/block-content-max-length (state/get-current-repo)))
 
 (defn block->index
   "Convert a block to the index for searching"
@@ -62,17 +62,17 @@
        (bean/->js)))
 
 (defn make-blocks-indice!
-  [repo]
-  (let [blocks (build-blocks-indice repo)
-        indice (fuse. blocks
-                      (clj->js {:keys ["uuid" "content" "page"]
-                                :shouldSort true
-                                :tokenize true
-                                :minMatchCharLength 1
-                                :distance 1000
-                                :threshold 0.35}))]
-    (swap! indices assoc-in [repo :blocks] indice)
-    indice))
+  ([repo] (make-blocks-indice! repo (build-blocks-indice repo)))
+  ([repo blocks]
+   (let [indice (fuse. blocks
+                       (clj->js {:keys ["uuid" "content" "page"]
+                                 :shouldSort true
+                                 :tokenize true
+                                 :minMatchCharLength 1
+                                 :distance 1000
+                                 :threshold 0.35}))]
+     (swap! indices assoc-in [repo :blocks] indice)
+     indice)))
 
 (defn original-page-name->index
   [p]

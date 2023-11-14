@@ -375,8 +375,6 @@ input::-webkit-inner-spin-button {
 
         .ui__button {
           margin-top: unset;
-          border-radius: 4px;
-          color: black;
           padding: 4px;
 
           .ti {

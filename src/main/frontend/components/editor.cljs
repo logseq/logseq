@@ -4,9 +4,8 @@
              :refer [*first-command-group *matched-block-commands *matched-commands]]
             [frontend.components.block :as block]
             [frontend.components.datetime :as datetime-comp]
-            [frontend.components.search :as search]
-            [frontend.components.search.highlight :as highlight]
             [frontend.components.svg :as svg]
+            [frontend.components.search :as search]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
@@ -16,6 +15,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.search :as search-handler]
             [frontend.search :refer [fuzzy-search]]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
@@ -198,7 +198,7 @@
                                   (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
                                   [:div.flex.space-x-1
                                    [:div (when-not (db/page-exists? page-name) (t :new-page))]
-                                   (highlight/highlight-exact-query page-name q)]]
+                                   (search-handler/highlight-exact-query page-name q)]]
                                  :open?           chosen?
                                  :manual?         true
                                  :fixed-position? true
@@ -207,6 +207,7 @@
                                 page-name)])
                :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
                :class       "black"})]))))))
+
 
 (defn- search-blocks!
   [state result]

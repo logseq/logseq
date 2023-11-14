@@ -187,7 +187,7 @@
     background: none;
 
     @screen md {
-      background: var(--ls-tertiary-background-color);
+      background: or(--ls-header-button-hover, --lx-gray-04, --ls-tertiary-background-color);
     }
   }
 

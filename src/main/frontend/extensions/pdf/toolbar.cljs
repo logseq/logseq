@@ -244,14 +244,30 @@
                            :dune))}]
 
         (when entered-active0?
-          (ui/button (ui/icon "arrow-back") :title "Enter to search" :class "icon-enter" :intent "true" :small? true))]
+          (ui/button {:icon "arrow-back"
+                      :intent "link"
+                      :title "Enter to search"
+                      :class "icon-enter"
+                      :small? true}))]
 
-       (ui/button (ui/icon "letter-case")
-                  :class (string/join " " (util/classnames [{:active case-sensitive?}]))
-                  :intent "true" :small? true :on-click #(set-case-sensitive? (not case-sensitive?)))
-       (ui/button (ui/icon "chevron-up") :intent "true" :small? true :on-click #(do (do-find! {:type :again :prev? true}) (util/stop %)))
-       (ui/button (ui/icon "chevron-down") :intent "true" :small? true :on-click #(do (do-find! {:type :again}) (util/stop %)))
-       (ui/button (ui/icon "x") :intent "true" :small? true :on-click close-finder!)]
+       (ui/button {:icon "letter-case"
+                   :intent "link"
+                   :class (string/join " " (util/classnames [{:active case-sensitive?}]))
+                   :small? true :on-click #(set-case-sensitive? (not case-sensitive?))})
+
+       (ui/button {:icon "chevron-up"
+                   :intent "link"
+                   :small? true :on-click #(do (do-find! {:type :again :prev? true}) (util/stop %))})
+
+       (ui/button
+         {:icon "chevron-down"
+          :intent "link"
+          :small? true :on-click #(do (do-find! {:type :again}) (util/stop %))})
+
+       (ui/button
+         {:icon "x"
+          :intent "link"
+          :small? true :on-click close-finder!})]
 
       [:div.result-inner
        (when-let [status (and entered-active?

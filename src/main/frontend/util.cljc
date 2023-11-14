@@ -1009,7 +1009,7 @@
      (when s
        (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
          (if remove-accents?
-           (removeAccents  normalize-str)
+           (removeAccents normalize-str)
            normalize-str)))))
 
 #?(:cljs
@@ -1048,17 +1048,6 @@
                      (d/set-attr! :href style)
                      (d/set-attr! :media "all"))]
            (d/append! parent-node link))))))
-
-(defn ->platform-shortcut
-  [keyboard-shortcut]
-  (let [result (or keyboard-shortcut "")
-        result (string/replace result "left" "←")
-        result (string/replace result "right" "→")]
-    (if mac?
-      (-> result
-          (string/replace "Ctrl" "Cmd")
-          (string/replace "Alt" "Opt"))
-      result)))
 
 (defn remove-common-preceding
   [col1 col2]
@@ -1307,10 +1296,6 @@
 
 (comment
   (re-matches (re-pattern (regex-escape "$u^8(d)+w.*[dw]d?")) "$u^8(d)+w.*[dw]d?"))
-
-#?(:cljs
-   (defn meta-key-name []
-     (if mac? "Cmd" "Ctrl")))
 
 #?(:cljs
    (defn meta-key? [e]

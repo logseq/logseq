@@ -4,7 +4,8 @@
             [frontend.components.block :as block]
             [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
-            [frontend.components.shortcut :as shortcut]
+            [frontend.components.shortcut-help :as shortcut-help]
+            [frontend.components.cmdk :as cmdk]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -57,7 +58,7 @@
 (rum/defc shortcut-settings
   []
   [:div.contents.flex-col.flex.ml-3
-   (shortcut/shortcut-page {:show-title? false})])
+   (shortcut-help/shortcut-page {:show-title? false})])
 
 (defn- block-with-breadcrumb
   [repo block idx sidebar-key ref?]
@@ -114,7 +115,7 @@
                 (history-stack (t :right-side-bar/history-redos) (rum/react (:redo-stack state)))]]]))
 
 (defn build-sidebar-item
-  [repo idx db-id block-type]
+  [repo idx db-id block-type *db-id init-key]
   (case (keyword block-type)
     :contents
     [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :right-side-bar/contents)]
@@ -154,6 +155,22 @@
           (ui/icon (if (contains? (set (:block/type page)) "whiteboard") "whiteboard" "page") {:class "text-md mr-2"}))
         [:span.overflow-hidden.text-ellipsis (db-model/get-page-original-name page-name)]]
        (page-cp repo page-name)])
+
+    :search
+    [[:.flex.items-center.page-title
+      (ui/icon "search" {:class "text-md mr-2"})
+      (let [input (rum/react *db-id)
+            input' (if (string/blank? input) "Blank input" input)]
+        [:span.overflow-hidden.text-ellipsis input'])]
+     (rum/with-key
+       (cmdk/cmdk-block {:initial-input db-id
+                         :sidebar? true
+                         :on-input-change (fn [new-value]
+                                            (reset! *db-id new-value))
+                         :on-input-blur (fn [new-value]
+                                            (state/sidebar-replace-block! [repo db-id block-type]
+                                                                          [repo new-value block-type]))})
+       (str init-key))]
 
     :page-slide-view
     (let [page-name (:block/name (db/entity db-id))]
@@ -221,11 +238,16 @@
   [component _should-update?]
   component)
 
-(rum/defc sidebar-item < rum/reactive
-  [repo idx db-id block-type block-count]
+(rum/defcs sidebar-item < rum/reactive
+  {:init (fn [state] (assoc state
+                            ::db-id (atom (nth (:rum/args state) 2))
+                            ::init-key (random-uuid)))}
+  [state repo idx db-id block-type block-count]
   (let [drag-from (rum/react *drag-from)
         drag-to (rum/react *drag-to)
-        item (build-sidebar-item repo idx db-id block-type)]
+        item (build-sidebar-item repo idx db-id block-type
+                                 (::db-id state)
+                                 (::init-key state))]
     (when item
       (let [collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
         [:<>
@@ -272,12 +294,14 @@
                               (context-menu-content db-id idx block-type collapsed? block-count close-fn)))
                [:button.button.close {:title (t :right-side-bar/pane-close)
                                       :on-click #(state/sidebar-remove-block! idx)} (ui/icon "x")]]]
-             [:div.pt-4.p-1 {:role "region"
-                             :id (str "sidebar-panel-content-" idx)
-                             :aria-labelledby (str "sidebar-panel-header-" idx)
-                             :class (util/classnames [{:hidden collapsed?
-                                                       :initial (not collapsed?)
-                                                       :p-4 (not (contains? #{:page :block :contents} block-type))}])}
+             [:div {:role "region"
+                    :id (str "sidebar-panel-content-" idx)
+                    :aria-labelledby (str "sidebar-panel-header-" idx)
+                    :class (util/classnames [{:hidden collapsed?
+                                              :initial (not collapsed?)
+                                              :p-4 (not (contains? #{:page :block :contents :search :shortcut-settings} block-type))
+                                              :pt-4 (not (contains? #{:search :shortcut-settings} block-type))
+                                              :p-1 (not (contains? #{:search :shortcut-settings} block-type))}])}
               (ui/catch-error
                [:span.warning "Something wrong happens"]
                (inner-component component (not drag-from)))]
@@ -435,12 +459,12 @@
             (t :right-side-bar/history)]])
         ]]
 
-      [:.sidebar-item-list.flex-1.scrollbar-spacing.ml-2.pr-3
+      [:.sidebar-item-list.flex-1.scrollbar-spacing.ml-2
        (if @*anim-finished?
          (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
-           (rum/with-key
-             (sidebar-item repo idx db-id block-type block-count)
-             (str "sidebar-block-" db-id)))
+            (rum/with-key
+              (sidebar-item repo idx db-id block-type block-count)
+              (str "sidebar-block-" db-id)))
          [:div.p-4
           [:span.font-medium.opacity-50 "Loading ..."]])]]]))
 

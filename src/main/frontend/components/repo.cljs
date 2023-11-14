@@ -18,7 +18,8 @@
             [goog.object :as gobj]
             [cljs.core.async :as async :refer [go <!]]
             [frontend.handler.file-sync :as file-sync]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [logseq.shui.core :as shui]))
 
 (rum/defc add-repo
   [args]
@@ -254,10 +255,12 @@
                                  {:style {:top 1}}
                                  (ui/icon (if logged-in?
                                             (let [icon (str "letter-" (first (user-handler/email)))]
-                                              (if (ui/tabler-icon icon) icon "user"))
+                                              (if (shui/tabler-icon icon) icon "user"))
                                             "database") {:size (if logged-in? 12 16)
                                                          :id "database-icon"
-                                                         :class (when logged-in? "p-1 rounded color-level-5")})]
+                                                         :class (when logged-in? "p-1 rounded")
+                                                         :style {:background-color "var(--lx-gray-06-alpha, var(--color-level-5))"
+                                                                 :padding 3}})]
                                 [:div.graphs
                                  [:span#repo-switch.block.pr-2.whitespace-nowrap
                                   [:span [:span#repo-name.font-medium

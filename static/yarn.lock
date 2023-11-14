@@ -400,47 +400,47 @@
   resolved "https://registry.yarnpkg.com/@gar/promisify/-/promisify-1.1.3.tgz#555193ab2e3bb3b6adc3d551c9c030d9e860daf6"
   integrity sha512-k2Ty1JcVojjJFwrg/ThKi2ujJ7XNLYaFGNB/bWT9wGR+oSMJHMa5w+CUq6p/pVrKeNNgA7pCqEcjSnHVoqJQFw==
 
-"@logseq/rsapi-darwin-arm64@0.0.75":
-  version "0.0.75"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-darwin-arm64/-/rsapi-darwin-arm64-0.0.75.tgz#726034266119e92a78f52ba8a56f00383023f4fd"
-  integrity sha512-fnJd6tbM1Sa47sZva7d2sH0u6L+RYoHLdi84GGQddDnA/2iWzajrH1qCeXTcO0se1W9+bMp1+CbyyYlvCOuD0Q==
+"@logseq/rsapi-darwin-arm64@0.0.76":
+  version "0.0.76"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-darwin-arm64/-/rsapi-darwin-arm64-0.0.76.tgz#58094734c80ff6765ed0d9716a4cd60585007d13"
+  integrity sha512-vhujPjhMvFjUOUXvKkaocxJ5M9VjHtt+IQwrXhlqSEreA+IYeg9Wcc6ryws5PkGzhxb/HVTYTpeCQWz5f++49w==
 
-"@logseq/rsapi-darwin-x64@0.0.75":
-  version "0.0.75"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-darwin-x64/-/rsapi-darwin-x64-0.0.75.tgz#523a748aa982065f942679664aef4c25acd034ac"
-  integrity sha512-GNk0RvZRLORn0uxLEzkQHVxT+EomBskGw1bFozAhafhHLy9/HxaV3Bifq/+26DCQ1PbpVUwJNh3lLOfX24+JfA==
+"@logseq/rsapi-darwin-x64@0.0.76":
+  version "0.0.76"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-darwin-x64/-/rsapi-darwin-x64-0.0.76.tgz#90fbed4431abacf927892bb794065b501c8cb1b5"
+  integrity sha512-XvAJGF1Lf2Z2VDVni1ey0Fcfd0Qsva6NculBkRMu9Fdvn3HcVqZ2aoFXvuVshhG5c/kmr9gCr/bFNMQhkpyqxA==
 
-"@logseq/rsapi-freebsd-x64@0.0.75":
-  version "0.0.75"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-freebsd-x64/-/rsapi-freebsd-x64-0.0.75.tgz#f27a5bd8f5a5564b02606fcb28ef61300c6d6bea"
-  integrity sha512-TSlHnH1SivUkfLbNu0AyxiGuk1lBJ0cHkj9Ifc+s4WZhrVvujxykOib6OMoN7Yj1+SHO3MzOvVYXeLrJOH5l0g==
+"@logseq/rsapi-freebsd-x64@0.0.76":
+  version "0.0.76"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-freebsd-x64/-/rsapi-freebsd-x64-0.0.76.tgz#e5ad91bbaa55f1de28e0ab8a14b2dce7b0bac33d"
+  integrity sha512-GQf517+cUGJtXccAPRfnWCiEXMtp7eOjL95Z69z+hNGLBeIYPgywpcPFuJzeU1gwnwNm9jkZ+eoCzOo4icovtg==
 
-"@logseq/rsapi-linux-arm64-gnu@0.0.75":
-  version "0.0.75"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-linux-arm64-gnu/-/rsapi-linux-arm64-gnu-0.0.75.tgz#905e205eca1decb08ee86ac3a8292524745962f4"
-  integrity sha512-6vw7U8Bb1KNYQqaTQYPpy0ja5UwMQOkfbEh3HK2t+YmLTGObvyGv11HLSEID7XLEuL97h6BU7dHSnhTxoglZZQ==
+"@logseq/rsapi-linux-arm64-gnu@0.0.76":
+  version "0.0.76"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-linux-arm64-gnu/-/rsapi-linux-arm64-gnu-0.0.76.tgz#1e4dc52eb2968329af7e9259ed622cabf393e8d3"
+  integrity sha512-YfnlhCb0IxDzwyj+yK8OUrhGtkhSxgajJ74lU3z5Z9onywGIj2E8skFxFbyh6uZMkwIlITfz6Kh3OrZUNCF2+g==
 
-"@logseq/rsapi-linux-x64-gnu@0.0.75":
-  version "0.0.75"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-linux-x64-gnu/-/rsapi-linux-x64-gnu-0.0.75.tgz#f16f3fc784de0a853e15b995d0c056dbe0711229"
-  integrity sha512-ly2xhXe1oJLmwSS9R7vnKa9Ml+P4nbu/zFGqtA3LzH9hbN2naqgP0TlUlAe3OcMKeOrRn1FuwV9aeEjySlh4vQ==
+"@logseq/rsapi-linux-x64-gnu@0.0.76":
+  version "0.0.76"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-linux-x64-gnu/-/rsapi-linux-x64-gnu-0.0.76.tgz#69a1ad7e2b548a6e04b485cccc2b6d24e632717f"
+  integrity sha512-Q5RC5iyGcG/EWGU+zgHLXIGs7SKIZlT1smpmtJvXhjnKgd0j2vJtbdudi4sRxPomuquw+xaqdio2pvVO3OCRHA==
 
-"@logseq/rsapi-win32-x64-msvc@0.0.75":
-  version "0.0.75"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-win32-x64-msvc/-/rsapi-win32-x64-msvc-0.0.75.tgz#7e445b4c3a5c3e3b7b393158a36d1a5ee61a7700"
-  integrity sha512-A+eS4Lj8ZJMoY+tCFcSku+/5bXxpXvX8cG2Vb/TBjELaSTD6zNUWUonpEmu/PQyJEaVBAEf6Tl9FAEL6Q95bmw==
+"@logseq/rsapi-win32-x64-msvc@0.0.76":
+  version "0.0.76"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-win32-x64-msvc/-/rsapi-win32-x64-msvc-0.0.76.tgz#79dedcbad0603ccb6f5612982cd18ce5fd7bd4a9"
+  integrity sha512-X+CFXZi7xuSTdbl2l6GDgVvSVAaBaZwZw40Glc97fePfrAoAdvmkea18Ym0HwOZct3jcQUiEcCelKxwA8j5MFQ==
 
-"@logseq/rsapi@0.0.75":
-  version "0.0.75"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi/-/rsapi-0.0.75.tgz#0561a58057af112817f9b6aa496446a5eac2e31e"
-  integrity sha512-+cspXIrm0+8Exjnw+2bAzzwFA7HII5i5nmAIOeQ9dCHr0Bp1I0Kw5ledLBxcYt/wVvH37swiDjk69/WVRXX2sg==
+"@logseq/rsapi@0.0.76":
+  version "0.0.76"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi/-/rsapi-0.0.76.tgz#67d3d44e540a6b89f0df0b7c0e2097692229c099"
+  integrity sha512-ELoILQnHHnHLpKiFJZ/c9buapmHktjh/KfyzIEdwTb0bibeuLOS+FbUviaLfNvvn4XkQQUBrO3Ei4M2ivEZUzQ==
   optionalDependencies:
-    "@logseq/rsapi-darwin-arm64" "0.0.75"
-    "@logseq/rsapi-darwin-x64" "0.0.75"
-    "@logseq/rsapi-freebsd-x64" "0.0.75"
-    "@logseq/rsapi-linux-arm64-gnu" "0.0.75"
-    "@logseq/rsapi-linux-x64-gnu" "0.0.75"
-    "@logseq/rsapi-win32-x64-msvc" "0.0.75"
+    "@logseq/rsapi-darwin-arm64" "0.0.76"
+    "@logseq/rsapi-darwin-x64" "0.0.76"
+    "@logseq/rsapi-freebsd-x64" "0.0.76"
+    "@logseq/rsapi-linux-arm64-gnu" "0.0.76"
+    "@logseq/rsapi-linux-x64-gnu" "0.0.76"
+    "@logseq/rsapi-win32-x64-msvc" "0.0.76"
 
 "@malept/cross-spawn-promise@^1.0.0", "@malept/cross-spawn-promise@^1.1.0":
   version "1.1.1"

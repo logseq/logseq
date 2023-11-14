@@ -24,7 +24,6 @@
 (s/def :document/mode? boolean?)
 (s/def :ui/shortcut-tooltip? boolean?)
 (s/def :ui/recent-pages map?)
-(s/def :ui/recent-search map?)
 (s/def :copy/export-block-text-indent-style string?)
 (s/def :copy/export-block-text-remove-options set?)
 (s/def :copy/export-block-text-other-options map?)
@@ -49,7 +48,6 @@
             :ui/theme
             :ui/system-theme?
             :ui/recent-pages
-            :ui/recent-search
             ::lsp-core-enabled
             ::instrument-disabled
             ::ls-pdf-area-is-dashed

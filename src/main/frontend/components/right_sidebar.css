@@ -19,6 +19,7 @@ html[data-theme=light] {
   margin-top: -8px;
   padding-bottom: 150px;
   height: calc(100vh - 48px);
+  background-color: or(--ls-right-ridebar-color, --lx-gray-01, --ls-secondary-background-color, #d8e1e8);
 }
 
 
@@ -28,7 +29,11 @@ html[data-theme=light] a.toggle:hover {
 
 .cp__header a, .cp__header button {
     opacity: 1;
-    color: var(--ls-header-button-background);
+    color: or(--ls-header-button-text-color, --lx-gray-11, --ls-header-button-background);
+}
+
+.cp__header a:hover, .cp__header button:hover, .cp__right-sidebar-topbar button:hover {
+    color: or(--ls-header-button-text-color-hover, --lx-gray-12, --ls-header-button-background);
 }
 
 .cp__right-sidebar-topbar {

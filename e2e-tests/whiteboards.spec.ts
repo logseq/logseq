@@ -21,7 +21,7 @@ test('should display onboarding tour', async ({ page }) => {
   await page.click('.nav-header .whiteboard')
 
   await expect(page.locator('.cp__whiteboard-welcome')).toBeVisible()
-  await page.click('.cp__whiteboard-welcome button.bg-gray-600')
+  await page.click('.cp__whiteboard-welcome button.skip-welcome')
   await expect(page.locator('.cp__whiteboard-welcome')).toBeHidden()
 })
 

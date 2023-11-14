@@ -7,9 +7,8 @@
             [frontend.components.page :as page]
             [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
-            [frontend.components.search :as search]
             [frontend.components.settings :as settings]
-            [frontend.components.whiteboard :as whiteboard] 
+            [frontend.components.whiteboard :as whiteboard]
             [frontend.extensions.zotero :as zotero]
             [frontend.components.bug-report :as bug-report]
             [frontend.components.user.login :as login]))
@@ -44,10 +43,6 @@
     {:name :file
      :view file/file}]
 
-   ["/search/:q"
-    {:name :search
-     :view search/more}]
-
    ["/page/:name"
     {:name :page
      :view page/page}]
@@ -81,8 +76,8 @@
      :view bug-report/bug-report}]
 
    ["/bug-report-tool/:tool"
-     {:name :bug-report-tools
-      :view bug-report/bug-report-tool-route}]
+    {:name :bug-report-tools
+     :view bug-report/bug-report-tool-route}]
 
    ["/all-journals"
     {:name :all-journals

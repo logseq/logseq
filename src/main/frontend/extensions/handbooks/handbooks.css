@@ -95,7 +95,7 @@
         @apply leading-none flex-1;
 
         > strong {
-          @apply font-medium text-sm pt-0.5 pb-[1px] opacity-90 leading-5 dark:text-gray-5;
+          @apply font-medium text-sm pt-0.5 pb-[1px] opacity-90 leading-5 dark:text-gray-50;
         }
 
         > span {

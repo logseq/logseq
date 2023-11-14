@@ -7,6 +7,7 @@
             [clojure.string :as string]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
+            [frontend.colors :as colors]
             [frontend.mobile.util :as mobile-util]
             [frontend.storage :as storage]
             [frontend.spec.storage :as storage-spec]
@@ -54,7 +55,7 @@
       :journals-length                       3
 
       :search/q                              ""
-      :search/mode                           :global ;; inner page or full graph? {:page :global}
+      :search/mode                           nil ; nil -> global mode, :graph -> add graph filter, etc.
       :search/result                         nil
       :search/graph-filters                  []
       :search/engines                        {}
@@ -77,20 +78,20 @@
       ;; left sidebar
       :ui/navigation-item-collapsed?         {}
       :ui/recent-pages                       (or (storage/get :ui/recent-pages) {})
-      :ui/recent-search                      (or (storage/get :ui/recent-search) {})
 
      ;; right sidebar
-     :ui/handbooks-open?                    false
-     :ui/help-open?                         false
-     :ui/fullscreen?                        false
-     :ui/settings-open?                     false
-     :ui/sidebar-open?                      false
-     :ui/sidebar-width                      "40%"
-     :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
-     :ui/theme                              (or (storage/get :ui/theme) "light")
-     :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
-     :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
-     :ui/wide-mode?                         (storage/get :ui/wide-mode)
+      :ui/handbooks-open?                    false
+      :ui/help-open?                         false
+      :ui/fullscreen?                        false
+      :ui/settings-open?                     false
+      :ui/sidebar-open?                      false
+      :ui/sidebar-width                      "40%"
+      :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
+      :ui/theme                              (or (storage/get :ui/theme) "light")
+      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
+      :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
+      :ui/wide-mode?                         (storage/get :ui/wide-mode)
+      :ui/radix-color                        (storage/get :ui/radix-color)
 
       ;; ui/collapsed-blocks is to separate the collapse/expand state from db for:
       ;; 1. right sidebar
@@ -230,11 +231,11 @@
       :plugin/focused-settings               nil ;; plugin id
 
      ;; pdf
-     :pdf/system-win?                       false
-     :pdf/current                           nil
-     :pdf/ref-highlight                     nil
-     :pdf/block-highlight-colored?          (or (storage/get "ls-pdf-hl-block-is-colored") true)
-     :pdf/auto-open-ctx-menu?               (not= false (storage/get "ls-pdf-auto-open-ctx-menu"))
+      :pdf/system-win?                       false
+      :pdf/current                           nil
+      :pdf/ref-highlight                     nil
+      :pdf/block-highlight-colored?          (or (storage/get "ls-pdf-hl-block-is-colored") true)
+      :pdf/auto-open-ctx-menu?               (not= false (storage/get "ls-pdf-auto-open-ctx-menu"))
 
       ;; all notification contents as k-v pairs
       :notification/contents                 {}
@@ -996,10 +997,6 @@ Similar to re-frame subscriptions"
   [range]
   (set-state! :editor/cursor-range range))
 
-(defn set-q!
-  [value]
-  (set-state! :search/q value))
-
 (defn set-search-mode!
   [value]
   (set-state! :search/mode value))
@@ -1490,7 +1487,7 @@ Similar to re-frame subscriptions"
    (set-modal! modal-panel-content
                {:fullscreen? false
                 :close-btn?  true}))
-  ([modal-panel-content {:keys [id label payload fullscreen? close-btn? close-backdrop? center?
+  ([modal-panel-content {:keys [id label payload fullscreen? close-btn? close-backdrop? center? panel?
                                 container-overflow-visible? style]}]
    (let [opened? (modal-opened?)
          style (if container-overflow-visible?
@@ -1511,6 +1508,7 @@ Similar to re-frame subscriptions"
               :modal/panel-content modal-panel-content
               :modal/payload payload
               :modal/fullscreen? fullscreen?
+              :modal/panel? (if (boolean? panel?) panel? true)
               :modal/close-btn? close-btn?
               :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)
               :modal/style style)))
@@ -1907,15 +1905,6 @@ Similar to re-frame subscriptions"
   [v]
   (set-state! [:ui/recent-pages (get-current-repo)] v)
   (storage/set :ui/recent-pages (:ui/recent-pages @state)))
-
-(defn get-recent-search
-  []
-  (get-in @state [:ui/recent-search (get-current-repo)]))
-
-(defn set-recent-search!
-  [v]
-  (set-state! [:ui/recent-search (get-current-repo)] v)
-  (storage/set :ui/recent-search (:ui/recent-search @state)))
 
 (defn get-export-block-text-remove-options []
   (:copy/export-block-text-remove-options @state))
@@ -2329,6 +2318,28 @@ Similar to re-frame subscriptions"
    (rum/derived-atom [(rum/cursor-in state [repo :restore/unloaded-blocks])] [::block-unloaded repo block-uuid]
      (fn [s]
        (contains? s (str block-uuid))))))
+
+(defn get-color-accent []
+  (get @state :ui/radix-color))
+
+(defn set-color-accent! [color]
+  (swap! state assoc :ui/radix-color color)
+  (storage/set :ui/radix-color color)
+  (colors/set-radix color))
+
+(defn unset-color-accent! []
+  (swap! state assoc :ui/radix-color nil)
+  (storage/remove :ui/radix-color)
+  (colors/unset-radix))
+
+(defn cycle-color! []
+  (let [current-color (get-color-accent)
+        next-color (->> (cons nil colors/color-list)
+                        (drop-while #(not= % current-color))
+                        (second))]
+    (if next-color
+      (set-color-accent! next-color)
+      (unset-color-accent!))))
 
 (defn handbook-open?
   []

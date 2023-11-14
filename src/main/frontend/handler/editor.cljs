@@ -205,6 +205,7 @@
 
 (defn open-block-in-sidebar!
   [block-id]
+  ; (assert (uuid? block-id) "frontend.handler.editor/open-block-in-sidebar! expects block-id to be of type uuid")
   (when block-id
     (when-let [block (db/entity (if (number? block-id) block-id [:block/uuid block-id]))]
       (let [page? (nil? (:block/page block))]
@@ -1259,7 +1260,7 @@
 
 (defn save-block!
   ([repo block-or-uuid content]
-    (save-block! repo block-or-uuid content {}))
+   (save-block! repo block-or-uuid content {}))
   ([repo block-or-uuid content {:keys [properties] :as opts}]
    (let [block (if (or (uuid? block-or-uuid)
                        (string? block-or-uuid))

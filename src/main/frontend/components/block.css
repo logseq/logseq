@@ -180,12 +180,12 @@
 }
 
 .block-children-left-border:hover {
-  background-color: var(--ls-primary-text-color);
+  background-color: or(--ls-block-left-color, --lx-gray-11, --ls-primary-text-color);
 }
 
 .block-children {
   border-left: 1px solid;
-  border-left-color: var(--ls-guideline-color, #ddd);
+  border-left-color: or(--ls-guideline-color, --lx-gray-04-alpha, --ls-guideline-color, #ddd) !important;
 
   padding-top: 2px;
   padding-bottom: 3px;
@@ -297,10 +297,10 @@
 }
 
 .page-ref {
-  color: var(--ls-link-ref-text-color);
+  color: or(--ls-page-ref-text-color, --lx-accent-11, --ls-link-ref-text-color);
 
   &:hover {
-    color: var(--ls-link-ref-text-hover-color);
+    color: or(--ls-page-ref-text-color-hover, --lx-accent-12, --ls-link-ref-text-hover-color);
   }
 }
 
@@ -478,7 +478,10 @@
 }
 
 .color-level {
-  background-color: var(--color-level-1);
+  background-color: or(--ls-right-sidebar-content-background, --lx-gray-02, --color-level-1);
+  .dark & {
+    background-color: or(--ls-right-sidebar-content-background, --lx-gray-01, --color-level-1);
+  }
 
   & .color-level {
     background-color: var(--color-level-2);
@@ -566,7 +569,7 @@
 
     font-size: 14px;
 
-    background-color: var(--ls-block-bullet-color, #394b59);
+    background-color: or(--ls-block-bullet-color, --lx-gray-07, --ls-block-bullet-color, #394b59);
     transition: transform 0.2s;
 
     > * {
@@ -576,7 +579,7 @@
 
   &:not(.typed-list) {
     &.bullet-closed {
-      background-color: var(--ls-block-bullet-border-color, #ced9e0);
+      background-color: or(--ls-bullet-closed-background, --lx-gray-04-alpha, --ls-block-bullet-border-color, #ced9e0);
     }
   }
 
@@ -594,11 +597,12 @@
   color: var(--ls-primary-text-color);
 
   &:hover > .bullet-container .bullet {
-    transform: scale(1.4);
+    transform: scale(1.2);
+    background-color: or(--ls-buller-border-color-typed-list, --lx-gray-08, inherit) !important;
   }
 
   &:hover > .bullet-container:not(.typed-list) {
-    background-color: var(--ls-block-bullet-border-color, #ced9e0);
+    background-color: or(--ls-bullet-border-color, --lx-gray-04-alpha, --ls-block-bullet-border-color, #ced9e0);
   }
 }
 

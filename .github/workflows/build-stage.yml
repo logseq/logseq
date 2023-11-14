@@ -4,6 +4,16 @@ name: Build-Stage
 
 on:
   workflow_dispatch:
+    inputs:
+      git-ref:
+        description: "Release Git Ref (Which branch or tag to build?)"
+        required: true
+        default: "master"
+      cloudflare-project-name:
+        description: "Cloudflare pages project name"
+        required: true
+        default: "logseq-demo"
+
   release:
     types: [released]
 
@@ -20,6 +30,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c  # v3.3.0
+        with:
+          ref: ${{ github.event.inputs.git-ref }}
 
       - name: Setup Java JDK
         uses: actions/setup-java@v3
@@ -50,7 +62,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: 2553ea8236c11ea0f88de28fce1cbfee
-          projectName: 'logseq-demo'
+          projectName: ${{ github.event.inputs.cloudflare-project-name }}
           directory: 'static'
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           branch: 'production'

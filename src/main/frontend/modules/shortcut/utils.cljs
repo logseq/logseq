@@ -28,7 +28,9 @@
                     "~" "shift+`"
                     "⇧" "shift"
                     "←" "left"
-                    "→" "right"}]
+                    "→" "right"
+                    "↑"  "up"
+                    "↓"  "down"}]
       (-> binding
           (str/replace #"[;=-\[\]'\(\)\~\→\←\⇧]" #(get keynames %))
           (str/replace #"\s+" " ")
@@ -50,6 +52,8 @@
         (str/replace "shift+/" "?")
         (str/replace "left" "←")
         (str/replace "right" "→")
+        (str/replace "up" "↑")
+        (str/replace "down" "↓")
         (str/replace "shift" "⇧")
         (str/replace "open-square-bracket" "[")
         (str/replace "close-square-bracket" "]")
