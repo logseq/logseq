@@ -149,7 +149,7 @@
                                                   :icon icon})))))
      dropdown-opts)))
 
-(rum/defc choices
+(rum/defc choices < rum/reactive
   [property *property-name *property-schema]
   (let [schema (:block/schema property)
         property-type (:type schema)
@@ -157,12 +157,13 @@
         dropdown-opts {:modal-class (util/hiccup->class
                                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}]
     [:div.closed-values.flex.flex-col
-     (let [choices (keep (fn [id]
-                           (when-let [block (db/entity [:block/uuid id])]
-                             {:id (str id)
-                              :value id
-                              :content (choice-item-content property block dropdown-opts)}))
-                         values)]
+     (let [choices (doall
+                    (keep (fn [id]
+                            (when-let [block (db/sub-block (:db/id (db/entity [:block/uuid id])))]
+                              {:id (str id)
+                               :value id
+                               :content (choice-item-content property block dropdown-opts)}))
+                          values))]
        (dnd/items choices
                   {:on-drag-end (fn [new-values]
                                   (when (seq new-values)
