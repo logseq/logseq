@@ -170,7 +170,7 @@
           }
 
           .active-plan-card {
-            @apply w-full bg-gray-5 rounded-lg p-4 flex flex-col gap-2
+            @apply w-full bg-gray-500 rounded-lg p-4 flex flex-col gap-2
             dark:bg-gray-500/10;
           }
         }
@@ -181,7 +181,7 @@
           &:before {
             content: " ";
 
-            @apply w-[6px] h-[6px] bg-green-9 rounded-full overflow-hidden;
+            @apply w-[6px] h-[6px] bg-green-700 rounded-full overflow-hidden;
             @apply absolute top-2 left-1;
           }
         }
@@ -192,7 +192,7 @@
 
           .card {
             @apply flex-1 rounded-lg p-4 pt-10 relative flex flex-col gap-4
-            dark:text-gray-3;
+            dark:text-gray-300;
 
             background-color: var(--ls-tertiary-background-color);
 
