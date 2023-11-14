@@ -1,6 +1,7 @@
 (ns logseq.db.frontend.property.type
   "Provides property types including fns to validate them"
-  (:require [datascript.core :as d]))
+  (:require [datascript.core :as d]
+            [clojure.set :as set]))
 
 (def internal-builtin-schema-types
   "Valid schema :type only to be used by built-in-properties"
@@ -11,8 +12,11 @@
   [:default :number :date :checkbox :url :page :template])
 
 (def closed-values-schema-types
-  "Valid schema :type for close values"
+  "Valid schema :type for closed values"
   #{:default :number :date :url :page})
+
+(assert (set/subset? closed-values-schema-types (set user-builtin-schema-types))
+        "All closed value types are valid property types")
 
 ;; TODO:
 ;; Validate && list fixes for non-validated values when updating property schema
@@ -47,14 +51,16 @@
   {:default  [:fn
               {:error/message "should be a text or UUID"}
               text-or-uuid?]                     ; refs/tags will not be extracted
-   :number   number?
+   :number   [:fn
+              {:error/message "should be a number or UUID"}
+              (some-fn number? uuid?)]
    :date     [:fn
               {:error/message "should be a journal date"}
               logseq-page?]
    :checkbox boolean?
    :url      [:fn
-              {:error/message "should be a URL"}
-              url?]
+              {:error/message "should be a URL or UUID"}
+              (some-fn url? uuid?)]
    :page     [:fn
               {:error/message "should be a page"}
               logseq-page?]
