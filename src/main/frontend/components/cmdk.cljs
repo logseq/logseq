@@ -63,12 +63,15 @@
 
 (defn create-items [q]
   (when-not (string/blank? q)
-    [{:text "Create page"       :icon "new-page"
-      :icon-theme :gray
-      :info (str "Create page called '" q "'") :source-create :page}
-     {:text "Create whiteboard" :icon "new-whiteboard"
-      :icon-theme :gray
-      :info (str "Create whiteboard called '" q "'") :source-create :whiteboard}]))
+    (let [class? (string/starts-with? q "#")]
+      (->> [{:text (if class? "Create class" "Create page")       :icon "new-page"
+             :icon-theme :gray
+             :info (str "Create page called '" q "'") :source-create :page}
+            (when-not class?
+              {:text "Create whiteboard" :icon "new-whiteboard"
+               :icon-theme :gray
+               :info (str "Create whiteboard called '" q "'") :source-create :whiteboard})]
+           (remove nil?)))))
 
 ;; Take the results, decide how many items to show, and order the results appropriately
 (defn state->results-ordered [state search-mode]
@@ -342,16 +345,24 @@
 
 (defmethod handle-action :create [_ state _event]
   (let [item (state->highlighted-item state)
+        !input (::input state)
+        create-class? (string/starts-with? @!input "#")
         create-whiteboard? (= :whiteboard (:source-create item))
         create-page? (= :page (:source-create item))
         alt? (some-> state ::alt deref)
-        !input (::input state)]
+        class (when create-class? (string/replace @!input #"^#+" ""))]
     (cond
+      create-class? (page-handler/create! class
+                                          {:redirect? false
+                                           :create-first-block? false
+                                           :class? true})
       (and create-whiteboard? alt?) (whiteboard-handler/create-new-whiteboard-page! @!input)
       (and create-whiteboard? (not alt?)) (whiteboard-handler/create-new-whiteboard-and-redirect! @!input)
       (and create-page? alt?) (page-handler/create! @!input {:redirect? false})
       (and create-page? (not alt?)) (page-handler/create! @!input {:redirect? true}))
-    (close-unless-alt! state)))
+    (if create-class?
+      (state/pub-event! [:class/configure (db/entity [:block/name (util/page-name-sanity-lc class)])])
+      (close-unless-alt! state))))
 
 (defn- get-filter-user-input
   [input]
