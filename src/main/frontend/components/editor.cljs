@@ -4,8 +4,8 @@
              :refer [*first-command-group *matched-block-commands *matched-commands]]
             [frontend.components.block :as block]
             [frontend.components.datetime :as datetime-comp]
-            [frontend.components.search :as search]
             [frontend.components.svg :as svg]
+            [frontend.components.search :as search]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
@@ -14,6 +14,7 @@
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.handler.page :as page-handler]
             [frontend.handler.paste :as paste-handler]
+            [frontend.handler.search :as search-handler]
             [frontend.search :refer [fuzzy-search]]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
@@ -157,7 +158,7 @@
                                  (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
                                  [:div.flex.space-x-1
                                   [:div (when-not (db/page-exists? page-name) (t :new-page))]
-                                  (search/highlight-exact-query page-name q)]]
+                                  (search-handler/highlight-exact-query page-name q)]]
                                 :open?           chosen?
                                 :manual?         true
                                 :fixed-position? true

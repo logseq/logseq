@@ -198,6 +198,7 @@
 
 (defn open-block-in-sidebar!
   [block-id]
+  ; (assert (uuid? block-id) "frontend.handler.editor/open-block-in-sidebar! expects block-id to be of type uuid")
   (when block-id
     (when-let [block (db/entity (if (number? block-id) block-id [:block/uuid block-id]))]
       (let [page? (nil? (:block/page block))]
@@ -845,9 +846,9 @@
                        concat-prev-block? (boolean (and prev-block new-content))
                        transact-opts (cond->
                                       {:outliner-op :delete-blocks}
-                                       concat-prev-block?
-                                       (assoc :concat-data
-                                              {:last-edit-block (:block/uuid block)}))]
+                                      concat-prev-block?
+                                      (assoc :concat-data
+                                             {:last-edit-block (:block/uuid block)}))]
                    (outliner-tx/transact! transact-opts
                                           (if concat-prev-block?
                                             (let [prev-block' (if (seq (:block/_refs block-e))
@@ -1285,7 +1286,7 @@
 
 (defn save-block!
   ([repo block-or-uuid content]
-    (save-block! repo block-or-uuid content {}))
+   (save-block! repo block-or-uuid content {}))
   ([repo block-or-uuid content {:keys [properties] :as opts}]
    (let [block (if (or (uuid? block-or-uuid)
                        (string? block-or-uuid))
