@@ -103,23 +103,12 @@
  :help/shortcuts-triggers "Pemicu"
  :help/shortcut "Pintasan"
  :help/slash-autocomplete "Pelengkapan otomatis garis miring"
- :help/block-content-autocomplete "Pelengkapan otomatis konten blok"
  :help/reference-autocomplete "Pelengkapan otomatis referensi halaman"
  :help/block-reference "Blok referensi"
  :help/open-link-in-sidebar "Buka tautan di bilah sisi"
- :more "Lebih lanjut"
- :search/result-for "Hasil pencarian untuk "
- :search/items "item"
  :search/page-names "Nama halaman pencarian"
- :search/recent "Pencarian terbaru:"
- :search/blocks-in-page "Blok pencarian dalam halaman:"
- :search/command-palette-tip-1 "Tip:"
- :search/command-palette-tip-2 "Untuk membuka palet perintah"
- :search/cache-outdated "Cache sudah kedaluwarsa. Silakan klik tombol 'Indeks ulang' di menu tarik-turun grafik."
  :search-item/whiteboard "Papan tulis"
  :search-item/page "Halaman"
- :search-item/file "Berkas"
- :search-item/block "Blok"
  :search-item/no-result "Tidak ada hasil yang cocok"
  :help/context-menu "Blokir menu konteks"
  :help/markdown-syntax "Sintaks penurunan harga"
@@ -358,7 +347,6 @@
  :close "Tutup"
  :delete "Hapus"
  :save "Simpan"
- :reset "Atur ulang"
  :type "Jenis"
  :host "Host"
  :port "Port"
@@ -370,10 +358,7 @@
  :sync-from-local-files "Segarkan"
  :sync-from-local-files-detail "Impor perubahan dari berkas lokal"
  :sync-from-local-changes-detected "Segarkan mendeteksi dan memproses berkas yang diubah di disk Anda yang telah berbeda dari konten halaman Logseq saat ini. Lanjutkan?"
- 
- :search/publishing "Cari"
- :search "Cari atau buat halaman"
- :whiteboard/link-whiteboard-or-block "Tautkan papan tulis/halaman/blok"
+
  :whiteboard/align-left "Rata kiri"
  :whiteboard/align-center-horizontally "Rata tengah secara horizontal"
  :whiteboard/align-right "Rata kanan"
@@ -485,13 +470,10 @@
  :flashcards/modal-toggle-preview-mode "Alihkan mode pratinjau"
  :flashcards/modal-toggle-random-mode "Alihkan mode acak"
 
- :page-search "Cari di halaman ini"
- :graph-search "Cari grafik"
  :home "Beranda"
  :new-page "Halaman baru:"
  :whiteboard "Papan tulis"
  :whiteboards "Papan tulis"
- :new-whiteboard "Papan tulis baru:"
  :new-graph "Tambahkan grafik baru"
  :graph "Grafik"
  :graph/persist "Logseq sedang menyinkronkan status internal, harap tunggu beberapa detik."
@@ -605,30 +587,29 @@
  :pdf/toggle-dashed "Gaya putus-putus untuk sorotan area"
  :pdf/hl-block-colored "Label berwarna untuk blok sorotan"
  :pdf/doc-metadata "Metadata Dokumen"
- 
+
  :updater/new-version-install "Versi baru telah diunduh."
  :updater/quit-and-install "Mulai ulang untuk menginstal"
- 
+
  :paginates/pages "Total {1} halaman"
  :paginates/prev "Sebelumnya"
  :paginates/next "Berikutnya"
- 
+
  :tips/all-done "Semua Selesai!"
- 
- :command-palette/prompt "Ketik perintah"
+
  :select/default-prompt "Pilih salah satu"
  :select/default-select-multiple "Pilih satu atau beberapa"
  :select.graph/prompt "Pilih grafik"
  :select.graph/empty-placeholder-description "Tidak ada grafik yang cocok. Apakah Anda ingin menambahkan yang lain?"
  :select.graph/add-graph "Ya, tambahkan grafik lain"
- 
+
  :file-sync/other-user-graph "Grafik lokal saat ini terikat ke grafik jarak jauh pengguna lain. Jadi tidak dapat memulai sinkronisasi."
  :file-sync/graph-deleted "Grafik jarak jauh saat ini telah dihapus"
  :file-sync/rsapi-cannot-upload-err "Tidak dapat memulai sinkronisasi, harap periksa apakah waktu lokal sudah benar."
  :file-sync/connectivity-testing-failed "Pengujian koneksi jaringan gagal. Harap periksa pengaturan jaringan Anda. URL pengujian: "
- 
+
  :notification/clear-all "Hapus semua"
- 
+
  :shortcut.category/basics "Dasar"
  :shortcut.category/formatting "Pemformatan"
  :shortcut.category/navigating "Navigasi"
@@ -639,7 +620,7 @@
  :shortcut.category/others "Lainnya"
  :shortcut.category/plugins "Plugin"
  :shortcut.category/whiteboard "Papan Tulis"
- 
+
  :keymap/all "Semua"
  :keymap/disabled "Nonaktifkan"
  :keymap/unset "Tidak diatur"
@@ -658,7 +639,7 @@
  :window/restore "Pulihkan"
  :window/close "Tutup"
  :window/exit-fullscreen "Keluar dari layar penuh"
- 
+
  :header/toggle-left-sidebar "Alihkan bilah sisi kiri"
  :header/search "Cari"
  :header/more "Lainnya"
@@ -677,7 +658,6 @@
  :command.cards/toggle-answers "Kartu: tampilkan / sembunyikan jawaban/clozes"
  :command.command/run "Jalankan perintah git"
  :command.command/toggle-favorite "Tambahkan/hapus dari favorit"
- :command.command-palette/toggle "Aktifkan/matikan palet perintah"
  :command.date-picker/complete "Date picker: Pilih hari yang dipilih"
  :command.date-picker/next-day "Date picker: Pilih hari berikutnya"
  :command.date-picker/next-week "Date picker: Pilih minggu berikutnya"
@@ -762,7 +742,6 @@
  :command.go/next-journal "Buka jurnal berikutnya"
  :command.go/prev-journal "Buka jurnal sebelumnya"
  :command.go/search "Cari halaman dan blok"
- :command.go/search-in-page "Cari blok di halaman saat ini"
  :command.go/tomorrow "Buka ke esok hari"
  :command.go/whiteboards "Buka papan tulis"
  :command.graph/add "Tambahkan grafik"
@@ -785,7 +764,6 @@
  :command.ui/install-plugins-from-file "Pasang plugin dari plugins.edn"
  :command.ui/select-theme-color "Pilih warna tema yang tersedia"
  :command.ui/toggle-brackets "Alihkan tampilan tanda kurung"
- :command.ui/toggle-cards "Alihkan kartu"
  :command.ui/toggle-contents "Alihkan Konten di bilah samping"
  :command.ui/toggle-document-mode "Alihkan mode dokumen"
  :command.ui/toggle-help "Alihkan bantuan"

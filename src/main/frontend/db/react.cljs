@@ -300,26 +300,26 @@
   (when (or skip-query-time-check?
             (<= (or query-time 0) 80))
     (let [new-result (->
-                     (cond
-                       query-fn
-                       (let [result (query-fn db tx result)]
-                         (if (coll? result)
-                           (doall result)
-                           result))
+                      (cond
+                        query-fn
+                        (let [result (query-fn db tx result)]
+                          (if (coll? result)
+                            (doall result)
+                            result))
 
-                       inputs-fn
-                       (let [inputs (inputs-fn)]
-                         (apply d/q query db inputs))
+                        inputs-fn
+                        (let [inputs (inputs-fn)]
+                          (apply d/q query db inputs))
 
-                       (keyword? query)
-                       (db-utils/get-key-value graph query)
+                        (keyword? query)
+                        (db-utils/get-key-value graph query)
 
-                       (seq inputs)
-                       (apply d/q query db inputs)
+                        (seq inputs)
+                        (apply d/q query db inputs)
 
-                       :else
-                       (d/q query db))
-                     transform-fn)]
+                        :else
+                        (d/q query db))
+                      transform-fn)]
      (when-not (= new-result result)
        (set-new-result! k new-result tx)))))
 
