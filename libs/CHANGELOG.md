@@ -9,7 +9,7 @@ All notable changes to this project will be documented in this file.
 - Support api of `logseq.UI.queryElementRect: (selector: string) => Promise<DOMRectReadOnly | null>`
 - Support api of `logseq.UI.queryElementById: (id: string) => Promise<string | boolean>`
 - Support api of `logseq.UI.checkSlotValid: (slot: UISlotIdentity['slot']) => Promise<boolean>`
-- Support api of `logseq.UI.resolveThemeCssPropsVals: (props: string | Array<string>) => Promise<unkonwn>`
+- Support api of `logseq.UI.resolveThemeCssPropsVals: (props: string | Array<string>) => Promise<any>`
 - Support api of `logseq.Assets.builtInOpen(path: string): Promise<boolean | undefined>`
 
 ### Fixed
