@@ -146,7 +146,7 @@
                 (upsert-property! repo k-name (assoc property-schema :type property-type)
                                   {:property-uuid property-uuid})
                 (let [block-properties (assoc properties property-uuid values')
-                      refs (outliner-core/rebuild-block-refs block block-properties)]
+                      refs (outliner-core/rebuild-block-refs repo block block-properties)]
                   (db/transact! repo
                                 [[:db/retract (:db/id block) :block/refs]
                                  {:block/uuid (:block/uuid block)
@@ -241,7 +241,8 @@
                                         (set (remove string/blank? new-value)))
                                       new-value)
                           block-properties (assoc properties property-uuid new-value)
-                          refs (outliner-core/rebuild-block-refs block
+                          refs (outliner-core/rebuild-block-refs repo
+                                                                 block
                                                                  block-properties)]
                       (db/transact! repo
                                     [[:db/retract (:db/id block) :block/refs]
@@ -268,8 +269,11 @@
                               properties]}]
   {:pre [(uuid? property-uuid)]}
   (when-let [property (db/entity [:block/uuid property-uuid])]
-    (let [type (get-in property [:block/schema :type])]
-      (when-not (and type (:type property-schema) (not= type (:type property-schema))) ; property type changed
+    (let [type (get-in property [:block/schema :type])
+          type-changed? (and type (:type property-schema) (not= type (:type property-schema)))]
+      (when (or (not type-changed?)
+                ;; only change type if property hasn't been used yet
+                (empty? (model/get-block-property-values property-uuid)))
         (when (and (= :many (:cardinality property-schema))
                    (not= :many (:cardinality (:block/schema property))))
           ;; cardinality changed from :one to :many
@@ -349,7 +353,7 @@
                                 nil))
                          properties (:block/properties block)
                          block-properties (assoc properties property-uuid v*)
-                         refs (outliner-core/rebuild-block-refs block block-properties)]
+                         refs (outliner-core/rebuild-block-refs repo block block-properties)]
                      [[:db/retract (:db/id block) :block/refs]
                       {:block/uuid (:block/uuid block)
                        :block/properties block-properties
@@ -369,7 +373,7 @@
                    (let [origin-properties (:block/properties block)]
                      (when (contains? (set (keys origin-properties)) property-uuid)
                        (let [properties' (dissoc origin-properties property-uuid)
-                             refs (outliner-core/rebuild-block-refs block properties')
+                             refs (outliner-core/rebuild-block-refs repo block properties')
                              property (db/entity [:block/uuid property-uuid])
                              value (get origin-properties property-uuid)
                              block-value? (and (= :default (get-in property [:block/schema :type] :default))
@@ -438,7 +442,7 @@
                     properties' (update properties property-id
                                         (fn [col]
                                           (set (remove #{property-value} col))))
-                    refs (outliner-core/rebuild-block-refs block properties')]
+                    refs (outliner-core/rebuild-block-refs repo block properties')]
                 (db/transact! repo
                               [[:db/retract (:db/id block) :block/refs]
                                {:block/uuid (:block/uuid block)

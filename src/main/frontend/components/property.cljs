@@ -7,7 +7,7 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
-            [frontend.db.model :as db-model]
+            [frontend.db.model :as model]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
@@ -27,7 +27,7 @@
             [frontend.components.dnd :as dnd]
             [dommy.core :as dom]
             [frontend.components.property.closed-value :as closed-value]
-            [frontend.components.property.util :as pu-component]))
+            [frontend.components.property.util :as components-pu]))
 
 (def icon closed-value/icon)
 
@@ -58,7 +58,7 @@
                   [:a.text-sm (str "#" page-name)]))))]
          [:div.opacity-50.pointer.text-sm "Empty"])])
     (fn [{:keys [toggle-fn]}]
-      (let [classes (db-model/get-all-classes (state/get-current-repo))
+      (let [classes (model/get-all-classes (state/get-current-repo))
             options (cond->> (map (fn [[name id]]
                                     {:label name :value id})
                                   classes)
@@ -134,7 +134,7 @@
                          add-new-property?)
         class? (contains? (:block/type block) "class")
         property-type (get-in property [:block/schema :type])
-        save-property-fn (fn [] (pu-component/update-property! property @*property-name @*property-schema))
+        save-property-fn (fn [] (components-pu/update-property! property @*property-name @*property-schema))
         enable-closed-values? (contains? db-property-type/closed-values-schema-types (or property-type :default))]
     [:div.property-configure.flex.flex-1.flex-col
      {:on-mouse-down #(state/set-state! :editor/mouse-down-from-property-configure? true)
@@ -174,14 +174,17 @@
                                        :disabled disabled?
                                        :value type
                                        :selected (= type (:type @*property-schema))})))]
-         [:div.col-span-2
-          (if property-type
-            (property-type-label property-type)
+         (if (and property-type
+                  (seq (model/get-block-property-values (:block/uuid property))))
+           [:div.col-span-2
+            {:title "Type can only edited if property is not used anywhere"}
+            (property-type-label property-type)]
+           [:div.col-span-2
             (ui/select schema-types
                        (fn [_e v]
                          (let [type (keyword (string/lower-case v))]
                            (swap! *property-schema assoc :type type)
-                           (pu-component/update-property! property @*property-name @*property-schema)))))])]
+                           (components-pu/update-property! property @*property-name @*property-schema))))]))]
 
       (when-not (contains? #{:checkbox :default :template} (:type @*property-schema))
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
@@ -192,6 +195,7 @@
                          :on-change (fn []
                                       (swap! *property-schema assoc :cardinality (if many? :one :many))
                                       (save-property-fn))}))])
+
 
       (case (:type @*property-schema)
         :page
