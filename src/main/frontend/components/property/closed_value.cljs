@@ -134,9 +134,7 @@
                  (property-handler/delete-closed-value property block))
                :update-icon
                (fn [icon]
-                 (property-handler/update-property! (state/get-current-repo)
-                                                    (pu/get-pid "icon")
-                                                    icon)))))
+                 (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :icon icon)))))
      (fn [opts]
        (item-config
         property
@@ -144,9 +142,9 @@
         (assoc opts :on-save
                (fn [value icon description]
                  (upsert-closed-value! property {:id uuid
-                                                  :value value
-                                                  :description description
-                                                  :icon icon})))))
+                                                 :value value
+                                                 :description description
+                                                 :icon icon})))))
      dropdown-opts)))
 
 (rum/defc choices < rum/reactive
