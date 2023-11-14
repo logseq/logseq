@@ -78,8 +78,8 @@
   [[:block/uuid :uuid]
    [:block/created-at :int]
    [:block/updated-at :int]
-   [:block/properties {:optional true} block-properties]
    [:block/format [:enum :markdown]]
+   [:block/properties {:optional true} block-properties]
    [:block/refs {:optional true} [:set :int]]
    [:block/tags {:optional true} [:set :int]]
    [:block/tx-id {:optional true} :int]])
@@ -130,9 +130,9 @@
    [:description {:optional true} :string]
    ;; For any types except for :checkbox :default :template :enum
    [:cardinality {:optional true} [:enum :one :many]]
-   ;; closed values
+   ;; For closed values
    [:values {:optional true}  [:vector :uuid]]
-   ;; Just for :enum
+   ;; For closed values
    [:position {:optional true} :string]
    ;; For :page and :template
    [:classes {:optional true} [:set [:or :uuid :keyword]]]])
@@ -240,11 +240,12 @@
     [[:block/type [:= #{"closed value"}]]
      [:block/schema {:optional true}
       [:map
-       [:description :string]]]
+       [:value [:or :string :double]]
+       [:description {:optional true} :string]]]
      [:block/metadata
       [:map
        [:created-from-property :uuid]]]]
-    (remove #(= :block/metadata (first %)) block-attrs)
+    (remove #(#{:block/metadata :block/content} (first %)) block-attrs)
     page-or-block-attrs)))
 
 (def normal-block
