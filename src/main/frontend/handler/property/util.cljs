@@ -87,7 +87,9 @@
                 [(-> prop-ent
                      :block/name
                      keyword)
-                 (if (= :enum (get-in prop-ent [:block/schema :type]))
-                   (:block/content (db/entity [:block/uuid v]))
+                 (if (seq (get-in prop-ent [:block/schema :values])) ; closed values
+                   (when-let [block (db/entity [:block/uuid v])]
+                     (or (:block/original-name block)
+                         (get-in block [:block/schema :value])))
                    v)])))
        (into {})))

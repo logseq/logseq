@@ -140,7 +140,7 @@
   [dropdown-state _close-fn content class style-opts]
   (let [class (or class
                   (util/hiccup->class "origin-top-right.absolute.right-0.mt-2"))]
-    [:div.dropdown-wrapper
+    [:div.dropdown-wrapper.max-h-screen.overflow-y-auto
      {:style style-opts
       :class (str class " "
                   (case dropdown-state

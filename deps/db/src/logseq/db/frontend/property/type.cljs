@@ -8,7 +8,11 @@
 
 (def user-builtin-schema-types
   "Valid schema :type for users in order they appear in the UI"
-  [:default :number :date :checkbox :url :page :template :enum])
+  [:default :number :date :checkbox :url :page :template])
+
+(def closed-values-schema-types
+  "Valid schema :type for close values"
+  #{:default :number :date :url :page})
 
 ;; TODO:
 ;; Validate && list fixes for non-validated values when updating property schema
@@ -57,7 +61,6 @@
    :template [:fn
               {:error/message "should has #template"}
               logseq-template?]
-   :enum     some?                      ; the value could be anything such as number, text, url, date, page, image, video, etc.
    ;; internal usage
    :keyword  keyword?
    :map      map?

@@ -19,7 +19,8 @@
 (def general-attr-set
   (into #{} (map first) general-attrs-schema-coll))
 
-(def block-type-schema [:enum "property" "class" "whiteboard" "object" "hidden" "enum value"])
+(def block-type-schema [:enum "property" "class" "whiteboard" "object" "hidden" "closed value"])
+
 (def to-ws-op-schema
   [:multi {:dispatch first :decode/string #(update % 0 keyword)}
    [:move
@@ -118,10 +119,6 @@
 
 (def data-from-ws-coercer (m/coercer data-from-ws-schema mt/string-transformer))
 (def data-from-ws-validator (m/validator data-from-ws-schema))
-
-
-
-
 
 (def data-to-ws-schema
   (mu/closed-schema
