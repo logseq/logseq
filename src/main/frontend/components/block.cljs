@@ -541,6 +541,8 @@
         tag? (:tag? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
         untitled? (model/untitled-page? page-name)]
+        ; gradient-styles (state/sub-color-gradient-text-styles :09)]
+
     [:a
      {:tabIndex "0"
       :class (cond-> (if tag? "tag" "page-ref")
@@ -689,14 +691,16 @@
           inner (page-inner config
                             page-name-in-block
                             page-name
-                            redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?)]
+                            redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?)
+          modal? (:modal/show? @state/state)]
       (cond
         (:breadcrumb? config)
         (or (:block/original-name page)
             (:block/name page))
 
         (and (not (util/mobile?))
-             (not preview?))
+             (not preview?)
+             (not modal?))
         (page-preview-trigger (assoc config :children inner) page-name)
 
         :else
@@ -918,7 +922,10 @@
                       ;; default open block page
                       :else (route-handler/redirect-to-page! id))))))}
 
-           (if (and (not (util/mobile?)) (not (:preview? config)) (nil? block-type))
+           (if (and (not (util/mobile?))
+                    (not (:preview? config))
+                    (not (:modal/show? @state/state))
+                    (nil? block-type))
              (ui/tippy {:html        (fn []
                                        [:div.tippy-wrapper.overflow-y-auto.p-4
                                         {:style {:width      735
@@ -2289,12 +2296,12 @@
                 :data-type (name block-type)
                 :style {:width "100%" :pointer-events (when stop-events? "none")}}
 
-                (not (string/blank? (:hl-color properties)))
-                (assoc :data-hl-color (:hl-color properties))
+               (not (string/blank? (:hl-color properties)))
+               (assoc :data-hl-color (:hl-color properties))
 
-                (not block-ref?)
-                (assoc mouse-down-key (fn [e]
-                                        (block-content-on-mouse-down e block block-id content edit-input-id))))]
+               (not block-ref?)
+               (assoc mouse-down-key (fn [e]
+                                       (block-content-on-mouse-down e block block-id content edit-input-id))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :class (when selected? "select-none")
@@ -2851,20 +2858,20 @@
        :blockid (str uuid)
        :haschild (str (boolean has-child?))}
 
-       level
-       (assoc :level level)
+      level
+      (assoc :level level)
 
-       (not slide?)
-       (merge attrs)
+      (not slide?)
+      (merge attrs)
 
-       (or reference? embed?)
-       (assoc :data-transclude true)
+      (or reference? embed?)
+      (assoc :data-transclude true)
 
-       embed?
-       (assoc :data-embed true)
+      embed?
+      (assoc :data-embed true)
 
-       custom-query?
-       (assoc :data-query true))
+      custom-query?
+      (assoc :data-query true))
 
      (when (and ref? breadcrumb-show?)
        (breadcrumb config repo uuid {:show-page? false
@@ -3479,9 +3486,7 @@
                    page (db/entity (:db/id page))
                    blocks (tree/non-consecutive-blocks->vec-tree blocks)
                    parent-blocks (group-by :block/parent blocks)]
-               [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                            (:ref? config)
-                            (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
+               [:div.custom-query-page-result.color-level {:key (str "page-" (:db/id page))}
                 (ui/foldable
                  [:div
                   (page-cp config page)
@@ -3507,9 +3512,7 @@
                    page (db/entity (:db/id page))
                    ;; FIXME: parents need to be sorted
                    parent-blocks (group-by :block/parent page-blocks)]
-               [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                            (:ref? config)
-                            (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
+               [:div.my-2 {:key (str "page-" (:db/id page))}
                 (ui/foldable
                  [:div
                   (page-cp config page)
@@ -3537,9 +3540,7 @@
               (let [alias? (:block/alias? page)
                     page (db/entity (:db/id page))
                     whiteboard? (model/whiteboard-page? page)]
-                [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                             (:ref? config)
-                             (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
+                [:div.my-2 {:key (str "page-" (:db/id page))}
                  (ui/foldable
                   [:div
                    (page-cp config page)

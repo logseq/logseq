@@ -304,10 +304,10 @@
             :on-pointer-down handle-pointer-down}
       child]]))
 
-(rum/defc table-gradient-accent [{:keys [color]}]
+(rum/defc table-gradient-accent [{:keys [color color-gradient linear-gradient]}]
   [:div.rounded-t.h-2.-ml-px.-mt-px.-mr-px 
-   {:style {:grid-column "1 / -1" :order -999} 
-    :class (str "grad-bg-" color "-9")
+   {:style {:grid-column "1 / -1" :order -999 
+            :background (linear-gradient color :09 color-gradient)}     
     :data-testid "v2-table-gradient-accent"}])
 
 (rum/defc table-header-row [handle-cell-width-change cells {:keys [cell-col-map] :as opts}]
@@ -372,7 +372,7 @@
      children]))
 
 (rum/defc root
-  [{:keys [data] :as _props} {:keys [block] :as context}]
+  [{:keys [data] :as _props} {:keys [block color-accent color-gradient linear-gradient] :as context}]
   (let [;; In order to highlight cells in the same row or column of the hovered cell, 
         ;; we need to know the row and column that the cursor is in
         [[_cell-hover-x _cell-hover-y :as cell-hover] set-cell-hover] (rum/use-state [])
@@ -390,7 +390,7 @@
         ;; Most of the config options will be repeated and reused throughout the table, so store 
         ;; all of it's state in a single map for consistency
         table-opts {; user configurable properties (sometimes with defaults)
-                    :color    (get-view-prop* :logseq.color)
+                    :color    (get-view-prop* :logseq.color color-accent)
                     :headers  (get-view-prop* :logseq.table.headers "none")
                     :borders? (get-view-prop* :logseq.table.borders true)
                     :compact? (get-view-prop* :logseq.table.compact false)
@@ -400,6 +400,8 @@
                     :columns  (get-columns block data)
 
                     ; non configurable properties
+                    :color-gradient color-gradient
+                    :linear-gradient linear-gradient
                     :cell-hover cell-hover
                     :cell-focus cell-focus
                     :cursor (or (not-empty cell-focus) (not-empty cell-hover))
@@ -447,7 +449,7 @@
                                      :table-underflow? table-underflow?
                                      :cell-col-map cell-col-map)]
     ; (js/console.log "shui table opts context" (clj->js context)) 
-    ; (js/console.log "shui table opts" (clj->js table-opts)) 
+    (js/console.log "shui table opts" (clj->js table-opts)) 
     ; (js/console.log "shui table opts" (pr-str table-opts)) 
     ;; Scrollable Container: if the table is larger than the container, manage the scrolling effects here
     (table-scrollable-overflow handle-root-width-change

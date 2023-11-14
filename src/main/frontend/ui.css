@@ -26,7 +26,7 @@
           }
         }
       }
-      
+
       &:hover, &.chosen {
         .has-help small {
           visibility: visible;
@@ -35,7 +35,7 @@
 
       &:not(.chosen):hover {
         background-color: unset !important;
-        color: var(--ls-primary-text-color);
+        color: or(--ls-autocomplete-color-hover, --lx-gray-12, --ls-primary-text-color);
       }
     }
   }
@@ -49,7 +49,8 @@
 
 .ui__ac-group-name {
   @apply p-2 text-xs;
-  color: var(--ls-block-ref-link-text-color);
+  color: or(--ls-dropdown-title-color, --lx-gray-11-alpha, --ls-block-ref-link-text-color);
+  background-color: or(--ls-dropdown-title-background, --lx-gray-03);
 }
 
 .search-all #ui__ac-inner {
@@ -70,8 +71,8 @@
   }
 
   .notification-area {
-    background-color: var(--ls-tertiary-background-color, #fff);
-    color: var(--ls-primary-text-color);
+    background-color: or(--logseq-of-notification-background, --lx-gray-04, --ls-tertiary-background-color, #fff);
+    color: or(--ls-notification-text-color, --lx-gray-11, --ls-primary-text-color);
   }
 }
 
@@ -106,15 +107,16 @@
   }
 
   &-overlay div {
-    background-image: linear-gradient(to bottom, var(--ls-primary-background-color), var(--ls-quaternary-background-color));
+    --from: or(--ls-modal-overlay-gradient-start, --lx-gray-03, --ls-primary-background-color);
+    --to: or(--ls-modal-overlay-gradient-end, --lx-gray-06, --ls-quaternary-background-color);
+    background-image: linear-gradient(to bottom, var(--from), var(--to));
   }
 
   &-panel {
-    @apply relative rounded-md shadow-xl border;
-    border-color: var(--ls-border-color);
+    @apply relative rounded-md shadow-xl border-none;
 
     overflow: hidden;
-    background: var(--ls-secondary-background-color);
+    background: or(--ls-modal-panel-color, --lx-gray-04, --ls-secondary-background-color);
 
     .panel-content {
       overflow-y: auto;
@@ -273,70 +275,9 @@ html.is-mobile {
   }
 }
 
-.ui__button {
-  @apply inline-flex items-center px-3 py-2 border border-transparent
-  text-sm leading-4 font-medium rounded-[6px] text-white
-  focus:outline-none transition ease-in-out duration-150;
-
-  &.bg-gray-600 {
-    color: var(--ls-primary-text-color);
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  &:hover:not([disabled]) {
-    opacity: 0.8;
-  }
-
-  &.is-link {
-    @apply text-white;
-  }
-
-  &[intent^='logseq'] {
-    @apply focus:border-gray-500 dark:hover:text-gray-200;
-
-    color: var(--ls-primary-text-color);
-    background: var(--ls-secondary-background-color);
-
-    &:hover {
-      color: var(--ls-link-text-color);
-    }
-  }
-
-  &[intent='logseq-1'] {
-    background: var(--ls-tertiary-background-color);
-  }
-
-  &[intent='logseq-2'] {
-    background: var(--ls-quaternary-background-color);
-  }
-
-  &[intent='link'], &[intent='border-link'] {
-    @apply focus:border-gray-500 dark:hover:text-gray-200;
-
-    color: var(--ls-primary-text-color);
-    background: transparent;
-
-    &:hover {
-      color: var(--ls-link-text-color);
-    }
-  }
-
-  &[intent='border-link'] {
-    border: 1px solid;
-  }
-
-  &.is-small {
-    @apply px-2.5 py-1;
-  }
-}
-
 .dropdown-wrapper {
-  background-color: var(--ls-primary-background-color, #fff);
-  border: 1px solid var(--ls-tertiary-background-color);
+  background-color: or(--ls-dropdown-background, --lx-gray-03, --ls-primary-background-color, #fff);
+  border: 1px solid or(--ls-dropdown-border-color, --lx-gray-05, --ls-tertiary-background-color);
   min-width: 12rem;
   border-radius: 6px;
 }
@@ -358,10 +299,10 @@ html.is-mobile {
   @apply block w-full pl-3 pr-10 py-2 text-base leading-6 rounded
   border-gray-300 focus:outline-none sm:text-sm sm:leading-5;
 
-  background-color: var(--ls-primary-background-color, transparent);
+  background-color: or(--ls-form-select-background-color, --lx-gray-03, --ls-primary-background-color, transparent);
   background-repeat: no-repeat;
   border-width: 1px;
-  border-color: var(--ls-border-color);
+  border-color: or(--ls-form-select-border-color, --lx-gray-07, --ls-border-color);
 
   &.is-small {
     @apply pl-2 py-1.5 sm:leading-4 sm:text-xs;
@@ -373,7 +314,7 @@ html.is-mobile {
   sm:text-sm sm:leading-5 rounded;
 
   border-width: 1px;
-  border-color: var(--ls-border-color);
+  border-color: or(--ls-form-input-border-color, --lx-gray-07, --ls-border-color);
 
   &:focus {
     box-shadow: 0 0 0 2px rgba(164, 202, 254, 0.45);
@@ -393,7 +334,7 @@ html.is-mobile {
 }
 
 .bg-quaternary {
-  background-color: var(--ls-quaternary-background-color);
+  background-color: or(--ls-bg-quaternary, --lx-gray-06, --ls-quaternary-background-color);
 }
 
 .ui__icon {
@@ -406,9 +347,9 @@ html.is-mobile {
   width: 24px;
   height: 24px;
   flex-shrink: 0;
-  border-color: var(--ls-primary-background-color);
+  border-color: or(--ls-type-icon-border-color, --lx-gray-03, --ls-primary-background-color);
   overflow: hidden;
-  color: var(--ls-primary-text-color);
+  color: or(--ls-type-icon-text-color, --lx-gray-12, --ls-primary-text-color);
 
   .ti,
   .tie {
@@ -417,11 +358,19 @@ html.is-mobile {
 
   &:before {
     @apply block absolute inset-0 ;
-    background: var(--ls-primary-background-color);
+    background: or(--ls-type-icon-before-color, --lx-gray-03, --ls-primary-background-color);
     content: " ";
   }
 }
 
 .ui__radio-list {
   @apply grid grid-flow-col gap-2;
+}
+
+.ui__toggle-background-on {
+  background: or(--ls-toggle-on-background, --lx-accent-09, --ls-button-background);
+}
+
+.ui__toggle-background-off {
+  background: or(--ls-toggle-off-background, --lx-gray-08, rgb(212, 212, 212));
 }
