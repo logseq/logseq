@@ -2,9 +2,9 @@ import { Page, Locator, ElementHandle } from '@playwright/test'
 import { randomString } from './basic'
 
 export async function closeSearchBox(page: Page): Promise<void> {
-    await page.keyboard.press("Escape") // escape (potential) search box typing
+    await page.keyboard.press("Escape", { delay: 50 }) // escape (potential) search box typing
     await page.waitForTimeout(500)
-    await page.keyboard.press("Escape") // escape modal
+    await page.keyboard.press("Escape", { delay: 50 }) // escape modal
 }
 
 export async function createRandomPage(page: Page) {
@@ -28,7 +28,7 @@ export async function createPage(page: Page, page_name: string) {// Click #searc
     await page.click('#search-button')
     // Fill [placeholder="What are you looking for?"]
     await page.fill('[placeholder="What are you looking for?"]', page_name)
-    await page.keyboard.press('Enter', { delay: 50 })
+    await page.keyboard.press('Enter', { delay: 100 })
     // wait for textarea of first block
     await page.waitForSelector('textarea >> nth=0', { state: 'visible' })
 
