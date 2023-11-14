@@ -139,12 +139,13 @@
                            (when multiple-choices?
                              [:div.p-4 (ui/button "Apply"
                                                   {:small? true
-                                                   :on-mouse-down (fn [e]
-                                                                    (util/stop e)
-                                                                    (when @*toggle (@*toggle))
-                                                                    (when (fn? on-apply)
-                                                                      (on-apply selected-choices)
-                                                                      (when close-modal? (state/close-modal!))))})])]]
+                                                   :button-props
+                                                   {:on-mouse-down (fn [e]
+                                                                     (util/stop e)
+                                                                     (when @*toggle (@*toggle))
+                                                                     (when (fn? on-apply)
+                                                                       (on-apply selected-choices)
+                                                                       (when close-modal? (state/close-modal!))))}})])]]
     (when (fn? tap-*input-val)
       (tap-*input-val input))
     [:div.cp__select
