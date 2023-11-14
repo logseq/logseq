@@ -225,6 +225,13 @@
   [pred coll]
   (first (filter pred coll)))
 
+(defn find-index
+  "Find first index of an element in list"
+  [pred-or-val coll]
+  (let [pred (if (fn? pred-or-val) pred-or-val #(= pred-or-val %))]
+    (reduce-kv #(if (pred %3) (reduced %2) %1) -1
+               (cond-> coll (list? coll) (vec)))))
+
 ;; (defn format
 ;;   [fmt & args]
 ;;   (apply gstring/format fmt args))
@@ -986,7 +993,7 @@
      (when s
        (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
          (if remove-accents?
-           (removeAccents  normalize-str)
+           (removeAccents normalize-str)
            normalize-str)))))
 
 #?(:cljs
@@ -1025,17 +1032,6 @@
                      (d/set-attr! :href style)
                      (d/set-attr! :media "all"))]
            (d/append! parent-node link))))))
-
-(defn ->platform-shortcut
-  [keyboard-shortcut]
-  (let [result (or keyboard-shortcut "")
-        result (string/replace result "left" "←")
-        result (string/replace result "right" "→")]
-    (if mac?
-      (-> result
-          (string/replace "Ctrl" "Cmd")
-          (string/replace "Alt" "Opt"))
-      result)))
 
 (defn remove-common-preceding
   [col1 col2]
@@ -1286,10 +1282,6 @@
   (re-matches (re-pattern (regex-escape "$u^8(d)+w.*[dw]d?")) "$u^8(d)+w.*[dw]d?"))
 
 #?(:cljs
-   (defn meta-key-name []
-     (if mac? "Cmd" "Ctrl")))
-
-#?(:cljs
    (defn meta-key? [e]
      (if mac?
        (gobj/get e "metaKey")
@@ -1434,6 +1426,23 @@
      (p/create
       (fn [resolve]
         (load url resolve)))))
+
+#?(:cljs
+   (defn css-load$
+     ([url] (css-load$ url nil))
+     ([url id]
+      (p/create
+       (fn [resolve reject]
+         (let [id (str "css-load-" (or id url))]
+           (if-not (gdom/getElement id)
+             (let [^js link (js/document.createElement "link")]
+               (set! (.-id link) id)
+               (set! (.-rel link) "stylesheet")
+               (set! (.-href link) url)
+               (set! (.-onload link) resolve)
+               (set! (.-onerror link) reject)
+               (.append (.-head js/document) link))
+             (resolve))))))))
 
 #?(:cljs
    (defn copy-image-to-clipboard

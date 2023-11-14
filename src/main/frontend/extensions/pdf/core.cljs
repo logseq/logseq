@@ -121,63 +121,66 @@
   ;;page-bounding (and highlight (pdf-utils/get-page-bounding viewer (:page highlight)))
   ;;])
 
-  (let [*el         (rum/use-ref nil)
-        ^js cnt     (.-container viewer)
+  (let [*el (rum/use-ref nil)
+        ^js cnt (.-container viewer)
         head-height 0                                       ;; 48 temp
-        top         (- (+ (:y point) (.-scrollTop cnt)) head-height)
-        left        (+ (:x point) (.-scrollLeft cnt))
-        id          (:id highlight)
-        new?        (nil? id)
-        content     (:content highlight)
-        area?       (not (string/blank? (:image content)))
-        action-fn!  (fn [action clear?]
-                      (when-let [action (and action (name action))]
-                        (let [highlight (if (fn? highlight) (highlight) highlight)
-                              content   (:content highlight)]
-                          (case action
-                            "ref"
-                            (pdf-assets/copy-hl-ref! highlight viewer)
+        top (- (+ (:y point) (.-scrollTop cnt)) head-height)
+        left (+ (:x point) (.-scrollLeft cnt))
+        id (:id highlight)
+        new? (nil? id)
+        new-&-highlight-mode? (and @*highlight-mode? new?)
+        show-ctx-menu? (and (not new-&-highlight-mode?)
+                            (or (not selection) (and selection (state/sub :pdf/auto-open-ctx-menu?))))
+        content (:content highlight)
+        area? (not (string/blank? (:image content)))
+        action-fn! (fn [action clear?]
+                     (when-let [action (and action (name action))]
+                       (let [highlight (if (fn? highlight) (highlight) highlight)
+                             content (:content highlight)]
+                         (case action
+                           "ref"
+                           (pdf-assets/copy-hl-ref! highlight viewer)
 
-                            "copy"
-                            (do
-                              (util/copy-to-clipboard!
+                           "copy"
+                           (do
+                             (util/copy-to-clipboard!
                                (or (:text content) (pdf-utils/fix-selection-text-breakline (.toString selection)))
                                :owner-window (pdf-windows/resolve-own-window viewer))
-                              (pdf-utils/clear-all-selection))
+                             (pdf-utils/clear-all-selection))
 
-                            "link"
-                            (pdf-assets/goto-block-ref! highlight)
+                           "link"
+                           (pdf-assets/goto-block-ref! highlight)
 
-                            "del"
-                            (do
-                              (del-hl! highlight)
-                              (pdf-assets/del-ref-block! highlight)
-                              (pdf-assets/unlink-hl-area-image$ viewer (:pdf/current @state/state) highlight))
+                           "del"
+                           (do
+                             (del-hl! highlight)
+                             (pdf-assets/del-ref-block! highlight)
+                             (pdf-assets/unlink-hl-area-image$ viewer (:pdf/current @state/state) highlight))
 
-                            "hook"
-                            :dune
+                           "hook"
+                           :dune
 
-                            ;; colors
-                            (let [properties {:color action}]
-                              (if-not id
-                                ;; add highlight
-                                (let [highlight (merge highlight
-                                                       {:id         (pdf-utils/gen-uuid)
-                                                        :properties properties})]
-                                  (add-hl! highlight)
-                                  (pdf-utils/clear-all-selection)
-                                  (pdf-assets/copy-hl-ref! highlight viewer))
+                           ;; colors
+                           (let [properties {:color action}]
+                             (if-not id
+                               ;; add highlight
+                               (let [highlight (merge highlight
+                                                      {:id         (pdf-utils/gen-uuid)
+                                                       :properties properties})]
+                                 (add-hl! highlight)
+                                 (pdf-utils/clear-all-selection)
+                                 (pdf-assets/copy-hl-ref! highlight viewer))
 
-                                ;; update highlight
-                                (upd-hl! (assoc highlight :properties properties)))
+                               ;; update highlight
+                               (upd-hl! (assoc highlight :properties properties)))
 
-                              (reset! *highlight-last-color (keyword action)))))
+                             (reset! *highlight-last-color (keyword action)))))
 
-                        (and clear? (js/setTimeout #(clear-ctx-menu!) 68))))]
+                       (and clear? (js/setTimeout #(clear-ctx-menu!) 68))))]
 
     (rum/use-effect!
      (fn []
-       (if (and @*highlight-mode? new?)
+       (if new-&-highlight-mode?
          ;; wait for selection cleared ...
          (js/setTimeout #(action-fn! @*highlight-last-color true) 300)
          (let [^js el (rum/deref *el)
@@ -189,7 +192,9 @@
 
     [:ul.extensions__pdf-hls-ctx-menu
      {:ref      *el
-      :style    {:top top :left left :visibility (if (and @*highlight-mode? new?) "hidden" "visible")}
+      :style    {:top top
+                 :left left
+                 :visibility (if show-ctx-menu? "visible" "hidden")}
       :on-click (fn [^js/MouseEvent e]
                   (.stopPropagation e)
                   (when-let [action (.. e -target -dataset -action)]
@@ -502,7 +507,7 @@
                                                       :content    {:text "[:span]" :image (js/Date.now)}
                                                       :properties {}}]
 
-                                     ;; ctx tips
+                                     ;; ctx tips for area
                                      (show-ctx-menu! viewer hl point {:reset-fn #(reset-coords!)}))
 
                                    (set-area-mode! false))
@@ -848,7 +853,6 @@
                        (confirm-fn password)))}
         "Submit"]]]]))
 
-
 (rum/defc ^:large-vars/data-var pdf-loader
   [{:keys [url hls-file identity filename] :as pdf-current}]
   (let [*doc-ref       (rum/use-ref nil)
@@ -860,6 +864,13 @@
                          (set-hls-state! #(merge % {:initial-hls [] :latest-hls latest-hls})))
         set-hls-extra! (fn [extra]
                          (set-hls-state! #(merge % {:extra extra})))]
+
+    ;; current pdf effects
+    (rum/use-effect!
+     (fn []
+       (when pdf-current
+         (pdf-assets/ensure-ref-page! pdf-current)))
+     [pdf-current])
 
     ;; load highlights
     (rum/use-effect!
@@ -888,22 +899,23 @@
     ;; cache highlights
     (let [persist-hls-data!
           (rum/use-callback
-            (util/debounce
-              4000 (fn [latest-hls extra]
-                    (pdf-assets/persist-hls-data$
-                      pdf-current latest-hls extra))) [pdf-current])]
+           (util/debounce
+            4000 (fn [latest-hls extra]
+                   (pdf-assets/persist-hls-data$
+                    pdf-current latest-hls extra))) [pdf-current])]
+
       (rum/use-effect!
-        (fn []
-          (when (= :completed (:status loader-state))
-            (p/catch
-              (when-not (:error hls-state)
-                (p/do! (persist-hls-data! (:latest-hls hls-state) (:extra hls-state))))
+       (fn []
+         (when (= :completed (:status loader-state))
+           (p/catch
+            (when-not (:error hls-state)
+              (p/do! (persist-hls-data! (:latest-hls hls-state) (:extra hls-state))))
 
-              ;; write hls file error
-              (fn [e]
-                (js/console.error "[write hls error]" e)))))
+            ;; write hls file error
+            (fn [e]
+              (js/console.error "[write hls error]" e)))))
 
-        [(:latest-hls hls-state) (:extra hls-state)]))
+       [(:latest-hls hls-state) (:extra hls-state)]))
 
     ;; load document
     (rum/use-effect!

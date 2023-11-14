@@ -217,19 +217,16 @@
           (str " · " total-whiteboards)]]
         [:div.flex-1]
         (when has-checked?
-          [:button.ui__button.m-0.py-1.inline-flex.items-center.bg-red-800
-           {:on-click
+          (ui/button
+           (count checked-page-names)
+           {:icon "trash"
+            :on-click
             (fn []
               (state/set-modal! (page/batch-delete-dialog
                                  (map (fn [name]
                                         (some (fn [w] (when (= (:block/name w) name) w)) whiteboards))
                                       checked-page-names)
-                                 false route-handler/redirect-to-whiteboard-dashboard!)))}
-           [:span.flex.gap-2.items-center
-            [:span.opacity-50 (ui/icon "trash" {:style {:font-size 15}})]
-            (t :delete)
-            [:span.opacity-50
-             (str " · " (count checked-page-names))]]])]
+                                 false route-handler/redirect-to-whiteboard-dashboard!)))}))]
        [:div
         {:ref ref}
         [:div.gap-8.grid.grid-rows-auto
@@ -309,7 +306,10 @@
    [:p (t :on-boarding/welcome-whiteboard-modal-description)]
 
    [:div.pt-6.flex.justify-center.space-x-2.sm:justify-end
-    (ui/button (t :on-boarding/welcome-whiteboard-modal-skip) :on-click close-fn :background "gray" :class "opacity-60")
+    (ui/button (t :on-boarding/welcome-whiteboard-modal-skip)
+               :on-click close-fn
+               :background "gray"
+               :class "opacity-60 skip-welcome")
     (ui/button (t :on-boarding/welcome-whiteboard-modal-start)
                :on-click (fn []
                            (quick-tour/ready

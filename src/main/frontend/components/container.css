@@ -6,13 +6,17 @@
 }
 
 #app-container {
-  background-color: var(--ls-primary-background-color, #fff);
+  background-color: or(--ls-top-bar-background, --lx-gray-01, --ls-primary-background-color, #fff);
   position: relative;
+}
+
+.dark #app-container {
+  background-color: or(--ls-top-bar-background, --lx-gray-02, --ls-primary-background-color, #fff);
 }
 
 #root {
   > div {
-    color: var(--ls-primary-text-color, #24292e);
+    color: or(--ls-document-text-color, --lx-gray-12, --ls-primary-text-color, #24292e);
     font-size: var(--ls-page-text-size);
   }
 }
@@ -75,6 +79,10 @@
   overflow: auto;
 }
 
+.dark .left-sidebar-inner {
+  background-color: or(--ls-left-sidebar-background-color, --lx-gray-01, --ls-primary-background);
+}
+
 .left-sidebar-inner {
   position: relative;
   height: 100%;
@@ -82,8 +90,8 @@
   width: var(--ls-left-sidebar-sm-width);
   overflow-y: auto;
   overflow-x: hidden;
-  background-color: var(--ls-primary-background-color);
-  border-right: 1px solid var(--ls-tertiary-background-color);
+  background-color: or(--ls-left-sidebar-background-color, --lx-gray-02, --ls-primary-background-color);
+  border-right: 1px solid or(--ls-left-sidebar-border-color, --lx-gray-03, --ls-tertiary-background-color);
   transition: transform .3s;
   transform: translate3d(-100%, 0, 0);
   z-index: 3;
@@ -119,12 +127,15 @@
 
   .nav-header a {
     .keyboard-shortcut {
-      @apply w-0 opacity-0;
-      transition: opacity 0.3s;
+        @apply w-0 opacity-0;
+        visibility: hidden;
     }
 
     &:hover {
       .keyboard-shortcut {
+        visibility: visible;
+        transition: opacity 1s;
+        transition-delay: 2s;
         width: auto;
         opacity: 1;
       }
@@ -156,16 +167,13 @@
     }
 
     &:hover {
-      background-color: var(--ls-tertiary-background-color);
-
-      .ui__icon {
-        opacity: .9;
-      }
+      background-color: or(--ls-left-sidebar-hover-background, --lx-gray-04, --ls-primary-background-color);
+      color: or(--ls-left-sidebar-text-color-hover, --lx-gray-12);
     }
 
-    &.active, &:active {
-      background-color: var(--ls-quaternary-background-color);
-
+    &.active {
+      background-color: or(--ls-left-sidebar-active-background, --lx-gray-04, --color-level-3);
+      color: or(--ls-left-sidebar-active-text-color, --lx-gray-12);
       .ui__icon {
         opacity: .9;
       }
@@ -208,17 +216,13 @@
         width: 20px;
       }
 
-      a {
-        opacity: .7;
-      }
-
       .more {
         display: none;
         transition: .15s transform;
       }
 
       &:hover {
-        background-color: var(--ls-tertiary-background-color);
+        background-color: or(--ls-nav-item-hover, --lx-gray-04, --ls-tertiary-background-color);
 
         * {
           opacity: 1 !important;
@@ -273,6 +277,7 @@
           }
 
           &:hover {
+            background-color: or(--ls-recessed-nav-item-hover, --lx-gray-04, --ls-quaternary-background-color);
             opacity: 1;
             background-color: var(--ls-quaternary-background-color);
           }
@@ -296,6 +301,14 @@
     background-image: linear-gradient(transparent, var(--ls-primary-background-color));
     user-select: none;
 
+    @screen sm {
+      background-image: linear-gradient(transparent, or(--ls-left-sidebar-bottom-gradient, --lx-gray-02, --ls-secondary-background-color));
+
+      .dark & {
+        background-image: linear-gradient(transparent, or(--ls-left-sidebar-bottom-gradient, --lx-gray-01, --ls-secondary-background-color));
+      }
+    }
+
     &-link {
       background-color: var(--ls-primary-background-color);
       box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
@@ -316,13 +329,22 @@
 
     #create-button {
       @apply flex items-center justify-center p-2 text-sm font-medium rounded-md w-full border;
-      background-color: var(--ls-secondary-background-color) !important;
+      background-color: or(--ls-create-button-color, --lx-gray-03, --ls-secondary-background-color) !important;
       border-color: transparent;
 
       &:hover,
       &:focus {
         border-color: var(--ls-border-color);
-        background-color: var(--ls-tertiary-background-color) !important;
+        background-color: or(--ls-create-button-color-focus, --lx-gray-03, --ls-primary-background-color) !important;
+      }
+
+      @screen sm {
+        background-color: or(--ls-create-button-color-sm, --lx-gray-03, --ls-primary-background-color) !important;
+
+        &:hover,
+        &:focus {
+          background-color: or(--ls-create-button-color-sm-focus, --lx-gray-04, --ls-secondary-background-color) !important;
+        }
       }
     }
   }
@@ -330,6 +352,11 @@
   @screen sm {
     padding-top: 0;
     width: var(--ls-left-sidebar-width);
+    background-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color);
+
+    .dark & {
+      background-color: or(--ls-left-sidebar-background, --lx-gray-01, --ls-secondary-background-color);
+    }
 
     > .wrap {
       margin-top: 52px;
@@ -353,8 +380,9 @@
 
   a {
     @apply opacity-90 hover:opacity-100;
+    transition: all 120ms ease-out;
 
-    color: var(--ls-header-button-background);
+    color: or(--ls-left-sidebar-text-color, --ls-header-button-background);
   }
 
   > .left-sidebar-inner {
@@ -431,7 +459,7 @@
     transition: width .3s;
 
     &:before {
-      background-color: var(--ls-secondary-background-color);
+      background-color: or(--ls-left-sidebar-container-sm, --lx-gray-02, --ls-secondary-background-color);
       width: 0;
       overflow: hidden;
     }
@@ -487,21 +515,17 @@
   }
 }
 
-html[data-theme='dark'] {
-  #left-sidebar {
-    > .shade-mask {
-      background-color: rgba(0, 0, 0, .15);
-    }
-  }
-}
-
 .settings-modal {
   @apply -m-8 rounded-lg;
   /* box-shadow: inset 0 0 0 1px var(--ls-border-color); */
 }
 
 .cp__sidebar-main-layout {
-  background-color: var(--ls-primary-background-color);
+  background-color: or(--ls-main-content-background, --lx-gray-01, --ls-primary-background-color);
+}
+
+.dark .cp__sidebar-main-layout {
+  background-color: or(--ls-main-content-background, --lx-gray-02, --ls-primary-background-color);
 }
 
 .cp__sidebar-main-content {
@@ -524,15 +548,38 @@ html[data-theme='dark'] {
   }
 
   &-btn {
-    @apply fixed bottom-4 right-4 sm:right-8;
+    @apply fixed bottom-4 right-4 sm:right-8 opacity-70 hover:opacity-100;
 
     > .inner {
-      @apply font-bold
-      rounded-full h-8 w-8 flex items-center justify-center font-bold
-      select-none cursor-help;
+      @apply rounded-full h-8 w-8 flex items-center justify-center
+      font-bold select-none cursor-pointer;
 
-      background-color: var(--ls-secondary-background-color);
+      background-color: or(--ls-left-sidebar-help-background, --lx-gray-01, --ls-secondary-background-color);
     }
+  }
+
+  &-menu-popup {
+    @apply fixed bottom-14 right-8 z-10 border
+    rounded-lg min-w-[260px] shadow;
+
+    background-color: var(--ls-secondary-background-color);
+    border-color: var(--ls-border-color);
+
+    > .list-wrap {
+      @apply flex flex-col pt-3;
+
+      .it {
+        color: var(--ls-primary-text-color);
+
+        &:active, &:hover {
+          background-color: var(--ls-tertiary-background-color);
+        }
+      }
+    }
+  }
+
+  &-handbook-btn {
+    @apply bottom-16;
   }
 }
 
@@ -556,7 +603,7 @@ html[data-theme='dark'] {
     &:hover,
     &:focus,
     &:active {
-      background-color: var(--ls-active-primary-color);
+      background-color: or(--ls-right-sidebar-resizer-color, --lx-gray-08-alpha, --ls-active-primary-color);
     }
   }
 
@@ -599,6 +646,7 @@ html[data-theme='dark'] {
     top: 0;
     left: 0;
     right: 0;
+    background-color: or(--ls-right-sidebar-topbar-color, --lx-gray-01, --ls-secondary-background-color, #d8e1e8);
     z-index: 999;
     user-select: none;
     -webkit-app-region: drag;
@@ -753,4 +801,12 @@ a.ui__modal-close, a.close {
 
 a.ui__modal-close:hover, a.close:hover {
   opacity: 1;
+}
+
+html[data-theme='dark'] {
+  #left-sidebar {
+    > .shade-mask {
+      background-color: rgba(0, 0, 0, .15);
+    }
+  }
 }

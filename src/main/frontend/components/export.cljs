@@ -275,7 +275,7 @@
               [:option {:key n :value n} n])]]]))
 
      (when @*content
-       [:div.mt-4
+       [:div.mt-4.flex.flex-row.gap-2
         (ui/button (if @*copied? (t :export-copied-to-clipboard) (t :export-copy-to-clipboard))
                    :class "mr-4"
                    :on-click (fn []

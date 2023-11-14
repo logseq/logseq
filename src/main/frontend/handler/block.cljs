@@ -16,10 +16,6 @@
 
 ;;  Fns
 
-(defn long-page?
-  [repo page-id]
-  (>= (db/get-page-blocks-count repo page-id) db-model/initial-blocks-length))
-
 ;; TODO: reduced version
 (defn- walk-block
   [block check? transform]

@@ -2,11 +2,12 @@
   "Provides main application state, fns associated to set and state based rum
   cursors"
   (:require [cljs-bean.core :as bean]
-            [cljs.core.async :as async :refer [<!]]
+            [cljs.core.async :as async :refer [<! >!]]
             [cljs.spec.alpha :as s]
             [clojure.string :as string]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
+            [frontend.colors :as colors]
             [frontend.mobile.util :as mobile-util]
             [frontend.storage :as storage]
             [frontend.spec.storage :as storage-spec]
@@ -50,7 +51,7 @@
      :journals-length                       3
 
      :search/q                              ""
-     :search/mode                           :global  ;; inner page or full graph? {:page :global}
+     :search/mode                           nil ; nil -> global mode, :graph -> add graph filter, etc.
      :search/result                         nil
      :search/graph-filters                  []
      :search/engines                        {}
@@ -74,6 +75,9 @@
      :ui/navigation-item-collapsed?         {}
 
      ;; right sidebar
+     :ui/handbooks-open?                    false
+     :ui/help-open?                         false
+     :ui/fullscreen?                        false
      :ui/settings-open?                     false
      :ui/sidebar-open?                      false
      :ui/sidebar-width                      "40%"
@@ -82,6 +86,7 @@
      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
      :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
      :ui/wide-mode?                         (storage/get :ui/wide-mode)
+     :ui/radix-color                        (storage/get :ui/radix-color)
 
      ;; ui/collapsed-blocks is to separate the collapse/expand state from db for:
      ;; 1. right sidebar
@@ -220,6 +225,7 @@
      :pdf/current                           nil
      :pdf/ref-highlight                     nil
      :pdf/block-highlight-colored?          (or (storage/get "ls-pdf-hl-block-is-colored") true)
+     :pdf/auto-open-ctx-menu?               (not= false (storage/get "ls-pdf-auto-open-ctx-menu"))
 
      ;; all notification contents as k-v pairs
      :notification/contents                 {}
@@ -277,12 +283,14 @@
 
      :ui/loading?                           {}
      :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
-     :feature/enable-sync-diff-merge?       (storage/get :logseq-sync-diff-merge-enabled)
+     :feature/enable-sync-diff-merge?       ((fnil identity true) (storage/get :logseq-sync-diff-merge-enabled))
 
      :file/rename-event-chan                (async/chan 100)
      :ui/find-in-page                       nil
      :graph/importing                       nil
      :graph/importing-state                 {}
+
+     :handbook/route-chan                   (async/chan (async/sliding-buffer 1))
 
      :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
      :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
@@ -900,10 +908,6 @@ Similar to re-frame subscriptions"
   [range]
   (set-state! :cursor-range range))
 
-(defn set-q!
-  [value]
-  (set-state! :search/q value))
-
 (defn set-search-mode!
   [value]
   (set-state! :search/mode value))
@@ -1395,7 +1399,7 @@ Similar to re-frame subscriptions"
    (set-modal! modal-panel-content
                {:fullscreen? false
                 :close-btn?  true}))
-  ([modal-panel-content {:keys [id label payload fullscreen? close-btn? close-backdrop? center?]}]
+  ([modal-panel-content {:keys [id label payload fullscreen? close-btn? close-backdrop? center? panel?]}]
    (let [opened? (modal-opened?)]
      (when opened?
        (close-modal!))
@@ -1412,6 +1416,7 @@ Similar to re-frame subscriptions"
               :modal/panel-content modal-panel-content
               :modal/payload payload
               :modal/fullscreen? fullscreen?
+              :modal/panel? (if (boolean? panel?) panel? true)
               :modal/close-btn? close-btn?
               :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true))))
    nil))
@@ -1896,6 +1901,10 @@ Similar to re-frame subscriptions"
             (when (or (util/mobile?) (mobile-util/native-platform?))
               (set-state! :mobile/show-action-bar? false)))))))))
 
+(defn action-bar-open?
+  []
+  (:mobile/show-action-bar? @state))
+
 (defn remove-watch-state [key]
   (remove-watch state key))
 
@@ -2184,6 +2193,43 @@ Similar to re-frame subscriptions"
 (defn clear-user-info!
   []
   (storage/remove :user-groups))
+
+(defn get-color-accent []
+  (get @state :ui/radix-color))
+
+(defn set-color-accent! [color]
+  (swap! state assoc :ui/radix-color color)
+  (storage/set :ui/radix-color color)
+  (colors/set-radix color))
+
+(defn unset-color-accent! []
+  (swap! state assoc :ui/radix-color nil)
+  (storage/remove :ui/radix-color)
+  (colors/unset-radix))
+
+(defn cycle-color! []
+  (let [current-color (get-color-accent)
+        next-color (->> (cons nil colors/color-list)
+                        (drop-while #(not= % current-color))
+                        (second))]
+    (if next-color
+      (set-color-accent! next-color)
+      (unset-color-accent!))))
+
+(defn handbook-open?
+  []
+  (:ui/handbooks-open? @state))
+
+(defn get-handbook-route-chan
+  []
+  (:handbook/route-chan @state))
+
+(defn open-handbook-pane!
+  [k]
+  (when-not (handbook-open?)
+    (set-state! :ui/handbooks-open? true))
+  (js/setTimeout #(async/go
+                    (>! (get-handbook-route-chan) k))))
 
 (defn set-page-properties-changed!
   [page-name]

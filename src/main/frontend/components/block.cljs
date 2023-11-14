@@ -530,18 +530,19 @@
              (state/get-left-sidebar-open?))
     (ui-handler/close-left-sidebar!)))
 
-(rum/defcs page-inner <
-  (rum/local false ::mouse-down?)
+(rum/defc page-inner
   "The inner div of page reference component
 
    page-name-in-block is the overridable name of the page (legacy)
 
    All page-names are sanitized except page-name-in-block"
-  [state config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?]
-  (let [*mouse-down? (::mouse-down? state)
+  [config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?]
+  (let [[mouse-down? set-mouse-down!] (rum/use-state false) ;; avoid click event after drag
         tag? (:tag? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
         untitled? (model/untitled-page? page-name)]
+        ; gradient-styles (state/sub-color-gradient-text-styles :09)]
+
     [:a
      {:tabIndex "0"
       :class (cond-> (if tag? "tag" "page-ref")
@@ -551,11 +552,17 @@
       :data-ref page-name
       :draggable true
       :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name-in-block e))
-      :on-mouse-down (fn [_e] (reset! *mouse-down? true))
+      :on-mouse-down #(set-mouse-down! true)
       :on-mouse-up (fn [e]
-                     (when @*mouse-down?
-                       (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)
-                       (reset! *mouse-down? false)))
+                     (when mouse-down?
+                       ;; when page-entity is nil and page name is journal page(not the current format),
+                       ;; convert title then redirect
+                       (let [redirect-page-name (or (and (nil? page-entity)
+                                                         (date/journal-title->custom-format page-name))
+                                                    redirect-page-name)
+                             redirect-page-name (string/lower-case redirect-page-name)]
+                         (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?))
+                       (set-mouse-down! false)))
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
                            (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)))}
 
@@ -684,14 +691,16 @@
           inner (page-inner config
                             page-name-in-block
                             page-name
-                            redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?)]
+                            redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?)
+          modal? (:modal/show? @state/state)]
       (cond
         (:breadcrumb? config)
         (or (:block/original-name page)
             (:block/name page))
 
         (and (not (util/mobile?))
-             (not preview?))
+             (not preview?)
+             (not modal?))
         (page-preview-trigger (assoc config :children inner) page-name)
 
         :else
@@ -913,7 +922,10 @@
                       ;; default open block page
                       :else (route-handler/redirect-to-page! id))))))}
 
-           (if (and (not (util/mobile?)) (not (:preview? config)) (nil? block-type))
+           (if (and (not (util/mobile?))
+                    (not (:preview? config))
+                    (not (:modal/show? @state/state))
+                    (nil? block-type))
              (ui/tippy {:html        (fn []
                                        [:div.tippy-wrapper.overflow-y-auto.p-4
                                         {:style {:width      735
@@ -1044,10 +1056,12 @@
       (cond
         (util/electron?)
         [:a.asset-ref.is-pdf
-         {:on-click (fn [event]
-                      (when-let [current (pdf-assets/inflate-asset s)]
-                        (state/set-current-pdf! current)
-                        (util/stop event)))
+         {:data-href s
+          :on-click (fn [^js e]
+                      (when-let [s (some-> (.-target e) (.-dataset) (.-href))]
+                        (when-let [current (pdf-assets/inflate-asset s)]
+                          (state/set-current-pdf! current)
+                          (util/stop e))))
           :draggable true
           :on-drag-start #(.setData (gobj/get % "dataTransfer") "file" s)}
          (or label-text
@@ -1338,7 +1352,7 @@
                   url)]
         (if (and (coll? src)
                  (= (first src) "youtube-player"))
-          (youtube/youtube-video (last src))
+          (youtube/youtube-video (last src) nil)
           (when src
             (let [width (min (- (util/get-width) 96) 560)
                   height (int (* width (/ (if (string/includes? src "player.bilibili.com")
@@ -1475,7 +1489,7 @@
                                 :else
                                 (nth (util/safe-re-find text-util/youtube-regex url) 5))]
           (when-not (string/blank? youtube-id)
-            (youtube/youtube-video youtube-id))))
+            (youtube/youtube-video youtube-id nil))))
 
       (= name "youtube-timestamp")
       (when-let [timestamp (first arguments)]
@@ -2289,12 +2303,12 @@
                 :data-type (name block-type)
                 :style {:width "100%" :pointer-events (when stop-events? "none")}}
 
-                (not (string/blank? (:hl-color properties)))
-                (assoc :data-hl-color (:hl-color properties))
+               (not (string/blank? (:hl-color properties)))
+               (assoc :data-hl-color (:hl-color properties))
 
-                (not block-ref?)
-                (assoc mouse-down-key (fn [e]
-                                        (block-content-on-mouse-down e block block-id content edit-input-id))))]
+               (not block-ref?)
+               (assoc mouse-down-key (fn [e]
+                                       (block-content-on-mouse-down e block block-id content edit-input-id))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :class (when selected? "select-none")
@@ -2636,6 +2650,7 @@
    (editor-handler/unhighlight-blocks!)))
 
 (defn- block-drop
+  "Block on-drop handler"
   [^js event uuid target-block *move-to]
   (util/stop event)
   (when-not (dnd-same-block? uuid)
@@ -2644,15 +2659,53 @@
           selected (db/pull-many (state/get-current-repo) '[*] lookup-refs)
           blocks (if (seq selected) selected [@*dragging-block])
           blocks (remove-nils blocks)]
-      (if-not (seq blocks)
-        (when-let [text (.getData (.-dataTransfer event) "text/plain")]
-          (editor-handler/api-insert-new-block!
-           text
-           {:block-uuid  uuid
-            :edit-block? false
-            :sibling?    (= @*move-to :sibling)
-            :before?     (= @*move-to :top)}))
-        (dnd/move-blocks event blocks target-block @*move-to))))
+      (if (seq blocks)
+        ;; dnd block moving in current Logseq instance
+        (dnd/move-blocks event blocks target-block @*move-to)
+        ;; handle DataTransfer
+        (let [repo (state/get-current-repo)
+              data-transfer (.-dataTransfer event)
+              transfer-types (set (js->clj (.-types data-transfer)))]
+          (cond
+            (contains? transfer-types "text/plain")
+            (let [text (.getData data-transfer "text/plain")]
+              (editor-handler/api-insert-new-block!
+               text
+               {:block-uuid  uuid
+                :edit-block? false
+                :sibling?    (= @*move-to :sibling)
+                :before?     (= @*move-to :top)}))
+
+            (contains? transfer-types "Files")
+            (let [files (.-files data-transfer)
+                  format (:block/format target-block)]
+              ;; When editing, this event will be handled by editor-handler/upload-asset(editor-on-paste)
+              (when (and (config/local-db? repo) (not (state/editing?)))
+                ;; Basically the same logic as editor-handler/upload-asset,
+                ;; does not require edting
+                (-> (editor-handler/save-assets! repo (js->clj files))
+                    (p/then
+                     (fn [res]
+                       (when-let [[asset-file-name file-obj asset-file-fpath matched-alias] (and (seq res) (first res))]
+                         (let [image? (config/ext-of-image? asset-file-name)
+                               link-content (assets-handler/get-asset-file-link format
+                                                                                (if matched-alias
+                                                                                  (str
+                                                                                   (if image? "../assets/" "")
+                                                                                   "@" (:name matched-alias) "/" asset-file-name)
+                                                                                  (editor-handler/resolve-relative-path (or asset-file-fpath asset-file-name)))
+                                                                                (if file-obj (.-name file-obj) (if image? "image" "asset"))
+                                                                                image?)]
+                           (editor-handler/api-insert-new-block!
+                            link-content
+                            {:block-uuid  uuid
+                             :edit-block? false
+                             :replace-empty-target? true
+                             :sibling?   true
+                             :before?    false}))))))))
+
+            :else
+            (prn ::unhandled-drop-data-transfer-type transfer-types))))))
   (block-drag-end event *move-to))
 
 (defn- block-mouse-over
@@ -2812,20 +2865,20 @@
        :blockid (str uuid)
        :haschild (str (boolean has-child?))}
 
-       level
-       (assoc :level level)
+      level
+      (assoc :level level)
 
-       (not slide?)
-       (merge attrs)
+      (not slide?)
+      (merge attrs)
 
-       (or reference? embed?)
-       (assoc :data-transclude true)
+      (or reference? embed?)
+      (assoc :data-transclude true)
 
-       embed?
-       (assoc :data-embed true)
+      embed?
+      (assoc :data-embed true)
 
-       custom-query?
-       (assoc :data-query true))
+      custom-query?
+      (assoc :data-query true))
 
      (when (and ref? breadcrumb-show?)
        (breadcrumb config repo uuid {:show-page? false
@@ -3440,9 +3493,7 @@
                    page (db/entity (:db/id page))
                    blocks (tree/non-consecutive-blocks->vec-tree blocks)
                    parent-blocks (group-by :block/parent blocks)]
-               [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                            (:ref? config)
-                            (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
+               [:div.custom-query-page-result.color-level {:key (str "page-" (:db/id page))}
                 (ui/foldable
                  [:div
                   (page-cp config page)
@@ -3468,9 +3519,7 @@
                    page (db/entity (:db/id page))
                    ;; FIXME: parents need to be sorted
                    parent-blocks (group-by :block/parent page-blocks)]
-               [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                            (:ref? config)
-                            (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
+               [:div.my-2 {:key (str "page-" (:db/id page))}
                 (ui/foldable
                  [:div
                   (page-cp config page)
@@ -3498,9 +3547,7 @@
               (let [alias? (:block/alias? page)
                     page (db/entity (:db/id page))
                     whiteboard? (model/whiteboard-page? page)]
-                [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                             (:ref? config)
-                             (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
+                [:div.my-2 {:key (str "page-" (:db/id page))}
                  (ui/foldable
                   [:div
                    (page-cp config page)

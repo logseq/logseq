@@ -29,6 +29,11 @@
             [clojure.data :as data]
             [medley.core :as medley]))
 
+(defn- search
+  [mode]
+  (editor-handler/escape-editing false)
+  (route-handler/go-to-search! mode))
+
 ;; TODO: Namespace all-default-keyboard-shortcuts keys with `:command` e.g.
 ;; `:command.date-picker/complete`. They are namespaced in translation but
 ;; almost everywhere else they are not which could cause needless conflicts
@@ -175,7 +180,7 @@
    :cards/recall                            {:binding "t"
                                              :fn      srs/recall}
 
-   :editor/escape-editing                   {:binding false
+   :editor/escape-editing                   {:binding []
                                              :fn      (fn [_ _]
                                                         (editor-handler/escape-editing))}
 
@@ -332,7 +337,7 @@
    :editor/zoom-out                         {:binding (if mac? "mod+," "alt+left")
                                              :fn      editor-handler/zoom-out!}
 
-   :editor/toggle-undo-redo-mode            {:binding false
+   :editor/toggle-undo-redo-mode            {:binding []
                                              :fn      undo-redo/toggle-undo-redo-mode!}
 
    :editor/toggle-number-list               {:binding "t n"
@@ -341,15 +346,13 @@
    :ui/toggle-brackets                      {:binding "mod+c mod+b"
                                              :fn      config-handler/toggle-ui-show-brackets!}
 
-   :go/search-in-page                       {:binding "mod+shift+k"
-                                             :fn      #(do
-                                                         (editor-handler/escape-editing)
-                                                         (route-handler/go-to-search! :page))}
-
    :go/search                               {:binding "mod+k"
-                                             :fn      #(do
-                                                         (editor-handler/escape-editing false)
-                                                         (route-handler/go-to-search! :global))}
+                                             :fn      #(search :global)}
+   :command-palette/toggle                  {:binding "mod+shift+p"
+                                             :fn      #(search :commands)}
+   :go/search-in-page                       {:binding "mod+shift+k"
+                                             :fn      #(search :current-page)}
+
 
    :go/electron-find-in-page                {:binding  "mod+f"
                                              :inactive (not (util/electron?))
@@ -389,14 +392,10 @@
    :misc/copy                               {:binding "mod+c"
                                              :fn      (fn [] (js/document.execCommand "copy"))}
 
-   :command-palette/toggle                  {:binding "mod+shift+p"
-                                             :fn      #(do
-                                                         (editor-handler/escape-editing)
-                                                         (state/pub-event! [:modal/command-palette]))}
 
    :graph/export-as-html                    {:fn      #(export-handler/download-repo-as-html!
-                                                         (state/get-current-repo))
-                                             :binding false}
+                                                        (state/get-current-repo))
+                                             :binding []}
 
    :graph/open                              {:fn      #(do
                                                          (editor-handler/escape-editing)
@@ -406,18 +405,18 @@
    :graph/remove                            {:fn      #(do
                                                          (editor-handler/escape-editing)
                                                          (state/set-state! :ui/open-select :graph-remove))
-                                             :binding false}
+                                             :binding []}
 
    :graph/add                               {:fn      (fn [] (route-handler/redirect! {:to :repo-add}))
-                                             :binding false}
+                                             :binding []}
 
    :graph/save                              {:fn      #(state/pub-event! [:graph/save])
-                                             :binding false}
+                                             :binding []}
 
    :graph/re-index                          {:fn      (fn []
                                                         (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
                                                           (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
-                                             :binding false}
+                                             :binding []}
 
    :command/run                             {:binding  "mod+shift+1"
                                              :inactive (not (util/electron?))
@@ -452,11 +451,8 @@
    :go/prev-journal                         {:binding "g p"
                                              :fn      journal-handler/go-to-prev-journal!}
 
-   :go/flashcards                           {:binding "g f"
-                                             :fn      (fn []
-                                                        (if (state/modal-opened?)
-                                                          (state/close-modal!)
-                                                          (state/pub-event! [:modal/show-cards])))}
+   :go/flashcards                           {:binding ["g f" "t c"]
+                                             :fn      ui-handler/toggle-cards!}
 
    :ui/toggle-document-mode                 {:binding "t d"
                                              :fn      state/toggle-document-mode!}
@@ -494,7 +490,7 @@
                                              :inactive (not (util/electron?))
                                              :fn       page-handler/copy-current-file}
 
-   :editor/copy-page-url                    {:binding  false
+   :editor/copy-page-url                    {:binding  []
                                              :inactive (not (util/electron?))
                                              :fn       #(page-handler/copy-page-url)}
 
@@ -516,32 +512,35 @@
                                              :inactive (not (config/plugin-config-enabled?))
                                              :fn       plugin-config-handler/open-replace-plugins-modal}
 
-   :ui/clear-all-notifications              {:binding false
+   :ui/clear-all-notifications              {:binding []
                                              :fn      :frontend.handler.notification/clear-all!}
 
    :editor/toggle-open-blocks               {:binding "t o"
                                              :fn      editor-handler/toggle-open!}
 
-   :ui/toggle-cards                         {:binding "t c"
-                                             :fn      ui-handler/toggle-cards!}
+   :ui/cycle-color-off                      {:binding "c o"
+                                             :fn      state/unset-color-accent!}
+
+   :ui/cycle-color                          {:binding "c c"
+                                             :fn      state/cycle-color!}
 
    :git/commit                              {:binding  "mod+g c"
                                              :inactive (not (util/electron?))
                                              :fn       commit/show-commit-modal!}
 
-   :dev/show-block-data                     {:binding  false
+   :dev/show-block-data                     {:binding  []
                                              :inactive (not (state/developer-mode?))
                                              :fn       :frontend.handler.common.developer/show-block-data}
 
-   :dev/show-block-ast                      {:binding  false
+   :dev/show-block-ast                      {:binding  []
                                              :inactive (not (state/developer-mode?))
                                              :fn       :frontend.handler.common.developer/show-block-ast}
 
-   :dev/show-page-data                      {:binding  false
+   :dev/show-page-data                      {:binding  []
                                              :inactive (not (state/developer-mode?))
                                              :fn       :frontend.handler.common.developer/show-page-data}
 
-   :dev/show-page-ast                       {:binding  false
+   :dev/show-page-ast                       {:binding  []
                                              :inactive (not (state/developer-mode?))
                                              :fn       :frontend.handler.common.developer/show-page-ast}})
 
@@ -583,154 +582,155 @@
 
 ;; This is the only var that should be publicly expose :fn functionality
 (defonce ^:large-vars/data-var *config
-  (atom
-   {:shortcut.handler/date-picker
-    (build-category-map {:ns :date-picker})
+         (atom
+           {:shortcut.handler/date-picker
+            (build-category-map {:ns :date-picker})
 
-    :shortcut.handler/pdf
-    (-> (build-category-map {:ns :pdf})
-        (with-meta {:before m/enable-when-not-editing-mode!}))
+            :shortcut.handler/pdf
+            (-> (build-category-map {:ns :pdf})
+                (with-meta {:before m/enable-when-not-editing-mode!}))
 
-    :shortcut.handler/whiteboard
-    (-> (build-category-map {:ns :whiteboard})
-        (with-meta {:before m/enable-when-not-editing-mode!}))
+            :shortcut.handler/whiteboard
+            (-> (build-category-map {:ns :whiteboard})
+                (with-meta {:before m/enable-when-not-editing-mode!}))
 
-    :shortcut.handler/auto-complete
-    (build-category-map {:ns :auto-complete})
+            :shortcut.handler/auto-complete
+            (build-category-map {:ns :auto-complete})
 
-    :shortcut.handler/cards
-    (-> (build-category-map {:ns :cards})
-        (with-meta {:before m/enable-when-not-editing-mode!}))
+            :shortcut.handler/cards
+            (-> (build-category-map {:ns :cards})
+                (with-meta {:before m/enable-when-not-editing-mode!}))
 
-    :shortcut.handler/block-editing-only
-    (-> (build-category-map
-          [:editor/escape-editing
-           :editor/backspace
-           :editor/delete
-           :editor/zoom-in
-           :editor/zoom-out
-           :editor/new-block
-           :editor/new-line
-           :editor/follow-link
-           :editor/open-link-in-sidebar
-           :editor/bold
-           :editor/italics
-           :editor/highlight
-           :editor/strike-through
-           :editor/clear-block
-           :editor/kill-line-before
-           :editor/kill-line-after
-           :editor/beginning-of-block
-           :editor/end-of-block
-           :editor/forward-word
-           :editor/backward-word
-           :editor/forward-kill-word
-           :editor/backward-kill-word
-           :editor/replace-block-reference-at-point
-           :editor/copy-embed
-           :editor/paste-text-in-one-block-at-point
-           :editor/insert-youtube-timestamp])
-        (with-meta {:before m/enable-when-editing-mode!}))
+            :shortcut.handler/block-editing-only
+            (-> (build-category-map
+                  [:editor/escape-editing
+                   :editor/backspace
+                   :editor/delete
+                   :editor/zoom-in
+                   :editor/zoom-out
+                   :editor/new-block
+                   :editor/new-line
+                   :editor/follow-link
+                   :editor/open-link-in-sidebar
+                   :editor/bold
+                   :editor/italics
+                   :editor/highlight
+                   :editor/strike-through
+                   :editor/clear-block
+                   :editor/kill-line-before
+                   :editor/kill-line-after
+                   :editor/beginning-of-block
+                   :editor/end-of-block
+                   :editor/forward-word
+                   :editor/backward-word
+                   :editor/forward-kill-word
+                   :editor/backward-kill-word
+                   :editor/replace-block-reference-at-point
+                   :editor/copy-embed
+                   :editor/paste-text-in-one-block-at-point
+                   :editor/insert-youtube-timestamp])
+                (with-meta {:before m/enable-when-editing-mode!}))
 
-    :shortcut.handler/editor-global
-    (-> (build-category-map
-          [:graph/export-as-html
-           :graph/open
-           :graph/remove
-           :graph/add
-           :graph/save
-           :graph/re-index
-           :editor/cycle-todo
-           :editor/up
-           :editor/down
-           :editor/left
-           :editor/right
-           :editor/select-up
-           :editor/select-down
-           :editor/move-block-up
-           :editor/move-block-down
-           :editor/open-edit
-           :editor/select-block-up
-           :editor/select-block-down
-           :editor/select-parent
-           :editor/delete-selection
-           :editor/expand-block-children
-           :editor/collapse-block-children
-           :editor/indent
-           :editor/outdent
-           :editor/copy
-           :editor/copy-text
-           :editor/cut
-           :command/toggle-favorite])
-        (with-meta {:before m/enable-when-not-component-editing!}))
+            :shortcut.handler/editor-global
+            (-> (build-category-map
+                  [:graph/export-as-html
+                   :graph/open
+                   :graph/remove
+                   :graph/add
+                   :graph/save
+                   :graph/re-index
+                   :editor/cycle-todo
+                   :editor/up
+                   :editor/down
+                   :editor/left
+                   :editor/right
+                   :editor/select-up
+                   :editor/select-down
+                   :editor/move-block-up
+                   :editor/move-block-down
+                   :editor/open-edit
+                   :editor/select-block-up
+                   :editor/select-block-down
+                   :editor/select-parent
+                   :editor/delete-selection
+                   :editor/expand-block-children
+                   :editor/collapse-block-children
+                   :editor/indent
+                   :editor/outdent
+                   :editor/copy
+                   :editor/copy-text
+                   :editor/cut
+                   :command/toggle-favorite])
+                (with-meta {:before m/enable-when-not-component-editing!}))
 
-    :shortcut.handler/global-prevent-default
-    (-> (build-category-map
-          [:editor/insert-link
-           :editor/select-all-blocks
-           :editor/toggle-undo-redo-mode
-           :editor/toggle-number-list
-           :editor/undo
-           :editor/redo
-           :ui/toggle-brackets
-           :go/search-in-page
-           :go/search
-           :go/electron-find-in-page
-           :go/electron-jump-to-the-next
-           :go/electron-jump-to-the-previous
-           :go/backward
-           :go/forward
-           :search/re-index
-           :sidebar/open-today-page
-           :sidebar/clear
-           :command/run
-           :command-palette/toggle])
-        (with-meta {:before m/prevent-default-behavior}))
+            :shortcut.handler/global-prevent-default
+            (-> (build-category-map
+                  [:editor/insert-link
+                   :editor/select-all-blocks
+                   :editor/toggle-undo-redo-mode
+                   :editor/toggle-number-list
+                   :editor/undo
+                   :editor/redo
+                   :ui/toggle-brackets
+                   :go/search
+                   :go/search-in-page
+                   :command-palette/toggle
+                   :go/electron-find-in-page
+                   :go/electron-jump-to-the-next
+                   :go/electron-jump-to-the-previous
+                   :go/backward
+                   :go/forward
+                   :search/re-index
+                   :sidebar/open-today-page
+                   :sidebar/clear
+                   :command/run
+                   :window/close])
+                (with-meta {:before m/prevent-default-behavior}))
 
-    :shortcut.handler/global-non-editing-only
-    (-> (build-category-map
-          [:go/home
-           :go/journals
-           :go/all-pages
-           :go/flashcards
-           :go/graph-view
-           :go/all-graphs
-           :go/whiteboards
-           :go/keyboard-shortcuts
-           :go/tomorrow
-           :go/next-journal
-           :go/prev-journal
-           :ui/toggle-document-mode
-           :ui/toggle-settings
-           :ui/toggle-right-sidebar
-           :ui/toggle-left-sidebar
-           :ui/toggle-help
-           :ui/toggle-theme
-           :ui/toggle-contents
-           :editor/open-file-in-default-app
-           :editor/open-file-in-directory
-           :editor/copy-current-file
-           :editor/copy-page-url
-           :window/close
-           :editor/new-whiteboard
-           :ui/toggle-wide-mode
-           :ui/select-theme-color
-           :ui/goto-plugins
-           :ui/install-plugins-from-file
-           :editor/toggle-open-blocks
-           :ui/toggle-cards
-           :ui/clear-all-notifications
-           :git/commit
-           :sidebar/close-top
-           :dev/show-block-data
-           :dev/show-block-ast
-           :dev/show-page-data
-           :dev/show-page-ast])
-        (with-meta {:before m/enable-when-not-editing-mode!}))
+            :shortcut.handler/global-non-editing-only
+            (-> (build-category-map
+                  [:go/home
+                   :go/journals
+                   :go/all-pages
+                   :go/flashcards
+                   :go/graph-view
+                   :go/all-graphs
+                   :go/whiteboards
+                   :go/keyboard-shortcuts
+                   :go/tomorrow
+                   :go/next-journal
+                   :go/prev-journal
+                   :ui/toggle-document-mode
+                   :ui/toggle-settings
+                   :ui/toggle-right-sidebar
+                   :ui/toggle-left-sidebar
+                   :ui/toggle-help
+                   :ui/toggle-theme
+                   :ui/toggle-contents
+                   :editor/open-file-in-default-app
+                   :editor/open-file-in-directory
+                   :editor/copy-current-file
+                   :editor/copy-page-url
+                   :editor/new-whiteboard
+                   :ui/toggle-wide-mode
+                   :ui/select-theme-color
+                   :ui/goto-plugins
+                   :ui/install-plugins-from-file
+                   :editor/toggle-open-blocks
+                   :ui/clear-all-notifications
+                   :git/commit
+                   :sidebar/close-top
+                   :dev/show-block-data
+                   :dev/show-block-ast
+                   :dev/show-page-data
+                   :dev/show-page-ast
+                   :ui/cycle-color
+                   :ui/cycle-color-off])
+                (with-meta {:before m/enable-when-not-editing-mode!}))
 
-    :shortcut.handler/misc
-    ;; always overrides the copy due to "mod+c mod+s"
-    {:misc/copy (:misc/copy all-built-in-keyboard-shortcuts)}}))
+            :shortcut.handler/misc
+            ;; always overrides the copy due to "mod+c mod+s"
+            {:misc/copy (:misc/copy all-built-in-keyboard-shortcuts)}}))
 
 ;; To add a new entry to this map, first add it here and then
 ;; a description for it in frontend.dicts.en/dicts
@@ -738,14 +738,15 @@
 (defonce ^:large-vars/data-var *category
   (atom
    {:shortcut.category/basics
-    [:editor/new-block
+    [:go/search
+     :editor/new-block
      :editor/new-line
      :editor/indent
      :editor/outdent
      :editor/select-all-blocks
      :editor/select-parent
-     :go/search
      :go/search-in-page
+     :command-palette/toggle
      :go/electron-find-in-page
      :go/electron-jump-to-the-next
      :go/electron-jump-to-the-previous
@@ -831,14 +832,15 @@
      :editor/toggle-undo-redo-mode
      :editor/toggle-number-list
      :ui/toggle-wide-mode
-     :ui/toggle-cards
      :ui/toggle-document-mode
      :ui/toggle-brackets
      :ui/toggle-theme
      :ui/toggle-left-sidebar
      :ui/toggle-right-sidebar
      :ui/toggle-settings
-     :ui/toggle-contents]
+     :ui/toggle-contents
+     :ui/cycle-color-off
+     :ui/cycle-color]
 
     :shortcut.category/whiteboard
     [:editor/new-whiteboard
@@ -874,7 +876,6 @@
      :pdf/find
      :command/toggle-favorite
      :command/run
-     :command-palette/toggle
      :graph/export-as-html
      :graph/open
      :graph/remove

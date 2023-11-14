@@ -1,20 +1,13 @@
 (ns frontend.modules.shortcut.data-helper
-  (:require [borkdude.rewrite-edn :as rewrite]
-            [clojure.set :refer [rename-keys] :as set]
+  (:require [clojure.set :refer [rename-keys] :as set]
             [clojure.string :as str]
             [cljs-bean.core :as bean]
             [frontend.context.i18n :refer [t]]
-            [frontend.config :as config]
-            [frontend.db :as db]
-            [frontend.handler.file :as file]
             [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.state :as state]
             [frontend.util :as util]
-            [lambdaisland.glogi :as log]
-            [frontend.handler.repo-config :as repo-config-handler]
-            [frontend.handler.config :as config-handler])
-  (:import [goog.ui KeyboardShortcutHandler]))
+            [lambdaisland.glogi :as log]))
 
 (declare get-group)
 
@@ -100,10 +93,6 @@
           shortcut)
         (mapv mod-key)))))
 
-(defn shortcut-cmd
-  [id]
-  (get @shortcut-config/*shortcut-cmds id))
-
 (defn shortcut-item
   [id]
   (get (get-bindings-ids-map) id))
@@ -151,10 +140,10 @@
   (let [tmp (cond
               (false? binding)
               (cond
-                (and util/mac? (= k :editor/kill-line-after)) "system default: ctrl+k"
-                (and util/mac? (= k :editor/beginning-of-block)) "system default: ctrl+a"
-                (and util/mac? (= k :editor/end-of-block)) "system default: ctrl+e"
-                (and util/mac? (= k :editor/backward-kill-word)) "system default: opt+delete"
+                (and util/mac? (= k :editor/kill-line-after)) "system default: ctrl k"
+                (and util/mac? (= k :editor/beginning-of-block)) "system default: ctrl a"
+                (and util/mac? (= k :editor/end-of-block)) "system default: ctrl e"
+                (and util/mac? (= k :editor/backward-kill-word)) "system default: opt delete"
                 :else (t :keymap/disabled))
 
               (string? binding)
@@ -168,24 +157,6 @@
     ;; Display "cmd" rather than "meta" to the user to describe the Mac
     ;; mod key, because that's what the Mac keyboards actually say.
     (str/replace tmp "meta" "cmd")))
-
-;; Given the displayed binding, prepare it to be put back into config.edn
-(defn binding-for-storage [binding]
-  (str/replace binding "cmd" "meta"))
-
-(defn remove-shortcut [k]
-  (let [repo (state/get-current-repo)
-        path (config/get-repo-config-path)]
-    (when-let [result (some-> (db/get-file path)
-                              (config-handler/parse-repo-config))]
-      (when-let [new-content (and (:shortcuts result)
-                                  (-> (rewrite/update
-                                        result
-                                        :shortcuts
-                                        #(dissoc (rewrite/sexpr %) k))
-                                      (str)))]
-        (repo-config-handler/set-repo-config-state! repo new-content)
-        (file/set-file-content! repo path new-content)))))
 
 (defn get-group
   "Given shortcut key, return handler group
@@ -236,15 +207,15 @@
                                                             (and (set? handler-ids) (contains? handler-ids handler-id'))
                                                             (and global? (contains? global-handlers handler-id'))))
                                                     (assoc r id handler-id')
-                                                    r)
-                                                  ) {} refs)]]))]
+                                                    r))
+                                                {} refs)]]))]
 
                      [k' (->> ks-bindings
                               (filterv same-leading-key?)
                               (mapv into-conflict-refs)
                               (remove #(empty? (second (second %1))))
-                              (into {}))]
-                     ))))
+                              (into {}))]))))
+
           (remove #(empty? (vals (second %1))))
           (into {})))))
 
@@ -261,30 +232,6 @@
                     (and (or (= (count from) 1)
                              (= (count target) 1))
                          (= (first target) (first from))))))))))
-
-(defn potential-conflict? [shortcut-id]
-  (if-not (shortcut-binding shortcut-id)
-    false
-    (let [handler-id (get-group shortcut-id)
-          shortcut-m (shortcut-map handler-id)
-          parse-shortcut #(try
-                            (KeyboardShortcutHandler/parseStringShortcut %)
-                            (catch :default e
-                              (js/console.error "[shortcut/parse-error]" (str % " - " (.-message e)))))
-          bindings (->> (shortcut-binding shortcut-id)
-                        (map mod-key)
-                        (map parse-shortcut)
-                        (map js->clj))
-          rest-bindings (->> (map key shortcut-m)
-                             (remove #{shortcut-id})
-                             (map shortcut-binding)
-                             (filter vector?)
-                             (mapcat identity)
-                             (map mod-key)
-                             (map parse-shortcut)
-                             (map js->clj))]
-
-      (some? (some (fn [b] (some #{b} rest-bindings)) bindings)))))
 
 (defn shortcut-data-by-id [id]
   (let [binding (shortcut-binding id)

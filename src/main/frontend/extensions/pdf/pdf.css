@@ -274,8 +274,8 @@ input::-webkit-inner-spin-button {
   &-settings {
     &-inner.hls-popup-box {
       position: absolute;
-      right: 345px;
-      width: 178px;
+      right: 375px;
+      width: 235px;
       padding: 15px 10px;
     }
 
@@ -375,8 +375,6 @@ input::-webkit-inner-spin-button {
 
         .ui__button {
           margin-top: unset;
-          border-radius: 4px;
-          color: black;
           padding: 4px;
 
           .ti {

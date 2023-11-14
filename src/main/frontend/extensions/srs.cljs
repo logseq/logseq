@@ -1,35 +1,36 @@
 (ns frontend.extensions.srs
-  (:require [frontend.template :as template]
-            [frontend.db.query-dsl :as query-dsl]
-            [frontend.db.query-react :as query-react]
-            [frontend.util :as util]
-            [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.util.page-ref :as page-ref]
-            [frontend.util.property :as property]
-            [frontend.util.drawer :as drawer]
-            [frontend.util.persist-var :as persist-var]
-            [frontend.db :as db]
-            [frontend.db.model :as db-model]
-            [frontend.db-mixins :as db-mixins]
-            [frontend.state :as state]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.handler.editor.property :as editor-property]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [cljs-time.local :as tl]
+            [clojure.string :as string]
+            [frontend.commands :as commands]
             [frontend.components.block :as component-block]
+            [frontend.components.editor :as editor]
             [frontend.components.macro :as component-macro]
             [frontend.components.select :as component-select]
             [frontend.components.svg :as svg]
-            [frontend.ui :as ui]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
-            [frontend.commands :as commands]
-            [frontend.components.editor :as editor]
-            [cljs-time.core :as t]
-            [cljs-time.local :as tl]
-            [cljs-time.coerce :as tc]
-            [clojure.string :as string]
-            [rum.core :as rum]
+            [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
+            [frontend.db.model :as db-model]
+            [frontend.db.query-dsl :as query-dsl]
+            [frontend.db.query-react :as query-react]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.property :as editor-property]
             [frontend.modules.shortcut.core :as shortcut]
+            [frontend.state :as state]
+            [frontend.template :as template]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [frontend.util.block-content :as content]
+            [frontend.util.drawer :as drawer]
+            [frontend.util.persist-var :as persist-var]
+            [frontend.util.property :as property]
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [medley.core :as medley]
-            [frontend.context.i18n :refer [t]]))
+            [rum.core :as rum]))
 
 ;;; ================================================================
 ;;; Commentary
@@ -415,7 +416,7 @@
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click class]}]
   (ui/button
    [:span btn-text (when-not (util/sm-breakpoint?)
-                     [" " (ui/render-keyboard-shortcut shortcut)])]
+                     [" " (ui/render-keyboard-shortcut shortcut {:theme :text})])]
    :id id
    :class (str id " " class)
    :background background
@@ -645,14 +646,14 @@
            (if @*preview-mode?
              (ui/tippy {:html [:div.text-sm (t :flashcards/modal-current-total)]
                         :interactive true}
-                       [:div.opacity-60.text-sm.mr-3
+                       [:div.opacity-60.text-sm.mr-2
                         @*card-index
                         [:span "/"]
                         total])
              (ui/tippy {:html [:div.text-sm (t :flashcards/modal-overdue-total)]
                         ;; :class "tippy-hover"
                         :interactive true}
-                       [:div.opacity-60.text-sm.mr-3
+                       [:div.opacity-60.text-sm.mr-2
                         (max 0 (- filtered-total @*card-index))
                         [:span "/"]
                         total]))
@@ -663,29 +664,35 @@
              :class "tippy-hover"
              :interactive true
              :disabled false}
-            [:a.opacity-60.hover:opacity-100.svg-small.inline.font-bold
-             {:id "preview-all-cards"
-              :style (when @*preview-mode? {:color "orange"})
-              :on-click (fn [e]
+
+            (ui/button
+             (merge
+              {:icon "letter-a"
+               :intent "link"
+               :on-click (fn [e]
                           (util/stop e)
                           (swap! *preview-mode? not)
-                          (reset! *card-index 0))}
-             "A"])
+                           (reset! *card-index 0))
+               :button-props {:id "preview-all-cards"}
+               :small? true}
+              (when @*preview-mode?
+                {:icon-props {:style {:color "var(--ls-button-background)"}}}))))
 
            (ui/tippy
             {:html [:div.text-sm (t :flashcards/modal-toggle-random-mode)]
              :delay [1000, 100]
              :class "tippy-hover"
              :interactive true}
-            [:a.mt-1.ml-2.block.opacity-60.hover:opacity-100
-             {:on-mouse-down (fn [e]
-                               (util/stop e)
-                               (swap! *random-mode? not))}
-             (ui/icon "arrows-shuffle" {:style (cond->
-                                                {:font-size 18
-                                                 :font-weight 600}
-                                                 @*random-mode?
-                                                 (assoc :color "orange"))})])]]
+            (ui/button
+             (merge
+              {:icon "arrows-shuffle"
+               :intent "link"
+               :on-click (fn [e]
+                           (util/stop e)
+                           (swap! *random-mode? not))
+               :small? true}
+              (when @*random-mode?
+                {:icon-props {:style {:color "var(--ls-button-background)"}}}))))]]
          [:div.px-1
           (when (and (not modal?) (not @*preview-mode?))
             {:on-click (fn []
@@ -770,30 +777,32 @@
                                   "Create a cloze"])
 
 ;; handlers
+(defn add-card-tag-to-block
+  "given a block struct, adds the #card to title and returns
+   a seq of [original-block new-content-string]"
+  [block]
+    (when-let [content (:block/content block)]
+      (let [format (:block/format block)
+            content (-> (property/remove-built-in-properties format content)
+                        (drawer/remove-logbook))
+            [title body] (content/get-title&body content format)]
+        [block (str title " #" card-hash-tag "\n" body)])))
+
 (defn make-block-a-card!
   [block-id]
   (when-let [block (db/entity [:block/uuid block-id])]
-    (when-let [content (:block/content block)]
-      (let [content (-> (property/remove-built-in-properties (:block/format block) content)
-                        (drawer/remove-logbook))]
-        (editor-handler/save-block!
-         (state/get-current-repo)
-         block-id
-         (str (string/trim content) " #" card-hash-tag))))))
+    (let [block-content (add-card-tag-to-block block)
+          new-content (get block-content 1)]
+      (editor-handler/save-block! (state/get-current-repo) block-id new-content))))
 
 (defn batch-make-cards!
   ([] (batch-make-cards! (state/get-selection-block-ids)))
   ([block-ids]
-   (let [block-content-fn (fn [block]
-                            [block (-> (property/remove-built-in-properties (:block/format block) (:block/content block))
-                                       (drawer/remove-logbook)
-                                       string/trim
-                                       (str " #" card-hash-tag))])
-         blocks (->> block-ids
-                     (map #(db/entity [:block/uuid %]))
-                     (remove card-block?)
-                     (map #(db/pull [:block/uuid (:block/uuid %)]))
-                     (map block-content-fn))]
+   (let [valid-blocks (->> block-ids
+                           (map #(db/entity [:block/uuid %]))
+                           (remove card-block?)
+                           (map #(db/pull [:block/uuid (:block/uuid %)])))
+         blocks (map add-card-tag-to-block valid-blocks)]
      (when-not (empty? blocks)
        (editor-handler/save-blocks! blocks)))))
 

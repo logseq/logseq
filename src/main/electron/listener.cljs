@@ -188,7 +188,13 @@
 
   (safe-api-call "syncAPIServerState"
                  (fn [^js data]
-                   (state/set-state! :electron/server (bean/->clj data)))))
+                   (state/set-state! :electron/server (bean/->clj data))))
+
+
+  (safe-api-call "handbook"
+                 (fn [^js data]
+                   (when-let [k (and data (.-key data))]
+                     (state/open-handbook-pane! k)))))
 
 (defn listen!
   []

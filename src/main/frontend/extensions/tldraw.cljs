@@ -66,7 +66,7 @@
 
 (defn save-asset-handler
   [file]
-  (-> (editor-handler/save-assets! nil (state/get-current-repo) [(js->clj file)])
+  (-> (editor-handler/save-assets! (state/get-current-repo) [(js->clj file)])
       (p/then
        (fn [res]
          (when-let [[asset-file-name _ full-file-path] (and (seq res) (first res))]
@@ -163,9 +163,9 @@
 
        (when
         (and populate-onboarding? (not loaded-app))
-         [:div.absolute.inset-0.flex.items-center.justify-center
-          {:style {:z-index 200}}
-          (ui/loading "Loading onboarding whiteboard ...")])
+        [:div.absolute.inset-0.flex.items-center.justify-center
+         {:style {:z-index 200}}
+         (ui/loading "Loading onboarding whiteboard ...")])
        (tldraw {:renderers tldraw-renderers
                 :handlers (get-tldraw-handlers page-name)
                 :onMount on-mount

@@ -1,6 +1,7 @@
 (ns frontend.components.container
   (:require [cljs-drag-n-drop.core :as dnd]
             [clojure.string :as string]
+            [frontend.version :refer [version]]
             [frontend.components.find-in-page :as find-in-page]
             [frontend.components.header :as header]
             [frontend.components.journal :as journal]
@@ -11,6 +12,7 @@
             [frontend.components.select :as select]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
+            [frontend.components.handbooks :as handbooks]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -35,6 +37,7 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.components.window-controls :as window-controls]
+            [medley.core :as medley]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.path :as path]
@@ -204,7 +207,9 @@
                    (state/pub-event! [:modal/show-cards]))}
      (ui/icon "infinity")
      [:span.flex-1 (t :right-side-bar/flashcards)]
-     [:span.ml-1 (ui/render-keyboard-shortcut (ui/keyboard-shortcut-from-config :go/flashcards))]
+     [:span.ml-1 (ui/render-keyboard-shortcut
+                  (ui/keyboard-shortcut-from-config :go/flashcards
+                                                    {:pick-first? true}))]
      (when (and num (not (zero? num)))
        [:span.ml-1.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])]))
 
@@ -696,15 +701,74 @@
                {:on-click state/toggle-document-mode!}
                "D"])))
 
+(def help-menu-items
+  [{:title "Handbook" :icon "book-2" :on-click #(handbooks/toggle-handbooks)}
+   {:title "Keyboard shortcuts" :icon "command" :on-click #(state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings)}
+   {:title "Documentation" :icon "help" :href "https://docs.logseq.com/"}
+   :hr
+   {:title "Report bug" :icon "bug" :on-click #(rfe/push-state :bug-report)}
+   {:title "Request feature" :icon "git-pull-request" :href "https://discuss.logseq.com/c/feature-requests/"}
+   {:title "Submit feedback" :icon "messages" :href "https://discuss.logseq.com/c/feedback/13"}
+   :hr
+   {:title "Ask the community" :icon "brand-discord" :href "https://discord.com/invite/KpN4eHY"}
+   {:title "Support forum" :icon "message" :href "https://discuss.logseq.com/"}
+   :hr
+   {:title "Release notes" :icon "asterisk" :href "https://docs.logseq.com/#/page/changelog"}])
+
+(rum/defc help-menu-popup
+  []
+
+  (rum/use-effect!
+    (fn []
+      (state/set-state! :ui/handbooks-open? false))
+    [])
+
+  (rum/use-effect!
+    (fn []
+      (let [h #(state/set-state! :ui/help-open? false)]
+        (.addEventListener js/document.body "click" h)
+        #(.removeEventListener js/document.body "click" h)))
+    [])
+
+  [:div.cp__sidebar-help-menu-popup
+   [:div.list-wrap
+    (for [[idx {:keys [title icon href on-click] :as item}] (medley/indexed help-menu-items)]
+      (case item
+        :hr
+        [:hr.my-2 {:key idx}]
+
+        ;; default
+        [:a.it.flex.items-center.px-4.py-1.select-none
+         {:key      title
+          :on-click (fn []
+                      (cond
+                        (fn? on-click) (on-click)
+                        (string? href) (util/open-url href))
+                      (state/set-state! :ui/help-open? false))}
+         [:span.flex.items-center.pr-2.opacity-40 (ui/icon icon {:size 20})]
+         [:strong.font-normal title]]))]
+   [:div.ft.pl-11.pb-3
+    [:span.opacity.text-xs.opacity-30 "Logseq " version]]])
+
 (rum/defc help-button < rum/reactive
   []
-  (when-not (state/sub :ui/sidebar-open?)
-    [:div.cp__sidebar-help-btn
-     [:div.inner
-      {:title    (t :help-shortcut-title)
-       :on-click (fn []
-                   (state/sidebar-add-block! (state/get-current-repo) "help" :help))}
-      "?"]]))
+  (let [help-open?      (state/sub :ui/help-open?)
+        handbooks-open? (state/sub :ui/handbooks-open?)]
+    [:<>
+     [:div.cp__sidebar-help-btn
+      [:div.inner
+       {:title    (t :help-shortcut-title)
+        :on-click #(state/toggle! :ui/help-open?)}
+       [:svg.scale-125 {:stroke "currentColor", :fill "none", :stroke-linejoin "round", :width "24", :viewbox "0 0 24 24", :xmlns "http://www.w3.org/2000/svg", :stroke-linecap "round", :stroke-width "2", :class "icon icon-tabler icon-tabler-help-small", :height "24"}
+        [:path {:stroke "none", :d "M0 0h24v24H0z", :fill "none"}]
+        [:path {:d "M12 16v.01"}]
+        [:path {:d "M12 13a2 2 0 0 0 .914 -3.782a1.98 1.98 0 0 0 -2.414 .483"}]]]]
+
+     (when help-open?
+       (help-menu-popup))
+
+     (when handbooks-open?
+       (handbooks/handbooks-popup))]))
 
 (rum/defcs ^:large-vars/cleanup-todo sidebar <
   (mixins/modal :modal/show?)
@@ -795,7 +859,6 @@
                         :route-match    route-match
                         :default-home   default-home
                         :new-block-mode new-block-mode})
-
         (when (util/electron?)
           (find-in-page/search))
 
@@ -828,7 +891,6 @@
                                     :nfs-granted? granted?
                                     :db-restoring? db-restoring?})
       [:a#download.hidden]
-      (when
-       (and (not config/mobile?)
-            (not config/publishing?))
+      (when (and (not config/mobile?)
+                 (not config/publishing?))
         (help-button))])))

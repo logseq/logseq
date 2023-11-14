@@ -2,7 +2,18 @@
   &-inner {
     @apply flex flex-col md:flex-row;
 
-    > aside {
+    > header {
+      padding: 10px;
+      padding-top: 0;
+      border-bottom: 1px solid or(--ls-settings-header-border-color, --lx-gray-06, --ls-quaternary-background-color);
+
+      h1 {
+        font-size: 22px;
+        margin: 0;
+      }
+    }
+
+    aside {
       @apply bg-gray-400/5 p-4;
 
       > ul > li {
@@ -65,6 +76,10 @@
     .settings-menu-item {
       @apply list-none p-0 my-1.5 rounded;
       @apply hover:bg-black/10;
+
+      &[data-id=keymap] {
+        @apply hidden sm:block;
+      }
     }
 
     .settings-menu-link {
@@ -91,9 +106,10 @@
 
         margin-bottom: 0;
         padding-bottom: 12px;
-        align-items: center;
 
         label {
+          min-height: 28px;
+          line-height: 28px;
           display: flex;
           align-items: center;
 
@@ -205,6 +221,18 @@
 
           &.mode-system {
             background-position-x: -194px;
+          }
+
+          &.mode-dark.radix {
+            background: url('../img/dark-theme.png') no-repeat center / cover;
+          }
+
+          &.mode-light.radix {
+            background: url('../img/light-theme.png') no-repeat center / cover;
+          }
+
+          &.mode-system.radix {
+            background: url('../img/system-theme.png') no-repeat center / cover;
           }
         }
 
@@ -430,6 +458,14 @@ html.is-native-iphone-without-notch {
     .panel-wrap {
       padding-bottom: 0;
     }
+  }
+
+  .theme-row--swatch {
+    @apply w-5 h-5 rounded-full flex justify-center items-center;
+  }
+
+  .theme-row--swatch-active {
+    @apply w-5 h-5 rounded-full flex justify-center items-center;
   }
 }
 
