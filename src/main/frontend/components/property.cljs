@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
+            [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -176,9 +177,13 @@
                                        :selected (= type (:type @*property-schema))})))]
          (if (and property-type
                   (seq (model/get-block-property-values (:block/uuid property))))
-           [:div.col-span-2
-            {:title "Type can only edited if property is not used anywhere"}
-            (property-type-label property-type)]
+           [:div.flex.items-center.col-span-2
+            (property-type-label property-type)
+            (ui/tippy {:html        "The type of this property is locked once you start using it. This is to make sure all your existing information stays correct if the property type is changed later. To unlock, all uses of a property must be deleted."
+                       :class       "tippy-hover ml-2"
+                       :interactive true
+                       :disabled    false}
+                      (svg/help-circle))]
            [:div.col-span-2
             (ui/select schema-types
                        (fn [_e v]
