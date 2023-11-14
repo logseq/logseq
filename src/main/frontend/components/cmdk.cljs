@@ -61,12 +61,19 @@
    :files          {:status :success :show :less :items nil}
    :filters        {:status :success :show :less :items nil}})
 
+(defn get-class-from-input
+  [input]
+  (string/replace input #"^#+" ""))
+
 (defn create-items [q]
   (when-not (string/blank? q)
     (let [class? (string/starts-with? q "#")]
       (->> [{:text (if class? "Create class" "Create page")       :icon "new-page"
              :icon-theme :gray
-             :info (str "Create page called '" q "'") :source-create :page}
+             :info (if class?
+                     (str "Create class called '" (get-class-from-input q) "'")
+                     (str "Create page called '" q "'"))
+             :source-create :page}
             (when-not class?
               {:text "Create whiteboard" :icon "new-whiteboard"
                :icon-theme :gray
@@ -350,7 +357,7 @@
         create-whiteboard? (= :whiteboard (:source-create item))
         create-page? (= :page (:source-create item))
         alt? (some-> state ::alt deref)
-        class (when create-class? (string/replace @!input #"^#+" ""))]
+        class (when create-class? (get-class-from-input @!input))]
     (cond
       create-class? (page-handler/create! class
                                           {:redirect? false
