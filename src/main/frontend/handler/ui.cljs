@@ -286,7 +286,7 @@
 
 (defn toggle-cards!
   []
-  (if (:modal/show? @state/state)
+  (if (and (= :srs (:modal/id @state/state)) (:modal/show? @state/state))
     (state/close-modal!)
     (state/pub-event! [:modal/show-cards])))
 

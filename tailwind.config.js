@@ -1,28 +1,111 @@
-const plugin = require('tailwindcss/plugin')
 const colors = require('tailwindcss/colors')
+const plugin = require('tailwindcss/plugin')
 const radix = require('@radix-ui/colors')
 
-const gradientColors = {
-  tomato:  ["amber",     "orange",    "tomato",      "red",         "crimson"],
-  red:     ["orange",    "tomato",    "red",         "crimson",     "pink"], 
-  crimson: ["tomato",    "red",       "crimson",     "pink",        "plum"],
-  pink:    ["red",       "crimson",   "pink",        "plum",        "purple"],
-  plum:    ["crimson",   "pink",      "plum",        "purple",      "violet"], 
-  purple:  ["pink",      "plum",      "purple",      "violet",      "indigo"],
-  violet:  ["plum",      "purple",    "violet",      "indigo",      "blue"],  
-  indigo:  ["purple",    "violet",    "indigo",      "blue",        "cyan"],
-  blue:    ["violet",    "indigo",    "blue",        "cyan",        "teal"],
-  // sky:     ["indigo",    "blue",      "sky",         "cyan",        "teal"],
-  cyan:    ["indigo",    "blue",      "cyan",        "teal",        "green"],
-  teal:    ["blue",      "cyan",      "teal",        "green",       "grass"],
-  // mint:    ["cyan",      "teal",      "mint",        "green",       "grass"],
-  green:   ["cyan",      "teal",      "green",       "grass",       "amber"],
-  grass:   ["teal",      "green",     "grass",       "amber",       "orange"],
-  // lime:    ["green",     "grass",     "lime",        "yellow",      "amber"],
-  // yellow:  ["grass",     "lime",      "yellow",      "amber",       "orange"],
-  amber:   ["green",     "grass",     "amber",       "orange",      "tomato"],
-  orange:  ["grass",     "amber",     "orange",      "tomato",      "red"],
-  // brown:   ["green",     "grass",     "brown",       "tomato",       "red"],
+const lx = override => ({
+  'accent-01': 'or(' + override + ', --lx-accent-01, --ls-page-properties-background-color)',
+  'accent-02': 'or(' + override + ', --lx-accent-02, --ls-page-properties-background-color)',
+  'accent-03': 'or(' + override + ', --lx-accent-03, --ls-page-properties-background-color)',
+  'accent-04': 'or(' + override + ', --lx-accent-04, --ls-page-properties-background-color)',
+  'accent-05': 'or(' + override + ', --lx-accent-05, --color-blue-900)',
+  'accent-06': 'or(' + override + ', --lx-accent-06, --color-blue-800)',
+  'accent-07': 'or(' + override + ', --lx-accent-07, --color-blue-700)',
+  'accent-08': 'or(' + override + ', --lx-accent-08, --color-blue-600)',
+  'accent-09': 'or(' + override + ', --lx-accent-09, --color-blue-500)',
+  'accent-10': 'or(' + override + ', --lx-accent-10, --color-blue-400)',
+  'accent-11': 'or(' + override + ', --lx-accent-11, --color-blue-200)',
+  'accent-12': 'or(' + override + ', --lx-accent-12, --color-blue-50)',
+  'accent-01-alpha': 'or(' + override + ', --lx-accent-01-alpha, --ls-page-properties-background-color)',
+  'accent-02-alpha': 'or(' + override + ', --lx-accent-02-alpha, --ls-page-properties-background-color)',
+  'accent-03-alpha': 'or(' + override + ', --lx-accent-03-alpha, --ls-page-properties-background-color)',
+  'accent-04-alpha': 'or(' + override + ', --lx-accent-04-alpha, --ls-page-properties-background-color)',
+  'accent-05-alpha': 'or(' + override + ', --lx-accent-05-alpha, --color-blue-900)',
+  'accent-06-alpha': 'or(' + override + ', --lx-accent-06-alpha, --color-blue-800)',
+  'accent-07-alpha': 'or(' + override + ', --lx-accent-07-alpha, --color-blue-700)',
+  'accent-08-alpha': 'or(' + override + ', --lx-accent-08-alpha, --color-blue-600)',
+  'accent-09-alpha': 'or(' + override + ', --lx-accent-09-alpha, --color-blue-500)',
+  'accent-10-alpha': 'or(' + override + ', --lx-accent-10-alpha, --color-blue-400)',
+  'accent-11-alpha': 'or(' + override + ', --lx-accent-11-alpha, --color-blue-200)',
+  'accent-12-alpha': 'or(' + override + ', --lx-accent-12-alpha, --color-blue-50)',
+  'gray-01': 'or(' + override + ', --lx-gray-01, --ls-primary-background-color)',
+  'gray-02': 'or(' + override + ', --lx-gray-02, --ls-secondary-background-color)',
+  'gray-03': 'or(' + override + ', --lx-gray-03, --ls-tertiary-background-color)',
+  'gray-04': 'or(' + override + ', --lx-gray-04, --ls-quaternary-background-color)',
+  'gray-05': 'or(' + override + ', --lx-gray-05, --color-level-4)',
+  'gray-06': 'or(' + override + ', --lx-gray-06, --ls-block-bullet-border-color)',
+  'gray-07': 'or(' + override + ', --lx-gray-07, --ls-border-color)',
+  'gray-08': 'or(' + override + ', --lx-gray-08, --ls-secondary-border-color)',
+  'gray-09': 'or(' + override + ', --lx-gray-09, --color-level-5)',
+  'gray-10': 'or(' + override + ', --lx-gray-10, --ls-title-text-color)',
+  'gray-11': 'or(' + override + ', --lx-gray-11, --ls-primary-text-color)',
+  'gray-12': 'or(' + override + ', --lx-gray-12, --ls-secondary-text-color)',
+  'gray-01-alpha': 'or(' + override + ', --lx-gray-01-alpha, --ls-primary-background-color)',
+  'gray-02-alpha': 'or(' + override + ', --lx-gray-02-alpha, --ls-secondary-background-color)',
+  'gray-03-alpha': 'or(' + override + ', --lx-gray-03-alpha, --ls-tertiary-background-color)',
+  'gray-04-alpha': 'or(' + override + ', --lx-gray-04-alpha, --ls-quaternary-background-color)',
+  'gray-05-alpha': 'or(' + override + ', --lx-gray-05-alpha, --color-level-4)',
+  'gray-06-alpha': 'or(' + override + ', --lx-gray-06-alpha, --ls-block-bullet-color)',
+  'gray-07-alpha': 'or(' + override + ', --lx-gray-07-alpha, --ls-border-color)',
+  'gray-08-alpha': 'or(' + override + ', --lx-gray-08-alpha, --ls-secondary-border-color)',
+  'gray-09-alpha': 'or(' + override + ', --lx-gray-09-alpha, --color-level-5)',
+  'gray-10-alpha': 'or(' + override + ', --lx-gray-10-alpha, --color-level-6)',
+  'gray-11-alpha': 'or(' + override + ', --lx-gray-11-alpha, --ls-primary-text-color)',
+  'gray-12-alpha': 'or(' + override + ', --lx-gray-12-alpha, --ls-secondary-text-color)',
+})
+
+const accent = {
+  '01': 'var(--lx-accent-01)',
+  '02': 'var(--lx-accent-02)',
+  '03': 'var(--lx-accent-03)',
+  '04': 'var(--lx-accent-04)',
+  '05': 'var(--lx-accent-05)',
+  '06': 'var(--lx-accent-06)',
+  '07': 'var(--lx-accent-07)',
+  '08': 'var(--lx-accent-08)',
+  '09': 'var(--lx-accent-09)',
+  '10': 'var(--lx-accent-10)',
+  '11': 'var(--lx-accent-11)',
+  '12': 'var(--lx-accent-12)',
+  '01-alpha': 'var(--lx-accent-01-alpha)',
+  '02-alpha': 'var(--lx-accent-02-alpha)',
+  '03-alpha': 'var(--lx-accent-03-alpha)',
+  '04-alpha': 'var(--lx-accent-04-alpha)',
+  '05-alpha': 'var(--lx-accent-05-alpha)',
+  '06-alpha': 'var(--lx-accent-06-alpha)',
+  '07-alpha': 'var(--lx-accent-07-alpha)',
+  '08-alpha': 'var(--lx-accent-08-alpha)',
+  '09-alpha': 'var(--lx-accent-09-alpha)',
+  '10-alpha': 'var(--lx-accent-10-alpha)',
+  '11-alpha': 'var(--lx-accent-11-alpha)',
+  '12-alpha': 'var(--lx-accent-12-alpha)',
+}
+
+const gray = {
+  ...colors.gray,
+  '01': 'var(--lx-gray-01)',
+  '02': 'var(--lx-gray-02)',
+  '03': 'var(--lx-gray-03)',
+  '04': 'var(--lx-gray-04)',
+  '05': 'var(--lx-gray-05)',
+  '06': 'var(--lx-gray-06)',
+  '07': 'var(--lx-gray-07)',
+  '08': 'var(--lx-gray-08)',
+  '09': 'var(--lx-gray-09)',
+  '10': 'var(--lx-gray-10)',
+  '11': 'var(--lx-gray-11)',
+  '12': 'var(--lx-gray-12)',
+  '01-alpha': 'var(--lx-gray-01-alpha)',
+  '02-alpha': 'var(--lx-gray-02-alpha)',
+  '03-alpha': 'var(--lx-gray-03-alpha)',
+  '04-alpha': 'var(--lx-gray-04-alpha)',
+  '05-alpha': 'var(--lx-gray-05-alpha)',
+  '06-alpha': 'var(--lx-gray-06-alpha)',
+  '07-alpha': 'var(--lx-gray-07-alpha)',
+  '08-alpha': 'var(--lx-gray-08-alpha)',
+  '09-alpha': 'var(--lx-gray-09-alpha)',
+  '10-alpha': 'var(--lx-gray-10-alpha)',
+  '11-alpha': 'var(--lx-gray-11-alpha)',
+  '12-alpha': 'var(--lx-gray-12-alpha)',
 }
 
 function exposeColorsToCssVars ({ addBase, theme }) {
@@ -44,84 +127,39 @@ function exposeColorsToCssVars ({ addBase, theme }) {
   })
 }
 
+const withOverride = plugin(function({ matchUtilities }) {
+  matchUtilities({
+    'or': (value, b) => {
+        // check if the value starts with "bg-"
+        if (value.startsWith('bg-')) {
+          return { [`--lx-bg-override`]: `var(--lx-${value})` }
+        }
+        // check if the value starts with "text-"
+        if (value.startsWith('text-')) {
+          return { [`--lx-text-override`]: `var(--lx-${value})` }
+        }
+        // check if the value starts with "border-"
+        if (value.startsWith('border-')) {
+          return { [`--lx-border-override`]: `var(--lx-${value})` }
+        }
+    }
+  }, {
+    values: {}
+  })
+})
+
 function buildColor(color, custom) {
   const base = custom || colors[color] || {}
 
   for (const [xName, xValue] of Object.entries(radix[color] || {})) {
-    const regexResult = xName.match(/\d+$/) 
-    if (!regexResult) { continue; } 
+    const regexResult = xName.match(/\d+$/)
+    if (!regexResult) { continue; }
     const xStep = regexResult[0]
     base[xStep] = xValue
   }
 
   return base
 }
-
-// this will allow us to use gradient color functions in the ui:
-// grad-bg-tomato-3 OR grad-bg-tomato-3-alpha
-// it will also loop through all 5 color stops, unless the stops are specified 
-// grad-bg-stops-3
-// this will have a default repeating gradient at a step that can be configured with 
-// grad-bg-cycle-32 
-const addGradientColors = plugin(({ addBase, addComponents, addUtilities, config, ___theme }) => {
-  const dark = getDarkSelector(config)
-
-  addUtilities({
-    ['.grad-bg-stops-3']: {
-      '--grad-bg-stops': "var(--grad-bg-stop-b), var(--grad-bg-stop-c), var(--grad-bg-stop-d)",
-    },
-    ['.grad-bg-stops-5']: {
-      '--grad-bg-stops': "var(--grad-bg-stop-a), var(--grad-bg-stop-b), var(--grad-bg-stop-c), var(--grad-bg-stop-d), var(--grad-bg-stop-e)",
-    },
-    ['.grad-bg-cycle-12']: {
-      'background-image': 'repeatint-linear-gradient(to right, var(--grad-bg-stops))',
-    },
-  })
-
-  Object.values(gradientColors).forEach((stops, ___index) => {
-    const baseColor = stops[2]
-    const color = (scale, stopIndex = 2, suffix = "") => `--color-${stops[stopIndex]}${suffix}-${scale}`
-
-    addComponents({
-      // tailwind componnent for .grad-bg-COLOR-9
-      [`.grad-bg-${baseColor}-9`]: {
-        "--grad-bg-stop-a": `var(${color(9, 0)})`,
-        "--grad-bg-stop-b": `var(${color(9, 1)})`,
-        "--grad-bg-stop-c": `var(${color(9, 2)})`,
-        "--grad-bg-stop-d": `var(${color(9, 3)})`,
-        "--grad-bg-stop-e": `var(${color(9, 4)})`,
-        "--grad-bg-stops-default": `var(--grad-bg-stop-b), var(--grad-bg-stop-c), var(--grad-bg-stop-d)`,
-        "background-image": `linear-gradient(var(--grad-bg-direction, to right), var(--grad-bg-stops, var(--grad-bg-stops-default)))`,
-
-        [dark]: {
-          "--grad-bg-stop-a": `var(${color(9, 0, "dark")})`,
-          "--grad-bg-stop-b": `var(${color(9, 1, "dark")})`,
-          "--grad-bg-stop-c": `var(${color(9, 2, "dark")})`,
-          "--grad-bg-stop-d": `var(${color(9, 3, "dark")})`,
-          "--grad-bg-stop-e": `var(${color(9, 4, "dark")})`,
-        }
-      },
-      // tailwind component for .grad-bg-COLOR-9-alpha
-      [`.grad-bg-${baseColor}-9-alpha`]: {
-        "--grad-bg-stop-a": `var(${color(9, 0)})`,
-        "--grad-bg-stop-b": `var(${color(9, 1)})`,
-        "--grad-bg-stop-c": `var(${color(9, 2)})`,
-        "--grad-bg-stop-d": `var(${color(9, 3)})`,
-        "--grad-bg-stop-e": `var(${color(9, 4)})`,
-        "--grad-bg-stops-default": `var(--grad-bg-stop-b), var(--grad-bg-stop-c), var(--grad-bg-stop-d)`,
-        "background-image": `linear-gradient(var(--grad-bg-direction, to right), var(--grad-bg-stops, var(--grad-bg-stops-default)))`,
-
-        [dark]: {
-          "--grad-bg-stop-a": `var(${color(9, 0, "dark")})`,
-          "--grad-bg-stop-b": `var(${color(9, 1, "dark")})`,
-          "--grad-bg-stop-c": `var(${color(9, 2, "dark")})`,
-          "--grad-bg-stop-d": `var(${color(9, 3, "dark")})`,
-          "--grad-bg-stop-e": `var(${color(9, 4, "dark")})`,
-        }
-      },
-    })
-  })
-})
 
 function getDarkSelector(config) {
   const darkMode = config("darkMode");
@@ -173,23 +211,14 @@ module.exports = {
     { pattern: /bg-(gray|red|yellow|green|blue|orange|indigo|rose|purple|pink)-(100|200|300|400|500|600|700|800|900)/ },
     { pattern: /text-(gray|red|yellow|green|blue|orange|indigo|rose|purple|pink)-(100|200|300|400|500|600|700|800|900)/ },
     { pattern: /columns-([1-9]|1[0-2])|(auto|3xs|2xs|xs|sm|md|lg|xl)|([2-7]xl)/ },
-    { pattern: /bg-(mauve|slate|sage|olive|sand|tomato|red|crimson|pink|plum|purple|violet|indigo|blue|sky|cyan|teal|mint|green|grass|lime|yellow|amber|orange|brown)(dark)?-(1|2|3|4|5|6|7|8|9|10|11|12)/ },
-    { pattern: /shadow-(mauve|slate|sage|olive|sand|tomato|red|crimson|pink|plum|purple|violet|indigo|blue|sky|cyan|teal|mint|green|grass|lime|yellow|amber|orange|brown)(dark)?-(1|2|3|4|5|6|7|8|9|10|11|12)/ },
-    { pattern: /text-(mauve|slate|sage|olive|sand|tomato|red|crimson|pink|plum|purple|violet|indigo|blue|sky|cyan|teal|mint|green|grass|lime|yellow|amber|orange|brown)(dark)?-(1|2|3|4|5|6|7|8|9|10|11|12)/ },
-    { pattern: /ring-(mauve|slate|sage|olive|sand|tomato|red|crimson|pink|plum|purple|violet|indigo|blue|sky|cyan|teal|mint|green|grass|lime|yellow|amber|orange|brown)(dark)?-(1|2|3|4|5|6|7|8|9|10|11|12)/ },
-    { pattern: /from-(mauve|slate|sage|olive|sand|tomato|red|crimson|pink|plum|purple|violet|indigo|blue|sky|cyan|teal|mint|green|grass|lime|yellow|amber|orange|brown)(dark)?-(1|2|3|4|5|6|7|8|9|10|11|12)/ },
-    { pattern: /via-(mauve|slate|sage|olive|sand|tomato|red|crimson|pink|plum|purple|violet|indigo|blue|sky|cyan|teal|mint|green|grass|lime|yellow|amber|orange|brown)(dark)?-(1|2|3|4|5|6|7|8|9|10|11|12)/ },
-    { pattern: /to-(mauve|slate|sage|olive|sand|tomato|red|crimson|pink|plum|purple|violet|indigo|blue|sky|cyan|teal|mint|green|grass|lime|yellow|amber|orange|brown)(dark)?-(1|2|3|4|5|6|7|8|9|10|11|12)/ },
-    { pattern: /border-(mauve|slate|sage|olive|sand|tomato|red|crimson|pink|plum|purple|violet|indigo|blue|sky|cyan|teal|mint|green|grass|lime|yellow|amber|orange|brown)(dark)?-(4|5|6|7|8)/ },
   ],
   plugins: [
     require('@tailwindcss/forms'),
     require('@tailwindcss/typography'),
     require('@tailwindcss/aspect-ratio'),
-    require('@tailwindcss/line-clamp'),
     require('tailwind-capitalize-first-letter'),
-    addGradientColors,
-    exposeColorsToCssVars
+    exposeColorsToCssVars,
+    withOverride,
   ],
   theme: {
     extend: {
@@ -218,87 +247,35 @@ module.exports = {
         'lsm': '600px',
         'lmd': '728px',
         'llg': '960px'
-      }
+      },
+      backgroundColor: {
+        ...lx('--lx-bg-override'),
+      },
+      textColor: {
+        ...lx('--lx-text-override'),
+      },
+      borderColor: {
+        ...lx('--lx-border-override'),
+      },
     },
     colors: {
       // Tailwind colors
+      gray: gray,
+      accent: accent,
+      red: colors.red,
+      green: colors.green,
+      blue: colors.blue,
       black: colors.black,
-      current: 'currentColor',
+      orange: colors.orange,
+      indigo: colors.indigo,
       rose: colors.rose,
+      purple: colors.purple,
+      pink: colors.pink,
+      yellow: colors.yellow,
+
+      current: 'currentColor',
       transparent: 'transparent',
       white: colors.white,
-
-      // Radix colors
-      amber: buildColor("amber"),
-      blue: buildColor("blue"),
-      bronze: buildColor("bronze"),
-      brown: buildColor("brown"),
-      crimson: buildColor("crimson"),
-      cyan: buildColor("cyan"),
-      gold: buildColor("gold"),
-      grass: buildColor("grass"),
-      green: buildColor("green"),
-      lime: buildColor("lime"),
-      mauve: buildColor("mauve"),
-      mint: buildColor("mint"),
-      olive: buildColor("olive"),
-      orange: buildColor("orange"),
-      pink: buildColor("pink"),
-      plum: buildColor("plum"),
-      purple: buildColor("purple"),
-      red: buildColor("red"),
-      sage: buildColor("sage"),
-      sand: buildColor("sand"),
-      sky: buildColor("sky"),
-      slate: buildColor("slate"),
-      teal: buildColor("teal"),
-      tomato: buildColor("tomato"),
-      violet: buildColor("violet"),
-        
-      // Custom colors
-      gray: buildColor("gray", colors.neutral),
-      yellow: buildColor("yellow", colors.amber),
-      indigo: buildColor("indigo", {
-        50: '#f0f9ff',
-        100: '#e0f2fe',
-        200: '#bae6fd',
-        300: '#7dd3fc',
-        400: '#38bdf8',
-        500: '#0ea5e9',
-        600: '#0284c7',
-        700: '#005b8a',
-        800: '#075985',
-        900: '#0c4a6e',
-      }),
-
-      tomatodark: buildColor("tomatoDark"),
-      reddark: buildColor("redDark"),
-      crimsondark: buildColor("crimsonDark"),
-      pinkdark: buildColor("pinkDark"),
-      plumdark: buildColor("plumDark"),
-      purpledark: buildColor("purpleDark"),
-      violetdark: buildColor("violetDark"),
-      skydark: buildColor("skyDark"),
-      indigodark: buildColor("indigoDark"),
-      bluedark: buildColor("blueDark"),
-      cyandark: buildColor("cyanDark"),
-      mintdark: buildColor("mintDark"),
-      tealdark: buildColor("tealDark"),
-      greendark: buildColor("greenDark"),
-      limedark: buildColor("limeDark"),
-      grassdark: buildColor("grassDark"),
-      yellowdark: buildColor("yellowDark"),
-      amberdark: buildColor("amberDark"),
-      orangedark: buildColor("orangeDark"),
-      browndark: buildColor("brownDark"),
-      graydark: buildColor("grayDark"),
-      mauvedark: buildColor("mauveDark"),
-      slatedark: buildColor("slateDark"),
-      sagedark: buildColor("sageDark"),
-      olivedark: buildColor("oliveDark"),
-      sanddark: buildColor("sandDark"),
-      golddark: buildColor("goldDark"),
-      bronzedark: buildColor("bronzeDark"),
     }
   }
 }

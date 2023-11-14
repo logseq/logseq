@@ -418,7 +418,7 @@
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click class]}]
   (ui/button
    [:span btn-text (when-not (util/sm-breakpoint?)
-                     [" " (ui/render-keyboard-shortcut shortcut)])]
+                     [" " (ui/render-keyboard-shortcut shortcut {:theme :text})])]
    :id id
    :class (str id " " class)
    :background background
@@ -647,14 +647,14 @@
            (if @*preview-mode?
              (ui/tippy {:html [:div.text-sm (t :flashcards/modal-current-total)]
                         :interactive true}
-                       [:div.opacity-60.text-sm.mr-3
+                       [:div.opacity-60.text-sm.mr-2
                         @*card-index
                         [:span "/"]
                         total])
              (ui/tippy {:html [:div.text-sm (t :flashcards/modal-overdue-total)]
                         ;; :class "tippy-hover"
                         :interactive true}
-                       [:div.opacity-60.text-sm.mr-3
+                       [:div.opacity-60.text-sm.mr-2
                         (max 0 (- filtered-total @*card-index))
                         [:span "/"]
                         total]))
@@ -665,29 +665,35 @@
              :class "tippy-hover"
              :interactive true
              :disabled false}
-            [:a.opacity-60.hover:opacity-100.svg-small.inline.font-bold
-             {:id "preview-all-cards"
-              :style (when @*preview-mode? {:color "orange"})
-              :on-click (fn [e]
+
+            (ui/button
+             (merge
+              {:icon "letter-a"
+               :intent "link"
+               :on-click (fn [e]
                           (util/stop e)
                           (swap! *preview-mode? not)
-                          (reset! *card-index 0))}
-             "A"])
+                           (reset! *card-index 0))
+               :button-props {:id "preview-all-cards"}
+               :small? true}
+              (when @*preview-mode?
+                {:icon-props {:style {:color "var(--ls-button-background)"}}}))))
 
            (ui/tippy
             {:html [:div.text-sm (t :flashcards/modal-toggle-random-mode)]
              :delay [1000, 100]
              :class "tippy-hover"
              :interactive true}
-            [:a.mt-1.ml-2.block.opacity-60.hover:opacity-100
-             {:on-mouse-down (fn [e]
-                               (util/stop e)
-                               (swap! *random-mode? not))}
-             (ui/icon "arrows-shuffle" {:style (cond->
-                                                {:font-size 18
-                                                 :font-weight 600}
-                                                 @*random-mode?
-                                                 (assoc :color "orange"))})])]]
+            (ui/button
+             (merge
+              {:icon "arrows-shuffle"
+               :intent "link"
+               :on-click (fn [e]
+                           (util/stop e)
+                           (swap! *random-mode? not))
+               :small? true}
+              (when @*random-mode?
+                {:icon-props {:style {:color "var(--ls-button-background)"}}}))))]]
          [:div.px-1
           (when (and (not modal?) (not @*preview-mode?))
             {:on-click (fn []

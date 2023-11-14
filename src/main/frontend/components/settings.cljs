@@ -1,6 +1,9 @@
 (ns frontend.components.settings
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
+            [logseq.shui.core :as shui]
+            [frontend.shui :refer [make-shui-context]]
+            [frontend.colors :as colors]
             [frontend.components.assets :as assets]
             [frontend.components.conversion :as conversion-component]
             [frontend.components.file-sync :as fs]
@@ -23,7 +26,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
-            [frontend.components.shortcut2 :as shortcut2]
+            [frontend.components.shortcut :as shortcut]
             [frontend.spec.storage :as storage-spec]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -38,7 +41,7 @@
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for label-for}
     name]
@@ -148,64 +151,64 @@
            :height 500}]]])
 
 (defn row-with-button-action
-  [{:keys [left-label action button-label href on-click desc -for]}]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-
+  [{:keys [left-label description action button-label href on-click desc -for stretch center?]
+    :or {center? true}}]
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4
+   {:class (if center? "sm:items-center" "sm:items-start")}
    ;; left column
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for -for}
-    left-label]
+   [:div.flex.flex-col
+    [:label.block.text-sm.font-medium.leading-5.opacity-70
+     {:for -for}
+     left-label]
+    (when description
+      [:div.text-xs.text-gray-10 description])]
 
    ;; right column
    [:div.mt-1.sm:mt-0.sm:col-span-2.flex.items-center
-    {:style {:gap "0.5rem"}}
-    [:div (cond
-            action
-            action
-            button-label
-            (ui/button
-             button-label
-             :class    "text-sm p-1"
-             :href     href
-             :on-click on-click))]
+    {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
+    [:div {:style (when stretch {:width "100%"})}
+     (if action action (shui/button {:text button-label
+                                     :href href
+                                     :on-click on-click}
+                         (make-shui-context)))]
     (when-not (or (util/mobile?)
                   (mobile-util/native-platform?))
       [:div.text-sm.flex desc])]])
 
 (defn edit-config-edn []
   (row-with-button-action
-    {:left-label   (t :settings-page/custom-configuration)
-     :button-label (t :settings-page/edit-config-edn)
-     :href         (rfe/href :file {:path (config/get-repo-config-path)})
-     :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
-     :-for         "config_edn"}))
+   {:left-label   (t :settings-page/custom-configuration)
+    :button-label (t :settings-page/edit-config-edn)
+    :href         (rfe/href :file {:path (config/get-repo-config-path)})
+    :on-click     ui-handler/toggle-settings-modal!
+    :-for         "config_edn"}))
 
 (defn edit-global-config-edn []
   (row-with-button-action
     {:left-label   (t :settings-page/custom-global-configuration)
      :button-label (t :settings-page/edit-global-config-edn)
      :href         (rfe/href :file {:path (global-config-handler/global-config-path)})
-     :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
+     :on-click     ui-handler/toggle-settings-modal!
      :-for         "global_config_edn"}))
 
 (defn edit-custom-css []
   (row-with-button-action
-    {:left-label   (t :settings-page/custom-theme)
-     :button-label (t :settings-page/edit-custom-css)
-     :href         (rfe/href :file {:path (config/get-custom-css-path)})
-     :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
-     :-for         "customize_css"}))
+   {:left-label   (t :settings-page/custom-theme)
+    :button-label (t :settings-page/edit-custom-css)
+    :href         (rfe/href :file {:path (config/get-custom-css-path)})
+    :on-click     ui-handler/toggle-settings-modal!
+    :-for         "customize_css"}))
 
 (defn edit-export-css []
   (row-with-button-action
    {:left-label   (t :settings-page/export-theme)
     :button-label (t :settings-page/edit-export-css)
     :href         (rfe/href :file {:path (config/get-export-css-path)})
-    :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
-    :-for         "customize_css"}))
+    :on-click     ui-handler/toggle-settings-modal!
+    :-for         "export_css"}))
 
 (defn show-brackets-row [t show-brackets?]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "show_brackets"}
     (t :settings-page/show-brackets)]
@@ -221,7 +224,7 @@
 (rum/defcs switch-spell-check-row < rum/reactive
   [state t]
   (let [enabled? (state/sub [:electron/user-cfgs :spell-check])]
-    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
       (t :settings-page/spell-checker)]
      [:div
@@ -238,7 +241,7 @@
 (rum/defcs switch-git-auto-commit-row < rum/reactive
   [state t]
   (let [enabled? (state/get-git-auto-commit-enabled?)]
-    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
       (t :settings-page/git-switcher-label)]
      [:div
@@ -253,7 +256,7 @@
 (rum/defcs git-auto-commit-seconds < rum/reactive
   [state t]
   (let [secs (or (state/sub [:electron/user-cfgs :git/auto-commit-seconds]) 60)]
-    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
       (t :settings-page/git-commit-delay)]
      [:div.mt-1.sm:mt-0.sm:col-span-2
@@ -299,20 +302,54 @@
                              :action     action})))
 
 (defn theme-modes-row [t switch-theme system-theme? dark?]
-  (let [pick-theme [:ul.theme-modes-options
+  (let [color-accent (state/sub :ui/radix-color)
+        pick-theme [:ul.theme-modes-options
                     [:li {:on-click (partial state/use-theme-mode! "light")
-                          :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light] [:strong (t :settings-page/theme-light)]]
+                          :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light {:class (when color-accent "radix")}] [:strong (t :settings-page/theme-light)]]
                     [:li {:on-click (partial state/use-theme-mode! "dark")
-                          :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark] [:strong (t :settings-page/theme-dark)]]
+                          :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark {:class (when color-accent "radix")}] [:strong (t :settings-page/theme-dark)]]
                     [:li {:on-click (partial state/use-theme-mode! "system")
-                          :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong (t :settings-page/theme-system)]]]]
+                          :class    (classnames [{:active system-theme?}])} [:i.mode-system {:class (when color-accent "radix")}] [:strong (t :settings-page/theme-system)]]]]
     (row-with-button-action {:left-label (t :right-side-bar/switch-theme (string/capitalize switch-theme))
                              :-for       "toggle_theme"
                              :action     pick-theme
                              :desc       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))})))
 
+(defn accent-color-row []
+  (let [color-accent (state/sub :ui/radix-color)
+        pick-theme [:div.grid {:style {:grid-template-columns "repeat(5, 1fr)"
+                                       :gap "0.75rem"
+                                       :width "100%"
+                                       :max-width "16rem"}}
+                    (for [color colors/color-list
+                          :let [active? (= color color-accent)]]
+                      [:div.flex.items-center {:style {:height 28}}
+                       [:div {:class "w-5 h-5 rounded-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"
+                              :style {:background-color (colors/variable color :09)
+                                      :outline-color (colors/variable color (if active? :07 :06))
+                                      :outline-width (if active? "4px" "1px")
+                                      :outline-style :solid
+                                      :opacity (if active? 1 0.5)}
+                              :on-click (fn [_e] (state/set-color-accent! color))}
+                        [:div {:class "w-2 h-2 rounded-full transition ease-in duration-100"
+                               :style {:background-color (str "var(--rx-" (name color) "-07)")
+                                       :opacity (if active? 1 0)}}]]])
+                    (when color-accent
+                      [:div.col-span-5
+                       (shui/button {:text "Back to default color"
+                                     :theme :gray
+                                     :on-click (fn [_e] (state/unset-color-accent!))}
+                                    (make-shui-context nil nil))])]]
+
+    [:<>
+     (row-with-button-action {:left-label "Accent color"
+                              :description "Choosing an accent color will override any theme you have selected."
+                              :-for       "toggle_radix_theme"
+                              :stretch    true
+                              :action     pick-theme})]))
+
 (defn file-format-row [t preferred-format]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "preferred_format"}
     (t :settings-page/preferred-file-format)]
@@ -329,7 +366,7 @@
         [:option {:key format :value format} (string/capitalize format)])]]]])
 
 (defn date-format-row [t preferred-date-format]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "custom_date_format"}
     (t :settings-page/custom-date-format)
@@ -355,7 +392,7 @@
         [:option {:key format} format])]]]])
 
 (defn workflow-row [t preferred-workflow]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "preferred_workflow"}
     (t :settings-page/preferred-workflow)]
@@ -469,7 +506,7 @@
               (config-handler/set-config! :publishing/all-pages-public? value)))))
 
 (defn zotero-settings-row []
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "zotero_settings"}
     "Zotero"]
@@ -528,15 +565,12 @@
         on-toggle #(let [v (not on?)]
                      (set-on? v)
                      (storage/set ::storage-spec/lsp-core-enabled v))]
-    [:div.flex.items-center
+    [:div.flex.items-center.gap-2
      (ui/toggle on? on-toggle true)
      (when (not= (boolean value) on?)
-       [:div.relative.opacity-70
-        [:span.absolute.whitespace-nowrap
-         {:style {:top -18 :left 10}}
-         (ui/button (t :plugin/restart)
-                    :on-click #(js/logseq.api.relaunch)
-           :small? true :intent "logseq")]])]))
+       (ui/button (t :plugin/restart)
+                  :on-click #(js/logseq.api.relaunch)
+                  :small? true :intent "logseq"))]))
 
 (rum/defc http-server-enabled-switcher
   [t]
@@ -545,15 +579,12 @@
         on-toggle #(let [v (not on?)]
                      (set-on? v)
                      (storage/set ::storage-spec/http-server-enabled v))]
-    [:div.flex.items-center
+    [:div.flex.items-center.gap-2
      (ui/toggle on? on-toggle true)
      (when (not= (boolean value) on?)
-       [:div.relative.opacity-70
-        [:span.absolute.whitespace-nowrap
-         {:style {:top -18 :left 10}}
-         (ui/button (t :plugin/restart)
-                    :on-click #(js/logseq.api.relaunch)
-                    :small? true :intent "logseq")]])]))
+       (ui/button (t :plugin/restart)
+                  :on-click #(js/logseq.api.relaunch)
+                  :small? true :intent "logseq"))]))
 
 (rum/defc flashcards-enabled-switcher
   [enable-flashcards?]
@@ -637,6 +668,7 @@
   (let [preferred-language (state/sub [:preferred-language])
         theme (state/sub :ui/theme)
         dark? (= "dark" theme)
+        show-radix-themes? true
         system-theme? (state/sub :ui/system-theme?)
         switch-theme (if dark? "light" "dark")]
     [:div.panel-wrap.is-general
@@ -644,6 +676,7 @@
      (language-row t preferred-language)
      (theme-modes-row t switch-theme system-theme? dark?)
      (when (and (util/electron?) (not util/mac?)) (native-titlebar-row t))
+     (when show-radix-themes? (accent-color-row))
      (when (config/global-config-enabled?) (edit-global-config-edn))
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))
@@ -991,7 +1024,7 @@
     [:div.panel-wrap.is-features.mb-8
      (journal-row enable-journals?)
      (when (not enable-journals?)
-       [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+       [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
         [:label.block.text-sm.font-medium.leading-5.opacity-70
          {:for "default page"}
          (t :settings-page/home-default-page)]
@@ -1032,7 +1065,7 @@
 
      (when-not web-platform?
        [:<>
-        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
          [:label.flex.font-medium.leading-5.self-start.mt-1
           (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
         [:div.flex.flex-col.gap-4
@@ -1050,7 +1083,7 @@
      ;; (when-not web-platform?
      ;;   [:<>
      ;;    [:hr]
-     ;;    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+;;    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      ;;     [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]]
      ;;    [:div.flex.flex-col.gap-4
      ;;     {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
@@ -1105,7 +1138,6 @@
      [:div.cp__settings-inner
       [:aside.md:w-64 {:style {:min-width "10rem"}}
        [:header.cp__settings-header
-        (ui/icon "settings")
         [:h1.cp__settings-modal-title (t :settings)]]
        [:ul.settings-menu
         (for [[label id text icon]
@@ -1158,7 +1190,7 @@
          (settings-editor current-repo)
 
          :keymap
-         (shortcut2/shortcut-keymap-x)
+         (shortcut/shortcut-keymap-x)
 
          :version-control
          (settings-git)

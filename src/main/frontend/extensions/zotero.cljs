@@ -355,8 +355,9 @@
   [:div.flex.flex-row.mb-4.items-center
    [:label.title.mr-32 {:for "profile-select"} "Choose a profile:"]
    [:div.flex.flex-row.ml-4
-    [:select.ml-1
-     {:value @profile*
+    [:select.ml-1.rounded
+     {:style {:padding "0px 36px 0px 8px"}
+      :value @profile*
       :on-change
       (fn [e]
         (when-let [profile (util/evalue e)]

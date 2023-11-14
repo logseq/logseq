@@ -387,7 +387,10 @@
         lisp-like? (contains? #{"scheme" "lisp" "clojure" "edn"} mode)
         config-edit? (and (:file? config) (string/ends-with? (:file-path config) "config.edn"))
         textarea (gdom/getElement id)
-        default-cm-options {:theme (str "solarized " theme)
+        radix-color (state/sub :ui/radix-color)
+        default-cm-options {:theme (if radix-color 
+                                     (str "lsradix " theme)
+                                     (str "solarized " theme))
                             :autoCloseBrackets true
                             :lineNumbers true
                             :matchBrackets lisp-like?
@@ -470,17 +473,29 @@
       (let [editor (render! state)]
         (reset! editor-atom editor)))))
 
+(defn get-theme! []
+  (if (state/sub :ui/radix-color)
+    (str "lsradix " (state/sub :ui/theme))
+    (str "solarized " (state/sub :ui/theme))))
+
 (rum/defcs editor < rum/reactive
   {:init (fn [state]
            (let [[_ _ _ code _ options] (:rum/args state)]
              (assoc state
                     :editor-atom (atom nil)
                     :calc-atom (atom (calc/eval-lines code))
-                    :code-options (atom options))))
+                    :code-options (atom options)
+                    :last-theme (atom (get-theme!)))))
    :did-mount (fn [state]
                 (load-and-render! state)
                 state)
    :did-update (fn [state]
+                 (let [next-theme (get-theme!)
+                       last-theme @(:last-theme state)
+                       editor (some-> state :editor-atom deref)]
+                   (when (and editor (not= next-theme last-theme)) 
+                     (reset! (:last-theme state) next-theme)
+                     (.setOption editor "theme" next-theme)))
                  (reset! (:code-options state) (last (:rum/args state)))
                  (when-not (:file? (first (:rum/args state)))
                    (let [code (nth (:rum/args state) 3)
