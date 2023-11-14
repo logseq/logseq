@@ -47,6 +47,6 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: 2553ea8236c11ea0f88de28fce1cbfee
           projectName: "logseq-dev"
-          directory: "public"
+          directory: "static"
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          branch: "main"
+          branch: "production"
