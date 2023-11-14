@@ -342,9 +342,10 @@
 
 (defmethod handle-action :open [_ state event]
   (when-let [item (some-> state state->highlighted-item)]
-    (let [shift? @(::shift? state)
-          page? (boolean (:source-page item))
+    (let [page? (boolean (:source-page item))
           block? (boolean (:source-block item))
+          shift?  @(::shift? state)
+          shift-or-sidebar? (or shift? (boolean (:open-sidebar? (:opts state))))
           search-mode (:search/mode @state/state)
           graph-view? (= search-mode :graph)]
       (cond
@@ -355,8 +356,8 @@
         (and graph-view? page? (not shift?)) (do
                                                (state/add-graph-search-filter! @(::input state))
                                                (reset! (::input state) ""))
-        (and shift? block?) (handle-action :open-block-right state event)
-        (and shift? page?) (handle-action :open-page-right state event)
+        (and shift-or-sidebar? block?) (handle-action :open-block-right state event)
+        (and shift-or-sidebar? page?) (handle-action :open-page-right state event)
         block? (handle-action :open-block state event)
         page? (handle-action :open-page state event)))))
 
@@ -662,14 +663,14 @@
   [state]
   (let [context (make-shui-context)
         action (state->action state)
-        button-fn (fn [text shortcut]
+        button-fn (fn [text shortcut & {:as opts}]
                     (shui/button {:text text
                                   :theme :text
                                   :hover-theme :gray
-                                  :on-click #(handle-action action state %)
+                                  :on-click #(handle-action action (assoc state :opts opts) %)
                                   :shortcut shortcut
                                   :muted true}
-                                 context))]
+                      context))]
     (when action
       [:div {:class "flex w-full px-3 py-2 gap-2 justify-between"
              :style {:background "var(--lx-gray-03)"
@@ -684,7 +685,7 @@
           :open
           [:<>
            (button-fn "Open" ["return"])
-           (button-fn "Open in sidebar" ["shift" "return"])
+           (button-fn "Open in sidebar" ["shift" "return"] {:open-sidebar? true})
            (when (:source-block @(::highlighted-item state)) (button-fn "Copy ref" ["⌘" "c"]))]
 
           :search
