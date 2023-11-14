@@ -1,7 +1,6 @@
 (ns frontend.handler.db-based.property
   "Properties handler for db graphs"
-  (:require [clojure.edn :as edn]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.notification :as notification]
@@ -30,12 +29,24 @@
                  [property-type property-val-schema]))
              db-property-type/builtin-schema-types)))
 
+(defn- fail-parse-long
+  [v-str]
+  (let [result (parse-long v-str)]
+    (or result
+        (throw (js/Error. (str "Can't convert \"" v-str "\" to a number"))))))
+
+(defn- fail-parse-double
+  [v-str]
+  (let [result (parse-double v-str)]
+    (or result
+        (throw (js/Error. (str "Can't convert \"" v-str "\" to a number"))))))
+
 (defn- infer-schema-from-input-string
   [v-str]
   (try
     (cond
-      (parse-long v-str) :number
-      (parse-double v-str) :number
+      (fail-parse-long v-str) :number
+      (fail-parse-double v-str) :number
       (util/uuid-string? v-str) :page
       (gp-util/url? v-str) :url
       (contains? #{"true" "false"} (string/lower-case v-str)) :checkbox
@@ -48,19 +59,19 @@
   (if (and (not (string? v-str)) (not (object? v-str)))
     v-str
     (case schema-type
-      :default
-      (if (util/uuid-string? v-str) (uuid v-str) v-str)
-
       :number
-      (edn/read-string v-str)
+      (fail-parse-double v-str)
 
       :page
       (uuid v-str)
 
       ;; these types don't need to be translated. :date expects uuid and other
       ;; types usually expect text
-      (:enum :url :date :any)
-      v-str)))
+      (:url :date :any)
+      v-str
+
+      ;; :default
+      (if (util/uuid-string? v-str) (uuid v-str) v-str))))
 
 (defn upsert-property!
   [repo k-name schema {:keys [property-uuid]}]
@@ -81,6 +92,14 @@
                              (seq schema)
                              (assoc :block/schema schema)))]
                     {:outliner-op :insert-blocks}))))
+
+(defn- validate-property-value
+  [property schema value]
+  (let [values (get-in property [:block/schema :values])]
+    (if (seq values)
+      (when-not (contains? (set values) value)
+        "Value is not included in the closed values.")
+      (me/humanize (mu/explain-data schema value)))))
 
 (defn- reset-block-property-multiple-values!
   [repo block-id k-name values _opts]
@@ -120,7 +139,7 @@
                              {:block/uuid block-id
                               attribute property-value-ids}]
                             {:outliner-op :save-block}))
-            (if-let [msg (some #(me/humanize (mu/explain-data schema %)) values')]
+            (if-let [msg (some #(validate-property-value property schema %) values')]
               (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                 (notification/show! msg' :warning))
               (do
@@ -193,7 +212,7 @@
                               [[:db/add (:db/id block) attribute property-value-id]]
                               {:outliner-op :save-block}))
               (when-not (contains? (if (set? value) value #{value}) v*)
-                (if-let [msg (me/humanize (mu/explain-data schema v*))]
+                (if-let [msg (validate-property-value property schema v*)]
                   (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                     (notification/show! msg' :warning))
                   (do

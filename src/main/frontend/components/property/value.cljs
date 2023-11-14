@@ -21,8 +21,10 @@
             [frontend.handler.property.util :as pu]))
 
 (defn- select-type?
-  [type]
-  (contains? #{:page :number :url :date :enum} type))
+  [property type]
+  (or (contains? #{:page :number :url :date} type)
+      ;; closed values
+      (seq (get-in property [:block/schema :values]))))
 
 (defn exit-edit-property
   ([]
@@ -62,9 +64,8 @@
     (route-handler/redirect-to-page! (date/js-date->journal-title value))))
 
 (rum/defc date-picker
-  [block property value opts]
-  (let [multiple-values? (= :many (:cardinality (:block/schema property)))
-        title (when (uuid? value)
+  [value {:keys [multiple-values? on-change] :as opts}]
+  (let [title (when (uuid? value)
                 (:block/original-name (db/entity [:block/uuid value])))
         value (if title
                 (js/Date. (date/journal-title->long title))
@@ -93,21 +94,32 @@
          (when-not title (ui/icon "calendar" {:size 15}))]])
      (fn [{:keys [toggle-fn]}]
        (ui/datepicker value' {:on-change (fn [_e date]
-                                           (let [repo (state/get-current-repo)
-                                                 journal (date/js-date->journal-title date)]
+                                           (let [journal (date/js-date->journal-title date)]
                                              (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
                                                (page-handler/create! journal {:redirect? false
                                                                               :create-first-block? false}))
-                                             (when-let [page (db/entity [:block/name (util/page-name-sanity-lc journal)])]
-                                               (property-handler/set-block-property! repo (:block/uuid block)
-                                                                                     (:block/name property)
-                                                                                     (:block/uuid page)))
+                                             (when (fn? on-change)
+                                               (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
                                              (exit-edit-property)
                                              (toggle-fn)
                                              (when-let [toggle (:toggle-fn opts)]
                                                (toggle))))}))
      {:modal-class (util/hiccup->class
                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})))
+
+
+(rum/defc property-value-date-picker
+  [block property value opts]
+  (let [multiple-values? (= :many (:cardinality (:block/schema property)))]
+    (date-picker value
+                 (merge opts
+                        {:multiple-values? multiple-values?
+                         :on-change (fn [page]
+                                      (let [repo (state/get-current-repo)]
+                                        (property-handler/set-block-property! repo (:block/uuid block)
+                                                                              (:block/name property)
+                                                                              (:block/uuid page))
+                                        (exit-edit-property)))}))))
 
 (defn- create-page-if-not-exists!
   [property classes page]
@@ -153,29 +165,31 @@
                           :items items'
                           k f'))))
 
-(defn- select-page
-  [block property
-   {:keys [classes multiple-choices? dropdown?] :as opts}
-   {:keys [*show-new-property-config?]}]
+(defn select-page
+  [property
+   {:keys [block classes multiple-choices? dropdown? input-opts on-chosen] :as opts}]
   (let [repo (state/get-current-repo)
         tags? (= "tags" (:block/name property))
         alias? (= "alias" (:block/name property))
         tags-or-alias? (or tags? alias?)
-        selected-choices (->>
-                          (if tags-or-alias?
-                            (->> (if (= "tags" (:block/name property))
-                                   (:block/tags block)
-                                   (:block/alias block))
-                                 (map (fn [e] (:block/original-name e))))
-                            (let [v (get-in block [:block/properties (:block/uuid property)])]
-                              (if (coll? v)
-                                (map (fn [id]
-                                       (:block/original-name (db/entity [:block/uuid id])))
-                                     v)
-                                [(:block/original-name (db/entity [:block/uuid v]))])))
-                          (remove nil?))
+        selected-choices (when block
+                           (->>
+                            (if tags-or-alias?
+                              (->> (if (= "tags" (:block/name property))
+                                     (:block/tags block)
+                                     (:block/alias block))
+                                   (map (fn [e] (:block/original-name e))))
+                              (when-let [v (get-in block [:block/properties (:block/uuid property)])]
+                                (if (coll? v)
+                                  (map (fn [id]
+                                         (:block/original-name (db/entity [:block/uuid id])))
+                                       v)
+                                  [(:block/original-name (db/entity [:block/uuid v]))])))
+                            (remove nil?)))
+        closed-values (seq (get-in property [:block/schema :values]))
         pages (->>
-               (if (seq classes)
+               (cond
+                 (seq classes)
                  (mapcat
                   (fn [class]
                     (if (= :logseq.class class)
@@ -184,68 +198,86 @@
                                (model/get-class-objects repo)
                                (map #(:block/original-name (db/entity %))))))
                   classes)
+
+                 (and block closed-values)
+                 (map (fn [id] (:block/original-name (db/entity [:block/uuid id]))) closed-values)
+
+                 :else
                  (model/get-all-page-original-names repo))
                distinct)
         options (map (fn [p] {:value p}) pages)
-        opts (cond->
-              {:multiple-choices? multiple-choices?
-               :items options
-               :selected-choices selected-choices
-               :dropdown? dropdown?
-               :input-default-placeholder (cond
-                                            tags?
-                                            "Set tags"
-                                            alias?
-                                            "Set alias"
-                                            multiple-choices?
-                                            "Choose pages"
-                                            :else
-                                            "Choose page")
-               :show-new-when-not-exact-match? true
-               :extract-chosen-fn :value
-               ;; Provides additional completion for inline classes on new pages
-               :transform-fn (fn [results input]
-                               (if-let [[_ new-page class-input] (and (empty? results) (re-find #"(.*)#(.*)$" input))]
-                                 (let [repo (state/get-current-repo)
-                                       class-names (map #(:block/original-name (db/entity repo [:block/uuid %])) classes)
-                                       descendent-classes (->> class-names
-                                                               (mapcat #(db/get-namespace-pages repo %))
-                                                               (map :block/original-name))]
-                                   (->> (concat class-names descendent-classes)
-                                        (filter #(string/includes? % class-input))
-                                        (mapv #(hash-map :value (str new-page "#" %)))))
-                                 results))
-               :input-opts (fn [_]
-                             {:on-blur (fn []
-                                         (exit-edit-property))
-                              :on-click (fn []
-                                          (when *show-new-property-config?
-                                            (reset! *show-new-property-config? false)))
-                              :on-key-down
-                              (fn [e]
-                                (case (util/ekey e)
-                                  "Escape"
-                                  (do
-                                    (exit-edit-property)
-                                    (when-let [f (:on-chosen opts)] (f)))
-                                  nil))})}
-               multiple-choices?
-               (assoc :on-apply (fn [choices]
-                                  (let [pages (->> choices
-                                                   (map #(create-page-if-not-exists! property classes %))
-                                                   (map first))
-                                        values (set (map #(pu/get-page-uuid repo %) pages))]
-                                    (add-property! block (:block/original-name property) values)
-                                    (when-let [f (:on-chosen opts)] (f)))))
-               (not multiple-choices?)
-               (assoc :on-chosen (fn [chosen]
-                                   (let [page* (string/trim (if (string? chosen) chosen (:value chosen)))]
-                                     (when-not (string/blank? page*)
-                                       (let [[page id] (create-page-if-not-exists! property classes page*)
-                                             id' (or id (pu/get-page-uuid repo page))]
-                                         (add-property! block (:block/original-name property) id')
-                                         (when-let [f (:on-chosen opts)] (f))))))))]
-    (select-aux block property opts)))
+        opts' (cond->
+               (merge
+                opts
+                {:multiple-choices? multiple-choices?
+                 :items options
+                 :selected-choices selected-choices
+                 :dropdown? dropdown?
+                 :input-default-placeholder (cond
+                                              tags?
+                                              "Set tags"
+                                              alias?
+                                              "Set alias"
+                                              multiple-choices?
+                                              "Choose pages"
+                                              :else
+                                              "Choose page")
+                 :show-new-when-not-exact-match? (not (and block closed-values))
+                 :extract-chosen-fn :value
+                 ;; Provides additional completion for inline classes on new pages
+                 :transform-fn (fn [results input]
+                                 (if-let [[_ new-page class-input] (and (empty? results) (re-find #"(.*)#(.*)$" input))]
+                                   (let [repo (state/get-current-repo)
+                                         class-names (map #(:block/original-name (db/entity repo [:block/uuid %])) classes)
+                                         descendent-classes (->> class-names
+                                                                 (mapcat #(db/get-namespace-pages repo %))
+                                                                 (map :block/original-name))]
+                                     (->> (concat class-names descendent-classes)
+                                          (filter #(string/includes? % class-input))
+                                          (mapv #(hash-map :value (str new-page "#" %)))))
+                                   results))
+                 :input-opts input-opts})
+                multiple-choices?
+                (assoc :on-apply (fn [choices]
+                                   (let [pages (->> choices
+                                                    (map #(create-page-if-not-exists! property classes %))
+                                                    (map first))
+                                         values (set (map #(pu/get-page-uuid repo %) pages))]
+                                     (when on-chosen (on-chosen values)))))
+                (not multiple-choices?)
+                (assoc :on-chosen (fn [chosen]
+                                    (let [page* (string/trim (if (string? chosen) chosen (:value chosen)))]
+                                      (when-not (string/blank? page*)
+                                        (let [[page id] (create-page-if-not-exists! property classes page*)
+                                              id' (or id (pu/get-page-uuid repo page))]
+                                          (when on-chosen (on-chosen id'))))))))]
+    (select-aux block property opts')))
+
+(defn property-value-select-page
+  [block property
+   {:keys [on-chosen] :as opts}
+   {:keys [*show-new-property-config?]}]
+  (let [input-opts (fn [_]
+                     {:on-blur (fn []
+                                 (exit-edit-property))
+                      :on-click (fn []
+                                  (when *show-new-property-config?
+                                    (reset! *show-new-property-config? false)))
+                      :on-key-down
+                      (fn [e]
+                        (case (util/ekey e)
+                          "Escape"
+                          (do
+                            (exit-edit-property)
+                            (when-let [f (:on-chosen opts)] (f)))
+                          nil))})
+        opts' (assoc opts
+                     :block block
+                     :input-opts input-opts
+                     :on-chosen (fn [values]
+                                  (add-property! block (:block/original-name property) values)
+                                  (when on-chosen (on-chosen))))]
+    (select-page property opts')))
 
 ;; (defn- move-cursor
 ;;   [up? opts]
@@ -328,18 +360,19 @@
   (let [schema (:block/schema property)
         property (db/sub-block (:db/id property))
         type (:type schema)
-        enum? (= :enum type)
-        items (if enum?
+        closed-values? (seq (:values schema))
+        items (if closed-values?
                 (keep (fn [id]
                         (when-let [block (when id (db/entity [:block/uuid id]))]
                           (let [icon (pu/get-property block :icon)
-                                name (:block/content block)]
+                                value (or (:block/original-name block)
+                                          (get-in block [:block/schema :value]))]
                             {:label (if icon
                                       [:div.flex.flex-row.gap-2
                                        (icon-component/icon icon)
-                                       name]
-                                      name)
-                             :value id}))) (get-in schema [:enum-config :values]))
+                                       value]
+                                      value)
+                             :value id}))) (:values schema))
                 (->> (model/get-block-property-values (:block/uuid property))
                      (mapcat (fn [[_id value]]
                                (if (coll? value)
@@ -364,7 +397,7 @@
                   :items items
                   :selected-choices selected-choices
                   :dropdown? dropdown?
-                  :show-new-when-not-exact-match? (not (contains? #{:enum} type))
+                  :show-new-when-not-exact-match? (not closed-values?)
                   :input-default-placeholder "Select"
                   :extract-chosen-fn :value
                   :input-opts (fn [_]
@@ -382,7 +415,7 @@
                                        (exit-edit-property)
                                        (when-let [f (:on-chosen opts)] (f)))
                                      nil))})}
-                  enum?
+                  closed-values?
                   (assoc :extract-fn :label)
                   multiple-choices?
                   (assoc :on-apply on-chosen)
@@ -436,24 +469,40 @@
       invalid-warning)))
 
 (rum/defc select-item
-  [type value {:keys [page-cp inline-text]}]
-  (case type
-    (:page :date)
-    (when-let [page (db/entity [:block/uuid value])]
-      (page-cp {:disable-preview? true
-                :hide-close-button? true} page))
+  [property type value {:keys [page-cp inline-text]}]
+  (let [closed-values? (seq (get-in property [:block/schema :values]))]
+    (cond
+      (contains? #{:page :date} type)
+      (when-let [page (db/entity [:block/uuid value])]
+        (page-cp {:disable-preview? true
+                  :hide-close-button? true} page))
 
-    :number
-    [:span.number (str value)]
+      closed-values?
+      (when-let [block (when value (db/entity [:block/uuid value]))]
+        (let [value' (get-in block [:block/schema :value])
+              icon (pu/get-property block :icon)]
+          (cond
+            (:block/name block)
+            (page-cp {:disable-preview? true
+                      :hide-close-button? true} block)
 
-    :enum
-    (when-let [block (when value (db/entity [:block/uuid value]))]
-      (let [name (:block/content block)]
-        (if-let [icon (pu/get-property block :icon)]
-          (icon-component/icon icon)
-          name)))
+            icon
+            (icon-component/icon icon)
 
-    (inline-text {} :markdown (str value))))
+            (= type :number)
+            [:span.number (str value')]
+
+            (= type :url)
+            (inline-text {} :markdown (str value'))
+
+            :else
+            value')))
+
+      (= type :number)
+      [:span.number (str value)]
+
+      :else
+      (inline-text {} :markdown (str value)))))
 
 (rum/defc single-value-select
   [block property value value-f select-opts {:keys [editing?] :as opts}]
@@ -467,11 +516,11 @@
         select-f (fn []
                    [:div.property-select (cond-> {} editing? (assoc :class "h-6"))
                     (case type
-                      (:number :url :date :enum)
+                      (:number :url :date :default)
                       (select block property select-opts' opts)
 
                       :page
-                      (select-page block property select-opts' opts))])
+                      (property-value-select-page block property select-opts' opts))])
         dropdown-opts {:modal-class (util/hiccup->class
                                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")
                        :initial-open? editing?}]
@@ -505,17 +554,19 @@
         multiple-values? (= :many (:cardinality schema))
         editor-id (or editor-id (str "ls-property-" (:db/id block) "-" (:db/id property)))
         editing? (or editing? (and @*ref (state/sub-editing? @*ref)))
-        select-type? (select-type? type)
+        select-type? (select-type? property type)
+        closed-values? (seq (:values schema))
         select-opts {:on-chosen on-chosen}]
-    (if (and select-type? (not= type :date))
+    (if (and select-type?
+             (not (and (not closed-values?) (= type :date))))
       (single-value-select block property value
                            (fn []
-                             (select-item type value opts))
+                             (select-item property type value opts))
                            select-opts
                            opts)
       (case type
         :date
-        (date-picker block property value nil)
+        (property-value-date-picker block property value nil)
 
         :checkbox
         (let [add-property! (fn []
@@ -593,9 +644,9 @@
                     (if (seq items)
                       (concat
                        (for [item items]
-                         (select-item type item opts))
+                         (select-item property type item opts))
                        (when date?
-                         [(date-picker block property nil {:toggle-fn toggle-fn})]))
+                         [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
                       (when-not editing? [:div.opacity-50.pointer.text-sm "Empty"])))
         select-cp (fn []
                     (let [select-opts {:multiple-choices? true
@@ -604,10 +655,10 @@
                                                     (when on-chosen (on-chosen)))}]
                       [:div.property-select (cond-> {} editing? (assoc :class "h-6"))
                        (if (= :page type)
-                         (select-page block property
-                                      (assoc select-opts
-                                             :classes (:classes schema))
-                                      opts)
+                         (property-value-select-page block property
+                                                     (assoc select-opts
+                                                            :classes (:classes schema))
+                                                     opts)
                          (select block property select-opts opts))]))]
     (if (and dropdown? (not editing?))
       (ui/dropdown
@@ -627,21 +678,23 @@
 
 (rum/defc property-value < rum/reactive
   [block property v opts]
-  (let [dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
-        editor-id (str dom-id "-editor")
-        schema (:block/schema property)
-        multiple-values? (= :many (:cardinality schema))
-        editor-args {:block property
-                     :parent-block block
-                     :format :markdown}]
-    (cond
-      multiple-values?
-      (multiple-values block property v opts schema)
+  (ui/catch-error
+   (ui/block-error "Something wrong" {})
+   (let [dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
+         editor-id (str dom-id "-editor")
+         schema (:block/schema property)
+         multiple-values? (= :many (:cardinality schema))
+         editor-args {:block property
+                      :parent-block block
+                      :format :markdown}]
+     (cond
+       multiple-values?
+       (multiple-values block property v opts schema)
 
-      :else
-      (property-scalar-value block property v
-                             (merge
-                              opts
-                              {:editor-args editor-args
-                               :editor-id editor-id
-                               :dom-id dom-id})))))
+       :else
+       (property-scalar-value block property v
+                              (merge
+                               opts
+                               {:editor-args editor-args
+                                :editor-id editor-id
+                                :dom-id dom-id}))))))

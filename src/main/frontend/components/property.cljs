@@ -26,10 +26,10 @@
             [frontend.components.icon :as icon-component]
             [frontend.components.dnd :as dnd]
             [dommy.core :as dom]
-            [frontend.components.property.enum :as enum]
+            [frontend.components.property.closed-value :as closed-value]
             [frontend.components.property.util :as components-pu]))
 
-(def icon enum/icon)
+(def icon closed-value/icon)
 
 (defn- create-class-if-not-exists!
   [value]
@@ -134,7 +134,8 @@
                          add-new-property?)
         class? (contains? (:block/type block) "class")
         property-type (get-in property [:block/schema :type])
-        save-property-fn (fn [] (components-pu/update-property! property @*property-name @*property-schema))]
+        save-property-fn (fn [] (components-pu/update-property! property @*property-name @*property-schema))
+        enable-closed-values? (contains? db-property-type/closed-values-schema-types (or property-type :default))]
     [:div.property-configure.flex.flex-1.flex-col
      {:on-mouse-down #(state/set-state! :editor/mouse-down-from-property-configure? true)
       :on-mouse-up #(state/set-state! :editor/mouse-down-from-property-configure? nil)}
@@ -154,14 +155,14 @@
        [:label.col-span-1 "Icon:"]
        (let [icon-value (pu/get-property property :icon)]
          [:div.col-span-3
-          (enum/icon icon-value
-                     {:disabled? disabled?
-                      :on-chosen (fn [_e icon]
-                                   (let [icon-property-id (pu/get-built-in-property-uuid :icon)]
-                                     (property-handler/update-property!
-                                      (state/get-current-repo)
-                                      (:block/uuid property)
-                                      {:properties {icon-property-id icon}})))})])]
+          (closed-value/icon icon-value
+                             {:disabled? disabled?
+                              :on-chosen (fn [_e icon]
+                                           (let [icon-property-id (pu/get-built-in-property-uuid :icon)]
+                                             (property-handler/update-property!
+                                              (state/get-current-repo)
+                                              (:block/uuid property)
+                                              {:properties {icon-property-id icon}})))})])]
 
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Schema type:"]
@@ -185,15 +186,27 @@
                            (swap! *property-schema assoc :type type)
                            (components-pu/update-property! property @*property-name @*property-schema))))]))]
 
+      (when-not (contains? #{:checkbox :default :template} (:type @*property-schema))
+        [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+         [:label "Multiple values:"]
+         (let [many? (boolean (= :many (:cardinality @*property-schema)))]
+           (ui/checkbox {:checked many?
+                         :disabled disabled?
+                         :on-change (fn []
+                                      (swap! *property-schema assoc :cardinality (if many? :one :many))
+                                      (save-property-fn))}))])
+
+
       (case (:type @*property-schema)
         :page
-        [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-         [:label "Specify classes:"]
-         (class-select *property-schema
-                       (:classes @*property-schema)
-                       (assoc opts
-                              :disabled? disabled?
-                              :save-property-fn save-property-fn))]
+        (when (empty? (:values @*property-schema))
+          [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+           [:label "Specify classes:"]
+           (class-select *property-schema
+                         (:classes @*property-schema)
+                         (assoc opts
+                                :disabled? disabled?
+                                :save-property-fn save-property-fn))])
 
         :template
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
@@ -204,15 +217,15 @@
                               :disabled? disabled?
                               :save-property-fn save-property-fn))]
 
-        :enum
-        [:div.grid.grid-cols-4.gap-1.items-start.leading-8
-         [:label.col-span-1 "Enum choices:"]
-         [:div.col-span-3
-          (enum/enum-choices property *property-name *property-schema)]]
-
         nil)
 
-      (when (= :enum (:type @*property-schema))
+      (when (and enable-closed-values? (empty? (:classes @*property-schema)))
+        [:div.grid.grid-cols-4.gap-1.items-start.leading-8
+         [:label.col-span-1 "Available choices:"]
+         [:div.col-span-3
+          (closed-value/choices property *property-name *property-schema)]])
+
+      (when (and enable-closed-values? (seq (:values @*property-schema)))
         (let [position (:position @*property-schema)
               choices (map
                        (fn [item]
@@ -226,23 +239,13 @@
                         ;; {:label "Ending of the block"
                         ;;  :value "block-ending"}
                         ])]
-          [:div.grid.grid-cols-4.gap-1.items-start.leading-8
+          [:div.grid.grid-cols-4.gap-1.items-center.leading-8
            [:label.col-span-1 "UI position:"]
            [:div.col-span-3
             (ui/select choices
                        (fn [_e v]
                          (swap! *property-schema assoc :position v)
                          (save-property-fn)))]]))
-
-      (when-not (contains? #{:checkbox :default :template :enum} (:type @*property-schema))
-        [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-         [:label "Multiple values:"]
-         (let [many? (boolean (= :many (:cardinality @*property-schema)))]
-           (ui/checkbox {:checked many?
-                         :disabled disabled?
-                         :on-change (fn []
-                                      (swap! *property-schema assoc :cardinality (if many? :one :many))
-                                      (save-property-fn))}))])
 
       (let [hide? (:hide? @*property-schema)]
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
@@ -538,14 +541,16 @@
   (when (uuid? k)
     (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid k])))]
       (let [type (get-in property [:block/schema :type] :default)
+            closed-values? (seq (get-in property [:block/schema :values]))
             v-block (when (uuid? v) (db/entity [:block/uuid v]))
             block? (and v-block
+                        (not closed-values?)
                         (:block/page v-block)
                         (contains? #{:default :template} type))
             collapsed? (when block? (property-collapsed? block property))
             date? (= type :date)]
         [:div {:class (cond
-                        block?
+                        (and block? (not closed-values?))
                         "flex flex-1 flex-col gap-1 property-block"
                         date?
                         "property-pair items-center"

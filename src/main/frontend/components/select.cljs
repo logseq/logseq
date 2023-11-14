@@ -54,9 +54,6 @@
                   (atom (set (:selected-choices (first (:rum/args state)))))))
    :will-unmount (fn [state]
                    (state/set-state! [:ui/open-select] nil)
-                   (let [{:keys [multiple-choices? on-chosen]} (first (:rum/args state))]
-                     (when (and multiple-choices? on-chosen)
-                       (on-chosen @(::selected-choices state))))
                    state)}
   [state {:keys [items limit on-chosen empty-placeholder
                  prompt-key input-default-placeholder close-modal?
