@@ -469,7 +469,7 @@
       invalid-warning)))
 
 (rum/defc select-item
-  [property type value {:keys [page-cp inline-text]}]
+  [property type value {:keys [page-cp inline-text icon?]}]
   (let [closed-values? (seq (get-in property [:block/schema :values]))]
     (cond
       (contains? #{:page :date} type)
@@ -487,7 +487,12 @@
                       :hide-close-button? true} block)
 
             icon
-            (icon-component/icon icon)
+            (if icon?
+              (icon-component/icon icon)
+              [:div.flex.flex-row.items-center.gap-2
+               (icon-component/icon icon)
+               (when value'
+                 [:span value'])])
 
             (= type :number)
             [:span.number (str value')]
