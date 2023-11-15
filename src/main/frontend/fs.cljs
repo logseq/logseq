@@ -37,11 +37,22 @@
     nfs-backend))
 
 (defn get-fs
-  [dir]
-  (let [bfs-local? (and dir
+  [dir & {:keys [repo rpath]}]
+  (let [repo (or repo (state/get-current-repo))
+        bfs-local? (and dir
                         (or (string/starts-with? dir "/local")
-                            (string/starts-with? dir "local")))]
+                            (string/starts-with? dir "local")))
+        db-assets? (and
+                    (config/db-based-graph? repo)
+                    rpath
+                    (string/starts-with? rpath "assets/"))]
     (cond
+      (and db-assets? (util/electron?))
+      node-backend
+
+      db-assets?
+      memory-backend
+
       (nil? dir) ;; global file op, use native backend
       (get-native-backend)
 
@@ -93,7 +104,8 @@
   [repo dir rpath content opts]
   (when content
     (let [path (gp-util/path-normalize rpath)
-          fs-record (get-fs dir)]
+          fs-record (get-fs dir {:repo repo
+                                 :rpath rpath})]
       (->
        (p/let [opts (assoc opts
                            :error-handler
@@ -103,7 +115,7 @@
                                                                           :fs (type fs-record)
                                                                           :user-agent (when js/navigator js/navigator.userAgent)
                                                                           :content-length (count content)}}])))
-               _ (protocol/write-file! (get-fs dir) repo dir path content opts)])
+               _ (protocol/write-file! fs-record repo dir path content opts)])
        (p/catch (fn [error]
                   (log/error :file/write-failed {:dir dir
                                                  :path path

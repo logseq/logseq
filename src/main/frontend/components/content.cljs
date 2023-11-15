@@ -10,7 +10,6 @@
             [frontend.extensions.srs :as srs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.common.developer :as dev-common-handler]
@@ -456,11 +455,9 @@
 (rum/defcs content < rum/reactive
   {:did-mount (fn [state]
                 (set-draw-iframe-style!)
-                (image-handler/render-local-images!)
                 state)
    :did-update (fn [state]
                  (set-draw-iframe-style!)
-                 (image-handler/render-local-images!)
                  state)}
   [state id {:keys [format
                     config

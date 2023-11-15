@@ -396,47 +396,48 @@
 
 (defn get-repo-dir
   [repo-url]
-  (cond
-    (nil? repo-url)
-    (do
-      (js/console.error "BUG: nil repo")
-      nil)
+  (let [db-based? (db-based-graph? repo-url)]
+    (cond
+      (nil? repo-url)
+      (do
+        (js/console.error "BUG: nil repo")
+        nil)
 
-    (and (util/electron?) (db-based-graph? repo-url))
-    (get-local-dir repo-url)
+      (and (util/electron?) db-based-graph?)
+      (get-local-dir repo-url)
 
-    (and (util/electron?) (local-file-based-graph? repo-url))
-    (get-local-dir repo-url)
+      db-based?
+      (str "memory:///"
+           (string/replace-first repo-url db-version-prefix ""))
 
-    (and (mobile-util/native-platform?) (local-file-based-graph? repo-url))
-    (let [dir (get-local-dir repo-url)]
-      (if (string/starts-with? dir "file://")
-        dir
-        (path/path-join "file://" dir)))
+      (and (util/electron?) (local-file-based-graph? repo-url))
+      (get-local-dir repo-url)
+
+      (and (mobile-util/native-platform?) (local-file-based-graph? repo-url))
+      (let [dir (get-local-dir repo-url)]
+        (if (string/starts-with? dir "file://")
+          dir
+          (path/path-join "file://" dir)))
 
     ;; Special handling for demo graph
-    (= repo-url "local")
-    "memory:///local"
+      (= repo-url "local")
+      "memory:///local"
 
     ;; nfs, browser-fs-access
     ;; Format: logseq_local_{dir-name}
-    (local-file-based-graph? repo-url)
-    (string/replace-first repo-url local-db-prefix "")
+      (local-file-based-graph? repo-url)
+      (string/replace-first repo-url local-db-prefix "")
 
-    ;; unit test
-    (= repo-url "test-db")
-    "/test-db"
+     ;; unit test
+      (= repo-url "test-db")
+      "/test-db"
 
-    ;; no dir for db-based-graph
-    (string/starts-with? repo-url "logseq_db")
-    nil
-
-    :else
-    (do
-      (js/console.error "Unknown Repo URL type:" repo-url)
-      (str "/"
-           (->> (take-last 2 (string/split repo-url #"/"))
-                (string/join "_"))))))
+      :else
+      (do
+        (js/console.error "Unknown Repo URL type:" repo-url)
+        (str "/"
+             (->> (take-last 2 (string/split repo-url #"/"))
+                  (string/join "_")))))))
 
 (defn get-string-repo-dir
   [repo-dir]
