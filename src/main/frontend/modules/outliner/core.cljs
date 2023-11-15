@@ -416,13 +416,12 @@
 (defn- assign-temp-id
   [blocks replace-empty-target? target-block]
   (map-indexed (fn [idx block]
+                 ;; TODO: block uuid changed, this could be a problem for rtc
                  (let [replacing-block? (and replace-empty-target? (zero? idx))
                        db-id (if replacing-block?
                                (:db/id target-block)
                                (dec (- idx)))]
-                   (cond-> (assoc block :db/id db-id)
-                     (and replacing-block? (:block/uuid target-block))
-                     (assoc :block/uuid (:block/uuid target-block))))) blocks))
+                   (assoc block :db/id db-id))) blocks))
 
 (defn- find-outdented-block-prev-hop
   [outdented-block blocks]
