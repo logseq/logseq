@@ -1014,7 +1014,8 @@
 
 (rum/defc button-inner
   [text & {:keys [background href class intent on-click small? title icon icon-props disabled? button-props]
-           :or   {small? false}}]
+           :or   {small? false}
+           :as   option}]
   (let [opts {:text text
               :theme (when (contains? #{"link" "border-link"} intent) :text)
               :href href
@@ -1022,7 +1023,11 @@
               :size (if small? :sm :md)
               :icon icon
               :icon-props icon-props
-              :button-props (merge button-props (when title {:title title}))
+              :button-props (merge
+                             (dissoc option
+                                     :background :href :class :intent :small? :large? :title :icon :icon-props :disabled? button-props)
+                             button-props
+                             (when title {:title title}))
               :class (if (= intent "border-link") (str class " border") class)
               :muted disabled?
               :disabled? disabled?}]
