@@ -128,7 +128,7 @@
 (def property-schema-attrs
   [[:hide? {:optional true} :boolean]
    [:description {:optional true} :string]
-   ;; For any types except for :checkbox :default :template :enum
+   ;; For any types except for :checkbox :default :template
    [:cardinality {:optional true} [:enum :one :many]]
    ;; For closed values
    [:values {:optional true}  [:vector :uuid]]
@@ -232,8 +232,8 @@
      [:block/page :int]]
     page-or-block-attrs)))
 
-(def enum-block
-  "An enum value for enum property"
+(def closed-value-block
+  "A closed value for a property with closed/allowed values"
   (vec
    (concat
     [:map]
@@ -245,7 +245,7 @@
      [:block/metadata
       [:map
        [:created-from-property :uuid]]]]
-    (remove #(#{:block/metadata :block/content} (first %)) block-attrs)
+    (remove #(#{:block/metadata :block/content :block/left} (first %)) block-attrs)
     page-or-block-attrs)))
 
 (def normal-block
@@ -261,7 +261,7 @@
   [:or
    normal-block
    object-block
-   enum-block
+   closed-value-block
    whiteboard-block])
 
 ;; TODO: invalid macros should not generate unknown
