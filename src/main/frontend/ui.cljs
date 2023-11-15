@@ -1013,7 +1013,7 @@
 (def icon shui/icon)
 
 (rum/defc button-inner
-  [text & {:keys [background href class intent on-click small? title icon icon-props disabled? button-props]
+  [text & {:keys [background href class intent on-click small? icon icon-props disabled? button-props]
            :or   {small? false}
            :as   option}]
   (let [opts {:text text
@@ -1025,9 +1025,8 @@
               :icon-props icon-props
               :button-props (merge
                              (dissoc option
-                                     :background :href :class :intent :small? :large? :title :icon :icon-props :disabled? button-props)
-                             button-props
-                             (when title {:title title}))
+                                     :background :href :class :intent :small? :large? :icon :icon-props :disabled? button-props)
+                             button-props)
               :class (if (= intent "border-link") (str class " border") class)
               :muted disabled?
               :disabled? disabled?}]
