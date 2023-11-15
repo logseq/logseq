@@ -305,10 +305,7 @@
                                           :block/page page-id
                                           :block/metadata metadata
                                           :block/schema {:value resolved-value}
-                                          :block/format :markdown
-                                          :block/parent page-id
-                                          :block/left (or (when page-entity (model/get-block-last-direct-child (db/get-db) (:db/id page-entity)))
-                                                          page-id)}
+                                          :block/parent page-id}
                                           icon
                                           (assoc :block/properties {icon-id icon})
 
