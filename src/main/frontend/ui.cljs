@@ -1026,9 +1026,9 @@
 (def icon shui/icon)
 
 (rum/defc button-inner
-  [text & {:keys [background href class intent on-click small? title icon icon-props disabled? button-props]
+  [text & {:keys [background href class intent on-click small? icon icon-props disabled? button-props]
            :or   {small? false}
-           :as option}]
+           :as   option}]
   (let [opts {:text text
               :theme (when (contains? #{"link" "border-link"} intent) :text)
               :href href
