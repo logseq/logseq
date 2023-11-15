@@ -1359,7 +1359,7 @@
   (p/let [repo-dir (config/get-repo-dir repo)
           assets-dir "assets"
           _ (fs/mkdir-if-not-exists (path/path-join repo-dir assets-dir))]
-    [repo-dir assets-dir]))
+        [repo-dir assets-dir]))
 
 (defn get-asset-path
   "Get asset path from filename, ensure assets dir exists"
@@ -1403,7 +1403,6 @@
             dir (or (:dir matched-alias) repo-dir)]
         (if (util/electron?)
           (let [from (not-empty (.-path file))]
-
             (js/console.debug "Debug: Copy Asset #" dir file-rpath from)
             (-> (js/window.apis.copyFileToAssets dir file-rpath from)
                 (p/then
@@ -1415,12 +1414,20 @@
                 (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
 
           (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
-                 (if (mobile-util/native-platform?)
+                 (cond
+                   (mobile-util/native-platform?)
                    ;; capacitor fs accepts Blob, File implements Blob
                    (p/let [buffer (.arrayBuffer file)
                            content (base64/encodeByteArray (js/Uint8Array. buffer))
                            fpath (path/path-join dir file-rpath)]
                      (capacitor-fs/<write-file-with-base64 fpath content))
+
+                   (config/db-based-graph? repo) ;; memory-fs
+                   (p/let [buffer (.arrayBuffer file)
+                           content (js/Uint8Array. buffer)]
+                     (fs/write-file! repo dir file-rpath content nil))
+
+                   :else                ; nfs
                    (fs/write-file! repo dir file-rpath (.stream file) nil))
                  [file-rpath file (path/path-join dir file-rpath) matched-alias])))))))
 
@@ -1450,6 +1457,11 @@
 
         (mobile-util/native-platform?)
         (mobile-util/convert-file-src full-path)
+
+        (config/db-based-graph? (state/get-current-repo)) ; memory fs
+        (p/let [binary (fs/read-file repo-dir path {})
+                blob (js/Blob. (array binary) (clj->js {:type "image"}))]
+          (when blob (js/URL.createObjectURL blob)))
 
         :else ;; nfs
         (let [handle-path (str "handle/" full-path)
@@ -1526,6 +1538,8 @@
                   {:last-pattern (if drop-or-paste? "" commands/command-trigger)
                    :restore?     true
                    :command      :insert-asset})))))
+          (p/catch (fn [e]
+                     (js/console.error e)))
           (p/finally
             (fn []
               (reset! uploading? false)

@@ -45,7 +45,6 @@
       (p/catch (fn [_error]
                  (js/window.pfs.mkdir dir)))))
 
-
 (defrecord MemoryFs []
   protocol/Fs
   (mkdir! [_this dir]
@@ -53,6 +52,10 @@
       (let [fpath (path/url-to-path dir)]
         (-> (js/window.pfs.mkdir fpath)
             (p/catch (fn [error] (println "(memory-fs)Mkdir error: " error)))))))
+  (mkdir-recur! [this dir]
+    (p/let [parent (path/parent dir)
+            _ (when parent (<ensure-dir! parent))]
+      (protocol/mkdir! this dir)))
   (readdir [_this dir]
     (when js/window.pfs
       (let [fpath (path/url-to-path dir)]
@@ -76,13 +79,15 @@
   (read-file [_this dir path options]
     (let [fpath (path/url-to-path (path/path-join dir path))]
       (js/window.pfs.readFile fpath (clj->js options))))
-  (write-file! [_this repo dir rpath content _opts]
+  (write-file! [_this _repo dir rpath content _opts]
     (p/let [fpath (path/url-to-path (path/path-join dir rpath))
             containing-dir (path/parent fpath)
             _ (<ensure-dir! containing-dir)
             _ (js/window.pfs.writeFile fpath content)]
-      (db/set-file-content! repo rpath content)
-      (db/set-file-last-modified-at! repo rpath (js/Date.))
+
+      ;; TODO: store file metadata
+      ;; (db/set-file-content! repo rpath content)
+      ;; (db/set-file-last-modified-at! repo rpath (js/Date.))
       ))
   (rename! [_this _repo old-path new-path]
     (let [old-path (path/url-to-path old-path)
