@@ -201,10 +201,12 @@
                                              v
 
                                              (uuid? v)
-                                             (if (get-in (db/entity repo [:block/uuid v]) [:block/metadata :created-from-property])
-                                               ;; don't reference hidden block property values
-                                               []
-                                               [v])
+                                             (when-let [entity (db/entity repo [:block/uuid v])]
+                                               (let [from-property? (get-in entity [:block/metadata :created-from-property])]
+                                                 (if (and from-property? (not (contains? (:block/type entity) "closed value")))
+                                                   ;; don't reference hidden block property values except closed values
+                                                   []
+                                                   [v])))
 
                                              (and (coll? v) (string? (first v)))
                                              (mapcat block/extract-refs-from-text v)
