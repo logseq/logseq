@@ -34,7 +34,7 @@
                        static-dir
                        graph-dir
                        output-path
-                       {:repo-config repo-config :db-graph? true})))
+                       {:repo-config repo-config :db-graph? true :ui/theme "dark" :ui/radix-color :cyan})))
 
 (defn -main
   [& args]
