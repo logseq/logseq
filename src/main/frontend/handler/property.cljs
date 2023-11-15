@@ -260,7 +260,7 @@
            value-block (when (uuid? value) (db/entity [:block/uuid value]))
            validate-message (db-property-handler/validate-property-value
                              (get (db-property-handler/builtin-schema-types property {:new-closed-value? true}) property-type)
-                             value)]
+                             resolved-value)]
        (cond
          (nil? resolved-value)
          nil
@@ -310,6 +310,7 @@
                                metadata {:created-from-property (:block/uuid property)}
                                new-block (cond->
                                           {:block/type #{"closed value"}
+                                           :block/format :markdown
                                            :block/uuid block-id
                                            :block/page page-id
                                            :block/metadata metadata

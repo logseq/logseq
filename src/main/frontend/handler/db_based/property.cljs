@@ -25,9 +25,17 @@
                :or {new-closed-value? false}}]
   (into {}
         (map (fn [[property-type property-val-schema]]
-               (if (db-property-type/property-types-with-db property-type)
+               (cond
+                 (db-property-type/closed-values-schema-types property-type)
+                 (let [[_ schema-opts schema-fn] property-val-schema
+                       schema-fn' (if (db-property-type/property-types-with-db property-type) #(schema-fn (db/get-db) %) schema-fn)]
+                   [property-type [:fn
+                                   schema-opts
+                                   #((db-property-type/type-or-closed-value? schema-fn') (db/get-db) property % new-closed-value?)]])
+                 (db-property-type/property-types-with-db property-type)
                  (let [[_ schema-opts schema-fn] property-val-schema]
-                   [property-type [:fn schema-opts #(schema-fn (db/get-db) property % new-closed-value?)]])
+                   [property-type [:fn schema-opts #(schema-fn (db/get-db) %)]])
+                 :else
                  [property-type property-val-schema]))
              db-property-type/builtin-schema-types)))
 

@@ -43,7 +43,8 @@
   (and (uuid? id)
        (some? (d/entity db [:block/uuid id]))))
 
-(defn- exist-closed-value?
+(defn- existing-closed-value-valid?
+  "Validates that the given existing closed value is valid"
   [db property type-validate-fn value]
   (boolean
    (when-let [e (and (uuid? value)
@@ -51,8 +52,10 @@
      (let [values (get-in property [:block/schema :values])]
        (and
         (contains? (set values) value)
-        (contains? (:block/type e) "closed value")
-        (type-validate-fn (:value (:block/schema e))))))))
+        (if (contains? (:block/type e) "closed value")
+          (type-validate-fn (:value (:block/schema e)))
+          ;; page uuids aren't closed value types
+          (type-validate-fn value)))))))
 
 (defn type-or-closed-value?
   "The `value` could be either a closed value (when `property` has pre-defined values) or it can be validated by `type-validate-fn`.
@@ -62,26 +65,28 @@
   (fn [db property value new-closed-value?]
     (if (and (seq (get-in property [:block/schema :values]))
              (not new-closed-value?))
-      (exist-closed-value? db property type-validate-fn value)
+      (existing-closed-value-valid? db property type-validate-fn value)
       (type-validate-fn value))))
 
 (def builtin-schema-types
   {:default  [:fn
               {:error/message "should be a text"}
-              (type-or-closed-value? string?)]                     ; refs/tags will not be extracted
+              ;; uuid check needed for property block values
+              (some-fn string? uuid?)]                     ; refs/tags will not be extracted
    :number   [:fn
               {:error/message "should be a number"}
-              (type-or-closed-value? number?)]
+              ;; TODO: Remove uuid? for :number and :url when type-or-closed-value? is used in this ns
+              (some-fn number? uuid?)]
    :date     [:fn
               {:error/message "should be a journal date"}
-              (type-or-closed-value? logseq-page?)]
+              logseq-page?]
    :checkbox boolean?
    :url      [:fn
               {:error/message "should be a URL"}
-              (type-or-closed-value? url?)]
+              (some-fn url? uuid?)]
    :page     [:fn
               {:error/message "should be a page"}
-              (type-or-closed-value? logseq-page?)]
+              logseq-page?]
    :template [:fn
               {:error/message "should has #template"}
               logseq-template?]
@@ -94,7 +99,7 @@
 
 (def property-types-with-db
   "Property types whose validation fn requires a datascript db"
-  #{:default :number :date :url :page :template})
+  #{:date :page :template})
 
 (assert (= (set (keys builtin-schema-types))
            (into internal-builtin-schema-types
