@@ -3,7 +3,6 @@
 
    Paths are denoted by `memory://`. No open-dir/get-files support."
   (:require [cljs-bean.core :as bean]
-            [frontend.db :as db]
             [frontend.fs.protocol :as protocol]
             [logseq.common.path :as path]
             [promesa.core :as p]))
@@ -52,10 +51,12 @@
       (let [fpath (path/url-to-path dir)]
         (-> (js/window.pfs.mkdir fpath)
             (p/catch (fn [error] (println "(memory-fs)Mkdir error: " error)))))))
-  (mkdir-recur! [this dir]
-    (p/let [parent (path/parent dir)
-            _ (when parent (<ensure-dir! parent))]
-      (protocol/mkdir! this dir)))
+  (mkdir-recur! [_this dir]
+    (when js/window.pfs
+      (let [fpath (path/url-to-path dir)]
+        (-> (js/window.pfs.mkdir fpath #js {:recursive true})
+            (p/catch (fn [error] (println "(memory-fs)Mkdir-recur error: " error)))))))
+
   (readdir [_this dir]
     (when js/window.pfs
       (let [fpath (path/url-to-path dir)]
