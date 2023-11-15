@@ -265,7 +265,9 @@
          (nil? resolved-value)
          nil
 
-         (some (fn [b] (and (= resolved-value (get-in b [:block/metadata :value]))
+         (some (fn [b] (and (if (contains? (get-in b [:block/schema :type]) "closed value")
+                              (= resolved-value (get-in b [:block/schema :value]))
+                              (= resolved-value (:block/uuid b)))
                             (not= id (:block/uuid b)))) block-values)
          (do
            (notification/show! "Choice already exists" :warning)
