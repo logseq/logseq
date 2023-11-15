@@ -18,14 +18,16 @@
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
 
-(def builtin-schema-types
+(defn builtin-schema-types
   "A frontend version of builtin-schema-types that adds the current database to
    schema fns"
+  [property & {:keys [new-closed-value?]
+               :or {new-closed-value? false}}]
   (into {}
         (map (fn [[property-type property-val-schema]]
                (if (db-property-type/property-types-with-db property-type)
                  (let [[_ schema-opts schema-fn] property-val-schema]
-                   [property-type [:fn schema-opts #(schema-fn (db/get-db) %)]])
+                   [property-type [:fn schema-opts #(schema-fn (db/get-db) property % new-closed-value?)]])
                  [property-type property-val-schema]))
              db-property-type/builtin-schema-types)))
 
@@ -93,13 +95,9 @@
                              (assoc :block/schema schema)))]
                     {:outliner-op :insert-blocks}))))
 
-(defn- validate-property-value
-  [property schema value]
-  (let [values (get-in property [:block/schema :values])]
-    (if (seq values)
-      (when-not (contains? (set values) value)
-        "Value is not included in the closed values.")
-      (me/humanize (mu/explain-data schema value)))))
+(defn validate-property-value
+  [schema value]
+  (me/humanize (mu/explain-data schema value)))
 
 (defn- reset-block-property-multiple-values!
   [repo block-id k-name values _opts]
@@ -114,7 +112,7 @@
     (when (and multiple-values? (seq values))
       (let [infer-schema (when-not type (infer-schema-from-input-string (first values)))
             property-type (or type infer-schema :default)
-            schema (get builtin-schema-types property-type)
+            schema (get (builtin-schema-types property) property-type)
             properties (:block/properties block)
             values' (try
                       (set (map #(convert-property-input-string property-type %) values))
@@ -139,7 +137,7 @@
                              {:block/uuid block-id
                               attribute property-value-ids}]
                             {:outliner-op :save-block}))
-            (if-let [msg (some #(validate-property-value property schema %) values')]
+            (if-let [msg (some #(validate-property-value schema %) values')]
               (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                 (notification/show! msg' :warning))
               (do
@@ -191,7 +189,7 @@
         (when (some? v)
           (let [infer-schema (when-not type (infer-schema-from-input-string v))
                 property-type (or type infer-schema :default)
-                schema (get builtin-schema-types property-type)
+                schema (get (builtin-schema-types property) property-type)
                 properties (:block/properties block)
                 value (get properties property-uuid)
                 v* (try
@@ -212,7 +210,7 @@
                               [[:db/add (:db/id block) attribute property-value-id]]
                               {:outliner-op :save-block}))
               (when-not (contains? (if (set? value) value #{value}) v*)
-                (if-let [msg (validate-property-value property schema v*)]
+                (if-let [msg (validate-property-value schema v*)]
                   (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                     (notification/show! msg' :warning))
                   (do
