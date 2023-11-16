@@ -5,7 +5,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.user :as user-handler]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -206,7 +205,6 @@
             repos (if (and (seq remotes) login?)
                     (repo-handler/combine-local-&-remote-graphs repos remotes) repos)
             links (repos-dropdown-links repos current-repo multiple-windows?)
-            logged-in? (user-handler/logged-in?)
             render-content (fn [{:keys [toggle-fn]}]
                              (let [remote? (:remote? (first (filter #(= current-repo (:url %)) repos)))
                                    repo-name (db/get-repo-name current-repo)
