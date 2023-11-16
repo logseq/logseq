@@ -68,6 +68,5 @@
   ;; this is controlled by :before-load in the config
   (handler/stop!)
   (when config/dev?
-    (sync/<sync-stop)
-    (browser-persist-db/dev-stop!))
+    (sync/<sync-stop))
   (js/console.log "stop"))
