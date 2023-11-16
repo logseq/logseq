@@ -57,7 +57,17 @@
               {:block-uuid #uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02"
                :updated-attrs {:content nil :link nil}
                :epoch 4}]
-             (:update (block-uuid->ops #uuid"f639f13e-ef6f-4ba5-83b4-67527d27cd02")))))))
+             (:update (block-uuid->ops #uuid"f639f13e-ef6f-4ba5-83b4-67527d27cd02"))))))
+  (testing "case4: update-page then remove-page"
+    (let [ops1 [["update-page" {:block-uuid #uuid "65564abe-1e79-4ae8-af60-215826cefea9" :epoch 1}]]
+          ops2 [["remove-page" {:block-uuid #uuid "65564abe-1e79-4ae8-af60-215826cefea9" :epoch 2}]]
+          {:keys [block-uuid->ops epoch->block-uuid-sorted-map]}
+          (op-layer/add-ops-to-block-uuid->ops (op-layer/ops-coercer ops1) {} (sorted-map-by <))
+          {block-uuid->ops2 :block-uuid->ops}
+          (op-layer/add-ops-to-block-uuid->ops (op-layer/ops-coercer ops2) block-uuid->ops epoch->block-uuid-sorted-map)]
+      (is (= {#uuid "65564abe-1e79-4ae8-af60-215826cefea9"
+              {:remove-page ["remove-page" {:block-uuid #uuid "65564abe-1e79-4ae8-af60-215826cefea9", :epoch 2}]}}
+             block-uuid->ops2)))))
 
 
 (deftest process-test

@@ -212,9 +212,7 @@
           (let [add-after-remove? (some-> (get exist-ops :update-page) second :epoch (> epoch))]
             (if add-after-remove?
               (recur block-uuid->ops epoch->block-uuid-sorted-map others)
-              (let [block-uuid->ops* (-> block-uuid->ops
-                                         (assoc-in [block-uuid :remove-page] op)
-                                         (update block-uuid dissoc :remove-page))
+              (let [block-uuid->ops* (assoc block-uuid->ops block-uuid {:remove-page op})
                     origin-min-epoch (block-uuid->min-epoch block-uuid->ops block-uuid)
                     min-epoch (block-uuid->min-epoch block-uuid->ops* block-uuid)]
                 (recur block-uuid->ops*
