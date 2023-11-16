@@ -19,7 +19,7 @@
 (def general-attr-set
   (into #{} (map first) general-attrs-schema-coll))
 
-(def block-type-schema [:enum "property" "class" "whiteboard" "object" "hidden" "closed value"])
+(def block-type-schema [:enum "property" "class" "whiteboard" "hidden" "closed value"])
 
 (def to-ws-op-schema
   [:multi {:dispatch first :decode/string #(update % 0 keyword)}

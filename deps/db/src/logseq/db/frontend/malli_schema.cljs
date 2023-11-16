@@ -88,7 +88,7 @@
   "Common attributes for pages"
   [[:block/name :string]
    [:block/original-name :string]
-   [:block/type {:optional true} [:enum #{"property"} #{"class"} #{"object"} #{"whiteboard"} #{"hidden"}]]
+   [:block/type {:optional true} [:enum #{"property"} #{"class"} #{"whiteboard"} #{"hidden"}]]
    [:block/journal? :boolean]
    [:block/alias {:optional true} [:set :int]]
     ;; TODO: Should this be here or in common?
@@ -98,20 +98,13 @@
   (vec
    (concat
     [:map
+     ;; Only for linked pages
+     [:block/collapsed? {:optional true} :boolean]
      ;; journal-day is only set for journal pages
      [:block/journal-day {:optional true} :int]
      [:block/namespace {:optional true} :int]]
     page-attrs
     page-or-block-attrs)))
-
-(def object-page
-  (vec
-   (concat
-    [:map
-     [:block/collapsed? {:optional true} :boolean]
-     [:block/tags [:set :int]]]
-    page-attrs
-    (remove #(= :block/tags (first %)) page-or-block-attrs))))
 
 (def class-page
   (vec
@@ -183,7 +176,6 @@
   [:multi {:dispatch :block/type}
    [#{"property"} property-page]
    [#{"class"} class-page]
-   [#{"object"} object-page]
    [#{"hidden"} hidden-page]
    [:malli.core/default normal-page]])
 
@@ -211,16 +203,6 @@
    [:block/repeated? {:optional true} :boolean]
    [:block/priority {:optional true} :string]
    [:block/collapsed? {:optional true} :boolean]])
-
-(def object-block
-  "A normal block with tags"
-  (vec
-   (concat
-    [:map]
-    [[:block/type [:= #{"object"}]]
-     [:block/tags [:set :int]]]
-    block-attrs
-    (remove #(= :block/tags (first %)) page-or-block-attrs))))
 
 (def whiteboard-block
   "A (shape) block for whiteboard"
@@ -260,7 +242,6 @@
   "A block has content and a page"
   [:or
    normal-block
-   object-block
    closed-value-block
    whiteboard-block])
 
