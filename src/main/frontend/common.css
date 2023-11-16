@@ -686,17 +686,17 @@ a.tag {
   text-decoration: none;
   display: inline-block;
   cursor: pointer;
-  padding: 0 2px;
-  border-radius: 4px;
-  background: or(--ls-tag-background, --lx-accent-05, transparent);
-  color: or(--ls-tag-text, --lx-accent-11, --ls-tag-text-color, #045591);
+  /* padding: 0 2px; */
+  /* border-radius: 4px; */
+  /* background: or(--ls-tag-background, --lx-accent-05, transparent); */
+  /* color: or(--ls-tag-text, --lx-accent-11, --ls-tag-text-color, #045591); */
   opacity: var(--ls-tag-text-opacity, 0.8);
 }
 
 a.tag:hover {
   opacity: var(--ls-tag-text-hover-opacity, 1);
-  background: or(--ls-tag-background-hover, --lx-accent-06, transparent);
-  color: or(--ls-tag-text-hvoer, --lx-accent-12, --ls-tag-text-hover-color, #045591);
+  /* background: or(--ls-tag-background-hover, --lx-accent-06, transparent); */
+  /* color: or(--ls-tag-text-hvoer, --lx-accent-12, --ls-tag-text-hover-color, #045591); */
 }
 
 svg.note {
