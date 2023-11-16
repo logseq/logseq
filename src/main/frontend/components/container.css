@@ -166,6 +166,17 @@
       position: relative;
     }
 
+    .graph-icon .ui__icon {
+        padding: 0;
+        width: unset;
+        margin-right: 0px;
+    }
+
+    .graph-icon {
+        margin-left: 3px;
+        margin-right: 11px;
+    }
+
     &:hover {
       background-color: or(--ls-left-sidebar-hover-background, --lx-gray-04, --ls-primary-background-color);
       color: or(--ls-left-sidebar-text-color-hover, --lx-gray-12);
