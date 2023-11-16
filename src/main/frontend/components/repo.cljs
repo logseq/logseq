@@ -1,6 +1,5 @@
 (ns frontend.components.repo
-  (:require [clojure.string :as string]
-            [frontend.components.widgets :as widgets]
+  (:require [frontend.components.widgets :as widgets]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -18,15 +17,6 @@
             [cljs.core.async :as async :refer [go <!]]
             [frontend.handler.file-sync :as file-sync]
             [reitit.frontend.easy :as rfe]))
-
-(rum/defc add-repo
-  [args]
-  (if-let [graph-types (get-in args [:query-params :graph-types])]
-    (let [graph-types-s (->> (string/split graph-types #",")
-                             (mapv keyword))]
-      (when (seq graph-types-s)
-        (widgets/add-graph :graph-types graph-types-s)))
-    (widgets/add-graph)))
 
 (rum/defc normalized-graph-label
   [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]

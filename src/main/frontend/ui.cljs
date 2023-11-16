@@ -6,7 +6,6 @@
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
-            [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -1005,10 +1004,6 @@
              :class                 "contents"
              :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
              :on-tweet-load-success #(reset! *loading? false)})]]))
-
-(defn tabler-icon
-  [name]
-  (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase name))))
 
 (def icon shui/icon)
 
