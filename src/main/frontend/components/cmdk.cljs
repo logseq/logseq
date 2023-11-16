@@ -95,7 +95,7 @@
                             (take 5 items))))
         page-exists? (when-not (string/blank? input)
                        (db/entity [:block/name (string/trim input)]))
-        filter-mode? (or (string/includes? input " /")
+        filter-mode? (or (string/includes? input "/")
                          (string/starts-with? input "/"))
         order* (cond
                  (= search-mode :graph)
@@ -275,7 +275,7 @@
   [input]
   (or (when (string/starts-with? input "/")
         (subs input 1))
-      (last (gp-util/split-last " /" input))))
+      (last (gp-util/split-last "/" input))))
 
 (defmethod load-results :filters [group state]
   (let [!results (::results state)
@@ -389,8 +389,8 @@
 (defn- get-filter-user-input
   [input]
   (cond
-    (string/includes? input " /")
-    (first (gp-util/split-last " /" input))
+    (string/includes? input "/")
+    (first (gp-util/split-last "/" input))
     (string/starts-with? input "/")
     ""
     :else
