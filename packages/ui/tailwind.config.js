@@ -42,10 +42,6 @@ module.exports = {
           DEFAULT: 'hsl(var(--accent))',
           foreground: 'hsl(var(--accent-foreground))',
         },
-        ['logseq-accent']: {
-          DEFAULT: 'var(--lx-accent-10, --accent)',
-          foreground: 'var(--lx-gray-01, --accent-foreground)',
-        },
         popover: {
           DEFAULT: 'hsl(var(--popover))',
           foreground: 'hsl(var(--popover-foreground))',

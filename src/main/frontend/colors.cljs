@@ -1,6 +1,7 @@
 (ns frontend.colors
   "Colors used"
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as string]
+            ["@radix-ui/colors" :as radix-colors]))
 
 (def color-list [:tomato :red :crimson :pink :plum :purple :violet :indigo :blue :cyan :teal :green :grass :orange :brown])
 
@@ -16,12 +17,27 @@
   ([color value alpha?]
    (str "var(--rx-" (name color) "-" (cond-> value keyword? name) (if alpha? "-alpha" "") ")")))
 
+(defn accent-base-hsl
+  [color]
+  (some-> radix-colors
+    (aget color)
+    (aget (str color "9"))
+    (string/replace "hsl(" "")
+    (string/replace ")" "")
+    (string/replace "," "")))
+
 (defn set-radix [color]
   (let [style-tag (or (js/document.querySelector "style#color-variables")
                       (js/document.createElement "style"))
         steps ["01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12" "01-alpha" "02-alpha" "03-alpha" "04-alpha" "05-alpha" "06-alpha" "07-alpha" "08-alpha" "09-alpha" "10-alpha" "11-alpha" "12-alpha"]
         gray (get gray-pairing-map color)
         accents (map #(str "--lx-accent-" % ": var(--rx-" (name color) "-" % "); ") steps)
+        accents (concat accents
+                  [(str "--accent:" (accent-base-hsl (name color)) "; ")
+                   (str "--primary:" (accent-base-hsl (name color)) "; ")
+                   ;; FIX ME: foreground
+                   (str "--accent-foreground: 190 43% 97%; ")
+                   (str "--primary-accent-foreground: 190 43% 97%; ")])
         grays   (map #(str "--lx-gray-" % ": var(--rx-" (name gray) "-" % "); ") steps)
         translations (str "--ls-primary-background-color: var(--rx-" (name gray) "-01); "
                           "--ls-secondary-background-color: var(--rx-" (name gray) "-02); "
@@ -50,7 +66,7 @@
     ; (set! (.-innerHTML style-tag) (str/join "\n" (flatten [":root {" accent gray "}"])))
     (->> [":root { " accents grays translations " } body, .dark-theme, .light-theme {" accents grays translations "} " tl-translations]
          (flatten)
-         (str/join "\n")
+         (string/join "\n")
          (set! (.-innerHTML style-tag)))
     (js/document.head.appendChild style-tag)))
 

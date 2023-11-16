@@ -1,3 +1,15 @@
+html[data-theme=light] {
+  --accent: 200 97% 37%;
+  --accent-foreground: 255 92% 100%;
+  --primary: 200 97% 37%;
+  --primary-foreground: 255 92% 100%;
+}
+
+html[data-theme=dark] {
+  --accent: 200 97% 37%;
+  --accent-foreground: 255 92% 100%;
+}
+
 .ui__button {
   @apply font-medium relative flex items-center justify-center gap-1;
   border-radius: 0.25rem;
