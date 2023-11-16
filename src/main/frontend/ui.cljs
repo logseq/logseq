@@ -1025,7 +1025,7 @@
               :icon-props icon-props
               :button-props (merge
                              (dissoc option
-                                     :background :href :class :intent :small? :large? :icon :icon-props :disabled? button-props)
+                                     :background :href :class :intent :small? :large? :icon :icon-props :disabled? :button-props)
                              button-props)
               :class (if (= intent "border-link") (str class " border") class)
               :muted disabled?
