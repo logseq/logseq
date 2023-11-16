@@ -681,7 +681,6 @@ img.small {
 }
 
 a.tag {
-  @apply text-sm;
   text-align: center;
   text-decoration: none;
   display: inline-block;
