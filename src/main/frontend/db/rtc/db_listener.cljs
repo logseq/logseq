@@ -1,12 +1,11 @@
 (ns frontend.db.rtc.db-listener
   "listen datascript changes, infer operations from the db tx-report"
-  (:require [clojure.data :as data]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [clojure.data :as data]
             [clojure.set :as set]
             [datascript.core :as d]
-            [frontend.db :as db]
-            [frontend.db.rtc.op-mem-layer :as op-mem-layer]
-            [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]))
+            [frontend.db.rtc.op-mem-layer :as op-mem-layer]))
 
 
 (defn- entity-datoms=>attr->datom
@@ -47,7 +46,7 @@
       (seq retract-uuids) (conj [:retract retract-uuids]))))
 
 (defn- entity-datoms=>ops
-  [repo db-before db-after entity-datoms]
+  [db-before db-after entity-datoms]
   (let [attr->datom (entity-datoms=>attr->datom entity-datoms)]
     (when (seq attr->datom)
       (let [updated-key-set (set (keys attr->datom))
@@ -127,7 +126,7 @@
                                        (apply merge))]
                     (cond-> ops (seq update-op) (conj [:update update-op]))))
             ops* (keep (fn [op]
-                         (let [block-uuid (some-> (db/entity repo e) :block/uuid str)]
+                         (let [block-uuid (some-> (d/entity db-after e) :block/uuid str)]
                            (case (first op)
                              :move        (when block-uuid ["move" {:block-uuid block-uuid}])
                              :update      (when block-uuid
@@ -145,7 +144,7 @@
         id->same-entity-datoms (group-by first datom-vec-coll)
         id-order (distinct (map first datom-vec-coll))
         same-entity-datoms-coll (map id->same-entity-datoms id-order)
-        ops (mapcat (partial entity-datoms=>ops repo db-before db-after) same-entity-datoms-coll)
+        ops (mapcat (partial entity-datoms=>ops db-before db-after) same-entity-datoms-coll)
         now-epoch*1000 (* 1000 (tc/to-long (t/now)))
         ops* (map-indexed (fn [idx op]
                             [(first op) (assoc (second op) :epoch (+ idx now-epoch*1000))]) ops)]

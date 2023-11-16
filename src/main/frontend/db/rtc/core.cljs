@@ -446,7 +446,7 @@
               (and (contains? attr-map :link)
                    (:block/uuid (:block/link block)))
               (assoc :link (:block/uuid (:block/link block)))
-              true (assoc :target-uuid target-uuid :sibling? sibling?))])))
+              target-uuid                     (assoc :target-uuid target-uuid :sibling? sibling?))])))
 
 (defmethod local-block-ops->remote-ops-aux :update-page-op
   [_ & {:keys [repo block-uuid *remote-ops]}]
@@ -494,17 +494,16 @@
                                                :left-uuid left-uuid
                                                :block-uuid block-uuid
                                                :*remote-ops *remote-ops
-                                               :*depend-on-block-uuid-set *depend-on-block-uuid-set))
-
-            ;; remote-update-op
-            (when update-op
-              (local-block-ops->remote-ops-aux :update-op
-                                               :repo repo
-                                               :block block
-                                               :update-op update-op
-                                               :parent-uuid parent-uuid
-                                               :left-uuid left-uuid
-                                               :*remote-ops *remote-ops))))
+                                               :*depend-on-block-uuid-set *depend-on-block-uuid-set)))
+          ;; remote-update-op
+          (when update-op
+            (local-block-ops->remote-ops-aux :update-op
+                                             :repo repo
+                                             :block block
+                                             :update-op update-op
+                                             :parent-uuid parent-uuid
+                                             :left-uuid left-uuid
+                                             :*remote-ops *remote-ops)))
         ;; remote-update-page-op
         (when update-page-op
           (local-block-ops->remote-ops-aux :update-page-op
