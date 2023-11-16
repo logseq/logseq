@@ -219,7 +219,7 @@
                                (subs q 1)
                                q))
               last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)]
-          (when (config/db-based-graph? (state/get-current-repo))
+          (when db-based?
             (let [tag (string/trim chosen)
                   edit-block (state/get-edit-block)]
               (when (and (not (string/blank? tag)) (:block/uuid edit-block))

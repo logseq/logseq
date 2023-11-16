@@ -16,7 +16,7 @@
 (defonce *inited (atom false))
 
 
-(when-not (or (util/electron?) config/publishing?)
+(when-not (or (util/electron?) config/publishing? util/node-test?)
   (defonce _do_not_reload_worker
     (let [worker (try
                   (js/Worker. "/static/js/db-worker.js")

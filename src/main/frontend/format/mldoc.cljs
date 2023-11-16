@@ -169,16 +169,3 @@
     (->> @*result
          (remove string/blank?)
          (distinct))))
-
-(defn content-without-tags
-  "Remove tags from content"
-  [content tags]
-  (->
-   (reduce
-    (fn [content tag]
-      (-> content
-          (string/replace (str "#" tag) "")
-          (string/replace (str "#" page-ref/left-brackets tag page-ref/right-brackets) "")))
-    content
-    tags)
-   (string/trim)))

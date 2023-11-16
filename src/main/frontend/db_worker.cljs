@@ -1,4 +1,5 @@
 (ns frontend.db-worker
+  "Worker used for browser DB implementation"
   (:require ["@logseq/sqlite" :as sqlite-db :default wasm-bindgen-init]
             ["comlink" :as Comlink]
             [promesa.core :as p]
@@ -6,6 +7,7 @@
 
 (def *inited (atom false))
 
+#_:clj-kondo/ignore
 (defclass SQLiteDB
   (extends js/Object)
 

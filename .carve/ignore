@@ -94,3 +94,7 @@ frontend.db.sync/export-as-blocks
 frontend.ui/_emoji-init-data
 ;; placeholder var for defonce
 frontend.db.rtc.op-mem-layer/_sync-loop
+;; Used by shadow.cljs
+frontend.db-worker/init
+;; For defonce
+frontend.persist-db.browser/_do_not_reload_worker

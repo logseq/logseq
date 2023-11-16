@@ -9,7 +9,6 @@
             [frontend.routes :as routes]
             [frontend.spec]
             [frontend.log]
-            [frontend.persist-db.browser :as browser-persist-db]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]
             [logseq.api]
