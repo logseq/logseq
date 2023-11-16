@@ -173,9 +173,8 @@
     }
 
     .graph-icon {
-        padding: 2px;
-        margin-left: 1px;
-        margin-right: 9px;
+        margin-left: 3px;
+        margin-right: 11px;
     }
 
     &:hover {

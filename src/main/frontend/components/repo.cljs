@@ -221,16 +221,8 @@
                                  :title    repo-name}       ;; show full path on hover
                                 [:div.flex.flex-row.items-center
                                  [:div.flex.relative.graph-icon.rounded
-                                  (cond->
-                                    {}
-                                    logged-in?
-                                    (assoc :style {:background-color "var(--lx-gray-06-alpha, var(--color-level-5))"}))
-                                  (let [icon (if logged-in?
-                                               (let [icon (str "letter-" (first (user-handler/email)))]
-                                                 (if (ui/tabler-icon icon) icon "user"))
-                                               "database")
-                                        opts {:size (if logged-in? 12 14)
-                                              :style {:margin-right 0}}]
+                                  (let [icon "database"
+                                        opts {:size 14}]
                                     (ui/icon icon opts))]
 
                                  [:div.graphs
