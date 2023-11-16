@@ -1,11 +1,9 @@
 (ns frontend.components.repo
-  (:require [clojure.string :as string]
-            [frontend.components.widgets :as widgets]
+  (:require [frontend.components.widgets :as widgets]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.user :as user-handler]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -17,17 +15,9 @@
             [electron.ipc :as ipc]
             [goog.object :as gobj]
             [cljs.core.async :as async :refer [go <!]]
+            [clojure.string :as string]
             [frontend.handler.file-sync :as file-sync]
             [reitit.frontend.easy :as rfe]))
-
-(rum/defc add-repo
-  [args]
-  (if-let [graph-types (get-in args [:query-params :graph-types])]
-    (let [graph-types-s (->> (string/split graph-types #",")
-                             (mapv keyword))]
-      (when (seq graph-types-s)
-        (widgets/add-graph :graph-types graph-types-s)))
-    (widgets/add-graph)))
 
 (rum/defc normalized-graph-label
   [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]
@@ -235,7 +225,6 @@
             repos (if (and (seq remotes) login?)
                     (repo-handler/combine-local-&-remote-graphs repos remotes) repos)
             links (repos-dropdown-links repos current-repo multiple-windows?)
-            logged-in? (user-handler/logged-in?)
             render-content (fn [{:keys [toggle-fn]}]
                              (let [remote? (:remote? (first (filter #(= current-repo (:url %)) repos)))
                                    repo-name (db/get-repo-name current-repo)
