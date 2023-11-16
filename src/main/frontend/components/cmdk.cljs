@@ -573,7 +573,7 @@
                (util/stop e)
                (reset! (::filter state) nil)
                (when-not filter (handle-input-change state nil ""))))
-      (= keyname "c") (copy-block-ref state)
+      (and meta? (= keyname "c")) (copy-block-ref state)
       :else nil)))
 
 (defn keyup-handler
@@ -783,7 +783,7 @@
             :style {:background "var(--lx-gray-02)"}}
 
       (when group-filter
-        [:div.flex.flex-col.p-3.opacity-50.text-sm
+        [:div.flex.flex-col.px-3.py-1.opacity-70.text-sm
          (search-only state (name group-filter))])
 
       (let [items (filter
