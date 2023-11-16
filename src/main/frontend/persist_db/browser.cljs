@@ -46,8 +46,8 @@
                          _ (reset! timer timer')]
                      (js/setTimeout (fn []
                                       (js/clearInterval timer)
+                                      (js/console.error "SQLite worker is not ready after 100s")
                                       (reject nil)) ;; cannot init
-                                    (js/console.error "SQLite worker is not ready after 100s")
                                     100000))))))
 
 (defn dev-stop!
