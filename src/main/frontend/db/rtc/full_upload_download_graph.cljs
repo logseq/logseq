@@ -80,7 +80,6 @@
                                  (transit/read transit-r))
            block-properties (some->> (:block/properties block)
                                      (transit/read transit-r))]
-       ;; TODO: block/properties
        (cond-> (assoc block :db/id (str db-id))
          block-parent (assoc :block/parent (str block-parent))
          block-left (assoc :block/left (str block-left))
@@ -144,8 +143,8 @@
      (if (not= 200 status)
        (ex-info "<download-graph failed" r)
        (let [all-blocks (transit/read transit-r body)]
-         (<? (<transact-remote-all-blocks-to-sqlite all-blocks repo))
          (op-mem-layer/init-empty-ops-store! repo)
+         (<? (<transact-remote-all-blocks-to-sqlite all-blocks repo))
          (op-mem-layer/update-graph-uuid! repo graph-uuid)
-         (prn ::download-graph (@@#'op-mem-layer/*ops-store repo))
+         (prn ::download-graph repo (@@#'op-mem-layer/*ops-store repo))
          (<! (op-mem-layer/<sync-to-idb-layer! repo)))))))
