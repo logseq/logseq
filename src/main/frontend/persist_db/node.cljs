@@ -11,7 +11,7 @@
     (prn ::new repo)
     (ipc/ipc :db-new repo))
   (<list-db [_this]
-    (js/console.warn "TODO: list-db for electron not implemented")
+    (js/console.warn "TODO: list-db for electron is not implemented")
     [])
   (<unsafe-delete [_this _repo]
     (js/console.warn "TODO: delete")

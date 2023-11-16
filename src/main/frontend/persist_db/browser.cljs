@@ -1,46 +1,62 @@
 (ns frontend.persist-db.browser
-  "Browser db persist"
+  "Browser db persist support, using @logseq/sqlite.
+
+   This interface uses clj data format as input."
   (:require ["comlink" :as Comlink]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs.core.async.interop :refer [p->c]]
             [clojure.core.async :as async :refer [<! chan go go-loop]]
             [frontend.persist-db.protocol :as protocol]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.util :as util]))
 
 (defonce *worker (atom nil))
 (defonce *sqlite (atom nil))
+(defonce *inited (atom false))
 
-(defonce db-upsert-chan (chan 10))
 
-(defn- ensure-sqlite-init []
-  (if (nil? @*worker)
-    (js/Promise. (fn [resolve _reject]
-                   (let [worker (try
-                                  (js/SharedWorker. "/static/js/ls-wa-sqlite/persist-db-worker.js")
-                                  (catch js/Error e
-                                    (js/console.error "worker error", e)
-                                    nil))
-                         _ (reset! *worker worker)
-                         ^js sqlite (Comlink/wrap (.-port worker))
-                         _ (reset! *sqlite sqlite)]
-                     (-> (.init sqlite)
-                         (p/then (fn []
-                                   (js/console.log "sqlite init done")
-                                   (resolve @*sqlite)))
-                         (p/then (fn []
-                                   (go-loop []
-                                     (let [[repo ret-ch deleted-uuids upsert-blocks] (<! db-upsert-chan)
-                                           delete-rc (when (seq deleted-uuids)
-                                                       (<! (p->c (.deleteBlocks sqlite repo (clj->js (map str deleted-uuids))))))
-                                           upsert-rc (<! (p->c (.upsertBlocks sqlite repo (clj->js upsert-blocks))))]
-                                       (async/put! ret-ch [delete-rc upsert-rc])
-                                       (prn :db-upsert-chan :delete delete-rc :upsert upsert-rc))
-                                     (recur))
-                                   (prn ::done)))
-                         (p/catch (fn [e]
-                                    (js/console.error "init error", e)))))))
-    (p/resolved @*sqlite)))
+(when-not (util/electron?)
+ (let [worker (try
+                (js/Worker. "/static/js/db-worker.js")
+                (catch js/Error e
+                  (js/console.error "worker error", e)
+                  nil))
+       ^js sqlite (Comlink/wrap worker)]
+   (reset! *worker worker)
+   (reset! *sqlite sqlite)))
+
+
+(defn- ensure-sqlite-init
+  []
+  (if @*inited
+    (p/resolved @*sqlite)
+    (js/Promise. (fn [resolve reject]
+                   (let [timer (atom nil)
+                         timer' (js/setInterval (fn []
+                                                  (p/let [inited (.inited ^js @*sqlite)]
+                                                    (when inited
+                                                      (p/let [version (.getVersion ^js @*sqlite)
+                                                              support (.supportOPFS ^js @*sqlite)]
+                                                        (prn :init-sqlite version :opfs-support support))
+                                                      (js/clearInterval @timer)
+                                                      (reset! *inited true)
+                                                      (resolve @*sqlite))))
+                                                1000)
+                         _ (reset! timer timer')]
+                     (js/setTimeout (fn []
+                                      (js/clearInterval timer)
+                                      (reject nil)) ;; cannot init
+                                    (js/console.error "SQLite worker is not ready after 100s")
+                                    100000))))))
+
+(defn dev-stop!
+  "For dev env only, stop opfs backend, close all sqlite connections and OPFS sync access handles."
+  []
+  (println "[persis-db] Dev: close all sqlite connections")
+  (when-not (util/electron?)
+    (when @*sqlite
+      (.unsafeDevCloseAll ^js @*sqlite))))
 
 (defn- type-of-block
   "
@@ -73,15 +89,15 @@
    @uuid, @type, @page_uuid, @page_journal_day, @name, @content, @datoms, @created_at, @updated_at
    "
   [b]
-  [(str (:block/uuid b))
-   (type-of-block b)
-   (str (:page_uuid b))
-   (:block/journal-day b)
-   (or (:file/path b) (:block/name b))
-   (or (:file/content b) (:block/content b))
-   (:datoms b)
-   (or (:block/created-at b) (time-ms))
-   (or (:block/updated-at b) (time-ms))])
+  {:uuid (str (:block/uuid b))
+   :type (type-of-block b)
+   :page_uuid (str (:page_uuid b))
+   :page_journal_day (:block/journal-day b)
+   :name (or (:file/path b) (:block/name b))
+   :content (or (:file/content b) (:block/content b))
+   :datoms (:datoms b)
+   :created_at (or (:block/created-at b) (time-ms))
+   :updated_at (or (:block/updated-at b) (time-ms))})
 
 (defrecord InBrowser []
   protocol/PersistentDB
@@ -91,27 +107,26 @@
       (.newDB sqlite repo)))
 
   (<list-db [_this]
-    (p/let [^js sqlite (ensure-sqlite-init)
-            dbs (.listDB sqlite)]
-      (js/console.log "list DBs:" dbs)
-      dbs))
+    (p/let [^js sqlite (ensure-sqlite-init)]
+      (.listDB sqlite)))
+
   (<unsafe-delete [_this repo]
     (p/let [^js sqlite (ensure-sqlite-init)]
       (.unsafeUnlinkDB sqlite repo)))
 
   (<transact-data [_this repo upsert-blocks deleted-uuids]
-    (go
-      (let [_ (<! (p->c (ensure-sqlite-init)))
-            upsert-blocks (map ds->sqlite-block upsert-blocks)
-            ch (chan)
-            _ (async/put! db-upsert-chan [repo ch deleted-uuids upsert-blocks])]
-        (<! ch))))
+    (p->c (p/let [^js sqlite (ensure-sqlite-init)
+                  deleted (clj->js (map str deleted-uuids))
+                  _ (when (seq deleted)
+                      (.deleteBlocks sqlite repo deleted))
+                  upsert-blocks (clj->js (map ds->sqlite-block upsert-blocks))]
+            (.upsertBlocks sqlite repo upsert-blocks))))
+
   (<fetch-initital-data [_this repo _opts]
-    (prn ::fetch-initial repo)
     (p/let [^js sqlite (ensure-sqlite-init)
             all-pages (.fetchAllPages sqlite repo)
             all-blocks (.fetchAllBlocks sqlite repo)
-            journal-blocks (.fetchRecentJournalBlocks sqlite repo)
+            journal-blocks (.fetchRecentJournals sqlite repo)
             init-data (.fetchInitData sqlite repo)]
 
       #js {:all-blocks all-blocks
