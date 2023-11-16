@@ -13,8 +13,7 @@
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.block :as gp-block]
             [clojure.walk :as walk]
-            [cljs-bean.core :as bean]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [cljs-bean.core :as bean]))
 
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
 (defonce parseOPML (gobj/get Mldoc "parseOPML"))
