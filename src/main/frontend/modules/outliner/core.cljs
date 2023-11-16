@@ -309,24 +309,11 @@
           db-based? (config/db-based-graph? repo)
           id (:db/id (:data this))
           block-entity (db/entity id)
-          structured-tags? (and db-based? (seq (:block/tags m)))
-          m (if (:block/content m)
-              (update m :block/content
-                      (fn [content]
-                        (mldoc/content-without-tags content
-                                                    (->>
-                                                     (map
-                                                      (fn [tag]
-                                                        (when (:block/uuid tag)
-                                                          (str config/page-ref-special-chars (:block/uuid tag))))
-                                                      (:block/tags m))
-                                                     (remove nil?)))))
-              m)
-          m-without-tags (if db-based? (dissoc m :block/tags) m)]
+          structured-tags? (and db-based? (seq (:block/tags m)))]
       (when id
         ;; Retract attributes to prepare for tx which rewrites block attributes
         (let [retract-attributes (when db-based?
-                                   (remove #{:block/tags :block/properties} db-schema/retract-attributes))]
+                                   (remove #{:block/properties} db-schema/retract-attributes))]
           (swap! txs-state (fn [txs]
                              (vec
                               (concat txs
@@ -335,12 +322,12 @@
                                            retract-attributes))))))
 
         ;; Update block's page attributes
-        (update-page-when-save-block txs-state block-entity m-without-tags)
+        (update-page-when-save-block txs-state block-entity m)
         ;; Remove macros as they are replaced by new ones
         (remove-macros-when-save repo txs-state block-entity)
 
         ;; Remove orphaned refs from block
-        (remove-orphaned-refs-when-save txs-state block-entity m-without-tags))
+        (remove-orphaned-refs-when-save txs-state block-entity m))
 
       ;; handle others txs
       (let [other-tx (:db/other-tx m)]
@@ -348,7 +335,7 @@
           (swap! txs-state (fn [txs]
                              (vec (concat txs other-tx)))))
         (swap! txs-state conj
-               (dissoc m-without-tags :db/other-tx)))
+               (dissoc m :db/other-tx)))
 
       (create-object-when-save txs-state block-entity m structured-tags?)
 

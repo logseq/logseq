@@ -2305,7 +2305,7 @@
 (rum/defc tags
   [config block]
   (when (seq (:block/tags block))
-    [:div.flex.flex-row.flex-wrap.items-center.ml-4.gap-1
+    [:div.flex.flex-row.flex-wrap.items-center.ml-4.gap-1.text-sm
      (for [tag (:block/tags block)]
        (page-cp (assoc config
                        :tag? true
@@ -2389,7 +2389,7 @@
                nil)
 
              [:div.flex.flex-row.items-center.gap-1
-              (when (seq block-tags)
+              (when (and (seq block-tags) (:block/name block))
                 (tags config block))
               (when (and (:original-block config) (not (:block/name block)))
                 [:a.fade-link {:title "Embed block"
