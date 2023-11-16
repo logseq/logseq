@@ -392,6 +392,84 @@
       (seq add*) (assoc :add add*)
       (seq retract) (assoc :retract retract))))
 
+(defmulti local-block-ops->remote-ops-aux (fn [tp & _] tp))
+
+(defmethod local-block-ops->remote-ops-aux :move-op
+  [_ & {:keys [parent-uuid left-uuid block-uuid *remote-ops *depend-on-block-uuid-set]}]
+  (when parent-uuid
+    (let [target-uuid (or left-uuid parent-uuid)
+          sibling? (not= left-uuid parent-uuid)]
+      (swap! *remote-ops conj [:move {:block-uuid block-uuid :target-uuid target-uuid :sibling? sibling?}])
+      (swap! *depend-on-block-uuid-set conj target-uuid))))
+
+(defmethod local-block-ops->remote-ops-aux :update-op
+  [_ & {:keys [repo block update-op left-uuid parent-uuid *remote-ops]}]
+  (let [block-uuid (:block/uuid block)
+        attr-map (:updated-attrs (second update-op))
+        attr-alias-map (when (contains? attr-map :alias)
+                         (remove-non-exist-block-uuids-in-add-retract-map repo (:alias attr-map)))
+        attr-tags-map (when (contains? attr-map :tags)
+                        (remove-non-exist-block-uuids-in-add-retract-map repo (:tags attr-map)))
+        attr-type-map (when (contains? attr-map :type)
+                        (let [{:keys [add retract]} (:type attr-map)
+                              current-type-value (set (:block/type block))
+                              add (set/intersection add current-type-value)
+                              retract (set/difference retract current-type-value)]
+                          (cond-> {}
+                            (seq add)     (assoc :add add)
+                            (seq retract) (assoc :retract retract))))
+        attr-properties-map (when (contains? attr-map :properties)
+                              (let [{:keys [add retract]} (:properties attr-map)
+                                    properties (:block/properties block)
+                                    add* (into []
+                                               (update-vals (select-keys properties add)
+                                                            (partial transit/write transit-w)))]
+                                (cond-> {}
+                                  (seq add*) (assoc :add add*)
+                                  (seq retract) (assoc :retract retract))))
+        target-uuid (or left-uuid parent-uuid)
+        sibling? (not= left-uuid parent-uuid)]
+    (swap! *remote-ops conj
+           [:update
+            (cond-> {:block-uuid block-uuid}
+              (:block/updated-at block)       (assoc :updated-at (:block/updated-at block))
+              (:block/created-at block)       (assoc :created-at (:block/created-at block))
+              (contains? attr-map :schema)    (assoc :schema
+                                                     (transit/write transit-w (:block/schema block)))
+              attr-alias-map                  (assoc :alias attr-alias-map)
+              attr-type-map                   (assoc :type attr-type-map)
+              attr-tags-map                   (assoc :tags attr-tags-map)
+              attr-properties-map             (assoc :properties attr-properties-map)
+              (and (contains? attr-map :content)
+                   (:block/content block))
+              (assoc :content (:block/content block))
+              (and (contains? attr-map :link)
+                   (:block/uuid (:block/link block)))
+              (assoc :link (:block/uuid (:block/link block)))
+              true (assoc :target-uuid target-uuid :sibling? sibling?))])))
+
+(defmethod local-block-ops->remote-ops-aux :update-page-op
+  [_ & {:keys [repo block-uuid *remote-ops]}]
+  (when-let [{page-name :block/name original-name :block/original-name}
+             (db/pull repo [:block/name :block/original-name] [:block/uuid block-uuid])]
+    (swap! *remote-ops conj
+           [:update-page {:block-uuid block-uuid
+                          :page-name page-name
+                          :original-name (or original-name page-name)}])))
+
+(defmethod local-block-ops->remote-ops-aux :remove-op
+  [_ & {:keys [repo remove-op *remote-ops]}]
+  (when-let [block-uuid (:block-uuid (second remove-op))]
+    (when (nil? (db/pull repo [:block/uuid] [:block/uuid block-uuid]))
+      (swap! *remote-ops conj [:remove {:block-uuids [block-uuid]}]))))
+
+(defmethod local-block-ops->remote-ops-aux :remove-page-op
+  [_ & {:keys [repo remove-page-op *remote-ops]}]
+  (when-let [block-uuid (:block-uuid (second remove-page-op))]
+    (when (nil? (db/pull repo [:block/uuid] [:block/uuid block-uuid]))
+      (swap! *remote-ops conj [:remove-page {:block-uuid block-uuid}]))))
+
+
 (defn- local-block-ops->remote-ops
   [repo block-ops]
   (let [*depend-on-block-uuid-set (atom #{})
@@ -408,76 +486,44 @@
                                 [:block/uuid block-uuid])]
         (let [left-uuid (some-> block :block/left :block/uuid)
               parent-uuid (some-> block :block/parent :block/uuid)]
-          (when (and left-uuid parent-uuid)
+          (when parent-uuid ; whiteboard blocks don't have :block/left
             ;; remote-move-op
             (when move-op
-              (swap! *remote-ops conj
-                     [:move {:block-uuid block-uuid :target-uuid left-uuid :sibling? (not= left-uuid parent-uuid)}])
-              (swap! *depend-on-block-uuid-set conj left-uuid))
+              (local-block-ops->remote-ops-aux :move-op
+                                               :parent-uuid parent-uuid
+                                               :left-uuid left-uuid
+                                               :block-uuid block-uuid
+                                               :*remote-ops *remote-ops
+                                               :*depend-on-block-uuid-set *depend-on-block-uuid-set))
 
             ;; remote-update-op
             (when update-op
-              (let [attr-map (:updated-attrs (second update-op))
-                    attr-alias-map (when (contains? attr-map :alias)
-                                     (remove-non-exist-block-uuids-in-add-retract-map repo (:alias attr-map)))
-                    attr-tags-map (when (contains? attr-map :tags)
-                                    (remove-non-exist-block-uuids-in-add-retract-map repo (:tags attr-map)))
-                    attr-type-map (when (contains? attr-map :type)
-                                    (let [{:keys [add retract]} (:type attr-map)
-                                          current-type-value (set (:block/type block))
-                                          add (set/intersection add current-type-value)
-                                          retract (set/difference retract current-type-value)]
-                                      (cond-> {}
-                                        (seq add)     (assoc :add add)
-                                        (seq retract) (assoc :retract retract))))
-                    attr-properties-map (when (contains? attr-map :properties)
-                                          (let [{:keys [add retract]} (:properties attr-map)
-                                                properties (:block/properties block)
-                                                add* (into []
-                                                           (update-vals (select-keys properties add)
-                                                                        (partial transit/write transit-w)))]
-                                            (cond-> {}
-                                              (seq add*) (assoc :add add*)
-                                              (seq retract) (assoc :retract retract))))]
-                (swap! *remote-ops conj
-                       [:update
-                        (cond-> {:block-uuid block-uuid}
-                          (:block/updated-at block)       (assoc :updated-at (:block/updated-at block))
-                          (:block/created-at block)       (assoc :created-at (:block/created-at block))
-                          (contains? attr-map :schema)    (assoc :schema
-                                                                 (transit/write transit-w (:block/schema block)))
-                          attr-alias-map                  (assoc :alias attr-alias-map)
-                          attr-type-map                   (assoc :type attr-type-map)
-                          attr-tags-map                   (assoc :tags attr-tags-map)
-                          attr-properties-map             (assoc :properties attr-properties-map)
-                          (and (contains? attr-map :content)
-                               (:block/content block))
-                          (assoc :content (:block/content block))
-                          (and (contains? attr-map :link)
-                               (:block/uuid (:block/link block)))
-                          (assoc :link (:block/uuid (:block/link block)))
-                          true (assoc :target-uuid left-uuid
-                                      :sibling? (not= left-uuid parent-uuid)))])))))
+              (local-block-ops->remote-ops-aux :update-op
+                                               :repo repo
+                                               :block block
+                                               :update-op update-op
+                                               :parent-uuid parent-uuid
+                                               :left-uuid left-uuid
+                                               :*remote-ops *remote-ops))))
         ;; remote-update-page-op
         (when update-page-op
-          (when-let [{page-name :block/name
-                      original-name :block/original-name}
-                     (db/pull repo [:block/name :block/original-name] [:block/uuid block-uuid])]
-            (swap! *remote-ops conj
-                   [:update-page {:block-uuid block-uuid
-                                  :page-name page-name
-                                  :original-name (or original-name page-name)}])))))
+          (local-block-ops->remote-ops-aux :update-page-op
+                                           :repo repo
+                                           :block-uuid block-uuid
+                                           :*remote-ops *remote-ops))))
     ;; remote-remove-op
     (when remove-op
-      (when-let [block-uuid (:block-uuid (second remove-op))]
-        (when (nil? (db/pull repo [:block/uuid] [:block/uuid block-uuid]))
-          (swap! *remote-ops conj [:remove {:block-uuids [block-uuid]}]))))
+      (local-block-ops->remote-ops-aux :remove-op
+                                       :repo repo
+                                       :remove-op remove-op
+                                       :*remote-ops *remote-ops))
 
     ;; remote-remove-page-op
     (when remove-page-op
-      (when-let [block-uuid (:block-uuid (second remove-page-op))]
-        (when (nil? (db/pull repo [:block/uuid] [:block/uuid block-uuid]))
-          (swap! *remote-ops conj [:remove-page {:block-uuid block-uuid}]))))
+      (local-block-ops->remote-ops-aux :remove-page-op
+                                       :repo repo
+                                       :remove-page-op remove-page-op
+                                       :*remote-ops *remote-ops))
 
     {:remote-ops @*remote-ops
      :depend-on-block-uuids @*depend-on-block-uuid-set}))
