@@ -559,7 +559,6 @@
     (reset! (::alt? state) alt?)
     (when (or as-keydown? as-keyup?)
       (.preventDefault e))
-    (when-not esc? (util/stop-propagation e))
 
     (cond
       (and meta? enter?)
@@ -573,13 +572,17 @@
       as-keyup? (if meta?
                   (show-less)
                   (move-highlight state -1))
-      enter? (handle-action :default state e)
+      enter? (do
+               (handle-action :default state e)
+               (util/stop-propagation e))
       esc? (let [filter @(::filter state)]
              (when (or filter (not (string/blank? input)))
                (util/stop e)
                (reset! (::filter state) nil)
                (when-not filter (handle-input-change state nil ""))))
-      (and meta? (= keyname "c")) (copy-block-ref state)
+      (and meta? (= keyname "c")) (do
+                                    (copy-block-ref state)
+                                    (util/stop-propagation e))
       :else nil)))
 
 (defn keyup-handler
@@ -622,20 +625,22 @@
        :placeholder (input-placeholder false)
        :ref #(when-not @input-ref (reset! input-ref %))
        :on-change (fn [e]
-                    (handle-input-change state e)
-                    (when-let [on-change (:on-input-change opts)]
-                      (on-change (.-value (.-target e)))))
+                    (let [new-value (.-value (.-target e))]
+                      (handle-input-change state e)
+                      (when-let [on-change (:on-input-change opts)]
+                        (on-change new-value))))
        :on-blur (fn [_e]
                   (when-let [on-blur (:on-input-blur opts)]
                     (on-blur input)))
        :on-composition-end (fn [e] (handle-input-change state e))
        :on-key-down (fn [e]
                       (let [value (.-value @input-ref)
-                            last-char (last value)]
+                            last-char (last value)
+                            backspace? (= (util/ekey e) "Backspace")]
                         (when (and (some? @(::filter state))
                                    (or (= (util/ekey e) "/")
-                                       (and (= (util/ekey e) "Backspace")
-                                            (= last-char "/"))))
+                                       (and backspace? (= last-char "/"))
+                                       (and backspace? (= input ""))))
                           (reset! (::filter state) nil))))
        :value input}]]))
 
