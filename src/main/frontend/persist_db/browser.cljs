@@ -7,6 +7,7 @@
             [cljs-time.core :as t]
             [cljs.core.async.interop :refer [p->c]]
             [frontend.persist-db.protocol :as protocol]
+            [frontend.config :as config]
             [promesa.core :as p]
             [frontend.util :as util]))
 
@@ -15,7 +16,7 @@
 (defonce *inited (atom false))
 
 
-(when-not (util/electron?)
+(when-not (or (util/electron?) config/publishing?)
   (defonce _do_not_reload_worker
     (let [worker (try
                   (js/Worker. "/static/js/db-worker.js")
