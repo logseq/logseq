@@ -85,9 +85,10 @@
     [:current-branch ops-store-value-schema]
     [:old-branch {:optional true} [:maybe ops-store-value-schema]]]])
 
-(def ops-store-schema-validator (m/validator ops-store-schema))
+(def ops-store-schema-coercer (m/coercer ops-store-schema))
 
-(defonce ^:private *ops-store (atom {} :validator ops-store-schema-validator))
+
+(defonce ^:private *ops-store (atom {} :validator ops-store-schema-coercer))
 
 (defn- merge-add-retract-maps
   [m1 m2]
