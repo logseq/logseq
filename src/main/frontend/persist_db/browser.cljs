@@ -46,9 +46,8 @@
                          _ (reset! timer timer')]
                      (js/setTimeout (fn []
                                       (js/clearInterval timer)
-                                      (js/console.error "SQLite worker is not ready after 100s")
                                       (reject nil)) ;; cannot init
-                                    100000))))))
+                                    20000))))))
 
 (defn- type-of-block
   "
@@ -136,7 +135,5 @@
            :journal-blocks journal-blocks
            :init-data init-data}))
   (<fetch-blocks-excluding [_this repo exclude-uuids _opts]
-    (p/let [^js sqlite (ensure-sqlite-init)
-            res (.fetchBlocksExcluding sqlite repo (clj->js exclude-uuids))]
-      (prn :<fetch-blocks-excluding res)
-      res)))
+    (p/let [^js sqlite (ensure-sqlite-init)]
+      (.fetchBlocksExcluding sqlite repo (clj->js exclude-uuids)))))
