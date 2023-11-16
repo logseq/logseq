@@ -202,15 +202,16 @@
            (when hashtag?
              (gp-util/safe-subs edit-content pos current-pos))
            (when (> (count edit-content) current-pos)
-             (gp-util/safe-subs edit-content pos current-pos)))]
+             (gp-util/safe-subs edit-content pos current-pos)))
+        db-based? (config/db-based-graph? (state/get-current-repo))]
     (if hashtag?
       (fn [chosen e]
         (util/stop e)
         (state/clear-editor-action!)
         (let [wrapped? (= page-ref/left-brackets (gp-util/safe-subs edit-content (- pos 2) pos))
-              chosen (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
-                       (page-ref/->page-ref chosen)
-                       chosen)
+              wrapped-tag (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
+                            (page-ref/->page-ref chosen)
+                            chosen)
               q (if (editor-handler/get-selected-text) "" q)
               last-pattern (if wrapped?
                              q
@@ -232,7 +233,7 @@
                                    [:db/add [:block/uuid (:block/uuid edit-block)] :block/refs (:db/id tag-entity)]]))))))
 
           (editor-handler/insert-command! id
-                                          (str "#" (when wrapped? page-ref/left-brackets) chosen)
+                                          (str "#" wrapped-tag)
                                           format
                                           {:last-pattern last-pattern
                                            :end-pattern (when wrapped? page-ref/right-brackets)
