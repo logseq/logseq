@@ -12,10 +12,10 @@
             ["os" :as os]))
 
 (defn -main [args]
-  (when (< (count args) 2)
-    (println "Usage: $0 GRAPH-DIR QUERY")
+  (when (< (count args) 3)
+    (println "Usage: $0 GRAPH-DIR QUERY TRANSACT-FN")
     (js/process.exit 1))
-  (let [[graph-dir query*] args
+  (let [[graph-dir query* transact-fn*] args
         dry-run? (contains? (set args) "-n")
         [dir db-name] (if (string/includes? graph-dir "/")
                         ((juxt node-path/dirname node-path/basename) graph-dir)
@@ -24,15 +24,16 @@
         conn (sqlite-cli/read-graph db-name)
         ;; find blocks to update
         query (into (edn/read-string query*) [:in '$ '%]) ;; assumes no :in are in queries
+        transact-fn (edn/read-string transact-fn*)
         blocks-to-update (mapv first (d/q query @conn (rules/extract-rules rules/db-query-dsl-rules)))
-        ;; TODO: Make this configurable
-        update-tx (mapv #(vector :db.fn/retractEntity %)
+        ;; TODO: Use sci eval when it's available in nbb-logseq
+        update-tx (mapv (fn [id] (eval (list transact-fn id)))
                         blocks-to-update)]
     (if dry-run?
       (do (println "Would update" (count blocks-to-update) "blocks with the following tx:")
           (prn update-tx)
           (println "With the following blocks updated:")
-          (prn (map #(into {} (d/entity @conn %)) blocks-to-update)))
+          (prn (map #(select-keys (d/entity @conn %) [:block/name :block/content]) blocks-to-update)))
       (do
         (persist-graph/add-listener conn db-name)
         (d/transact! conn update-tx)
