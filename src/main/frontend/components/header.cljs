@@ -125,12 +125,6 @@
                     :target "_blank"}
           :icon (ui/icon "brand-discord")})
 
-       (when-not config/publishing?
-         {:title [:div.flex-row.flex.justify-between.items-center
-                  [:span (t :help/bug)]]
-          :options {:href (rfe/href :bug-report)}
-          :icon (ui/icon "bug")})
-
        (when config/publishing?
          {:title (t :toggle-theme)
           :options {:on-click #(state/toggle-theme!)}
