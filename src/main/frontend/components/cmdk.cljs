@@ -562,8 +562,7 @@
     (when-not esc? (util/stop-propagation e))
 
     (cond
-      (and meta? enter?
-           (not (string/blank? input)))
+      (and meta? enter?)
       (let [repo (state/get-current-repo)]
         (state/close-modal!)
         (state/sidebar-add-block! repo input :search))
