@@ -74,7 +74,7 @@ export const Primary: StoryObj =
           <DropdownMenuCheckboxes/>
           <Button onClick={() => {
             const p = toast({
-              title: <strong>hello</strong>,
+              title: 'hello',
               description: <Button onClick={() => p.dismiss()}>hello</Button>
             })
           }}>toast</Button>
