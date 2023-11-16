@@ -1338,7 +1338,7 @@
          [:div.r.flex.items-center.justify-between
           [:div
            (ui/select (->> (if (config/db-based-graph? current-repo)
-                             ["" "class" "property" "object" "whiteboard"]
+                             ["" "class" "property" "whiteboard"]
                              ["" "whiteboard"])
                            (map (fn [block-type]
                                   {:label (if (seq block-type) (string/capitalize block-type) "Filter by page type")

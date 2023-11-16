@@ -150,7 +150,7 @@
                                            (vector :db.fn/retractEntity (:db/id %)))
                                         (:block/macros block-entity)))))))
 
-(defn- create-object-when-save
+(defn- create-linked-page-when-save
   [txs-state block-entity m structured-tags?]
   (if structured-tags?
     (let [content (state/get-edit-content)
@@ -158,7 +158,7 @@
           sanity-linked-page (some-> linked-page util/page-name-sanity-lc)
           linking-page? (and (not (string/blank? sanity-linked-page))
                              @(:editor/create-page? @state/state))]
-      (if linking-page?
+      (when linking-page?
         (let [existing-ref-id (some (fn [r]
                                       (when (= sanity-linked-page (:block/name r))
                                         (:block/uuid r)))
@@ -178,17 +178,12 @@
                              (concat txs
                                      [(assoc page-m
                                              :block/tags (:block/tags m)
-                                             :block/format :markdown
-                                             :block/type "object")
+                                             :block/format :markdown)
                                       {:db/id (:db/id block-entity)
                                        :block/content ""
                                        :block/refs []
                                        :block/link [:block/uuid (:block/uuid page-m)]}]
-                                     merge-tx))))
-        (swap! txs-state (fn [txs]
-                           (concat txs
-                                   [{:db/id (:db/id block-entity)
-                                     :block/type "object"}])))))
+                                     merge-tx))))))
     (reset! (:editor/create-page? @state/state) false)))
 
 (defn rebuild-block-refs
@@ -337,7 +332,7 @@
         (swap! txs-state conj
                (dissoc m :db/other-tx)))
 
-      (create-object-when-save txs-state block-entity m structured-tags?)
+      (create-linked-page-when-save txs-state block-entity m structured-tags?)
 
       (rebuild-refs repo txs-state block-entity m)
 

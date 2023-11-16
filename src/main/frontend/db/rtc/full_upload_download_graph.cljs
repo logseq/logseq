@@ -62,8 +62,7 @@
   {:block-type/property   "property"
    :block-type/class      "class"
    :block-type/whiteboard "whiteboard"
-   :block-type/macros     "macros"
-   :block-type/object     "object"})
+   :block-type/macros     "macros"})
 
 
 (defn- replace-db-id-with-temp-id
