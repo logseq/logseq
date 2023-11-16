@@ -95,17 +95,24 @@
                             (take 5 items))))
         page-exists? (when-not (string/blank? input)
                        (db/entity [:block/name (string/trim input)]))
-        filter-mode? (or (string/includes? input "/")
-                         (string/starts-with? input "/"))
+        include-slash? (or (string/includes? input "/")
+                           (string/starts-with? input "/"))
         order* (cond
                  (= search-mode :graph)
                  [["Pages"          :pages          (visible-items :pages)]]
 
-                 filter-mode?
-                 [["Filters"        :filters        (visible-items :filters)]
-                  ["Pages"          :pages          (visible-items :pages)]
+                 include-slash?
+                 [(if page-exists?
+                    ["Pages"          :pages          (visible-items :pages)]
+                    ["Filters"        :filters        (visible-items :filters)])
+                  (if page-exists?
+                    ["Filters"        :filters        (visible-items :filters)]
+                    ["Pages"          :pages          (visible-items :pages)])
                   (when-not page-exists?
-                    ["Create"         :create         (create-items input)])]
+                    ["Create"         :create         (create-items input)])
+                  ["Current page"   :current-page   (visible-items :current-page)]
+                  ["Blocks"         :blocks         (visible-items :blocks)]
+                  ["Files"          :files          (visible-items :files)]]
 
                  filter-group
                  [(when (= filter-group :blocks)
