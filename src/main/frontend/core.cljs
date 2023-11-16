@@ -9,6 +9,7 @@
             [frontend.routes :as routes]
             [frontend.spec]
             [frontend.log]
+            [frontend.persist-db.browser :as browser-persist-db]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]
             [logseq.api]
@@ -67,5 +68,6 @@
   ;; this is controlled by :before-load in the config
   (handler/stop!)
   (when config/dev?
-    (sync/<sync-stop))
+    (sync/<sync-stop)
+    (browser-persist-db/dev-stop!))
   (js/console.log "stop"))
