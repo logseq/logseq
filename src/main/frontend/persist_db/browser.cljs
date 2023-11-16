@@ -6,7 +6,6 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs.core.async.interop :refer [p->c]]
-            [clojure.core.async :as async :refer [<! chan go go-loop]]
             [frontend.persist-db.protocol :as protocol]
             [promesa.core :as p]
             [frontend.util :as util]))
@@ -17,14 +16,15 @@
 
 
 (when-not (util/electron?)
- (let [worker (try
-                (js/Worker. "/static/js/db-worker.js")
-                (catch js/Error e
-                  (js/console.error "worker error", e)
-                  nil))
-       ^js sqlite (Comlink/wrap worker)]
-   (reset! *worker worker)
-   (reset! *sqlite sqlite)))
+  (defonce _do_not_reload_worker
+    (let [worker (try
+                  (js/Worker. "/static/js/db-worker.js")
+                  (catch js/Error e
+                    (js/console.error "worker error", e)
+                    nil))
+         ^js sqlite (Comlink/wrap worker)]
+     (reset! *worker worker)
+     (reset! *sqlite sqlite))))
 
 
 (defn- ensure-sqlite-init
@@ -49,14 +49,6 @@
                                       (js/console.error "SQLite worker is not ready after 100s")
                                       (reject nil)) ;; cannot init
                                     100000))))))
-
-(defn dev-stop!
-  "For dev env only, stop opfs backend, close all sqlite connections and OPFS sync access handles."
-  []
-  (println "[persis-db] Dev: close all sqlite connections")
-  (when-not (util/electron?)
-    (when @*sqlite
-      (.unsafeDevCloseAll ^js @*sqlite))))
 
 (defn- type-of-block
   "
@@ -98,6 +90,16 @@
    :datoms (:datoms b)
    :created_at (or (:block/created-at b) (time-ms))
    :updated_at (or (:block/updated-at b) (time-ms))})
+
+(comment
+  (defn dev-stop!
+  "For dev env only, stop opfs backend, close all sqlite connections and OPFS sync access handles."
+  []
+  (println "[persis-db] Dev: close all sqlite connections")
+  (when-not (util/electron?)
+    (when @*sqlite
+      (.unsafeDevCloseAll ^js @*sqlite)))))
+
 
 (defrecord InBrowser []
   protocol/PersistentDB
