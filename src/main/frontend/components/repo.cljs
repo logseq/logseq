@@ -18,8 +18,7 @@
             [goog.object :as gobj]
             [cljs.core.async :as async :refer [go <!]]
             [frontend.handler.file-sync :as file-sync]
-            [reitit.frontend.easy :as rfe]
-            [logseq.shui.core :as shui]))
+            [reitit.frontend.easy :as rfe]))
 
 (rum/defc add-repo
   [args]
@@ -251,26 +250,22 @@
                                              (check-multiple-windows? state)
                                              (toggle-fn))
                                  :title    repo-name}       ;; show full path on hover
-                                [:span.flex.relative
-                                 {:style {:top 1}}
-                                 (ui/icon (if logged-in?
-                                            (let [icon (str "letter-" (first (user-handler/email)))]
-                                              (if (shui/tabler-icon icon) icon "user"))
-                                            "database") {:size (if logged-in? 12 16)
-                                                         :id "database-icon"
-                                                         :class (when logged-in? "p-1 rounded")
-                                                         :style {:background-color "var(--lx-gray-06-alpha, var(--color-level-5))"
-                                                                 :padding 3}})]
-                                [:div.graphs
-                                 [:span#repo-switch.block.pr-2.whitespace-nowrap
-                                  [:span [:span#repo-name.font-medium
-                                          [:span.overflow-hidden.text-ellipsis (if (= config/local-repo short-repo-name) "Demo" short-repo-name)]
-                                          (when remote? [:span.pl-1 (ui/icon "cloud")])]]
-                                  [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]))
+                                [:div.flex.flex-row.items-center
+                                 [:div.flex.relative.graph-icon.rounded
+                                  (let [icon "database"
+                                        opts {:size 14}]
+                                    (ui/icon icon opts))]
+
+                                 [:div.graphs
+                                  [:span#repo-switch.block.pr-2.whitespace-nowrap
+                                   [:span [:span#repo-name.font-medium
+                                           [:span.overflow-hidden.text-ellipsis (if (= config/local-repo short-repo-name) "Demo" short-repo-name)]
+                                           (when remote? [:span.pl-1 (ui/icon "cloud")])]]
+                                   [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]]))
             links-header (cond->
-                           {:z-index 1000
-                            :modal-class (util/hiccup->class
-                                           "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")}
+                          {:z-index 1000
+                           :modal-class (util/hiccup->class
+                                         "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")}
                            (> (count repos) 1)              ; show switch to if there are multiple repos
                            (assoc :links-header [:div.font-medium.text-sm.opacity-70.px-4.pt-2.pb-1.flex.flex-row.justify-between.items-center
                                                  [:div (t :left-side-bar/switch)]
