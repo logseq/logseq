@@ -12,11 +12,13 @@
   - clj-kondo lint
   - carve lint for unused vars
   - lint for vars that are too large
-  - lint invalid translation entries"
+  - lint invalid translation entries
+  - lint to ensure file and db graph remain separate"
   []
   (doseq [cmd ["clojure -M:clj-kondo --parallel --lint src --cache false"
                "bb lint:carve"
                "bb lint:large-vars"
+               "bb lint:db-and-file-graphs-separate"
                "bb lang:validate-translations"
                "bb lint:ns-docstrings"]]
     (println cmd)
