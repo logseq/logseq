@@ -51,6 +51,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.db-based.property.util :as db-pu]
             [frontend.handler.property :as property-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.web.nfs :as nfs-handler]
@@ -317,7 +318,7 @@
                       (contains? shown-properties property)
                       property-value)]
          [:div.flex.flex-row.m-2.justify-between.align-items
-          [:div (if (uuid? property) (pu/get-property-name property) (name property))]
+          [:div (if (uuid? property) (db-pu/get-property-name property) (name property))]
           [:div.mt-1 (ui/toggle shown?
                                 (fn []
                                   (let [value (not shown?)]

@@ -82,6 +82,7 @@
              frontend.handler.db-based.editor db-editor-handler
              frontend.handler.db-based.page db-page-handler
              frontend.handler.db-based.property db-property-handler
+             frontend.handler.db-based.property.util db-pu
              frontend.handler.file-based.page file-page-handler
              frontend.handler.file-based.property file-property-handler
              frontend.handler.file-based.page-property file-page-property

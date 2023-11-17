@@ -18,7 +18,8 @@
             [rum.core :as rum]
             [logseq.graph-parser.text :as text]
             [logseq.db.frontend.property :as db-property]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [frontend.handler.db-based.property.util :as db-pu]))
 
 ;; Util fns
 ;; ========
@@ -108,7 +109,7 @@
         hidden-properties (if db-graph?
                             ;; TODO: Support additional hidden properties e.g. from user config
                             ;; or gp-property/built-in-extended properties
-                            (set (map #(pu/get-built-in-property-uuid repo %)
+                            (set (map #(db-pu/get-built-in-property-uuid repo %)
                                       db-property/built-in-properties-keys-str))
                             (conj (file-property-handler/built-in-properties) :template))
         prop-keys* (->> (distinct (mapcat keys (map :block/properties result)))
@@ -296,9 +297,11 @@
           sort-result (sort-result result (assoc sort-state :page? page?))
           table-version (get-shui-component-version :table config)]
       (case table-version
-        2 (let [v2-columns (mapv #(if (uuid? %) (pu/get-property-name %) %) columns)
-                v2-config (assoc-in config [:block :properties]
-                                (pu/readable-properties (get-in config [:block :block/properties])))
+        2 (let [v2-columns (mapv #(if (uuid? %) (db-pu/get-property-name %) %) columns)
+                v2-config (cond-> config
+                            db-graph?
+                            (assoc-in [:block :properties]
+                                      (db-pu/readable-properties (get-in config [:block :block/properties]))))
                 result-as-text (for [row result]
                                  (for [column columns]
                                    (build-column-text row column)))]

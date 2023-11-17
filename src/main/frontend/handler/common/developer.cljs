@@ -6,7 +6,7 @@
             [frontend.handler.notification :as notification]
             [frontend.ui :as ui]
             [frontend.util.page :as page-util]
-            [frontend.handler.property.util :as pu]
+            [frontend.handler.db-based.property.util :as db-pu]
             [frontend.format.mldoc :as mldoc]
             [frontend.config :as config]))
 
@@ -15,8 +15,8 @@
   [& pull-args]
   (let [result* (apply db/pull pull-args)
         result (cond-> result*
-                 (seq (:block/properties result*))
-                 (assoc :block.debug/properties (update-keys (:block/properties result*) pu/get-property-name)))
+                 (and (seq (:block/properties result*)) (config/db-based-graph? (state/get-current-repo)))
+                 (assoc :block.debug/properties (update-keys (:block/properties result*) db-pu/get-property-name)))
         pull-data (with-out-str (pprint/pprint result))]
     (println pull-data)
     (notification/show!
