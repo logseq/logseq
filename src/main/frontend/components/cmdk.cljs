@@ -530,6 +530,8 @@
      ;; update the input value in the UI
      (reset! !input input)
 
+     (reset! (::input-changed? state) true)
+
        ;; ensure that there is a throttled version of the load-results function
      (when-not @!load-results-throttled
        (reset! !load-results-throttled (gfun/throttle load-results 50)))
@@ -576,7 +578,8 @@
                (handle-action :default state e)
                (util/stop-propagation e))
       esc? (let [filter @(::filter state)]
-             (when (or filter (not (string/blank? input)))
+             (when (or (and filter @(::input-changed? state))
+                       (not (string/blank? input)))
                (util/stop e)
                (reset! (::filter state) nil)
                (when-not filter (handle-input-change state nil ""))))
@@ -775,6 +778,7 @@
   (rum/local nil ::load-results-throttled)
   (rum/local nil ::scroll-container-ref)
   (rum/local nil ::input-ref)
+  (rum/local false ::input-changed?)
   [state {:keys [sidebar?] :as opts}]
   (let [*input (::input state)
         _input (rum/react *input)
