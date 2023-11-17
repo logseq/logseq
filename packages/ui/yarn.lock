@@ -2159,6 +2159,11 @@
     schema-utils "^3.0.0"
     source-map "^0.7.3"
 
+"@radix-ui/colors@^3.0.0":
+  version "3.0.0"
+  resolved "https://registry.yarnpkg.com/@radix-ui/colors/-/colors-3.0.0.tgz#e8a591a303c44e503bd1212cacf40a09511165e0"
+  integrity sha512-FUOsGBkHrYJwCSEtWRCIfQbZG7q1e6DgxCIOe1SUQzDe/7rXXeA47s8yCn6fuTNQAj1Zq4oTFi9Yjp3wzElcxg==
+
 "@radix-ui/number@1.0.1":
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/@radix-ui/number/-/number-1.0.1.tgz#644161a3557f46ed38a042acf4a770e826021674"

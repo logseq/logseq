@@ -1,5 +1,23 @@
+* {
+  @apply border-border;
+}
+
+body {
+  @apply bg-background text-foreground;
+}
+
 /* light */
 html {
+  &[data-theme=default] {
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --primary: 200 95% 40%;
+    --primary-foreground: 210 40% 98%;
+
+    --ring: 200 97% 37%;
+  }
+
   &[data-theme=blue] {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;

@@ -4,8 +4,10 @@ module.exports = {
   content: [
     './@/components/**/*.{ts,tsx}',
     './src/**/*.{ts,tsx}',
-    './examples/**/*.{ts,tsx}',
-    './.storybook/cljs/**/*.js'
+    './examples/**/*.{ts,tsx}'
+  ],
+  safelist: [
+    { pattern: /primary-(gray|red|yellow|green|blue|orange|indigo|rose|purple|pink)/}
   ],
   theme: {
     container: {

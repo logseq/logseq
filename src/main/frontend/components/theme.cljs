@@ -26,6 +26,8 @@
      #(let [doc js/document.documentElement
             cls (.-classList doc)]
         (.setAttribute doc "data-theme" theme)
+        ;; FIXME: color state
+        (.setAttribute doc "data-color" "logseq")
         (if (= theme "dark") ;; for tailwind dark mode
           (.add cls "dark")
           (.remove cls "dark"))
