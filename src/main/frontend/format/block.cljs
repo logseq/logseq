@@ -11,7 +11,7 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [frontend.handler.property.util :as pu]
+            [frontend.handler.db-based.property.util :as db-pu]
             [lambdaisland.glogi :as log]
             [frontend.util :as util]
             [datascript.core :as d]
@@ -25,7 +25,7 @@
   (let [repo (state/get-current-repo)
         update-properties (fn [props]
                             (update-keys props #(if (contains? db-property/built-in-properties-keys %)
-                                                  (pu/get-built-in-property-uuid repo %)
+                                                  (db-pu/get-built-in-property-uuid repo %)
                                                   %)))]
     (if (config/db-based-graph? repo)
      (->> blocks

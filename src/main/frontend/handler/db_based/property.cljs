@@ -13,7 +13,7 @@
             [malli.error :as me]
             [frontend.format.block :as block]
             [logseq.graph-parser.util.page-ref :as page-ref]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.db-based.property.util :as db-pu]))
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
@@ -372,7 +372,7 @@
   [repo block-ids key]
   (when-let [property-uuid (if (uuid? key)
                              key
-                             (pu/get-user-property-uuid repo key))]
+                             (db-pu/get-user-property-uuid repo key))]
     (let [txs (mapcat
                (fn [id]
                  (when-let [block (db/entity [:block/uuid id])]
@@ -467,7 +467,7 @@
    (map (fn [k]
           (if (uuid? k)
             k
-            (let [property-id (pu/get-user-property-uuid k)]
+            (let [property-id (db-pu/get-user-property-uuid k)]
              (when-not property-id
                (throw (ex-info "Property not exists yet"
                                {:key k})))

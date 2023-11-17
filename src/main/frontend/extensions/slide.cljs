@@ -11,7 +11,7 @@
             [frontend.db :as db]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.state :as state]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.db-based.property.util :as db-pu]))
 
 (defn loaded? []
   js/window.Reveal)
@@ -25,7 +25,7 @@
               properties
               (fn [k]
                 (-> (str "data-" (if (config/db-based-graph? (state/get-current-repo))
-                                   (pu/get-property-name k)
+                                   (db-pu/get-property-name k)
                                    (name k)))
                     (string/replace "data-data-" "data-")))))
       m)))

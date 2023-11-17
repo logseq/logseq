@@ -13,6 +13,7 @@
             [frontend.db.model :as model]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.db-based.property.util :as db-pu]
             [clojure.string :as string]))
 
 (defn remove-block-property!
@@ -173,7 +174,7 @@
     (or
      (seq (:block/alias properties))
      (and (seq properties)
-          (not= (keys properties) [(pu/get-built-in-property-uuid :icon)])))))
+          (not= (keys properties) [(db-pu/get-built-in-property-uuid :icon)])))))
 
 (defn property-create-new-block
   [block property value parse-block]

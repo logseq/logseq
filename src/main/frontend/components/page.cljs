@@ -13,6 +13,7 @@
             [frontend.components.property.value :as pv]
             [frontend.components.class :as class-component]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.db-based.property.util :as db-pu]
             [frontend.handler.property :as property-handler]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
@@ -453,9 +454,9 @@
                          (reset! *hover? false))}
        (when icon
          [:div.page-icon {:on-mouse-down util/stop-propagation}
-          (if (map? icon)
+          (if (and (map? icon) db-based?)
             (property/icon icon {:on-chosen (fn [_e icon]
-                                              (let [icon-property-id (pu/get-built-in-property-uuid :icon)]
+                                              (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
                                                 (property-handler/update-property!
                                                  repo
                                                  (:block/uuid page)

@@ -22,6 +22,7 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.db-based.property.util :as db-pu]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.notification :as notification]
@@ -3411,7 +3412,7 @@
              (valid-custom-query-block? block)
              (and (config/db-based-graph? repo)
                   (seq (:block/properties block))
-                  (not (pu/all-hidden-built-in-properties? (keys (:block/properties block)))))
+                  (not (db-pu/all-hidden-built-in-properties? (keys (:block/properties block)))))
              (and (config/db-based-graph? repo)
                   (seq (:block/tags block)))
              (and

@@ -14,6 +14,7 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.db-based.property.util :as db-pu]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.search :as search]
@@ -159,7 +160,7 @@
           (closed-value/icon icon-value
                              {:disabled? disabled?
                               :on-chosen (fn [_e icon]
-                                           (let [icon-property-id (pu/get-built-in-property-uuid :icon)]
+                                           (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
                                              (property-handler/update-property!
                                               (state/get-current-repo)
                                               (:block/uuid property)
@@ -492,7 +493,7 @@
          (icon-component/icon-search
           {:on-chosen
            (fn [_e icon]
-             (let [icon-property-id (pu/get-built-in-property-uuid :icon)]
+             (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
                (when icon
                  (property-handler/update-property! repo
                                                     (:block/uuid property)
@@ -617,7 +618,7 @@
                      (sort-by first block-properties))
         alias (set (map :block/uuid (:block/alias block)))
         alias-properties (when (seq alias)
-                           [[(pu/get-built-in-property-uuid :alias) alias]])
+                           [[(db-pu/get-built-in-property-uuid :alias) alias]])
         remove-built-in-properties (fn [properties]
                                      (remove (fn [x]
                                                (let [id (if (uuid? x) x (first x))]

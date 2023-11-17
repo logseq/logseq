@@ -4,6 +4,7 @@
             [frontend.extensions.sci :as sci]
             [frontend.handler.common :as common-handler]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.db-based.property.util :as db-pu]
             [frontend.state :as state]
             [goog.string :as gstring]
             [goog.string.format]
@@ -48,7 +49,7 @@
                  int? (some integer? vals)
                  repo (state/get-current-repo)
                  prop-key (if (config/db-based-graph? repo)
-                            (or (pu/get-user-property-uuid repo f)
+                            (or (db-pu/get-user-property-uuid repo f)
                                 ;; Fall back to the keyword for queries that set named properties through :result-transform
                                 f)
                             f)]

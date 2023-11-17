@@ -52,6 +52,7 @@
             [frontend.handler.export.common :as export-common-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.db-based.property.util :as db-pu]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.security :as security]
@@ -614,8 +615,7 @@
 
      (let [repo (state/get-current-repo)
            block-id (:block/uuid config)
-           block (when block-id (db/entity [:block/uuid block-id]))
-           tags-id (pu/get-built-in-property-uuid repo :tags)]
+           block (when block-id (db/entity [:block/uuid block-id]))]
        (when (and block tag? @*hover? (config/db-based-graph? repo)
                   display-close-button?)
          [:a.close.fade-in
@@ -625,8 +625,9 @@
            :on-mouse-down
            (fn [e]
              (util/stop e)
-             (property-handler/delete-property-value! repo block
-                                                      tags-id
+             (property-handler/delete-property-value! repo
+                                                      block
+                                                      (db-pu/get-built-in-property-uuid repo :tags)
                                                       (:block/uuid page-entity)))}
           (ui/icon "x" {:size 15})]))]))
 
@@ -3188,9 +3189,12 @@
 
 (defn table
   [config {:keys [header groups col_groups]}]
+
   (case (get-shui-component-version :table config)
-    2 (let [v2-config (assoc-in config [:block :properties]
-                                (pu/readable-properties (get-in config [:block :block/properties])))]
+    2 (let [v2-config (cond-> config
+                        (config/db-based-graph? (state/get-current-repo))
+                        (assoc-in [:block :properties]
+                                  (db-pu/readable-properties (get-in config [:block :block/properties]))))]
         (shui/table-v2 {:data (concat [[header]] groups)}
                        (make-shui-context v2-config inline)))
     1 (let [tr (fn [elm cols]
