@@ -78,8 +78,10 @@
                        ;; from logseq.db.frontend.schema
                        [:block/properties-text-values :block/pre-block :recent/pages :file/handle :block/file :block/properties-order]
                        (map str)
-                       ;; e.g. block/properties :title
-                       (into ["block/properties :"]))
+                       (into [;; e.g. block/properties :title
+                              "block/properties :"
+                              ;; anything org mode
+                              "org"]))
         res (apply shell {:out :string :continue true}
                    "git grep -E" (str "(" (string/join "|" file-concepts) ")")
                    db-graph-paths)]

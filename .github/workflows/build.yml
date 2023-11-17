@@ -120,6 +120,9 @@ jobs:
       - name: Lint invalid translation entries
         run: bb lang:validate-translations
 
+      - name: Lint to keep db and file graph code separate
+        run: bb lint:db-and-file-graphs-separate
+
   db-graph-test:
     strategy:
       matrix:

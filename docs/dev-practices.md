@@ -336,7 +336,7 @@ docs](https://github.com/logseq/bb-tasks#logseqbb-tasksnbbwatch) for more info.
 These tasks are specific to database graphs. For these tasks there is a one time setup:
 
 ```sh
-  $ cd deps/db && yarn install && cd -
+  $ cd deps/db && yarn install && cd ../outliner && yarn install && cd ../..
 ```
 
 * `dev:validate-db` - Validates a DB graph's datascript schema
