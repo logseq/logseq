@@ -43,7 +43,7 @@
                                                       (js/clearInterval @timer)
                                                       (reset! *inited true)
                                                       (resolve @*sqlite))))
-                                                1000)
+                                                200)
                          _ (reset! timer timer')]
                      (js/setTimeout (fn []
                                       (js/clearInterval timer)
