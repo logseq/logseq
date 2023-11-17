@@ -17,7 +17,14 @@
    (ui/slider)
 
    [:hr.my-10]
-
+   [:p
+    (ui/button
+      {:variant :default
+       :size :md
+       :class "primary-orange"}
+      (ui/tabler-icon "brand-soundcloud")
+      "Get SoundCloud (.primary-{color})")]
+   [:hr.my-10]
 
    (let [[loading? set-loading!] (rum/use-state false)]
      (ui/button
@@ -28,5 +35,5 @@
         :disabled loading?}
        (when loading?
          (ui/tabler-icon "loader2" {:class "animate-spin"}))
-       "Logseq UI Button"
+       "Logseq Classic Button"
        (ui/tabler-icon "arrow-right")))])
