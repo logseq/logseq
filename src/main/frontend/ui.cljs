@@ -242,6 +242,7 @@
          wrapper-children)))
    opts))
 
+(declare button)
 (rum/defc notification-content
   [state content status uid]
   (when (and content status)
@@ -275,18 +276,19 @@
                                             :overflow-x "hidden"}}
          [:div.p-4
           [:div.flex.items-start
-           [:div.flex-shrink-0
+           [:div.flex-shrink-0.pt-2
             svg]
-           [:div.ml-3.w-0.flex-1
+           [:div.ml-3.w-0.flex-1.pt-2
             [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}}
              content]]
-           [:div.ml-4.flex-shrink-0.flex
-            [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150.notification-close-button
-             {:aria-label "Close"
-              :on-click (fn []
-                          (notification/clear! uid))}
-
-             (icon "x" {:fill "currentColor"})]]]]]]])))
+           [:div.flex-shrink-0.flex {:style {:margin-top -9
+                                             :margin-right -18}}
+            (button
+              {:button-props {:aria-label "Close"}
+               :intent "link"
+               :on-click (fn []
+                           (notification/clear! uid))
+               :icon "x"})]]]]]])))
 
 (declare button)
 
@@ -691,21 +693,18 @@
              (t sub-title)
              sub-title)]]]]
 
-       [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
-        [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
-         [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-          {:type     "button"
-           :autoFocus "on"
-           :class "ui__modal-enter"
+       [:div.mt-5.sm:mt-4.flex.gap-4
+        (button
+          (t :cancel)
+          {:theme :gray
+           :on-click (comp on-cancel close-fn)})
+        (button
+          (t :yes)
+          {:class "ui__modal-enter"
            :on-click #(and (fn? on-confirm)
                            (on-confirm % {:close-fn close-fn
-                                          :sub-selected (and *sub-checkbox-selected @*sub-checkbox-selected)}))}
-          (t :yes)]]
-        [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
-         [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-          {:type     "button"
-           :on-click (comp on-cancel close-fn)}
-          (t :cancel)]]]])))
+                                          :sub-selected (and *sub-checkbox-selected @*sub-checkbox-selected)}))
+           :button-props {:autoFocus "on"}})]])))
 
 (rum/defc sub-modal < rum/reactive
   []
@@ -1008,11 +1007,11 @@
 (def icon shui/icon)
 
 (rum/defc button-inner
-  [text & {:keys [background href class intent on-click small? icon icon-props disabled? button-props]
+  [text & {:keys [theme background href class intent on-click small? icon icon-props disabled? button-props]
            :or   {small? false}
            :as   option}]
   (let [opts {:text text
-              :theme (when (contains? #{"link" "border-link"} intent) :text)
+              :theme (or (when (contains? #{"link" "border-link"} intent) :text) theme)
               :href href
               :on-click on-click
               :size (if small? :sm :md)
