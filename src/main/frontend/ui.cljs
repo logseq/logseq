@@ -1069,9 +1069,9 @@
 (rum/defc progress-bar
   [width]
   {:pre (integer? width)}
-  [:div.w-full.bg-indigo-200.rounded-full.h-2.5.animate-pulse
-   [:div.bg-indigo-600.h-2.5.rounded-full {:style {:width (str width "%")}
-                                           :transition "width 1s"}]])
+  [:div.w-full.rounded-full.h-2.5.animate-pulse.bg-gray-06-alpha
+   [:div.bg-gray-09-alpha.h-2.5.rounded-full {:style {:width (str width "%")}
+                                              :transition "width 1s"}]])
 
 (rum/defc progress-bar-with-label
   [width label-left label-right]
