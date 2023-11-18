@@ -8,7 +8,8 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.shui.core :as shui]))
 
 (defn- commit-all!
   []
@@ -63,11 +64,10 @@
           [:h3#modal-headline.text-lg.leading-6.font-medium
            "No changes to commit!"]]]
         [:div.mt-5.sm:mt-4.flex
-         [:span.flex.w-full.rounded-md.shadow-sm
-          [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-           {:type "button"
-            :on-click #(state/close-modal!)}
-           "Close"]]]]
+         (shui/button
+          {:text "Close"
+           :on-click state/close-modal!}
+          (shui/make-context))]]
 
        [:<>
         [:div.sm:flex.sm:items-start
@@ -82,11 +82,10 @@
          {:auto-focus true
           :default-value ""}]
         [:div.mt-5.sm:mt-4.flex
-         [:span.flex.w-full.rounded-md.shadow-sm
-          [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-           {:type "button"
-            :on-click commit-all!}
-           "Commit"]]]])]))
+         (shui/button
+           {:text "Commit"
+           :on-click commit-all!}
+          (shui/make-context))]])]))
 
 (defn show-commit-modal! [e]
   (state/set-modal! add-commit-message)
