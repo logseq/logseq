@@ -416,8 +416,7 @@ body[data-page=import] {
 
     .shepherd-footer {
       button {
-        @apply bg-indigo-600 hover:bg-indigo-700;
-
+        background-color: var(--lx-bg-override, var(--lx-accent-09, var(--ls-button-background)));
         padding: 4px 8px;
         border-radius: 6px;
         overflow: hidden;
@@ -432,6 +431,10 @@ body[data-page=import] {
         &.bg-gray {
           @apply bg-gray-400;
         }
+      }
+
+      button:hover {
+          background-color: var(--lx-bg-override, var(--lx-accent-10, var(--ls-button-background)));
       }
     }
   }
