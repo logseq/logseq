@@ -13,8 +13,8 @@
             [frontend.components.property.value :as pv]
             [frontend.components.class :as class-component]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.db-based.property.util :as db-pu]
-            [frontend.handler.property :as property-handler]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -358,7 +358,7 @@
         (not class-or-property?)
         (when (and (not class?)
                    (not property?)
-                   (not (property-handler/block-has-viewable-properties? page)))
+                   (not (db-property-handler/block-has-viewable-properties? page)))
           (page-properties page page-opts))
 
         @*show-page-properties?
@@ -377,7 +377,7 @@
                                                       :inline-text component-block/inline-text)))])]
 
      (when (and class-or-property?
-                (not (property-handler/block-has-viewable-properties? page))
+                (not (db-property-handler/block-has-viewable-properties? page))
                 (not config/publishing?)
                 (empty? (:properties (:block/schema page))))
        [:a.fade-link.flex.flex-row.items-center.gap-1.text-sm
@@ -457,7 +457,7 @@
           (if (and (map? icon) db-based?)
             (property/icon icon {:on-chosen (fn [_e icon]
                                               (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-                                                (property-handler/update-property!
+                                                (db-property-handler/update-property!
                                                  repo
                                                  (:block/uuid page)
                                                  {:properties {icon-property-id icon}})))})
@@ -521,7 +521,7 @@
              (page-tags page tags-property *hover? *configuring?))
 
            (when (or (some #(contains? #{"class" "property"} %) (:block/type page))
-                     (not (property-handler/block-has-viewable-properties? page)))
+                     (not (db-property-handler/block-has-viewable-properties? page)))
              (page-configure page *hover? *configuring?))]])])))
 
 (defn- page-mouse-over
@@ -560,7 +560,7 @@
         edit-input-id-prefix (str "edit-block-" (:block/uuid page))
         configure-opts {:selected? false
                         :page-configure? true}
-        has-viewable-properties? (property-handler/block-has-viewable-properties? page)
+        has-viewable-properties? (db-property-handler/block-has-viewable-properties? page)
         has-class-properties? (seq (:properties (:block/schema page)))]
     (when (or configure? has-viewable-properties? has-class-properties?)
       [:div.ls-page-properties.mb-4 {:style {:padding 2}}
@@ -574,7 +574,7 @@
                                               (str edit-input-id-prefix "-schema")
                                               (assoc configure-opts :class-schema? true))]
 
-           (not (property-handler/block-has-viewable-properties? page))
+           (not (db-property-handler/block-has-viewable-properties? page))
            [:div
             [:div.mb-1 "Page properties:"]
             (component-block/db-properties-cp {:editor-box editor/box}
@@ -626,7 +626,7 @@
 (rum/defc page-properties-react < rum/reactive
   [page* page-opts]
   (let [page (db/sub-block (:db/id page*))]
-    (when (or (property-handler/block-has-viewable-properties? page)
+    (when (or (db-property-handler/block-has-viewable-properties? page)
               ;; Allow class and property pages to add new property
               (some #{"class" "property"} (:block/type page)))
       (page-properties page page-opts))))

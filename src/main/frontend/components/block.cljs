@@ -50,8 +50,8 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.export.common :as export-common-handler]
-            [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.db-based.property.util :as db-pu]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
@@ -625,10 +625,10 @@
            :on-mouse-down
            (fn [e]
              (util/stop e)
-             (property-handler/delete-property-value! repo
-                                                      block
-                                                      (db-pu/get-built-in-property-uuid repo :tags)
-                                                      (:block/uuid page-entity)))}
+             (db-property-handler/delete-property-value! repo
+                                                         block
+                                                         (db-pu/get-built-in-property-uuid repo :tags)
+                                                         (:block/uuid page-entity)))}
           (ui/icon "x" {:size 15})]))]))
 
 (rum/defc page-preview-trigger
@@ -2314,7 +2314,7 @@
 
 (rum/defc block-closed-values-properties
   [block]
-  (let [closed-values-properties (property-handler/get-block-other-position-properties (:db/id block))]
+  (let [closed-values-properties (db-property-handler/get-block-other-position-properties (:db/id block))]
     (when (seq closed-values-properties)
       [:div.closed-values-properties.flex.flex-row.items-center.gap-1.select-none.h-full
        (for [pid closed-values-properties]
@@ -2483,7 +2483,7 @@
         repo (state/get-current-repo)
         db-based? (config/db-based-graph? repo)]
     [:div.flex.flex-1.flex-row.flex-wrap.gap-1.items-start
-     (block-closed-values-properties block)
+     (when db-based? (block-closed-values-properties block))
      (if (and edit? editor-box)
        [:div.editor-wrapper.flex.flex-1
         {:id editor-id}
@@ -2610,8 +2610,8 @@
                               level-limit 3}
                          :as opts}]
   (when block-id
-    (let [block-id (or (when block-id
-                         (some-> (property-handler/get-property-block-created-block [:block/uuid block-id])
+    (let [block-id (or (when (and block-id (config/db-based-graph? repo))
+                         (some-> (db-property-handler/get-property-block-created-block [:block/uuid block-id])
                                  db/entity
                                  :block/uuid))
                        block-id)

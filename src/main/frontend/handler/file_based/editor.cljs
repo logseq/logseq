@@ -211,7 +211,20 @@
 
 (defn batch-set-heading! [block-ids heading]
   (outliner-tx/transact!
-       {:outliner-op :save-block}
-       (doseq [block-id block-ids]
-         (when-let [block (set-heading-aux! block-id heading)]
-           (outliner-core/save-block! block)))))
+   {:outliner-op :save-block}
+   (doseq [block-id block-ids]
+     (when-let [block (set-heading-aux! block-id heading)]
+       (outliner-core/save-block! block)))))
+
+(defn set-blocks-id!
+  "Persist block uuid to file if the uuid is valid, and it's not persisted in file.
+   Accepts a list of uuids."
+  [block-ids]
+  (let [block-ids (remove nil? block-ids)
+        col (map (fn [block-id]
+                   (when-let [block (db/entity [:block/uuid block-id])]
+                     (when-not (:block/pre-block? block)
+                       [block-id :id (str block-id)])))
+                 block-ids)
+        col (remove nil? col)]
+    (file-property-handler/batch-set-block-property-aux! col)))

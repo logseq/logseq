@@ -9,6 +9,7 @@
             [frontend.components.icon :as icon-component]
             [frontend.components.property.util :as pu-component]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.components.property.value :as property-value]
             [frontend.db :as db]
             [frontend.state :as state]
@@ -17,7 +18,7 @@
 (defn- upsert-closed-value!
   "Create new closed value and returns its block UUID."
   [property item]
-  (let [{:keys [block-id tx-data]} (property-handler/upsert-closed-value property item)]
+  (let [{:keys [block-id tx-data]} (db-property-handler/upsert-closed-value property item)]
     (when (seq tx-data) (db/transact! tx-data))
     block-id))
 
@@ -131,7 +132,7 @@
         (assoc opts
                :delete-choice
                (fn []
-                 (property-handler/delete-closed-value property block))
+                 (db-property-handler/delete-closed-value property block))
                :update-icon
                (fn [icon]
                  (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :icon icon)))))

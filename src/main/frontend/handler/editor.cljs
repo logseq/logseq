@@ -912,14 +912,7 @@
   [block-ids]
   (let [repo (state/get-current-repo)]
     (when-not (config/db-based-graph? repo)
-      (let [block-ids (remove nil? block-ids)
-            col (map (fn [block-id]
-                       (when-let [block (db/entity [:block/uuid block-id])]
-                         (when-not (:block/pre-block? block)
-                           [block-id :id (str block-id)])))
-                  block-ids)
-            col (remove nil? col)]
-        (property-handler/file-batch-set-property! repo col)))))
+      (file-editor-handler/set-blocks-id! block-ids))))
 
 (defn copy-block-ref!
   ([block-id]
