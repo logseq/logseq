@@ -3,17 +3,18 @@
   (:require [clojure.string :as string]
             [frontend.db :as db]
             [frontend.db.model :as model]
+            [frontend.format.block :as block]
             [frontend.handler.notification :as notification]
+            [frontend.handler.db-based.property.util :as db-pu]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.util :as util]
+            [frontend.state :as state]
             [logseq.graph-parser.util :as gp-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.property.type :as db-property-type]
             [malli.util :as mu]
             [malli.error :as me]
-            [frontend.format.block :as block]
-            [logseq.graph-parser.util.page-ref :as page-ref]
-            [frontend.handler.db-based.property.util :as db-pu]))
+            [logseq.graph-parser.util.page-ref :as page-ref]))
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
@@ -297,43 +298,46 @@
                         {:outliner-op :save-block}))))))
 
 (defn class-add-property!
-  [repo class k-name]
-  (when (contains? (:block/type class) "class")
-    (let [k-name (name k-name)
-          property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
-          property-uuid (or (:block/uuid property) (db/new-block-id))
-          property-type (get-in property [:block/schema :type])
-          {:keys [properties] :as class-schema} (:block/schema class)
-          _ (upsert-property! repo k-name
-                              (cond-> (:block/schema property)
-                                (some? property-type)
-                                (assoc :type property-type))
-                              {:property-uuid property-uuid})
-          new-properties (vec (distinct (conj properties property-uuid)))
-          class-new-schema (assoc class-schema :properties new-properties)]
-      (db/transact! repo
-                    [{:db/id (:db/id class)
-                      :block/schema class-new-schema}]
-                    {:outliner-op :save-block}))))
+  [repo class-uuid k-name]
+  (when-let [class (db/entity repo [:block/uuid class-uuid])]
+    (when (contains? (:block/type class) "class")
+      (let [k-name (name k-name)
+            property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
+            property-uuid (or (:block/uuid property) (db/new-block-id))
+            property-type (get-in property [:block/schema :type])
+            {:keys [properties] :as class-schema} (:block/schema class)
+            _ (upsert-property! repo k-name
+                                (cond-> (:block/schema property)
+                                  (some? property-type)
+                                  (assoc :type property-type))
+                                {:property-uuid property-uuid})
+            new-properties (vec (distinct (conj properties property-uuid)))
+            class-new-schema (assoc class-schema :properties new-properties)]
+        (db/transact! repo
+                      [{:db/id (:db/id class)
+                        :block/schema class-new-schema}]
+                      {:outliner-op :save-block})))))
 
 (defn class-remove-property!
-  [repo class k-uuid]
-  (when (contains? (:block/type class) "class")
-    (when-let [property (db/pull repo '[*] [:block/uuid k-uuid])]
-      (let [property-uuid (:block/uuid property)
-            {:keys [properties] :as class-schema} (:block/schema class)
-            new-properties (vec (distinct (remove #{property-uuid} properties)))
-            class-new-schema (assoc class-schema :properties new-properties)]
-        (db/transact! repo [{:db/id (:db/id class)
-                             :block/schema class-new-schema}]
-          {:outliner-op :save-block})))))
+  [repo class-uuid k-uuid]
+  (when-let [class (db/entity repo [:block/uuid class-uuid])]
+    (when (contains? (:block/type class) "class")
+      (when-let [property (db/pull repo '[*] [:block/uuid k-uuid])]
+        (let [property-uuid (:block/uuid property)
+              {:keys [properties] :as class-schema} (:block/schema class)
+              new-properties (vec (distinct (remove #{property-uuid} properties)))
+              class-new-schema (assoc class-schema :properties new-properties)]
+          (db/transact! repo [{:db/id (:db/id class)
+                               :block/schema class-new-schema}]
+                        {:outliner-op :save-block}))))))
 
 (defn class-set-schema!
-  [repo class schema]
-  (when (contains? (:block/type class) "class")
-    (db/transact! repo [{:db/id (:db/id class)
-                         :block/schema schema}]
-                  {:outliner-op :save-block})))
+  [repo class-uuid schema]
+  (when-let [class (db/entity repo [:block/uuid class-uuid])]
+    (when (contains? (:block/type class) "class")
+      (db/transact! repo [{:db/id (:db/id class)
+                           :block/schema schema}]
+                    {:outliner-op :save-block}))))
 
 (defn batch-set-property!
   "Notice that this works only for properties with cardinality equals to `one`."
@@ -476,8 +480,245 @@
    (vals m)))
 
 (defn collapse-expand-property!
+  "Notice this works only if the value itself if a block (property type should be either :default or :template)"
   [repo block property collapse?]
   (let [f (if collapse? :db/add :db/retract)]
     (db/transact! repo
                   [[f (:db/id block) :block/collapsed-properties (:db/id property)]]
                   {:outliner-op :save-block})))
+
+(defn- get-namespace-parents
+  [tags]
+  (let [tags' (filter (fn [tag] (contains? (:block/type tag) "class")) tags)
+        *namespaces (atom #{})]
+    (doseq [tag tags']
+      (when-let [ns (:block/namespace tag)]
+        (loop [current-ns ns]
+          (when (and
+                 current-ns
+                 (contains? (:block/type ns) "class")
+                 (not (contains? @*namespaces (:db/id ns))))
+            (swap! *namespaces conj current-ns)
+            (recur (:block/namespace current-ns))))))
+    @*namespaces))
+
+(defn get-block-classes-properties
+  [eid]
+  (let [block (db/entity eid)
+        classes (->> (:block/tags block)
+                     (sort-by :block/name)
+                     (filter (fn [tag] (contains? (:block/type tag) "class"))))
+        namespace-parents (get-namespace-parents classes)
+        all-classes (->> (concat classes namespace-parents)
+                         (filter (fn [class]
+                                   (seq (:properties (:block/schema class))))))
+        all-properties (-> (mapcat (fn [class]
+                                     (seq (:properties (:block/schema class)))) all-classes)
+                           distinct)]
+    {:classes classes
+     :all-classes all-classes           ; block own classes + parent classes
+     :classes-properties all-properties}))
+
+(defn- closed-value-other-position?
+  [property-id block-properties]
+  (and
+   (some? (get block-properties property-id))
+   (let [schema (:block/schema (db/entity [:block/uuid property-id]))]
+     (= (:position schema) "block-beginning"))))
+
+(defn get-block-other-position-properties
+  [eid]
+  (let [block (db/entity eid)
+        own-properties (keys (:block/properties block))]
+    (->> (:classes-properties (get-block-classes-properties eid))
+         (concat own-properties)
+         (filter (fn [id] (closed-value-other-position? id (:block/properties block))))
+         (distinct))))
+
+(defn block-has-viewable-properties?
+  [block-entity]
+  (let [properties (:block/properties block-entity)]
+    (or
+     (seq (:block/alias properties))
+     (and (seq properties)
+          (not= (keys properties) [(db-pu/get-built-in-property-uuid :icon)])))))
+
+(defn property-create-new-block
+  [block property value parse-block]
+  (let [current-page-id (:block/uuid (or (:block/page block) block))
+        page-name (str "$$$" current-page-id)
+        page-entity (db/entity [:block/name page-name])
+        page (or page-entity
+                 (-> (block/page-name->map page-name true)
+                     (assoc :block/type #{"hidden"}
+                            :block/format :markdown
+                            :block/metadata {:source-page-id current-page-id})))
+        page-tx (when-not page-entity page)
+        page-id [:block/uuid (:block/uuid page)]
+        parent-id (db/new-block-id)
+        metadata {:created-from-block (:block/uuid block)
+                  :created-from-property (:block/uuid property)}
+        parent (-> {:block/uuid parent-id
+                    :block/format :markdown
+                    :block/content ""
+                    :block/page page-id
+                    :block/parent page-id
+                    :block/left (or (when page-entity (model/get-block-last-direct-child (db/get-db) (:db/id page-entity)))
+                                    page-id)
+                    :block/metadata metadata}
+                   outliner-core/block-with-timestamps)
+        child-1-id (db/new-block-id)
+        child-1 (-> {:block/uuid child-1-id
+                     :block/format :markdown
+                     :block/content value
+                     :block/page page-id
+                     :block/parent [:block/uuid parent-id]
+                     :block/left [:block/uuid parent-id]}
+                    outliner-core/block-with-timestamps
+                    parse-block)]
+    {:page page-tx
+     :blocks [parent child-1]}))
+
+(defn property-create-new-block-from-template
+  [block property template]
+  (let [current-page-id (:block/uuid (or (:block/page block) block))
+        page-name (str "$$$" current-page-id)
+        page-entity (db/entity [:block/name page-name])
+        page (or page-entity
+                 (-> (block/page-name->map page-name true)
+                     (assoc :block/type #{"hidden"}
+                            :block/format :markdown
+                            :block/metadata {:source-page-id current-page-id})))
+        page-tx (when-not page-entity page)
+        page-id [:block/uuid (:block/uuid page)]
+        block-id (db/new-block-id)
+        metadata {:created-from-block (:block/uuid block)
+                  :created-from-property (:block/uuid property)
+                  :created-from-template (:block/uuid template)}
+        new-block (-> {:block/uuid block-id
+                       :block/format :markdown
+                       :block/content ""
+                       :block/tags #{(:db/id template)}
+                       :block/page page-id
+                       :block/metadata metadata
+                       :block/parent page-id
+                       :block/left (or (when page-entity (model/get-block-last-direct-child (db/get-db) (:db/id page-entity)))
+                                       page-id)}
+                      outliner-core/block-with-timestamps)]
+    {:page page-tx
+     :blocks [new-block]}))
+
+(defn upsert-closed-value
+  "id should be a block UUID or nil"
+  [property {:keys [id value icon description]}]
+  (assert (or (nil? id) (uuid? id)))
+  (let [property-type (get-in property [:block/schema :type] :default)]
+    (when (contains? db-property-type/closed-values-schema-types property-type)
+     (let [value (if (string? value) (string/trim value) value)
+           property-schema (:block/schema property)
+           closed-values (:values property-schema)
+           block-values (map (fn [id] (db/entity [:block/uuid id])) closed-values)
+           resolved-value (try
+                            (convert-property-input-string (:type property-schema) value)
+                            (catch :default e
+                              (js/console.error e)
+                              (notification/show! (str e) :error false)
+                              nil))
+           block (when id (db/entity [:block/uuid id]))
+           value-block (when (uuid? value) (db/entity [:block/uuid value]))
+           validate-message (validate-property-value
+                             (get (builtin-schema-types property {:new-closed-value? true}) property-type)
+                             resolved-value)]
+       (cond
+         (nil? resolved-value)
+         nil
+
+         (some (fn [b] (and (if (contains? (get-in b [:block/schema :type]) "closed value")
+                              (= resolved-value (get-in b [:block/schema :value]))
+                              (= resolved-value (:block/uuid b)))
+                            (not= id (:block/uuid b)))) block-values)
+         (do
+           (notification/show! "Choice already exists" :warning)
+           :value-exists)
+
+         validate-message
+         (do
+           (notification/show! validate-message :warning)
+           :value-invalid)
+
+         (:block/name value-block)             ; page
+         (let [new-values (vec (conj closed-values value))]
+           {:block-id value
+            :tx-data [{:db/id (:db/id property)
+                       :block/schema (assoc property-schema :values new-values)}]})
+
+         :else
+         (let [block-id (or id (db/new-block-id))
+               icon-id (db-pu/get-built-in-property-uuid "icon")
+               icon (when-not (and (string? icon) (string/blank? icon)) icon)
+               description (string/trim description)
+               description (when-not (string/blank? description) description)
+               tx-data (if block
+                         [(let [properties (:block/properties block)
+                                schema (assoc (:block/schema block)
+                                              :value resolved-value)]
+                            {:block/uuid id
+                             :block/properties (if icon
+                                                 (assoc properties icon-id icon)
+                                                 (dissoc properties icon-id))
+                             :block/schema (if description
+                                             (assoc schema :description description)
+                                             (dissoc schema :description))})]
+                         (let [page-name (str "$$$" (:block/uuid property))
+                               page-entity (db/entity [:block/name page-name])
+                               page (or page-entity
+                                        (-> (block/page-name->map page-name true)
+                                            (assoc :block/type #{"hidden"}
+                                                   :block/format :markdown)))
+                               page-tx (when-not page-entity page)
+                               page-id [:block/uuid (:block/uuid page)]
+                               metadata {:created-from-property (:block/uuid property)}
+                               new-block (cond->
+                                          {:block/type #{"closed value"}
+                                           :block/format :markdown
+                                           :block/uuid block-id
+                                           :block/page page-id
+                                           :block/metadata metadata
+                                           :block/schema {:value resolved-value}
+                                           :block/parent page-id}
+                                           icon
+                                           (assoc :block/properties {icon-id icon})
+
+                                           description
+                                           (update :block/schema assoc :description description)
+
+                                           true
+                                           outliner-core/block-with-timestamps)
+                               new-values (vec (conj closed-values block-id))]
+                           (->> (cons page-tx [new-block
+                                               {:db/id (:db/id property)
+                                                :block/schema (assoc property-schema :values new-values)}])
+                                (remove nil?))))]
+           {:block-id block-id
+            :tx-data tx-data}))))))
+
+(defn delete-closed-value
+  [property item]
+  (if (seq (:block/_refs item))
+    (notification/show! "The choice can't be deleted because it's still used." :warning)
+    (let [schema (:block/schema property)
+          tx-data [[:db/retractEntity (:db/id item)]
+                   {:db/id (:db/id property)
+                    :block/schema (update schema :values
+                                          (fn [values]
+                                            (vec (remove #{(:block/uuid item)} values))))}]]
+      (db/transact! tx-data))))
+
+(defn get-property-block-created-block
+  "Get the root block that created this property block."
+  [eid]
+  (let [b (db/entity eid)
+        parents (model/get-block-parents (state/get-current-repo) (:block/uuid b) {})
+        from-id (some #(get-in % [:block/metadata :created-from-block]) (reverse parents))
+        from (when from-id (db/entity [:block/uuid from-id]))]
+    (or (:db/id from) (:db/id b))))

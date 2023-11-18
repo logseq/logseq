@@ -161,7 +161,7 @@
                              {:disabled? disabled?
                               :on-chosen (fn [_e icon]
                                            (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-                                             (property-handler/update-property!
+                                             (db-property-handler/update-property!
                                               (state/get-current-repo)
                                               (:block/uuid property)
                                               {:properties {icon-property-id icon}})))})])]
@@ -286,7 +286,7 @@
                                              (js/confirm "Are you sure you want to delete this property?"))
                                      (let [repo (state/get-current-repo)
                                            f (if (and class? class-schema?)
-                                               property-handler/class-remove-property!
+                                               db-property-handler/class-remove-property!
                                                property-handler/remove-block-property!)]
                                        (f repo (:block/uuid block) (:block/uuid property))
                                        (when toggle-fn (toggle-fn)))))}
@@ -439,7 +439,7 @@
        [:div#edit-new-property
         (property-input block *property-key *property-value opts)]
 
-       (and (or (property-handler/block-has-viewable-properties? block)
+       (and (or (db-property-handler/block-has-viewable-properties? block)
                 (:page-configure? opts))
             (not config/publishing?)
             (not (:in-block-container? opts)))
@@ -474,7 +474,7 @@
        [:a.block-control
         {:on-click (fn [event]
                      (util/stop event)
-                     (property-handler/collapse-expand-property! repo block property (not collapsed?)))}
+                     (db-property-handler/collapse-expand-property! repo block property (not collapsed?)))}
         [:span {:class (cond
                          (or collapsed? @*hover?)
                          "control-show cursor-pointer"
@@ -495,9 +495,9 @@
            (fn [_e icon]
              (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
                (when icon
-                 (property-handler/update-property! repo
-                                                    (:block/uuid property)
-                                                    {:properties {icon-property-id icon}})
+                 (db-property-handler/update-property! repo
+                                                       (:block/uuid property)
+                                                       {:properties {icon-property-id icon}})
                  (toggle-fn))))})])
       {:modal-class (util/hiccup->class
                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
@@ -592,7 +592,7 @@
                                      (let [schema (assoc (:block/schema block)
                                                          :properties properties)]
                                        (when (seq properties)
-                                         (property-handler/class-set-schema! (state/get-current-repo) (:block/uuid block) schema))))}))
+                                         (db-property-handler/class-set-schema! (state/get-current-repo) (:block/uuid block) schema))))}))
         (for [[k v] properties]
           (property-cp block k v opts))))))
 
@@ -625,7 +625,7 @@
                                                  (when (uuid? id)
                                                    (contains? db-property/hidden-built-in-properties (keyword (:block/name (db/entity [:block/uuid id])))))))
                                              properties))
-        {:keys [classes all-classes classes-properties]} (property-handler/get-block-classes-properties (:db/id block))
+        {:keys [classes all-classes classes-properties]} (db-property-handler/get-block-classes-properties (:db/id block))
         one-class? (= 1 (count classes))
         block-own-properties (->> (concat (seq alias-properties)
                                           (seq properties))

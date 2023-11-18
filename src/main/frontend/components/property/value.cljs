@@ -11,6 +11,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -53,7 +54,7 @@
          class? (contains? (:block/type block) "class")]
      (when property-key
        (if (and class? class-schema?)
-         (property-handler/class-add-property! repo (:block/uuid block) property-key)
+         (db-property-handler/class-add-property! repo (:block/uuid block) property-key)
          (property-handler/set-block-property! repo (:block/uuid block) property-key property-value)))
      (when exit-edit?
        (exit-edit-property)))))
@@ -307,7 +308,7 @@
 (defn create-new-block!
   [block property value]
   (let [repo (state/get-current-repo)
-        {:keys [page blocks]} (property-handler/property-create-new-block block property value editor-handler/wrap-parse-block)
+        {:keys [page blocks]} (db-property-handler/property-create-new-block block property value editor-handler/wrap-parse-block)
         last-block-id (:block/uuid (last blocks))]
     (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})
     (add-property! block (:block/original-name property)
@@ -318,7 +319,7 @@
   "`template`: tag block"
   [block property template]
   (let [repo (state/get-current-repo)
-        {:keys [page blocks]} (property-handler/property-create-new-block-from-template block property template)]
+        {:keys [page blocks]} (db-property-handler/property-create-new-block-from-template block property template)]
     (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})
     (add-property! block (:block/original-name property) (:block/uuid (last blocks)))
     (last blocks)))
