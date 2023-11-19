@@ -258,10 +258,6 @@ li {
   margin: 0.25rem 0;
 }
 
-li:first-child {
-  margin-top: 0;
-}
-
 pre {
   background: var(--ls-secondary-background-color, #f6f8fa);
   margin: 1rem 0;

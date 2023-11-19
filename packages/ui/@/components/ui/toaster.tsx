@@ -5,15 +5,21 @@ import {
   ToastProvider,
   ToastTitle,
   ToastViewport,
-} from "@/components/ui/toast"
-import { useToast } from "@/components/ui/use-toast"
+} from '@/components/ui/toast'
+import { useToast } from '@/components/ui/use-toast'
 
-export function Toaster() {
+export function Toaster () {
   const { toasts } = useToast()
 
   return (
     <ToastProvider>
-      {toasts?.map(function ({ id, title, description, action, ...props }) {
+      {toasts?.map(function ({
+        id,
+        title,
+        description,
+        action,
+        ...props
+      }) {
         return (
           <Toast key={id} {...props}>
             <div className="grid gap-1">
@@ -23,11 +29,11 @@ export function Toaster() {
               )}
             </div>
             {action}
-            <ToastClose />
+            <ToastClose/>
           </Toast>
         )
       })}
-      <ToastViewport className={'ui__toaster-viewport space-y-2'} />
+      <ToastViewport className={'ui__toaster-viewport'}/>
     </ToastProvider>
   )
 }

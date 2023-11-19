@@ -19,9 +19,14 @@
    [:hr.my-10]
    [:p
     (ui/button
-      {:variant :default
-       :size :md
-       :class "primary-orange"}
+      {:variant  :default
+       :size     :md
+       :on-click (fn []
+                   (ui/toast!
+                     {:duration    100000
+                      :variant :destructive
+                      :description (.toLocaleString (js/Date.))}))
+       :class    "primary-orange"}
       (ui/tabler-icon "brand-soundcloud")
       "Get SoundCloud (.primary-{color})")]
    [:hr.my-10]

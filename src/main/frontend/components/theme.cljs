@@ -6,7 +6,6 @@
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [logseq.shui.ui :as shui]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.state :as state]
@@ -114,6 +113,4 @@
       :on-click on-click}
      child
 
-     (pdf/default-embed-playground)
-
-     (shui/toaster-installer)]))
+     (pdf/default-embed-playground)]))

@@ -34,6 +34,7 @@
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.shui.toaster.core :as shui-toaster]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.components.window-controls :as window-controls]
@@ -884,6 +885,7 @@
       (ui/notification)
       (ui/modal)
       (ui/sub-modal)
+      (shui-toaster/install-toaster)
       (select/select-modal)
       (custom-context-menu)
       (plugins/custom-js-installer {:t t

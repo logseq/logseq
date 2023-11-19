@@ -155,3 +155,6 @@
         ;; lazy calculating is for HMR from ts
         cp #(gobj/getValueByKeys ns (clj->js path))]
     (react->rum (if dev? cp (cp)) static?)))
+
+(def lsui-wrap
+  (partial component-wrap js/window.LSUI))

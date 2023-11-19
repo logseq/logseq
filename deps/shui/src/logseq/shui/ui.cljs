@@ -1,36 +1,27 @@
 (ns logseq.shui.ui
   (:require [logseq.shui.util :as util]
             [logseq.shui.icon.v2 :as icon-v2]
+            [logseq.shui.toaster.core :as toaster]
             [cljs-bean.core :as bean]))
 
-(def ui-wrap (partial util/component-wrap js/window.LSUI))
-
-(def button (ui-wrap "Button" {:static? false}))
-(def slider (ui-wrap "Slider"))
+(def button (util/lsui-wrap "Button" {:static? false}))
+(def slider (util/lsui-wrap "Slider"))
 (def tabler-icon icon-v2/root)
 
-(def dropdown-menu (ui-wrap "DropdownMenu"))
-(def dropdown-menu-content (ui-wrap "DropdownMenuContent"))
-(def dropdown-menu-group (ui-wrap "DropdownMenuGroup"))
-(def dropdown-menu-item (ui-wrap "DropdownMenuItem"))
-(def dropdown-menu-checkbox-item (ui-wrap "DropdownMenuCheckboxItem"))
-(def dropdown-menu-radio-group (ui-wrap "DropdownMenuRadioGroup"))
-(def dropdown-menu-radio-item (ui-wrap "DropdownMenuRadioItem"))
-(def dropdown-menu-label (ui-wrap "DropdownMenuLabel"))
-(def dropdown-menu-separator (ui-wrap "DropdownMenuSeparator"))
-(def dropdown-menu-trigger (ui-wrap "DropdownMenuTrigger"))
-(def dropdown-menu-shortcut (ui-wrap "DropdownMenuShortcut"))
-(def dropdown-menu-portal (ui-wrap "DropdownMenuPortal"))
-(def dropdown-menu-sub (ui-wrap "DropdownMenuSub"))
-(def dropdown-menu-sub-content (ui-wrap "DropdownMenuSubContent"))
-(def dropdown-menu-sub-trigger (ui-wrap "DropdownMenuSubTrigger"))
+(def dropdown-menu (util/lsui-wrap "DropdownMenu"))
+(def dropdown-menu-content (util/lsui-wrap "DropdownMenuContent"))
+(def dropdown-menu-group (util/lsui-wrap "DropdownMenuGroup"))
+(def dropdown-menu-item (util/lsui-wrap "DropdownMenuItem"))
+(def dropdown-menu-checkbox-item (util/lsui-wrap "DropdownMenuCheckboxItem"))
+(def dropdown-menu-radio-group (util/lsui-wrap "DropdownMenuRadioGroup"))
+(def dropdown-menu-radio-item (util/lsui-wrap "DropdownMenuRadioItem"))
+(def dropdown-menu-label (util/lsui-wrap "DropdownMenuLabel"))
+(def dropdown-menu-separator (util/lsui-wrap "DropdownMenuSeparator"))
+(def dropdown-menu-trigger (util/lsui-wrap "DropdownMenuTrigger"))
+(def dropdown-menu-shortcut (util/lsui-wrap "DropdownMenuShortcut"))
+(def dropdown-menu-portal (util/lsui-wrap "DropdownMenuPortal"))
+(def dropdown-menu-sub (util/lsui-wrap "DropdownMenuSub"))
+(def dropdown-menu-sub-content (util/lsui-wrap "DropdownMenuSubContent"))
+(def dropdown-menu-sub-trigger (util/lsui-wrap "DropdownMenuSubTrigger"))
 
-(def toaster-installer (ui-wrap "Toaster"))
-(defn use-toast []
-  (when-let [^js js-toast (js/window.LSUI.useToast)]
-    (let [toast-fn! (.-toast js-toast)
-          dismiss! (.-dismiss js-toast)]
-      [(fn [s]
-         (let [^js s (bean/->js s)]
-           (toast-fn! s)))
-       dismiss!])))
+(def toast! toaster/toast!)

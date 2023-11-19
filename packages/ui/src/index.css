@@ -102,4 +102,12 @@
       }
     }
   }
+
+  .ui__toaster {
+    &-viewport {
+      > li {
+        border-color: hsl(var(--border));
+      }
+    }
+  }
 }
