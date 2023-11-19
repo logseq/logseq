@@ -867,22 +867,21 @@
           (when-not orphaned-pages? [:td.created-at [:span (if created-at (date/int->local-time-2 created-at) "Unknown")]])
           (when-not orphaned-pages? [:td.updated-at [:span (if updated-at (date/int->local-time-2 updated-at) "Unknown")]])])]]
 
-     [:div.pt-6.flex.justify-end
-
-      [:span.pr-2
-       (ui/button
-         (t :cancel)
-         :intent "logseq"
-         :on-click close-fn)]
+     [:div.pt-6.flex.justify-end.gap-4
 
       (ui/button
-        (t :yes)
-        :on-click (fn []
-                    (close-fn)
-                    (doseq [page-name (map :block/name pages)]
-                      (page-handler/delete! page-name #()))
-                    (notification/show! (t :tips/all-done) :success)
-                    (js/setTimeout #(refresh-fn) 200)))]]))
+       (t :cancel)
+       :theme :gray
+       :on-click close-fn)
+
+      (ui/button
+       (t :yes)
+       :on-click (fn []
+                   (close-fn)
+                   (doseq [page-name (map :block/name pages)]
+                     (page-handler/delete! page-name #()))
+                   (notification/show! (t :tips/all-done) :success)
+                   (js/setTimeout #(refresh-fn) 200)))]]))
 
 (rum/defc pagination
   "Pagination component, like `<< <Prev 1/10 Next> >>`.
