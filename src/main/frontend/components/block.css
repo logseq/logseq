@@ -598,11 +598,11 @@
 
   &:hover > .bullet-container .bullet {
     transform: scale(1.2);
-    background-color: or(--ls-buller-border-color-typed-list, --lx-gray-08, inherit) !important;
+    background-color: or(--lx-gray-08, --ls-block-bullet-color, inherit) !important;
   }
 
   &:hover > .bullet-container:not(.typed-list) {
-    background-color: or(--ls-bullet-border-color, --lx-gray-04-alpha, --ls-block-bullet-border-color, #ced9e0);
+    background-color: or(--lx-gray-04-alpha, --ls-block-bullet-border-color, #ced9e0);
   }
 }
 
