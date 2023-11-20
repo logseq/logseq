@@ -253,9 +253,8 @@
     width: 100%;
     border: none;
     box-shadow: none;
-    padding-left: 5px;
-    padding-top: 5px;
-    padding-bottom: 4px;
+    padding: 0;
+    padding-right: 4px;
 
     &-wrapper {
       @apply rounded;
@@ -284,10 +283,6 @@ a.page-title {
 
   > .title {
     @apply w-full overflow-hidden overflow-ellipsis;
-  }
-
-  .edit-input {
-    padding-right: 4px;
   }
 }
 
