@@ -298,7 +298,10 @@
                           property-name (merge
                                          {:block/original-name property-name
                                           :block/name (gp-util/page-name-sanity-lc property-name)})
-                          property-schema (assoc :block/schema property-schema)
+                          property-schema (assoc :block/schema
+                                                 ;; a property must have a :type when making schema changes
+                                                 (merge {:type :default}
+                                                        property-schema))
                           properties (assoc :block/properties
                                             (merge (:block/properties property)
                                                    properties))
@@ -706,7 +709,8 @@
                                new-values (vec (conj closed-values block-id))]
                            (->> (cons page-tx [new-block
                                                {:db/id (:db/id property)
-                                                :block/schema (assoc property-schema :values new-values)}])
+                                                :block/schema (merge {:type property-type}
+                                                                     (assoc property-schema :values new-values))}])
                                 (remove nil?))))]
            {:block-id block-id
             :tx-data tx-data}))))))
