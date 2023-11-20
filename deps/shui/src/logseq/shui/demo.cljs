@@ -23,9 +23,8 @@
        :size     :md
        :on-click (fn []
                    (ui/toast!
-                     {:duration    100000
-                      :variant :destructive
-                      :description (.toLocaleString (js/Date.))}))
+                     [:b.text-red-700
+                      (.toLocaleString (js/Date.))]))
        :class    "primary-orange"}
       (ui/tabler-icon "brand-soundcloud")
       "Get SoundCloud (.primary-{color})")]

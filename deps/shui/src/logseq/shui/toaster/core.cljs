@@ -1,10 +1,11 @@
 (ns logseq.shui.toaster.core
   (:require [rum.core :as rum]
+            [daiquiri.interpreter :refer [interpret]]
             [logseq.shui.util :as util]
             [cljs-bean.core :as bean]))
 
-(def ^:private toaster-installer (util/lsui-wrap "Toaster"))
-(def ^:private *toast (atom nil))
+(defonce ^:private toaster-installer (util/lsui-wrap "Toaster"))
+(defonce ^:private *toast (atom nil))
 
 (defn use-toast []
   (when-let [^js js-toast (js/window.LSUI.useToast)]
@@ -33,8 +34,23 @@
        :for :htmlFor
        %)))
 
+(defn interpret-vals
+  [config ks]
+  (reduce (fn [config k]
+            (let [v (get config k)]
+              (if (vector? v) (assoc config k (interpret v)) config)))
+    config ks))
+
 (defn toast!
-  [config]
-  (if-let [{:keys [toast _dismiss]} @*toast]
-    (js->clj (toast (clj->js (update-html-props config))))
-    :exception))
+  ([content-or-config] (toast! content-or-config :default nil))
+  ([content-or-config status] (toast! content-or-config status nil))
+  ([content-or-config status opts]
+   (if-let [{:keys [toast _dismiss]} @*toast]
+     (let [config (if (map? content-or-config)
+                    (update-html-props content-or-config)
+                    {:description content-or-config
+                     :variant     status})
+           config (merge config opts)
+           config (interpret-vals config [:title :description])]
+       (js->clj (toast (clj->js config))))
+     :exception)))
