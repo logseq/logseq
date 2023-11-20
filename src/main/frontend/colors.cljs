@@ -41,6 +41,7 @@
                           "--ls-table-tr-even-background-color: var(--rx-" (name gray) "-04); "
                           "--ls-page-properties-background-color: var(--rx-" (name gray) "-04); "
                           "--ls-block-properties-background-color: var(--rx-" (name gray) "-03); "
+                          "--ls-page-inline-code-bg-color: var(--rx-" (name gray) "-03); "
                           "--ls-cloze-text-color: var(--rx-" (name color) "-08); "
                           "--ls-wb-stroke-color-default: var(--rx-" (name color) "-07); "
                           "--ls-wb-background-color-default: var(--rx-" (name color) "-04); "
