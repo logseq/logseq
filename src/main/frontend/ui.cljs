@@ -295,7 +295,7 @@
 (rum/defc notification-clear-all
   []
   [:div.ui__notifications-content
-   [:div.pointer-events-auto
+   [:div.pointer-events-auto.notification-clear
     (button (t :notification/clear-all)
      :intent "logseq"
      :on-click (fn []
