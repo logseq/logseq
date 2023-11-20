@@ -645,9 +645,8 @@
          (nil? resolved-value)
          nil
 
-         (some (fn [b] (and (if (contains? (get-in b [:block/schema :type]) "closed value")
-                              (= resolved-value (get-in b [:block/schema :value]))
-                              (= resolved-value (:block/uuid b)))
+         (some (fn [b] (and (= resolved-value (or (db-pu/property-value-when-closed b)
+                                                  (:block/uuid b)))
                             (not= id (:block/uuid b)))) block-values)
          (do
            (notification/show! "Choice already exists" :warning)
