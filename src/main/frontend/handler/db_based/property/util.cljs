@@ -1,6 +1,6 @@
 (ns frontend.handler.db-based.property.util
   "DB-graph only utility fns for properties"
-  (:require [frontend.db :as db]
+  (:require [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.util :as gp-util]
@@ -9,19 +9,19 @@
 (defn get-property-name
   "Get a property's name given its uuid"
   [uuid]
-  (:block/original-name (db/entity [:block/uuid uuid])))
+  (:block/original-name (db-utils/entity [:block/uuid uuid])))
 
 (defn get-built-in-property-uuid
   "Get a built-in property's uuid given its name"
   ([property-name] (get-built-in-property-uuid (state/get-current-repo) property-name))
   ([repo property-name]
-   (:block/uuid (db/entity repo [:block/name (name property-name)]))))
+   (:block/uuid (db-utils/entity repo [:block/name (name property-name)]))))
 
 (defn get-user-property-uuid
   "Get a user property's uuid given its unsanitized name"
   ([property-name] (get-user-property-uuid (state/get-current-repo) property-name))
   ([repo property-name]
-   (:block/uuid (db/entity repo [:block/name (gp-util/page-name-sanity-lc (name property-name))]))))
+   (:block/uuid (db-utils/entity repo [:block/name (gp-util/page-name-sanity-lc (name property-name))]))))
 
 (defonce *hidden-built-in-properties (atom #{}))
 
@@ -42,11 +42,17 @@
   [properties]
   (->> properties
        (map (fn [[k v]]
-              (let [prop-ent (db/entity [:block/uuid k])]
+              (let [prop-ent (db-utils/entity [:block/uuid k])]
                 [(-> prop-ent :block/name keyword)
                  (if (seq (get-in prop-ent [:block/schema :values])) ; closed values
-                   (when-let [block (db/entity [:block/uuid v])]
+                   (when-let [block (db-utils/entity [:block/uuid v])]
                      (or (:block/original-name block)
                          (get-in block [:block/schema :value])))
                    v)])))
        (into {})))
+
+(defn property-value-when-closed
+  "Returns property value if the given entity is type 'closed value' or nil"
+  [ent]
+  (when (contains? (:block/type ent) "closed value")
+    (get-in ent [:block/schema :value])))
