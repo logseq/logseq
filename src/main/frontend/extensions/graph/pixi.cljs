@@ -3,7 +3,6 @@
             ["d3-force"
              :refer [forceCenter forceCollide forceLink forceManyBody forceSimulation forceX forceY]
              :as force]
-            [clojure.string :as string]
             [goog.object :as gobj]
             [frontend.colors :as colors]
             ["graphology" :as graphology]
