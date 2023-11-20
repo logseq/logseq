@@ -9,6 +9,8 @@ body[data-page=import] {
   &-setups {
     background-color: var(--ls-primary-background-color);
     z-index: 1;
+    overflow: hidden;
+    border-radius: 20px;
 
     .as-flex-center {
       display: flex;
