@@ -240,7 +240,7 @@
                              (util/page-name-sanity-lc @*title-value))
                        (db/page-exists? page-name)
                        (db/page-exists? @*title-value))
-        rollback-fn #(do
+        rollback-fn #(let [old-name (if untitled? "" old-name)]
                        (reset! *title-value old-name)
                        (gobj/set (rum/deref input-ref) "value" old-name)
                        (reset! *edit? true)
