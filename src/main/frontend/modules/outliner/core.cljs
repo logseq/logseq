@@ -124,12 +124,11 @@
 
 (defn- remove-orphaned-refs-when-save
   [txs-state block-entity m]
-  (when-not (config/db-based-graph? (state/get-current-repo))
-    (let [remove-self-page #(remove (fn [b]
-                                      (= (:db/id b) (:db/id (:block/page block-entity)))) %)
-          old-refs (remove-self-page (:block/refs block-entity))
-          new-refs (remove-self-page (:block/refs m))]
-      (remove-orphaned-page-refs! (:db/id block-entity) txs-state old-refs new-refs))))
+  (let [remove-self-page #(remove (fn [b]
+                                    (= (:db/id b) (:db/id (:block/page block-entity)))) %)
+        old-refs (remove-self-page (:block/refs block-entity))
+        new-refs (remove-self-page (:block/refs m))]
+    (remove-orphaned-page-refs! (:db/id block-entity) txs-state old-refs new-refs)))
 
 (defn- get-last-child-or-self
   [block]
