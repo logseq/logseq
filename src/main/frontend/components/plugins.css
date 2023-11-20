@@ -4,7 +4,6 @@
 
 .cp__plugins {
   &-page {
-    background-color: var(--ls-primary-background-color);
     margin: -2rem;
     padding: 1.5rem 2rem;
     outline: none;
@@ -198,7 +197,7 @@
   &-item-card {
     @apply flex py-3 px-1 rounded-md;
 
-    background-color: var(--ls-secondary-background-color);
+    background-color: var(--ls-tertiary-background-color);
     height: 150px;
 
     li {
