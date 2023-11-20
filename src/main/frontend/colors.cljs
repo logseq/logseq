@@ -79,7 +79,7 @@
 
 (defn get-accent-color
   []
-  (if-let [hsl-color (some-> js/document.documentElement
+  (when-let [hsl-color (some-> js/document.documentElement
                        (js/getComputedStyle)
                        (.getPropertyValue "--lx-accent-09")
                        (str/replace "hsl(" "")
