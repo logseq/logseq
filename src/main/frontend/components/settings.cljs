@@ -1132,9 +1132,9 @@
 
     [:div#settings.cp__settings-main
      (settings-effect @*active)
-     [:div.cp__settings-inner
+     [:div.cp__settings-inner {:class "min-h-[65dvh] max-h-[75dvh]"}
       [:aside.cp__settings-aside
-       {:style     {:min-width "10rem"}
+       {:style     {:min-width "13rem"}
         :tab-index "-1"
         :auto-focus "on"
         :on-key-down (fn [^js e]

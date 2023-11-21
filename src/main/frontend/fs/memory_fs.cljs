@@ -53,6 +53,13 @@
       (let [fpath (path/url-to-path dir)]
         (-> (js/window.pfs.mkdir fpath)
             (p/catch (fn [error] (println "(memory-fs)Mkdir error: " error)))))))
+
+  (mkdir-recur! [_this dir]
+    (when js/window.pfs
+      (let [fpath (path/url-to-path dir)]
+        (-> (js/window.pfs.mkdir fpath #js {:recursive true})
+            (p/catch (fn [error] (println "(memory-fs)Mkdir-recur error: " error)))))))
+
   (readdir [_this dir]
     (when js/window.pfs
       (let [fpath (path/url-to-path dir)]
@@ -82,8 +89,7 @@
             _ (<ensure-dir! containing-dir)
             _ (js/window.pfs.writeFile fpath content)]
       (db/set-file-content! repo rpath content)
-      (db/set-file-last-modified-at! repo rpath (js/Date.))
-      ))
+      (db/set-file-last-modified-at! repo rpath (js/Date.))))
   (rename! [_this _repo old-path new-path]
     (let [old-path (path/url-to-path old-path)
           new-path (path/url-to-path new-path)]
