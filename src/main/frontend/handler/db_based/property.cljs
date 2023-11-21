@@ -14,7 +14,8 @@
             [logseq.db.frontend.property.type :as db-property-type]
             [malli.util :as mu]
             [malli.error :as me]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [logseq.graph-parser.util.page-ref :as page-ref]
+            [datascript.impl.entity :as e]))
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
@@ -620,99 +621,143 @@
     {:page page-tx
      :blocks [new-block]}))
 
+(defn- closed-value-new-block
+  [page-id block-id value property]
+  {:block/type #{"closed value"}
+   :block/format :markdown
+   :block/uuid block-id
+   :block/page page-id
+   :block/metadata {:created-from-property (:block/uuid property)}
+   :block/schema {:value value}
+   :block/parent page-id})
+
+(defn- get-property-hidden-page
+  [property]
+  (let [page-name (str "$$$" (:block/uuid property))
+        page-entity (db/entity [:block/name page-name])]
+    (or page-entity
+        (-> (block/page-name->map page-name true)
+            (assoc :block/type #{"hidden"}
+                   :block/format :markdown)))))
+
 (defn upsert-closed-value
   "id should be a block UUID or nil"
   [property {:keys [id value icon description]}]
   (assert (or (nil? id) (uuid? id)))
   (let [property-type (get-in property [:block/schema :type] :default)]
     (when (contains? db-property-type/closed-values-schema-types property-type)
-     (let [value (if (string? value) (string/trim value) value)
-           property-schema (:block/schema property)
-           closed-values (:values property-schema)
-           block-values (map (fn [id] (db/entity [:block/uuid id])) closed-values)
-           resolved-value (try
-                            (convert-property-input-string (:type property-schema) value)
-                            (catch :default e
-                              (js/console.error e)
-                              (notification/show! (str e) :error false)
-                              nil))
-           block (when id (db/entity [:block/uuid id]))
-           value-block (when (uuid? value) (db/entity [:block/uuid value]))
-           validate-message (validate-property-value
-                             (get (builtin-schema-types property {:new-closed-value? true}) property-type)
-                             resolved-value)]
-       (cond
-         (nil? resolved-value)
-         nil
+      (let [value (if (string? value) (string/trim value) value)
+            property-schema (:block/schema property)
+            closed-values (:values property-schema)
+            block-values (map (fn [id] (db/entity [:block/uuid id])) closed-values)
+            resolved-value (try
+                             (convert-property-input-string (:type property-schema) value)
+                             (catch :default e
+                               (js/console.error e)
+                               (notification/show! (str e) :error false)
+                               nil))
+            block (when id (db/entity [:block/uuid id]))
+            value-block (when (uuid? value) (db/entity [:block/uuid value]))
+            validate-message (validate-property-value
+                              (get (builtin-schema-types property {:new-closed-value? true}) property-type)
+                              resolved-value)]
+        (cond
+          (nil? resolved-value)
+          nil
 
-         (some (fn [b] (and (= resolved-value (or (db-pu/property-value-when-closed b)
-                                                  (:block/uuid b)))
-                            (not= id (:block/uuid b)))) block-values)
-         (do
-           (notification/show! "Choice already exists" :warning)
-           :value-exists)
+          (some (fn [b] (and (= resolved-value (or (db-pu/property-value-when-closed b)
+                                                   (:block/uuid b)))
+                             (not= id (:block/uuid b)))) block-values)
+          (do
+            (notification/show! "Choice already exists" :warning)
+            :value-exists)
 
-         validate-message
-         (do
-           (notification/show! validate-message :warning)
-           :value-invalid)
+          validate-message
+          (do
+            (notification/show! validate-message :warning)
+            :value-invalid)
 
-         (:block/name value-block)             ; page
-         (let [new-values (vec (conj closed-values value))]
-           {:block-id value
-            :tx-data [{:db/id (:db/id property)
-                       :block/schema (assoc property-schema :values new-values)}]})
+          (:block/name value-block)             ; page
+          (let [new-values (vec (conj closed-values value))]
+            {:block-id value
+             :tx-data [{:db/id (:db/id property)
+                        :block/schema (assoc property-schema :values new-values)}]})
 
-         :else
-         (let [block-id (or id (db/new-block-id))
-               icon-id (db-pu/get-built-in-property-uuid "icon")
-               icon (when-not (and (string? icon) (string/blank? icon)) icon)
-               description (string/trim description)
-               description (when-not (string/blank? description) description)
-               tx-data (if block
-                         [(let [properties (:block/properties block)
-                                schema (assoc (:block/schema block)
-                                              :value resolved-value)]
-                            {:block/uuid id
-                             :block/properties (if icon
-                                                 (assoc properties icon-id icon)
-                                                 (dissoc properties icon-id))
-                             :block/schema (if description
-                                             (assoc schema :description description)
-                                             (dissoc schema :description))})]
-                         (let [page-name (str "$$$" (:block/uuid property))
-                               page-entity (db/entity [:block/name page-name])
-                               page (or page-entity
-                                        (-> (block/page-name->map page-name true)
-                                            (assoc :block/type #{"hidden"}
-                                                   :block/format :markdown)))
-                               page-tx (when-not page-entity page)
-                               page-id [:block/uuid (:block/uuid page)]
-                               metadata {:created-from-property (:block/uuid property)}
-                               new-block (cond->
-                                          {:block/type #{"closed value"}
-                                           :block/format :markdown
-                                           :block/uuid block-id
-                                           :block/page page-id
-                                           :block/metadata metadata
-                                           :block/schema {:value resolved-value}
-                                           :block/parent page-id}
-                                           icon
-                                           (assoc :block/properties {icon-id icon})
+          :else
+          (let [block-id (or id (db/new-block-id))
+                icon-id (db-pu/get-built-in-property-uuid "icon")
+                icon (when-not (and (string? icon) (string/blank? icon)) icon)
+                description (string/trim description)
+                description (when-not (string/blank? description) description)
+                tx-data (if block
+                          [(let [properties (:block/properties block)
+                                 schema (assoc (:block/schema block)
+                                               :value resolved-value)]
+                             {:block/uuid id
+                              :block/properties (if icon
+                                                  (assoc properties icon-id icon)
+                                                  (dissoc properties icon-id))
+                              :block/schema (if description
+                                              (assoc schema :description description)
+                                              (dissoc schema :description))})]
+                          (let [page (get-property-hidden-page property)
+                                page-tx (when-not (e/entity? page) page)
+                                page-id [:block/uuid (:block/uuid page)]
+                                new-block (cond->
+                                           (closed-value-new-block page-id block-id value property)
+                                            icon
+                                            (assoc :block/properties {icon-id icon})
 
-                                           description
-                                           (update :block/schema assoc :description description)
+                                            description
+                                            (update :block/schema assoc :description description)
 
-                                           true
-                                           outliner-core/block-with-timestamps)
-                               new-values (vec (conj closed-values block-id))]
-                           (->> (cons page-tx [new-block
-                                               {:db/id (:db/id property)
-                                                :block/schema (merge {:type property-type}
-                                                                     (assoc property-schema :values new-values))}])
-                                (remove nil?))))]
-           {:block-id block-id
-            :tx-data tx-data}))))))
+                                            true
+                                            outliner-core/block-with-timestamps)
+                                new-values (vec (conj closed-values block-id))]
+                            (->> (cons page-tx [new-block
+                                                {:db/id (:db/id property)
+                                                 :block/schema (merge {:type property-type}
+                                                                      (assoc property-schema :values new-values))}])
+                                 (remove nil?))))]
+            {:block-id block-id
+             :tx-data tx-data}))))))
+
+(defn add-existing-values-to-closed-values!
+  [property values]
+  (when (seq values)
+    (let [property-id (:block/uuid property)
+          property-schema (:block/schema property)
+          page (get-property-hidden-page property)
+          page-tx (when-not (e/entity? page) page)
+          page-id (:block/uuid page)
+          closed-value-blocks (map (fn [value]
+                                     (closed-value-new-block [:block/uuid page-id]
+                                                             (db/new-block-id)
+                                                             value
+                                                             property))
+                                   (remove string/blank? values))
+          value->block-id (zipmap
+                           (map #(get-in % [:block/schema :value]) closed-value-blocks)
+                           (map :block/uuid closed-value-blocks))
+          new-value-ids (map :block/uuid closed-value-blocks)
+          property-tx {:db/id (:db/id property)
+                       :block/schema (assoc property-schema :values new-value-ids)}
+          block-values (->> (model/get-block-property-values (:block/uuid property))
+                            (remove #(uuid? (first %))))
+          tx-data (concat
+                   (when page-tx [page-tx])
+                   closed-value-blocks
+                   [property-tx]
+                   (map (fn [[id value]]
+                          (let [properties (:block/properties (db/entity id))]
+                            (if (string/blank? value) ; remove blank property values
+                              {:db/id id
+                               :block/properties (dissoc properties property-id)}
+                              {:db/id id
+                               :block/properties (assoc properties property-id (get value->block-id value))})))
+                        block-values))]
+      (db/transact! (state/get-current-repo) tx-data
+        {:outliner-op :insert-blocks}))))
 
 (defn delete-closed-value
   [property item]
