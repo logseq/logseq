@@ -102,6 +102,10 @@
 (defmethod transact-db! :raw [_ & args]
   (apply db/transact! args))
 
+(defn- whiteboard-page-block?
+  [block]
+  (contains? (set (:block/type block)) "whiteboard"))
+
 (defn apply-remote-remove-ops
   [repo remove-ops]
   (prn :remove-ops remove-ops)
@@ -113,9 +117,11 @@
 (defn- insert-or-move-block
   [repo block-uuid remote-parents remote-left-uuid move?]
   (when (and (seq remote-parents) remote-left-uuid)
-    (let [local-left (db/pull repo '[*] [:block/uuid remote-left-uuid])
-          first-remote-parent (first remote-parents)
+    (let [first-remote-parent (first remote-parents)
           local-parent (db/pull repo '[*] [:block/uuid first-remote-parent])
+          whiteboard-page-block? (whiteboard-page-block? local-parent)
+          ;; when insert blocks in whiteboard, local-left is ignored
+          local-left (when-not whiteboard-page-block? (db/pull repo '[*] [:block/uuid remote-left-uuid]))
           b {:block/uuid block-uuid}
           ;; b-ent (db/entity repo [:block/uuid (uuid block-uuid-str)])
           ]
@@ -172,6 +178,7 @@
   (move-ops-map->sorted-move-ops move-ops-map))
 
 (defn- check-block-pos
+  "NOTE: some blocks don't have :block/left (e.g. whiteboard blocks)"
   [repo block-uuid remote-parents remote-left-uuid]
   (let [local-b (db/pull repo '[{:block/left [:block/uuid]}
                                 {:block/parent [:block/uuid]}
@@ -182,8 +189,14 @@
       (nil? local-b)
       :not-exist
 
-      (not (and (= (:block/uuid (:block/parent local-b)) remote-parent-uuid)
-                (= (:block/uuid (:block/left local-b)) remote-left-uuid)))
+      (and (nil? (:block/left local-b))
+           (not= (:block/uuid (:block/parent local-b)) remote-parent-uuid))
+      ;; blocks don't have :block/left
+      :wrong-pos
+
+      (and (:block/left local-b)
+           (or (not= (:block/uuid (:block/parent local-b)) remote-parent-uuid)
+               (not= (:block/uuid (:block/left local-b)) remote-left-uuid)))
       :wrong-pos
       :else nil)))
 
