@@ -95,17 +95,24 @@
                             (take 5 items))))
         page-exists? (when-not (string/blank? input)
                        (db/entity [:block/name (string/trim input)]))
-        filter-mode? (or (string/includes? input " /")
-                         (string/starts-with? input "/"))
+        include-slash? (or (string/includes? input "/")
+                           (string/starts-with? input "/"))
         order* (cond
                  (= search-mode :graph)
                  [["Pages"          :pages          (visible-items :pages)]]
 
-                 filter-mode?
-                 [["Filters"        :filters        (visible-items :filters)]
-                  ["Pages"          :pages          (visible-items :pages)]
+                 include-slash?
+                 [(if page-exists?
+                    ["Pages"          :pages          (visible-items :pages)]
+                    ["Filters"        :filters        (visible-items :filters)])
+                  (if page-exists?
+                    ["Filters"        :filters        (visible-items :filters)]
+                    ["Pages"          :pages          (visible-items :pages)])
                   (when-not page-exists?
-                    ["Create"         :create         (create-items input)])]
+                    ["Create"         :create         (create-items input)])
+                  ["Current page"   :current-page   (visible-items :current-page)]
+                  ["Blocks"         :blocks         (visible-items :blocks)]
+                  ["Files"          :files          (visible-items :files)]]
 
                  filter-group
                  [(when (= filter-group :blocks)
@@ -275,7 +282,7 @@
   [input]
   (or (when (string/starts-with? input "/")
         (subs input 1))
-      (last (gp-util/split-last " /" input))))
+      (last (gp-util/split-last "/" input))))
 
 (defmethod load-results :filters [group state]
   (let [!results (::results state)
@@ -389,8 +396,8 @@
 (defn- get-filter-user-input
   [input]
   (cond
-    (string/includes? input " /")
-    (first (gp-util/split-last " /" input))
+    (string/includes? input "/")
+    (first (gp-util/split-last "/" input))
     (string/starts-with? input "/")
     ""
     :else
@@ -523,6 +530,8 @@
      ;; update the input value in the UI
      (reset! !input input)
 
+     (reset! (::input-changed? state) true)
+
        ;; ensure that there is a throttled version of the load-results function
      (when-not @!load-results-throttled
        (reset! !load-results-throttled (gfun/throttle load-results 50)))
@@ -552,11 +561,9 @@
     (reset! (::alt? state) alt?)
     (when (or as-keydown? as-keyup?)
       (.preventDefault e))
-    (when-not esc? (util/stop-propagation e))
 
     (cond
-      (and meta? enter?
-           (not (string/blank? input)))
+      (and meta? enter?)
       (let [repo (state/get-current-repo)]
         (state/close-modal!)
         (state/sidebar-add-block! repo input :search))
@@ -567,13 +574,18 @@
       as-keyup? (if meta?
                   (show-less)
                   (move-highlight state -1))
-      enter? (handle-action :default state e)
+      enter? (do
+               (handle-action :default state e)
+               (util/stop-propagation e))
       esc? (let [filter @(::filter state)]
-             (when (or filter (not (string/blank? input)))
+             (when (or (and filter @(::input-changed? state))
+                       (not (string/blank? input)))
                (util/stop e)
                (reset! (::filter state) nil)
                (when-not filter (handle-input-change state nil ""))))
-      (= keyname "c") (copy-block-ref state)
+      (and meta? (= keyname "c")) (do
+                                    (copy-block-ref state)
+                                    (util/stop-propagation e))
       :else nil)))
 
 (defn keyup-handler
@@ -616,20 +628,22 @@
        :placeholder (input-placeholder false)
        :ref #(when-not @input-ref (reset! input-ref %))
        :on-change (fn [e]
-                    (handle-input-change state e)
-                    (when-let [on-change (:on-input-change opts)]
-                      (on-change (.-value (.-target e)))))
+                    (let [new-value (.-value (.-target e))]
+                      (handle-input-change state e)
+                      (when-let [on-change (:on-input-change opts)]
+                        (on-change new-value))))
        :on-blur (fn [_e]
                   (when-let [on-blur (:on-input-blur opts)]
                     (on-blur input)))
        :on-composition-end (fn [e] (handle-input-change state e))
        :on-key-down (fn [e]
                       (let [value (.-value @input-ref)
-                            last-char (last value)]
+                            last-char (last value)
+                            backspace? (= (util/ekey e) "Backspace")]
                         (when (and (some? @(::filter state))
                                    (or (= (util/ekey e) "/")
-                                       (and (= (util/ekey e) "Backspace")
-                                            (= last-char "/"))))
+                                       (and backspace? (= last-char "/"))
+                                       (and backspace? (= input ""))))
                           (reset! (::filter state) nil))))
        :value input}]]))
 
@@ -764,6 +778,7 @@
   (rum/local nil ::load-results-throttled)
   (rum/local nil ::scroll-container-ref)
   (rum/local nil ::input-ref)
+  (rum/local false ::input-changed?)
   [state {:keys [sidebar?] :as opts}]
   (let [*input (::input state)
         _input (rum/react *input)
@@ -780,10 +795,11 @@
                      (not sidebar?) (str " pb-14"))
             :ref #(let [*ref (::scroll-container-ref state)]
                     (when-not @*ref (reset! *ref %)))
-            :style {:background "var(--lx-gray-02)"}}
+            :style {:background "var(--lx-gray-02)"
+                    :scroll-padding-block 32}}
 
       (when group-filter
-        [:div.flex.flex-col.p-3.opacity-50.text-sm
+        [:div.flex.flex-col.px-3.py-1.opacity-70.text-sm
          (search-only state (name group-filter))])
 
       (let [items (filter

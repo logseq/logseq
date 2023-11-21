@@ -3,6 +3,12 @@ import { test } from './fixtures'
 import { createRandomPage, lastBlock, IsMac, IsLinux } from './utils'
 
 test("Logseq URLs (same graph)", async ({ page, block }) => {
+  try {
+    await page.waitForSelector('.notification-clear', { timeout: 10 })
+    page.click('.notification-clear')
+  } catch (error) {
+  }
+
   let paste_key = IsMac ? 'Meta+v' : 'Control+v'
   // create a page with identify block
   let identify_text = "URL redirect target"

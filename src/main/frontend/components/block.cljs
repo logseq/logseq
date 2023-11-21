@@ -2072,7 +2072,7 @@
                                                   :page-id (:db/id (:block/page block))})]
     (cond
       (seq ordered-properties)
-      [:div.block-properties
+      [:div.block-properties.rounded
        {:class (when pre-block? "page-properties")
         :title (if pre-block?
                  "Click to edit this page's properties"
