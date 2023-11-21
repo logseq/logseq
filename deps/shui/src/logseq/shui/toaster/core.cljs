@@ -60,7 +60,6 @@
            config (assoc config :id id)
            config (interpret-vals config [:title :description :action]
                     {:id id :dismiss! #(dismiss id) :update! #(toast! (assoc %1 :id id))})]
-       (js/console.log "==>>" (clj->js config))
        (js->clj (toast (clj->js config))))
      :exception)))
 
