@@ -37,10 +37,10 @@
                          (ui/button
                            {:on-click #(update! {:title  (js/Date.now)
                                                  :action [:b (ui/button {:on-click (fn [] (ui/toast-dismiss!))} "clear all")]})
-                            :size :sm}
+                            :size     :sm}
                            "x update")]])
                      :default
-                     {:duration 5000}))
+                     {:duration 3000 :onDismiss #(js/console.log "===>> dismiss?:" %1)}))
        :class    "primary-orange"}
       (ui/tabler-icon "brand-soundcloud")
       "Get SoundCloud (.primary-{color})")]

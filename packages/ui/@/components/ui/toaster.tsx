@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/toast'
 import { useToast } from '@/components/ui/use-toast'
 
-export function Toaster() {
+export function Toaster () {
   const { toasts } = useToast()
 
   return (
@@ -20,9 +20,10 @@ export function Toaster() {
         action,
         ...props
       }) {
-        props = {
-          duration: 5000,
-          ...props
+        const duration = props?.duration
+        // @ts-ignore
+        if (Number.isInteger(duration) && duration <= 0) {
+          props.duration = 1000 * 120
         }
 
         return (

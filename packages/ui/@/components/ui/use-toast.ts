@@ -7,13 +7,14 @@ import type {
 } from '@/components/ui/toast'
 
 const TOAST_LIMIT = 16
-const TOAST_REMOVE_DELAY = 1 * 1000
+const TOAST_REMOVE_DELAY = 2 * 1000
 
 type ToasterToast = ToastProps & {
   id: string
   title?: React.ReactNode
   description?: React.ReactNode
   action?: ToastActionElement
+  onDismiss?: (id: string) => void
 }
 
 const actionTypes = {
@@ -94,10 +95,13 @@ export const reducer = (state: State, action: Action): State => {
       // ! Side effects ! - This could be extracted into a dismissToast() action,
       // but I'll keep it here for simplicity
       if (toastId) {
+        const toast = state.toasts.find(it => it.id == toastId)
         addToRemoveQueue(toastId)
+        toast?.onDismiss?.(toastId)
       } else {
         state.toasts.forEach((toast) => {
           addToRemoveQueue(toast.id)
+          toast?.onDismiss?.(toast.id)
         })
       }
 
