@@ -2541,8 +2541,7 @@
 
               (block-refs-count block refs-count *hide-block-refs?)])]
 
-          (when (and (not hide-block-refs?) (> refs-count 0)
-                     (not (:in-property? config)))
+          (when (and (not hide-block-refs?) (> refs-count 0))
             (let [refs-cp (state/get-component :block/linked-references)]
               (refs-cp uuid)))]))]))
 
