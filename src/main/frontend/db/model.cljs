@@ -696,7 +696,7 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-block-page
   [repo block-uuid]
-  (assert (uuid? block-uuid) "get-block-page requires block-uuid to be of type uuid")
+  (assert (uuid? block-uuid) (str "get-block-page requires block-uuid to be of type uuid but got " block-uuid))
   (when-let [block (db-utils/entity repo [:block/uuid block-uuid])]
     (db-utils/entity repo (:db/id (:block/page block)))))
 

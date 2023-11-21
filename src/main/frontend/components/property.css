@@ -19,7 +19,7 @@
 
 .ls-block .ls-properties-area, .property-block-container {
     border-left: 1px solid;
-    border-left-color: var(--ls-guideline-color, #ddd);
+    border-left-color: or(--lx-gray-04-alpha, --ls-guideline-color, #ddd) !important;
 }
 
 .ls-page-properties > .ls-properties-area > .property-block {

@@ -293,18 +293,6 @@ html.is-native-ipad {
     &-topbar {
       padding-top: 37px;
     }
-
-    &-inner {
-      .resizer {
-        top: 30vh;
-        width: 12px;
-        height: 40vh;
-      }
-
-      .resizer:hover {
-        background-color: var(--ls-guideline-color, #ddd);
-      }
-    }
   }
 }
 

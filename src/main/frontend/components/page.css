@@ -261,7 +261,19 @@
 
   .edit-input {
     width: 100%;
+    height: 32px;
     border: none;
+    box-shadow: none;
+    padding: 0;
+    padding-right: 4px;
+
+    &-wrapper {
+      @apply rounded;
+
+      &.editing {
+        background-color: var(--ls-secondary-background-color);
+      }
+    }
   }
 }
 
@@ -272,6 +284,18 @@ a.page-title {
   display: block;
   color: inherit;
   margin-bottom: 0;
+}
+
+.page-title-sizer-wrapper {
+  @apply w-full overflow-x-auto overflow-y-hidden;
+
+  :empty::before {
+    content: '\200b';
+  }
+
+  > .title {
+    @apply w-full overflow-hidden overflow-ellipsis;
+  }
 }
 
 html.is-native-android,

@@ -67,6 +67,7 @@ test('update whiteboard title', async ({ page }) => {
   await page.click('.whiteboard-page-title')
   await page.fill('.whiteboard-page-title input', title + '-2')
   await page.keyboard.press('Enter')
+  await page.click('.ui__modal-enter')
   await expect(page.locator('.whiteboard-page-title .title')).toContainText(
     title + '-2'
   )
