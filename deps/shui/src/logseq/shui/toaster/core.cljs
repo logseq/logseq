@@ -13,7 +13,7 @@
 (defn use-toast []
   (when-let [^js js-toast (js/window.LSUI.useToast)]
     (let [toast-fn! (.-toast js-toast)
-          dismiss!  (.-dismiss js-toast)]
+          dismiss! (.-dismiss js-toast)]
       [(fn [s]
          (let [^js s (bean/->js s)]
            (toast-fn! s)))
@@ -25,7 +25,8 @@
   (let [^js js-toast (js/window.LSUI.useToast)]
     (rum/use-effect!
       #(reset! *toast {:toast   (.-toast js-toast)
-                       :dismiss (.-dismiss js-toast)})
+                       :dismiss (.-dismiss js-toast)
+                       :update  (.-update js-toast)})
       [])
     [:<> (toaster-installer)]))
 
@@ -49,7 +50,7 @@
   ([content-or-config] (toast! content-or-config :default nil))
   ([content-or-config status] (toast! content-or-config status nil))
   ([content-or-config status opts]
-   (if-let [{:keys [toast _dismiss]} @*toast]
+   (if-let [{:keys [toast dismiss]} @*toast]
      (let [config (if (map? content-or-config)
                     (update-html-props content-or-config)
                     {:description content-or-config
@@ -57,7 +58,8 @@
            config (merge config opts)
            id (or (:id config) (gen-id))
            config (assoc config :id id)
-           config (interpret-vals config [:title :description] {:id id})]
+           config (interpret-vals config [:title :description :action]
+                    {:id id :dismiss! #(dismiss id) :update! #(toast! (assoc %1 :id id))})]
        (js->clj (toast (clj->js config))))
      :exception)))
 

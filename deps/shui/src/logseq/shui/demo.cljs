@@ -23,13 +23,22 @@
        :size     :md
        :on-click (fn []
                    (ui/toast!
-                     (fn [{:keys [id]}]
+                     (fn [{:keys [id dismiss! update!]}]
                        [:b.text-red-700
-                        (str "#(" id ") ")
-                        (.toLocaleString (js/Date.))
-                        (ui/button
-                          {:on-click #(ui/toast-clear! id)}
-                          "x close")])
+                        [:p.flex.items-center.gap-2
+                         (ui/tabler-icon "info-circle")
+                         (str "#(" id ") ")
+                         (.toLocaleString (js/Date.))]
+                        [:div.flex.flex-row.gap-2
+                         (ui/button
+                           {:on-click #(dismiss! id) :size :sm}
+                           "x close")
+
+                         (ui/button
+                           {:on-click #(update! {:title  (js/Date.now)
+                                                 :action [:b (ui/button {:on-click (fn [] (ui/toast-dismiss!))} "clear all")]})
+                            :size :sm}
+                           "x update")]])
                      :default
                      {:duration 5000}))
        :class    "primary-orange"}
