@@ -1,7 +1,8 @@
 (ns frontend.colors
   "Colors used"
   (:require [clojure.string :as string]
-            ["@radix-ui/colors" :as radix-colors]))
+            ["@radix-ui/colors" :as radix-colors]
+            [frontend.util :as util]))
 
 (def color-list [:tomato :red :crimson :pink :plum :purple :violet :indigo :blue :cyan :teal :green :grass :orange :brown])
 
@@ -55,6 +56,8 @@
                           "--ls-focus-ring-color: var(--rx-" (name color) "-09); "
                           "--ls-table-tr-even-background-color: var(--rx-" (name gray) "-04); "
                           "--ls-page-properties-background-color: var(--rx-" (name gray) "-04); "
+                          "--ls-block-properties-background-color: var(--rx-" (name gray) "-03); "
+                          "--ls-page-inline-code-bg-color: var(--rx-" (name gray) "-03); "
                           "--ls-cloze-text-color: var(--rx-" (name color) "-08); "
                           "--ls-wb-stroke-color-default: var(--rx-" (name color) "-07); "
                           "--ls-wb-background-color-default: var(--rx-" (name color) "-04); "
@@ -89,3 +92,14 @@
       6 (str "linear-gradient(-45deg, " (step -3) " -10%, " (step -2) " 10%, " (step -1) " 30%, " (step 0) " 50%, " (step 1) " 70%, " (step 2) " 90%, " (step 3) " 110%)")
       7 (str "linear-gradient(-45deg, " (step -3) " 0%, " (step -2) " 16.66%, " (step -1) " 33.33%, " (step 0) " 50%, " (step 1) " 66.66%, " (step 2) " 83.33%, " (step 3) " 100%)")
       (str "linear-gradient(90deg, " (step 0) ", " (step 0) ")"))))
+
+(defn get-accent-color
+  []
+  (when-let [hsl-color (some-> js/document.documentElement
+                       (js/getComputedStyle)
+                       (.getPropertyValue "--lx-accent-09")
+                       (string/replace "hsl(" "")
+                       (string/replace ")" "")
+                       (string/split ","))]
+    (let [hsl-color (map js/parseFloat hsl-color)]
+      (apply util/hsl2hex hsl-color))))

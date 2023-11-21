@@ -7,8 +7,9 @@ body[data-page=import] {
 
 .cp__onboarding {
   &-setups {
-    background-color: var(--ls-primary-background-color);
     z-index: 1;
+    overflow: hidden;
+    border-radius: 20px;
 
     .as-flex-center {
       display: flex;
@@ -17,7 +18,6 @@ body[data-page=import] {
     }
 
     .inner-card {
-      background-color: var(--ls-secondary-background-color);
       padding-top: 55px;
 
       > h1 {
@@ -46,7 +46,6 @@ body[data-page=import] {
       }
 
       > article {
-        background-color: var(--ls-secondary-background-color);
         border-radius: 20px;
         flex: 1;
 
@@ -253,8 +252,6 @@ body[data-page=import] {
 
           > section {
             &.a {
-              border-radius: 20px 0 0 20px;
-
               > small {
                 padding: 0 95px;
               }

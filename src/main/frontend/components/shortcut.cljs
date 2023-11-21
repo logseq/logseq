@@ -154,8 +154,7 @@
   [id binding-map]
   (when-let [id' (and id binding-map (some-> (str id) (string/replace "plugin." "")))]
     [:span {:title (str id' "#" (some-> (:handler-id binding-map) (name)))}
-     [:span.pl-1 (dh/get-shortcut-desc (assoc binding-map :id id))]
-     [:small.pl-1 [:code.text-xs (str id')]]]))
+     [:span.pl-1 (dh/get-shortcut-desc (assoc binding-map :id id))]]))
 
 (defn- open-customize-shortcut-dialog!
   [id]
