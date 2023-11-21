@@ -86,6 +86,10 @@
     (let [dir (backup-file/get-backup-dir repo path)]
       (.openPath shell dir))))
 
+(defmethod handle :openFileInFolder [_window [_ full-path]]
+  (when (string? full-path)
+   (.showItemInFolder shell full-path)))
+
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))
 

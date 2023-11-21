@@ -78,7 +78,8 @@
             [rum.core :as rum]
             [shadow.loader :as loader]
             [datascript.impl.entity :as e]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [electron.ipc :as ipc]))
 
 
 
@@ -316,7 +317,7 @@
                  :on-click      (fn [e]
                                   (util/stop e)
                                   (if local?
-                                    (js/window.apis.showItemInFolder image-src)
+                                    (ipc/ipc "openFileInFolder" image-src)
                                     (js/window.apis.openExternal image-src)))}
                 image-src])
              [:.flex
