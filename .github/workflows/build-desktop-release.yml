@@ -312,9 +312,9 @@ jobs:
       - name: Build/Release Electron app
         run: yarn electron:make
         working-directory: ./static
-        env:
-          CODE_SIGN_CERTIFICATE_FILE: ../codesign.pfx
-          CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
+        #env:
+        #  CODE_SIGN_CERTIFICATE_FILE: ../codesign.pfx
+        #  CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
 
       - name: Save Artifact
         run: |

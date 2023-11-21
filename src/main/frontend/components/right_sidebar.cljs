@@ -337,7 +337,9 @@
         add-resizing-class #(.. js/document.documentElement -classList (add "is-resizing-buf"))
         remove-resizing-class (fn []
                                 (.. js/document.documentElement -classList (remove "is-resizing-buf"))
-                                (reset! ui-handler/*right-sidebar-resized-at (js/Date.now)))
+                                (reset! ui-handler/*right-sidebar-resized-at (js/Date.now))
+                                (when-let [element js/document.activeElement]
+                                  (.blur element)))
         set-width! (fn [ratio]
                      (when el-ref
                        (let [value (* ratio 100)
@@ -397,11 +399,11 @@
      [])
 
     (rum/use-effect!
-      (fn []
+     (fn []
         ;; sidebar animation duration
-        (js/setTimeout
-          #(reset! ui-handler/*right-sidebar-resized-at (js/Date.now)) 300))
-      [sidebar-open?])
+       (js/setTimeout
+        #(reset! ui-handler/*right-sidebar-resized-at (js/Date.now)) 300))
+     [sidebar-open?])
 
     [:.resizer {:ref el-ref
                 :role "separator"

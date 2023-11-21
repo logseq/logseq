@@ -66,6 +66,7 @@
 #?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
 #?(:cljs (defonce convert-to-roman utils/convertToRoman))
 #?(:cljs (defonce convert-to-letters utils/convertToLetters))
+#?(:cljs (defonce hsl2hex utils/hsl2hex))
 
 (defn string-join-path
   #_:clj-kondo/ignore

@@ -7,6 +7,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db.model :as model]
+            [frontend.db :as db]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
@@ -101,7 +102,10 @@
    :queryBlockByUUID (fn [block-uuid]
                        (clj->js
                         (model/query-block-by-uuid (parse-uuid block-uuid))))
-   :getBlockPageName #(:block/name (model/get-block-page (state/get-current-repo) (parse-uuid %)))
+   :getBlockPageName #(let [block-id-str %]
+                        (if (util/uuid-string? block-id-str)
+                          (:block/name (model/get-block-page (state/get-current-repo) (parse-uuid block-id-str)))
+                          (:block/name (db/entity [:block/name (util/page-name-sanity-lc block-id-str)]))))
    :exportToImage (fn [page-name options] (state/set-modal! #(export/export-blocks page-name (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))
    :isWhiteboardPage model/whiteboard-page?
    :isMobile util/mobile?
