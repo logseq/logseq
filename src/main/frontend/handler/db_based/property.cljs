@@ -579,7 +579,7 @@
                     :block/left (or (when page-entity (model/get-block-last-direct-child (db/get-db) (:db/id page-entity)))
                                     page-id)
                     :block/metadata metadata}
-                   outliner-core/block-with-timestamps)
+                   sqlite-util/block-with-timestamps)
         child-1-id (db/new-block-id)
         child-1 (-> {:block/uuid child-1-id
                      :block/format :markdown
@@ -587,7 +587,7 @@
                      :block/page page-id
                      :block/parent [:block/uuid parent-id]
                      :block/left [:block/uuid parent-id]}
-                    outliner-core/block-with-timestamps
+                    sqlite-util/block-with-timestamps
                     parse-block)]
     {:page page-tx
      :blocks [parent child-1]}))
@@ -617,7 +617,7 @@
                        :block/parent page-id
                        :block/left (or (when page-entity (model/get-block-last-direct-child (db/get-db) (:db/id page-entity)))
                                        page-id)}
-                      outliner-core/block-with-timestamps)]
+                      sqlite-util/block-with-timestamps)]
     {:page page-tx
      :blocks [new-block]}))
 
@@ -712,7 +712,7 @@
                                             (update :block/schema assoc :description description)
 
                                             true
-                                            outliner-core/block-with-timestamps)
+                                            sqlite-util/block-with-timestamps)
                                 new-values (vec (conj closed-values block-id))]
                             (->> (cons page-tx [new-block
                                                 {:db/id (:db/id property)
@@ -731,15 +731,16 @@
           page-tx (when-not (e/entity? page) page)
           page-id (:block/uuid page)
           closed-value-blocks (map (fn [value]
-                                     (closed-value-new-block [:block/uuid page-id]
-                                                             (db/new-block-id)
-                                                             value
-                                                             property))
+                                     (sqlite-util/block-with-timestamps
+                                      (closed-value-new-block [:block/uuid page-id]
+                                                              (db/new-block-id)
+                                                              value
+                                                              property)))
                                    (remove string/blank? values))
           value->block-id (zipmap
                            (map #(get-in % [:block/schema :value]) closed-value-blocks)
                            (map :block/uuid closed-value-blocks))
-          new-value-ids (map :block/uuid closed-value-blocks)
+          new-value-ids (mapv :block/uuid closed-value-blocks)
           property-tx {:db/id (:db/id property)
                        :block/schema (assoc property-schema :values new-value-ids)}
           block-values (->> (model/get-block-property-values (:block/uuid property))
