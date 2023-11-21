@@ -3659,7 +3659,7 @@
     (->> (all-blocks-with-level {:page page
                                  :collapse? true})
          (map (fn [b] (or (some-> (:db/id (:block/link b)) db/entity) b)))
-         (map (comp gdom/getElementByClass str :block/uuid))
+         (map (comp gdom/getElementByClass (fn [b] (str "id" (:block/uuid b)))))
          state/exit-editing-and-set-selected-blocks!))
   (state/set-state! :selection/selected-all? true))
 
@@ -3674,7 +3674,7 @@
       (do
         (util/stop e)
         (state/exit-editing-and-set-selected-blocks!
-         [(gdom/getElementByClass (str (:block/uuid edit-block)))]))
+         [(gdom/getElementByClass (str "id" (:block/uuid edit-block)))]))
 
       edit-block
       nil
@@ -3702,7 +3702,7 @@
                   nil
 
                   (and parent (:block/parent parent))
-                  (state/exit-editing-and-set-selected-blocks! [(gdom/getElementByClass (:block/uuid parent))])
+                  (state/exit-editing-and-set-selected-blocks! [(gdom/getElementByClass (str "id" (:block/uuid parent)))])
 
                   (:block/name parent)
                   ;; page block
