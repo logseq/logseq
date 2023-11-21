@@ -274,7 +274,7 @@
 
 ;; The default load-results function triggers all the other load-results function
 (defmethod load-results :default [_ state]
-  (js/console.log "load-results/default" @(::input state))
+  ;; (js/console.log "load-results/default" @(::input state))
   (if-not (some-> state ::input deref seq)
     (load-results :initial state)
     (do
