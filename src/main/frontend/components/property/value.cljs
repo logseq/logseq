@@ -439,9 +439,8 @@
   (when value
     (if (state/sub-block-unloaded? (state/get-current-repo) value)
       [:div.text-sm.opacity-70 "loading"]
-      (when-let [_block (db/sub-block (:db/id (db/entity [:block/uuid value])))]
-        (let [entity (db/entity [:block/uuid value])
-              properties-cp (:properties-cp opts)]
+      (when-let [entity (db/sub-block (:db/id (db/entity [:block/uuid value])))]
+        (let [properties-cp (:properties-cp opts)]
           (when (and entity properties-cp)
             [:div.property-block-container.w-full.property-template
              (properties-cp config entity (:editor-id config) (merge opts {:in-block-container? true}))]))))))
@@ -481,8 +480,7 @@
     (if (state/sub-block-unloaded? (state/get-current-repo) value)
       [:div.text-sm.opacity-70 "loading"]
       (when-let [block (db/sub-block (:db/id (db/entity [:block/uuid value])))]
-        (let [block (db/entity (:db/id block))
-              value' (get-in block [:block/schema :value])
+        (let [value' (get-in block [:block/schema :value])
               icon (pu/get-property block :icon)]
           (cond
             (:block/name block)
