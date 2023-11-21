@@ -2609,12 +2609,16 @@
                               level-limit 3}
                          :as opts}]
   (when block-id
-    (let [block-id (or (when (and block-id (config/db-based-graph? repo))
-                         (some-> (db-property-handler/get-property-block-created-block [:block/uuid block-id])
-                                 db/entity
-                                 :block/uuid))
-                       block-id)
-          parents (db/get-block-parents repo block-id {:depth (inc level-limit)})
+    (let [{:keys [from-block-id from-property-id]}
+          (when (and block-id (config/db-based-graph? repo))
+            (db-property-handler/get-property-block-created-block [:block/uuid block-id]))
+          from-block (when from-block-id (db/entity from-block-id))
+          from-property (when from-property-id (db/entity from-property-id))
+          block-id (or (:block/uuid from-block) block-id)
+          parents (concat
+                   (db/get-block-parents repo block-id {:depth (inc level-limit)})
+                   (when (and from-block from-property)
+                     [from-block from-property]))
           page (or (db/get-block-page repo block-id) ;; only return for block uuid
                    (model/query-block-by-uuid block-id)) ;; return page entity when received page uuid
           page-name (:block/name page)
@@ -2633,7 +2637,8 @@
                                  {:block/name (or page-original-name page-name)}])
               parents-props (doall
                              (for [{:block/keys [uuid name content] :as block} parents]
-                               (when-not name ; not page
+                               (if name
+                                 [block (page-cp {} block)]
                                  (let [{:block/keys [title body]} (block/parse-title-and-body
                                                                    uuid
                                                                    (:block/format block)
@@ -2648,10 +2653,11 @@
               breadcrumb (->> (into [] parents-props)
                               (concat [page-name-props] (when more? [:more]))
                               (filterv identity)
-                              (map (fn [x] (if (and (vector? x) (second x))
-                                             (let [[block label] x]
-                                               (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
-                                             [:span.opacity-70 "⋯"])))
+                              (map (fn [x]
+                                     (if (and (vector? x) (second x))
+                                       (let [[block label] x]
+                                         (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
+                                       [:span.opacity-70 "⋯"])))
                               (interpose (breadcrumb-separator)))]
           (when (seq breadcrumb)
             [:div.breadcrumb.block-parents

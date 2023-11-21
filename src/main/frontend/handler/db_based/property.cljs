@@ -727,10 +727,17 @@
       (db/transact! tx-data))))
 
 (defn get-property-block-created-block
-  "Get the root block that created this property block."
+  "Get the root block and property that created this property block."
   [eid]
   (let [b (db/entity eid)
         parents (model/get-block-parents (state/get-current-repo) (:block/uuid b) {})
-        from-id (some #(get-in % [:block/metadata :created-from-block]) (reverse parents))
-        from (when from-id (db/entity [:block/uuid from-id]))]
-    (or (:db/id from) (:db/id b))))
+        {:keys [created-from-block created-from-property]}
+        (some (fn [block]
+                (let [metadata (:block/metadata block)
+                      result (select-keys metadata [:created-from-block :created-from-property])]
+                  (when (seq result)
+                    result))) (reverse parents))
+        from-block (when created-from-block (db/entity [:block/uuid created-from-block]))
+        from-property (when created-from-property (db/entity [:block/uuid created-from-property]))]
+    {:from-block-id (or (:db/id from-block) (:db/id b))
+     :from-property-id (:db/id from-property)}))
