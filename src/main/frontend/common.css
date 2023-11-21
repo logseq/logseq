@@ -221,7 +221,8 @@ svg {
 textarea {
   overflow: hidden;
   padding: 8px;
-  border: 1px solid rgba(39, 41, 43, 0.15);
+  border: 1px solid;
+  border-color: or(--lx-gray-07, rgba(39, 41, 43, 0.15));
   border-radius: var(--ls-border-radius-low);
   font-size: 1em;
   line-height: 1.5;

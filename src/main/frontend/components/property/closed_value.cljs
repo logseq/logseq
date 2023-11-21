@@ -13,7 +13,8 @@
             [frontend.components.property.value :as property-value]
             [frontend.db :as db]
             [frontend.state :as state]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [frontend.db.model :as model]))
 
 (defn- upsert-closed-value!
   "Create new closed value and returns its block UUID."
@@ -148,6 +149,20 @@
                                                  :icon icon})))))
      dropdown-opts)))
 
+(rum/defc add-existing-values
+  [property values {:keys [toggle-fn]}]
+  [:div.flex.flex-col.gap-1.w-64.p-4.overflow-y-auto
+   {:class "max-h-[50dvh]"}
+   [:div "Existing values:"]
+   [:ol
+    (for [value values]
+      [:li (str value)])]
+   (ui/button
+    "Add choices"
+    {:on-click (fn []
+                 (db-property-handler/add-existing-values-to-closed-values! property values)
+                 (toggle-fn))})])
+
 (rum/defc choices < rum/reactive
   [property *property-name *property-schema]
   (let [schema (:block/schema property)
@@ -181,12 +196,19 @@
                                        :close-modal? false
                                        :on-chosen (fn [chosen]
                                                     (upsert-closed-value! property {:value chosen}))})
-          (item-config
-           property
-           nil
-           (assoc opts :on-save
-                  (fn [value icon description]
-                    (upsert-closed-value! property {:value value
-                                                    :description description
-                                                    :icon icon}))))))
+          (let [values (->> (model/get-block-property-values (:block/uuid property))
+                            (map second)
+                            (remove uuid?)
+                            (remove string/blank?)
+                            distinct)]
+            (if (seq values)
+              (add-existing-values property values opts)
+              (item-config
+               property
+               nil
+               (assoc opts :on-save
+                      (fn [value icon description]
+                        (upsert-closed-value! property {:value value
+                                                        :description description
+                                                        :icon icon}))))))))
       dropdown-opts)]))
