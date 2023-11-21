@@ -74,7 +74,6 @@
 
 (defn clear-query-state!
   []
-  (prn :debug :clear-query-state!)
   (reset! query-state {}))
 
 (defn add-q!

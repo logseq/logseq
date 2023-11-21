@@ -256,9 +256,7 @@
        (p/catch (fn [e]
                   (js/console.error "Error while restoring repos: " e)))
        (p/finally (fn []
-                    (state/set-db-restoring! false)
-                    (react/clear-query-state!)
-                    (ui-handler/re-render-root!))))
+                    (state/set-db-restoring! false))))
 
    (file/<ratelimit-file-writes!)
    (util/<app-wake-up-from-sleep-loop (atom false))

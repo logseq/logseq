@@ -174,14 +174,15 @@
           block-id (parse-uuid page-name)
           block? (boolean block-id)
           block (get-block page-name)
-          block-unloaded? (state/sub-block-unloaded? repo (:block/uuid block))]
+          block-unloaded? (state/sub-block-unloaded? repo (:block/uuid block))
+          children (:block/_parent block)]
       (cond
         block-unloaded?
         (ui/loading "Loading...")
 
         (and
          (not block?)
-         (empty? (:block/_parent block)))
+         (empty? children))
         (dummy-block page-name)
 
         :else
@@ -197,7 +198,7 @@
                               :disable-lazy-load? short-page?}
                              config)
               config (common-handler/config-with-document-mode hiccup-config)
-              blocks (if block? [block] (db/sort-by-left (:block/_parent block) block))]
+              blocks (if block? [block] (db/sort-by-left children block))]
           [:div
            (page-blocks-inner page-name block blocks config sidebar? whiteboard? block-id)
            (when-not config/publishing?

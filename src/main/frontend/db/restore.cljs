@@ -112,6 +112,7 @@
       (state/set-state! [repo :restore/unloaded-blocks] nil)
       (state/set-state! [repo :restore/unloaded-pages] nil)
       (state/set-state! :graph/loading? false)
+      (react/clear-query-state!)
       (state/pub-event! [:ui/re-render-root]))))
 
 (defn- restore-graph-from-sqlite!
@@ -140,8 +141,7 @@
 
     (js/setTimeout
      (fn []
-       (p/let [;other-data (ipc/ipc :get-other-data repo (map :uuid journal-blocks))
-               other-data (persist-db/<fetch-blocks-excluding repo (map :uuid journal-blocks))
+       (p/let [other-data (persist-db/<fetch-blocks-excluding repo (map :uuid journal-blocks))
                _ (set-unloaded-block-ids! repo other-data)
                _ (p/delay 10)]
          (restore-other-data-from-sqlite! repo other-data uuid->db-id-map)))
