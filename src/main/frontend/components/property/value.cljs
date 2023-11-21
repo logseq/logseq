@@ -431,8 +431,7 @@
     (when (seq children)
       [:div.property-block-container.w-full
        (block-cp children {:id (str (:block/uuid parent))
-                           :editor-box editor-box
-                           :in-property? true})])))
+                           :editor-box editor-box})])))
 
 (rum/defc property-template-value < rum/reactive
   [config value opts]
