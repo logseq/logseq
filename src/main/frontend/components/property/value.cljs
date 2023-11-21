@@ -423,11 +423,11 @@
                   (not multiple-choices?)
                   (assoc :on-chosen on-chosen)))))
 
-(rum/defc property-normal-block-value < rum/reactive
-  [value block-cp editor-box]
-  (let [parent (db/entity [:block/uuid value])
-        parent (db/sub-block (:db/id parent))
-        children (model/sort-by-left (:block/_parent parent) parent)]
+(rum/defc property-normal-block-value
+  [parent block-cp editor-box]
+  (let [children (model/sort-by-left
+                  (:block/_parent (db/entity (:db/id parent)))
+                  parent)]
     (when (seq children)
       [:div.property-block-container.w-full
        (block-cp children {:id (str (:block/uuid parent))
@@ -436,51 +436,53 @@
 
 (rum/defc property-template-value < rum/reactive
   [config value opts]
-  (let [e (db/entity [:block/uuid value])
-        entity (db/sub-block (:db/id e))
-        properties-cp (:properties-cp opts)]
-    (when (and entity properties-cp)
-      [:div.property-block-container.w-full.property-template
-       (properties-cp config entity (:editor-id config) (merge opts {:in-block-container? true}))])))
+  (when value
+    (if (state/sub-block-unloaded? (state/get-current-repo) value)
+      [:div.text-sm.opacity-70 "loading"]
+      (when-let [_block (db/sub-block (:db/id (db/entity [:block/uuid value])))]
+        (let [entity (db/entity [:block/uuid value])
+              properties-cp (:properties-cp opts)]
+          (when (and entity properties-cp)
+            [:div.property-block-container.w-full.property-template
+             (properties-cp config entity (:editor-id config) (merge opts {:in-block-container? true}))]))))))
 
 (rum/defc property-block-value < rum/reactive
   [value block property block-cp editor-box opts page-cp editor-id]
-  (let [v-block (db/entity [:block/uuid value])
-        class? (contains? (:block/type v-block) "class")
-        invalid-warning [:div.warning.text-sm
-                         "Invalid block value, please delete the current property."]]
-    (if v-block
-      (cond
-        (:block/page v-block)
-        (property-normal-block-value value block-cp editor-box)
+  (when value
+    (if (state/sub-block-unloaded? (state/get-current-repo) value)
+      [:div.text-sm.opacity-70 "loading"]
+      (when-let [v-block (db/sub-block (:db/id (db/entity [:block/uuid value])))]
+        (let [class? (contains? (:block/type v-block) "class")
+              invalid-warning [:div.warning.text-sm
+                               "Invalid block value, please delete the current property."]]
+          (if v-block
+            (cond
+              (:block/page v-block)
+              (property-normal-block-value v-block block-cp editor-box)
 
-        (and class? (seq (:properties (:block/schema v-block))))
-        (let [template-instance-block (create-new-block-from-template! block property v-block)]
-          (property-template-value {:editor-id editor-id}
-                                   (:block/uuid template-instance-block)
-                                   opts))
+              (and class? (seq (:properties (:block/schema v-block))))
+              (let [template-instance-block (create-new-block-from-template! block property v-block)]
+                (property-template-value {:editor-id editor-id}
+                                         (:block/uuid template-instance-block)
+                                         opts))
 
         ;; page/class/etc.
-        (:block/name v-block)
-        (page-cp {:disable-preview? true
-                  :hide-close-button? true
-                  :tag? class?} v-block)
-        :else
-        invalid-warning)
-      invalid-warning)))
+              (:block/name v-block)
+              (page-cp {:disable-preview? true
+                        :hide-close-button? true
+                        :tag? class?} v-block)
+              :else
+              invalid-warning)
+            invalid-warning))))))
 
-(rum/defc select-item
-  [property type value {:keys [page-cp inline-text icon?]}]
-  (let [closed-values? (seq (get-in property [:block/schema :values]))]
-    (cond
-      (contains? #{:page :date} type)
-      (when-let [page (db/entity [:block/uuid value])]
-        (page-cp {:disable-preview? true
-                  :hide-close-button? true} page))
-
-      closed-values?
-      (when-let [block (when value (db/entity [:block/uuid value]))]
-        (let [value' (get-in block [:block/schema :value])
+(rum/defc closed-value-item < rum/reactive
+  [value {:keys [page-cp inline-text icon?]}]
+  (when value
+    (if (state/sub-block-unloaded? (state/get-current-repo) value)
+      [:div.text-sm.opacity-70 "loading"]
+      (when-let [block (db/sub-block (:db/id (db/entity [:block/uuid value])))]
+        (let [block (db/entity (:db/id block))
+              value' (get-in block [:block/schema :value])
               icon (pu/get-property block :icon)]
           (cond
             (:block/name block)
@@ -502,7 +504,19 @@
             (inline-text {} :markdown (str value'))
 
             :else
-            value')))
+            value'))))))
+
+(rum/defc select-item
+  [property type value {:keys [page-cp inline-text _icon?] :as opts}]
+  (let [closed-values? (seq (get-in property [:block/schema :values]))]
+    (cond
+      (contains? #{:page :date} type)
+      (when-let [page (db/entity [:block/uuid value])]
+        (page-cp {:disable-preview? true
+                  :hide-close-button? true} page))
+
+      closed-values?
+      (closed-value-item value opts)
 
       (= type :number)
       [:span.number (str value)]
