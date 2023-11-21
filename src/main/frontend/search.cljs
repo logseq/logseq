@@ -243,7 +243,7 @@
 (defn- get-blocks-from-datoms-impl
   [blocks]
   (when (seq blocks)
-    (let [blocks-result (->> (db/pull-many '[:db/id :block/uuid :block/format :block/content :block/page] (set (map :e blocks)))
+    (let [blocks-result (->> (db/pull-many '[:db/id :block/uuid :block/format :block/content :block/page :block/properties] (set (map :e blocks)))
                              (map (fn [b] (assoc b :block/page (get-in b [:block/page :db/id])))))
           blocks-to-add-set (->> (filter :added blocks)
                                  (map :e)
