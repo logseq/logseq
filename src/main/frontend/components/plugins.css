@@ -30,7 +30,6 @@
 
     .tabs {
       .ui__button {
-        background-color: transparent;
         margin: 0 8px;
 
         > span {
@@ -44,9 +43,7 @@
           }
         }
 
-        &.active {
-          background-color: var(--ls-tertiary-background-color);
-        }
+        &.active {}
       }
     }
 

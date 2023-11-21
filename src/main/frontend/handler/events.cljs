@@ -11,14 +11,13 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [frontend.commands :as commands]
-            [frontend.components.command-palette :as command-palette]
+            [frontend.components.cmdk :as cmdk]
             [frontend.components.conversion :as conversion-component]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
             [frontend.components.file-sync :as file-sync]
             [frontend.components.git :as git-component]
             [frontend.components.plugins :as plugin]
-            [frontend.components.search :as component-search]
             [frontend.components.shell :as shell]
             [frontend.components.whiteboard :as whiteboard]
             [frontend.components.user.login :as login]
@@ -34,7 +33,6 @@
             [frontend.fs.nfs :as nfs]
             [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as fs-watcher]
-            [frontend.handler.command-palette :as cp]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
@@ -272,18 +270,18 @@
   (when
    (and (not (util/electron?))
         (not (mobile-util/native-platform?)))
-    (fn [close-fn]
-      [:div
-       ;; TODO: fn translation with args
-       [:p
-        "Grant native filesystem permission for directory: "
-        [:b (config/get-local-dir repo)]]
-       (ui/button
-        (t :settings-permission/start-granting)
-        :class "ui__modal-enter"
-        :on-click (fn []
-                    (nfs/check-directory-permission! repo)
-                    (close-fn)))])))
+   (fn [close-fn]
+     [:div
+      ;; TODO: fn translation with args
+      [:p
+       "Grant native filesystem permission for directory: "
+       [:b (config/get-local-dir repo)]]
+      (ui/button
+       (t :settings-permission/start-granting)
+       :class "ui__modal-enter"
+       :on-click (fn []
+                   (nfs/check-directory-permission! repo)
+                   (close-fn)))])))
 
 (defmethod handle :modal/nfs-ask-permission []
   (when-let [repo (get-local-repo)]
@@ -389,20 +387,7 @@
           _ (js/setTimeout #(mobile/mobile-postinit) 1000)
           ;; FIXME: an ugly implementation for redirecting to page on new window is restored
           _ (repo-handler/graph-ready! repo)
-          _ (fs-watcher/load-graph-files! repo loaded-homepage-files)]
-
-  ;; TODO(junyi): Notify user to update filename format when the UX is smooth enough
-  ;; (when-not config/test?
-  ;;   (js/setTimeout
-  ;;    (fn []
-  ;;      (let [filename-format (state/get-filename-format repo)]
-  ;;        (when (and (util/electron?)
-  ;;                   (not (util/ci?))
-  ;;                   (not (config/demo-graph?))
-  ;;                   (not= filename-format :triple-lowbar))
-  ;;          (state/pub-event! [:ui/notify-outdated-filename-format []]))))
-  ;;    3000))
-    ))
+          _ (fs-watcher/load-graph-files! repo loaded-homepage-files)]))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
@@ -412,9 +397,10 @@
     (state/set-modal! shell/shell)))
 
 (defmethod handle :go/search [_]
-  (state/set-modal! component-search/search-modal
-                    {:fullscreen? false
+  (state/set-modal! cmdk/cmdk-modal
+                    {:fullscreen? true
                      :close-btn?  false
+                     :panel?      false
                      :label "ls-modal-search"}))
 
 (defmethod handle :go/plugins [_]
@@ -645,8 +631,7 @@
       (t :yes)
       :autoFocus "on"
       :class "ui__modal-enter"
-      :large? true
-      :on-click (fn []
+       :on-click (fn []
                   (state/close-modal!)
                   (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))
 
@@ -695,7 +680,6 @@
          (t :yes)
          :autoFocus "on"
          :class "ui__modal-enter"
-         :large? true
          :on-click (fn []
                      (state/close-modal!)
                      (state/pub-event! [:graph/re-index])))]])))
@@ -709,12 +693,6 @@
                          :repo repo-url)
                   opts))
    {:center? true :close-btn? false :close-backdrop? false}))
-
-(defmethod handle :modal/command-palette [_]
-  (state/set-modal!
-   #(command-palette/command-palette {:commands (cp/get-commands)})
-   {:fullscreen? false
-    :close-btn?  false}))
 
 (defmethod handle :journal/insert-template [[_ page-name]]
   (let [page-name (util/page-name-sanity-lc page-name)]
@@ -991,5 +969,4 @@
   (def deprecated-repo (state/get-current-repo))
   (def new-repo (string/replace deprecated-repo deprecated-app-id current-app-id))
 
-  (update-file-path deprecated-repo new-repo deprecated-app-id current-app-id)
-  )
+  (update-file-path deprecated-repo new-repo deprecated-app-id current-app-id))

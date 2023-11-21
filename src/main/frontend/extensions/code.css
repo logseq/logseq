@@ -69,3 +69,7 @@
     cursor: pointer;
   }
 }
+
+.cm-s-solarized.CodeMirror {
+    box-shadow: none;
+}
