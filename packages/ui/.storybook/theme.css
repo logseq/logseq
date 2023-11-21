@@ -4,6 +4,12 @@
 
 body {
   @apply bg-background text-foreground;
+
+  .ui__toaster {
+    &-viewport {
+      @apply gap-2;
+    }
+  }
 }
 
 /* light */

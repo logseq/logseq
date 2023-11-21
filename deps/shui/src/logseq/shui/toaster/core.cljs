@@ -4,7 +4,7 @@
             [logseq.shui.util :as util]
             [cljs-bean.core :as bean]))
 
-(defonce ^:private toaster-installer (util/lsui-wrap "Toaster"))
+(defonce ^:private Toaster (util/lsui-wrap "Toaster"))
 (defonce ^:private *toast (atom nil))
 
 (defn gen-id []
@@ -24,11 +24,13 @@
   []
   (let [^js js-toast (js/window.LSUI.useToast)]
     (rum/use-effect!
-      #(reset! *toast {:toast   (.-toast js-toast)
-                       :dismiss (.-dismiss js-toast)
-                       :update  (.-update js-toast)})
+      (fn []
+        (reset! *toast {:toast   (.-toast js-toast)
+                        :dismiss (.-dismiss js-toast)
+                        :update  (.-update js-toast)})
+        #())
       [])
-    [:<> (toaster-installer)]))
+    [:<> (Toaster)]))
 
 (defn update-html-props
   [v]

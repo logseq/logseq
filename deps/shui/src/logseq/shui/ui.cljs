@@ -1,8 +1,7 @@
 (ns logseq.shui.ui
   (:require [logseq.shui.util :as util]
             [logseq.shui.icon.v2 :as icon-v2]
-            [logseq.shui.toaster.core :as toaster]
-            [cljs-bean.core :as bean]))
+            [logseq.shui.toaster.core :as toaster]))
 
 (def button (util/lsui-wrap "Button" {:static? false}))
 (def slider (util/lsui-wrap "Slider"))

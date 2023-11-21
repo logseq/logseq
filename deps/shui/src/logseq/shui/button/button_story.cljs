@@ -1,7 +1,5 @@
 (ns logseq.shui.button.button-story
-  (:require [logseq.shui.button.v2 :as shui-button]
-            [logseq.shui.util :as shui-utils]
-            [logseq.shui.ui :as ui]
+  (:require [logseq.shui.ui :as ui]
             [cljs-bean.core :as bean]
             [rum.core :as rum])
   (:require-macros [logseq.shui.storybook :refer [defmeta defstory]]))

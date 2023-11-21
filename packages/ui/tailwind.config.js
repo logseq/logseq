@@ -4,7 +4,8 @@ module.exports = {
   content: [
     './@/components/**/*.{ts,tsx}',
     './src/**/*.{ts,tsx}',
-    './examples/**/*.{ts,tsx}'
+    './examples/**/*.{ts,tsx}',
+    '../../deps/shui/src/**/*.cljs'
   ],
   safelist: [
     { pattern: /primary-(gray|red|yellow|green|blue|orange|indigo|rose|purple|pink)/}
