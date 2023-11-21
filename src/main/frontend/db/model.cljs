@@ -1339,7 +1339,8 @@ independent of format as format specific heading characters are stripped"
        :block/uuid id
        :block/page (:db/id (:block/page e))
        :block/content (:block/content e)
-       :block/format (:block/format e)})))
+       :block/format (:block/format e)
+       :block/properties (:block/properties e)})))
 
 (defn get-all-block-contents
   []
