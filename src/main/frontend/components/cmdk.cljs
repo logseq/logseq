@@ -780,7 +780,8 @@
                      (not sidebar?) (str " pb-14"))
             :ref #(let [*ref (::scroll-container-ref state)]
                     (when-not @*ref (reset! *ref %)))
-            :style {:background "var(--lx-gray-02)"}}
+            :style {:background "var(--lx-gray-02)"
+                    :scroll-padding-block 32}}
 
       (when group-filter
         [:div.flex.flex-col.px-3.py-1.opacity-70.text-sm
