@@ -7,6 +7,9 @@
 (defonce ^:private toaster-installer (util/lsui-wrap "Toaster"))
 (defonce ^:private *toast (atom nil))
 
+(defn gen-id []
+  (js/window.LSUI.genToastId))
+
 (defn use-toast []
   (when-let [^js js-toast (js/window.LSUI.useToast)]
     (let [toast-fn! (.-toast js-toast)
@@ -35,9 +38,10 @@
        %)))
 
 (defn interpret-vals
-  [config ks]
+  [config ks & args]
   (reduce (fn [config k]
-            (let [v (get config k)]
+            (let [v (get config k)
+                  v (if (fn? v) (apply v args) v)]
               (if (vector? v) (assoc config k (interpret v)) config)))
     config ks))
 
@@ -51,6 +55,14 @@
                     {:description content-or-config
                      :variant     status})
            config (merge config opts)
-           config (interpret-vals config [:title :description])]
+           id (or (:id config) (gen-id))
+           config (assoc config :id id)
+           config (interpret-vals config [:title :description] {:id id})]
        (js->clj (toast (clj->js config))))
      :exception)))
+
+(defn dismiss!
+  ([] (dismiss! nil))
+  ([id]
+   (when-let [{:keys [dismiss]} @*toast]
+     (dismiss id))))

@@ -25,3 +25,4 @@
 (def dropdown-menu-sub-trigger (util/lsui-wrap "DropdownMenuSubTrigger"))
 
 (def toast! toaster/toast!)
+(def toast-clear! toaster/dismiss!)

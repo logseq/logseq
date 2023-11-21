@@ -18,7 +18,7 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { Toaster } from '@/components/ui/toaster'
-import { useToast } from '@/components/ui/use-toast'
+import { genId, useToast } from '@/components/ui/use-toast'
 
 declare global {
   var LSUI: any
@@ -42,7 +42,8 @@ const shadui = {
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
-  Toaster, useToast
+  Toaster, useToast,
+  genToastId: genId
 }
 
 function setupGlobals() {

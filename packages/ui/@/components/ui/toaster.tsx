@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/toast'
 import { useToast } from '@/components/ui/use-toast'
 
-export function Toaster () {
+export function Toaster() {
   const { toasts } = useToast()
 
   return (
@@ -20,6 +20,11 @@ export function Toaster () {
         action,
         ...props
       }) {
+        props = {
+          duration: 5000,
+          ...props
+        }
+
         return (
           <Toast key={id} {...props}>
             <div className="grid gap-1">
