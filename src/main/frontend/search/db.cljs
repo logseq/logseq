@@ -51,7 +51,7 @@
                    ": "
                    value)))))
        (remove nil?)
-       (string/join "\n")))
+       (string/join "; ")))
 
 (defn block->index
   "Convert a block to the index for searching"
