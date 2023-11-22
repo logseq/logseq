@@ -111,14 +111,6 @@
   (when-let [engine (get-engine repo)]
     (protocol/transact-blocks! engine data)))
 
-(defn- transact-pages!
-  "Transact pages to search engine
-   :pages-to-remove-set the set of pages to remove (not include those to update)
-   :pages-to-add        the page entities to add"
-  [repo data]
-  (when-let [engine (get-engine repo)]
-    (protocol/transact-pages! engine data)))
-
 (defn exact-matched?
   "Check if two strings points toward same search result"
   [q match]
