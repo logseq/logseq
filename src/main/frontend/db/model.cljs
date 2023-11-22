@@ -1181,7 +1181,10 @@ independent of format as format specific heading characters are stripped"
   (let [db (conn/get-db)
         ids (->> (d/datoms db :aevt :block/schema)
                  (map :e))]
-    (map #(:block/original-name (db-utils/entity %)) ids)))
+    (->> ids
+         (map db-utils/entity)
+         (filter #(contains? (:block/type %) "property"))
+         (map :block/original-name))))
 
 (defn get-all-properties
   "Returns a seq of property name strings"
