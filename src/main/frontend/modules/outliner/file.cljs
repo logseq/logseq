@@ -101,17 +101,17 @@
 (defn <ratelimit-file-writes!
   []
   (util/<ratelimit (state/get-file-write-chan) batch-write-interval
-                 :filter-fn
-                 (fn [[repo _ _ time]]
-                   (swap! *writes-finished? assoc repo {:time time
-                                                        :value false})
-                   true)
-                 :flush-fn
-                 (fn [col]
-                   (let [start-time (tc/to-long (t/now))
-                         repos (distinct (map first col))]
-                     (write-files! col)
-                     (doseq [repo repos]
-                       (let [last-write-time (get-in @*writes-finished? [repo :time])]
-                         (when (> start-time last-write-time)
-                           (swap! *writes-finished? assoc repo {:value true}))))))))
+                   :filter-fn
+                   (fn [[repo _ _ time]]
+                     (swap! *writes-finished? assoc repo {:time time
+                                                          :value false})
+                     true)
+                   :flush-fn
+                   (fn [col]
+                     (let [start-time (tc/to-long (t/now))
+                           repos (distinct (map first col))]
+                       (write-files! col)
+                       (doseq [repo repos]
+                         (let [last-write-time (get-in @*writes-finished? [repo :time])]
+                           (when (> start-time last-write-time)
+                             (swap! *writes-finished? assoc repo {:value true}))))))))
