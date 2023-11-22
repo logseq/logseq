@@ -17,7 +17,7 @@
                              :table       {:defaultValue {:summary 5000}}}
                :variant     {:control     :select
                              :description "-"
-                             :options     [:default :destructive]}
+                             :options     [:default :destructive :info :success :warning :error]}
                :onDismiss   {:type        :function
                              :description "hook on the toast item dismissed `func`"
                              :control     {:hideNoControlsWarning true}}
@@ -44,7 +44,7 @@
        (ui/button
          {:on-click
           #(ui/toast!
-             [:b.text-2xl (:description props)]
+             [:b (:description props)]
              (:variant props)
              {:title    (:title props)
               :duration (:duration props)})}
