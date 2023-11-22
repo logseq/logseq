@@ -17,6 +17,14 @@
  :on-boarding/tour-whiteboard-home-description "Beyaz tahtalar uygulamada kendi bölümlerine sahiptir ve onları bir bakışta görebilir, kolayca yenilerini oluşturabilir veya silebilirsiniz."
  :on-boarding/tour-whiteboard-new "{1} Yeni beyaz tahta oluştur"
  :on-boarding/tour-whiteboard-new-description "Yeni bir beyaz tahta oluşturmanın birçok yolu vardır. Bunlardan biri her zaman tam burada bu panodadır."
+ :handbook/title "Yardım"
+ :handbook/topics "Konular"
+ :handbook/popular-topics "Popüler konular"
+ :handbook/help-categories "Yardım kategorileri"
+ :handbook/search "Ara"
+ :handbook/home "Ana sayfa"
+ :handbook/settings "Ayarlar"
+ :handbook/close "Kapat"
  :on-boarding/tour-whiteboard-btn-next "Sonraki"
  :on-boarding/tour-whiteboard-btn-back "Önceki"
  :on-boarding/tour-whiteboard-btn-finish "Son"
@@ -338,6 +346,8 @@
  :settings-page/update-error-2 " Lütfen bu bağlantıyı denetleyin: "
  :settings-permission/start-granting "İzin ver"
 
+ :settings-page/auto-chmod "Dosya izinlerini otomatik olarak değiştir"
+ :settings-page/auto-chmod-desc "Grup üyeliği tarafından verilen izinlere sahip birden fazla kullanıcının düzenleme yapmasına izin vermek için devre dışı bırakın."
  :yes "Evet"
 
  :submit "Onayla"
@@ -446,6 +456,7 @@
  :whiteboard/dashboard-card-edited "Düzenlendi: "
  :whiteboard/toggle-grid "Kılavuzu aç/kapat"
  :whiteboard/snap-to-grid "Kılavuzlara daya"
+ :whiteboard/toggle-pen-mode "Kalem modunu aç/kapat"
  :flashcards/modal-welcome-title "Bir kart oluşturma zamanı!"
  :flashcards/modal-welcome-desc-1 "Herhangi bir bloğu karta dönüştürmek için \"#card\" etiketini ekleyebilir veya cümle tamamlama eklemek için \"/cloze\" komutunu kullanabilirsiniz."
  :flashcards/modal-welcome-desc-2 "Belgeleri kontrol etmek için "
@@ -585,6 +596,7 @@
  :pdf/linked-ref "Bağlantılı referans"
  :pdf/toggle-dashed "Alan vurgusu için çizgili stil"
  :pdf/hl-block-colored "Vurgulu blok için renkli etiket"
+ :pdf/auto-open-context-menu "Seçimler için içerik menüsünü otomatik aç"
  :pdf/doc-metadata "Belge meta verileri"
 
  :updater/new-version-install "Yeni bir sürüm indirildi."
@@ -793,4 +805,5 @@
  :command.dev/show-block-data             "(Dev) Blok verilerini göster"
  :command.dev/show-block-ast              "(Dev) Blok AST'sini göster"
  :command.dev/show-page-data              "(Dev) Sayfa verilerini göster"
- :command.dev/show-page-ast               "(Dev) Sayfa AST'sini göster"}
+ :command.dev/show-page-ast               "(Dev) Sayfa AST'sini göster"
+ :command.window/close                    "Pencereyi kapat"}
