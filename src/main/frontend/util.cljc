@@ -1513,19 +1513,3 @@ Arg *stop: atom, reset to true to stop the loop"
      (if (satisfies? IMeta o)
        (with-meta o meta)
        o)))
-
-
-(defn dedupe-by
-  ([keyfn]
-   (fn [rf]
-     (let [pa (volatile! ::none)]
-       (fn
-         ([] (rf))
-         ([result] (rf result))
-         ([result input]
-          (let [prior @pa
-                key (keyfn input)]
-            (vreset! pa key)
-            (if (= prior key)
-              result
-              (rf result input)))))))))
