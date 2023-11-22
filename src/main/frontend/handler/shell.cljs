@@ -1,14 +1,14 @@
 (ns frontend.handler.shell
   "Git related handler fns"
-  (:require [electron.ipc :as ipc]
-            [clojure.string :as string]
-            [logseq.graph-parser.util :as gp-util]
-            [frontend.handler.notification :as notification]
-            [promesa.core :as p]
-            [frontend.db :as db]
-            [frontend.state :as state]
+  (:require [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.config :as config]
-            [frontend.util :as util]))
+            [frontend.db :as db]
+            [frontend.handler.notification :as notification]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]
+            [promesa.core :as p]))
 
 (defn run-git-command!
   [command]
@@ -29,7 +29,7 @@
   (p/let [result (f command args)]
     (notification/show!
      (if (string/blank? result)
-       [:p [:code.mr-1 (str command " " args) ]
+       [:p [:code.mr-1 (str command " " args)]
         "was executed successfully!"]
        result)
      :success
@@ -86,7 +86,8 @@
                                     [:hr]
                                     [:div.mb-2
                                      [:a.font-medium.mr-1.inline
-                                      {:on-click (fn [] (get-versioned-file-content hash path))}
+                                      {:on-click (fn [] ((notification/clear-all!)
+                                                         (get-versioned-file-content hash path)))}
                                       hash]
                                      title]
                                     [:div.opacity-50 time]]))] :success false))))))
