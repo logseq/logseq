@@ -12,12 +12,20 @@
                           :options [:default :md :sm :xs :lg :icon]}
                :variant  {:control :select
                           :options [:default :solid :destructive :outline :secondary :ghost :link]}
-               :disabled {:control :boolean}}
+               :disabled {:control :boolean}
+               :children {:description "`string` | `ReactElement`"
+                          :control     {:hideNoControlsWarning true}}}
    :args      {:children "Button"
                :disabled false
                :variant  :default}})
 
 (defstory Primary
+  {:args
+   {:variant  :default
+    :size     :sm
+    :children "Primary button"}})
+
+(defstory Secondary
   {:args
    {:variant :secondary
     :children
@@ -27,7 +35,7 @@
        "Get Logseq Desktop"
        (ui/tabler-icon "arrow-right")])}})
 
-(defstory LoadingIcon
+(defstory LoadingButton
   {:args
    {:children
     (fn []
