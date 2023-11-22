@@ -4,9 +4,12 @@
             [logseq.shui.toaster.core :as toaster]))
 
 (def button (util/lsui-wrap "Button" {:static? false}))
-(def slider (util/lsui-wrap "Slider"))
 (def tabler-icon icon-v2/root)
 
+(def alert (util/lsui-wrap "Alert"))
+(def alert-title (util/lsui-wrap "AlertTitle"))
+(def alert-description (util/lsui-wrap "AlertDescription"))
+(def slider (util/lsui-wrap "Slider"))
 (def dropdown-menu (util/lsui-wrap "DropdownMenu"))
 (def dropdown-menu-content (util/lsui-wrap "DropdownMenuContent"))
 (def dropdown-menu-group (util/lsui-wrap "DropdownMenuGroup"))

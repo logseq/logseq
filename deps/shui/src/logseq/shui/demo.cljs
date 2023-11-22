@@ -4,9 +4,21 @@
 
 (rum/defc page []
   [:div.p-10
-   [:h1.text-2xl.text-red-500 "hello Logseq UI"]
-   [:p.pt-5.charlie-radix-color
-    "radix colors for Logseq"]
+   [:h1.text-3xl.pb-8.font-bold "Logseq UI"]
+
+   (ui/alert
+     {:class "text-orange-rx-09 border-orange-rx-07-alpha mb-4"}
+     (ui/tabler-icon "brand-soundcloud")
+     (ui/alert-title "Title is SoundCloud")
+     (ui/alert-description
+       "content: radix colors for Logseq"))
+
+   (ui/alert
+     (ui/tabler-icon "brand-github")
+     (ui/alert-title "GitHub")
+     (ui/alert-description
+       "content: radix colors for Logseq"))
+
    [:hr.my-10]
 
    (ui/button
@@ -16,12 +28,8 @@
                    (nth [:success :error :info :warning] (rand-int 3))
                    {:title    (if (odd? (js/Date.now)) "中国的历史" "")
                     :duration 2000})}
-
-     "abc"
-
+     "Open random toast"
      (ui/tabler-icon "arrow-right"))
-
-   [:div.ls-card.content "hello world"]
 
    [:hr.my-10]
 

@@ -1,3 +1,7 @@
+html * {
+  border-color: hsl(var(--border));
+}
+
 html[data-theme=light] {
   &[data-color=logseq] {
     --accent: 200 97% 37%;

@@ -134,4 +134,14 @@
       }
     }
   }
+
+  .ui__alert {
+    > .ui__icon {
+      @apply absolute top-4 left-4;
+
+      & ~ * {
+        @apply pl-7;
+      }
+    }
+  }
 }

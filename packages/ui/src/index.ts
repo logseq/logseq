@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Toaster } from '@/components/ui/toaster'
 import { genId, useToast } from '@/components/ui/use-toast'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 declare global {
   var LSUI: any
@@ -43,10 +44,12 @@ const shadui = {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   Toaster, useToast,
-  genToastId: genId
+  genToastId: genId,
+  Alert, AlertTitle,
+  AlertDescription
 }
 
-function setupGlobals() {
+function setupGlobals () {
   console.debug('[ui] setup logseq ui globals')
 
   window.LSUI = shadui
