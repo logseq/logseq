@@ -9,6 +9,11 @@ html[data-theme=light] {
 }
 
 html[data-theme=dark] {
+  --primary-foreground: 255 92% 100%;
+  --background: 0 0% 11%;
+  --foreground: 0 0% 95%;
+  --border: 0 0% 16%;
+
   &[data-color=logseq] {
     --background: 192 100% 11%;
     --foreground: 0 0% 95%;

@@ -1,3 +1,4 @@
+import './radix.css'
 import './theme.css'
 import '../src/index.css'
 import { useEffect } from 'react'

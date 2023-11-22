@@ -19,13 +19,14 @@
    (str "var(--rx-" (name color) "-" (cond-> value keyword? name) (if alpha? "-alpha" "") ")")))
 
 (defn accent-base-hsl
-  [color]
-  (some-> radix-colors
-    (aget color)
-    (aget (str color "9"))
-    (string/replace "hsl(" "")
-    (string/replace ")" "")
-    (string/replace "," "")))
+  ([color] (accent-base-hsl color "9"))
+  ([color level]
+   (some-> radix-colors
+     (aget color)
+     (aget (str color level))
+     (string/replace "hsl(" "")
+     (string/replace ")" "")
+     (string/replace "," ""))))
 
 (defn set-radix [color]
   (let [style-tag (or (js/document.querySelector "style#color-variables")

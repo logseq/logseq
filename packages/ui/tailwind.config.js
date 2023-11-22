@@ -1,3 +1,26 @@
+const radix = require('@radix-ui/colors')
+
+function mapRadixColorToTailwind(color) {
+  const radixColor = radix[color]
+  if (!radixColor) throw new Error(`[radix color] not exist for ${color}`)
+  const twSteps = [10, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]
+  const rxSteps = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  const colors = {}
+
+  twSteps.forEach((twStep, index) => {
+    const rxStep = rxSteps[index]
+    // base color
+    colors[twStep] = radixColor[`${color}${rxStep}`]
+    // theme vars color
+    const rxStepName = `${(rxStep < 10) ? '0' : ''}${rxStep}`
+    const rxVarName = `--rx-${color}-${rxStepName}`
+    colors[`rx-${rxStepName}`] = `var(${rxVarName})`
+    colors[`rx-${rxStepName}-alpha`] = `var(${rxVarName}-alpha)`
+  })
+
+  return colors
+}
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: ['class'],
@@ -53,6 +76,36 @@ module.exports = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+
+        red: mapRadixColorToTailwind('red'),
+        pink: mapRadixColorToTailwind('pink'),
+        orange: mapRadixColorToTailwind('orange'),
+        yellow: mapRadixColorToTailwind('yellow'),
+        green: mapRadixColorToTailwind('green'),
+        blue: mapRadixColorToTailwind('blue'),
+        indigo: mapRadixColorToTailwind('indigo'),
+        purple: mapRadixColorToTailwind('purple'),
+
+        rose: mapRadixColorToTailwind('red'),
+        amber: mapRadixColorToTailwind('amber'),
+        bronze: mapRadixColorToTailwind('bronze'),
+        brown: mapRadixColorToTailwind('brown'),
+        crimson: mapRadixColorToTailwind('crimson'),
+        cyan: mapRadixColorToTailwind('cyan'),
+        gold: mapRadixColorToTailwind('gold'),
+        grass: mapRadixColorToTailwind('grass'),
+        lime: mapRadixColorToTailwind('lime'),
+        mauve: mapRadixColorToTailwind('mauve'),
+        mint: mapRadixColorToTailwind('mint'),
+        olive: mapRadixColorToTailwind('olive'),
+        plum: mapRadixColorToTailwind('plum'),
+        sage: mapRadixColorToTailwind('sage'),
+        sand: mapRadixColorToTailwind('sand'),
+        sky: mapRadixColorToTailwind('sky'),
+        slate: mapRadixColorToTailwind('slate'),
+        teal: mapRadixColorToTailwind('teal'),
+        tomato: mapRadixColorToTailwind('tomato'),
+        violet: mapRadixColorToTailwind('violet')
       },
       borderRadius: {
         lg: 'var(--radius)',

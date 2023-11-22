@@ -107,6 +107,30 @@
     &-viewport {
       > li {
         border-color: hsl(var(--border));
+
+        &.has-variant-icon {
+          @apply relative border pl-12 py-5;
+
+          .variant-icon {
+            @apply absolute left-[13px] top-[18px] scale-90;
+          }
+
+          &.info .variant-icon {
+            @apply text-blue-rx-09-alpha;
+          }
+
+          &.success .variant-icon {
+            @apply text-green-rx-09-alpha;
+          }
+
+          &.warning .variant-icon {
+            @apply text-yellow-rx-10-alpha;
+          }
+
+          &.error .variant-icon {
+            @apply text-red-rx-10-alpha;
+          }
+        }
       }
     }
   }
