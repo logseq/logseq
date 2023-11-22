@@ -7,7 +7,8 @@
             [frontend.state :as state]
             [frontend.config :as config]
             [frontend.util :as util]
-            ["fuse.js" :as fuse]))
+            ["fuse.js" :as fuse]
+            [datascript.impl.entity :as e]))
 
 ;; Notice: When breaking changes happen, bump version in src/electron/electron/search.cljs
 
@@ -61,7 +62,7 @@
                      (empty? properties))
         (let [m {:id (:db/id block)
                  :uuid (str uuid)
-                 :page page
+                 :page (if (or (map? page) (e/entity? page)) (:db/id page) page)
                  :content (sanitize content)}
               m' (cond-> m
                    (and (config/db-based-graph? repo) (seq properties))
