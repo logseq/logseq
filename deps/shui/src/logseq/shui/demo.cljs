@@ -9,6 +9,23 @@
     "radix colors for Logseq"]
    [:hr.my-10]
 
+   (ui/button
+     {:size     :sm :variant :default
+      :on-click #(ui/toast!
+                   (fn [{:keys [dismiss!]}]
+                     [:<>
+                      [:b.text-2xl "abc"]
+                      (ui/button {:on-click (fn [] (ui/toast-dismiss!))} "close")])
+                   :default
+                   {:action
+                    [:b.text-4xl.text-red-500
+                     {:on-click (fn [] (ui/toast-dismiss!))}
+                     "close me"]})}
+
+     "abc"
+
+     (ui/tabler-icon "arrow-right"))
+
    [:div.ls-card.content "hello world"]
 
 
