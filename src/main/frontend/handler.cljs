@@ -22,6 +22,7 @@
             [frontend.extensions.srs :as srs]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.events :as events]
+            [frontend.handler.file-based.events]
             [frontend.handler.file :as file-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
