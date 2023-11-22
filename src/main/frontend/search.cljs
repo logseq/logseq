@@ -281,7 +281,7 @@
     (when (or (seq blocks-to-add) (seq blocks-to-remove))
       (transact-blocks! repo
                         {:blocks-to-remove-set (set (map :db/id blocks-to-remove))
-                         :blocks-to-add        (map search-db/block->index blocks-to-add)}))))
+                         :blocks-to-add        (remove nil? (map search-db/block->index blocks-to-add))}))))
 
 (defn rebuild-indices!
   ([]
