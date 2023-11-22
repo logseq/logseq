@@ -676,7 +676,9 @@ independent of format as format specific heading characters are stripped"
         (when (string/includes? (ex-message e) "Lookup ref attribute should be marked as :db/unique: [:block/name")
           ;; old db schema
           (state/pub-event! [:notification/show
-                             {:content "It seems that the current graph is outdated, please re-index it."
+                             {:content (if (config/db-based-graph? repo)
+                                         "Unexpected error occurred."
+                                         "It seems that the current graph is outdated, please re-index it.")
                               :status :error}]))))))
 
 (defn page-empty-or-dummy?

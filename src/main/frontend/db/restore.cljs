@@ -1,11 +1,10 @@
 (ns frontend.db.restore
   "Fns for DB restore(from text or sqlite)"
-  (:require [clojure.string :as string]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.conn :as db-conn]
-            [frontend.db.migrate :as db-migrate]
+            [frontend.db.file-based.migrate :as db-migrate]
             [frontend.db.persist :as db-persist]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
@@ -150,7 +149,7 @@
 (defn restore-graph!
   "Restore db from serialized db cache"
   [repo]
-  (if (string/starts-with? repo config/db-version-prefix)
+  (if (config/db-based-graph? repo)
     (restore-graph-from-sqlite! repo)
     (p/let [db-name (db-conn/datascript-db repo)
             stored (db-persist/get-serialized-graph db-name)]
