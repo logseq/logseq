@@ -35,7 +35,10 @@
      {:route-match                           nil
       :today                                 nil
       :system/events                         (async/chan 1000)
-      :file/writes                           (async/chan 10000)
+      :file/writes                           (async/chan 10000
+                                                         (util/dedupe-by
+                                                          (fn [[repo page-id outliner-op _epoch]]
+                                                            [repo page-id outliner-op])))
       :file/unlinked-dirs                    #{}
       :reactive/custom-queries               (async/chan 1000)
       :notification/show?                    false
@@ -44,7 +47,7 @@
       :nfs/user-granted?                     {}
       :nfs/refreshing?                       nil
       :instrument/disabled?                  (storage/get "instrument-disabled")
-      ;; TODO: how to detect the network reliably?
+     ;; TODO: how to detect the network reliably?
       :network/online?         true
       :indexeddb/support?      true
       :me                      nil

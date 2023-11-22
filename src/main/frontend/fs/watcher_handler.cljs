@@ -8,9 +8,9 @@
             [frontend.db.model :as model]
             [frontend.fs :as fs]
             [logseq.common.path :as path]
-            [frontend.handler.property :as property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
@@ -29,14 +29,17 @@
   "For every referred block in the content, fix their block ids in files if missing."
   [content]
   (when (string? content)
-    (doseq [block-id (block-ref/get-all-block-ref-ids content)]
-      (when-let [block (try
-                         (model/get-block-by-uuid block-id)
-                         (catch :default _e
-                           nil))]
-        (let [id-property (:id (:block/properties block))]
-          (when-not (= (str id-property) (str block-id))
-            (property-handler/file-persist-block-id! (state/get-current-repo) block-id)))))))
+    (let [missing-blocks (->> (block-ref/get-all-block-ref-ids content)
+                              (distinct)
+                              (keep model/get-block-by-uuid)
+                              (filter (fn [block]
+                                        (not= (str (:id (:block/properties block)))
+                                              (str (:block/uuid block))))))]
+      (when (seq missing-blocks)
+        (file-property-handler/batch-set-block-property-aux!
+         (mapv
+          (fn [b] [(:block/uuid b) :id (str (:block/uuid b))])
+          missing-blocks))))))
 
 (defn- handle-add-and-change!
   [repo path content db-content mtime backup?]
@@ -256,4 +259,3 @@
                                                                :clear? true}]))))
             (p/catch (fn [error]
                        (js/console.dir error))))))))
-
