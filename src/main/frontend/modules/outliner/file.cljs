@@ -56,7 +56,7 @@
                    (not (state/input-idle? repo {:diff 3000}))) ;; long page
               ;; when this whiteboard page is just being updated
               (and whiteboard? (not (state/whiteboard-idle? repo))))
-        (async/put! (state/get-file-write-chan) [repo page-db-id outliner-op])
+        (async/put! (state/get-file-write-chan) [repo page-db-id outliner-op (tc/to-long (t/now))])
         (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
               blocks (model/get-page-blocks-no-cache repo (:block/name page-block) {:pull-keys pull-keys})
               blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)]
@@ -102,7 +102,7 @@
   []
   (util/<ratelimit (state/get-file-write-chan) batch-write-interval
                  :filter-fn
-                 (fn [[repo _ time]]
+                 (fn [[repo _ _ time]]
                    (swap! *writes-finished? assoc repo {:time time
                                                         :value false})
                    true)
