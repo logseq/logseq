@@ -79,7 +79,7 @@
 
 (defmulti handle first)
 
-(defn- file-sync-restart! []
+(defn file-sync-restart! []
   (async/go (async/<! (p->c (persist-var/load-vars)))
             (async/<! (sync/<sync-stop))
             (some-> (sync/<sync-start) async/<!)))
@@ -253,20 +253,6 @@
 
 (defmethod handle :graph/migrated [[_ _repo]]
   (js/alert "Graph migrated."))
-
-(defmethod handle :graph/save [_]
-  (repo-handler/persist-db! (state/get-current-repo)
-                            {:before     #(notification/show!
-                                           (ui/loading (t :graph/save))
-                                           :warning)
-                             :on-success #(do
-                                            (notification/clear-all!)
-                                            (notification/show!
-                                             (t :graph/save-success)
-                                             :success))
-                             :on-error   #(notification/show!
-                                           (t :graph/save-error)
-                                           :error)}))
 
 (defn get-local-repo
   []
@@ -675,15 +661,6 @@
                                    r))
                             (state/get-repos)))))))
 
-(defmethod handle :graph/re-index [[_]]
-  ;; Ensure the graph only has ONE window instance
-  (async/go
-    (async/<! (sync/<sync-stop))
-    (repo-handler/re-index!
-     nfs-handler/rebuild-index!
-     #(do (page-handler/create-today-journal!)
-          (file-sync-restart!)))))
-
 (defmethod handle :graph/ask-for-re-index [[_ *multiple-windows? ui]]
   ;; *multiple-windows? - if the graph is opened in multiple windows, boolean atom
   ;; ui - custom message to show on asking for re-index
@@ -699,12 +676,12 @@
        (when (not (nil? ui)) ui)
        [:p (t :re-index-discard-unsaved-changes-warning)]
        (ui/button
-         (t :yes)
-         :autoFocus "on"
-         :class "ui__modal-enter"
-         :on-click (fn []
-                     (state/close-modal!)
-                     (state/pub-event! [:graph/re-index])))]])))
+        (t :yes)
+        :autoFocus "on"
+        :class "ui__modal-enter"
+        :on-click (fn []
+                    (state/close-modal!)
+                    (state/pub-event! [:graph/re-index])))]])))
 
 (defmethod handle :modal/remote-encryption-input-pw-dialog [[_ repo-url remote-graph-info type opts]]
   (state/set-modal!

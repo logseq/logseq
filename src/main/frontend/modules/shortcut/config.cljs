@@ -7,6 +7,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.history :as history]
+            [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.journal :as journal-handler]
@@ -47,6 +48,8 @@
 ;;  * :fn - Fn or a qualified keyword that represents a fn
 ;;  * :inactive - Optional boolean to disable a shortcut for certain conditions
 ;;    e.g. a given platform or feature condition
+;;  * :file-graph? - Optional boolean to identify a command to only be run in file graphs
+;;    and warned gracefully in db graphs
 (def ^:large-vars/data-var all-built-in-keyboard-shortcuts
   ;; BUG: Actually, "enter" is registered by mixin behind a "when inputing" guard
   ;; So this setting item does not cover all cases.
@@ -425,11 +428,13 @@
                                              :binding false}
 
    :graph/save                              {:fn      #(state/pub-event! [:graph/save])
+                                             :file-graph? true
                                              :binding []}
 
    :graph/re-index                          {:fn      (fn []
                                                         (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
                                                           (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
+                                             :file-graph? true
                                              :binding []}
 
    :command/run                             {:binding  "mod+shift+1"
@@ -494,14 +499,17 @@
 
    :editor/open-file-in-default-app         {:binding  "mod+d mod+a"
                                              :inactive (not (util/electron?))
+                                             :file-graph? true
                                              :fn       page-handler/open-file-in-default-app}
 
    :editor/open-file-in-directory           {:binding  "mod+d mod+i"
                                              :inactive (not (util/electron?))
+                                             :file-graph? true
                                              :fn       page-handler/open-file-in-directory}
 
    :editor/copy-current-file                {:binding  false
                                              :inactive (not (util/electron?))
+                                             :file-graph? true
                                              :fn       page-handler/copy-current-file}
 
    :editor/copy-page-url                    {:binding  []
@@ -540,6 +548,7 @@
 
    :git/commit                              {:binding  "mod+g c"
                                              :inactive (not (util/electron?))
+                                             :file-graph? true
                                              :fn       commit/show-commit-modal!}
 
    :dev/show-block-data                     {:binding  []
@@ -575,6 +584,15 @@
       (resolved-fn)
       (throw (ex-info (str "Unable to resolve " keyword-fn " to a fn") {})))))
 
+(defn- wrap-fn-with-file-graph-only-warning
+  "Wraps file graph only commands so they are only run in file graphs and warned
+   when in DB graphs"
+  [f]
+  (fn []
+    (if (config/db-based-graph? (state/get-current-repo))
+      (notification/show! "This command is only for file graphs." :warning true nil 3000)
+      (f))))
+
 (defn build-category-map [ks]
   (->> (if (sequential? ks)
          ks (let [{:keys [ns includes excludes]} ks]
@@ -591,6 +609,10 @@
        (map (fn [[k v]]
               [k (if (keyword? (:fn v))
                    (assoc v :fn (resolve-fn (:fn v)))
+                   v)]))
+       (map (fn [[k v]]
+              [k (if (:file-graph? v)
+                   (update v :fn wrap-fn-with-file-graph-only-warning)
                    v)]))
        (into {})))
 

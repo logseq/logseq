@@ -25,7 +25,7 @@
   protocol/Engine
 
   (query [_this q opts]
-    (println "D:Search > Query blocks:" repo q opts)
+    ;; (println "D:Search > Query blocks:" repo q opts)
     (let [[e1 e2] (get-registered-engines repo)]
       (doseq [e e2]
         (protocol/query e q opts))
