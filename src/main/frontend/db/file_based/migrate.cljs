@@ -1,5 +1,5 @@
-(ns frontend.db.migrate
-  "Do DB migration, in a version-by-version style.
+(ns frontend.db.file-based.migrate
+  "Do DB migration for file graphs, in a version-by-version style.
 
    `:schema/version` is not touched"
   (:require [clojure.string :as string]

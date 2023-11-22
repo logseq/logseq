@@ -1,5 +1,6 @@
 (ns frontend.components.reference
   (:require [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.components.block :as block]
             [frontend.components.content :as content]
             [frontend.components.editor :as editor]
@@ -252,7 +253,9 @@
 (rum/defc references
   [page-name]
   (ui/catch-error
-   (ui/component-error "Linked References: Unexpected error. Please re-index your graph first.")
+   (ui/component-error (if (config/db-based-graph? (state/get-current-repo))
+                         "Linked References: Unexpected error."
+                         "Linked References: Unexpected error. Please re-index your graph first."))
    (ui/lazy-visible
     (fn []
       (references* page-name))

@@ -661,28 +661,6 @@
                                    r))
                             (state/get-repos)))))))
 
-(defmethod handle :graph/ask-for-re-index [[_ *multiple-windows? ui]]
-  ;; *multiple-windows? - if the graph is opened in multiple windows, boolean atom
-  ;; ui - custom message to show on asking for re-index
-  (if (and (util/atom? *multiple-windows?) @*multiple-windows?)
-    (handle
-     [:modal/show
-      [:div
-       (when (not (nil? ui)) ui)
-       [:p (t :re-index-multiple-windows-warning)]]])
-    (handle
-     [:modal/show
-      [:div {:style {:max-width 700}}
-       (when (not (nil? ui)) ui)
-       [:p (t :re-index-discard-unsaved-changes-warning)]
-       (ui/button
-        (t :yes)
-        :autoFocus "on"
-        :class "ui__modal-enter"
-        :on-click (fn []
-                    (state/close-modal!)
-                    (state/pub-event! [:graph/re-index])))]])))
-
 (defmethod handle :modal/remote-encryption-input-pw-dialog [[_ repo-url remote-graph-info type opts]]
   (state/set-modal!
    (encryption/input-password
