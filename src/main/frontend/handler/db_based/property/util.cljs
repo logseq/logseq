@@ -42,13 +42,17 @@
   [properties]
   (->> properties
        (map (fn [[k v]]
-              (let [prop-ent (db-utils/entity [:block/uuid k])]
+              (let [prop-ent (db-utils/entity [:block/uuid k])
+                    readable-property-val
+                    #(if (seq (get-in prop-ent [:block/schema :values])) ; closed values
+                       (when-let [block (db-utils/entity [:block/uuid %])]
+                         (or (:block/original-name block)
+                             (get-in block [:block/schema :value])))
+                       %)]
                 [(-> prop-ent :block/name keyword)
-                 (if (seq (get-in prop-ent [:block/schema :values])) ; closed values
-                   (when-let [block (db-utils/entity [:block/uuid v])]
-                     (or (:block/original-name block)
-                         (get-in block [:block/schema :value])))
-                   v)])))
+                (if (set? v)
+                  (set (map readable-property-val v))
+                  (readable-property-val v))])))
        (into {})))
 
 (defn property-value-when-closed
