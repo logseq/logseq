@@ -31,7 +31,10 @@
      :today                                 nil
      :system/events                         (async/chan 1000)
      :db/batch-txs                          (async/chan 1000)
-     :file/writes                           (async/chan 10000)
+     :file/writes                           (async/chan 10000
+                                                        (util/dedupe-by
+                                                         (fn [[repo page-id outliner-op _epoch]]
+                                                           [repo page-id outliner-op])))
      :file/unlinked-dirs                    #{}
      :reactive/custom-queries               (async/chan 1000)
      :notification/show?                    false
