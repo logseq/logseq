@@ -51,11 +51,13 @@
       (let [fpath (path/url-to-path dir)]
         (-> (js/window.pfs.mkdir fpath)
             (p/catch (fn [error] (println "(memory-fs)Mkdir error: " error)))))))
-  (mkdir-recur! [_this dir]
+  (mkdir-recur! [this dir]
+    ;; FIXME: replace this with a recurisve implementation
     (when js/window.pfs
-      (let [fpath (path/url-to-path dir)]
-        (-> (js/window.pfs.mkdir fpath #js {:recursive true})
-            (p/catch (fn [error] (println "(memory-fs)Mkdir-recur error: " error)))))))
+      (p/let [dir' (path/url-to-path dir)
+              parent (path/parent dir')
+              _ (when parent (<ensure-dir! parent))]
+        (protocol/mkdir! this dir'))))
 
   (readdir [_this dir]
     (when js/window.pfs
