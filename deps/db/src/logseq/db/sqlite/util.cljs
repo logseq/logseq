@@ -20,6 +20,7 @@
   |     4 | db schema                                      |
   |     5 | unknown type                                   |
   |     6 | property block                                 |
+  |     7 | macro                                          |
   "
   [block]
   (cond
@@ -70,7 +71,7 @@
          (transit/write t-writer))))
 
 (defn block-with-timestamps
-  "Copy of outliner-core/block-with-timestamps. Too basic to couple this to main app"
+  "Adds updated-at timestamp and created-at if it doesn't exist"
   [block]
   (let [updated-at (time-ms)
         block (cond->

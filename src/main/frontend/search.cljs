@@ -178,7 +178,9 @@
 (defn get-all-properties
   []
   (let [hidden-props (if (config/db-based-graph? (state/get-current-repo))
-                       (set (map name db-property/hidden-built-in-properties))
+                       (set (map #(or (get-in db-property/built-in-properties [% :original-name])
+                                      (name %))
+                                 db-property/hidden-built-in-properties))
                        (set (map name (property-util/hidden-properties))))]
     (remove hidden-props (db-model/get-all-properties))))
 
