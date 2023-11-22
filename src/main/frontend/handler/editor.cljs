@@ -1454,8 +1454,8 @@
 
         (config/db-based-graph? (state/get-current-repo)) ; memory fs
         (p/let [binary (fs/read-file repo-dir path {})
-                blob (js/Blob. (array binary) (clj->js {:type "image"}))]
-          (when blob (js/URL.createObjectURL blob)))
+                 blob (js/Blob. (array binary) (clj->js {:type "image"}))]
+           (when blob (js/URL.createObjectURL blob)))
 
         :else ;; nfs
         (let [handle-path (str "handle/" full-path)
