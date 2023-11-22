@@ -1550,3 +1550,18 @@ Arg *stop: atom, reset to true to stop the loop"
            (not (string/includes? s " "))
            (string/starts-with? s "#[[")
            (string/ends-with? s "]]")))))
+
+(defn dedupe-by
+  ([keyfn]
+   (fn [rf]
+     (let [pa (volatile! ::none)]
+       (fn
+         ([] (rf))
+         ([result] (rf result))
+         ([result input]
+          (let [prior @pa
+                key (keyfn input)]
+            (vreset! pa key)
+            (if (= prior key)
+              result
+              (rf result input)))))))))
