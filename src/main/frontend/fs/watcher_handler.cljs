@@ -29,14 +29,17 @@
   "For every referred block in the content, fix their block ids in files if missing."
   [content]
   (when (string? content)
-    (doseq [block-id (block-ref/get-all-block-ref-ids content)]
-      (when-let [block (try
-                         (model/get-block-by-uuid block-id)
-                         (catch :default _e
-                           nil))]
-        (let [id-property (:id (:block/properties block))]
-          (when-not (= (str id-property) (str block-id))
-            (editor-property/set-block-property! block-id "id" block-id)))))))
+    (let [missing-blocks (->> (block-ref/get-all-block-ref-ids content)
+                              (distinct)
+                              (keep model/get-block-by-uuid)
+                              (filter (fn [block]
+                                        (not= (str (:id (:block/properties block)))
+                                              (str (:block/uuid block))))))]
+      (when (seq missing-blocks)
+        (editor-property/batch-set-block-property!
+         (mapv
+          (fn [b] [(:block/uuid b) :id (str (:block/uuid b))])
+          missing-blocks))))))
 
 (defn- handle-add-and-change!
   [repo path content db-content mtime backup?]
@@ -256,4 +259,3 @@
                                                                :clear? true}]))))
             (p/catch (fn [error]
                        (js/console.dir error))))))))
-
