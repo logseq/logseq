@@ -14,7 +14,6 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [promesa.core :as p]
-            [clojure.set :as set]
             [datascript.core :as d]
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.config :as config]
@@ -217,49 +216,28 @@
            (let [result (fuzzy-search result q :limit limit)]
              (vec result))))))))
 
-(defn- get-pages-from-datoms-impl
-  [pages]
-  (let [pages-result (db/pull-many '[:db/id :block/name :block/original-name] (set (map :e pages)))
-        pages-to-add-set (->> (filter :added pages)
-                              (map :e)
-                              (set))
-        pages-to-add (->> (filter (fn [page]
-                                    (contains? pages-to-add-set (:db/id page))) pages-result)
-                          (map (fn [p] (or (:block/original-name p)
-                                           (:block/name p))))
-                          (remove string/blank?)
-                          (map search-db/original-page-name->index))
-        pages-to-remove-set (->> (remove :added pages)
-                                 (map :v)
-                                 set)
-        pages-to-remove-id-set (->> (remove :added pages)
-                                    (map :e)
-                                    set)]
-    {:pages-to-add        pages-to-add
-     :pages-to-remove-set pages-to-remove-set
-     :pages-to-add-id-set pages-to-add-set
-     :pages-to-remove-id-set pages-to-remove-id-set}))
-
 (defn- get-blocks-from-datoms-impl
-  [blocks]
-  (when (seq blocks)
-    (let [blocks-result (->> (db/pull-many '[:db/id :block/uuid :block/format :block/content :block/page :block/properties] (set (map :e blocks)))
-                             (map (fn [b] (assoc b :block/page (get-in b [:block/page :db/id])))))
-          blocks-to-add-set (->> (filter :added blocks)
+  [{:keys [db-after db-before]} datoms]
+  (when (seq datoms)
+    (let [blocks-to-add-set (->> (filter :added datoms)
                                  (map :e)
                                  (set))
-          blocks-to-add (->> (filter (fn [block]
-                                       (contains? blocks-to-add-set (:db/id block)))
-                                     blocks-result)
-                             (map search-db/block->index)
-                             (remove nil?))
-          added (set (map :id blocks-to-add))
-          blocks-to-remove-set (->> (remove :added blocks)
+          blocks-to-remove-set (->> (remove :added datoms)
+                                    (filter #(= :block/uuid (:a %)))
                                     (map :e)
-                                    (remove added)
-                                    (set))]
-      {:blocks-to-remove-set blocks-to-remove-set
-       :blocks-to-add        blocks-to-add})))
+                                    (set))
+          blocks-to-add-set' (if (and (config/db-based-graph? (state/get-current-repo)) (seq blocks-to-add-set))
+                               (->> blocks-to-add-set
+                                    (mapcat (fn [id] (map :db/id (:block/_refs (db/entity id)))))
+                                    (concat blocks-to-add-set)
+                                    set)
+                               blocks-to-add-set)]
+      {:blocks-to-remove     (->>
+                              (map #(d/entity db-before %) blocks-to-remove-set)
+                              (remove nil?))
+       :blocks-to-add        (->>
+                              (map #(d/entity db-after %) blocks-to-add-set')
+                              (remove nil?))})))
 
 (defn- get-direct-blocks-and-pages
   [tx-report]
@@ -267,90 +245,43 @@
         datoms (filter
                 (fn [datom]
                   ;; Capture any direct change on page display title, page ref or block content
-                  (contains? #{:block/name :block/original-name :block/content} (:a datom)))
+                  (contains? #{:block/uuid :block/name :block/original-name :block/content :block/properties :block/schema} (:a datom)))
                 data)]
     (when (seq datoms)
-      (let [datoms (group-by :a datoms)
-            blocks (:block/content datoms)
-            pages (concat ;; Duplicated eids are handled in `get-pages-from-datoms-impl`
-                   (:block/name datoms)
-                   (:block/original-name datoms))]
-        (merge (get-blocks-from-datoms-impl blocks)
-               (get-pages-from-datoms-impl pages))))))
-
-(defn- get-indirect-pages
-  "Return the set of pages that will have content updated"
-  [tx-report]
-  (let [data   (:tx-data tx-report)
-        datoms (filter
-                (fn [datom]
-                  (and (:added datom)
-                       (contains? #{:file/content} (:a datom))))
-                data)]
-    (when (seq datoms)
-      (->> datoms
-           (mapv (fn [datom]
-                   (let [tar-db  (:db-after tx-report)]
-                     ;; Reverse query the corresponding page id of the modified `:file/content`)
-                     (when-let [page-id (->> (:e datom)
-                                             (d/pull tar-db '[:block/_file])
-                                             (:block/_file)
-                                             (first)
-                                             (:db/id))]
-                       ;; Fetch page entity according to what page->index requested
-                       (d/pull tar-db '[:db/id :block/uuid
-                                        :block/original-name
-                                        {:block/file [:file/content]}]
-                               page-id)))))
-           (remove nil?)))))
+      (let [{:keys [blocks-to-remove blocks-to-add]} (get-blocks-from-datoms-impl tx-report datoms)]
+        {:pages-to-remove  (filter :block/name blocks-to-remove)
+         :pages-to-add     (filter :block/name blocks-to-add)
+         :blocks-to-remove (remove :block/name blocks-to-remove)
+         :blocks-to-add    (remove :block/name blocks-to-add)}))))
 
 ;; TODO merge with logic in `invoke-hooks` when feature and test is sufficient
 (defn sync-search-indice!
   [repo tx-report]
-  (let [{:keys [pages-to-add pages-to-remove-set pages-to-remove-id-set
-                blocks-to-add blocks-to-remove-set]} (get-direct-blocks-and-pages tx-report) ;; directly modified block & pages
-        updated-pages (if (config/db-based-graph? repo)
-                        ;; FIXME: Find a way to do this for DB graphs
-                        (do
-                          (js/console.log "Fetching pages that will have content updated isn't supported in DB graphs")
-                          [])
-                        (get-indirect-pages tx-report))
+  (let [{:keys [pages-to-add pages-to-remove
+                blocks-to-add blocks-to-remove]} (get-direct-blocks-and-pages tx-report) ;; directly modified block & pages
         pages-to-add' (remove (comp db-model/hidden-page? :name) pages-to-add)]
     ;; update page title indice
-    (when (or (seq pages-to-add') (seq pages-to-remove-set))
+    (when (or (seq pages-to-add') (seq pages-to-remove))
       (swap! search-db/indices update-in [repo :pages]
              (fn [indice]
                (when indice
-                 (doseq [page-name pages-to-remove-set]
+                 (doseq [page-entity pages-to-remove]
                    (.remove indice
                             (fn [page]
-                              (= (util/safe-page-name-sanity-lc page-name)
+                              (= (:block/name page-entity)
                                  (util/safe-page-name-sanity-lc (gobj/get page "original-name"))))))
                  (when (seq pages-to-add')
                    (doseq [page pages-to-add']
-                     (.add indice (bean/->js page)))))
+                     (.add indice (bean/->js (search-db/original-page-name->index
+                                              (or (:block/original-name page)
+                                                  (:block/name page))))))))
                indice)))
 
     ;; update block indice
-    (when (or (seq blocks-to-add) (seq blocks-to-remove-set))
+    (when (or (seq blocks-to-add) (seq blocks-to-remove))
       (transact-blocks! repo
-                        {:blocks-to-remove-set blocks-to-remove-set
-                         :blocks-to-add        blocks-to-add}))
-
-    ;; update page indice
-    (when (or (seq pages-to-remove-id-set) (seq updated-pages)) ;; when move op happens, no :block/content provided
-      (let [indice-pages   (map search-db/page->index updated-pages)
-            invalid-set    (->> (map (fn [updated indiced] ;; get id of pages without valid page index
-                                       (if indiced nil (:db/id updated)))
-                                     updated-pages indice-pages)
-                                (remove nil?)
-                                set)
-            pages-to-add   (->> indice-pages
-                                (remove nil?)
-                                set)
-            pages-to-remove-set (set/union pages-to-remove-id-set invalid-set)]
-        (transact-pages! repo {:pages-to-remove-set pages-to-remove-set
-                               :pages-to-add        pages-to-add})))))
+                        {:blocks-to-remove-set (set (map :db/id blocks-to-remove))
+                         :blocks-to-add        (map search-db/block->index blocks-to-add)}))))
 
 (defn rebuild-indices!
   ([]
