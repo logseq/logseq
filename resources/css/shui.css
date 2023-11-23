@@ -26,7 +26,7 @@ html[data-theme=dark] {
     --primary: 200 97% 37%;
     --primary-foreground: 255 92% 100%;
     --ring: 200 97% 37%;
-    --secondary: 218 50% 80%;
+    --secondary: 203 50% 20%;
     --secondary-foreground: 0 0% 98%;
     --border: 192 100% 16%;
   }
