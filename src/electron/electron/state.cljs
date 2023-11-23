@@ -45,6 +45,10 @@
   []
   (get-in @state [:config :git/disable-auto-commit?] true))
 
+(defn git-commit-on-close-disabled?
+  []
+  (get-in @state [:config :git/disable-commit-on-close?] true))
+
 (defn get-graph-path
   []
   (:graph/current @state))
