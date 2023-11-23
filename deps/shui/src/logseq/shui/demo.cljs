@@ -15,17 +15,29 @@
 
    ;; Button
    (section-item "Button"
-     (let [[loading? set-loading!] (rum/use-state false)]
-       (ui/button
-         {:size     :sm
-          :on-click (fn []
-                      (set-loading! true)
-                      (js/setTimeout #(set-loading! false) 5000))
-          :disabled loading?}
-         (when loading?
-           (ui/tabler-icon "loader2" {:class "animate-spin"}))
-         "Logseq Classic Button"
-         (ui/tabler-icon "arrow-right"))))
+     [:div.flex.flex-row.space-x-2
+      (let [[loading? set-loading!] (rum/use-state false)]
+        (ui/button
+          {:size     :sm
+           :on-click (fn []
+                       (set-loading! true)
+                       (js/setTimeout #(set-loading! false) 5000))
+           :disabled loading?}
+          (when loading?
+            (ui/tabler-icon "loader2" {:class "animate-spin"}))
+          "Logseq Classic Button"
+          (ui/tabler-icon "arrow-right")))
+
+      (ui/button {:variant :outline :size :sm} "Outline")
+      (ui/button {:variant :secondary :size :sm} "Secondary")
+      (ui/button {:variant :destructive :size :sm} "Destructive")
+      (ui/button {:class "primary-green" :size :sm} "Custom (.primary-green)")
+      (ui/button
+        {:variant :icon
+         :size    :sm}
+        [:a.flex.items-center.text-blue-rx-10.hover:text-blue-rx-10-alpha
+         {:href "https://x.com/logseq" :target "_blank"}
+         (ui/tabler-icon "brand-twitter" {:size 15})])])
 
    ;; Toast
    (section-item "Toast"
@@ -66,6 +78,15 @@
                        {:duration 3000 :onDismiss #(js/console.log "===>> dismiss?:" %1)}))}
         (ui/tabler-icon "apps")
         "Toast callback handle")])
+
+   ;; Badge
+   (section-item "Badge"
+     [:div.flex.flex-row.space-x-2
+      (ui/badge "Default")
+      (ui/badge {:variant :outline} "Outline")
+      (ui/badge {:variant :secondary} "Secondary")
+      (ui/badge {:variant :destructive} "Destructive")
+      (ui/badge {:class "primary-yellow"} "Custom (.primary-yellow)")])
 
    ;; Alert
    (section-item "Alert"

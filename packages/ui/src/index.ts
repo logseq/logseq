@@ -20,6 +20,7 @@ import {
 import { Toaster } from '@/components/ui/toaster'
 import { genId, useToast } from '@/components/ui/use-toast'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 
 declare global {
   var LSUI: any
@@ -46,7 +47,8 @@ const shadui = {
   Toaster, useToast,
   genToastId: genId,
   Alert, AlertTitle,
-  AlertDescription
+  AlertDescription,
+  Badge
 }
 
 function setupGlobals () {

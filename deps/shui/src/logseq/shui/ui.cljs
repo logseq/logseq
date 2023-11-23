@@ -10,6 +10,7 @@
 (def alert-title (util/lsui-wrap "AlertTitle"))
 (def alert-description (util/lsui-wrap "AlertDescription"))
 (def slider (util/lsui-wrap "Slider"))
+(def badge (util/lsui-wrap "Badge"))
 (def dropdown-menu (util/lsui-wrap "DropdownMenu"))
 (def dropdown-menu-content (util/lsui-wrap "DropdownMenuContent"))
 (def dropdown-menu-group (util/lsui-wrap "DropdownMenuGroup"))
