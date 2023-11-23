@@ -169,7 +169,8 @@
   (if (is-file-url? base)
     (apply url-join base segments)
     (let [rejoined-path (apply path-join-internal base segments)]
-      (if (string/starts-with? base "//") ;; Win path fix
+      (if (and (not-empty base)
+               (string/starts-with? base "//")) ;; Win path fix
         (str "/" rejoined-path)
         rejoined-path))))
 
