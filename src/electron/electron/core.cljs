@@ -330,7 +330,9 @@
                                                   (.setFullScreen win false))
                                               (.hide win)))
                                         :else
-                                        nil)))))
+                                        nil)))
+                                  (git/commit-current-graph!)
+                                ))
                (.on app "before-quit" (fn [_e]
                                         (reset! win/*quitting? true)))
 

@@ -181,3 +181,10 @@
         (js/setTimeout add-all-and-commit! 5000)
         (let [interval (js/setInterval add-all-and-commit! (* seconds 1000))]
           (state/set-git-commit-interval! interval))))))
+
+(defn commit-current-graph!
+  []
+  (when (not (state/git-auto-commit-disabled?))
+    (when (not (state/git-commit-on-close-disabled?))
+      (state/clear-git-commit-interval!)
+      (js/setTimeout add-all-and-commit! 3000))))

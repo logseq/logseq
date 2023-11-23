@@ -654,6 +654,7 @@
  :settings-page/git-desc-1                          "Para ver el historial de edición de la página, da clic en los tres puntos horizontales en la esquina superior derecha y selecciona \"Ver historial de página\"."
  :settings-page/git-desc-2                          "Para usuarios profesionales, Logseq también es compatible con"
  :settings-page/git-desc-3                          " para control de versiones. Usa Git bajo tu propio riesgo ya que problemas generales con Git no son respaldados por el equipo de Logseq."
+ :settings-page/git-commit-on-close-switcher-label  "Git auto commit"
  :settings-page/git-switcher-label                  "Habilitar Git auto commit"
  :settings-page/git-tip                             "Si tienes Logseq Sync habilitado, puedes ver el historial de edición de la página directamente. Esta sección es solo para conocedores de tecnología."
  :settings-page/home-default-page                   "Establecer página de inicio"
