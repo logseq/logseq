@@ -208,23 +208,23 @@
 ;; The pages search action uses an existing handler
 (defmethod load-results :pages [group state]
   (let [!input (::input state)
-        !results (::results state)]
+        !results (::results state)
+        repo (state/get-current-repo)]
     (swap! !results assoc-in [group :status] :loading)
     (p/let [pages (search/page-search @!input)
             items (map
                    (fn [page]
                      (let [entity (db/entity [:block/name (util/page-name-sanity-lc page)])
                            whiteboard? (= (:block/type entity) "whiteboard")
-                           redirect-page-name (model/get-redirect-page-name page)]
+                           source-page (model/get-alias-source-page repo page)]
                        (hash-map :icon (if whiteboard? "whiteboard" "page")
                                  :icon-theme :gray
-                                 :text (if (= (util/page-name-sanity-lc page)
-                                              (util/page-name-sanity-lc redirect-page-name))
-                                         page
+                                 :text (if source-page
                                          [:div.flex.flex-row.items-center.gap-2
                                           page
                                           [:div.opacity-50.font-normal "alias of"]
-                                          redirect-page-name])
+                                          (:block/original-name source-page)]
+                                         page)
                                  :source-page page)))
                    pages)]
       (swap! !results update group        merge {:status :success :items items}))))
@@ -328,10 +328,11 @@
 (defmethod handle-action :open-page [_ state _event]
   (when-let [page-name (some-> state state->highlighted-item :source-page)]
     (let [redirect-page-name (model/get-redirect-page-name page-name)
-          page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
+          page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])
+          original-name (:block/original-name page)]
       (if (= (:block/type page) "whiteboard")
-        (route-handler/redirect-to-whiteboard! redirect-page-name)
-        (route-handler/redirect-to-page! redirect-page-name)))
+        (route-handler/redirect-to-whiteboard! original-name)
+        (route-handler/redirect-to-page! original-name)))
     (close-unless-alt! state)))
 
 (defmethod handle-action :open-block [_ state _event]
@@ -349,7 +350,7 @@
     (let [redirect-page-name (model/get-redirect-page-name page-name)
           page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
       (when page
-       (editor-handler/open-block-in-sidebar! (:block/uuid page))))
+        (editor-handler/open-block-in-sidebar! (:block/uuid page))))
     (close-unless-alt! state)))
 
 (defmethod handle-action :open-block-right [_ state _event]
