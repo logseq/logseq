@@ -77,7 +77,16 @@
                        :default
                        {:duration 3000 :onDismiss #(js/console.log "===>> dismiss?:" %1)}))}
         (ui/tabler-icon "apps")
-        "Toast callback handle")])
+        "Toast callback handle")
+
+      (ui/button
+        {:on-click #(ui/toast! "A message from SoundCloud..."
+                      {:class    "text-orange-rx-10"
+                       :icon     [:b.pl-1 (ui/tabler-icon "brand-soundcloud" {:size 20})]
+                       :duration 3000})
+         :class    "primary-orange"
+         :size     :md}
+        "Custom icon")])
 
    ;; Badge
    (section-item "Badge"

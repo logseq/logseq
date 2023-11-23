@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/toast'
 import { useToast } from '@/components/ui/use-toast'
 import { AlertCircleIcon, CheckCircle2Icon, InfoIcon, XCircleIcon } from 'lucide-react'
-import { ReactElement } from 'react'
+import { ReactElement, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 export function Toaster() {
@@ -21,6 +21,7 @@ export function Toaster() {
         title,
         description,
         action,
+        icon,
         ...props
       }) {
         const duration = props?.duration
@@ -29,20 +30,20 @@ export function Toaster() {
           props.duration = 1000 * 120
         }
 
-        let variantIcon: ReactElement | null = null
+        let variantIcon: ReactNode | null = icon
 
         switch (props.variant) {
           case 'info':
-            variantIcon = <InfoIcon/>
+            variantIcon = <InfoIcon size={22}/>
             break
           case 'success':
-            variantIcon = <CheckCircle2Icon/>
+            variantIcon = <CheckCircle2Icon size={22}/>
             break
           case 'warning':
-            variantIcon = <AlertCircleIcon/>
+            variantIcon = <AlertCircleIcon size={22}/>
             break
           case 'error':
-            variantIcon = <XCircleIcon/>
+            variantIcon = <XCircleIcon size={22}/>
             break
         }
 

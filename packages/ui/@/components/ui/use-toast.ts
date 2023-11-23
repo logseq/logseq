@@ -14,6 +14,7 @@ type ToasterToast = ToastProps & {
   title?: React.ReactNode
   description?: React.ReactNode
   action?: ToastActionElement
+  icon?: React.ReactNode
   onDismiss?: (id: string) => void
 }
 

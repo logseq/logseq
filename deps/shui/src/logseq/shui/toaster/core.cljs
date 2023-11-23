@@ -54,13 +54,13 @@
   ([content-or-config status opts]
    (if-let [{:keys [toast dismiss]} @*toast]
      (let [config (if (map? content-or-config)
-                    (update-html-props content-or-config)
-                    {:description content-or-config
-                     :variant     status})
-           config (merge config opts)
+                    content-or-config
+                    (-> {:description content-or-config}
+                      (merge (if (map? status) status {:variant status}))))
+           config (update-html-props (merge config opts))
            id (or (:id config) (gen-id))
            config (assoc config :id id)
-           config (interpret-vals config [:title :description :action]
+           config (interpret-vals config [:title :description :action :icon]
                     {:id id :dismiss! #(dismiss id) :update! #(toast! (assoc %1 :id id))})]
        (js->clj (toast (clj->js config))))
      :exception)))
