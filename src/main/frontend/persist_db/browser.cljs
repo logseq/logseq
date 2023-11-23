@@ -9,9 +9,9 @@
             [frontend.persist-db.protocol :as protocol]
             [frontend.config :as config]
             [promesa.core :as p]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.handler.notification :as notification]))
 
-(defonce *worker (atom nil))
 (defonce *sqlite (atom nil))
 (defonce *inited (atom false))
 
@@ -19,13 +19,15 @@
 (when-not (or (util/electron?) config/publishing? util/node-test?)
   (defonce _do_not_reload_worker
     (let [worker (try
-                  (js/Worker. "/static/js/db-worker.js")
-                  (catch js/Error e
-                    (js/console.error "worker error", e)
-                    nil))
-         ^js sqlite (Comlink/wrap worker)]
-     (reset! *worker worker)
-     (reset! *sqlite sqlite))))
+                   (js/Worker. "/static/js/db-worker.js")
+                   (catch js/Error e
+                     (js/console.error "worker error", e)
+                     nil))
+          ^js sqlite (Comlink/wrap worker)]
+      (p/catch (.init sqlite)
+               (fn [error]
+                 (notification/show! [:div (str "init error: " error)] :error))) ;; load wasm
+      (reset! *sqlite sqlite))))
 
 
 (defn- ensure-sqlite-init
