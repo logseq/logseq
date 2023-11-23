@@ -253,6 +253,21 @@
            (ipc/ipc :userAppCfgs :git/disable-auto-commit? enabled?))
          true)]]]))
 
+(rum/defcs switch-git-commit-on-close < rum/reactive
+  [state t]
+  (let [enabled? (state/get-git-commit-on-close-enabled?)]
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+     [:label.block.text-sm.font-medium.leading-5.opacity-70
+      (t :settings-page/git-commit-on-close-switcher-label)]
+     [:div
+      [:div.rounded-md.sm:max-w-xs
+       (ui/toggle
+         enabled?
+         (fn []
+           (state/set-state! [:electron/user-cfgs :git/disable-commit-on-close?] enabled?)
+           (ipc/ipc :userAppCfgs :git/disable-commit-on-close? enabled?))
+         true)]]]))
+
 (rum/defcs git-auto-commit-seconds < rum/reactive
   [state t]
   (let [secs (or (state/sub [:electron/user-cfgs :git/auto-commit-seconds]) 60)]
@@ -267,13 +282,13 @@
                           (let [value (-> (util/evalue event)
                                           util/safe-parse-int)]
                             (if (and (number? value)
-                                     (< 0 value (inc 600)))
+                                     (< 0 value (inc 86400)))
                               (do
                                 (state/set-state! [:electron/user-cfgs :git/auto-commit-seconds] value)
                                 (ipc/ipc :userAppCfgs :git/auto-commit-seconds value))
                               (when-let [elem (gobj/get event "target")]
                                 (notification/show!
-                                 [:div "Invalid value! Must be a number between 1 and 600."]
+                                 [:div "Invalid value! Must be a number between 1 and 86400"]
                                  :warning true)
                                 (gobj/set elem "value" secs)))))}]]]]))
 
@@ -746,6 +761,7 @@
      (t :settings-page/git-desc-3)]]
    [:br]
    (switch-git-auto-commit-row t)
+   (switch-git-commit-on-close t)
    (git-auto-commit-seconds t)
 
    (ui/admonition
