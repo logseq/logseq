@@ -129,12 +129,13 @@
   {:will-unmount (fn [state]
                    (reset! commands/*current-command nil)
                    state)}
-  "Embedded page searching popup"
+  "Page or tag searching popup"
   [state id format]
   (let [action (state/sub :editor/action)
         db? (config/db-based-graph? (state/get-current-repo))
         embed? (and db? (= @commands/*current-command "Page embed"))
         tag? (= action :page-search-hashtag)
+        db-tag? (and db? tag?)
         create-page? (state/sub :editor/create-page?)]
     (when (contains? #{:page-search :page-search-hashtag} action)
       (let [pos (state/get-editor-last-pos)
@@ -150,8 +151,11 @@
                    (when (> (count edit-content) current-pos)
                      (gp-util/safe-subs edit-content pos current-pos))
                    "")
-                matched-pages (when-not (string/blank? q)
-                                (editor-handler/get-matched-pages q))
+                matched-pages (if db-tag?
+                                (editor-handler/get-matched-classes q)
+                                ;; FIXME: display refed pages recentedly or frequencyly used
+                                (when-not (string/blank? q)
+                                  (editor-handler/get-matched-pages q)))
                 matched-pages (cond
                                 (contains? (set (map util/page-name-sanity-lc matched-pages))
                                            (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched
@@ -159,8 +163,11 @@
                                            [(count m) m])
                                          matched-pages)
 
-                                (string/blank? q)
+                                (and (string/blank? q) (not db-tag?))
                                 nil
+
+                                (and (string/blank? q) db-tag?)
+                                matched-pages
 
                                 (empty? matched-pages)
                                 (cons q matched-pages)
@@ -177,7 +184,7 @@
                                           (cons q (rest matched-pages)))
                                     (cons q matched-pages))))]
             [:div
-             (when (and db? tag?
+             (when (and db-tag?
                         ;; Don't display in heading
                         (not (some->> edit-content (re-find #"^\s*#"))))
                [:div.flex.flex-row.items-center.px-4.py-1.text-sm.opacity-70.gap-2
@@ -197,7 +204,10 @@
                                  [:div.flex
                                   (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
                                   [:div.flex.space-x-1
-                                   [:div (when-not (db/page-exists? page-name) (t :new-page))]
+                                   [:div (when-not (db/page-exists? page-name)
+                                           (if db-tag?
+                                             (t :new-class)
+                                             (t :new-page)))]
                                    (search-handler/highlight-exact-query page-name q)]]
                                  :open?           chosen?
                                  :manual?         true
@@ -205,7 +215,9 @@
                                  :tippy-distance  24
                                  :tippy-position  (if sidebar? "left" "right")}
                                 page-name)])
-               :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
+               :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
+                                                                          "Search for a class"
+                                                                          "Search for a page")]
                :class       "black"})]))))))
 
 

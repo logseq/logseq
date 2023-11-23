@@ -483,6 +483,7 @@
 
  :home "Home"
  :new-page "New page:"
+ :new-class "New class:"
  ;; :new-class "New class:"
  :whiteboard "Whiteboard"
  :whiteboards "Whiteboards"
