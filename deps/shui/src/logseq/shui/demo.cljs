@@ -8,6 +8,43 @@
    [:h2.text-xl.font-semibold.py-2.italic.opacity-50 title]
    [:div.py-4 children]])
 
+(rum/defc sample-dropdown-menu-content
+  []
+  (let [icon #(ui/tabler-icon (name %1) {:class "scale-90 pr-1 opacity-80"})]
+    (ui/dropdown-menu-content
+      {:class    "w-56"
+       :on-click (fn [^js e] (some-> (.-target e) (.-innerText)
+                               (#(identity ["You select: " [:b.text-red-700 %1]])) (ui/toast! :info)))}
+      (ui/dropdown-menu-label "My Account")
+      (ui/dropdown-menu-separator)
+      (ui/dropdown-menu-group
+        ;; items
+        (ui/dropdown-menu-item (icon :user) "Profile" (ui/dropdown-menu-shortcut "⌘P"))
+        (ui/dropdown-menu-item (icon :brand-mastercard) [:span "Billing"] (ui/dropdown-menu-shortcut "⌘B"))
+        (ui/dropdown-menu-item (icon :adjustments-alt) [:span "Settings"] (ui/dropdown-menu-shortcut "⌘,"))
+        (ui/dropdown-menu-item (icon :keyboard) [:span "Keyboard shortcuts"]))
+      (ui/dropdown-menu-separator)
+      ;; group
+      (ui/dropdown-menu-group
+        ;; items
+        (ui/dropdown-menu-item (icon :users) "Team")
+        ;; sub menu
+        (ui/dropdown-menu-sub
+          (ui/dropdown-menu-sub-trigger
+            (icon :user-plus) [:span "Invite users"])
+          (ui/dropdown-menu-sub-content
+            (ui/dropdown-menu-item (icon :mail) "Email")
+            (ui/dropdown-menu-item (icon :message) "Message")
+            (ui/dropdown-menu-item (icon :dots-circle-horizontal) "More...")))
+        ;; menu item
+        (ui/dropdown-menu-item (icon :plus) "New Team" (ui/dropdown-menu-shortcut "⌘+T")))
+      (ui/dropdown-menu-separator)
+      (ui/dropdown-menu-item (icon :brand-github) "GitHub")
+      (ui/dropdown-menu-item {:disabled true} (icon :cloud) "Cloud API")
+      (ui/dropdown-menu-separator)
+      (ui/dropdown-menu-item (icon :logout) "Logout" (ui/dropdown-menu-shortcut "⌘+Q"))
+      )))
+
 (rum/defc page []
   [:div.p-10
    [:h1.text-3xl.font-bold "Logseq UI"]
@@ -97,6 +134,15 @@
       (ui/badge {:variant :destructive} "Destructive")
       (ui/badge {:class "primary-yellow"} "Custom (.primary-yellow)")])
 
+   ;; Dropdown
+   (section-item "Dropdown"
+     [:<>
+      (ui/dropdown-menu
+        (ui/dropdown-menu-trigger
+          (ui/button {:variant :outline}
+            (ui/tabler-icon "list") "Open dropdown menu"))
+        (sample-dropdown-menu-content))])
+
    ;; Alert
    (section-item "Alert"
      [:<>
@@ -113,7 +159,8 @@
           "content: radix colors for Logseq"))])
 
    ;; Slider
-   (section-item "Slider"
-     (ui/slider))
+   [:div.grid.grid-cols-2.gap-8
+    (section-item "Slider" (ui/slider))
+    (section-item "Switch" [:input {:type "radio"}])]
 
-   [:hr.my-10]])
+   [:hr.mb-40]])

@@ -117,7 +117,7 @@
           @apply relative border pl-12 py-5;
 
           .variant-icon {
-            @apply absolute left-[13px] top-[20px] flex items-center;
+            @apply absolute left-[14px] top-[19px] flex items-center;
           }
 
           &.info .variant-icon {

@@ -2,10 +2,20 @@ html * {
   border-color: hsl(var(--border));
 }
 
+
+&:not([data-color=logseq]) {
+  .ui__dropdown-menu-content {
+    --accent: var(--rx-gray-04-hsl);
+    --accent-foreground: var(--rx-gray-12-hsl);
+  }
+}
+
+
 html[data-theme=light] {
+  --accent: var(--rx-gray-04-hsl);
+  --accent-foreground: var(--rx-gray-12-hsl);
+
   &[data-color=logseq] {
-    --accent: 200 97% 37%;
-    --accent-foreground: 255 92% 100%;
     --primary: 200 97% 37%;
     --primary-foreground: 255 92% 100%;
     --ring: 200 97% 37%;
@@ -17,18 +27,22 @@ html[data-theme=dark] {
   --background: 0 0% 11%;
   --foreground: 0 0% 95%;
   --border: 0 0% 16%;
+  --muted: 200 10% 11%;
+  --popover: 0 0% 7%;
 
   &[data-color=logseq] {
     --background: 192 100% 11%;
     --foreground: 0 0% 95%;
-    --accent: 200 97% 37%;
+    --accent: 192 80% 10%;
     --accent-foreground: 255 92% 100%;
     --primary: 200 97% 37%;
     --primary-foreground: 255 92% 100%;
     --ring: 200 97% 37%;
     --secondary: 203 50% 20%;
     --secondary-foreground: 0 0% 98%;
+    --muted: 192 100% 13%;
     --border: 192 100% 16%;
+    --popover: 192 100% 11%;
   }
 }
 
