@@ -214,10 +214,17 @@
             items (map
                    (fn [page]
                      (let [entity (db/entity [:block/name (util/page-name-sanity-lc page)])
-                           whiteboard? (= (:block/type entity) "whiteboard")]
+                           whiteboard? (= (:block/type entity) "whiteboard")
+                           redirect-page-name (model/get-redirect-page-name page)]
                        (hash-map :icon (if whiteboard? "whiteboard" "page")
                                  :icon-theme :gray
-                                 :text page
+                                 :text (if (= (util/page-name-sanity-lc page)
+                                              (util/page-name-sanity-lc redirect-page-name))
+                                         page
+                                         [:div.flex.flex-row.items-center.gap-2
+                                          page
+                                          [:div.opacity-50.font-normal "alias of"]
+                                          redirect-page-name])
                                  :source-page page)))
                    pages)]
       (swap! !results update group        merge {:status :success :items items}))))
@@ -320,10 +327,11 @@
 
 (defmethod handle-action :open-page [_ state _event]
   (when-let [page-name (some-> state state->highlighted-item :source-page)]
-    (let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
+    (let [redirect-page-name (model/get-redirect-page-name page-name)
+          page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
       (if (= (:block/type page) "whiteboard")
-        (route-handler/redirect-to-whiteboard! page-name)
-        (route-handler/redirect-to-page! page-name)))
+        (route-handler/redirect-to-whiteboard! redirect-page-name)
+        (route-handler/redirect-to-page! redirect-page-name)))
     (close-unless-alt! state)))
 
 (defmethod handle-action :open-block [_ state _event]
@@ -338,8 +346,10 @@
 
 (defmethod handle-action :open-page-right [_ state _event]
   (when-let [page-name (some-> state state->highlighted-item :source-page)]
-    (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
-      (editor-handler/open-block-in-sidebar! (:block/uuid page)))
+    (let [redirect-page-name (model/get-redirect-page-name page-name)
+          page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
+      (when page
+       (editor-handler/open-block-in-sidebar! (:block/uuid page))))
     (close-unless-alt! state)))
 
 (defmethod handle-action :open-block-right [_ state _event]
