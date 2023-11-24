@@ -119,7 +119,6 @@
   [repo]
   (state/set-state! :graph/loading? true)
   (p/let [start-time (t/now)
-          ; data (ipc/ipc :get-initial-data repo)
           data (persist-db/<fetch-init-data repo)
           {:keys [conn uuid->db-id-map journal-blocks datoms-count]}
           (sqlite-restore/restore-initial-data data {:conn-from-datoms-fn

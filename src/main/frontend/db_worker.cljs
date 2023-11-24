@@ -5,7 +5,7 @@
             [promesa.core :as p]
             [shadow.cljs.modern :refer [defclass]]))
 
-(def *inited (atom false))
+(def *wasm-loaded (atom false))
 
 #_:clj-kondo/ignore
 (defclass SQLiteDB
@@ -16,9 +16,18 @@
    (super))
 
   Object
+  (init
+   [_this]
+   (p/let [wasm-url (js/URL. "/static/js/logseq_sqlite_bg.wasm" (.. js/location -href))
+           _ (wasm-bindgen-init wasm-url)]
+     (prn ::init-ok
+          :has-opfs-support (.has_opfs_support sqlite-db)
+          :sqlite-version (.get_version sqlite-db))
+     (reset! *wasm-loaded true)))
+
   (inited
    [_this]
-   (boolean @*inited))
+   (boolean @*wasm-loaded))
 
   ;; dev-only, close all db connections and db files
   (unsafeDevCloseAll
@@ -39,47 +48,64 @@
 
   (newDB
    [_this repo]
-   (.new_db sqlite-db repo))
+   (p/do!
+    (.ensure_init sqlite-db)
+    (.init_db sqlite-db repo) ;; close another and init this one
+    (.new_db sqlite-db repo)))
+
+  (openDB
+   [_this repo]
+   (p/do!
+    (.ensure_init sqlite-db)
+    ;; close another and init this one
+    (.init_db sqlite-db repo)))
 
   (deleteBlocks
    [_this repo uuids]
    (when (seq uuids)
-     (.delete_blocks sqlite-db repo uuids)))
+     (p/do!
+      (.ensure_init sqlite-db)
+      (.delete_blocks sqlite-db repo uuids))))
 
   (upsertBlocks
    [_this repo blocks]
-   (.upsert_blocks sqlite-db repo blocks))
+   (p/do!
+    (.ensure_init sqlite-db)
+    (.upsert_blocks sqlite-db repo blocks)))
 
   (fetchAllPages
    [_this repo]
-   (.fetch_all_pages sqlite-db repo))
+   (p/do!
+    (.ensure_init sqlite-db)
+    (.fetch_all_pages sqlite-db repo)))
 
   ;; fetch all blocks, return block id and page id
   (fetchAllBlocks
    [_this repo]
-   (.fetch_all_blocks sqlite-db repo))
+   (p/do!
+    (.ensure_init sqlite-db)
+    (.fetch_all_blocks sqlite-db repo)))
 
   (fetchRecentJournals
    [_this repo]
-   (.fetch_recent_journals sqlite-db repo))
+   (p/do!
+    (.ensure_init sqlite-db)
+    (.fetch_recent_journals sqlite-db repo)))
 
   (fetchInitData
    [_this repo]
-   (.fetch_init_data sqlite-db repo))
+   (p/do!
+    (.ensure_init sqlite-db)
+    (.fetch_init_data sqlite-db repo)))
 
   (fetchBlocksExcluding
    [_this repo excluding-uuids]
-   (.fetch_blocks_excluding sqlite-db repo excluding-uuids)))
+   (p/do!
+    (.ensure_init sqlite-db)
+    (.fetch_blocks_excluding sqlite-db repo excluding-uuids))))
 
 (defn init
   "web worker entry"
   []
-  (p/let [current-url (js/URL. "/static/js/logseq_sqlite_bg.wasm" (.. js/location -href))
-          ^js obj (SQLiteDB.) ;; call this
-          _ (Comlink/expose obj) ;; expose as early as possible
-          _ (wasm-bindgen-init current-url) ;; init wasm
-          _ (.init sqlite-db)]
-    (prn ::init-ok
-         :has-opfs-support (.has_opfs_support sqlite-db)
-         :sqlite-version (.get_version sqlite-db))
-    (reset! *inited true)))
+  (let [^js obj (SQLiteDB.)]
+    (Comlink/expose obj)))
