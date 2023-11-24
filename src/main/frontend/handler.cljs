@@ -107,7 +107,7 @@
             (p/finally
               (fn []
                 ;; install after config is restored
-                (shortcut/refresh!)
+                (shortcut/refresh-immediately!)
 
                 (cond
                   (and (not (seq (db/get-files config/local-repo)))

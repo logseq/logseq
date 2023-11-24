@@ -237,7 +237,7 @@
      (listen-all!)
      state)})
 
-(defn refresh-internal!
+(defn refresh-immediately!
   "Always use this function to refresh shortcuts"
   []
   (when-not (:ui/shortcut-handler-refreshing? @state/state)
@@ -251,7 +251,7 @@
     (state/pub-event! [:shortcut-handler-refreshed])
     (state/set-state! :ui/shortcut-handler-refreshing? false)))
 
-(def refresh! (debounce refresh-internal! 1000))
+(def refresh! (debounce refresh-immediately! 1000))
 
 (defn- name-with-meta [e]
   (let [ctrl (.-ctrlKey e)
