@@ -10,6 +10,7 @@
   (<new [_this repo]
     (prn ::new repo)
     (ipc/ipc :db-new repo))
+
   (<list-db [_this]
     (js/console.warn "TODO: list-db for electron is not implemented")
     [])

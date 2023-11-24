@@ -50,7 +50,15 @@
    [_this repo]
    (p/do!
     (.ensure_init sqlite-db)
+    (.init_db sqlite-db repo) ;; close another and init this one
     (.new_db sqlite-db repo)))
+
+  (openDB
+   [_this repo]
+   (p/do!
+    (.ensure_init sqlite-db)
+    ;; close another and init this one
+    (.init_db sqlite-db repo)))
 
   (deleteBlocks
    [_this repo uuids]
