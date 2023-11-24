@@ -8,6 +8,7 @@
             [clojure.set :as set]
             [cognitect.transit :as transit]
             [frontend.db :as db]
+            [frontend.db.react :as react]
             [frontend.db.rtc.const :as rtc-const]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.db.rtc.ws :as ws]
@@ -338,7 +339,6 @@
        affected-blocks-map))
    affected-blocks-map local-unpushed-ops))
 
-
 (defn <apply-remote-data
   [repo data-from-ws]
   (assert (rtc-const/data-from-ws-validator data-from-ws) data-from-ws)
@@ -375,11 +375,18 @@
               update-ops (vals update-ops-map)
               update-page-ops (vals update-page-ops-map)
               remove-page-ops (vals remove-page-ops-map)]
+          (state/set-state! [:rtc/remote-batch-tx-state repo]
+                            {:in-transaction? true
+                             :txs []})
           (util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo update-page-ops))
           (util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo remove-ops))
           (util/profile :apply-remote-move-ops (apply-remote-move-ops repo sorted-move-ops))
           (util/profile :apply-remote-update-ops (apply-remote-update-ops repo update-ops))
           (util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo remove-page-ops))
+          (let [txs (get @state/state [:rtc/remote-batch-tx-state repo :txs])]
+            (util/profile
+             :batch-refresh
+             (react/batch-refresh! repo txs)))
           (op-mem-layer/update-local-tx! repo remote-t))
         :else (throw (ex-info "unreachable" {:remote-t remote-t
                                              :remote-t-before remote-t-before

@@ -1108,7 +1108,7 @@ independent of format as format specific heading characters are stripped"
                                                 (drawer/remove-logbook))))
                               patterns))]
       (->> (react/q repo [:frontend.db.react/page-unlinked-refs page-id]
-             {:query-fn (fn [db _tx-report _result]
+             {:query-fn (fn [db _result]
                           (let [ids
                                 (->> (d/datoms db :aevt :block/content)
                                      (filter filter-fn)
