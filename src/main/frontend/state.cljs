@@ -289,8 +289,8 @@
       :file-sync/graph-state                 {:current-graph-uuid nil}
       ;; graph-uuid -> ...
 
-      :rtc/remote-batch-tx-state             {:in-transaction? false
-                                              :txs []}
+      ;; graph-url -> {:in-transaction? Boolean :txs []}
+      :rtc/remote-batch-tx-state             {}
 
       :user/info                             {:UserGroups (storage/get :user-groups)}
       :encryption/graph-parsing?             false

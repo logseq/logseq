@@ -383,7 +383,7 @@
           (util/profile :apply-remote-move-ops (apply-remote-move-ops repo sorted-move-ops))
           (util/profile :apply-remote-update-ops (apply-remote-update-ops repo update-ops))
           (util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo remove-page-ops))
-          (let [txs (get @state/state [:rtc/remote-batch-tx-state repo :txs])]
+          (let [txs (get-in @state/state [:rtc/remote-batch-tx-state repo :txs])]
             (util/profile
              :batch-refresh
              (react/batch-refresh! repo txs)))
