@@ -35,7 +35,6 @@
     (when draw-component
       (draw-component name shape-id))))
 
-;; TODO: make it reactive to db changes
 (rum/defc tldraw-preview < rum/reactive
   {:init (fn [state]
            (p/let [_ (loader/load :tldraw)]
