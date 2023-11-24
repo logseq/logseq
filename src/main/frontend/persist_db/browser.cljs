@@ -9,23 +9,25 @@
             [frontend.persist-db.protocol :as protocol]
             [frontend.config :as config]
             [promesa.core :as p]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.handler.notification :as notification]
+            [clojure.string :as string]))
 
-(defonce *worker (atom nil))
 (defonce *sqlite (atom nil))
 (defonce *inited (atom false))
-
 
 (when-not (or (util/electron?) config/publishing? util/node-test?)
   (defonce _do_not_reload_worker
     (let [worker (try
-                  (js/Worker. "/static/js/db-worker.js")
-                  (catch js/Error e
-                    (js/console.error "worker error", e)
-                    nil))
-         ^js sqlite (Comlink/wrap worker)]
-     (reset! *worker worker)
-     (reset! *sqlite sqlite))))
+                   (js/Worker. "/static/js/db-worker.js")
+                   (catch js/Error e
+                     (js/console.error "worker error", e)
+                     nil))
+          ^js sqlite (Comlink/wrap worker)]
+      (p/catch (.init sqlite)
+               (fn [error]
+                 (notification/show! [:div (str "init error: " error)] :error))) ;; load wasm
+      (reset! *sqlite sqlite))))
 
 
 (defn- ensure-sqlite-init
@@ -93,24 +95,33 @@
 
 (comment
   (defn dev-stop!
-  "For dev env only, stop opfs backend, close all sqlite connections and OPFS sync access handles."
-  []
-  (println "[persis-db] Dev: close all sqlite connections")
-  (when-not (util/electron?)
-    (when @*sqlite
-      (.unsafeDevCloseAll ^js @*sqlite)))))
+    "For dev env only, stop opfs backend, close all sqlite connections and OPFS sync access handles."
+    []
+    (println "[persis-db] Dev: close all sqlite connections")
+    (when-not (util/electron?)
+      (when @*sqlite
+        (.unsafeDevCloseAll ^js @*sqlite)))))
 
 
 (defrecord InBrowser []
   protocol/PersistentDB
   (<new [_this repo]
     (prn ::new-repo repo)
-    (p/let [^js sqlite (ensure-sqlite-init)]
-      (.newDB sqlite repo)))
+    (-> (p/let [^js sqlite (ensure-sqlite-init)]
+          (.newDB sqlite repo))
+        (p/catch (fn [error]
+                   (if (string/includes? (str error) "NoModificationAllowedError")
+                     (notification/show! [:div (str "Avoid opening the same graph in multi-tabs. Error: " error)] :error)
+                     (notification/show! [:div (str "SQLiteDB backend error: " error)] :error))
+
+                   nil))))
 
   (<list-db [_this]
-    (p/let [^js sqlite (ensure-sqlite-init)]
-      (.listDB sqlite)))
+    (-> (p/let [^js sqlite (ensure-sqlite-init)]
+          (.listDB sqlite))
+        (p/catch (fn [error]
+                   (notification/show! [:div (str "SQLiteDB error: " error)] :error)
+                   []))))
 
   (<unsafe-delete [_this repo]
     (p/let [^js sqlite (ensure-sqlite-init)]
@@ -125,16 +136,25 @@
             (.upsertBlocks sqlite repo upsert-blocks))))
 
   (<fetch-initital-data [_this repo _opts]
-    (p/let [^js sqlite (ensure-sqlite-init)
-            all-pages (.fetchAllPages sqlite repo)
-            all-blocks (.fetchAllBlocks sqlite repo)
-            journal-blocks (.fetchRecentJournals sqlite repo)
-            init-data (.fetchInitData sqlite repo)]
+    (-> (p/let [^js sqlite (ensure-sqlite-init)
+            ;; <fetch-initital-data is called when init/re-loading graph
+            ;; the underlying DB should be opened
+                _ (.openDB sqlite repo)
+                all-pages (.fetchAllPages sqlite repo)
+                all-blocks (.fetchAllBlocks sqlite repo)
+                journal-blocks (.fetchRecentJournals sqlite repo)
+                init-data (.fetchInitData sqlite repo)]
 
-      #js {:all-blocks all-blocks
-           :all-pages all-pages
-           :journal-blocks journal-blocks
-           :init-data init-data}))
+          #js {:all-blocks all-blocks
+               :all-pages all-pages
+               :journal-blocks journal-blocks
+               :init-data init-data})
+        (p/catch (fn [error]
+                   (if (string/includes? (str error) "NoModificationAllowedError")
+                     (notification/show! [:div (str "Avoid opening the same graph in multi-tabs. Error: " error)] :error)
+                     (notification/show! [:div (str "SQLiteDB backend error: " error)] :error))
+
+                   {}))))
   (<fetch-blocks-excluding [_this repo exclude-uuids _opts]
     (p/let [^js sqlite (ensure-sqlite-init)]
       (.fetchBlocksExcluding sqlite repo (clj->js exclude-uuids)))))
