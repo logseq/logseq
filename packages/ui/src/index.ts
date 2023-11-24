@@ -21,6 +21,18 @@ import { Toaster } from '@/components/ui/toaster'
 import { genId, useToast } from '@/components/ui/use-toast'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  useFormField
+} from '@/components/ui/form'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 
 declare global {
   var LSUI: any
@@ -44,14 +56,17 @@ const shadui = {
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
-  Toaster, useToast,
+  Toaster, useToast, Badge,
   genToastId: genId,
-  Alert, AlertTitle,
-  AlertDescription,
-  Badge
+  Alert, AlertTitle, Input,
+  AlertDescription, Label,
+  Form, FormItem, FormLabel,
+  FormField, FormControl,
+  FormDescription, FormMessage,
+  useFormField
 }
 
-function setupGlobals () {
+function setupGlobals() {
   console.debug('[ui] setup logseq ui globals')
 
   window.LSUI = shadui

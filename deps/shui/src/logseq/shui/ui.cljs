@@ -1,7 +1,8 @@
 (ns logseq.shui.ui
   (:require [logseq.shui.util :as util]
             [logseq.shui.icon.v2 :as icon-v2]
-            [logseq.shui.toaster.core :as toaster]))
+            [logseq.shui.toaster.core :as toaster-core]
+            [logseq.shui.form.core :as form-core]))
 
 (def button (util/lsui-wrap "Button" {:static? false}))
 (def tabler-icon icon-v2/root)
@@ -11,6 +12,13 @@
 (def alert-description (util/lsui-wrap "AlertDescription"))
 (def slider (util/lsui-wrap "Slider"))
 (def badge (util/lsui-wrap "Badge"))
+(def input (util/lsui-wrap "Input"))
+
+(def form form-core/form)
+(def form-item form-core/form-item)
+(def form-label form-core/form-label)
+(def form-description form-core/form-description)
+(def form-message form-core/form-message)
 
 (def dropdown-menu (util/lsui-wrap "DropdownMenu"))
 (def dropdown-menu-content (util/lsui-wrap "DropdownMenuContent"))
@@ -28,5 +36,5 @@
 (def dropdown-menu-sub-content (util/lsui-wrap "DropdownMenuSubContent"))
 (def dropdown-menu-sub-trigger (util/lsui-wrap "DropdownMenuSubTrigger"))
 
-(def toast! toaster/toast!)
-(def toast-dismiss! toaster/dismiss!)
+(def toast! toaster-core/toast!)
+(def toast-dismiss! toaster-core/dismiss!)
