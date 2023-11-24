@@ -220,7 +220,8 @@
        (when (and page-entity
                   (nil? (:block/file page-entity))
                   (not (config/db-based-graph? (state/get-current-repo))))
-         (outliner-file/sync-to-file page-entity))))))
+         (outliner-file/sync-to-file page-entity)))
+     name)))
 
 (defn create-new-whiteboard-and-redirect!
   ([]
@@ -259,12 +260,13 @@
 
 (defn page-name->tldr!
   ([page-name]
-   (clj->js
-    (if page-name
-      (if-let [[page-block blocks] (get-whiteboard-clj page-name)]
-        (whiteboard-clj->tldr page-block blocks)
-        (create-new-whiteboard-page! page-name))
-      (create-new-whiteboard-page! nil)))))
+   (let [page (if (model/page-exists? page-name)
+                (model/get-page page-name)
+                (let [name (create-new-whiteboard-page! page-name)]
+                  (model/get-page name)))
+         react-page (db/sub-block (:db/id page))
+         blocks (:block/_page react-page)]
+     (whiteboard-clj->tldr react-page blocks))))
 
 (defn- get-whiteboard-blocks
   "Given a page, return all the logseq blocks (exclude all shapes)"
