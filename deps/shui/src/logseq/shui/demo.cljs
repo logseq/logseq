@@ -1,6 +1,8 @@
 (ns logseq.shui.demo
   (:require [rum.core :as rum]
-            [logseq.shui.ui :as ui]))
+            [logseq.shui.ui :as ui]
+            [logseq.shui.form.core :as form-core]
+            [cljs-bean.core :as bean]))
 
 (rum/defc section-item
   [title children]
@@ -44,6 +46,23 @@
       (ui/dropdown-menu-separator)
       (ui/dropdown-menu-item (icon :logout) "Logout" (ui/dropdown-menu-shortcut "⌘+Q"))
       )))
+
+(rum/defc sample-form-basic
+  []
+  [:div.border.p-6.rounded.bg-gray-01
+   (let [^js form (form-core/use-form)]
+     (ui/form
+       ;(bean/->clj form)
+       ;; children
+       (ui/form-field
+         {:control (.-control form)}
+         (fn [o]
+           (js/console.log "===>>> basic form item render:" o)
+           (ui/form-item
+             (ui/form-label "Username")
+             (ui/form-control (ui/input {:placeholder "username"}))
+             (ui/form-description "This is your public display name."))))))
+   ])
 
 (rum/defc page []
   [:div.p-10
@@ -163,4 +182,9 @@
     (section-item "Slider" (ui/slider))
     (section-item "Switch" [:input {:type "radio"}])]
 
-   [:hr.mb-40]])
+   ;; Form
+   ;(section-item "Form"
+   ;  [:<>
+   ;   (sample-form-basic)])
+
+   [:hr.mb-60]])

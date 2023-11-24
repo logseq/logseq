@@ -19,6 +19,8 @@
 (def form-label form-core/form-label)
 (def form-description form-core/form-description)
 (def form-message form-core/form-message)
+(def form-field form-core/form-field)
+(def form-control form-core/form-control)
 
 (def dropdown-menu (util/lsui-wrap "DropdownMenu"))
 (def dropdown-menu-content (util/lsui-wrap "DropdownMenuContent"))

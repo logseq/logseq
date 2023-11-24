@@ -7,13 +7,26 @@
 
 ;; State
 (def form (util/lsui-wrap "Form"))
-(def form-field (util/lsui-wrap "FormField"))
+(def form-field' (util/lsui-wrap "FormField"))
+
+(rum/defc form-field
+  [render' & args]
+  (let [[props render']
+        (if (map? render')
+          [render' (first args)]
+          [(first args) render'])
+        render (fn [^js o]
+                 (js-debugger)
+                 (js/console.log "==>>>>" o)
+                 (render'))]
+    (form-field' (assoc props :render render))))
+
 (def form-control (util/lsui-wrap "FormControl"))
 
 ;; Hooks
 ;; https://react-hook-form.com/docs/useform#resolver
-(def use-form (util/lsui-wrap "useForm"))
-(def use-form-context (util/lsui-wrap "useFormContext"))
+(def use-form (aget js/window.LSUI "useForm"))
+(def use-form-context (aget js/window.LSUI "useFormContext"))
 
 ;; UI
 (def form-item (util/lsui-wrap "FormItem"))

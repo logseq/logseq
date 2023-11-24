@@ -28,11 +28,12 @@ import {
   FormField,
   FormItem,
   FormLabel,
-  FormMessage,
+  FormMessage, useForm,
   useFormField
 } from '@/components/ui/form'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { useFormContext } from 'react-hook-form'
 
 declare global {
   var LSUI: any
@@ -63,7 +64,8 @@ const shadui = {
   Form, FormItem, FormLabel,
   FormField, FormControl,
   FormDescription, FormMessage,
-  useFormField
+  useFormField, useForm,
+  useFormContext
 }
 
 function setupGlobals() {
