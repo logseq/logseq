@@ -11,7 +11,8 @@
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [cljs.spec.alpha :as s]
-            [clojure.core.async :as async]))
+            [clojure.core.async :as async]
+            [clojure.set :as set]))
 
 ;;; keywords specs for reactive query, used by `react/q` calls
 ;; ::block
@@ -141,7 +142,7 @@
           (let [{:keys [result time]} (util/with-time
                                         (-> (cond
                                               query-fn
-                                              (query-fn db nil nil)
+                                              (query-fn db nil)
 
                                               inputs-fn
                                               (let [inputs (inputs-fn)]
@@ -262,7 +263,7 @@
      set)))
 
 (defn- execute-query!
-  [graph db k tx {:keys [query _query-time inputs transform-fn query-fn inputs-fn result]}
+  [graph db k {:keys [query _query-time inputs transform-fn query-fn inputs-fn result]}
    {:keys [_skip-query-time-check?]}]
   ;; FIXME:
   (when true
@@ -271,7 +272,7 @@
     (let [new-result (->
                       (cond
                         query-fn
-                        (let [result (query-fn db tx result)]
+                        (let [result (query-fn db result)]
                           (if (coll? result)
                             (doall result)
                             result))
@@ -299,35 +300,51 @@
           (contains? #{:collapse-expand-blocks :delete-blocks} outliner-op)
           (:undo? tx-meta) (:redo? tx-meta)))))
 
+(defn- refresh-affected-queries!
+  [repo-url affected-keys]
+  (let [db (conn/get-db repo-url)]
+    (doseq [[k cache] @query-state]
+     (let [custom? (= :custom (second k))
+           kv? (= :kv (second k))]
+       (when (and
+              (= (first k) repo-url)
+              (or (get affected-keys (vec (rest k)))
+                  custom?
+                  kv?))
+         (let [{:keys [query query-fn]} cache
+               {:keys [custom-query?]} (state/edit-in-query-or-refs-component)]
+           (util/profile
+            (str "refresh! " (rest k))
+            (when (or query query-fn)
+              (try
+                (let [f #(execute-query! repo-url db k cache {:skip-query-time-check? custom-query?})]
+                       ;; Detects whether user is editing in a custom query, if so, execute the query immediately
+                  (if (and custom? (not custom-query?))
+                    (async/put! (state/get-reactive-custom-queries-chan) [f query])
+                    (f)))
+                (catch :default e
+                  (js/console.error e)))))))))))
+
 (defn refresh!
   "Re-compute corresponding queries (from tx) and refresh the related react components."
   [repo-url {:keys [tx-data tx-meta] :as tx}]
-  (when (and repo-url
-             (not (:skip-refresh? tx-meta)))
-    (when (seq tx-data)
-      (let [db (conn/get-db repo-url)
-            affected-keys (get-affected-queries-keys tx)]
-        (doseq [[k cache] @query-state]
-          (let [custom? (= :custom (second k))
-                kv? (= :kv (second k))]
-            (when (and
-                   (= (first k) repo-url)
-                   (or (get affected-keys (vec (rest k)))
-                       custom?
-                       kv?))
-              (let [{:keys [query query-fn]} cache
-                    {:keys [custom-query?]} (state/edit-in-query-or-refs-component)]
-                (util/profile
-                 (str "refresh! " (rest k))
-                 (when (or query query-fn)
-                   (try
-                     (let [f #(execute-query! repo-url db k tx cache {:skip-query-time-check? custom-query?})]
-                       ;; Detects whether user is editing in a custom query, if so, execute the query immediately
-                       (if (and custom? (not custom-query?))
-                         (async/put! (state/get-reactive-custom-queries-chan) [f query])
-                         (f)))
-                     (catch :default e
-                       (js/console.error e)))))))))))))
+  (when repo-url
+    (if (get-in @state/state [:rtc/remote-batch-tx-state repo-url :in-transaction?])
+      (state/update-state! [:rtc/remote-batch-tx-state repo-url :txs]
+                           (fn [txs]
+                             (conj txs tx)))
+      (when (and (not (:skip-refresh? tx-meta)) (seq tx-data))
+        (let [affected-keys (get-affected-queries-keys tx)]
+          (refresh-affected-queries! repo-url affected-keys))))))
+
+(defn batch-refresh!
+  [repo-url txs]
+  (when (and repo-url (seq txs))
+    (let [affected-keys (apply set/union (map get-affected-queries-keys txs))]
+      (refresh-affected-queries! repo-url affected-keys)))
+  (state/set-state! [:rtc/remote-batch-tx-state repo-url]
+                    {:in-transaction? false
+                     :txs []}))
 
 (defn set-key-value
   [repo-url key value]
