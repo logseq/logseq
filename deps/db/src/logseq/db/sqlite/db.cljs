@@ -3,7 +3,19 @@
   (:require ["path" :as node-path]
             ["better-sqlite3" :as sqlite3]
             [clojure.string :as string]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [datascript.storage :refer [IStorage]]
+            [cognitect.transit :as t]
+            [cljs-bean.core :as bean]
+            [cljs.cache :as cache]
+            [datascore.core :as d]))
+
+(defn- write-transit [data]
+  (t/write (t/writer :json) data))
+
+(defn- read-transit [s]
+  (t/read (t/reader :json) s))
+
 
 ;; Notice: this works only on Node.js environment, it doesn't support browser yet.
 
@@ -36,6 +48,10 @@
   [repo]
   (get @databases (sanitize-db-name repo)))
 
+(defn get-conn
+  [repo]
+  (get @conns (sanitize-db-name repo)))
+
 (defn prepare
   [^object db sql db-name]
   (when db
@@ -56,13 +72,6 @@
   (let [db-name' (sanitize-db-name db-name)
         graph-dir (node-path/join graphs-dir db-name')]
     [db-name' (node-path/join graph-dir "db.sqlite")]))
-
-(defn open-db!
-  [graphs-dir db-name]
-  (let [[db-sanitized-name db-full-path] (get-db-full-path graphs-dir db-name)
-        db (new sqlite db-full-path nil)]
-    (create-kvs-table! db db-name)
-    (swap! databases assoc db-sanitized-name db)))
 
 (defn- clj-list->sql
   "Turn clojure list into SQL list
@@ -148,6 +157,51 @@
           (str "select content from kvs where addr = " addr))
         first)))
 
+(defn sqlite-storage
+  [repo {:keys [threshold]
+         :or {threshold 4096}}]
+  (let [cache (cache/lru-cache-factory {} :threshold threshold)]
+    (reify IStorage
+      (-store [_ addr+data-seq]
+        (prn :debug :store {:addr-data addr+data-seq})
+        (let [data (map
+                    (fn [[addr data]]
+                      {:addr addr
+                       :content (write-transit data)})
+                    addr+data-seq)]
+          (upsert-addr-content! repo (bean/->js data))))
+      (-restore [_ addr]
+        (when-let [content (if (cache/has? cache addr)
+                             (do
+                               (cache/hit cache addr)
+                               (cache/lookup cache addr))
+                             (when-let [result (restore-data-from-addr repo addr)]
+                               (cache/miss cache addr result)
+                               result))]
+          (prn {:content content})
+          (read-transit content))))))
+
+(defn open-db!
+  [graphs-dir db-name]
+  (let [[db-sanitized-name db-full-path] (get-db-full-path graphs-dir db-name)
+        db (new sqlite db-full-path nil)]
+    (create-kvs-table! db db-name)
+    (swap! databases assoc db-sanitized-name db)
+    (let [storage (sqlite-storage db-name {})
+          conn (or (d/restore-conn storage)
+                   (d/create-conn nil {:storage storage}))]
+      (swap! conns assoc db-name conn))))
+
 (defn transact!
   [repo tx-data tx-meta]
-  )
+  (when-let [conn (get-conn repo)]
+    (d/transact! conn tx-data tx-meta)))
+
+(defn load-data
+  "Get all datoms remove :block/content"
+  [repo]
+  (when-let [conn (get-conn repo)]
+    (let [db @conn]
+      (->> (d/datoms db :eavt)
+           (remove (fn [e]
+                     (= :block/content (:a e))))))))
