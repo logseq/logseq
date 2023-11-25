@@ -5,10 +5,15 @@
             [clojure.string :as string]
             [cljs-bean.core :as bean]))
 
+;; Notice: this works only on Node.js environment, it doesn't support browser yet.
+
 ;; use built-in blocks to represent db schema, config, custom css, custom js, etc.
 
-;; Store databases for db graphs
+;; sqlite databases
 (defonce databases (atom nil))
+;; datascript conns
+(defonce conns (atom nil))
+
 ;; Reference same sqlite default class in cljs + nbb without needing .cljc
 (def sqlite (if (find-ns 'nbb.core) (aget sqlite3 "default") sqlite3))
 
@@ -40,23 +45,11 @@
         (js/console.error (str "SQLite prepare failed: " e ": " db-name))
         (throw e)))))
 
-(defn create-blocks-table!
+(defn create-kvs-table!
   [db db-name]
-  (let [stmt (prepare db "CREATE TABLE IF NOT EXISTS blocks (
-                        uuid TEXT PRIMARY KEY NOT NULL,
-                        type INTEGER NOT NULL,
-                        page_uuid TEXT,
-                        page_journal_day INTEGER,
-                        name TEXT UNIQUE,
-                        content TEXT,
-                        datoms TEXT,
-                        created_at INTEGER NOT NULL,
-                        updated_at INTEGER NOT NULL
-                        )"
+  (let [stmt (prepare db "create table if not exists kvs (addr INTEGER primary key, content TEXT)"
                       db-name)]
-    (.run ^object stmt)
-    (let [create-index-stmt (prepare db "CREATE INDEX IF NOT EXISTS block_type ON blocks(type)" db-name)]
-      (.run ^object create-index-stmt))))
+    (.run ^object stmt)))
 
 (defn get-db-full-path
   [graphs-dir db-name]
@@ -68,7 +61,7 @@
   [graphs-dir db-name]
   (let [[db-sanitized-name db-full-path] (get-db-full-path graphs-dir db-name)
         db (new sqlite db-full-path nil)]
-    (create-blocks-table! db db-name)
+    (create-kvs-table! db db-name)
     (swap! databases assoc db-sanitized-name db)))
 
 (defn- clj-list->sql
@@ -135,3 +128,26 @@
   (when-let [db (get-db repo)]
     (query repo db (str "select * from blocks where type = 1 and uuid not in "
                         (clj-list->sql journal-block-uuids)))))
+
+(defn upsert-addr-content!
+  "Upsert addr+data-seq"
+  [repo data]
+  (when-let [db (get-db repo)]
+    (let [insert (prepare db "INSERT INTO kvs (addr, content) values (@addr, @content) on conflict(addr) do update set content = @content"
+                          repo)
+          insert-many (.transaction ^object db
+                                    (fn [data]
+                                      (doseq [item data]
+                                        (.run ^object insert item))))]
+      (insert-many data))))
+
+(defn restore-data-from-addr
+  [repo addr]
+  (when-let [db (get-db repo)]
+    (-> (query repo db
+          (str "select content from kvs where addr = " addr))
+        first)))
+
+(defn transact!
+  [repo tx-data tx-meta]
+  )
