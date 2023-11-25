@@ -34,7 +34,8 @@
             [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.graph :as common-graph]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [datascript.transit :as dt]))
 
 (defmethod handle :mkdir [_window [_ dir]]
   (fs/mkdirSync dir))
@@ -375,7 +376,6 @@
   (db/new-db! repo))
 
 (defmethod handle :db-transact-data [_window [_ repo data-str]]
-  (prn :debug :data-str data-str)
   (let [{:keys [tx-data tx-meta]} (reader/read-string data-str)]
     (sqlite-db/transact! repo tx-data tx-meta)
     nil))
@@ -383,7 +383,7 @@
 ;; Needs to be called first for an existing graph
 (defmethod handle :get-initial-data [_window [_ repo _opts]]
   (db/open-db! repo)
-  (sqlite-db/get-initial-data repo))
+  (dt/write-transit-str (sqlite-db/get-initial-data repo)))
 
 (defmethod handle :get-other-data [_window [_ repo journal-block-uuids _opts]]
   nil)
