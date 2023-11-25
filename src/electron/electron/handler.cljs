@@ -375,15 +375,10 @@
   (db/new-db! repo))
 
 (defmethod handle :db-transact-data [_window [_ repo data-str]]
-  (let [data (reader/read-string data-str)
-        {:keys [blocks deleted-block-uuids]} data]
-    (when (seq deleted-block-uuids)
-      (sqlite-db/delete-blocks! repo deleted-block-uuids))
-    (when (seq blocks)
-      (let [blocks' (mapv sqlite-util/ds->sqlite-block blocks)]
-        (when-let [unknown-blocks (seq (filter #(= 5 (:type %)) blocks'))]
-          (logger/error "The following blocks saved as unknown:" unknown-blocks))
-        (sqlite-db/upsert-blocks! repo (bean/->js blocks'))))))
+  (prn :debug :data-str data-str)
+  (let [{:keys [tx-data tx-meta]} (reader/read-string data-str)]
+    (sqlite-db/transact! repo tx-data tx-meta)
+    nil))
 
 ;; Needs to be called first for an existing graph
 (defmethod handle :get-initial-data [_window [_ repo _opts]]
@@ -391,7 +386,7 @@
   (sqlite-db/get-initial-data repo))
 
 (defmethod handle :get-other-data [_window [_ repo journal-block-uuids _opts]]
-  (sqlite-db/get-other-data repo journal-block-uuids))
+  nil)
 
 ;; DB related IPCs End
 

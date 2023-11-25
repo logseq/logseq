@@ -121,11 +121,9 @@
             (when (config/db-based-graph? repo)
               (when-not config/publishing?
                 (go
-                  (let [_transact-result (<! (persist-db/<transact-data repo upsert-blocks deleted-block-uuids))
-                        _ipc-result (comment ipc/ipc :db-transact-data repo
-                                             (pr-str
-                                              {:blocks upsert-blocks
-                                               :deleted-block-uuids deleted-block-uuids}))]))))))
+                  (if (util/electron?)
+                    (<! (persist-db/<transact-data repo (:tx-data tx-report) (:tx-meta tx-report)))
+                    (<! (persist-db/<transact-data repo upsert-blocks deleted-block-uuids))))))))
 
         (when (and (not (:delete-files? tx-meta))
                    (not replace?))

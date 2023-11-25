@@ -7,12 +7,6 @@
   (<list-db [this])
   (<new [this repo])
   (<unsafe-delete [this repo])
-  (<transact-data [this repo added-blocks deleted-block-uuids]
-    "Transact data to db
-
-    - added-blocks: list of blocks to be added
-    - deleted-block-uuids: set of #uuid")
+  (<transact-data [this repo tx-data tx-meta] "Transact data to db")
   (<fetch-initital-data [this repo opts])
   (<fetch-blocks-excluding [this repo exclude-uuids opts]))
-
-

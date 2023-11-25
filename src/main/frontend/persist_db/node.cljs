@@ -17,16 +17,15 @@
   (<unsafe-delete [_this _repo]
     (js/console.warn "TODO: delete")
     (p/resolved nil))
-  (<transact-data [_this repo added-blocks deleted-block-uuids]
-    ;; (prn ::transact-data repo added-blocks deleted-block-uuids)
+  (<transact-data [_this repo tx-data tx-meta]
     (p->c
      (ipc/ipc :db-transact-data repo
               (pr-str
-               {:blocks added-blocks
-                :deleted-block-uuids deleted-block-uuids}))))
+               {:tx-data tx-data
+                :tx-meta tx-meta}))))
   (<fetch-initital-data [_this repo _opts]
     (prn ::fetch-initial repo)
     (ipc/ipc :get-initial-data repo))
   (<fetch-blocks-excluding [_this repo exclude-uuids _opts]
     (prn ::fetch-by-exclude repo exclude-uuids)
-    (ipc/ipc :get-other-data repo exclude-uuids)))
+    nil))

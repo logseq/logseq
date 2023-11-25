@@ -17,7 +17,8 @@
             [promesa.core :as p]
             [frontend.util :as util]
             [cljs-time.core :as t]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [cljs-bean.core :as bean]))
 
 (defn- old-schema?
   "Requires migration if the schema version is older than db-schema/version"
@@ -120,10 +121,16 @@
   (state/set-state! :graph/loading? true)
   (p/let [start-time (t/now)
           data (persist-db/<fetch-init-data repo)
+          electron? (util/electron?)
           {:keys [conn uuid->db-id-map journal-blocks datoms-count]}
-          (sqlite-restore/restore-initial-data data {:conn-from-datoms-fn
-                                                     (fn profiled-d-conn [& args]
-                                                       (util/profile :restore-graph-from-sqlite!-init-db (apply d/conn-from-datoms args)))})
+          (when-not electron? (sqlite-restore/restore-initial-data data {:conn-from-datoms-fn
+                                                                         (fn profiled-d-conn [& args]
+                                                                           (util/profile :restore-graph-from-sqlite!-init-db (apply d/conn-from-datoms args)))}))
+          [conn datoms-count] (if electron?
+                                (let [datoms (bean/->clj data)]
+                                  [(d/conn-from-datoms datoms db-schema/schema-for-db-based-graph)
+                                   (count datoms)])
+                                [conn datoms-count])
           db-name (db-conn/datascript-db repo)
           _ (swap! db-conn/conns assoc db-name conn)
           end-time (t/now)]
@@ -137,13 +144,14 @@
                        {:schema/version db-schema/version}]
                  {:skip-persist? true})
 
-    (js/setTimeout
-     (fn []
-       (p/let [other-data (persist-db/<fetch-blocks-excluding repo (map :uuid journal-blocks))
-               _ (set-unloaded-block-ids! repo other-data)
-               _ (p/delay 10)]
-         (restore-other-data-from-sqlite! repo other-data uuid->db-id-map)))
-     100)))
+    (when-not electron?
+      (js/setTimeout
+       (fn []
+         (p/let [other-data (persist-db/<fetch-blocks-excluding repo (map :uuid journal-blocks))
+                 _ (set-unloaded-block-ids! repo other-data)
+                 _ (p/delay 10)]
+           (restore-other-data-from-sqlite! repo other-data uuid->db-id-map)))
+       100))))
 
 (defn restore-graph!
   "Restore db from serialized db cache"

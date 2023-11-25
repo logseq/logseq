@@ -8,7 +8,7 @@
             [cognitect.transit :as t]
             [cljs-bean.core :as bean]
             [cljs.cache :as cache]
-            [datascore.core :as d]))
+            [datascript.core :as d]))
 
 (defn- write-transit [data]
   (t/write (t/writer :json) data))
@@ -113,31 +113,6 @@
   (let [stmt (prepare db sql repo)]
     (.all ^object stmt)))
 
-(defn get-initial-data
-  [repo]
-  (when-let [db (get-db repo)]
-    (let [all-pages (query repo db "select * from blocks where type = 2") ; 2 = page block
-          ;; 1 = normal block
-          all-block-ids (query repo db "select uuid, page_uuid from blocks where type = 1")
-          ;; Load enough data so that journals view is functional
-          ;; 3 is arbitrary and assumes about 10 blocks per page
-          recent-journals (->> (query repo db "select uuid from blocks where type = 2 order by page_journal_day desc limit 3")
-                               bean/->clj
-                               (map :uuid))
-          latest-journal-blocks (when (seq recent-journals)
-                                  (query repo db (str "select * from blocks where type = 1 and page_uuid IN " (clj-list->sql recent-journals))))
-          init-data (query repo db "select * from blocks where type in (3, 4, 5, 6, 7)")]
-      {:all-pages all-pages
-       :all-blocks all-block-ids
-       :journal-blocks latest-journal-blocks
-       :init-data init-data})))
-
-(defn get-other-data
-  [repo journal-block-uuids]
-  (when-let [db (get-db repo)]
-    (query repo db (str "select * from blocks where type = 1 and uuid not in "
-                        (clj-list->sql journal-block-uuids)))))
-
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
   [repo data]
@@ -190,18 +165,21 @@
     (let [storage (sqlite-storage db-name {})
           conn (or (d/restore-conn storage)
                    (d/create-conn nil {:storage storage}))]
-      (swap! conns assoc db-name conn))))
+      (swap! conns assoc db-name conn)))
+  nil)
 
 (defn transact!
   [repo tx-data tx-meta]
+  (prn :transit {:tx-data tx-data
+                 :tx-meta tx-meta})
   (when-let [conn (get-conn repo)]
     (d/transact! conn tx-data tx-meta)))
 
-(defn load-data
+(defn get-initial-data
   "Get all datoms remove :block/content"
   [repo]
   (when-let [conn (get-conn repo)]
     (let [db @conn]
       (->> (d/datoms db :eavt)
-           (remove (fn [e]
-                     (= :block/content (:a e))))))))
+           ;; (remove (fn [e] (= :block/content (:a e))))
+           ))))
