@@ -31,8 +31,8 @@
   {:pre [(<= (count repo) 56)]}
   (protocol/<new (get-impl) repo))
 
-(defn <transact-data [repo added-blocks deleted-block-uuids]
-  (protocol/<transact-data (get-impl) repo added-blocks deleted-block-uuids))
+(defn <transact-data [repo tx-data tx-meta]
+  (protocol/<transact-data (get-impl) repo tx-data tx-meta))
 
 (defn <fetch-init-data
   ([repo]
