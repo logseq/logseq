@@ -8,7 +8,8 @@
             [cognitect.transit :as t]
             [cljs-bean.core :as bean]
             [cljs.cache :as cache]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [goog.object :as gobj]))
 
 (defn- write-transit [data]
   (t/write (t/writer :json) data))
@@ -130,7 +131,8 @@
   (when-let [db (get-db repo)]
     (-> (query repo db
           (str "select content from kvs where addr = " addr))
-        first)))
+        first
+        (gobj/get "content"))))
 
 (defn sqlite-storage
   [repo {:keys [threshold]
