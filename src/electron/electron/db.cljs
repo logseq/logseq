@@ -22,6 +22,7 @@
   (let [graphs-dir (get-graphs-dir)]
     (try (sqlite-db/open-db! graphs-dir db-name)
          (catch :default e
+           (js/console.error e)
            (logger/error (str e ": " db-name))
            ;; (fs/unlinkSync db-full-path)
            ))))
