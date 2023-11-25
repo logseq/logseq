@@ -9,7 +9,8 @@
             [cljs-bean.core :as bean]
             [cljs.cache :as cache]
             [datascript.core :as d]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [logseq.db.frontend.schema :as db-schema]))
 
 (defn- write-transit [data]
   (t/write (t/writer :json) data))
@@ -74,41 +75,6 @@
         graph-dir (node-path/join graphs-dir db-name')]
     [db-name' (node-path/join graph-dir "db.sqlite")]))
 
-(defn- clj-list->sql
-  "Turn clojure list into SQL list
-   '(1 2 3 4)
-   ->
-   \"('1','2','3','4')\""
-  [ids]
-  (str "(" (->> (map (fn [id] (str "'" id "'")) ids)
-                (string/join ", ")) ")"))
-
-(defn upsert-blocks!
-  "Creates or updates given js blocks"
-  [repo blocks]
-  (when-let [db (get-db repo)]
-    (let [insert (prepare db "INSERT INTO blocks (uuid, type, page_uuid, page_journal_day, name, content,datoms, created_at, updated_at) VALUES (@uuid, @type, @page_uuid, @page_journal_day, @name, @content, @datoms, @created_at, @updated_at) ON CONFLICT (uuid) DO UPDATE SET (type, page_uuid, page_journal_day, name, content, datoms, created_at, updated_at) = (@type, @page_uuid, @page_journal_day, @name, @content, @datoms, @created_at, @updated_at)"
-                          repo)
-          insert-many (.transaction ^object db
-                                    (fn [blocks]
-                                      (doseq [block blocks]
-                                        (.run ^object insert block))))]
-      (insert-many blocks))))
-
-(defn delete-blocks!
-  [repo uuids]
-  (when-let [db (get-db repo)]
-    (let [sql (str "DELETE from blocks WHERE uuid IN " (clj-list->sql uuids))
-          stmt (prepare db sql repo)]
-      (.run ^object stmt))))
-
-
-;; Initial data:
-;; All pages and block ids
-;; latest 3 journals
-;; other data such as config.edn, custom css/js
-;; current page, sidebar blocks
-
 (defn query
   [repo db sql]
   (let [stmt (prepare db sql repo)]
@@ -128,11 +94,12 @@
 
 (defn restore-data-from-addr
   [repo addr]
-  (when-let [db (get-db repo)]
-    (-> (query repo db
-          (str "select content from kvs where addr = " addr))
-        first
-        (gobj/get "content"))))
+  (when addr
+    (when-let [db (get-db repo)]
+     (-> (query repo db
+                (str "select content from kvs where addr = " addr))
+         first
+         (gobj/get "content")))))
 
 (defn sqlite-storage
   [repo {:keys [threshold]
@@ -166,16 +133,18 @@
     (swap! databases assoc db-sanitized-name db)
     (let [storage (sqlite-storage db-name {})
           conn (or (d/restore-conn storage)
-                   (d/create-conn nil {:storage storage}))]
-      (swap! conns assoc db-name conn)))
+                   (d/create-conn db-schema/schema-for-db-based-graph {:storage storage}))]
+      (swap! conns assoc db-sanitized-name conn)))
   nil)
 
 (defn transact!
   [repo tx-data tx-meta]
-  (prn :transit {:tx-data tx-data
-                 :tx-meta tx-meta})
   (when-let [conn (get-conn repo)]
-    (d/transact! conn tx-data tx-meta)))
+    (try
+      (d/transact! conn tx-data tx-meta)
+      (catch :default e
+        (prn :debug :error)
+        (js/console.error e)))))
 
 (defn get-initial-data
   "Get all datoms remove :block/content"
@@ -184,4 +153,4 @@
     (let [db @conn]
       (->> (d/datoms db :eavt)
            ;; (remove (fn [e] (= :block/content (:a e))))
-           ))))
+           vec))))

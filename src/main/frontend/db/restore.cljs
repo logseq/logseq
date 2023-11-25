@@ -18,7 +18,8 @@
             [frontend.util :as util]
             [cljs-time.core :as t]
             [logseq.db.frontend.property :as db-property]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [datascript.transit :as dt]))
 
 (defn- old-schema?
   "Requires migration if the schema version is older than db-schema/version"
@@ -127,7 +128,7 @@
                                                                          (fn profiled-d-conn [& args]
                                                                            (util/profile :restore-graph-from-sqlite!-init-db (apply d/conn-from-datoms args)))}))
           [conn datoms-count] (if electron?
-                                (let [datoms (bean/->clj data)]
+                                (let [datoms (dt/read-transit-str (or data ""))]
                                   [(d/conn-from-datoms datoms db-schema/schema-for-db-based-graph)
                                    (count datoms)])
                                 [conn datoms-count])
