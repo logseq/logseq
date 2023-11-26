@@ -20,10 +20,7 @@
                               db-graph?
                               (assoc :block/format :markdown)))
                           default-db/built-in-pages)]
-      (d/transact! db-conn
-                   (concat
-                    [{:schema/version db-schema/version}]
-                    built-in-pages)))))
+      (d/transact! db-conn built-in-pages))))
 
 (defn start-conn
   "Create datascript conn with schema and default data"

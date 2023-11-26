@@ -79,16 +79,19 @@
   (let [tx-meta (:tx-meta tx-report)
         {:keys [compute-path-refs? from-disk? new-graph? replace?]} tx-meta]
     (when (and (not from-disk?)
-               (not new-graph?)
-               (not compute-path-refs?))
-
-      (reset-editing-block-content! (:tx-data tx-report) tx-meta)
+               (not new-graph?))
+      (try
+        (reset-editing-block-content! (:tx-data tx-report) tx-meta)
+        (catch :default e
+          (prn :reset-editing-block-content)
+          (js/console.error e)))
 
       (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
             repo (state/get-current-repo)
-            tx (util/profile
-                "Compute path refs: "
-                (set (compute-block-path-refs-tx tx-report blocks)))
+            tx (when-not compute-path-refs?
+                 (util/profile
+                  "Compute path refs: "
+                  (set (compute-block-path-refs-tx tx-report blocks))))
             tx-report' (if (seq tx)
                          (let [refs-tx-data' (:tx-data (db/transact! repo tx {:outliner/transact? true
                                                                               :replace? true
@@ -99,31 +102,32 @@
             importing? (:graph/importing @state/state)
             deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))]
 
-        (when (and (seq deleted-block-uuids) (not replace?))
+        (when (and (seq deleted-block-uuids) (not replace?)
+                   (not compute-path-refs?))
           (delete-property-parent-block-if-empty! repo tx-report deleted-block-uuids))
+
+        (let [upsert-blocks (outliner-pipeline/build-upsert-blocks blocks deleted-block-uuids (:db-after tx-report'))
+              updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids)  (:block/uuid b))) blocks)
+              tx-id (get-in tx-report' [:tempids :db/current-tx])
+              update-tx-ids (->>
+                             (map (fn [b]
+                                    (when-let [db-id (:db/id b)]
+                                      {:db/id db-id
+                                       :block/tx-id tx-id})) updated-blocks)
+                             (remove nil?))]
+          (when (and (seq update-tx-ids)
+                     (not (:update-tx-ids? tx-meta)))
+            (db/transact! repo update-tx-ids {:replace? true
+                                              :update-tx-ids? true}))
+          (when (config/db-based-graph? repo)
+            (when-not config/publishing?
+              (go
+                (if (util/electron?)
+                  (<! (persist-db/<transact-data repo (:tx-data tx-report) (:tx-meta tx-report)))
+                  (<! (persist-db/<transact-data repo upsert-blocks deleted-block-uuids)))))))
 
         (when-not importing?
           (react/refresh! repo tx-report'))
-
-        (when (and (not (:skip-persist? tx-meta))
-                   (not replace?)
-                   (not (:update-tx-ids? tx-meta)))
-          (let [upsert-blocks (outliner-pipeline/build-upsert-blocks blocks deleted-block-uuids (:db-after tx-report'))
-                updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids)  (:block/uuid b))) blocks)
-                tx-id (get-in tx-report' [:tempids :db/current-tx])
-                update-tx-ids (map (fn [b]
-                                     (when-let [db-id (:db/id b)]
-                                       {:db/id db-id
-                                        :block/tx-id tx-id})) updated-blocks)]
-            (when (seq update-tx-ids)
-              (db/transact! repo update-tx-ids {:replace? true
-                                                :update-tx-ids? true}))
-            (when (config/db-based-graph? repo)
-              (when-not config/publishing?
-                (go
-                  (if (util/electron?)
-                    (<! (persist-db/<transact-data repo (:tx-data tx-report) (:tx-meta tx-report)))
-                    (<! (persist-db/<transact-data repo upsert-blocks deleted-block-uuids))))))))
 
         (when (and (not (:delete-files? tx-meta))
                    (not replace?))

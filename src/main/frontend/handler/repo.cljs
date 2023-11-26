@@ -7,6 +7,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.restore :as db-restore]
+            [logseq.db.frontend.schema :as db-schema]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.file :as file-handler]
@@ -546,8 +547,8 @@
           _ (start-repo-db-if-not-exists! full-graph-name)
           _ (state/add-repo! {:url full-graph-name})
           _ (route-handler/redirect-to-home!)
-          _ (db/transact! full-graph-name [(react/kv :db/type "db")]
-                          {:skip-persist? true})
+          _ (db/transact! full-graph-name [(react/kv :db/type "db")
+                                           (react/kv :schema/version db-schema/version)])
           initial-data (sqlite-util/build-db-initial-data config/config-default-content)
           _ (db/transact! full-graph-name initial-data)
           _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
