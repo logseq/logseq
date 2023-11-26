@@ -51,18 +51,20 @@
   []
   [:div.border.p-6.rounded.bg-gray-01
    (let [^js form (form-core/use-form)]
+     (js/console.log "[form] use-form state: " form)
      (ui/form
-       ;(bean/->clj form)
+       {:getFieldState (.-getFieldState form)}
        ;; children
        (ui/form-field
-         {:control (.-control form)}
-         (fn [o]
-           (js/console.log "===>>> basic form item render:" o)
+         {:control (.-control form)
+          :name    "username"}
+         (fn [field ^js ctx]
+           (js/console.log "[form] render field: " field ctx)
            (ui/form-item
              (ui/form-label "Username")
-             (ui/form-control (ui/input {:placeholder "username"}))
-             (ui/form-description "This is your public display name."))))))
-   ])
+             (ui/form-control (ui/input (merge {:placeholder "Username"} field)))
+             (ui/form-description "This is your public display name.")))
+         )))])
 
 (rum/defc page []
   [:div.p-10
@@ -183,8 +185,8 @@
     (section-item "Switch" [:input {:type "radio"}])]
 
    ;; Form
-   ;(section-item "Form"
-   ;  [:<>
-   ;   (sample-form-basic)])
+   (section-item "Form"
+     [:<>
+      (sample-form-basic)])
 
    [:hr.mb-60]])

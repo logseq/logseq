@@ -6,7 +6,7 @@
 
 
 ;; State
-(def form (util/lsui-wrap "Form"))
+(def form (util/lsui-wrap "Form" {:static? false}))
 (def form-field' (util/lsui-wrap "FormField"))
 
 (rum/defc form-field
@@ -15,10 +15,9 @@
         (if (map? render')
           [render' (first args)]
           [(first args) render'])
-        render (fn [^js o]
-                 (js-debugger)
-                 (js/console.log "==>>>>" o)
-                 (render'))]
+        render (fn [^js ctx]
+                 ;; TODO: convert field-state?
+                 (render' (js->clj (.-field ctx)) ctx))]
     (form-field' (assoc props :render render))))
 
 (def form-control (util/lsui-wrap "FormControl"))
