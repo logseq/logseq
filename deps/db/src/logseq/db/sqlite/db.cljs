@@ -10,14 +10,9 @@
             [cljs.cache :as cache]
             [datascript.core :as d]
             [goog.object :as gobj]
-            [logseq.db.frontend.schema :as db-schema]))
-
-(defn- write-transit [data]
-  (t/write (t/writer :json) data))
-
-(defn- read-transit [s]
-  (t/read (t/reader :json) s))
-
+            [logseq.db.frontend.schema :as db-schema]
+            [datascript.transit :as dt]
+            [clojure.edn :as edn]))
 
 ;; Notice: this works only on Node.js environment, it doesn't support browser yet.
 
@@ -107,23 +102,33 @@
   (let [cache (cache/lru-cache-factory {} :threshold threshold)]
     (reify IStorage
       (-store [_ addr+data-seq]
+        (prn :debug :store-addr (map first addr+data-seq))
         (prn :debug :store {:addr-data addr+data-seq})
-        (let [data (map
-                    (fn [[addr data]]
-                      {:addr addr
-                       :content (write-transit data)})
-                    addr+data-seq)]
-          (upsert-addr-content! repo (bean/->js data))))
+        (let [data (->>
+                    (map
+                     (fn [[addr data]]
+                       #js {:addr addr
+                            :content (pr-str data)})
+                     addr+data-seq)
+                    (to-array))]
+          (upsert-addr-content! repo data)))
       (-restore [_ addr]
-        (when-let [content (if (cache/has? cache addr)
-                             (do
-                               (cache/hit cache addr)
-                               (cache/lookup cache addr))
-                             (when-let [result (restore-data-from-addr repo addr)]
-                               (cache/miss cache addr result)
-                               result))]
-          (prn {:content content})
-          (read-transit content))))))
+        (let [content (restore-data-from-addr repo addr)]
+          (when (nil? content)
+            (prn :debug :error :addr-not-exists addr))
+          (prn :debug :restored {:addr addr
+                                 ;; :content content
+                                 })
+          (edn/read-string content))
+        ;; (when-let [content (if (cache/has? cache addr)
+        ;;                      (do
+        ;;                        (cache/hit cache addr)
+        ;;                        (cache/lookup cache addr))
+        ;;                      (when-let [result (restore-data-from-addr repo addr)]
+        ;;                        (cache/miss cache addr result)
+        ;;                        result))]
+        ;;   (edn/read-string content))
+        ))))
 
 (defn open-db!
   [graphs-dir db-name]

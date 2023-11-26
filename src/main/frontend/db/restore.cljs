@@ -141,10 +141,6 @@
     ;; TODO: Store schema in sqlite
     ;; (db-migrate/migrate attached-db)
 
-    (d/transact! conn [(react/kv :db/type "db")
-                       {:schema/version db-schema/version}]
-                 {:skip-persist? true})
-
     (when-not electron?
       (js/setTimeout
        (fn []
