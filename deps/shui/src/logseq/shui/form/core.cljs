@@ -7,7 +7,7 @@
 
 ;; State
 (def form (util/lsui-wrap "Form" {:static? false}))
-(def form-field' (util/lsui-wrap "FormField"))
+(def form-field' (util/lsui-wrap "FormField" {:static? false}))
 
 (rum/defc form-field
   [render' & args]
@@ -15,17 +15,27 @@
         (if (map? render')
           [render' (first args)]
           [(first args) render'])
+        _ (assert (contains? props :name) ":name is required for <ui/form-field>")
         render (fn [^js ctx]
                  ;; TODO: convert field-state?
-                 (render' (js->clj (.-field ctx)) ctx))]
+                 (render'
+                   (js->clj (.-field ctx) {:keywordize-keys true})
+                   ctx))]
     (form-field' (assoc props :render render))))
 
-(def form-control (util/lsui-wrap "FormControl"))
+(def form-control (util/lsui-wrap "FormControl" {:static? false}))
 
 ;; Hooks
 ;; https://react-hook-form.com/docs/useform#resolver
-(def use-form (aget js/window.LSUI "useForm"))
-(def use-form-context (aget js/window.LSUI "useFormContext"))
+(def use-form' (util/lsui-get "useForm"))
+(def use-form-context (util/lsui-get "useFormContext"))
+
+(defn use-form
+  ([] (use-form {}))
+  ([opts]
+   (let [^js methods (use-form' (bean/->js opts))]
+     ;; NOTE: just shallow convert return object!
+     (bean/bean methods))))
 
 ;; UI
 (def form-item (util/lsui-wrap "FormItem"))

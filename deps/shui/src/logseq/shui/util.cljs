@@ -158,3 +158,7 @@
 
 (def lsui-wrap
   (partial component-wrap js/window.LSUI))
+
+(defn lsui-get
+  [name]
+  (aget js/window.LSUI name))

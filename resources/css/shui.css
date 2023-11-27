@@ -14,6 +14,7 @@ html * {
 html[data-theme=light] {
   --accent: var(--rx-gray-04-hsl);
   --accent-foreground: var(--rx-gray-12-hsl);
+  --input: var(--rx-gray-03-hsl);
 
   &[data-color=logseq] {
     --primary: 200 97% 37%;
@@ -29,6 +30,7 @@ html[data-theme=dark] {
   --border: 0 0% 16%;
   --muted: 200 10% 11%;
   --popover: 0 0% 7%;
+  --input: 0 0% 25%;
 
   &[data-color=logseq] {
     --background: 192 100% 11%;
@@ -43,18 +45,12 @@ html[data-theme=dark] {
     --muted: 192 100% 13%;
     --border: 192 100% 16%;
     --popover: 192 100% 11%;
+    --input: 203 35% 25%;
   }
 }
 
 .ui__button {
   @apply font-medium relative flex items-center justify-center gap-1;
-  border-radius: 0.25rem;
-  /* box-shadow: inset 0 2px 0 0px rgba(255, 255, 255, 0.2), */
-  /*             inset 0 -2px 0 0px rgba(0, 0, 0, 0.1); */
-  /* background-image: linear-gradient(white, white), */
-  /*                   linear-gradient(to bottom, green, gold); */
-  /* background-origin: border-box; */
-  /* background-clip: content-box, border-box; */
 }
 
 .ui__button-size-sm {

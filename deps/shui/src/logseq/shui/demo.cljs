@@ -50,21 +50,28 @@
 (rum/defc sample-form-basic
   []
   [:div.border.p-6.rounded.bg-gray-01
-   (let [^js form (form-core/use-form)]
-     (js/console.log "[form] use-form state: " form)
-     (ui/form
-       {:getFieldState (.-getFieldState form)}
+   (let [form-ctx (form-core/use-form
+                    {:defaultValues {:username "Charlie"}})
+         handle-submit (:handleSubmit form-ctx)
+         on-submit-valid (handle-submit
+                           (fn [^js e]
+                             (ui/toast! [:code (js/JSON.stringify e #js {})] :info)))]
+
+     (ui/form form-ctx
        ;; children
-       (ui/form-field
-         {:control (.-control form)
-          :name    "username"}
-         (fn [field ^js ctx]
-           (js/console.log "[form] render field: " field ctx)
-           (ui/form-item
-             (ui/form-label "Username")
-             (ui/form-control (ui/input (merge {:placeholder "Username"} field)))
-             (ui/form-description "This is your public display name.")))
-         )))])
+       [:form
+        {:on-submit on-submit-valid}
+        (ui/form-field
+          {:name    "username"
+           :control (:control form-ctx)}
+          (fn [field ^js _ctx]
+            (ui/form-item
+              (ui/form-label "Username")
+              (ui/form-control
+                (ui/input (merge {:placeholder "Username"} field)))
+              (ui/form-description "This is your public display name."))))
+        [:p (ui/button {:type "submit"} "Submit")]
+        ]))])
 
 (rum/defc page []
   [:div.p-10

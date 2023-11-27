@@ -1,6 +1,6 @@
 const radix = require('@radix-ui/colors')
 
-function mapRadixColorToTailwind(color) {
+function mapRadixColorToTailwind (color) {
   const radixColor = radix[color]
   if (!radixColor) throw new Error(`[radix color] not exist for ${color}`)
   const twSteps = [10, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]
@@ -31,7 +31,7 @@ module.exports = {
     '../../deps/shui/src/**/*.cljs'
   ],
   safelist: [
-    { pattern: /primary-(gray|red|yellow|green|blue|orange|indigo|rose|purple|pink)/}
+    { pattern: /primary-(gray|red|yellow|green|blue|orange|indigo|rose|purple|pink)/ }
   ],
   theme: {
     container: {
@@ -129,4 +129,7 @@ module.exports = {
     },
   },
   plugins: [require('tailwindcss-animate')],
+  corePlugins: {
+    preflight: false,
+  }
 }
