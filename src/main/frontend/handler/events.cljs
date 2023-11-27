@@ -23,7 +23,7 @@
             [frontend.components.whiteboard :as whiteboard]
             [frontend.components.user.login :as login]
             [frontend.components.repo :as repo]
-            [frontend.components.page :as page]
+            [frontend.components.db-based.page :as db-page]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -832,7 +832,7 @@
   (state/set-modal!
    #(vector :<>
             (class-component/configure page)
-            (page/page-properties page {:configure? true}))
+            (db-page/page-properties page {:configure? true}))
    {:id :page-configure
     :label "page-configure"
     :container-overflow-visible? true}))
