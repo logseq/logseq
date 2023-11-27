@@ -37,6 +37,7 @@
         accents (concat accents
                   [(str "--accent:" (accent-base-hsl (name color)) "; ")
                    (str "--primary:" (accent-base-hsl (name color)) "; ")
+                   (str "--ring:" (accent-base-hsl (name color) 8) "; ")
                    ;; FIX ME: foreground
                    (str "--accent-foreground: 190 43% 97%; ")
                    (str "--primary-accent-foreground: 190 43% 97%; ")])
