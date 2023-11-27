@@ -22,20 +22,20 @@
 (rum/defc normalized-graph-label
   [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]
   (when graph
-    (let [local? (config/local-file-based-graph? url)]
-      [:span.flex.items-center
-       (if local?
-         (let [local-dir (config/get-local-dir url)
-               graph-name (text-util/get-graph-name-from-path url)]
-           [:a.flex.items-center {:title    local-dir
-                                  :on-click #(on-click graph)}
-            [:span graph-name (when GraphName [:strong.px-1 "(" GraphName ")"])]
-            (when remote? [:strong.pr-1.flex.items-center (ui/icon "cloud")])])
-
-         [:a.flex.items-center {:title    GraphUUID
+    [:span.flex.items-center
+     (if (or (config/local-file-based-graph? url)
+             (config/db-based-graph? url))
+       (let [local-dir (config/get-local-dir url)
+             graph-name (text-util/get-graph-name-from-path url)]
+         [:a.flex.items-center {:title    local-dir
                                 :on-click #(on-click graph)}
-          (db/get-repo-path (or url GraphName))
-          (when remote? [:strong.pl-1.flex.items-center (ui/icon "cloud")])])])))
+          [:span graph-name (when GraphName [:strong.px-1 "(" GraphName ")"])]
+          (when remote? [:strong.pr-1.flex.items-center (ui/icon "cloud")])])
+
+       [:a.flex.items-center {:title    GraphUUID
+                              :on-click #(on-click graph)}
+        (db/get-repo-path (or url GraphName))
+        (when remote? [:strong.pl-1.flex.items-center (ui/icon "cloud")])])]))
 
 (rum/defc repos-inner
   "Graph list in `All graphs` page"
