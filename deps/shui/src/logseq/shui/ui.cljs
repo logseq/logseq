@@ -14,6 +14,7 @@
 (def badge (util/lsui-wrap "Badge"))
 (def input (util/lsui-wrap "Input"))
 (def switch (util/lsui-wrap "Switch"))
+(def checkbox (util/lsui-wrap "Checkbox"))
 
 (def form-provider form-core/form-provider)
 (def form-item form-core/form-item)

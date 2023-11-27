@@ -224,6 +224,10 @@
   top: 1rem;
 }
 
+.top-\[-8px\] {
+  top: -8px;
+}
+
 .top-\[50\%\] {
   top: 50%;
 }
@@ -557,6 +561,10 @@
   gap: .25rem;
 }
 
+.gap-16 {
+  gap: 4rem;
+}
+
 .gap-2 {
   gap: .5rem;
 }
@@ -567,10 +575,6 @@
 
 .gap-4 {
   gap: 1rem;
-}
-
-.gap-8 {
-  gap: 2rem;
 }
 
 .space-x-2 > :not([hidden]) ~ :not([hidden]) {
@@ -1036,6 +1040,10 @@
 
 .text-blue-rx-10 {
   color: var(--rx-blue-10);
+}
+
+.text-current {
+  color: currentColor;
 }
 
 .text-destructive {
@@ -1559,6 +1567,10 @@
 
 .data-\[state\=unchecked\]\:bg-input[data-state="unchecked"] {
   background-color: hsl(var(--input));
+}
+
+.data-\[state\=checked\]\:text-primary-foreground[data-state="checked"] {
+  color: hsl(var(--primary-foreground));
 }
 
 .data-\[state\=open\]\:text-muted-foreground[data-state="open"] {

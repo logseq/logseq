@@ -37,6 +37,7 @@ import { useFormContext } from 'react-hook-form'
 import { yupResolver } from '@hookform/resolvers/yup'
 import * as yup from 'yup'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
 
 declare global {
   var LSUI: any
@@ -69,7 +70,7 @@ const shadui = {
   FormDescription, FormMessage,
   useFormField, useForm,
   useFormContext, yupResolver, yup,
-  Switch
+  Switch, Checkbox,
 }
 
 function setupGlobals() {

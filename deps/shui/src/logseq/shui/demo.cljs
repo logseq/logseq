@@ -51,7 +51,7 @@
   []
   [:div.border.p-6.rounded.bg-gray-01
    (let [form-ctx (form-core/use-form
-                    {:defaultValues {:username ""}
+                    {:defaultValues {:username "" :agreement true}
                      :yupSchema     (-> (.object yup)
                                       (.shape #js {:username (-> (.string yup) (.required))})
                                       (.required))})
@@ -76,6 +76,15 @@
                 (if error
                   [:b.text-red-800 (:message error)]
                   "This is your public display name.")))))
+
+        (ui/form-field {:name "agreement"}
+          (fn [field]
+            (ui/form-item
+              {:class "flex justify-end items-center space-x-3 space-y-0 my-3"}
+              (ui/form-control
+                (ui/checkbox {:checked           (:value field)
+                              :on-checked-change (:onChange field)}))
+              (ui/form-label {:class "font-normal cursor-pointer"} "Agreement terms"))))
 
         ;; actions
         [:p (ui/button {:type "submit"} "Submit")]]))])

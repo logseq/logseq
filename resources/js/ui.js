@@ -17137,6 +17137,181 @@ const $068ad3a70cdac599$export$b5d5cf8927ab7262 = /*#__PURE__*/ $LI8jA.forwardRe
 $068ad3a70cdac599$export$b5d5cf8927ab7262.displayName = $c4dc380c0fcb143e$export$be92b6f5f03c0fe9.displayName;
 
 
+
+
+var $LI8jA = parcelRequire("LI8jA");
+
+
+var $LI8jA = parcelRequire("LI8jA");
+
+
+
+
+
+
+
+
+/* -------------------------------------------------------------------------------------------------
+ * Checkbox
+ * -----------------------------------------------------------------------------------------------*/ const $7596e82f828d9671$var$$e698a72e93240346$var$CHECKBOX_NAME = "Checkbox";
+const [$7596e82f828d9671$var$$e698a72e93240346$var$createCheckboxContext, $7596e82f828d9671$export$b566c4ff5488ea01] = (0, $ec3315292aa721d0$export$50c7b4e9d9f19c1)($7596e82f828d9671$var$$e698a72e93240346$var$CHECKBOX_NAME);
+const [$7596e82f828d9671$var$$e698a72e93240346$var$CheckboxProvider, $7596e82f828d9671$var$$e698a72e93240346$var$useCheckboxContext] = $7596e82f828d9671$var$$e698a72e93240346$var$createCheckboxContext($7596e82f828d9671$var$$e698a72e93240346$var$CHECKBOX_NAME);
+const $7596e82f828d9671$export$48513f6b9f8ce62d = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeCheckbox: __scopeCheckbox , name: name , checked: checkedProp , defaultChecked: defaultChecked , required: required , disabled: disabled , value: value = "on" , onCheckedChange: onCheckedChange , ...checkboxProps } = props;
+    const [button, setButton] = (0, $LI8jA.useState)(null);
+    const composedRefs = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, (node)=>setButton(node));
+    const hasConsumerStoppedPropagationRef = (0, $LI8jA.useRef)(false); // We set this to true by default so that events bubble to forms without JS (SSR)
+    const isFormControl = button ? Boolean(button.closest("form")) : true;
+    const [checked = false, setChecked] = (0, $f4c632903130edee$export$6f32135080cb4c3)({
+        prop: checkedProp,
+        defaultProp: defaultChecked,
+        onChange: onCheckedChange
+    });
+    const initialCheckedStateRef = (0, $LI8jA.useRef)(checked);
+    (0, $LI8jA.useEffect)(()=>{
+        const form = button === null || button === void 0 ? void 0 : button.form;
+        if (form) {
+            const reset = ()=>setChecked(initialCheckedStateRef.current);
+            form.addEventListener("reset", reset);
+            return ()=>form.removeEventListener("reset", reset);
+        }
+    }, [
+        button,
+        setChecked
+    ]);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)($7596e82f828d9671$var$$e698a72e93240346$var$CheckboxProvider, {
+        scope: __scopeCheckbox,
+        state: checked,
+        disabled: disabled
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).button, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        type: "button",
+        role: "checkbox",
+        "aria-checked": $7596e82f828d9671$var$$e698a72e93240346$var$isIndeterminate(checked) ? "mixed" : checked,
+        "aria-required": required,
+        "data-state": $7596e82f828d9671$var$$e698a72e93240346$var$getState(checked),
+        "data-disabled": disabled ? "" : undefined,
+        disabled: disabled,
+        value: value
+    }, checkboxProps, {
+        ref: composedRefs,
+        onKeyDown: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onKeyDown, (event)=>{
+            // According to WAI ARIA, Checkboxes don't activate on enter keypress
+            if (event.key === "Enter") event.preventDefault();
+        }),
+        onClick: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onClick, (event)=>{
+            setChecked((prevChecked)=>$7596e82f828d9671$var$$e698a72e93240346$var$isIndeterminate(prevChecked) ? true : !prevChecked);
+            if (isFormControl) {
+                hasConsumerStoppedPropagationRef.current = event.isPropagationStopped(); // if checkbox is in a form, stop propagation from the button so that we only propagate
+                // one click event (from the input). We propagate changes from an input so that native
+                // form validation works and form events reflect checkbox updates.
+                if (!hasConsumerStoppedPropagationRef.current) event.stopPropagation();
+            }
+        })
+    })), isFormControl && /*#__PURE__*/ (0, $LI8jA.createElement)($7596e82f828d9671$var$$e698a72e93240346$var$BubbleInput, {
+        control: button,
+        bubbles: !hasConsumerStoppedPropagationRef.current,
+        name: name,
+        value: value,
+        checked: checked,
+        required: required,
+        disabled: disabled // We transform because the input is absolutely positioned but we have
+        ,
+        style: {
+            transform: "translateX(-100%)"
+        }
+    }));
+});
+/*#__PURE__*/ Object.assign($7596e82f828d9671$export$48513f6b9f8ce62d, {
+    displayName: $7596e82f828d9671$var$$e698a72e93240346$var$CHECKBOX_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * CheckboxIndicator
+ * -----------------------------------------------------------------------------------------------*/ const $7596e82f828d9671$var$$e698a72e93240346$var$INDICATOR_NAME = "CheckboxIndicator";
+const $7596e82f828d9671$export$59aad738f51d1c05 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeCheckbox: __scopeCheckbox , forceMount: forceMount , ...indicatorProps } = props;
+    const context = $7596e82f828d9671$var$$e698a72e93240346$var$useCheckboxContext($7596e82f828d9671$var$$e698a72e93240346$var$INDICATOR_NAME, __scopeCheckbox);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $0ac33c7c3f86b9ab$export$99c2b779aa4e8b8b), {
+        present: forceMount || $7596e82f828d9671$var$$e698a72e93240346$var$isIndeterminate(context.state) || context.state === true
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).span, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        "data-state": $7596e82f828d9671$var$$e698a72e93240346$var$getState(context.state),
+        "data-disabled": context.disabled ? "" : undefined
+    }, indicatorProps, {
+        ref: forwardedRef,
+        style: {
+            pointerEvents: "none",
+            ...props.style
+        }
+    })));
+});
+/*#__PURE__*/ Object.assign($7596e82f828d9671$export$59aad738f51d1c05, {
+    displayName: $7596e82f828d9671$var$$e698a72e93240346$var$INDICATOR_NAME
+});
+/* ---------------------------------------------------------------------------------------------- */ const $7596e82f828d9671$var$$e698a72e93240346$var$BubbleInput = (props)=>{
+    const { control: control , checked: checked , bubbles: bubbles = true , ...inputProps } = props;
+    const ref = (0, $LI8jA.useRef)(null);
+    const prevChecked = (0, $760b241fb7cd5f92$export$5cae361ad82dce8b)(checked);
+    const controlSize = (0, $e5427f5e3f2cde3c$export$1ab7ae714698c4b8)(control); // Bubble checked change to parents (e.g form change event)
+    (0, $LI8jA.useEffect)(()=>{
+        const input = ref.current;
+        const inputProto = window.HTMLInputElement.prototype;
+        const descriptor = Object.getOwnPropertyDescriptor(inputProto, "checked");
+        const setChecked = descriptor.set;
+        if (prevChecked !== checked && setChecked) {
+            const event = new Event("click", {
+                bubbles: bubbles
+            });
+            input.indeterminate = $7596e82f828d9671$var$$e698a72e93240346$var$isIndeterminate(checked);
+            setChecked.call(input, $7596e82f828d9671$var$$e698a72e93240346$var$isIndeterminate(checked) ? false : checked);
+            input.dispatchEvent(event);
+        }
+    }, [
+        prevChecked,
+        checked,
+        bubbles
+    ]);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)("input", (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        type: "checkbox",
+        "aria-hidden": true,
+        defaultChecked: $7596e82f828d9671$var$$e698a72e93240346$var$isIndeterminate(checked) ? false : checked
+    }, inputProps, {
+        tabIndex: -1,
+        ref: ref,
+        style: {
+            ...props.style,
+            ...controlSize,
+            position: "absolute",
+            pointerEvents: "none",
+            opacity: 0,
+            margin: 0
+        }
+    }));
+};
+function $7596e82f828d9671$var$$e698a72e93240346$var$isIndeterminate(checked) {
+    return checked === "indeterminate";
+}
+function $7596e82f828d9671$var$$e698a72e93240346$var$getState(checked) {
+    return $7596e82f828d9671$var$$e698a72e93240346$var$isIndeterminate(checked) ? "indeterminate" : checked ? "checked" : "unchecked";
+}
+const $7596e82f828d9671$export$be92b6f5f03c0fe9 = $7596e82f828d9671$export$48513f6b9f8ce62d;
+const $7596e82f828d9671$export$adb584737d712b70 = $7596e82f828d9671$export$59aad738f51d1c05;
+
+
+
+
+const $92f0eedf92840b98$export$48513f6b9f8ce62d = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($7596e82f828d9671$export$be92b6f5f03c0fe9, {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__checkbox", "peer h-4 w-4 shrink-0 rounded-sm border border-primary ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground", className),
+        ...props,
+        children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($7596e82f828d9671$export$adb584737d712b70, {
+            className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("flex items-center justify-center text-current"),
+            children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)((0, $40c0f661ec418351$export$2e2bcd8739ae039), {
+                className: "h-4 w-4"
+            })
+        })
+    }));
+$92f0eedf92840b98$export$48513f6b9f8ce62d.displayName = $7596e82f828d9671$export$be92b6f5f03c0fe9.displayName;
+
+
 const $f4eb51170e743c4a$var$shadui = {
     Button: $0e5897524c762a41$export$353f5b6fc5456de1,
     Slider: $c38718c2690bae4e$export$472062a354075cee,
@@ -17176,7 +17351,8 @@ const $f4eb51170e743c4a$var$shadui = {
     useFormContext: $9d503234465cbf96$export$4d957a5e1be13b03,
     yupResolver: $c2277a4615adf02f$export$d55832dfcd4989a,
     yup: $3e943e01faec8b35$exports,
-    Switch: $068ad3a70cdac599$export$b5d5cf8927ab7262
+    Switch: $068ad3a70cdac599$export$b5d5cf8927ab7262,
+    Checkbox: $92f0eedf92840b98$export$48513f6b9f8ce62d
 };
 function $f4eb51170e743c4a$export$40e78c93e005ce8f() {
     console.debug("[ui] setup logseq ui globals");
