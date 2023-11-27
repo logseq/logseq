@@ -3,7 +3,8 @@
   (:require ["path" :as node-path]
             ["better-sqlite3" :as sqlite3]
             [clojure.string :as string]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 ;; use built-in blocks to represent db schema, config, custom css, custom js, etc.
 
@@ -22,7 +23,7 @@
 (defn sanitize-db-name
   [db-name]
   (-> db-name
-      (string/replace "logseq_db_" "")
+      (string/replace sqlite-util/db-version-prefix "")
       (string/replace "/" "_")
       (string/replace "\\" "_")
       (string/replace ":" "_"))) ;; windows

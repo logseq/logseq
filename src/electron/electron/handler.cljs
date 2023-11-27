@@ -245,7 +245,7 @@
     (->> (common-graph/read-directories dir)
          (remove (fn [s] (= s db/unlinked-graphs-dir)))
          (map graph-name->path)
-         (map (fn [s] (str "logseq_db_" s))))))
+         (map (fn [s] (str sqlite-util/db-version-prefix s))))))
 
 (defn- get-graphs
   []
@@ -255,13 +255,15 @@
 
 ;; TODO support alias mechanism
 (defn get-graph-name
-  "Given a graph's name of string, returns the graph's fullname.
-   E.g., given `cat`, returns `logseq_local_<path_to_directory>/cat`
-   Returns `nil` if no such graph exists."
+  "Given a graph's name of string, returns the graph's fullname. For example, given
+  `cat`, returns `logseq_local_<path_to_directory>/cat` for a file graph and
+  `logseq_db_cat` for a db graph.  Returns `nil` if no such graph exists."
   [graph-identifier]
   (->> (get-graphs)
-       (some #(when (string/ends-with? (utils/normalize-lc %)
-                                       (str "/" (utils/normalize-lc graph-identifier)))
+       (some #(when (or
+                     (= (utils/normalize-lc %) (utils/normalize-lc (str sqlite-util/db-version-prefix graph-identifier)))
+                     (string/ends-with? (utils/normalize-lc %)
+                                        (str "/" (utils/normalize-lc graph-identifier))))
                 %))))
 
 (defmethod handle :getGraphs [_window [_]]
