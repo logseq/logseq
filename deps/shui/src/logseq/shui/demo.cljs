@@ -52,14 +52,13 @@
   [:div.border.p-6.rounded.bg-gray-01
    (let [form-ctx (form-core/use-form
                     {:defaultValues {:username ""}
-                     :resolver      (yup-resolver
-                                      (-> (.object yup)
-                                        (.shape #js {:username (-> (.string yup) (.required))})
-                                        (.required)))})
+                     :yupSchema     (-> (.object yup)
+                                      (.shape #js {:username (-> (.string yup) (.required))})
+                                      (.required))})
          handle-submit (:handleSubmit form-ctx)
          on-submit-valid (handle-submit
                            (fn [^js e]
-                             (js/console.log "==>> submit: " e)
+                             (js/console.log "[form] submit: " e)
                              (ui/toast! [:code (js/JSON.stringify e #js {})] :info)))]
 
      (ui/form-provider form-ctx

@@ -38,7 +38,11 @@
 (defn use-form
   ([] (use-form {}))
   ([opts]
-   (let [^js methods (use-form' (bean/->js opts))]
+   (let [yup-schema (:yupSchema opts)
+         ^js methods (use-form' (bean/->js
+                                  (cond-> opts
+                                    (not (nil? yup-schema))
+                                    (assoc :resolver (yup-resolver yup-schema)))))]
      ;; NOTE: just shallow convert return object!
      (bean/bean methods))))
 
