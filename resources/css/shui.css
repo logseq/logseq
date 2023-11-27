@@ -50,7 +50,7 @@ html[data-theme=dark] {
 }
 
 .ui__button {
-  @apply font-medium relative flex items-center justify-center gap-1;
+  @apply font-medium relative flex items-center justify-center gap-1 rounded;
 }
 
 .ui__button-size-sm {
