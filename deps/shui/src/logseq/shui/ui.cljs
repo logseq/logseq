@@ -14,7 +14,7 @@
 (def badge (util/lsui-wrap "Badge"))
 (def input (util/lsui-wrap "Input"))
 
-(def form form-core/form)
+(def form-provider form-core/form-provider)
 (def form-item form-core/form-item)
 (def form-label form-core/form-label)
 (def form-description form-core/form-description)

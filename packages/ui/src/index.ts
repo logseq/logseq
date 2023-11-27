@@ -34,6 +34,8 @@ import {
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { useFormContext } from 'react-hook-form'
+import { yupResolver } from '@hookform/resolvers/yup'
+import * as yup from 'yup'
 
 declare global {
   var LSUI: any
@@ -65,7 +67,7 @@ const shadui = {
   FormField, FormControl,
   FormDescription, FormMessage,
   useFormField, useForm,
-  useFormContext
+  useFormContext, yupResolver, yup
 }
 
 function setupGlobals() {

@@ -6,7 +6,7 @@
 
 
 ;; State
-(def form (util/lsui-wrap "Form" {:static? false}))
+(def form-provider (util/lsui-wrap "Form" {:static? false}))
 (def form-field' (util/lsui-wrap "FormField" {:static? false}))
 
 (rum/defc form-field
@@ -19,11 +19,16 @@
         render (fn [^js ctx]
                  ;; TODO: convert field-state?
                  (render'
-                   (js->clj (.-field ctx) {:keywordize-keys true})
+                   (bean/bean (.-field ctx))
+                   (some-> (.-fieldState ctx) (.-error) (bean/bean))
+                   (bean/bean (.-fieldState ctx))
                    ctx))]
     (form-field' (assoc props :render render))))
 
 (def form-control (util/lsui-wrap "FormControl" {:static? false}))
+
+(def ^js yup (util/lsui-get "yup"))
+(def yup-resolver (util/lsui-get "yupResolver"))
 
 ;; Hooks
 ;; https://react-hook-form.com/docs/useform#resolver

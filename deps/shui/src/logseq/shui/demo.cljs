@@ -1,7 +1,7 @@
 (ns logseq.shui.demo
   (:require [rum.core :as rum]
             [logseq.shui.ui :as ui]
-            [logseq.shui.form.core :as form-core]
+            [logseq.shui.form.core :refer [yup yup-resolver] :as form-core]
             [cljs-bean.core :as bean]))
 
 (rum/defc section-item
@@ -51,27 +51,35 @@
   []
   [:div.border.p-6.rounded.bg-gray-01
    (let [form-ctx (form-core/use-form
-                    {:defaultValues {:username "Charlie"}})
+                    {:defaultValues {:username ""}
+                     :resolver      (yup-resolver
+                                      (-> (.object yup)
+                                        (.shape #js {:username (-> (.string yup) (.required))})
+                                        (.required)))})
          handle-submit (:handleSubmit form-ctx)
          on-submit-valid (handle-submit
                            (fn [^js e]
+                             (js/console.log "==>> submit: " e)
                              (ui/toast! [:code (js/JSON.stringify e #js {})] :info)))]
 
-     (ui/form form-ctx
-       ;; children
+     (ui/form-provider form-ctx
        [:form
         {:on-submit on-submit-valid}
-        (ui/form-field
-          {:name    "username"
-           :control (:control form-ctx)}
-          (fn [field ^js _ctx]
+
+        ;; field item
+        (ui/form-field {:name "username"}
+          (fn [field error]
             (ui/form-item
               (ui/form-label "Username")
               (ui/form-control
                 (ui/input (merge {:placeholder "Username"} field)))
-              (ui/form-description "This is your public display name."))))
-        [:p (ui/button {:type "submit"} "Submit")]
-        ]))])
+              (ui/form-description
+                (if error
+                  [:b.text-red-800 (:message error)]
+                  "This is your public display name.")))))
+
+        ;; actions
+        [:p (ui/button {:type "submit"} "Submit")]]))])
 
 (rum/defc page []
   [:div.p-10
