@@ -17312,6 +17312,284 @@ const $92f0eedf92840b98$export$48513f6b9f8ce62d = /*#__PURE__*/ $LI8jA.forwardRe
 $92f0eedf92840b98$export$48513f6b9f8ce62d.displayName = $7596e82f828d9671$export$be92b6f5f03c0fe9.displayName;
 
 
+
+
+var $LI8jA = parcelRequire("LI8jA");
+
+
+var $LI8jA = parcelRequire("LI8jA");
+
+
+
+
+
+
+
+
+
+
+/* -------------------------------------------------------------------------------------------------
+ * Radio
+ * -----------------------------------------------------------------------------------------------*/ const $280cadbb18dcd3d9$var$$ce77a8961b41be9e$var$RADIO_NAME = "Radio";
+const [$280cadbb18dcd3d9$var$$ce77a8961b41be9e$var$createRadioContext, $280cadbb18dcd3d9$var$$ce77a8961b41be9e$export$67d2296460f1b002] = (0, $ec3315292aa721d0$export$50c7b4e9d9f19c1)($280cadbb18dcd3d9$var$$ce77a8961b41be9e$var$RADIO_NAME);
+const [$280cadbb18dcd3d9$var$$ce77a8961b41be9e$var$RadioProvider, $280cadbb18dcd3d9$var$$ce77a8961b41be9e$var$useRadioContext] = $280cadbb18dcd3d9$var$$ce77a8961b41be9e$var$createRadioContext($280cadbb18dcd3d9$var$$ce77a8961b41be9e$var$RADIO_NAME);
+const $280cadbb18dcd3d9$var$$ce77a8961b41be9e$export$d7b12c4107be0d61 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeRadio: __scopeRadio , name: name , checked: checked = false , required: required , disabled: disabled , value: value = "on" , onCheck: onCheck , ...radioProps } = props;
+    const [button, setButton] = (0, $LI8jA.useState)(null);
+    const composedRefs = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, (node)=>setButton(node));
+    const hasConsumerStoppedPropagationRef = (0, $LI8jA.useRef)(false); // We set this to true by default so that events bubble to forms without JS (SSR)
+    const isFormControl = button ? Boolean(button.closest("form")) : true;
+    return /*#__PURE__*/ (0, $LI8jA.createElement)($280cadbb18dcd3d9$var$$ce77a8961b41be9e$var$RadioProvider, {
+        scope: __scopeRadio,
+        checked: checked,
+        disabled: disabled
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).button, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        type: "button",
+        role: "radio",
+        "aria-checked": checked,
+        "data-state": $280cadbb18dcd3d9$var$$ce77a8961b41be9e$var$getState(checked),
+        "data-disabled": disabled ? "" : undefined,
+        disabled: disabled,
+        value: value
+    }, radioProps, {
+        ref: composedRefs,
+        onClick: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onClick, (event)=>{
+            // radios cannot be unchecked so we only communicate a checked state
+            if (!checked) onCheck === null || onCheck === void 0 || onCheck();
+            if (isFormControl) {
+                hasConsumerStoppedPropagationRef.current = event.isPropagationStopped(); // if radio is in a form, stop propagation from the button so that we only propagate
+                // one click event (from the input). We propagate changes from an input so that native
+                // form validation works and form events reflect radio updates.
+                if (!hasConsumerStoppedPropagationRef.current) event.stopPropagation();
+            }
+        })
+    })), isFormControl && /*#__PURE__*/ (0, $LI8jA.createElement)($280cadbb18dcd3d9$var$$ce77a8961b41be9e$var$BubbleInput, {
+        control: button,
+        bubbles: !hasConsumerStoppedPropagationRef.current,
+        name: name,
+        value: value,
+        checked: checked,
+        required: required,
+        disabled: disabled // We transform because the input is absolutely positioned but we have
+        ,
+        style: {
+            transform: "translateX(-100%)"
+        }
+    }));
+});
+/*#__PURE__*/ Object.assign($280cadbb18dcd3d9$var$$ce77a8961b41be9e$export$d7b12c4107be0d61, {
+    displayName: $280cadbb18dcd3d9$var$$ce77a8961b41be9e$var$RADIO_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * RadioIndicator
+ * -----------------------------------------------------------------------------------------------*/ const $280cadbb18dcd3d9$var$$ce77a8961b41be9e$var$INDICATOR_NAME = "RadioIndicator";
+const $280cadbb18dcd3d9$var$$ce77a8961b41be9e$export$d35a9ffa9a04f9e7 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeRadio: __scopeRadio , forceMount: forceMount , ...indicatorProps } = props;
+    const context = $280cadbb18dcd3d9$var$$ce77a8961b41be9e$var$useRadioContext($280cadbb18dcd3d9$var$$ce77a8961b41be9e$var$INDICATOR_NAME, __scopeRadio);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $0ac33c7c3f86b9ab$export$99c2b779aa4e8b8b), {
+        present: forceMount || context.checked
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).span, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        "data-state": $280cadbb18dcd3d9$var$$ce77a8961b41be9e$var$getState(context.checked),
+        "data-disabled": context.disabled ? "" : undefined
+    }, indicatorProps, {
+        ref: forwardedRef
+    })));
+});
+/*#__PURE__*/ Object.assign($280cadbb18dcd3d9$var$$ce77a8961b41be9e$export$d35a9ffa9a04f9e7, {
+    displayName: $280cadbb18dcd3d9$var$$ce77a8961b41be9e$var$INDICATOR_NAME
+});
+/* ---------------------------------------------------------------------------------------------- */ const $280cadbb18dcd3d9$var$$ce77a8961b41be9e$var$BubbleInput = (props)=>{
+    const { control: control , checked: checked , bubbles: bubbles = true , ...inputProps } = props;
+    const ref = (0, $LI8jA.useRef)(null);
+    const prevChecked = (0, $760b241fb7cd5f92$export$5cae361ad82dce8b)(checked);
+    const controlSize = (0, $e5427f5e3f2cde3c$export$1ab7ae714698c4b8)(control); // Bubble checked change to parents (e.g form change event)
+    (0, $LI8jA.useEffect)(()=>{
+        const input = ref.current;
+        const inputProto = window.HTMLInputElement.prototype;
+        const descriptor = Object.getOwnPropertyDescriptor(inputProto, "checked");
+        const setChecked = descriptor.set;
+        if (prevChecked !== checked && setChecked) {
+            const event = new Event("click", {
+                bubbles: bubbles
+            });
+            setChecked.call(input, checked);
+            input.dispatchEvent(event);
+        }
+    }, [
+        prevChecked,
+        checked,
+        bubbles
+    ]);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)("input", (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        type: "radio",
+        "aria-hidden": true,
+        defaultChecked: checked
+    }, inputProps, {
+        tabIndex: -1,
+        ref: ref,
+        style: {
+            ...props.style,
+            ...controlSize,
+            position: "absolute",
+            pointerEvents: "none",
+            opacity: 0,
+            margin: 0
+        }
+    }));
+};
+function $280cadbb18dcd3d9$var$$ce77a8961b41be9e$var$getState(checked) {
+    return checked ? "checked" : "unchecked";
+}
+const $280cadbb18dcd3d9$var$$f99a8c78507165f7$var$ARROW_KEYS = [
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight"
+];
+/* -------------------------------------------------------------------------------------------------
+ * RadioGroup
+ * -----------------------------------------------------------------------------------------------*/ const $280cadbb18dcd3d9$var$$f99a8c78507165f7$var$RADIO_GROUP_NAME = "RadioGroup";
+const [$280cadbb18dcd3d9$var$$f99a8c78507165f7$var$createRadioGroupContext, $280cadbb18dcd3d9$export$c547093f11b76da2] = (0, $ec3315292aa721d0$export$50c7b4e9d9f19c1)($280cadbb18dcd3d9$var$$f99a8c78507165f7$var$RADIO_GROUP_NAME, [
+    (0, $fafe9e85b41f374b$export$c7109489551a4f4),
+    $280cadbb18dcd3d9$var$$ce77a8961b41be9e$export$67d2296460f1b002
+]);
+const $280cadbb18dcd3d9$var$$f99a8c78507165f7$var$useRovingFocusGroupScope = (0, $fafe9e85b41f374b$export$c7109489551a4f4)();
+const $280cadbb18dcd3d9$var$$f99a8c78507165f7$var$useRadioScope = $280cadbb18dcd3d9$var$$ce77a8961b41be9e$export$67d2296460f1b002();
+const [$280cadbb18dcd3d9$var$$f99a8c78507165f7$var$RadioGroupProvider, $280cadbb18dcd3d9$var$$f99a8c78507165f7$var$useRadioGroupContext] = $280cadbb18dcd3d9$var$$f99a8c78507165f7$var$createRadioGroupContext($280cadbb18dcd3d9$var$$f99a8c78507165f7$var$RADIO_GROUP_NAME);
+const $280cadbb18dcd3d9$export$a98f0dcb43a68a25 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeRadioGroup: __scopeRadioGroup , name: name , defaultValue: defaultValue , value: valueProp , required: required = false , disabled: disabled = false , orientation: orientation , dir: dir , loop: loop = true , onValueChange: onValueChange , ...groupProps } = props;
+    const rovingFocusGroupScope = $280cadbb18dcd3d9$var$$f99a8c78507165f7$var$useRovingFocusGroupScope(__scopeRadioGroup);
+    const direction = (0, $842d1ddb67983cae$export$b39126d51d94e6f3)(dir);
+    const [value, setValue] = (0, $f4c632903130edee$export$6f32135080cb4c3)({
+        prop: valueProp,
+        defaultProp: defaultValue,
+        onChange: onValueChange
+    });
+    return /*#__PURE__*/ (0, $LI8jA.createElement)($280cadbb18dcd3d9$var$$f99a8c78507165f7$var$RadioGroupProvider, {
+        scope: __scopeRadioGroup,
+        name: name,
+        required: required,
+        disabled: disabled,
+        value: value,
+        onValueChange: setValue
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $fafe9e85b41f374b$export$be92b6f5f03c0fe9), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        asChild: true
+    }, rovingFocusGroupScope, {
+        orientation: orientation,
+        dir: direction,
+        loop: loop
+    }), /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).div, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        role: "radiogroup",
+        "aria-required": required,
+        "aria-orientation": orientation,
+        "data-disabled": disabled ? "" : undefined,
+        dir: direction
+    }, groupProps, {
+        ref: forwardedRef
+    }))));
+});
+/*#__PURE__*/ Object.assign($280cadbb18dcd3d9$export$a98f0dcb43a68a25, {
+    displayName: $280cadbb18dcd3d9$var$$f99a8c78507165f7$var$RADIO_GROUP_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * RadioGroupItem
+ * -----------------------------------------------------------------------------------------------*/ const $280cadbb18dcd3d9$var$$f99a8c78507165f7$var$ITEM_NAME = "RadioGroupItem";
+const $280cadbb18dcd3d9$export$9f866c100ef519e4 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeRadioGroup: __scopeRadioGroup , disabled: disabled , ...itemProps } = props;
+    const context = $280cadbb18dcd3d9$var$$f99a8c78507165f7$var$useRadioGroupContext($280cadbb18dcd3d9$var$$f99a8c78507165f7$var$ITEM_NAME, __scopeRadioGroup);
+    const isDisabled = context.disabled || disabled;
+    const rovingFocusGroupScope = $280cadbb18dcd3d9$var$$f99a8c78507165f7$var$useRovingFocusGroupScope(__scopeRadioGroup);
+    const radioScope = $280cadbb18dcd3d9$var$$f99a8c78507165f7$var$useRadioScope(__scopeRadioGroup);
+    const ref = (0, $LI8jA.useRef)(null);
+    const composedRefs = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, ref);
+    const checked = context.value === itemProps.value;
+    const isArrowKeyPressedRef = (0, $LI8jA.useRef)(false);
+    (0, $LI8jA.useEffect)(()=>{
+        const handleKeyDown = (event)=>{
+            if ($280cadbb18dcd3d9$var$$f99a8c78507165f7$var$ARROW_KEYS.includes(event.key)) isArrowKeyPressedRef.current = true;
+        };
+        const handleKeyUp = ()=>isArrowKeyPressedRef.current = false;
+        document.addEventListener("keydown", handleKeyDown);
+        document.addEventListener("keyup", handleKeyUp);
+        return ()=>{
+            document.removeEventListener("keydown", handleKeyDown);
+            document.removeEventListener("keyup", handleKeyUp);
+        };
+    }, []);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $fafe9e85b41f374b$export$6d08773d2e66f8f2), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        asChild: true
+    }, rovingFocusGroupScope, {
+        focusable: !isDisabled,
+        active: checked
+    }), /*#__PURE__*/ (0, $LI8jA.createElement)($280cadbb18dcd3d9$var$$ce77a8961b41be9e$export$d7b12c4107be0d61, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        disabled: isDisabled,
+        required: context.required,
+        checked: checked
+    }, radioScope, itemProps, {
+        name: context.name,
+        ref: composedRefs,
+        onCheck: ()=>context.onValueChange(itemProps.value),
+        onKeyDown: (0, $890940bb4b8db948$export$b9ecd428b558ff10)((event)=>{
+            // According to WAI ARIA, radio groups don't activate items on enter keypress
+            if (event.key === "Enter") event.preventDefault();
+        }),
+        onFocus: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(itemProps.onFocus, ()=>{
+            var _ref$current;
+            /**
+       * Our `RovingFocusGroup` will focus the radio when navigating with arrow keys
+       * and we need to "check" it in that case. We click it to "check" it (instead
+       * of updating `context.value`) so that the radio change event fires.
+       */ if (isArrowKeyPressedRef.current) (_ref$current = ref.current) === null || _ref$current === void 0 || _ref$current.click();
+        })
+    })));
+});
+/*#__PURE__*/ Object.assign($280cadbb18dcd3d9$export$9f866c100ef519e4, {
+    displayName: $280cadbb18dcd3d9$var$$f99a8c78507165f7$var$ITEM_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * RadioGroupIndicator
+ * -----------------------------------------------------------------------------------------------*/ const $280cadbb18dcd3d9$var$$f99a8c78507165f7$var$INDICATOR_NAME = "RadioGroupIndicator";
+const $280cadbb18dcd3d9$export$5fb54c671a65c88 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeRadioGroup: __scopeRadioGroup , ...indicatorProps } = props;
+    const radioScope = $280cadbb18dcd3d9$var$$f99a8c78507165f7$var$useRadioScope(__scopeRadioGroup);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)($280cadbb18dcd3d9$var$$ce77a8961b41be9e$export$d35a9ffa9a04f9e7, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, radioScope, indicatorProps, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($280cadbb18dcd3d9$export$5fb54c671a65c88, {
+    displayName: $280cadbb18dcd3d9$var$$f99a8c78507165f7$var$INDICATOR_NAME
+});
+/* ---------------------------------------------------------------------------------------------- */ const $280cadbb18dcd3d9$export$be92b6f5f03c0fe9 = $280cadbb18dcd3d9$export$a98f0dcb43a68a25;
+const $280cadbb18dcd3d9$export$6d08773d2e66f8f2 = $280cadbb18dcd3d9$export$9f866c100ef519e4;
+const $280cadbb18dcd3d9$export$adb584737d712b70 = $280cadbb18dcd3d9$export$5fb54c671a65c88;
+
+
+
+
+const $faa77b788ed00186$export$a98f0dcb43a68a25 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>{
+    return /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($280cadbb18dcd3d9$export$be92b6f5f03c0fe9, {
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__radio-group grid gap-2", className),
+        ...props,
+        ref: ref
+    });
+});
+$faa77b788ed00186$export$a98f0dcb43a68a25.displayName = $280cadbb18dcd3d9$export$be92b6f5f03c0fe9.displayName;
+const $faa77b788ed00186$export$9f866c100ef519e4 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>{
+    return /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($280cadbb18dcd3d9$export$6d08773d2e66f8f2, {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__radio-group-item", "aspect-square h-4 w-4 rounded-full border border-primary text-primary ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50", className),
+        ...props,
+        children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($280cadbb18dcd3d9$export$adb584737d712b70, {
+            className: "flex items-center justify-center",
+            children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)((0, $f4de4372d9dbc0ac$export$2e2bcd8739ae039), {
+                className: "h-2.5 w-2.5 fill-current text-current"
+            })
+        })
+    });
+});
+$faa77b788ed00186$export$9f866c100ef519e4.displayName = $280cadbb18dcd3d9$export$6d08773d2e66f8f2.displayName;
+
+
 const $f4eb51170e743c4a$var$shadui = {
     Button: $0e5897524c762a41$export$353f5b6fc5456de1,
     Slider: $c38718c2690bae4e$export$472062a354075cee,
@@ -17352,7 +17630,9 @@ const $f4eb51170e743c4a$var$shadui = {
     yupResolver: $c2277a4615adf02f$export$d55832dfcd4989a,
     yup: $3e943e01faec8b35$exports,
     Switch: $068ad3a70cdac599$export$b5d5cf8927ab7262,
-    Checkbox: $92f0eedf92840b98$export$48513f6b9f8ce62d
+    Checkbox: $92f0eedf92840b98$export$48513f6b9f8ce62d,
+    RadioGroup: $faa77b788ed00186$export$a98f0dcb43a68a25,
+    RadioGroupItem: $faa77b788ed00186$export$9f866c100ef519e4
 };
 function $f4eb51170e743c4a$export$40e78c93e005ce8f() {
     console.debug("[ui] setup logseq ui globals");

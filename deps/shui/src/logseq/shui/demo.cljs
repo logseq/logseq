@@ -51,7 +51,7 @@
   []
   [:div.border.p-6.rounded.bg-gray-01
    (let [form-ctx (form-core/use-form
-                    {:defaultValues {:username "" :agreement true}
+                    {:defaultValues {:username "" :agreement true :notification "all"}
                      :yupSchema     (-> (.object yup)
                                       (.shape #js {:username (-> (.string yup) (.required))})
                                       (.required))})
@@ -59,7 +59,7 @@
          on-submit-valid (handle-submit
                            (fn [^js e]
                              (js/console.log "[form] submit: " e)
-                             (ui/toast! [:code (js/JSON.stringify e #js {})] :info)))]
+                             (js/alert (js/JSON.stringify e nil 2))))]
 
      (ui/form-provider form-ctx
        [:form
@@ -77,17 +77,45 @@
                   [:b.text-red-800 (:message error)]
                   "This is your public display name.")))))
 
+        ;; radio
+        (ui/form-field {:name "notification"}
+          ;; item render
+          (fn [field]
+            (ui/form-item
+              {:class "space-y-3 my-4"}
+              (ui/form-label "Notify me about...")
+              (ui/form-control
+                (ui/radio-group
+                  {:default-value   (:value field)
+                   :on-value-change (:onChange field)
+                   :class           "flex flex-col space-y-3"}
+                  (ui/form-item
+                    {:class "flex flex-row space-x-3 items-center space-y-0"}
+                    (ui/form-control
+                      (ui/radio-group-item {:value "all"}))
+                    (ui/form-label "All"))
+
+                  (ui/form-item
+                    {:class "flex flex-row space-x-3 items-center space-y-0"}
+                    (ui/form-control
+                      (ui/radio-group-item {:value "direct"}))
+                    (ui/form-label "Direct messages and mentions")))))))
+
+        [:hr]
+
+        ;; checkbox
         (ui/form-field {:name "agreement"}
           (fn [field]
             (ui/form-item
-              {:class "flex justify-end items-center space-x-3 space-y-0 my-3"}
+              {:class "flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
               (ui/form-control
                 (ui/checkbox {:checked           (:value field)
                               :on-checked-change (:onChange field)}))
               (ui/form-label {:class "font-normal cursor-pointer"} "Agreement terms"))))
 
         ;; actions
-        [:p (ui/button {:type "submit"} "Submit")]]))])
+        [:p.relative.px-2
+         (ui/button {:type "submit" :class "absolute right-0 top-[-40px]"} "Submit")]]))])
 
 (rum/defc page []
   [:div.p-10

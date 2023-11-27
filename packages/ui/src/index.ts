@@ -38,6 +38,7 @@ import { yupResolver } from '@hookform/resolvers/yup'
 import * as yup from 'yup'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
 declare global {
   var LSUI: any
@@ -70,7 +71,7 @@ const shadui = {
   FormDescription, FormMessage,
   useFormField, useForm,
   useFormContext, yupResolver, yup,
-  Switch, Checkbox,
+  Switch, Checkbox, RadioGroup, RadioGroupItem
 }
 
 function setupGlobals() {

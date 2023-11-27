@@ -15,6 +15,8 @@
 (def input (util/lsui-wrap "Input"))
 (def switch (util/lsui-wrap "Switch"))
 (def checkbox (util/lsui-wrap "Checkbox"))
+(def radio-group (util/lsui-wrap "RadioGroup"))
+(def radio-group-item (util/lsui-wrap "RadioGroupItem"))
 
 (def form-provider form-core/form-provider)
 (def form-item form-core/form-item)
