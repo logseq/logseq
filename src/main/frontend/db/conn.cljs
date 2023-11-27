@@ -36,15 +36,18 @@
 (defn get-short-repo-name
   "repo-name: from get-repo-name. Dir/Name => Name"
   [repo-name]
-  (cond
-    (util/electron?)
-    (text/get-file-basename repo-name)
+  (let [repo-name' (cond
+                     (util/electron?)
+                     (text/get-file-basename repo-name)
 
-    (mobile-util/native-platform?)
-    (gp-util/safe-decode-uri-component (text/get-file-basename repo-name))
+                     (mobile-util/native-platform?)
+                     (gp-util/safe-decode-uri-component (text/get-file-basename repo-name))
 
-    :else
-    repo-name))
+                     :else
+                     repo-name)]
+    (if (config/db-based-graph? repo-name')
+      (string/replace-first repo-name' config/db-version-prefix "")
+      repo-name')))
 
 (defn datascript-db
   [repo]

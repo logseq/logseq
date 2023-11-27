@@ -31,6 +31,8 @@
     (contains? (set (:block/type block)) "macro") 7
     :else 5))
 
+(defonce db-version-prefix "logseq_db_")
+
 (defn time-ms
   "Copy of util/time-ms. Too basic to couple this to main app"
   []
