@@ -224,6 +224,10 @@
   top: 1rem;
 }
 
+.top-\[-40px\] {
+  top: -40px;
+}
+
 .top-\[-8px\] {
   top: -8px;
 }
@@ -424,6 +428,10 @@
   max-height: 100vh;
 }
 
+.min-h-\[80px\] {
+  min-height: 80px;
+}
+
 .w-10 {
   width: 2.5rem;
 }
@@ -563,8 +571,8 @@
   align-items: center;
 }
 
-.justify-end {
-  justify-content: flex-end;
+.justify-start {
+  justify-content: flex-start;
 }
 
 .justify-center {
@@ -966,6 +974,10 @@
 
 .pr-2 {
   padding-right: .5rem;
+}
+
+.pr-3 {
+  padding-right: .75rem;
 }
 
 .pr-8 {
@@ -1427,6 +1439,10 @@
 .hover\:grayscale-0:hover {
   --tw-grayscale: grayscale(0);
   filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow);
+}
+
+.focus\:border-input:focus {
+  border-color: hsl(var(--input));
 }
 
 .focus\:bg-accent:focus {

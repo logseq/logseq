@@ -3,13 +3,14 @@ html * {
 }
 
 
-&:not([data-color=logseq]) {
-  .ui__dropdown-menu-content {
-    --accent: var(--rx-gray-04-hsl);
-    --accent-foreground: var(--rx-gray-12-hsl);
+html {
+  &:not([data-color=logseq]) {
+    .ui__dropdown-menu-content {
+      --accent: var(--rx-gray-04-hsl);
+      --accent-foreground: var(--rx-gray-12-hsl);
+    }
   }
 }
-
 
 html[data-theme=light] {
   --accent: var(--rx-gray-04-hsl);
@@ -30,6 +31,7 @@ html[data-theme=dark] {
   --border: 0 0% 16%;
   --muted: 200 10% 11%;
   --popover: 0 0% 7%;
+  --popover-foreground: 0 0 95%;
   --input: 0 0% 25%;
 
   &[data-color=logseq] {
@@ -46,6 +48,12 @@ html[data-theme=dark] {
     --border: 192 100% 16%;
     --popover: 192 100% 11%;
     --input: 203 35% 25%;
+
+    .ui__button {
+      &.as-outline {
+        --accent: 192 100% 12%;
+      }
+    }
   }
 }
 

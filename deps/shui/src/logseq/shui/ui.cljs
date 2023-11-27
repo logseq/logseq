@@ -13,6 +13,7 @@
 (def slider (util/lsui-wrap "Slider"))
 (def badge (util/lsui-wrap "Badge"))
 (def input (util/lsui-wrap "Input"))
+(def textarea (util/lsui-wrap "Textarea"))
 (def switch (util/lsui-wrap "Switch"))
 (def checkbox (util/lsui-wrap "Checkbox"))
 (def radio-group (util/lsui-wrap "RadioGroup"))

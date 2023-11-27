@@ -17590,6 +17590,20 @@ const $faa77b788ed00186$export$9f866c100ef519e4 = /*#__PURE__*/ $LI8jA.forwardRe
 $faa77b788ed00186$export$9f866c100ef519e4.displayName = $280cadbb18dcd3d9$export$6d08773d2e66f8f2.displayName;
 
 
+
+
+var $LI8jA = parcelRequire("LI8jA");
+
+const $cbe9a99643f971a9$export$379139ebc1c2b235 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>{
+    return /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)("textarea", {
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__textarea", "flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:border-input focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50", className),
+        ref: ref,
+        ...props
+    });
+});
+$cbe9a99643f971a9$export$379139ebc1c2b235.displayName = "Textarea";
+
+
 const $f4eb51170e743c4a$var$shadui = {
     Button: $0e5897524c762a41$export$353f5b6fc5456de1,
     Slider: $c38718c2690bae4e$export$472062a354075cee,
@@ -17615,6 +17629,7 @@ const $f4eb51170e743c4a$var$shadui = {
     Alert: $9ea37f7f736d8afe$export$caec2af78bcc877f,
     AlertTitle: $9ea37f7f736d8afe$export$4a7253439a300753,
     Input: $b7a5acf71ba8cfaa$export$f5b8910cec6cf069,
+    Textarea: $cbe9a99643f971a9$export$379139ebc1c2b235,
     AlertDescription: $9ea37f7f736d8afe$export$d4feae172fccda11,
     Label: $a273c4b7249c38d5$export$b04be29aa201d4f5,
     Form: $8c4bab3834363c0d$export$a7fed597f4b8afd8,

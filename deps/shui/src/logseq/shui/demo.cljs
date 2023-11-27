@@ -77,6 +77,13 @@
                   [:b.text-red-800 (:message error)]
                   "This is your public display name.")))))
 
+        (ui/form-field {:name "bio"}
+          (fn [field error]
+            (ui/form-item
+              {:class "pt-4"}
+              (ui/form-control
+                (ui/textarea (merge {:placeholder "Bio text..."} field))))))
+
         ;; radio
         (ui/form-field {:name "notification"}
           ;; item render

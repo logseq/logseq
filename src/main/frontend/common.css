@@ -234,10 +234,6 @@ textarea {
   background: var(--ls-primary-background-color);
 }
 
-.dark-theme textarea {
-  background: var(--ls-tertiary-background-color);
-}
-
 ul {
   list-style: circle;
   margin-left: 1.2em;
