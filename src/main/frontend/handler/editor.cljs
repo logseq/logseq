@@ -64,8 +64,7 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.handler.db-based.property :as db-property-handler]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
-            [frontend.db.model :as model]))
+            [frontend.fs.capacitor-fs :as capacitor-fs]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
