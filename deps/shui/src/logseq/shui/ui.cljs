@@ -13,6 +13,7 @@
 (def slider (util/lsui-wrap "Slider"))
 (def badge (util/lsui-wrap "Badge"))
 (def input (util/lsui-wrap "Input"))
+(def switch (util/lsui-wrap "Switch"))
 
 (def form-provider form-core/form-provider)
 (def form-item form-core/form-item)

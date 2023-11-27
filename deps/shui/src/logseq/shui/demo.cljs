@@ -194,9 +194,10 @@
           "content: radix colors for Logseq"))])
 
    ;; Slider
-   [:div.grid.grid-cols-2.gap-8
+   [:div.grid.grid-cols-2.gap-16
     (section-item "Slider" (ui/slider))
-    (section-item "Switch" [:input {:type "radio"}])]
+    (section-item "Switch"
+      (ui/switch {:size :sm :class "relative top-[-8px]"}))]
 
    ;; Form
    (section-item "Form"

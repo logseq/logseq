@@ -16990,6 +16990,153 @@ function $3e943e01faec8b35$export$20be359f745f973c(schemaType, name, fn) {
 }
 
 
+
+
+var $LI8jA = parcelRequire("LI8jA");
+
+
+var $LI8jA = parcelRequire("LI8jA");
+
+
+
+
+
+
+
+/* -------------------------------------------------------------------------------------------------
+ * Switch
+ * -----------------------------------------------------------------------------------------------*/ const $c4dc380c0fcb143e$var$$6be4966fd9bbc698$var$SWITCH_NAME = "Switch";
+const [$c4dc380c0fcb143e$var$$6be4966fd9bbc698$var$createSwitchContext, $c4dc380c0fcb143e$export$cf7f5f17f69cbd43] = (0, $ec3315292aa721d0$export$50c7b4e9d9f19c1)($c4dc380c0fcb143e$var$$6be4966fd9bbc698$var$SWITCH_NAME);
+const [$c4dc380c0fcb143e$var$$6be4966fd9bbc698$var$SwitchProvider, $c4dc380c0fcb143e$var$$6be4966fd9bbc698$var$useSwitchContext] = $c4dc380c0fcb143e$var$$6be4966fd9bbc698$var$createSwitchContext($c4dc380c0fcb143e$var$$6be4966fd9bbc698$var$SWITCH_NAME);
+const $c4dc380c0fcb143e$export$b5d5cf8927ab7262 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeSwitch: __scopeSwitch , name: name , checked: checkedProp , defaultChecked: defaultChecked , required: required , disabled: disabled , value: value = "on" , onCheckedChange: onCheckedChange , ...switchProps } = props;
+    const [button, setButton] = (0, $LI8jA.useState)(null);
+    const composedRefs = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, (node)=>setButton(node));
+    const hasConsumerStoppedPropagationRef = (0, $LI8jA.useRef)(false); // We set this to true by default so that events bubble to forms without JS (SSR)
+    const isFormControl = button ? Boolean(button.closest("form")) : true;
+    const [checked = false, setChecked] = (0, $f4c632903130edee$export$6f32135080cb4c3)({
+        prop: checkedProp,
+        defaultProp: defaultChecked,
+        onChange: onCheckedChange
+    });
+    return /*#__PURE__*/ (0, $LI8jA.createElement)($c4dc380c0fcb143e$var$$6be4966fd9bbc698$var$SwitchProvider, {
+        scope: __scopeSwitch,
+        checked: checked,
+        disabled: disabled
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).button, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        type: "button",
+        role: "switch",
+        "aria-checked": checked,
+        "aria-required": required,
+        "data-state": $c4dc380c0fcb143e$var$$6be4966fd9bbc698$var$getState(checked),
+        "data-disabled": disabled ? "" : undefined,
+        disabled: disabled,
+        value: value
+    }, switchProps, {
+        ref: composedRefs,
+        onClick: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onClick, (event)=>{
+            setChecked((prevChecked)=>!prevChecked);
+            if (isFormControl) {
+                hasConsumerStoppedPropagationRef.current = event.isPropagationStopped(); // if switch is in a form, stop propagation from the button so that we only propagate
+                // one click event (from the input). We propagate changes from an input so that native
+                // form validation works and form events reflect switch updates.
+                if (!hasConsumerStoppedPropagationRef.current) event.stopPropagation();
+            }
+        })
+    })), isFormControl && /*#__PURE__*/ (0, $LI8jA.createElement)($c4dc380c0fcb143e$var$$6be4966fd9bbc698$var$BubbleInput, {
+        control: button,
+        bubbles: !hasConsumerStoppedPropagationRef.current,
+        name: name,
+        value: value,
+        checked: checked,
+        required: required,
+        disabled: disabled // We transform because the input is absolutely positioned but we have
+        ,
+        style: {
+            transform: "translateX(-100%)"
+        }
+    }));
+});
+/*#__PURE__*/ Object.assign($c4dc380c0fcb143e$export$b5d5cf8927ab7262, {
+    displayName: $c4dc380c0fcb143e$var$$6be4966fd9bbc698$var$SWITCH_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * SwitchThumb
+ * -----------------------------------------------------------------------------------------------*/ const $c4dc380c0fcb143e$var$$6be4966fd9bbc698$var$THUMB_NAME = "SwitchThumb";
+const $c4dc380c0fcb143e$export$4d07bf653ea69106 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeSwitch: __scopeSwitch , ...thumbProps } = props;
+    const context = $c4dc380c0fcb143e$var$$6be4966fd9bbc698$var$useSwitchContext($c4dc380c0fcb143e$var$$6be4966fd9bbc698$var$THUMB_NAME, __scopeSwitch);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).span, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        "data-state": $c4dc380c0fcb143e$var$$6be4966fd9bbc698$var$getState(context.checked),
+        "data-disabled": context.disabled ? "" : undefined
+    }, thumbProps, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($c4dc380c0fcb143e$export$4d07bf653ea69106, {
+    displayName: $c4dc380c0fcb143e$var$$6be4966fd9bbc698$var$THUMB_NAME
+});
+/* ---------------------------------------------------------------------------------------------- */ const $c4dc380c0fcb143e$var$$6be4966fd9bbc698$var$BubbleInput = (props)=>{
+    const { control: control , checked: checked , bubbles: bubbles = true , ...inputProps } = props;
+    const ref = (0, $LI8jA.useRef)(null);
+    const prevChecked = (0, $760b241fb7cd5f92$export$5cae361ad82dce8b)(checked);
+    const controlSize = (0, $e5427f5e3f2cde3c$export$1ab7ae714698c4b8)(control); // Bubble checked change to parents (e.g form change event)
+    (0, $LI8jA.useEffect)(()=>{
+        const input = ref.current;
+        const inputProto = window.HTMLInputElement.prototype;
+        const descriptor = Object.getOwnPropertyDescriptor(inputProto, "checked");
+        const setChecked = descriptor.set;
+        if (prevChecked !== checked && setChecked) {
+            const event = new Event("click", {
+                bubbles: bubbles
+            });
+            setChecked.call(input, checked);
+            input.dispatchEvent(event);
+        }
+    }, [
+        prevChecked,
+        checked,
+        bubbles
+    ]);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)("input", (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        type: "checkbox",
+        "aria-hidden": true,
+        defaultChecked: checked
+    }, inputProps, {
+        tabIndex: -1,
+        ref: ref,
+        style: {
+            ...props.style,
+            ...controlSize,
+            position: "absolute",
+            pointerEvents: "none",
+            opacity: 0,
+            margin: 0
+        }
+    }));
+};
+function $c4dc380c0fcb143e$var$$6be4966fd9bbc698$var$getState(checked) {
+    return checked ? "checked" : "unchecked";
+}
+const $c4dc380c0fcb143e$export$be92b6f5f03c0fe9 = $c4dc380c0fcb143e$export$b5d5cf8927ab7262;
+const $c4dc380c0fcb143e$export$6521433ed15a34db = $c4dc380c0fcb143e$export$4d07bf653ea69106;
+
+
+
+const $068ad3a70cdac599$export$b5d5cf8927ab7262 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , size: size , ...props }, ref)=>{
+    const isSmall = size === "sm";
+    return /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($c4dc380c0fcb143e$export$be92b6f5f03c0fe9, {
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__switch", isSmall ? "h-4 w-8" : "h-6 w-11", "peer inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input", className),
+        ...props,
+        ref: ref,
+        children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($c4dc380c0fcb143e$export$6521433ed15a34db, {
+            className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)(isSmall ? "h-3 w-3 data-[state=checked]:translate-x-4" : "h-5 w-5 data-[state=checked]:translate-x-5", "pointer-events-none block rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=unchecked]:translate-x-0")
+        })
+    });
+});
+$068ad3a70cdac599$export$b5d5cf8927ab7262.displayName = $c4dc380c0fcb143e$export$be92b6f5f03c0fe9.displayName;
+
+
 const $f4eb51170e743c4a$var$shadui = {
     Button: $0e5897524c762a41$export$353f5b6fc5456de1,
     Slider: $c38718c2690bae4e$export$472062a354075cee,
@@ -17028,7 +17175,8 @@ const $f4eb51170e743c4a$var$shadui = {
     useForm: $9d503234465cbf96$export$87c0cf8eb5a167e0,
     useFormContext: $9d503234465cbf96$export$4d957a5e1be13b03,
     yupResolver: $c2277a4615adf02f$export$d55832dfcd4989a,
-    yup: $3e943e01faec8b35$exports
+    yup: $3e943e01faec8b35$exports,
+    Switch: $068ad3a70cdac599$export$b5d5cf8927ab7262
 };
 function $f4eb51170e743c4a$export$40e78c93e005ce8f() {
     console.debug("[ui] setup logseq ui globals");
