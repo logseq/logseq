@@ -139,7 +139,7 @@
     (if empty-graph?
       (route-handler/redirect! {:to :import :query-params {:from "picker"}})
       (route-handler/redirect-to-home!)))
-  (when-let [dir-name (config/get-repo-dir repo)]
+  (when-let [dir-name (and (not (config/db-based-graph? repo)) (config/get-repo-dir repo))]
     (fs/watch-dir! dir-name))
   (file-sync-restart!))
 
@@ -168,7 +168,7 @@
        (srs/update-cards-due-count!)
        (state/pub-event! [:graph/ready graph])
        (file-sync-restart!)
-       (when-let [dir-name (config/get-repo-dir graph)]
+       (when-let [dir-name (and (not (config/db-based-graph? graph)) (config/get-repo-dir graph))]
          (fs/watch-dir! dir-name))))))
 
 ;; Parameters for the `persist-db` function, to show the notification messages

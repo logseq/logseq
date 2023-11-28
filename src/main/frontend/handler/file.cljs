@@ -253,7 +253,7 @@
 (defn watch-for-current-graph-dir!
   []
   (when-let [repo (state/get-current-repo)]
-    (when-let [dir (config/get-repo-dir repo)]
+    (when-let [dir (and (not (config/db-based-graph? repo)) (config/get-repo-dir repo))]
       ;; An unwatch shouldn't be needed on startup. However not having this
       ;; after an app refresh can cause stale page data to load
       (fs/unwatch-dir! dir)
