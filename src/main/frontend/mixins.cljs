@@ -68,6 +68,7 @@
                 nil)))))
 
 (defn on-key-up
+  "Cation: This mixin uses a different args than on-key-down"
   [state keycode-map all-handler]
   (listen state js/window "keyup"
           (fn [e]
