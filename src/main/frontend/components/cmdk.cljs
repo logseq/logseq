@@ -561,6 +561,7 @@
         keyname (.-key e)
         enter? (= keyname "Enter")
         esc? (= keyname "Escape")
+        composing? (util/event-is-composing? e)
         highlighted-group @(::highlighted-group state)
         show-less (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :less))
         show-more (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :more))
@@ -585,9 +586,9 @@
       as-keyup? (if meta?
                   (show-less)
                   (move-highlight state -1))
-      enter? (do
-               (handle-action :default state e)
-               (util/stop-propagation e))
+      (and enter? (not composing?)) (do
+                                      (handle-action :default state e)
+                                      (util/stop-propagation e))
       esc? (let [filter @(::filter state)]
              (when (or (and filter @(::input-changed? state))
                        (not (string/blank? input)))
