@@ -99,11 +99,9 @@
 (defn sqlite-storage
   [repo {:keys [threshold]
          :or {threshold 4096}}]
-  (let [cache (cache/lru-cache-factory {} :threshold threshold)]
+  (let [_cache (cache/lru-cache-factory {} :threshold threshold)]
     (reify IStorage
       (-store [_ addr+data-seq]
-        (prn :debug :store-addr (map first addr+data-seq))
-        (prn :debug :store {:addr-data addr+data-seq})
         (let [data (->>
                     (map
                      (fn [[addr data]]
@@ -114,12 +112,9 @@
           (upsert-addr-content! repo data)))
       (-restore [_ addr]
         (let [content (restore-data-from-addr repo addr)]
-          (when (nil? content)
-            (prn :debug :error :addr-not-exists addr))
-          (prn :debug :restored {:addr addr
-                                 ;; :content content
-                                 })
+          (assert (nil? content) (str "Restore address data not exists, addr: " addr))
           (edn/read-string content))
+        ;; disable cache for now
         ;; (when-let [content (if (cache/has? cache addr)
         ;;                      (do
         ;;                        (cache/hit cache addr)

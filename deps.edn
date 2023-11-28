@@ -3,13 +3,9 @@
  {org.clojure/clojure                   {:mvn/version "1.11.1"}
   rum/rum                               {:mvn/version "0.12.9"}
 
-  datascript/datascript        {:local/root "../../datascript"
-                                :exclusions [persistent-sorted-set/persistent-sorted-set]}
-  ;; datascript/datascript        {:git/url "https://github.com/logseq/datascript" ;; fork
-  ;;                               :sha     "f0922f4d10714636711bc0176409290e44ce2feb"
-  ;;                               :exclusions [persistent-sorted-set/persistent-sorted-set]}
+  datascript/datascript        {:git/url "https://github.com/logseq/datascript" ;; fork
+                                :sha     "53fcbc6a3bb31150086cb2f2631666a8cc1523a5"}
 
-  persistent-sorted-set/persistent-sorted-set {:local/root "../../persistent-sorted-set"}
   datascript-transit/datascript-transit {:mvn/version "0.3.0"}
   borkdude/rewrite-edn                  {:mvn/version "0.4.7"}
   funcool/promesa                       {:mvn/version "4.0.2"}
