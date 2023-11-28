@@ -1,10 +1,7 @@
 {:deps
  ;; External deps should be kept in sync with https://github.com/logseq/nbb-logseq/blob/main/bb.edn
- {datascript/datascript        {:local/root "../../../../datascript"
-                                :exclusions [persistent-sorted-set/persistent-sorted-set]}
-  persistent-sorted-set/persistent-sorted-set {:local/root "../../persistent-sorted-set"}
-  ;; datascript/datascript {:git/url "https://github.com/logseq/datascript" ;; fork
-  ;;                        :sha     "f0922f4d10714636711bc0176409290e44ce2feb"}
+ {datascript/datascript {:git/url "https://github.com/logseq/datascript" ;; fork
+                         :sha     "53fcbc6a3bb31150086cb2f2631666a8cc1523a5"}
   logseq/db             {:local/root "../db"}
   com.cognitect/transit-cljs {:mvn/version "0.8.280"}}
  :aliases
