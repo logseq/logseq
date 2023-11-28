@@ -28,6 +28,8 @@ html[data-theme=dark] {
   --primary-foreground: 255 92% 100%;
   --background: 0 0% 11%;
   --foreground: 0 0% 95%;
+  --card: 0 0% 11%;
+  --card-foreground: 0 0% 95%;
   --border: 0 0% 16%;
   --muted: 200 10% 11%;
   --popover: 0 0% 7%;
@@ -46,6 +48,8 @@ html[data-theme=dark] {
     --secondary-foreground: 0 0% 98%;
     --muted: 192 100% 13%;
     --border: 192 100% 16%;
+    --card: 192 100% 10%;
+    --card-foreground: 0 0% 95%;
     --popover: 192 100% 11%;
     --input: 203 35% 25%;
 

@@ -248,4 +248,29 @@
      [:<>
       (sample-form-basic)])
 
+   ;; Card
+   [:div.grid.grid-cols-2.gap-8
+    (section-item "Card"
+      (ui/card
+        (ui/card-header
+          (ui/card-title "Title")
+          (ui/card-description "Description"))
+        (ui/card-content "This is content")
+        (ui/card-footer "Footer")))
+
+    (section-item "Skeleton"
+      (ui/card
+        (ui/card-header
+          (ui/card-title
+            (ui/skeleton {:class "h-4 w-1/2"}))
+          (ui/card-description
+            (ui/skeleton {:class "h-2 w-full"})))
+        (ui/card-content
+          (ui/skeleton {:class "h-3 mb-1"})
+          (ui/skeleton {:class "h-3 mb-1"})
+          (ui/skeleton {:class "h-3 w-2/3"}))
+
+        (ui/card-footer
+          (ui/skeleton {:class "h-4 w-full"}))))]
+
    [:hr.mb-60]])

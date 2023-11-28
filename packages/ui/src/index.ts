@@ -40,6 +40,8 @@ import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 
 declare global {
   var LSUI: any
@@ -72,10 +74,12 @@ const shadui = {
   FormDescription, FormMessage,
   useFormField, useForm,
   useFormContext, yupResolver, yup,
-  Switch, Checkbox, RadioGroup, RadioGroupItem
+  Switch, Checkbox, RadioGroup, RadioGroupItem,
+  Card, CardHeader, CardTitle, CardDescription,
+  CardContent, CardFooter, Skeleton
 }
 
-function setupGlobals() {
+function setupGlobals () {
   console.debug('[ui] setup logseq ui globals')
 
   window.LSUI = shadui

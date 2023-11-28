@@ -18,6 +18,14 @@
 (def checkbox (util/lsui-wrap "Checkbox"))
 (def radio-group (util/lsui-wrap "RadioGroup"))
 (def radio-group-item (util/lsui-wrap "RadioGroupItem"))
+(def skeleton (util/lsui-wrap "Skeleton"))
+
+(def card (util/lsui-wrap "Card"))
+(def card-header (util/lsui-wrap "CardHeader"))
+(def card-title (util/lsui-wrap "CardTitle"))
+(def card-description (util/lsui-wrap "CardDescription"))
+(def card-content (util/lsui-wrap "CardContent"))
+(def card-footer (util/lsui-wrap "CardFooter"))
 
 (def form-provider form-core/form-provider)
 (def form-item form-core/form-item)
