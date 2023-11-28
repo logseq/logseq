@@ -17604,6 +17604,507 @@ const $cbe9a99643f971a9$export$379139ebc1c2b235 = /*#__PURE__*/ $LI8jA.forwardRe
 $cbe9a99643f971a9$export$379139ebc1c2b235.displayName = "Textarea";
 
 
+
+
+var $LI8jA = parcelRequire("LI8jA");
+
+const $790eef164c1b2564$export$60332b2344f7fe41 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)("div", {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__card", "rounded-lg border bg-card text-card-foreground shadow-sm", className),
+        ...props
+    }));
+$790eef164c1b2564$export$60332b2344f7fe41.displayName = "Card";
+const $790eef164c1b2564$export$5665775b26e26c5d = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)("div", {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__card-header flex flex-col space-y-1.5 p-6", className),
+        ...props
+    }));
+$790eef164c1b2564$export$5665775b26e26c5d.displayName = "CardHeader";
+const $790eef164c1b2564$export$474db65c3c394e1c = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)("h3", {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__card-title", "text-2xl font-semibold leading-none tracking-tight", className),
+        ...props
+    }));
+$790eef164c1b2564$export$474db65c3c394e1c.displayName = "CardTitle";
+const $790eef164c1b2564$export$16e0ed4cb97c00d4 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)("p", {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__card-description text-sm text-muted-foreground", className),
+        ...props
+    }));
+$790eef164c1b2564$export$16e0ed4cb97c00d4.displayName = "CardDescription";
+const $790eef164c1b2564$export$64ef9b8c11710c47 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)("div", {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__card-content p-6 pt-0", className),
+        ...props
+    }));
+$790eef164c1b2564$export$64ef9b8c11710c47.displayName = "CardContent";
+const $790eef164c1b2564$export$e9897d434e0741ee = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)("div", {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__card-footer flex items-center p-6 pt-0", className),
+        ...props
+    }));
+$790eef164c1b2564$export$e9897d434e0741ee.displayName = "CardFooter";
+
+
+
+parcelRequire("LI8jA");
+
+function $aebf6e1059226b5f$export$8f31e4c4a37b8e9c({ className: className , ...props }) {
+    return /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)("div", {
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__skeleton animate-pulse rounded-md bg-muted", className),
+        ...props
+    });
+}
+
+
+
+
+var $LI8jA = parcelRequire("LI8jA");
+
+
+var $LI8jA = parcelRequire("LI8jA");
+
+
+
+
+
+
+/* -------------------------------------------------------------------------------------------------
+ * ContextMenu
+ * -----------------------------------------------------------------------------------------------*/ const $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$CONTEXT_MENU_NAME = "ContextMenu";
+const [$e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$createContextMenuContext, $e70d0a26a1f8446f$export$1059331f43ddcc82] = (0, $ec3315292aa721d0$export$50c7b4e9d9f19c1)($e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$CONTEXT_MENU_NAME, [
+    (0, $e731b17b2f6739b5$export$4027731b685e72eb)
+]);
+const $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useMenuScope = (0, $e731b17b2f6739b5$export$4027731b685e72eb)();
+const [$e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$ContextMenuProvider, $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useContextMenuContext] = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$createContextMenuContext($e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$CONTEXT_MENU_NAME);
+const $e70d0a26a1f8446f$export$8dc6765e8be191c7 = (props)=>{
+    const { __scopeContextMenu: __scopeContextMenu , children: children , onOpenChange: onOpenChange , dir: dir , modal: modal = true  } = props;
+    const [open1, setOpen] = (0, $LI8jA.useState)(false);
+    const menuScope = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useMenuScope(__scopeContextMenu);
+    const handleOpenChangeProp = (0, $8d5f4755e7320408$export$25bec8c6f54ee79a)(onOpenChange);
+    const handleOpenChange = (0, $LI8jA.useCallback)((open)=>{
+        setOpen(open);
+        handleOpenChangeProp(open);
+    }, [
+        handleOpenChangeProp
+    ]);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)($e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$ContextMenuProvider, {
+        scope: __scopeContextMenu,
+        open: open1,
+        onOpenChange: handleOpenChange,
+        modal: modal
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $e731b17b2f6739b5$export$be92b6f5f03c0fe9), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, menuScope, {
+        dir: dir,
+        open: open1,
+        onOpenChange: handleOpenChange,
+        modal: modal
+    }), children));
+};
+/*#__PURE__*/ Object.assign($e70d0a26a1f8446f$export$8dc6765e8be191c7, {
+    displayName: $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$CONTEXT_MENU_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * ContextMenuTrigger
+ * -----------------------------------------------------------------------------------------------*/ const $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$TRIGGER_NAME = "ContextMenuTrigger";
+const $e70d0a26a1f8446f$export$be6fc7b1d5b0beb9 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeContextMenu: __scopeContextMenu , disabled: disabled = false , ...triggerProps } = props;
+    const context = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useContextMenuContext($e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$TRIGGER_NAME, __scopeContextMenu);
+    const menuScope = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useMenuScope(__scopeContextMenu);
+    const pointRef = (0, $LI8jA.useRef)({
+        x: 0,
+        y: 0
+    });
+    const virtualRef = (0, $LI8jA.useRef)({
+        getBoundingClientRect: ()=>DOMRect.fromRect({
+                width: 0,
+                height: 0,
+                ...pointRef.current
+            })
+    });
+    const longPressTimerRef = (0, $LI8jA.useRef)(0);
+    const clearLongPress = (0, $LI8jA.useCallback)(()=>window.clearTimeout(longPressTimerRef.current), []);
+    const handleOpen = (event)=>{
+        pointRef.current = {
+            x: event.clientX,
+            y: event.clientY
+        };
+        context.onOpenChange(true);
+    };
+    (0, $LI8jA.useEffect)(()=>clearLongPress, [
+        clearLongPress
+    ]);
+    (0, $LI8jA.useEffect)(()=>void (disabled && clearLongPress()), [
+        disabled,
+        clearLongPress
+    ]);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $LI8jA.Fragment), null, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $e731b17b2f6739b5$export$b688253958b8dfe7), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, menuScope, {
+        virtualRef: virtualRef
+    })), /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).span, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        "data-state": context.open ? "open" : "closed",
+        "data-disabled": disabled ? "" : undefined
+    }, triggerProps, {
+        ref: forwardedRef // prevent iOS context menu from appearing
+        ,
+        style: {
+            WebkitTouchCallout: "none",
+            ...props.style
+        } // if trigger is disabled, enable the native Context Menu
+        ,
+        onContextMenu: disabled ? props.onContextMenu : (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onContextMenu, (event)=>{
+            // clearing the long press here because some platforms already support
+            // long press to trigger a `contextmenu` event
+            clearLongPress();
+            handleOpen(event);
+            event.preventDefault();
+        }),
+        onPointerDown: disabled ? props.onPointerDown : (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onPointerDown, $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$whenTouchOrPen((event)=>{
+            // clear the long press here in case there's multiple touch points
+            clearLongPress();
+            longPressTimerRef.current = window.setTimeout(()=>handleOpen(event), 700);
+        })),
+        onPointerMove: disabled ? props.onPointerMove : (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onPointerMove, $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$whenTouchOrPen(clearLongPress)),
+        onPointerCancel: disabled ? props.onPointerCancel : (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onPointerCancel, $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$whenTouchOrPen(clearLongPress)),
+        onPointerUp: disabled ? props.onPointerUp : (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onPointerUp, $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$whenTouchOrPen(clearLongPress))
+    })));
+});
+/*#__PURE__*/ Object.assign($e70d0a26a1f8446f$export$be6fc7b1d5b0beb9, {
+    displayName: $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$TRIGGER_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * ContextMenuPortal
+ * -----------------------------------------------------------------------------------------------*/ const $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$PORTAL_NAME = "ContextMenuPortal";
+const $e70d0a26a1f8446f$export$14afd0be83e45060 = (props)=>{
+    const { __scopeContextMenu: __scopeContextMenu , ...portalProps } = props;
+    const menuScope = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useMenuScope(__scopeContextMenu);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $e731b17b2f6739b5$export$602eac185826482c), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, menuScope, portalProps));
+};
+/*#__PURE__*/ Object.assign($e70d0a26a1f8446f$export$14afd0be83e45060, {
+    displayName: $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$PORTAL_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * ContextMenuContent
+ * -----------------------------------------------------------------------------------------------*/ const $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$CONTENT_NAME = "ContextMenuContent";
+const $e70d0a26a1f8446f$export$572205900c9369e = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeContextMenu: __scopeContextMenu , ...contentProps } = props;
+    const context = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useContextMenuContext($e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$CONTENT_NAME, __scopeContextMenu);
+    const menuScope = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useMenuScope(__scopeContextMenu);
+    const hasInteractedOutsideRef = (0, $LI8jA.useRef)(false);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $e731b17b2f6739b5$export$7c6e2c02157bb7d2), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, menuScope, contentProps, {
+        ref: forwardedRef,
+        side: "right",
+        sideOffset: 2,
+        align: "start",
+        onCloseAutoFocus: (event)=>{
+            var _props$onCloseAutoFoc;
+            (_props$onCloseAutoFoc = props.onCloseAutoFocus) === null || _props$onCloseAutoFoc === void 0 || _props$onCloseAutoFoc.call(props, event);
+            if (!event.defaultPrevented && hasInteractedOutsideRef.current) event.preventDefault();
+            hasInteractedOutsideRef.current = false;
+        },
+        onInteractOutside: (event)=>{
+            var _props$onInteractOuts;
+            (_props$onInteractOuts = props.onInteractOutside) === null || _props$onInteractOuts === void 0 || _props$onInteractOuts.call(props, event);
+            if (!event.defaultPrevented && !context.modal) hasInteractedOutsideRef.current = true;
+        },
+        style: {
+            ...props.style,
+            "--radix-context-menu-content-transform-origin": "var(--radix-popper-transform-origin)",
+            "--radix-context-menu-content-available-width": "var(--radix-popper-available-width)",
+            "--radix-context-menu-content-available-height": "var(--radix-popper-available-height)",
+            "--radix-context-menu-trigger-width": "var(--radix-popper-anchor-width)",
+            "--radix-context-menu-trigger-height": "var(--radix-popper-anchor-height)"
+        }
+    }));
+});
+/*#__PURE__*/ Object.assign($e70d0a26a1f8446f$export$572205900c9369e, {
+    displayName: $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$CONTENT_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * ContextMenuGroup
+ * -----------------------------------------------------------------------------------------------*/ const $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$GROUP_NAME = "ContextMenuGroup";
+const $e70d0a26a1f8446f$export$9860523b0fcdd664 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeContextMenu: __scopeContextMenu , ...groupProps } = props;
+    const menuScope = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useMenuScope(__scopeContextMenu);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $e731b17b2f6739b5$export$eb2fcfdbd7ba97d4), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, menuScope, groupProps, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($e70d0a26a1f8446f$export$9860523b0fcdd664, {
+    displayName: $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$GROUP_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * ContextMenuLabel
+ * -----------------------------------------------------------------------------------------------*/ const $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$LABEL_NAME = "ContextMenuLabel";
+const $e70d0a26a1f8446f$export$d4b9d3b609a10742 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeContextMenu: __scopeContextMenu , ...labelProps } = props;
+    const menuScope = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useMenuScope(__scopeContextMenu);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $e731b17b2f6739b5$export$b04be29aa201d4f5), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, menuScope, labelProps, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($e70d0a26a1f8446f$export$d4b9d3b609a10742, {
+    displayName: $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$LABEL_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * ContextMenuItem
+ * -----------------------------------------------------------------------------------------------*/ const $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$ITEM_NAME = "ContextMenuItem";
+const $e70d0a26a1f8446f$export$16a26dc176a49100 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeContextMenu: __scopeContextMenu , ...itemProps } = props;
+    const menuScope = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useMenuScope(__scopeContextMenu);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $e731b17b2f6739b5$export$6d08773d2e66f8f2), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, menuScope, itemProps, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($e70d0a26a1f8446f$export$16a26dc176a49100, {
+    displayName: $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$ITEM_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * ContextMenuCheckboxItem
+ * -----------------------------------------------------------------------------------------------*/ const $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$CHECKBOX_ITEM_NAME = "ContextMenuCheckboxItem";
+const $e70d0a26a1f8446f$export$b6adbe51d5d8b7ec = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeContextMenu: __scopeContextMenu , ...checkboxItemProps } = props;
+    const menuScope = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useMenuScope(__scopeContextMenu);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $e731b17b2f6739b5$export$16ce288f89fa631c), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, menuScope, checkboxItemProps, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($e70d0a26a1f8446f$export$b6adbe51d5d8b7ec, {
+    displayName: $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$CHECKBOX_ITEM_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * ContextMenuRadioGroup
+ * -----------------------------------------------------------------------------------------------*/ const $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$RADIO_GROUP_NAME = "ContextMenuRadioGroup";
+const $e70d0a26a1f8446f$export$db5c89af5ed9aa07 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeContextMenu: __scopeContextMenu , ...radioGroupProps } = props;
+    const menuScope = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useMenuScope(__scopeContextMenu);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $e731b17b2f6739b5$export$a98f0dcb43a68a25), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, menuScope, radioGroupProps, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($e70d0a26a1f8446f$export$db5c89af5ed9aa07, {
+    displayName: $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$RADIO_GROUP_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * ContextMenuRadioItem
+ * -----------------------------------------------------------------------------------------------*/ const $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$RADIO_ITEM_NAME = "ContextMenuRadioItem";
+const $e70d0a26a1f8446f$export$8a727d09a7d9bfc2 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeContextMenu: __scopeContextMenu , ...radioItemProps } = props;
+    const menuScope = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useMenuScope(__scopeContextMenu);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $e731b17b2f6739b5$export$371ab307eab489c0), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, menuScope, radioItemProps, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($e70d0a26a1f8446f$export$8a727d09a7d9bfc2, {
+    displayName: $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$RADIO_ITEM_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * ContextMenuItemIndicator
+ * -----------------------------------------------------------------------------------------------*/ const $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$INDICATOR_NAME = "ContextMenuItemIndicator";
+const $e70d0a26a1f8446f$export$9ed8194dee42d94b = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeContextMenu: __scopeContextMenu , ...itemIndicatorProps } = props;
+    const menuScope = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useMenuScope(__scopeContextMenu);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $e731b17b2f6739b5$export$c3468e2714d175fa), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, menuScope, itemIndicatorProps, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($e70d0a26a1f8446f$export$9ed8194dee42d94b, {
+    displayName: $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$INDICATOR_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * ContextMenuSeparator
+ * -----------------------------------------------------------------------------------------------*/ const $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$SEPARATOR_NAME = "ContextMenuSeparator";
+const $e70d0a26a1f8446f$export$8d6b009fadfe1207 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeContextMenu: __scopeContextMenu , ...separatorProps } = props;
+    const menuScope = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useMenuScope(__scopeContextMenu);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $e731b17b2f6739b5$export$1ff3c3f08ae963c0), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, menuScope, separatorProps, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($e70d0a26a1f8446f$export$8d6b009fadfe1207, {
+    displayName: $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$SEPARATOR_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * ContextMenuArrow
+ * -----------------------------------------------------------------------------------------------*/ const $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$ARROW_NAME = "ContextMenuArrow";
+const $e70d0a26a1f8446f$export$f47d0a58228a61e2 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeContextMenu: __scopeContextMenu , ...arrowProps } = props;
+    const menuScope = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useMenuScope(__scopeContextMenu);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $e731b17b2f6739b5$export$21b07c8f274aebd5), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, menuScope, arrowProps, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($e70d0a26a1f8446f$export$f47d0a58228a61e2, {
+    displayName: $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$ARROW_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * ContextMenuSub
+ * -----------------------------------------------------------------------------------------------*/ const $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$SUB_NAME = "ContextMenuSub";
+const $e70d0a26a1f8446f$export$5bc21d1c00c4b201 = (props)=>{
+    const { __scopeContextMenu: __scopeContextMenu , children: children , onOpenChange: onOpenChange , open: openProp , defaultOpen: defaultOpen  } = props;
+    const menuScope = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useMenuScope(__scopeContextMenu);
+    const [open, setOpen] = (0, $f4c632903130edee$export$6f32135080cb4c3)({
+        prop: openProp,
+        defaultProp: defaultOpen,
+        onChange: onOpenChange
+    });
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $e731b17b2f6739b5$export$d7a01e11500dfb6f), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, menuScope, {
+        open: open,
+        onOpenChange: setOpen
+    }), children);
+};
+/*#__PURE__*/ Object.assign($e70d0a26a1f8446f$export$5bc21d1c00c4b201, {
+    displayName: $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$SUB_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * ContextMenuSubTrigger
+ * -----------------------------------------------------------------------------------------------*/ const $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$SUB_TRIGGER_NAME = "ContextMenuSubTrigger";
+const $e70d0a26a1f8446f$export$30b2b5c64556d316 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeContextMenu: __scopeContextMenu , ...triggerItemProps } = props;
+    const menuScope = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useMenuScope(__scopeContextMenu);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $e731b17b2f6739b5$export$2ea8a7a591ac5eac), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, menuScope, triggerItemProps, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($e70d0a26a1f8446f$export$30b2b5c64556d316, {
+    displayName: $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$SUB_TRIGGER_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * ContextMenuSubContent
+ * -----------------------------------------------------------------------------------------------*/ const $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$SUB_CONTENT_NAME = "ContextMenuSubContent";
+const $e70d0a26a1f8446f$export$2c967063bd2dc512 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeContextMenu: __scopeContextMenu , ...subContentProps } = props;
+    const menuScope = $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$useMenuScope(__scopeContextMenu);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $e731b17b2f6739b5$export$6d4de93b380beddf), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, menuScope, subContentProps, {
+        ref: forwardedRef,
+        style: {
+            ...props.style,
+            "--radix-context-menu-content-transform-origin": "var(--radix-popper-transform-origin)",
+            "--radix-context-menu-content-available-width": "var(--radix-popper-available-width)",
+            "--radix-context-menu-content-available-height": "var(--radix-popper-available-height)",
+            "--radix-context-menu-trigger-width": "var(--radix-popper-anchor-width)",
+            "--radix-context-menu-trigger-height": "var(--radix-popper-anchor-height)"
+        }
+    }));
+});
+/*#__PURE__*/ Object.assign($e70d0a26a1f8446f$export$2c967063bd2dc512, {
+    displayName: $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$SUB_CONTENT_NAME
+});
+/* -----------------------------------------------------------------------------------------------*/ function $e70d0a26a1f8446f$var$$1b0217ee4a91d156$var$whenTouchOrPen(handler) {
+    return (event)=>event.pointerType !== "mouse" ? handler(event) : undefined;
+}
+const $e70d0a26a1f8446f$export$be92b6f5f03c0fe9 = $e70d0a26a1f8446f$export$8dc6765e8be191c7;
+const $e70d0a26a1f8446f$export$41fb9f06171c75f4 = $e70d0a26a1f8446f$export$be6fc7b1d5b0beb9;
+const $e70d0a26a1f8446f$export$602eac185826482c = $e70d0a26a1f8446f$export$14afd0be83e45060;
+const $e70d0a26a1f8446f$export$7c6e2c02157bb7d2 = $e70d0a26a1f8446f$export$572205900c9369e;
+const $e70d0a26a1f8446f$export$eb2fcfdbd7ba97d4 = $e70d0a26a1f8446f$export$9860523b0fcdd664;
+const $e70d0a26a1f8446f$export$b04be29aa201d4f5 = $e70d0a26a1f8446f$export$d4b9d3b609a10742;
+const $e70d0a26a1f8446f$export$6d08773d2e66f8f2 = $e70d0a26a1f8446f$export$16a26dc176a49100;
+const $e70d0a26a1f8446f$export$16ce288f89fa631c = $e70d0a26a1f8446f$export$b6adbe51d5d8b7ec;
+const $e70d0a26a1f8446f$export$a98f0dcb43a68a25 = $e70d0a26a1f8446f$export$db5c89af5ed9aa07;
+const $e70d0a26a1f8446f$export$371ab307eab489c0 = $e70d0a26a1f8446f$export$8a727d09a7d9bfc2;
+const $e70d0a26a1f8446f$export$c3468e2714d175fa = $e70d0a26a1f8446f$export$9ed8194dee42d94b;
+const $e70d0a26a1f8446f$export$1ff3c3f08ae963c0 = $e70d0a26a1f8446f$export$8d6b009fadfe1207;
+const $e70d0a26a1f8446f$export$21b07c8f274aebd5 = $e70d0a26a1f8446f$export$f47d0a58228a61e2;
+const $e70d0a26a1f8446f$export$d7a01e11500dfb6f = $e70d0a26a1f8446f$export$5bc21d1c00c4b201;
+const $e70d0a26a1f8446f$export$2ea8a7a591ac5eac = $e70d0a26a1f8446f$export$30b2b5c64556d316;
+const $e70d0a26a1f8446f$export$6d4de93b380beddf = $e70d0a26a1f8446f$export$2c967063bd2dc512;
+
+
+
+
+const $5015ffc5018fd12f$export$8dc6765e8be191c7 = $e70d0a26a1f8446f$export$be92b6f5f03c0fe9;
+const $5015ffc5018fd12f$export$be6fc7b1d5b0beb9 = $e70d0a26a1f8446f$export$41fb9f06171c75f4;
+const $5015ffc5018fd12f$export$9860523b0fcdd664 = $e70d0a26a1f8446f$export$eb2fcfdbd7ba97d4;
+const $5015ffc5018fd12f$export$14afd0be83e45060 = $e70d0a26a1f8446f$export$602eac185826482c;
+const $5015ffc5018fd12f$export$5bc21d1c00c4b201 = $e70d0a26a1f8446f$export$d7a01e11500dfb6f;
+const $5015ffc5018fd12f$export$db5c89af5ed9aa07 = $e70d0a26a1f8446f$export$a98f0dcb43a68a25;
+const $5015ffc5018fd12f$export$30b2b5c64556d316 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , inset: inset , children: children , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsxs)($e70d0a26a1f8446f$export$2ea8a7a591ac5eac, {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__context-menu-sub-trigger", "flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground", inset && "pl-8", className),
+        ...props,
+        children: [
+            children,
+            /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)((0, $128d882bc0fdb62f$export$2e2bcd8739ae039), {
+                className: "ml-auto h-4 w-4"
+            })
+        ]
+    }));
+$5015ffc5018fd12f$export$30b2b5c64556d316.displayName = $e70d0a26a1f8446f$export$2ea8a7a591ac5eac.displayName;
+const $5015ffc5018fd12f$export$2c967063bd2dc512 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($e70d0a26a1f8446f$export$6d4de93b380beddf, {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__context-menu-sub-content", "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2", className),
+        ...props
+    }));
+$5015ffc5018fd12f$export$2c967063bd2dc512.displayName = $e70d0a26a1f8446f$export$6d4de93b380beddf.displayName;
+const $5015ffc5018fd12f$export$572205900c9369e = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($e70d0a26a1f8446f$export$602eac185826482c, {
+        children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($e70d0a26a1f8446f$export$7c6e2c02157bb7d2, {
+            ref: ref,
+            className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__context-menu-content", "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2", className),
+            ...props
+        })
+    }));
+$5015ffc5018fd12f$export$572205900c9369e.displayName = $e70d0a26a1f8446f$export$7c6e2c02157bb7d2.displayName;
+const $5015ffc5018fd12f$export$16a26dc176a49100 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , inset: inset , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($e70d0a26a1f8446f$export$6d08773d2e66f8f2, {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50", inset && "pl-8", className),
+        ...props
+    }));
+$5015ffc5018fd12f$export$16a26dc176a49100.displayName = $e70d0a26a1f8446f$export$6d08773d2e66f8f2.displayName;
+const $5015ffc5018fd12f$export$b6adbe51d5d8b7ec = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , children: children , checked: checked , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsxs)($e70d0a26a1f8446f$export$16ce288f89fa631c, {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50", className),
+        checked: checked,
+        ...props,
+        children: [
+            /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)("span", {
+                className: "absolute left-2 flex h-3.5 w-3.5 items-center justify-center",
+                children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($e70d0a26a1f8446f$export$c3468e2714d175fa, {
+                    children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)((0, $40c0f661ec418351$export$2e2bcd8739ae039), {
+                        className: "h-4 w-4"
+                    })
+                })
+            }),
+            children
+        ]
+    }));
+$5015ffc5018fd12f$export$b6adbe51d5d8b7ec.displayName = $e70d0a26a1f8446f$export$16ce288f89fa631c.displayName;
+const $5015ffc5018fd12f$export$8a727d09a7d9bfc2 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , children: children , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsxs)($e70d0a26a1f8446f$export$371ab307eab489c0, {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50", className),
+        ...props,
+        children: [
+            /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)("span", {
+                className: "absolute left-2 flex h-3.5 w-3.5 items-center justify-center",
+                children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($e70d0a26a1f8446f$export$c3468e2714d175fa, {
+                    children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)((0, $f4de4372d9dbc0ac$export$2e2bcd8739ae039), {
+                        className: "h-2 w-2 fill-current"
+                    })
+                })
+            }),
+            children
+        ]
+    }));
+$5015ffc5018fd12f$export$8a727d09a7d9bfc2.displayName = $e70d0a26a1f8446f$export$371ab307eab489c0.displayName;
+const $5015ffc5018fd12f$export$d4b9d3b609a10742 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , inset: inset , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($e70d0a26a1f8446f$export$b04be29aa201d4f5, {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("px-2 py-1.5 text-sm font-semibold text-foreground", inset && "pl-8", className),
+        ...props
+    }));
+$5015ffc5018fd12f$export$d4b9d3b609a10742.displayName = $e70d0a26a1f8446f$export$b04be29aa201d4f5.displayName;
+const $5015ffc5018fd12f$export$8d6b009fadfe1207 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($e70d0a26a1f8446f$export$1ff3c3f08ae963c0, {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("-mx-1 my-1 h-px bg-border", className),
+        ...props
+    }));
+$5015ffc5018fd12f$export$8d6b009fadfe1207.displayName = $e70d0a26a1f8446f$export$1ff3c3f08ae963c0.displayName;
+const $5015ffc5018fd12f$export$66061e7e1cd4bd76 = ({ className: className , ...props })=>{
+    return /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)("span", {
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ml-auto text-xs tracking-widest text-muted-foreground", className),
+        ...props
+    });
+};
+$5015ffc5018fd12f$export$66061e7e1cd4bd76.displayName = "ContextMenuShortcut";
+
+
 const $f4eb51170e743c4a$var$shadui = {
     Button: $0e5897524c762a41$export$353f5b6fc5456de1,
     Slider: $c38718c2690bae4e$export$472062a354075cee,
@@ -17647,7 +18148,29 @@ const $f4eb51170e743c4a$var$shadui = {
     Switch: $068ad3a70cdac599$export$b5d5cf8927ab7262,
     Checkbox: $92f0eedf92840b98$export$48513f6b9f8ce62d,
     RadioGroup: $faa77b788ed00186$export$a98f0dcb43a68a25,
-    RadioGroupItem: $faa77b788ed00186$export$9f866c100ef519e4
+    RadioGroupItem: $faa77b788ed00186$export$9f866c100ef519e4,
+    Card: $790eef164c1b2564$export$60332b2344f7fe41,
+    CardHeader: $790eef164c1b2564$export$5665775b26e26c5d,
+    CardTitle: $790eef164c1b2564$export$474db65c3c394e1c,
+    CardDescription: $790eef164c1b2564$export$16e0ed4cb97c00d4,
+    CardContent: $790eef164c1b2564$export$64ef9b8c11710c47,
+    CardFooter: $790eef164c1b2564$export$e9897d434e0741ee,
+    Skeleton: $aebf6e1059226b5f$export$8f31e4c4a37b8e9c,
+    ContextMenu: $5015ffc5018fd12f$export$8dc6765e8be191c7,
+    ContextMenuTrigger: $5015ffc5018fd12f$export$be6fc7b1d5b0beb9,
+    ContextMenuContent: $5015ffc5018fd12f$export$572205900c9369e,
+    ContextMenuItem: $5015ffc5018fd12f$export$16a26dc176a49100,
+    ContextMenuCheckboxItem: $5015ffc5018fd12f$export$b6adbe51d5d8b7ec,
+    ContextMenuRadioItem: $5015ffc5018fd12f$export$8a727d09a7d9bfc2,
+    ContextMenuLabel: $5015ffc5018fd12f$export$d4b9d3b609a10742,
+    ContextMenuSeparator: $5015ffc5018fd12f$export$8d6b009fadfe1207,
+    ContextMenuShortcut: $5015ffc5018fd12f$export$66061e7e1cd4bd76,
+    ContextMenuGroup: $5015ffc5018fd12f$export$9860523b0fcdd664,
+    ContextMenuPortal: $5015ffc5018fd12f$export$14afd0be83e45060,
+    ContextMenuSub: $5015ffc5018fd12f$export$5bc21d1c00c4b201,
+    ContextMenuSubContent: $5015ffc5018fd12f$export$2c967063bd2dc512,
+    ContextMenuSubTrigger: $5015ffc5018fd12f$export$30b2b5c64556d316,
+    ContextMenuRadioGroup: $5015ffc5018fd12f$export$db5c89af5ed9aa07
 };
 function $f4eb51170e743c4a$export$40e78c93e005ce8f() {
     console.debug("[ui] setup logseq ui globals");

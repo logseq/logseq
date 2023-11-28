@@ -42,6 +42,20 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  ContextMenu,
+  ContextMenuCheckboxItem,
+  ContextMenuContent,
+  ContextMenuGroup,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuPortal, ContextMenuRadioGroup,
+  ContextMenuRadioItem,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger,
+  ContextMenuTrigger
+} from '@/components/ui/context-menu'
 
 declare global {
   var LSUI: any
@@ -76,7 +90,22 @@ const shadui = {
   useFormContext, yupResolver, yup,
   Switch, Checkbox, RadioGroup, RadioGroupItem,
   Card, CardHeader, CardTitle, CardDescription,
-  CardContent, CardFooter, Skeleton
+  CardContent, CardFooter, Skeleton,
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuCheckboxItem,
+  ContextMenuRadioItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuGroup,
+  ContextMenuPortal,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuRadioGroup,
 }
 
 function setupGlobals () {

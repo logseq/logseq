@@ -432,6 +432,10 @@
   min-height: 80px;
 }
 
+.w-1\/2 {
+  width: 50%;
+}
+
 .w-10 {
   width: 2.5rem;
 }
@@ -446,6 +450,10 @@
 
 .w-2\.5 {
   width: .625rem;
+}
+
+.w-2\/3 {
+  width: 66.6667%;
 }
 
 .w-3 {
@@ -1346,8 +1354,22 @@
   }
 }
 
+.animate-in {
+  --tw-enter-opacity: initial;
+  --tw-enter-scale: initial;
+  --tw-enter-rotate: initial;
+  --tw-enter-translate-x: initial;
+  --tw-enter-translate-y: initial;
+  animation-name: enter;
+  animation-duration: .15s;
+}
+
 .fade-in {
   --tw-enter-opacity: 0;
+}
+
+.fade-in-80 {
+  --tw-enter-opacity: .8;
 }
 
 .duration-200 {
@@ -1661,6 +1683,10 @@
 
 .data-\[state\=checked\]\:text-primary-foreground[data-state="checked"] {
   color: hsl(var(--primary-foreground));
+}
+
+.data-\[state\=open\]\:text-accent-foreground[data-state="open"] {
+  color: hsl(var(--accent-foreground));
 }
 
 .data-\[state\=open\]\:text-muted-foreground[data-state="open"] {

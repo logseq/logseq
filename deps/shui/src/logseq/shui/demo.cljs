@@ -47,6 +47,51 @@
       (ui/dropdown-menu-item (icon :logout) "Logout" (ui/dropdown-menu-shortcut "⌘+Q"))
       )))
 
+(rum/defc sample-context-menu-content
+  []
+  (let [icon #(ui/tabler-icon (name %1) {:class "scale-90 pr-1 opacity-80"})]
+    (ui/context-menu
+      ;; trigger
+      (ui/context-menu-trigger
+        [:div.border.px-6.py-12.border-dashed.rounded.text-center.select-none
+         [:span.opacity-50 "Right click here"]])
+      ;; content
+      (ui/context-menu-content
+        {:class "w-60"}
+        (ui/context-menu-item
+          (icon "arrow-left")
+          "Back"
+          (ui/context-menu-shortcut "⌘["))
+        (ui/context-menu-item {:disabled true}
+          (icon "arrow-right")
+          "Forward"
+          (ui/context-menu-shortcut "⌘]"))
+        (ui/context-menu-item
+          (icon "refresh")
+          "Reload"
+          (ui/context-menu-shortcut "⌘R"))
+        ;; Sub menu
+        (ui/context-menu-sub
+          (ui/context-menu-sub-trigger {:inset true} "More tools")
+          (ui/context-menu-sub-content {:class "w-48"}
+            (ui/context-menu-item "Save page As..."
+              (ui/context-menu-shortcut "⇧⌘S"))
+            (ui/context-menu-item "Create Shortcut...")
+            (ui/context-menu-item "Name Window...")
+            (ui/context-menu-separator)
+            (ui/context-menu-item "Developer Tools")))
+        ;; more
+        (ui/context-menu-separator)
+        (ui/context-menu-checkbox-item {:checked true}
+          "Show Bookmarks Bar" (ui/context-menu-shortcut "⌘⇧B"))
+        (ui/context-menu-checkbox-item "Show Full URLs")
+        (ui/context-menu-separator)
+        (ui/context-menu-radio-group {:value "pedro"}
+          (ui/context-menu-label {:inset true} "People")
+          (ui/context-menu-separator)
+          (ui/context-menu-radio-item {:value "pedro"} "Pedro Duarte")
+          (ui/context-menu-radio-item {:value "colm"} "Colm Tuite"))))))
+
 (rum/defc sample-form-basic
   []
   [:div.border.p-6.rounded.bg-gray-01
@@ -213,14 +258,19 @@
       (ui/badge {:variant :destructive} "Destructive")
       (ui/badge {:class "primary-yellow"} "Custom (.primary-yellow)")])
 
-   ;; Dropdown
-   (section-item "Dropdown"
-     [:<>
-      (ui/dropdown-menu
-        (ui/dropdown-menu-trigger
-          (ui/button {:variant :outline}
-            (ui/tabler-icon "list") "Open dropdown menu"))
-        (sample-dropdown-menu-content))])
+   [:div.grid.grid-cols-3.gap-8
+    ;; Dropdown
+    (section-item "Dropdown"
+      [:<>
+       (ui/dropdown-menu
+         (ui/dropdown-menu-trigger
+           (ui/button {:variant :outline}
+             (ui/tabler-icon "list") "Open dropdown menu"))
+         (sample-dropdown-menu-content))])
+    ;; Context menu
+    [:div.col-span-2
+     (section-item "Context Menu"
+       (sample-context-menu-content))]]
 
    ;; Alert
    (section-item "Alert"
