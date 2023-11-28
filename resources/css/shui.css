@@ -2,10 +2,10 @@ html * {
   border-color: hsl(var(--border));
 }
 
-
 html {
   &:not([data-color=logseq]) {
-    .ui__dropdown-menu-content {
+    .ui__dropdown-menu-content,
+    .ui__context-menu-content {
       --accent: var(--rx-gray-04-hsl);
       --accent-foreground: var(--rx-gray-12-hsl);
     }
