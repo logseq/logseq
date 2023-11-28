@@ -600,7 +600,7 @@
                                     (util/stop-propagation e))
       :else nil)))
 
-(defn keyup-handler
+(defn- keyup-handler
   [state e]
   (let [shift? (.-shiftKey e)
         meta? (.-metaKey e)
@@ -778,9 +778,8 @@
        (mixins/on-key-down state {}
                            {:target ref
                             :all-handler (fn [e _key] (keydown-handler state e))})
-       (mixins/on-key-up state {}
-                         {:target ref
-                          :all-handler (fn [e _key] (keyup-handler state e))}))))
+       (mixins/on-key-up state {} (fn [e _key]
+                                    (keyup-handler state e))))))
   (rum/local false ::shift?)
   (rum/local false ::meta?)
   (rum/local false ::alt?)
