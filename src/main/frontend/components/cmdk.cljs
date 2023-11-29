@@ -467,7 +467,12 @@
      [:div {:class         "border-b border-gray-06 pb-1 last:border-b-0"
             :on-mouse-move #(reset! *mouse-active? true)}
       [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02"}
-       [:div {:class "font-bold text-gray-11 pl-0.5"} title]
+       [:div {:class "font-bold text-gray-11 pl-0.5 cursor-pointer select-none"
+              :on-click (fn [_e]
+                          ;; change :less to :more or :more to :less
+                          (swap! (::results state) update-in [group :show] {:more :less
+                                                                            :less :more}))}
+        title]
        (when (not= group :create)
          [:div {:class "pl-1.5 text-gray-12 rounded-full"
                 :style {:font-size "0.7rem"}}
