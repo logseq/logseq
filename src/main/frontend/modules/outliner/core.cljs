@@ -297,7 +297,7 @@
                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom?
                         :block/title :block/body :block/level)
                 gp-util/remove-nils
-                block-with-timestamps
+                block-with-updated-at
                 fix-tag-ids)
           repo (state/get-current-repo)
           db-based? (config/db-based-graph? repo)
