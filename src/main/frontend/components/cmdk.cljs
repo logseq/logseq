@@ -202,16 +202,23 @@
 ;; The pages search action uses an existing handler
 (defmethod load-results :pages [group state]
   (let [!input (::input state)
-        !results (::results state)]
+        !results (::results state)
+        repo (state/get-current-repo)]
     (swap! !results assoc-in [group :status] :loading)
     (p/let [pages (search/page-search @!input)
             items (map
                    (fn [page]
                      (let [entity (db/entity [:block/name (util/page-name-sanity-lc page)])
-                           whiteboard? (= (:block/type entity) "whiteboard")]
+                           whiteboard? (= (:block/type entity) "whiteboard")
+                           source-page (model/get-alias-source-page repo page)]
                        (hash-map :icon (if whiteboard? "whiteboard" "page")
                                  :icon-theme :gray
-                                 :text page
+                                 :text (if source-page
+                                         [:div.flex.flex-row.items-center.gap-2
+                                          page
+                                          [:div.opacity-50.font-normal "alias of"]
+                                          (:block/original-name source-page)]
+                                         page)
                                  :source-page page)))
                    pages)]
       (swap! !results update group        merge {:status :success :items items}))))
@@ -297,10 +304,12 @@
 
 (defmethod handle-action :open-page [_ state _event]
   (when-let [page-name (some-> state state->highlighted-item :source-page)]
-    (let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
+    (let [redirect-page-name (model/get-redirect-page-name page-name)
+          page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])
+          original-name (:block/original-name page)]
       (if (= (:block/type page) "whiteboard")
-        (route-handler/redirect-to-whiteboard! page-name)
-        (route-handler/redirect-to-page! page-name)))
+        (route-handler/redirect-to-whiteboard! original-name)
+        (route-handler/redirect-to-page! original-name)))
     (close-unless-alt! state)))
 
 (defmethod handle-action :open-block [_ state _event]
@@ -315,8 +324,10 @@
 
 (defmethod handle-action :open-page-right [_ state _event]
   (when-let [page-name (some-> state state->highlighted-item :source-page)]
-    (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
-      (editor-handler/open-block-in-sidebar! (:block/uuid page)))
+    (let [redirect-page-name (model/get-redirect-page-name page-name)
+          page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
+      (when page
+        (editor-handler/open-block-in-sidebar! (:block/uuid page))))
     (close-unless-alt! state)))
 
 (defmethod handle-action :open-block-right [_ state _event]
@@ -441,7 +452,12 @@
      [:div {:class         "border-b border-gray-06 pb-1 last:border-b-0"
             :on-mouse-move #(reset! *mouse-active? true)}
       [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02"}
-       [:div {:class "font-bold text-gray-11 pl-0.5"} title]
+       [:div {:class "font-bold text-gray-11 pl-0.5 cursor-pointer select-none"
+              :on-click (fn [_e]
+                          ;; change :less to :more or :more to :less
+                          (swap! (::results state) update-in [group :show] {:more :less
+                                                                            :less :more}))}
+        title]
        (when (not= group :create)
          [:div {:class "pl-1.5 text-gray-12 rounded-full"
                 :style {:font-size "0.7rem"}}
@@ -535,6 +551,7 @@
         keyname (.-key e)
         enter? (= keyname "Enter")
         esc? (= keyname "Escape")
+        composing? (util/event-is-composing? e)
         highlighted-group @(::highlighted-group state)
         show-less (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :less))
         show-more (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :more))
@@ -559,9 +576,9 @@
       as-keyup? (if meta?
                   (show-less)
                   (move-highlight state -1))
-      enter? (do
-               (handle-action :default state e)
-               (util/stop-propagation e))
+      (and enter? (not composing?)) (do
+                                      (handle-action :default state e)
+                                      (util/stop-propagation e))
       esc? (let [filter @(::filter state)]
              (when (or (and filter @(::input-changed? state))
                        (not (string/blank? input)))
@@ -573,7 +590,7 @@
                                     (util/stop-propagation e))
       :else nil)))
 
-(defn keyup-handler
+(defn- keyup-handler
   [state e]
   (let [shift? (.-shiftKey e)
         meta? (.-metaKey e)
@@ -751,9 +768,8 @@
        (mixins/on-key-down state {}
                            {:target ref
                             :all-handler (fn [e _key] (keydown-handler state e))})
-       (mixins/on-key-up state {}
-                         {:target ref
-                          :all-handler (fn [e _key] (keyup-handler state e))}))))
+       (mixins/on-key-up state {} (fn [e _key]
+                                    (keyup-handler state e))))))
   (rum/local false ::shift?)
   (rum/local false ::meta?)
   (rum/local false ::alt?)

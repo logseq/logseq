@@ -460,10 +460,7 @@
 
 (defn get-repo-fpath
   [repo-url path]
-  (if (and (or (util/electron?) (mobile-util/native-platform?))
-           (local-file-based-graph? repo-url))
-    (path/path-join (get-repo-dir repo-url) path)
-    (util/node-path.join (get-repo-dir repo-url) path)))
+  (path/path-join (get-repo-dir repo-url) path))
 
 (defn get-repo-config-path
   []

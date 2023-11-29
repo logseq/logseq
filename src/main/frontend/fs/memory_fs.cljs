@@ -44,6 +44,34 @@
       (p/catch (fn [_error]
                  (js/window.pfs.mkdir dir)))))
 
+(defn- <exists?
+  "dir is path, without memory:// prefix for simplicity"
+  [dir]
+  (-> (js/window.pfs.stat dir)
+      (p/then (fn [stat]
+                (not (nil? stat))))
+      (p/catch (fn [_]
+                 nil))))
+
+(defn- <mkdir-recur!
+  "mkdir, recursively create parent directories if not exist
+
+   lightning-fs does not support's :recursive in mkdir options"
+  [dir]
+  (p/let [fpath (path/url-to-path dir)
+          sub-dirs (p/loop [top-parent fpath
+                            remains []]
+                     (p/let [exists? (<exists? top-parent)]
+                       (if exists?
+                         (reverse remains) ;; top-parent is the first non-exist dir
+                         (p/recur (path/parent top-parent)
+                                  (conj remains top-parent)))))]
+    (p/loop [remains sub-dirs]
+      (if (empty? remains)
+        (p/resolved nil)
+        (p/do! (js/window.pfs.mkdir (first remains))
+               (p/recur (rest remains)))))))
+
 (defrecord MemoryFs []
   protocol/Fs
   (mkdir! [_this dir]
@@ -51,13 +79,11 @@
       (let [fpath (path/url-to-path dir)]
         (-> (js/window.pfs.mkdir fpath)
             (p/catch (fn [error] (println "(memory-fs)Mkdir error: " error)))))))
-  (mkdir-recur! [this dir]
-    ;; FIXME: replace this with a recurisve implementation
+  (mkdir-recur! [_this dir]
     (when js/window.pfs
-      (p/let [dir' (path/url-to-path dir)
-              parent (path/parent dir')
-              _ (when parent (<ensure-dir! parent))]
-        (protocol/mkdir! this dir'))))
+      (let [fpath (path/url-to-path dir)]
+        (-> (<mkdir-recur! fpath)
+            (p/catch (fn [error] (println "(memory-fs)Mkdir-recur error: " error)))))))
 
   (readdir [_this dir]
     (when js/window.pfs

@@ -90,14 +90,6 @@ contextBridge.exposeInMainWorld('apis', {
     await shell.openPath(path)
   },
 
-  showItemInFolder (fullpath) {
-    if (IS_WIN32) {
-      shell.openPath(path.dirname(fullpath).replaceAll("/", "\\"))
-    } else {
-      shell.showItemInFolder(fullpath)
-    }
-  },
-
   /**
    * save all publish assets to disk
    *
