@@ -301,10 +301,11 @@
                 fix-tag-ids)
           repo (state/get-current-repo)
           db-based? (config/db-based-graph? repo)
-          id (:db/id (:data this))
-          block-entity (db/entity id)
+          eid (or (:db/id (:data this))
+                  (when-let [block-uuid (:block/uuid (:data this))] [:block/uuid block-uuid]))
+          block-entity (db/entity eid)
           structured-tags? (and db-based? (seq (:block/tags m)))]
-      (when id
+      (when eid
         ;; Retract attributes to prepare for tx which rewrites block attributes
         (let [retract-attributes (when db-based?
                                    (remove #{:block/properties} db-schema/retract-attributes))]
@@ -312,7 +313,7 @@
                              (vec
                               (concat txs
                                       (map (fn [attribute]
-                                             [:db/retract id attribute])
+                                             [:db/retract eid attribute])
                                            retract-attributes))))))
 
         ;; Update block's page attributes
