@@ -56,6 +56,15 @@ import {
   ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger,
   ContextMenuTrigger
 } from '@/components/ui/context-menu'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel, SelectScrollDownButton, SelectScrollUpButton, SelectSeparator,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 
 declare global {
   var LSUI: any
@@ -106,6 +115,16 @@ const shadui = {
   ContextMenuSubContent,
   ContextMenuSubTrigger,
   ContextMenuRadioGroup,
+  Select,
+  SelectGroup,
+  SelectValue,
+  SelectTrigger,
+  SelectContent,
+  SelectLabel,
+  SelectItem,
+  SelectSeparator,
+  SelectScrollUpButton,
+  SelectScrollDownButton,
 }
 
 function setupGlobals () {

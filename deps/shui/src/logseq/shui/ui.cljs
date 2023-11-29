@@ -2,6 +2,7 @@
   (:require [logseq.shui.util :as util]
             [logseq.shui.icon.v2 :as icon-v2]
             [logseq.shui.toaster.core :as toaster-core]
+            [logseq.shui.select.core :as select-core]
             [logseq.shui.form.core :as form-core]))
 
 (def button (util/lsui-wrap "Button" {:static? false}))
@@ -34,6 +35,17 @@
 (def form-message form-core/form-message)
 (def form-field form-core/form-field)
 (def form-control form-core/form-control)
+
+(def select select-core/select)
+(def select-group select-core/select-group)
+(def select-value select-core/select-value)
+(def select-trigger select-core/select-trigger)
+(def select-content select-core/select-content)
+(def select-label select-core/select-label)
+(def select-item select-core/select-item)
+(def select-separator select-core/select-separator)
+(def select-scroll-up-button select-core/select-scroll-up-button)
+(def select-scroll-down-button select-core/select-scroll-down-button)
 
 (def dropdown-menu (util/lsui-wrap "DropdownMenu"))
 (def dropdown-menu-trigger (util/lsui-wrap "DropdownMenuTrigger"))

@@ -288,10 +288,28 @@
           "content: radix colors for Logseq"))])
 
    ;; Slider
-   [:div.grid.grid-cols-2.gap-16
-    (section-item "Slider" (ui/slider))
-    (section-item "Switch"
-      (ui/switch {:size :sm :class "relative top-[-8px]"}))]
+   [:div.grid.grid-cols-8.gap-4
+    [:div.col-span-4.mr-6
+     (section-item "Slider" (ui/slider))]
+    [:div.col-span-1
+     (section-item "Switch"
+       (ui/switch {:size :sm :class "relative top-[-8px]"}))]
+    [:div.col-span-3.pl-4.pr-2
+     (section-item "Select"
+       (ui/select
+         {:on-value-change (fn [v] (ui/toast! v :info))}
+         ;; trigger
+         (ui/select-trigger
+           (ui/select-value {:placeholder "Select a fruit"}))
+         ;; content
+         (ui/select-content
+           (ui/select-group
+             (ui/select-label "Fruits")
+             (ui/select-item {:value "apple"} "Apple")
+             (ui/select-item {:value "pear"} "Pear")
+             (ui/select-item {:value "grapes"} "Grapes")
+
+             ))))]]
 
    ;; Form
    (section-item "Form"
@@ -321,6 +339,6 @@
           (ui/skeleton {:class "h-3 w-2/3"}))
 
         (ui/card-footer
-          (ui/skeleton {:class "h-4 w-full"}))))]
+          (ui/skeleton {:class "h-4 w-full mb-2"}))))]
 
    [:hr.mb-60]])
