@@ -167,7 +167,7 @@
 
         ;; actions
         [:p.relative.px-2
-         (ui/button {:type "submit" :class "absolute right-0 top-[-40px]"} "Submit")]]))])
+         (ui/button {:type "submit" :class "!absolute right-0 top-[-40px]"} "Submit")]]))])
 
 (rum/defc page []
   [:div.p-10

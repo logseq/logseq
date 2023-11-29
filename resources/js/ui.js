@@ -18105,6 +18105,1325 @@ const $5015ffc5018fd12f$export$66061e7e1cd4bd76 = ({ className: className , ...p
 $5015ffc5018fd12f$export$66061e7e1cd4bd76.displayName = "ContextMenuShortcut";
 
 
+
+
+var $LI8jA = parcelRequire("LI8jA");
+
+
+var $LI8jA = parcelRequire("LI8jA");
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$OPEN_KEYS = [
+    " ",
+    "Enter",
+    "ArrowUp",
+    "ArrowDown"
+];
+const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SELECTION_KEYS = [
+    " ",
+    "Enter"
+];
+/* -------------------------------------------------------------------------------------------------
+ * Select
+ * -----------------------------------------------------------------------------------------------*/ const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SELECT_NAME = "Select";
+const [$287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$Collection, $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useCollection, $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$createCollectionScope] = (0, $38e2772b5a4e93fc$export$c74125a8e3af6bb2)($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SELECT_NAME);
+const [$287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$createSelectContext, $287e5cc5498c5bc4$export$286727a75dc039bd] = (0, $ec3315292aa721d0$export$50c7b4e9d9f19c1)($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SELECT_NAME, [
+    $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$createCollectionScope,
+    (0, $576aaf0a88f44294$export$722aac194ae923)
+]);
+const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$usePopperScope = (0, $576aaf0a88f44294$export$722aac194ae923)();
+const [$287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectProvider, $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectContext] = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$createSelectContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SELECT_NAME);
+const [$287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectNativeOptionsProvider, $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectNativeOptionsContext] = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$createSelectContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SELECT_NAME);
+const $287e5cc5498c5bc4$export$ef9b1a59e592288f = (props)=>{
+    const { __scopeSelect: __scopeSelect , children: children , open: openProp , defaultOpen: defaultOpen , onOpenChange: onOpenChange , value: valueProp , defaultValue: defaultValue , onValueChange: onValueChange , dir: dir , name: name , autoComplete: autoComplete , disabled: disabled , required: required  } = props;
+    const popperScope = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$usePopperScope(__scopeSelect);
+    const [trigger, setTrigger] = (0, $LI8jA.useState)(null);
+    const [valueNode, setValueNode] = (0, $LI8jA.useState)(null);
+    const [valueNodeHasChildren, setValueNodeHasChildren] = (0, $LI8jA.useState)(false);
+    const direction = (0, $842d1ddb67983cae$export$b39126d51d94e6f3)(dir);
+    const [open = false, setOpen] = (0, $f4c632903130edee$export$6f32135080cb4c3)({
+        prop: openProp,
+        defaultProp: defaultOpen,
+        onChange: onOpenChange
+    });
+    const [value, setValue] = (0, $f4c632903130edee$export$6f32135080cb4c3)({
+        prop: valueProp,
+        defaultProp: defaultValue,
+        onChange: onValueChange
+    });
+    const triggerPointerDownPosRef = (0, $LI8jA.useRef)(null); // We set this to true by default so that events bubble to forms without JS (SSR)
+    const isFormControl = trigger ? Boolean(trigger.closest("form")) : true;
+    const [nativeOptionsSet, setNativeOptionsSet] = (0, $LI8jA.useState)(new Set()); // The native `select` only associates the correct default value if the corresponding
+    // `option` is rendered as a child **at the same time** as itself.
+    // Because it might take a few renders for our items to gather the information to build
+    // the native `option`(s), we generate a key on the `select` to make sure React re-builds it
+    // each time the options change.
+    const nativeSelectKey = Array.from(nativeOptionsSet).map((option)=>option.props.value).join(";");
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $576aaf0a88f44294$export$be92b6f5f03c0fe9), popperScope, /*#__PURE__*/ (0, $LI8jA.createElement)($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectProvider, {
+        required: required,
+        scope: __scopeSelect,
+        trigger: trigger,
+        onTriggerChange: setTrigger,
+        valueNode: valueNode,
+        onValueNodeChange: setValueNode,
+        valueNodeHasChildren: valueNodeHasChildren,
+        onValueNodeHasChildrenChange: setValueNodeHasChildren,
+        contentId: (0, $d4070564f9335f17$export$f680877a34711e37)(),
+        value: value,
+        onValueChange: setValue,
+        open: open,
+        onOpenChange: setOpen,
+        dir: direction,
+        triggerPointerDownPosRef: triggerPointerDownPosRef,
+        disabled: disabled
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$Collection.Provider, {
+        scope: __scopeSelect
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectNativeOptionsProvider, {
+        scope: props.__scopeSelect,
+        onNativeOptionAdd: (0, $LI8jA.useCallback)((option)=>{
+            setNativeOptionsSet((prev)=>new Set(prev).add(option));
+        }, []),
+        onNativeOptionRemove: (0, $LI8jA.useCallback)((option)=>{
+            setNativeOptionsSet((prev)=>{
+                const optionsSet = new Set(prev);
+                optionsSet.delete(option);
+                return optionsSet;
+            });
+        }, [])
+    }, children)), isFormControl ? /*#__PURE__*/ (0, $LI8jA.createElement)($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$BubbleSelect, {
+        key: nativeSelectKey,
+        "aria-hidden": true,
+        required: required,
+        tabIndex: -1,
+        name: name,
+        autoComplete: autoComplete,
+        value: value // enable form autofill
+        ,
+        onChange: (event)=>setValue(event.target.value),
+        disabled: disabled
+    }, value === undefined ? /*#__PURE__*/ (0, $LI8jA.createElement)("option", {
+        value: ""
+    }) : null, Array.from(nativeOptionsSet)) : null));
+};
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$export$ef9b1a59e592288f, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SELECT_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * SelectTrigger
+ * -----------------------------------------------------------------------------------------------*/ const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$TRIGGER_NAME = "SelectTrigger";
+const $287e5cc5498c5bc4$export$3ac1e88a1c0b9f1 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeSelect: __scopeSelect , disabled: disabled = false , ...triggerProps } = props;
+    const popperScope = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$usePopperScope(__scopeSelect);
+    const context = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$TRIGGER_NAME, __scopeSelect);
+    const isDisabled = context.disabled || disabled;
+    const composedRefs = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, context.onTriggerChange);
+    const getItems = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useCollection(__scopeSelect);
+    const [searchRef, handleTypeaheadSearch, resetTypeahead] = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useTypeaheadSearch((search)=>{
+        const enabledItems = getItems().filter((item)=>!item.disabled);
+        const currentItem = enabledItems.find((item)=>item.value === context.value);
+        const nextItem = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$findNextItem(enabledItems, search, currentItem);
+        if (nextItem !== undefined) context.onValueChange(nextItem.value);
+    });
+    const handleOpen = ()=>{
+        if (!isDisabled) {
+            context.onOpenChange(true); // reset typeahead when we open
+            resetTypeahead();
+        }
+    };
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $576aaf0a88f44294$export$b688253958b8dfe7), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        asChild: true
+    }, popperScope), /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).button, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        type: "button",
+        role: "combobox",
+        "aria-controls": context.contentId,
+        "aria-expanded": context.open,
+        "aria-required": context.required,
+        "aria-autocomplete": "none",
+        dir: context.dir,
+        "data-state": context.open ? "open" : "closed",
+        disabled: isDisabled,
+        "data-disabled": isDisabled ? "" : undefined,
+        "data-placeholder": $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$shouldShowPlaceholder(context.value) ? "" : undefined
+    }, triggerProps, {
+        ref: composedRefs // Enable compatibility with native label or custom `Label` "click" for Safari:
+        ,
+        onClick: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(triggerProps.onClick, (event)=>{
+            // Whilst browsers generally have no issue focusing the trigger when clicking
+            // on a label, Safari seems to struggle with the fact that there's no `onClick`.
+            // We force `focus` in this case. Note: this doesn't create any other side-effect
+            // because we are preventing default in `onPointerDown` so effectively
+            // this only runs for a label "click"
+            event.currentTarget.focus();
+        }),
+        onPointerDown: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(triggerProps.onPointerDown, (event)=>{
+            // prevent implicit pointer capture
+            // https://www.w3.org/TR/pointerevents3/#implicit-pointer-capture
+            const target = event.target;
+            if (target.hasPointerCapture(event.pointerId)) target.releasePointerCapture(event.pointerId);
+            // only call handler if it's the left button (mousedown gets triggered by all mouse buttons)
+            // but not when the control key is pressed (avoiding MacOS right click)
+            if (event.button === 0 && event.ctrlKey === false) {
+                handleOpen();
+                context.triggerPointerDownPosRef.current = {
+                    x: Math.round(event.pageX),
+                    y: Math.round(event.pageY)
+                }; // prevent trigger from stealing focus from the active item after opening.
+                event.preventDefault();
+            }
+        }),
+        onKeyDown: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(triggerProps.onKeyDown, (event)=>{
+            const isTypingAhead = searchRef.current !== "";
+            const isModifierKey = event.ctrlKey || event.altKey || event.metaKey;
+            if (!isModifierKey && event.key.length === 1) handleTypeaheadSearch(event.key);
+            if (isTypingAhead && event.key === " ") return;
+            if ($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$OPEN_KEYS.includes(event.key)) {
+                handleOpen();
+                event.preventDefault();
+            }
+        })
+    })));
+});
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$export$3ac1e88a1c0b9f1, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$TRIGGER_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * SelectValue
+ * -----------------------------------------------------------------------------------------------*/ const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$VALUE_NAME = "SelectValue";
+const $287e5cc5498c5bc4$export$e288731fd71264f0 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    // We ignore `className` and `style` as this part shouldn't be styled.
+    const { __scopeSelect: __scopeSelect , className: className , style: style , children: children , placeholder: placeholder = "" , ...valueProps } = props;
+    const context = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$VALUE_NAME, __scopeSelect);
+    const { onValueNodeHasChildrenChange: onValueNodeHasChildrenChange  } = context;
+    const hasChildren = children !== undefined;
+    const composedRefs = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, context.onValueNodeChange);
+    (0, $620f4b520baef9c2$export$e5c5a5f917a5871c)(()=>{
+        onValueNodeHasChildrenChange(hasChildren);
+    }, [
+        onValueNodeHasChildrenChange,
+        hasChildren
+    ]);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).span, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, valueProps, {
+        ref: composedRefs // we don't want events from the portalled `SelectValue` children to bubble
+        ,
+        style: {
+            pointerEvents: "none"
+        }
+    }), $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$shouldShowPlaceholder(context.value) ? /*#__PURE__*/ (0, $LI8jA.createElement)((0, $LI8jA.Fragment), null, placeholder) : children);
+});
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$export$e288731fd71264f0, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$VALUE_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * SelectIcon
+ * -----------------------------------------------------------------------------------------------*/ const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ICON_NAME = "SelectIcon";
+const $287e5cc5498c5bc4$export$99b400cabb58c515 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeSelect: __scopeSelect , children: children , ...iconProps } = props;
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).span, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        "aria-hidden": true
+    }, iconProps, {
+        ref: forwardedRef
+    }), children || "▼");
+});
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$export$99b400cabb58c515, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ICON_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * SelectPortal
+ * -----------------------------------------------------------------------------------------------*/ const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$PORTAL_NAME = "SelectPortal";
+const $287e5cc5498c5bc4$export$b2af6c9944296213 = (props)=>{
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $726ec765805a08e3$export$602eac185826482c), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        asChild: true
+    }, props));
+};
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$export$b2af6c9944296213, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$PORTAL_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * SelectContent
+ * -----------------------------------------------------------------------------------------------*/ const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_NAME = "SelectContent";
+const $287e5cc5498c5bc4$export$c973a4b3cb86a03d = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const context = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_NAME, props.__scopeSelect);
+    const [fragment, setFragment] = (0, $LI8jA.useState)(); // setting the fragment in `useLayoutEffect` as `DocumentFragment` doesn't exist on the server
+    (0, $620f4b520baef9c2$export$e5c5a5f917a5871c)(()=>{
+        setFragment(new DocumentFragment());
+    }, []);
+    if (!context.open) {
+        const frag = fragment;
+        return frag ? /*#__PURE__*/ (0, $117771ce739ab0ef$exports.createPortal)(/*#__PURE__*/ (0, $LI8jA.createElement)($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectContentProvider, {
+            scope: props.__scopeSelect
+        }, /*#__PURE__*/ (0, $LI8jA.createElement)($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$Collection.Slot, {
+            scope: props.__scopeSelect
+        }, /*#__PURE__*/ (0, $LI8jA.createElement)("div", null, props.children))), frag) : null;
+    }
+    return /*#__PURE__*/ (0, $LI8jA.createElement)($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectContentImpl, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, props, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$export$c973a4b3cb86a03d, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * SelectContentImpl
+ * -----------------------------------------------------------------------------------------------*/ const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_MARGIN = 10;
+const [$287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectContentProvider, $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectContentContext] = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$createSelectContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_NAME);
+const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_IMPL_NAME = "SelectContentImpl";
+const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectContentImpl = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeSelect: __scopeSelect , position: position = "item-aligned" , onCloseAutoFocus: onCloseAutoFocus , onEscapeKeyDown: onEscapeKeyDown , onPointerDownOutside: onPointerDownOutside , side: // PopperContent props
+    side , sideOffset: sideOffset , align: align , alignOffset: alignOffset , arrowPadding: arrowPadding , collisionBoundary: collisionBoundary , collisionPadding: collisionPadding , sticky: sticky , hideWhenDetached: hideWhenDetached , avoidCollisions: avoidCollisions , ...contentProps } = props;
+    const context = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_NAME, __scopeSelect);
+    const [content, setContent] = (0, $LI8jA.useState)(null);
+    const [viewport, setViewport] = (0, $LI8jA.useState)(null);
+    const composedRefs = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, (node)=>setContent(node));
+    const [selectedItem, setSelectedItem] = (0, $LI8jA.useState)(null);
+    const [selectedItemText, setSelectedItemText] = (0, $LI8jA.useState)(null);
+    const getItems = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useCollection(__scopeSelect);
+    const [isPositioned, setIsPositioned] = (0, $LI8jA.useState)(false);
+    const firstValidItemFoundRef = (0, $LI8jA.useRef)(false); // aria-hide everything except the content (better supported equivalent to setting aria-modal)
+    (0, $LI8jA.useEffect)(()=>{
+        if (content) return (0, $f51523d7bb101394$export$6e33d16126ed003c)(content);
+    }, [
+        content
+    ]); // Make sure the whole tree has focus guards as our `Select` may be
+    // the last element in the DOM (because of the `Portal`)
+    (0, $a8797df59e287e29$export$b7ece24a22aeda8c)();
+    const focusFirst = (0, $LI8jA.useCallback)((candidates)=>{
+        const [firstItem, ...restItems] = getItems().map((item)=>item.ref.current);
+        const [lastItem] = restItems.slice(-1);
+        const PREVIOUSLY_FOCUSED_ELEMENT = document.activeElement;
+        for (const candidate of candidates){
+            // if focus is already where we want to go, we don't want to keep going through the candidates
+            if (candidate === PREVIOUSLY_FOCUSED_ELEMENT) return;
+            candidate === null || candidate === void 0 || candidate.scrollIntoView({
+                block: "nearest"
+            }); // viewport might have padding so scroll to its edges when focusing first/last items.
+            if (candidate === firstItem && viewport) viewport.scrollTop = 0;
+            if (candidate === lastItem && viewport) viewport.scrollTop = viewport.scrollHeight;
+            candidate === null || candidate === void 0 || candidate.focus();
+            if (document.activeElement !== PREVIOUSLY_FOCUSED_ELEMENT) return;
+        }
+    }, [
+        getItems,
+        viewport
+    ]);
+    const focusSelectedItem = (0, $LI8jA.useCallback)(()=>focusFirst([
+            selectedItem,
+            content
+        ]), [
+        focusFirst,
+        selectedItem,
+        content
+    ]); // Since this is not dependent on layout, we want to ensure this runs at the same time as
+    // other effects across components. Hence why we don't call `focusSelectedItem` inside `position`.
+    (0, $LI8jA.useEffect)(()=>{
+        if (isPositioned) focusSelectedItem();
+    }, [
+        isPositioned,
+        focusSelectedItem
+    ]); // prevent selecting items on `pointerup` in some cases after opening from `pointerdown`
+    // and close on `pointerup` outside.
+    const { onOpenChange: onOpenChange , triggerPointerDownPosRef: triggerPointerDownPosRef  } = context;
+    (0, $LI8jA.useEffect)(()=>{
+        if (content) {
+            let pointerMoveDelta = {
+                x: 0,
+                y: 0
+            };
+            const handlePointerMove = (event)=>{
+                var _triggerPointerDownPo, _triggerPointerDownPo2, _triggerPointerDownPo3, _triggerPointerDownPo4;
+                pointerMoveDelta = {
+                    x: Math.abs(Math.round(event.pageX) - ((_triggerPointerDownPo = (_triggerPointerDownPo2 = triggerPointerDownPosRef.current) === null || _triggerPointerDownPo2 === void 0 ? void 0 : _triggerPointerDownPo2.x) !== null && _triggerPointerDownPo !== void 0 ? _triggerPointerDownPo : 0)),
+                    y: Math.abs(Math.round(event.pageY) - ((_triggerPointerDownPo3 = (_triggerPointerDownPo4 = triggerPointerDownPosRef.current) === null || _triggerPointerDownPo4 === void 0 ? void 0 : _triggerPointerDownPo4.y) !== null && _triggerPointerDownPo3 !== void 0 ? _triggerPointerDownPo3 : 0))
+                };
+            };
+            const handlePointerUp = (event)=>{
+                // If the pointer hasn't moved by a certain threshold then we prevent selecting item on `pointerup`.
+                if (pointerMoveDelta.x <= 10 && pointerMoveDelta.y <= 10) event.preventDefault();
+                else if (!content.contains(event.target)) onOpenChange(false);
+                document.removeEventListener("pointermove", handlePointerMove);
+                triggerPointerDownPosRef.current = null;
+            };
+            if (triggerPointerDownPosRef.current !== null) {
+                document.addEventListener("pointermove", handlePointerMove);
+                document.addEventListener("pointerup", handlePointerUp, {
+                    capture: true,
+                    once: true
+                });
+            }
+            return ()=>{
+                document.removeEventListener("pointermove", handlePointerMove);
+                document.removeEventListener("pointerup", handlePointerUp, {
+                    capture: true
+                });
+            };
+        }
+    }, [
+        content,
+        onOpenChange,
+        triggerPointerDownPosRef
+    ]);
+    (0, $LI8jA.useEffect)(()=>{
+        const close = ()=>onOpenChange(false);
+        window.addEventListener("blur", close);
+        window.addEventListener("resize", close);
+        return ()=>{
+            window.removeEventListener("blur", close);
+            window.removeEventListener("resize", close);
+        };
+    }, [
+        onOpenChange
+    ]);
+    const [searchRef, handleTypeaheadSearch] = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useTypeaheadSearch((search)=>{
+        const enabledItems = getItems().filter((item)=>!item.disabled);
+        const currentItem = enabledItems.find((item)=>item.ref.current === document.activeElement);
+        const nextItem = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$findNextItem(enabledItems, search, currentItem);
+        if (nextItem) /**
+       * Imperative focus during keydown is risky so we prevent React's batching updates
+       * to avoid potential bugs. See: https://github.com/facebook/react/issues/20332
+       */ setTimeout(()=>nextItem.ref.current.focus());
+    });
+    const itemRefCallback = (0, $LI8jA.useCallback)((node, value, disabled)=>{
+        const isFirstValidItem = !firstValidItemFoundRef.current && !disabled;
+        const isSelectedItem = context.value !== undefined && context.value === value;
+        if (isSelectedItem || isFirstValidItem) {
+            setSelectedItem(node);
+            if (isFirstValidItem) firstValidItemFoundRef.current = true;
+        }
+    }, [
+        context.value
+    ]);
+    const handleItemLeave = (0, $LI8jA.useCallback)(()=>content === null || content === void 0 ? void 0 : content.focus(), [
+        content
+    ]);
+    const itemTextRefCallback = (0, $LI8jA.useCallback)((node, value, disabled)=>{
+        const isFirstValidItem = !firstValidItemFoundRef.current && !disabled;
+        const isSelectedItem = context.value !== undefined && context.value === value;
+        if (isSelectedItem || isFirstValidItem) setSelectedItemText(node);
+    }, [
+        context.value
+    ]);
+    const SelectPosition = position === "popper" ? $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectPopperPosition : $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectItemAlignedPosition; // Silently ignore props that are not supported by `SelectItemAlignedPosition`
+    const popperContentProps = SelectPosition === $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectPopperPosition ? {
+        side: side,
+        sideOffset: sideOffset,
+        align: align,
+        alignOffset: alignOffset,
+        arrowPadding: arrowPadding,
+        collisionBoundary: collisionBoundary,
+        collisionPadding: collisionPadding,
+        sticky: sticky,
+        hideWhenDetached: hideWhenDetached,
+        avoidCollisions: avoidCollisions
+    } : {};
+    return /*#__PURE__*/ (0, $LI8jA.createElement)($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectContentProvider, {
+        scope: __scopeSelect,
+        content: content,
+        viewport: viewport,
+        onViewportChange: setViewport,
+        itemRefCallback: itemRefCallback,
+        selectedItem: selectedItem,
+        onItemLeave: handleItemLeave,
+        itemTextRefCallback: itemTextRefCallback,
+        focusSelectedItem: focusSelectedItem,
+        selectedItemText: selectedItemText,
+        position: position,
+        isPositioned: isPositioned,
+        searchRef: searchRef
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $82d0ba9afddcc0a1$export$2e2bcd8739ae039), {
+        as: (0, $db045af315cca07a$export$8c6ed5c666ac1360),
+        allowPinchZoom: true
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a69c668904a4ce70$export$20e40289641fbbb6), {
+        asChild: true // we make sure we're not trapping once it's been closed
+        ,
+        trapped: context.open,
+        onMountAutoFocus: (event)=>{
+            // we prevent open autofocus because we manually focus the selected item
+            event.preventDefault();
+        },
+        onUnmountAutoFocus: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(onCloseAutoFocus, (event)=>{
+            var _context$trigger;
+            (_context$trigger = context.trigger) === null || _context$trigger === void 0 || _context$trigger.focus({
+                preventScroll: true
+            });
+            event.preventDefault();
+        })
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a102e9b8e3188262$export$177fb62ff3ec1f22), {
+        asChild: true,
+        disableOutsidePointerEvents: true,
+        onEscapeKeyDown: onEscapeKeyDown,
+        onPointerDownOutside: onPointerDownOutside // When focus is trapped, a focusout event may still happen.
+        ,
+        onFocusOutside: (event)=>event.preventDefault(),
+        onDismiss: ()=>context.onOpenChange(false)
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)(SelectPosition, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        role: "listbox",
+        id: context.contentId,
+        "data-state": context.open ? "open" : "closed",
+        dir: context.dir,
+        onContextMenu: (event)=>event.preventDefault()
+    }, contentProps, popperContentProps, {
+        onPlaced: ()=>setIsPositioned(true),
+        ref: composedRefs,
+        style: {
+            // flex layout so we can place the scroll buttons properly
+            display: "flex",
+            flexDirection: "column",
+            // reset the outline by default as the content MAY get focused
+            outline: "none",
+            ...contentProps.style
+        },
+        onKeyDown: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(contentProps.onKeyDown, (event)=>{
+            const isModifierKey = event.ctrlKey || event.altKey || event.metaKey; // select should not be navigated using tab key so we prevent it
+            if (event.key === "Tab") event.preventDefault();
+            if (!isModifierKey && event.key.length === 1) handleTypeaheadSearch(event.key);
+            if ([
+                "ArrowUp",
+                "ArrowDown",
+                "Home",
+                "End"
+            ].includes(event.key)) {
+                const items = getItems().filter((item)=>!item.disabled);
+                let candidateNodes = items.map((item)=>item.ref.current);
+                if ([
+                    "ArrowUp",
+                    "End"
+                ].includes(event.key)) candidateNodes = candidateNodes.slice().reverse();
+                if ([
+                    "ArrowUp",
+                    "ArrowDown"
+                ].includes(event.key)) {
+                    const currentElement = event.target;
+                    const currentIndex = candidateNodes.indexOf(currentElement);
+                    candidateNodes = candidateNodes.slice(currentIndex + 1);
+                }
+                /**
+         * Imperative focus during keydown is risky so we prevent React's batching updates
+         * to avoid potential bugs. See: https://github.com/facebook/react/issues/20332
+         */ setTimeout(()=>focusFirst(candidateNodes));
+                event.preventDefault();
+            }
+        })
+    }))))));
+});
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectContentImpl, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_IMPL_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * SelectItemAlignedPosition
+ * -----------------------------------------------------------------------------------------------*/ const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ITEM_ALIGNED_POSITION_NAME = "SelectItemAlignedPosition";
+const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectItemAlignedPosition = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeSelect: __scopeSelect , onPlaced: onPlaced , ...popperProps } = props;
+    const context = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_NAME, __scopeSelect);
+    const contentContext = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectContentContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_NAME, __scopeSelect);
+    const [contentWrapper, setContentWrapper] = (0, $LI8jA.useState)(null);
+    const [content, setContent] = (0, $LI8jA.useState)(null);
+    const composedRefs = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, (node)=>setContent(node));
+    const getItems = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useCollection(__scopeSelect);
+    const shouldExpandOnScrollRef = (0, $LI8jA.useRef)(false);
+    const shouldRepositionRef = (0, $LI8jA.useRef)(true);
+    const { viewport: viewport , selectedItem: selectedItem , selectedItemText: selectedItemText , focusSelectedItem: focusSelectedItem  } = contentContext;
+    const position = (0, $LI8jA.useCallback)(()=>{
+        if (context.trigger && context.valueNode && contentWrapper && content && viewport && selectedItem && selectedItemText) {
+            const triggerRect = context.trigger.getBoundingClientRect(); // -----------------------------------------------------------------------------------------
+            //  Horizontal positioning
+            // -----------------------------------------------------------------------------------------
+            const contentRect = content.getBoundingClientRect();
+            const valueNodeRect = context.valueNode.getBoundingClientRect();
+            const itemTextRect = selectedItemText.getBoundingClientRect();
+            if (context.dir !== "rtl") {
+                const itemTextOffset = itemTextRect.left - contentRect.left;
+                const left = valueNodeRect.left - itemTextOffset;
+                const leftDelta = triggerRect.left - left;
+                const minContentWidth = triggerRect.width + leftDelta;
+                const contentWidth = Math.max(minContentWidth, contentRect.width);
+                const rightEdge = window.innerWidth - $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_MARGIN;
+                const clampedLeft = (0, $6997abd862cdf210$export$7d15b64cf5a3a4c4)(left, [
+                    $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_MARGIN,
+                    rightEdge - contentWidth
+                ]);
+                contentWrapper.style.minWidth = minContentWidth + "px";
+                contentWrapper.style.left = clampedLeft + "px";
+            } else {
+                const itemTextOffset = contentRect.right - itemTextRect.right;
+                const right = window.innerWidth - valueNodeRect.right - itemTextOffset;
+                const rightDelta = window.innerWidth - triggerRect.right - right;
+                const minContentWidth = triggerRect.width + rightDelta;
+                const contentWidth = Math.max(minContentWidth, contentRect.width);
+                const leftEdge = window.innerWidth - $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_MARGIN;
+                const clampedRight = (0, $6997abd862cdf210$export$7d15b64cf5a3a4c4)(right, [
+                    $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_MARGIN,
+                    leftEdge - contentWidth
+                ]);
+                contentWrapper.style.minWidth = minContentWidth + "px";
+                contentWrapper.style.right = clampedRight + "px";
+            } // -----------------------------------------------------------------------------------------
+            // Vertical positioning
+            // -----------------------------------------------------------------------------------------
+            const items = getItems();
+            const availableHeight = window.innerHeight - $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_MARGIN * 2;
+            const itemsHeight = viewport.scrollHeight;
+            const contentStyles = window.getComputedStyle(content);
+            const contentBorderTopWidth = parseInt(contentStyles.borderTopWidth, 10);
+            const contentPaddingTop = parseInt(contentStyles.paddingTop, 10);
+            const contentBorderBottomWidth = parseInt(contentStyles.borderBottomWidth, 10);
+            const contentPaddingBottom = parseInt(contentStyles.paddingBottom, 10);
+            const fullContentHeight = contentBorderTopWidth + contentPaddingTop + itemsHeight + contentPaddingBottom + contentBorderBottomWidth; // prettier-ignore
+            const minContentHeight = Math.min(selectedItem.offsetHeight * 5, fullContentHeight);
+            const viewportStyles = window.getComputedStyle(viewport);
+            const viewportPaddingTop = parseInt(viewportStyles.paddingTop, 10);
+            const viewportPaddingBottom = parseInt(viewportStyles.paddingBottom, 10);
+            const topEdgeToTriggerMiddle = triggerRect.top + triggerRect.height / 2 - $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_MARGIN;
+            const triggerMiddleToBottomEdge = availableHeight - topEdgeToTriggerMiddle;
+            const selectedItemHalfHeight = selectedItem.offsetHeight / 2;
+            const itemOffsetMiddle = selectedItem.offsetTop + selectedItemHalfHeight;
+            const contentTopToItemMiddle = contentBorderTopWidth + contentPaddingTop + itemOffsetMiddle;
+            const itemMiddleToContentBottom = fullContentHeight - contentTopToItemMiddle;
+            const willAlignWithoutTopOverflow = contentTopToItemMiddle <= topEdgeToTriggerMiddle;
+            if (willAlignWithoutTopOverflow) {
+                const isLastItem = selectedItem === items[items.length - 1].ref.current;
+                contentWrapper.style.bottom = "0px";
+                const viewportOffsetBottom = content.clientHeight - viewport.offsetTop - viewport.offsetHeight;
+                const clampedTriggerMiddleToBottomEdge = Math.max(triggerMiddleToBottomEdge, selectedItemHalfHeight + (isLastItem ? viewportPaddingBottom : 0) + viewportOffsetBottom + contentBorderBottomWidth);
+                const height = contentTopToItemMiddle + clampedTriggerMiddleToBottomEdge;
+                contentWrapper.style.height = height + "px";
+            } else {
+                const isFirstItem = selectedItem === items[0].ref.current;
+                contentWrapper.style.top = "0px";
+                const clampedTopEdgeToTriggerMiddle = Math.max(topEdgeToTriggerMiddle, contentBorderTopWidth + viewport.offsetTop + (isFirstItem ? viewportPaddingTop : 0) + selectedItemHalfHeight);
+                const height = clampedTopEdgeToTriggerMiddle + itemMiddleToContentBottom;
+                contentWrapper.style.height = height + "px";
+                viewport.scrollTop = contentTopToItemMiddle - topEdgeToTriggerMiddle + viewport.offsetTop;
+            }
+            contentWrapper.style.margin = `${$287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_MARGIN}px 0`;
+            contentWrapper.style.minHeight = minContentHeight + "px";
+            contentWrapper.style.maxHeight = availableHeight + "px"; // -----------------------------------------------------------------------------------------
+            onPlaced === null || onPlaced === void 0 || onPlaced(); // we don't want the initial scroll position adjustment to trigger "expand on scroll"
+            // so we explicitly turn it on only after they've registered.
+            requestAnimationFrame(()=>shouldExpandOnScrollRef.current = true);
+        }
+    }, [
+        getItems,
+        context.trigger,
+        context.valueNode,
+        contentWrapper,
+        content,
+        viewport,
+        selectedItem,
+        selectedItemText,
+        context.dir,
+        onPlaced
+    ]);
+    (0, $620f4b520baef9c2$export$e5c5a5f917a5871c)(()=>position(), [
+        position
+    ]); // copy z-index from content to wrapper
+    const [contentZIndex, setContentZIndex] = (0, $LI8jA.useState)();
+    (0, $620f4b520baef9c2$export$e5c5a5f917a5871c)(()=>{
+        if (content) setContentZIndex(window.getComputedStyle(content).zIndex);
+    }, [
+        content
+    ]); // When the viewport becomes scrollable at the top, the scroll up button will mount.
+    // Because it is part of the normal flow, it will push down the viewport, thus throwing our
+    // trigger => selectedItem alignment off by the amount the viewport was pushed down.
+    // We wait for this to happen and then re-run the positining logic one more time to account for it.
+    const handleScrollButtonChange = (0, $LI8jA.useCallback)((node)=>{
+        if (node && shouldRepositionRef.current === true) {
+            position();
+            focusSelectedItem === null || focusSelectedItem === void 0 || focusSelectedItem();
+            shouldRepositionRef.current = false;
+        }
+    }, [
+        position,
+        focusSelectedItem
+    ]);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectViewportProvider, {
+        scope: __scopeSelect,
+        contentWrapper: contentWrapper,
+        shouldExpandOnScrollRef: shouldExpandOnScrollRef,
+        onScrollButtonChange: handleScrollButtonChange
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)("div", {
+        ref: setContentWrapper,
+        style: {
+            display: "flex",
+            flexDirection: "column",
+            position: "fixed",
+            zIndex: contentZIndex
+        }
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).div, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, popperProps, {
+        ref: composedRefs,
+        style: {
+            // When we get the height of the content, it includes borders. If we were to set
+            // the height without having `boxSizing: 'border-box'` it would be too big.
+            boxSizing: "border-box",
+            // We need to ensure the content doesn't get taller than the wrapper
+            maxHeight: "100%",
+            ...popperProps.style
+        }
+    }))));
+});
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectItemAlignedPosition, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ITEM_ALIGNED_POSITION_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * SelectPopperPosition
+ * -----------------------------------------------------------------------------------------------*/ const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$POPPER_POSITION_NAME = "SelectPopperPosition";
+const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectPopperPosition = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeSelect: __scopeSelect , align: align = "start" , collisionPadding: collisionPadding = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_MARGIN , ...popperProps } = props;
+    const popperScope = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$usePopperScope(__scopeSelect);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $576aaf0a88f44294$export$7c6e2c02157bb7d2), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, popperScope, popperProps, {
+        ref: forwardedRef,
+        align: align,
+        collisionPadding: collisionPadding,
+        style: {
+            // Ensure border-box for floating-ui calculations
+            boxSizing: "border-box",
+            ...popperProps.style,
+            "--radix-select-content-transform-origin": "var(--radix-popper-transform-origin)",
+            "--radix-select-content-available-width": "var(--radix-popper-available-width)",
+            "--radix-select-content-available-height": "var(--radix-popper-available-height)",
+            "--radix-select-trigger-width": "var(--radix-popper-anchor-width)",
+            "--radix-select-trigger-height": "var(--radix-popper-anchor-height)"
+        }
+    }));
+});
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectPopperPosition, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$POPPER_POSITION_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * SelectViewport
+ * -----------------------------------------------------------------------------------------------*/ const [$287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectViewportProvider, $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectViewportContext] = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$createSelectContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_NAME, {});
+const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$VIEWPORT_NAME = "SelectViewport";
+const $287e5cc5498c5bc4$export$9ed6e7b40248d36d = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeSelect: __scopeSelect , ...viewportProps } = props;
+    const contentContext = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectContentContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$VIEWPORT_NAME, __scopeSelect);
+    const viewportContext = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectViewportContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$VIEWPORT_NAME, __scopeSelect);
+    const composedRefs = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, contentContext.onViewportChange);
+    const prevScrollTopRef = (0, $LI8jA.useRef)(0);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $LI8jA.Fragment), null, /*#__PURE__*/ (0, $LI8jA.createElement)("style", {
+        dangerouslySetInnerHTML: {
+            __html: `[data-radix-select-viewport]{scrollbar-width:none;-ms-overflow-style:none;-webkit-overflow-scrolling:touch;}[data-radix-select-viewport]::-webkit-scrollbar{display:none}`
+        }
+    }), /*#__PURE__*/ (0, $LI8jA.createElement)($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$Collection.Slot, {
+        scope: __scopeSelect
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).div, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        "data-radix-select-viewport": "",
+        role: "presentation"
+    }, viewportProps, {
+        ref: composedRefs,
+        style: {
+            // we use position: 'relative' here on the `viewport` so that when we call
+            // `selectedItem.offsetTop` in calculations, the offset is relative to the viewport
+            // (independent of the scrollUpButton).
+            position: "relative",
+            flex: 1,
+            overflow: "auto",
+            ...viewportProps.style
+        },
+        onScroll: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(viewportProps.onScroll, (event)=>{
+            const viewport = event.currentTarget;
+            const { contentWrapper: contentWrapper , shouldExpandOnScrollRef: shouldExpandOnScrollRef  } = viewportContext;
+            if (shouldExpandOnScrollRef !== null && shouldExpandOnScrollRef !== void 0 && shouldExpandOnScrollRef.current && contentWrapper) {
+                const scrolledBy = Math.abs(prevScrollTopRef.current - viewport.scrollTop);
+                if (scrolledBy > 0) {
+                    const availableHeight = window.innerHeight - $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$CONTENT_MARGIN * 2;
+                    const cssMinHeight = parseFloat(contentWrapper.style.minHeight);
+                    const cssHeight = parseFloat(contentWrapper.style.height);
+                    const prevHeight = Math.max(cssMinHeight, cssHeight);
+                    if (prevHeight < availableHeight) {
+                        const nextHeight = prevHeight + scrolledBy;
+                        const clampedNextHeight = Math.min(availableHeight, nextHeight);
+                        const heightDiff = nextHeight - clampedNextHeight;
+                        contentWrapper.style.height = clampedNextHeight + "px";
+                        if (contentWrapper.style.bottom === "0px") {
+                            viewport.scrollTop = heightDiff > 0 ? heightDiff : 0; // ensure the content stays pinned to the bottom
+                            contentWrapper.style.justifyContent = "flex-end";
+                        }
+                    }
+                }
+            }
+            prevScrollTopRef.current = viewport.scrollTop;
+        })
+    }))));
+});
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$export$9ed6e7b40248d36d, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$VIEWPORT_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * SelectGroup
+ * -----------------------------------------------------------------------------------------------*/ const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$GROUP_NAME = "SelectGroup";
+const [$287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectGroupContextProvider, $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectGroupContext] = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$createSelectContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$GROUP_NAME);
+const $287e5cc5498c5bc4$export$ee25a334c55de1f4 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeSelect: __scopeSelect , ...groupProps } = props;
+    const groupId = (0, $d4070564f9335f17$export$f680877a34711e37)();
+    return /*#__PURE__*/ (0, $LI8jA.createElement)($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectGroupContextProvider, {
+        scope: __scopeSelect,
+        id: groupId
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).div, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        role: "group",
+        "aria-labelledby": groupId
+    }, groupProps, {
+        ref: forwardedRef
+    })));
+});
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$export$ee25a334c55de1f4, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$GROUP_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * SelectLabel
+ * -----------------------------------------------------------------------------------------------*/ const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$LABEL_NAME = "SelectLabel";
+const $287e5cc5498c5bc4$export$f67338d29bd972f8 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeSelect: __scopeSelect , ...labelProps } = props;
+    const groupContext = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectGroupContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$LABEL_NAME, __scopeSelect);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).div, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        id: groupContext.id
+    }, labelProps, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$export$f67338d29bd972f8, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$LABEL_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * SelectItem
+ * -----------------------------------------------------------------------------------------------*/ const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ITEM_NAME = "SelectItem";
+const [$287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectItemContextProvider, $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectItemContext] = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$createSelectContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ITEM_NAME);
+const $287e5cc5498c5bc4$export$13ef48a934230896 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeSelect: __scopeSelect , value: value , disabled: disabled = false , textValue: textValueProp , ...itemProps } = props;
+    const context = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ITEM_NAME, __scopeSelect);
+    const contentContext = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectContentContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ITEM_NAME, __scopeSelect);
+    const isSelected = context.value === value;
+    const [textValue, setTextValue] = (0, $LI8jA.useState)(textValueProp !== null && textValueProp !== void 0 ? textValueProp : "");
+    const [isFocused, setIsFocused] = (0, $LI8jA.useState)(false);
+    const composedRefs = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, (node)=>{
+        var _contentContext$itemR;
+        return (_contentContext$itemR = contentContext.itemRefCallback) === null || _contentContext$itemR === void 0 ? void 0 : _contentContext$itemR.call(contentContext, node, value, disabled);
+    });
+    const textId = (0, $d4070564f9335f17$export$f680877a34711e37)();
+    const handleSelect = ()=>{
+        if (!disabled) {
+            context.onValueChange(value);
+            context.onOpenChange(false);
+        }
+    };
+    if (value === "") throw new Error("A <Select.Item /> must have a value prop that is not an empty string. This is because the Select value can be set to an empty string to clear the selection and show the placeholder.");
+    return /*#__PURE__*/ (0, $LI8jA.createElement)($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectItemContextProvider, {
+        scope: __scopeSelect,
+        value: value,
+        disabled: disabled,
+        textId: textId,
+        isSelected: isSelected,
+        onItemTextChange: (0, $LI8jA.useCallback)((node)=>{
+            setTextValue((prevTextValue)=>{
+                var _node$textContent;
+                return prevTextValue || ((_node$textContent = node === null || node === void 0 ? void 0 : node.textContent) !== null && _node$textContent !== void 0 ? _node$textContent : "").trim();
+            });
+        }, [])
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$Collection.ItemSlot, {
+        scope: __scopeSelect,
+        value: value,
+        disabled: disabled,
+        textValue: textValue
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).div, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        role: "option",
+        "aria-labelledby": textId,
+        "data-highlighted": isFocused ? "" : undefined // `isFocused` caveat fixes stuttering in VoiceOver
+        ,
+        "aria-selected": isSelected && isFocused,
+        "data-state": isSelected ? "checked" : "unchecked",
+        "aria-disabled": disabled || undefined,
+        "data-disabled": disabled ? "" : undefined,
+        tabIndex: disabled ? undefined : -1
+    }, itemProps, {
+        ref: composedRefs,
+        onFocus: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(itemProps.onFocus, ()=>setIsFocused(true)),
+        onBlur: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(itemProps.onBlur, ()=>setIsFocused(false)),
+        onPointerUp: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(itemProps.onPointerUp, handleSelect),
+        onPointerMove: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(itemProps.onPointerMove, (event)=>{
+            if (disabled) {
+                var _contentContext$onIte;
+                (_contentContext$onIte = contentContext.onItemLeave) === null || _contentContext$onIte === void 0 || _contentContext$onIte.call(contentContext);
+            } else // as it only means it might scroll a few pixels when using the pointer.
+            event.currentTarget.focus({
+                preventScroll: true
+            });
+        }),
+        onPointerLeave: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(itemProps.onPointerLeave, (event)=>{
+            if (event.currentTarget === document.activeElement) {
+                var _contentContext$onIte2;
+                (_contentContext$onIte2 = contentContext.onItemLeave) === null || _contentContext$onIte2 === void 0 || _contentContext$onIte2.call(contentContext);
+            }
+        }),
+        onKeyDown: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(itemProps.onKeyDown, (event)=>{
+            var _contentContext$searc;
+            const isTypingAhead = ((_contentContext$searc = contentContext.searchRef) === null || _contentContext$searc === void 0 ? void 0 : _contentContext$searc.current) !== "";
+            if (isTypingAhead && event.key === " ") return;
+            if ($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SELECTION_KEYS.includes(event.key)) handleSelect(); // prevent page scroll if using the space key to select an item
+            if (event.key === " ") event.preventDefault();
+        })
+    }))));
+});
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$export$13ef48a934230896, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ITEM_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * SelectItemText
+ * -----------------------------------------------------------------------------------------------*/ const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ITEM_TEXT_NAME = "SelectItemText";
+const $287e5cc5498c5bc4$export$3572fb0fb821ff49 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    // We ignore `className` and `style` as this part shouldn't be styled.
+    const { __scopeSelect: __scopeSelect , className: className , style: style , ...itemTextProps } = props;
+    const context = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ITEM_TEXT_NAME, __scopeSelect);
+    const contentContext = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectContentContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ITEM_TEXT_NAME, __scopeSelect);
+    const itemContext = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectItemContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ITEM_TEXT_NAME, __scopeSelect);
+    const nativeOptionsContext = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectNativeOptionsContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ITEM_TEXT_NAME, __scopeSelect);
+    const [itemTextNode, setItemTextNode] = (0, $LI8jA.useState)(null);
+    const composedRefs = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, (node)=>setItemTextNode(node), itemContext.onItemTextChange, (node)=>{
+        var _contentContext$itemT;
+        return (_contentContext$itemT = contentContext.itemTextRefCallback) === null || _contentContext$itemT === void 0 ? void 0 : _contentContext$itemT.call(contentContext, node, itemContext.value, itemContext.disabled);
+    });
+    const textContent = itemTextNode === null || itemTextNode === void 0 ? void 0 : itemTextNode.textContent;
+    const nativeOption = (0, $LI8jA.useMemo)(()=>/*#__PURE__*/ (0, $LI8jA.createElement)("option", {
+            key: itemContext.value,
+            value: itemContext.value,
+            disabled: itemContext.disabled
+        }, textContent), [
+        itemContext.disabled,
+        itemContext.value,
+        textContent
+    ]);
+    const { onNativeOptionAdd: onNativeOptionAdd , onNativeOptionRemove: onNativeOptionRemove  } = nativeOptionsContext;
+    (0, $620f4b520baef9c2$export$e5c5a5f917a5871c)(()=>{
+        onNativeOptionAdd(nativeOption);
+        return ()=>onNativeOptionRemove(nativeOption);
+    }, [
+        onNativeOptionAdd,
+        onNativeOptionRemove,
+        nativeOption
+    ]);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $LI8jA.Fragment), null, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).span, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        id: itemContext.textId
+    }, itemTextProps, {
+        ref: composedRefs
+    })), itemContext.isSelected && context.valueNode && !context.valueNodeHasChildren ? /*#__PURE__*/ (0, $117771ce739ab0ef$exports.createPortal)(itemTextProps.children, context.valueNode) : null);
+});
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$export$3572fb0fb821ff49, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ITEM_TEXT_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * SelectItemIndicator
+ * -----------------------------------------------------------------------------------------------*/ const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ITEM_INDICATOR_NAME = "SelectItemIndicator";
+const $287e5cc5498c5bc4$export$6b9198de19accfe6 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeSelect: __scopeSelect , ...itemIndicatorProps } = props;
+    const itemContext = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectItemContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ITEM_INDICATOR_NAME, __scopeSelect);
+    return itemContext.isSelected ? /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).span, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        "aria-hidden": true
+    }, itemIndicatorProps, {
+        ref: forwardedRef
+    })) : null;
+});
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$export$6b9198de19accfe6, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ITEM_INDICATOR_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * SelectScrollUpButton
+ * -----------------------------------------------------------------------------------------------*/ const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SCROLL_UP_BUTTON_NAME = "SelectScrollUpButton";
+const $287e5cc5498c5bc4$export$d8117927658af6d7 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const contentContext = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectContentContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SCROLL_UP_BUTTON_NAME, props.__scopeSelect);
+    const viewportContext = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectViewportContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SCROLL_UP_BUTTON_NAME, props.__scopeSelect);
+    const [canScrollUp1, setCanScrollUp] = (0, $LI8jA.useState)(false);
+    const composedRefs = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, viewportContext.onScrollButtonChange);
+    (0, $620f4b520baef9c2$export$e5c5a5f917a5871c)(()=>{
+        if (contentContext.viewport && contentContext.isPositioned) {
+            const viewport = contentContext.viewport;
+            function handleScroll() {
+                const canScrollUp = viewport.scrollTop > 0;
+                setCanScrollUp(canScrollUp);
+            }
+            handleScroll();
+            viewport.addEventListener("scroll", handleScroll);
+            return ()=>viewport.removeEventListener("scroll", handleScroll);
+        }
+    }, [
+        contentContext.viewport,
+        contentContext.isPositioned
+    ]);
+    return canScrollUp1 ? /*#__PURE__*/ (0, $LI8jA.createElement)($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectScrollButtonImpl, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, props, {
+        ref: composedRefs,
+        onAutoScroll: ()=>{
+            const { viewport: viewport , selectedItem: selectedItem  } = contentContext;
+            if (viewport && selectedItem) viewport.scrollTop = viewport.scrollTop - selectedItem.offsetHeight;
+        }
+    })) : null;
+});
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$export$d8117927658af6d7, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SCROLL_UP_BUTTON_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * SelectScrollDownButton
+ * -----------------------------------------------------------------------------------------------*/ const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SCROLL_DOWN_BUTTON_NAME = "SelectScrollDownButton";
+const $287e5cc5498c5bc4$export$ff951e476c12189 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const contentContext = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectContentContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SCROLL_DOWN_BUTTON_NAME, props.__scopeSelect);
+    const viewportContext = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectViewportContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SCROLL_DOWN_BUTTON_NAME, props.__scopeSelect);
+    const [canScrollDown1, setCanScrollDown] = (0, $LI8jA.useState)(false);
+    const composedRefs = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, viewportContext.onScrollButtonChange);
+    (0, $620f4b520baef9c2$export$e5c5a5f917a5871c)(()=>{
+        if (contentContext.viewport && contentContext.isPositioned) {
+            const viewport = contentContext.viewport;
+            function handleScroll() {
+                const maxScroll = viewport.scrollHeight - viewport.clientHeight; // we use Math.ceil here because if the UI is zoomed-in
+                // `scrollTop` is not always reported as an integer
+                const canScrollDown = Math.ceil(viewport.scrollTop) < maxScroll;
+                setCanScrollDown(canScrollDown);
+            }
+            handleScroll();
+            viewport.addEventListener("scroll", handleScroll);
+            return ()=>viewport.removeEventListener("scroll", handleScroll);
+        }
+    }, [
+        contentContext.viewport,
+        contentContext.isPositioned
+    ]);
+    return canScrollDown1 ? /*#__PURE__*/ (0, $LI8jA.createElement)($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectScrollButtonImpl, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, props, {
+        ref: composedRefs,
+        onAutoScroll: ()=>{
+            const { viewport: viewport , selectedItem: selectedItem  } = contentContext;
+            if (viewport && selectedItem) viewport.scrollTop = viewport.scrollTop + selectedItem.offsetHeight;
+        }
+    })) : null;
+});
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$export$ff951e476c12189, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SCROLL_DOWN_BUTTON_NAME
+});
+const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SelectScrollButtonImpl = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeSelect: __scopeSelect , onAutoScroll: onAutoScroll , ...scrollIndicatorProps } = props;
+    const contentContext = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectContentContext("SelectScrollButton", __scopeSelect);
+    const autoScrollTimerRef = (0, $LI8jA.useRef)(null);
+    const getItems = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useCollection(__scopeSelect);
+    const clearAutoScrollTimer = (0, $LI8jA.useCallback)(()=>{
+        if (autoScrollTimerRef.current !== null) {
+            window.clearInterval(autoScrollTimerRef.current);
+            autoScrollTimerRef.current = null;
+        }
+    }, []);
+    (0, $LI8jA.useEffect)(()=>{
+        return ()=>clearAutoScrollTimer();
+    }, [
+        clearAutoScrollTimer
+    ]); // When the viewport becomes scrollable on either side, the relevant scroll button will mount.
+    // Because it is part of the normal flow, it will push down (top button) or shrink (bottom button)
+    // the viewport, potentially causing the active item to now be partially out of view.
+    // We re-run the `scrollIntoView` logic to make sure it stays within the viewport.
+    (0, $620f4b520baef9c2$export$e5c5a5f917a5871c)(()=>{
+        var _activeItem$ref$curre;
+        const activeItem = getItems().find((item)=>item.ref.current === document.activeElement);
+        activeItem === null || activeItem === void 0 || (_activeItem$ref$curre = activeItem.ref.current) === null || _activeItem$ref$curre === void 0 || _activeItem$ref$curre.scrollIntoView({
+            block: "nearest"
+        });
+    }, [
+        getItems
+    ]);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).div, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        "aria-hidden": true
+    }, scrollIndicatorProps, {
+        ref: forwardedRef,
+        style: {
+            flexShrink: 0,
+            ...scrollIndicatorProps.style
+        },
+        onPointerDown: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(scrollIndicatorProps.onPointerDown, ()=>{
+            if (autoScrollTimerRef.current === null) autoScrollTimerRef.current = window.setInterval(onAutoScroll, 50);
+        }),
+        onPointerMove: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(scrollIndicatorProps.onPointerMove, ()=>{
+            var _contentContext$onIte3;
+            (_contentContext$onIte3 = contentContext.onItemLeave) === null || _contentContext$onIte3 === void 0 || _contentContext$onIte3.call(contentContext);
+            if (autoScrollTimerRef.current === null) autoScrollTimerRef.current = window.setInterval(onAutoScroll, 50);
+        }),
+        onPointerLeave: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(scrollIndicatorProps.onPointerLeave, ()=>{
+            clearAutoScrollTimer();
+        })
+    }));
+});
+/* -------------------------------------------------------------------------------------------------
+ * SelectSeparator
+ * -----------------------------------------------------------------------------------------------*/ const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SEPARATOR_NAME = "SelectSeparator";
+const $287e5cc5498c5bc4$export$eba4b1df07cb1d3 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeSelect: __scopeSelect , ...separatorProps } = props;
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).div, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        "aria-hidden": true
+    }, separatorProps, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$export$eba4b1df07cb1d3, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$SEPARATOR_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * SelectArrow
+ * -----------------------------------------------------------------------------------------------*/ const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ARROW_NAME = "SelectArrow";
+const $287e5cc5498c5bc4$export$314f4cb8f8099628 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeSelect: __scopeSelect , ...arrowProps } = props;
+    const popperScope = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$usePopperScope(__scopeSelect);
+    const context = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ARROW_NAME, __scopeSelect);
+    const contentContext = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useSelectContentContext($287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ARROW_NAME, __scopeSelect);
+    return context.open && contentContext.position === "popper" ? /*#__PURE__*/ (0, $LI8jA.createElement)((0, $576aaf0a88f44294$export$21b07c8f274aebd5), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, popperScope, arrowProps, {
+        ref: forwardedRef
+    })) : null;
+});
+/*#__PURE__*/ Object.assign($287e5cc5498c5bc4$export$314f4cb8f8099628, {
+    displayName: $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$ARROW_NAME
+});
+/* -----------------------------------------------------------------------------------------------*/ function $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$shouldShowPlaceholder(value) {
+    return value === "" || value === undefined;
+}
+const $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$BubbleSelect = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { value: value , ...selectProps } = props;
+    const ref = (0, $LI8jA.useRef)(null);
+    const composedRefs = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, ref);
+    const prevValue = (0, $760b241fb7cd5f92$export$5cae361ad82dce8b)(value); // Bubble value change to parents (e.g form change event)
+    (0, $LI8jA.useEffect)(()=>{
+        const select = ref.current;
+        const selectProto = window.HTMLSelectElement.prototype;
+        const descriptor = Object.getOwnPropertyDescriptor(selectProto, "value");
+        const setValue = descriptor.set;
+        if (prevValue !== value && setValue) {
+            const event = new Event("change", {
+                bubbles: true
+            });
+            setValue.call(select, value);
+            select.dispatchEvent(event);
+        }
+    }, [
+        prevValue,
+        value
+    ]);
+    /**
+   * We purposefully use a `select` here to support form autofill as much
+   * as possible.
+   *
+   * We purposefully do not add the `value` attribute here to allow the value
+   * to be set programatically and bubble to any parent form `onChange` event.
+   * Adding the `value` will cause React to consider the programatic
+   * dispatch a duplicate and it will get swallowed.
+   *
+   * We use `VisuallyHidden` rather than `display: "none"` because Safari autofill
+   * won't work otherwise.
+   */ return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $eecd8ed8717db193$export$439d29a4e110a164), {
+        asChild: true
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)("select", (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, selectProps, {
+        ref: composedRefs,
+        defaultValue: value
+    })));
+});
+$287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$BubbleSelect.displayName = "BubbleSelect";
+function $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$useTypeaheadSearch(onSearchChange) {
+    const handleSearchChange = (0, $8d5f4755e7320408$export$25bec8c6f54ee79a)(onSearchChange);
+    const searchRef = (0, $LI8jA.useRef)("");
+    const timerRef = (0, $LI8jA.useRef)(0);
+    const handleTypeaheadSearch = (0, $LI8jA.useCallback)((key)=>{
+        const search = searchRef.current + key;
+        handleSearchChange(search);
+        (function updateSearch(value) {
+            searchRef.current = value;
+            window.clearTimeout(timerRef.current); // Reset `searchRef` 1 second after it was last updated
+            if (value !== "") timerRef.current = window.setTimeout(()=>updateSearch(""), 1000);
+        })(search);
+    }, [
+        handleSearchChange
+    ]);
+    const resetTypeahead = (0, $LI8jA.useCallback)(()=>{
+        searchRef.current = "";
+        window.clearTimeout(timerRef.current);
+    }, []);
+    (0, $LI8jA.useEffect)(()=>{
+        return ()=>window.clearTimeout(timerRef.current);
+    }, []);
+    return [
+        searchRef,
+        handleTypeaheadSearch,
+        resetTypeahead
+    ];
+}
+/**
+ * This is the "meat" of the typeahead matching logic. It takes in a list of items,
+ * the search and the current item, and returns the next item (or `undefined`).
+ *
+ * We normalize the search because if a user has repeatedly pressed a character,
+ * we want the exact same behavior as if we only had that one character
+ * (ie. cycle through items starting with that character)
+ *
+ * We also reorder the items by wrapping the array around the current item.
+ * This is so we always look forward from the current item, and picking the first
+ * item will always be the correct one.
+ *
+ * Finally, if the normalized search is exactly one character, we exclude the
+ * current item from the values because otherwise it would be the first to match always
+ * and focus would never move. This is as opposed to the regular case, where we
+ * don't want focus to move if the current item still matches.
+ */ function $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$findNextItem(items, search, currentItem) {
+    const isRepeated = search.length > 1 && Array.from(search).every((char)=>char === search[0]);
+    const normalizedSearch = isRepeated ? search[0] : search;
+    const currentItemIndex = currentItem ? items.indexOf(currentItem) : -1;
+    let wrappedItems = $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$wrapArray(items, Math.max(currentItemIndex, 0));
+    const excludeCurrentItem = normalizedSearch.length === 1;
+    if (excludeCurrentItem) wrappedItems = wrappedItems.filter((v)=>v !== currentItem);
+    const nextItem = wrappedItems.find((item)=>item.textValue.toLowerCase().startsWith(normalizedSearch.toLowerCase()));
+    return nextItem !== currentItem ? nextItem : undefined;
+}
+/**
+ * Wraps an array around itself at a given start index
+ * Example: `wrapArray(['a', 'b', 'c', 'd'], 2) === ['c', 'd', 'a', 'b']`
+ */ function $287e5cc5498c5bc4$var$$cc7e05a45900e73f$var$wrapArray(array, startIndex) {
+    return array.map((_, index)=>array[(startIndex + index) % array.length]);
+}
+const $287e5cc5498c5bc4$export$be92b6f5f03c0fe9 = $287e5cc5498c5bc4$export$ef9b1a59e592288f;
+const $287e5cc5498c5bc4$export$41fb9f06171c75f4 = $287e5cc5498c5bc4$export$3ac1e88a1c0b9f1;
+const $287e5cc5498c5bc4$export$4c8d1a57a761ef94 = $287e5cc5498c5bc4$export$e288731fd71264f0;
+const $287e5cc5498c5bc4$export$f04a61298a47a40f = $287e5cc5498c5bc4$export$99b400cabb58c515;
+const $287e5cc5498c5bc4$export$602eac185826482c = $287e5cc5498c5bc4$export$b2af6c9944296213;
+const $287e5cc5498c5bc4$export$7c6e2c02157bb7d2 = $287e5cc5498c5bc4$export$c973a4b3cb86a03d;
+const $287e5cc5498c5bc4$export$d5c6c08dc2d3ca7 = $287e5cc5498c5bc4$export$9ed6e7b40248d36d;
+const $287e5cc5498c5bc4$export$eb2fcfdbd7ba97d4 = $287e5cc5498c5bc4$export$ee25a334c55de1f4;
+const $287e5cc5498c5bc4$export$b04be29aa201d4f5 = $287e5cc5498c5bc4$export$f67338d29bd972f8;
+const $287e5cc5498c5bc4$export$6d08773d2e66f8f2 = $287e5cc5498c5bc4$export$13ef48a934230896;
+const $287e5cc5498c5bc4$export$d6e5bf9c43ea9319 = $287e5cc5498c5bc4$export$3572fb0fb821ff49;
+const $287e5cc5498c5bc4$export$c3468e2714d175fa = $287e5cc5498c5bc4$export$6b9198de19accfe6;
+const $287e5cc5498c5bc4$export$2f60d3ec9ad468f2 = $287e5cc5498c5bc4$export$d8117927658af6d7;
+const $287e5cc5498c5bc4$export$bf1aedc3039c8d63 = $287e5cc5498c5bc4$export$ff951e476c12189;
+const $287e5cc5498c5bc4$export$1ff3c3f08ae963c0 = $287e5cc5498c5bc4$export$eba4b1df07cb1d3;
+const $287e5cc5498c5bc4$export$21b07c8f274aebd5 = $287e5cc5498c5bc4$export$314f4cb8f8099628;
+
+
+/**
+ * lucide-react v0.292.0 - ISC
+ */ 
+const $a19858e1d331c5ce$export$2e2bcd8739ae039 = (0, $149557adc85d935d$export$2e2bcd8739ae039)("ChevronDown", [
+    [
+        "path",
+        {
+            d: "m6 9 6 6 6-6",
+            key: "qrunsl"
+        }
+    ]
+]);
+
+/**
+ * lucide-react v0.292.0 - ISC
+ */ 
+const $769ac46d375be599$export$2e2bcd8739ae039 = (0, $149557adc85d935d$export$2e2bcd8739ae039)("ChevronUp", [
+    [
+        "path",
+        {
+            d: "m18 15-6-6-6 6",
+            key: "153udz"
+        }
+    ]
+]);
+
+
+
+const $a6a33fe0ca01be41$export$ef9b1a59e592288f = $287e5cc5498c5bc4$export$be92b6f5f03c0fe9;
+const $a6a33fe0ca01be41$export$ee25a334c55de1f4 = $287e5cc5498c5bc4$export$eb2fcfdbd7ba97d4;
+const $a6a33fe0ca01be41$export$e288731fd71264f0 = $287e5cc5498c5bc4$export$4c8d1a57a761ef94;
+const $a6a33fe0ca01be41$export$3ac1e88a1c0b9f1 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , children: children , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsxs)($287e5cc5498c5bc4$export$41fb9f06171c75f4, {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__select-trigger", "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1", className),
+        ...props,
+        children: [
+            children,
+            /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($287e5cc5498c5bc4$export$f04a61298a47a40f, {
+                asChild: true,
+                children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)((0, $a19858e1d331c5ce$export$2e2bcd8739ae039), {
+                    className: "h-4 w-4 opacity-50"
+                })
+            })
+        ]
+    }));
+$a6a33fe0ca01be41$export$3ac1e88a1c0b9f1.displayName = $287e5cc5498c5bc4$export$41fb9f06171c75f4.displayName;
+const $a6a33fe0ca01be41$export$d8117927658af6d7 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($287e5cc5498c5bc4$export$2f60d3ec9ad468f2, {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__select-up-button flex cursor-default items-center justify-center py-1", className),
+        ...props,
+        children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)((0, $769ac46d375be599$export$2e2bcd8739ae039), {
+            className: "h-4 w-4"
+        })
+    }));
+$a6a33fe0ca01be41$export$d8117927658af6d7.displayName = $287e5cc5498c5bc4$export$2f60d3ec9ad468f2.displayName;
+const $a6a33fe0ca01be41$export$ff951e476c12189 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($287e5cc5498c5bc4$export$bf1aedc3039c8d63, {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__select-down-button flex cursor-default items-center justify-center py-1", className),
+        ...props,
+        children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)((0, $a19858e1d331c5ce$export$2e2bcd8739ae039), {
+            className: "h-4 w-4"
+        })
+    }));
+$a6a33fe0ca01be41$export$ff951e476c12189.displayName = $287e5cc5498c5bc4$export$bf1aedc3039c8d63.displayName;
+const $a6a33fe0ca01be41$export$c973a4b3cb86a03d = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , children: children , position: position = "popper" , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($287e5cc5498c5bc4$export$602eac185826482c, {
+        children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsxs)($287e5cc5498c5bc4$export$7c6e2c02157bb7d2, {
+            ref: ref,
+            className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__select-content", "relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2", position === "popper" && "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1", className),
+            position: position,
+            ...props,
+            children: [
+                /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($a6a33fe0ca01be41$export$d8117927658af6d7, {}),
+                /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($287e5cc5498c5bc4$export$d5c6c08dc2d3ca7, {
+                    className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("p-1", position === "popper" && "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]"),
+                    children: children
+                }),
+                /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($a6a33fe0ca01be41$export$ff951e476c12189, {})
+            ]
+        })
+    }));
+$a6a33fe0ca01be41$export$c973a4b3cb86a03d.displayName = $287e5cc5498c5bc4$export$7c6e2c02157bb7d2.displayName;
+const $a6a33fe0ca01be41$export$f67338d29bd972f8 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($287e5cc5498c5bc4$export$b04be29aa201d4f5, {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__select-label py-1.5 pl-8 pr-2 text-sm font-semibold", className),
+        ...props
+    }));
+$a6a33fe0ca01be41$export$f67338d29bd972f8.displayName = $287e5cc5498c5bc4$export$b04be29aa201d4f5.displayName;
+const $a6a33fe0ca01be41$export$13ef48a934230896 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , children: children , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsxs)($287e5cc5498c5bc4$export$6d08773d2e66f8f2, {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__select-item", "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50", className),
+        ...props,
+        children: [
+            /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)("span", {
+                className: "absolute left-2 flex h-3.5 w-3.5 items-center justify-center",
+                children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($287e5cc5498c5bc4$export$c3468e2714d175fa, {
+                    children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)((0, $40c0f661ec418351$export$2e2bcd8739ae039), {
+                        className: "h-4 w-4"
+                    })
+                })
+            }),
+            /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($287e5cc5498c5bc4$export$d6e5bf9c43ea9319, {
+                children: children
+            })
+        ]
+    }));
+$a6a33fe0ca01be41$export$13ef48a934230896.displayName = $287e5cc5498c5bc4$export$6d08773d2e66f8f2.displayName;
+const $a6a33fe0ca01be41$export$eba4b1df07cb1d3 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($287e5cc5498c5bc4$export$1ff3c3f08ae963c0, {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__select-separator -mx-1 my-1 h-px bg-muted", className),
+        ...props
+    }));
+$a6a33fe0ca01be41$export$eba4b1df07cb1d3.displayName = $287e5cc5498c5bc4$export$1ff3c3f08ae963c0.displayName;
+
+
 const $f4eb51170e743c4a$var$shadui = {
     Button: $0e5897524c762a41$export$353f5b6fc5456de1,
     Slider: $c38718c2690bae4e$export$472062a354075cee,
@@ -18170,7 +19489,17 @@ const $f4eb51170e743c4a$var$shadui = {
     ContextMenuSub: $5015ffc5018fd12f$export$5bc21d1c00c4b201,
     ContextMenuSubContent: $5015ffc5018fd12f$export$2c967063bd2dc512,
     ContextMenuSubTrigger: $5015ffc5018fd12f$export$30b2b5c64556d316,
-    ContextMenuRadioGroup: $5015ffc5018fd12f$export$db5c89af5ed9aa07
+    ContextMenuRadioGroup: $5015ffc5018fd12f$export$db5c89af5ed9aa07,
+    Select: $a6a33fe0ca01be41$export$ef9b1a59e592288f,
+    SelectGroup: $a6a33fe0ca01be41$export$ee25a334c55de1f4,
+    SelectValue: $a6a33fe0ca01be41$export$e288731fd71264f0,
+    SelectTrigger: $a6a33fe0ca01be41$export$3ac1e88a1c0b9f1,
+    SelectContent: $a6a33fe0ca01be41$export$c973a4b3cb86a03d,
+    SelectLabel: $a6a33fe0ca01be41$export$f67338d29bd972f8,
+    SelectItem: $a6a33fe0ca01be41$export$13ef48a934230896,
+    SelectSeparator: $a6a33fe0ca01be41$export$eba4b1df07cb1d3,
+    SelectScrollUpButton: $a6a33fe0ca01be41$export$d8117927658af6d7,
+    SelectScrollDownButton: $a6a33fe0ca01be41$export$ff951e476c12189
 };
 function $f4eb51170e743c4a$export$40e78c93e005ce8f() {
     console.debug("[ui] setup logseq ui globals");

@@ -271,5 +271,8 @@ module.exports = {
       tomato: mapRadixColorToTailwind('tomato'),
       violet: mapRadixColorToTailwind('violet'),
     }
+  },
+  corePlugins: {
+    preflight: false
   }
 }
