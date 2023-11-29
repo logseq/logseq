@@ -141,7 +141,8 @@
 (defn get-all-page-original-names
   [repo]
   (let [db (conn/get-db repo)]
-    (->> (d/datoms db :avet :block/original-name)
+    (->>
+     (d/datoms db :avet :block/original-name)
          (map :v)
          (remove hidden-page?))))
 
@@ -228,7 +229,7 @@
   [repo path last-modified-at]
   (when (and repo path last-modified-at)
     (when-let [conn (conn/get-db repo false)]
-      (d/transact! conn
+      (db-utils/transact! conn
                    [{:file/path path
                      :file/last-modified-at last-modified-at}]
                    {:skip-refresh? true}))))
