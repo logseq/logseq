@@ -1,5 +1,5 @@
 (ns frontend.handler.db-based.property-test
-  (:require [frontend.handler.db-based.property :as property]
+  (:require [frontend.handler.db-based.property :as db-property-handler]
             [frontend.db :as db]
             [clojure.test :refer [deftest is testing are use-fixtures]]
             [frontend.test.helper :as test-helper]
@@ -26,14 +26,15 @@
 (use-fixtures :each start-and-destroy-db)
 
 ;; set-block-property!
+;; delete-property-value!
 ;; remove-block-property!
 ;; batch-set-property!
 ;; batch-remove-property!
 ;; upsert-property!
 ;; update-property!
-(deftest set-block-property-test
+(deftest ^:large-vars/cleanup-todo set-block-property-test
   (testing "Add a property to a block"
-    (property/set-block-property! repo fbid "property-1" "value" {})
+    (db-property-handler/set-block-property! repo fbid "property-1" "value" {})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)
           property (db/entity [:block/name "property-1"])]
@@ -53,7 +54,7 @@
         "value")))
 
   (testing "Add another property"
-    (property/set-block-property! repo fbid "property-2" "1" {})
+    (db-property-handler/set-block-property! repo fbid "property-2" "1" {})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)
           property (db/entity [:block/name "property-2"])]
@@ -73,7 +74,7 @@
         1)))
 
   (testing "Update property value"
-    (property/set-block-property! repo fbid "property-2" 2 {})
+    (db-property-handler/set-block-property! repo fbid "property-2" 2 {})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)]
       ;; check block's properties
@@ -84,7 +85,7 @@
         2)))
 
   (testing "Wrong type property value shouldn't transacted"
-    (property/set-block-property! repo fbid "property-2" "Not a number" {})
+    (db-property-handler/set-block-property! repo fbid "property-2" "Not a number" {})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)]
       ;; check block's properties
@@ -95,10 +96,10 @@
         2)))
 
   (testing "Add a multi-values property"
-    (property/upsert-property! repo "property-3" {:type :default :cardinality :many} {})
-    (property/set-block-property! repo fbid "property-3" "value 1" {})
-    (property/set-block-property! repo fbid "property-3" "value 2" {})
-    (property/set-block-property! repo fbid "property-3" "value 3" {})
+    (db-property-handler/upsert-property! repo "property-3" {:type :default :cardinality :many} {})
+    (db-property-handler/set-block-property! repo fbid "property-3" "value 1" {})
+    (db-property-handler/set-block-property! repo fbid "property-3" "value 2" {})
+    (db-property-handler/set-block-property! repo fbid "property-3" "value 3" {})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)
           property (db/entity [:block/name "property-3"])]
@@ -116,7 +117,7 @@
         #{"value 1" "value 2" "value 3"}))
 
     ;; update property value from "value 1" to "value 4"
-    (property/set-block-property! repo fbid "property-3" "value 4" {:old-value "value 1"})
+    (db-property-handler/set-block-property! repo fbid "property-3" "value 4" {:old-value "value 1"})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)
           property (db/entity [:block/name "property-3"])]
@@ -125,10 +126,15 @@
         (count properties)
         3
         (get properties (:block/uuid property))
-        #{"value 4" "value 2" "value 3"})))
+        #{"value 4" "value 2" "value 3"})
+
+      (db-property-handler/delete-property-value! repo block (:block/uuid property) "value 4")
+      (let [properties (:block/properties block)]
+        (is (get properties (:block/uuid property))
+            #{"value 2" "value 3"}))))
 
   (testing "Remove a property"
-    (property/remove-block-property! repo fbid "property-3")
+    (db-property-handler/remove-block-property! repo fbid "property-3")
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)
           property (db/entity [:block/name "property-3"])]
@@ -142,7 +148,7 @@
   (testing "Batch set properties"
     (let [k "property-4"
           v "batch value"]
-      (property/batch-set-property! repo [fbid sbid] k v)
+      (db-property-handler/batch-set-property! repo [fbid sbid] k v)
       (let [fb (db/entity [:block/uuid fbid])
             sb (db/entity [:block/uuid sbid])]
         (are [x y] (= x y)
@@ -153,7 +159,7 @@
 
   (testing "Batch remove properties"
     (let [k "property-4"]
-      (property/batch-remove-property! repo [fbid sbid] k)
+      (db-property-handler/batch-remove-property! repo [fbid sbid] k)
       (let [fb (db/entity [:block/uuid fbid])
             sb (db/entity [:block/uuid sbid])]
         (are [x y] (= x y)
@@ -161,9 +167,6 @@
           2
           (count (:block/properties sb))
           0)))))
-
-;; delete-property-value!
-;; property-create-new-block
 
 ;; class related
 ;; class-add-property!
@@ -181,6 +184,7 @@
 ;; property-create-new-block-from-template
 
 ;; others
+;; property-create-new-block
 ;; convert-property-input-string
 ;; replace-key-with-id
 ;; collapse-expand-property! TODO
