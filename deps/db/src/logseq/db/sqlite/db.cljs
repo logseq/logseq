@@ -6,7 +6,6 @@
             [cljs-bean.core :as bean]
             [datascript.storage :refer [IStorage]]
             [cognitect.transit :as t]
-            [cljs-bean.core :as bean]
             [cljs.cache :as cache]
             [datascript.core :as d]
             [goog.object :as gobj]
@@ -91,10 +90,10 @@
   [repo addr]
   (when addr
     (when-let [db (get-db repo)]
-     (-> (query repo db
-                (str "select content from kvs where addr = " addr))
-         first
-         (gobj/get "content")))))
+      (-> (query repo db
+                 (str "select content from kvs where addr = " addr))
+          first
+          (gobj/get "content")))))
 
 (defn sqlite-storage
   [repo {:keys [threshold]

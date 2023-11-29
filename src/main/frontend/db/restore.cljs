@@ -124,10 +124,10 @@
           data (persist-db/<fetch-init-data repo)
           electron? (util/electron?)
           {:keys [conn uuid->db-id-map journal-blocks datoms-count]}
-          (when-not electron? (sqlite-restore/restore-initial-data data {:conn-from-datoms-fn
+          (comment electron? (sqlite-restore/restore-initial-data data {:conn-from-datoms-fn
                                                                          (fn profiled-d-conn [& args]
                                                                            (util/profile :restore-graph-from-sqlite!-init-db (apply d/conn-from-datoms args)))}))
-          [conn datoms-count] (if electron?
+          [conn datoms-count] (if true
                                 (do
                                   (assert (some? data) "No data found when reloading db")
                                   (let [datoms (dt/read-transit-str data)]
@@ -143,7 +143,7 @@
     ;; TODO: Store schema in sqlite
     ;; (db-migrate/migrate attached-db)
 
-    (when-not electron?
+    (comment when-not electron?
       (js/setTimeout
        (fn []
          (p/let [other-data (persist-db/<fetch-blocks-excluding repo (map :uuid journal-blocks))
