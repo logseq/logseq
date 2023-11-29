@@ -683,7 +683,7 @@
   }
 
   .references {
-    margin-left: 12px;
+    @apply mx-[28px];
   }
 
   .sidebar-drop-indicator {
@@ -756,6 +756,10 @@
         }
       }
     }
+  }
+
+  .page-hierarchy {
+    @apply pl-[28px];
   }
 }
 
