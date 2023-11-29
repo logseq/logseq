@@ -6,7 +6,9 @@
             [datascript.core :as d]
             [frontend.handler.property.util :as pu]
             [frontend.state]
-            [frontend.config]))
+            [frontend.config]
+            [frontend.handler.page :as page-handler]
+            [frontend.handler.editor :as editor-handler]))
 
 (def repo test-helper/test-db-name-db-version)
 
@@ -32,7 +34,7 @@
 ;; batch-remove-property!
 ;; upsert-property!
 ;; update-property!
-(deftest ^:large-vars/cleanup-todo set-block-property-test
+(deftest ^:large-vars/cleanup-todo block-property-test
   (testing "Add a property to a block"
     (db-property-handler/set-block-property! repo fbid "property-1" "value" {})
     (let [block (db/entity [:block/uuid fbid])
@@ -173,6 +175,50 @@
 ;; class-remove-property!
 ;; class-set-schema!
 ;; get-block-classes-properties
+(deftest property-class-test
+  (let [opts {:redirect? false :create-first-block? false :class? true}
+        _ (page-handler/create! "class1" opts)
+        _ (page-handler/create! "class2" opts)
+        _ (page-handler/create! "class3" opts)
+        c1 (db/entity [:block/name "class1"])
+        c2 (db/entity [:block/name "class2"])
+        c1id (:block/uuid c1)
+        c2id (:block/uuid c2)]
+
+    (testing "Create classes"
+      (are [x y] (= x y)
+        (:block/type (db/entity [:block/name "class1"]))
+        #{"class"}
+        (:block/type (db/entity [:block/name "class2"]))
+        #{"class"}))
+
+    (testing "Class add property"
+      (db-property-handler/class-add-property! repo c1id "property-1")
+      (db-property-handler/class-add-property! repo c1id "property-2")
+      ;; repeated adding property-2
+      (db-property-handler/class-add-property! repo c1id "property-2")
+      (is (= 2 (count (:properties (:block/schema (db/entity (:db/id c1))))))))
+
+    (testing "Class remove property"
+      (db-property-handler/class-remove-property! repo c1id (:block/uuid (db/entity [:block/name "property-1"])))
+      (is (= 1 (count (:properties (:block/schema (db/entity (:db/id c1))))))))
+    (testing "Add classes to a block"
+      (editor-handler/save-block! repo fbid "Block 1 #class1 #class2 #class3")
+      (is (= 3 (count (:block/tags (db/entity [:block/uuid fbid]))))))
+    (testing "Remove a class from a block"
+      ;; make sure class2 will not be deleted when removing it from the first block
+      (editor-handler/save-block! repo sbid "Block 2 #class2")
+      (editor-handler/save-block! repo fbid "Block 1 #class1 #class3")
+      (is (= 2 (count (:block/tags (db/entity [:block/uuid fbid]))))))
+    (testing "Get block's classes properties"
+      ;; set c2 as parent of c3
+      (let [c3 (db/entity [:block/name "class3"])]
+        (db/transact! [{:db/id (:db/id c3)
+                        :block/namespace (:db/id c2)}]))
+      (db-property-handler/class-add-property! repo c2id "property-3")
+      (db-property-handler/class-add-property! repo c2id "property-4")
+      (is (= 3 (count (:classes-properties
+                       (db-property-handler/get-block-classes-properties (:db/id (db/entity [:block/uuid fbid]))))))))))
 
 ;; closed values related
 ;; upsert-closed-value
@@ -180,13 +226,14 @@
 ;; delete-closed-value
 ;; get-property-block-created-block
 
-;; template (TBD, template implementation not settle down yet)
-;; property-create-new-block-from-template
-
 ;; others
 ;; property-create-new-block
 ;; convert-property-input-string
 ;; replace-key-with-id
 ;; collapse-expand-property! TODO
+
+
+;; template (TBD, template implementation not settle down yet)
+;; property-create-new-block-from-template
 
 #_(cljs.test/run-tests)
