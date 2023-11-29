@@ -15,7 +15,7 @@
     (js/console.warn "TODO: list-db for electron is not implemented")
     [])
   (<unsafe-delete [_this _repo]
-    (js/console.warn "TODO: delete")
+    (js/console.warn "TODO: delete persidt-db on electron")
     (p/resolved nil))
   (<transact-data [_this repo tx-data tx-meta]
     (p->c

@@ -139,7 +139,7 @@
     (-> (p/let [^js sqlite (ensure-sqlite-init)
                 ;; <fetch-initital-data is called when init/re-loading graph
                 ;; the underlying DB should be opened
-                _ (.openDB sqlite repo)]
+                _ (.newDB sqlite repo)]
           (.getInitialData sqlite repo))
         (p/catch (fn [error]
                    (prn ::fuck-error)
