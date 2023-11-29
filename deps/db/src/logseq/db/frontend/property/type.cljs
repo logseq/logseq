@@ -97,6 +97,9 @@
    :coll     coll?
    :any      some?})
 
+(def property-types-with-cardinality
+  #{:number :date :url :page})
+
 (def property-types-with-db
   "Property types whose validation fn requires a datascript db"
   #{:date :page :template})
