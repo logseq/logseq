@@ -1313,19 +1313,6 @@ independent of format as format specific heading characters are stripped"
          (sort-by :block/name)
          (first))))
 
-(defonce blocks-count-cache (atom nil))
-
-(defn blocks-count
-  ([]
-   (blocks-count true))
-  ([cache?]
-   (if (and cache? @blocks-count-cache)
-     @blocks-count-cache
-     (when-let [db (conn/get-db)]
-       (let [n (count (d/datoms db :avet :block/uuid))]
-         (reset! blocks-count-cache n)
-         n)))))
-
 (defn get-all-referenced-blocks-uuid
   "Get all uuids of blocks with any back link exists."
   []
@@ -1356,12 +1343,6 @@ independent of format as format specific heading characters are stripped"
          (map get-single-block-contents)
          (remove nil?))))
 
-(defn get-all-block-avets
-  []
-  (when-let [db (conn/get-db)]
-    (->> (d/datoms db :avet :block/uuid))))
-
-;; Deprecated?
 (defn delete-blocks
   [repo-url files _delete-page?]
   (when (seq files)
