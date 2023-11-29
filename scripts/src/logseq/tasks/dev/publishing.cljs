@@ -23,4 +23,4 @@
                        static-dir
                        graph-dir
                        output-path
-                       {:repo-config repo-config})))
+                       {:repo-config repo-config :ui/theme "dark" :ui/radix-color :purple})))
