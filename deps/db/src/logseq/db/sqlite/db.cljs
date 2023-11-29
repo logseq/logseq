@@ -112,7 +112,6 @@
           (upsert-addr-content! repo data)))
       (-restore [_ addr]
         (let [content (restore-data-from-addr repo addr)]
-          (assert (some? content) (str "Restore address data not exists, addr: " addr))
           (edn/read-string content))
         ;; disable cache for now
         ;; (when-let [content (if (cache/has? cache addr)

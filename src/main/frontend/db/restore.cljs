@@ -128,9 +128,11 @@
                                                                          (fn profiled-d-conn [& args]
                                                                            (util/profile :restore-graph-from-sqlite!-init-db (apply d/conn-from-datoms args)))}))
           [conn datoms-count] (if electron?
-                                (let [datoms (dt/read-transit-str (or data ""))]
-                                  [(d/conn-from-datoms datoms db-schema/schema-for-db-based-graph)
-                                   (count datoms)])
+                                (do
+                                  (assert (some? data) "No data found when reloading db")
+                                  (let [datoms (dt/read-transit-str data)]
+                                    [(d/conn-from-datoms datoms db-schema/schema-for-db-based-graph)
+                                     (count datoms)]))
                                 [conn datoms-count])
           db-name (db-conn/datascript-db repo)
           _ (swap! db-conn/conns assoc db-name conn)
