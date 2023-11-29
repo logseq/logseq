@@ -188,11 +188,16 @@
            [:div.col-span-2
             (ui/select schema-types
                        (fn [_e v]
-                         (let [type (keyword (string/lower-case v))]
-                           (swap! *property-schema assoc :type type)
+                         (let [type (keyword (string/lower-case v))
+                               update-schema-fn (comp
+                                                 (if (contains? db-property-type/property-types-with-cardinality type)
+                                                   identity
+                                                   #(dissoc % :cardinality))
+                                                 #(assoc % :type type))]
+                           (swap! *property-schema update-schema-fn)
                            (components-pu/update-property! property @*property-name @*property-schema))))]))]
 
-      (when-not (contains? #{:checkbox :default :template} (:type @*property-schema))
+      (when (contains? db-property-type/property-types-with-cardinality (:type @*property-schema))
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
          [:label "Multiple values:"]
          (let [many? (boolean (= :many (:cardinality @*property-schema)))]
