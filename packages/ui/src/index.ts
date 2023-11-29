@@ -66,6 +66,7 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 declare global {
   var LSUI: any
@@ -127,6 +128,8 @@ const shadui = {
   SelectScrollUpButton,
   SelectScrollDownButton,
   Calendar,
+  Popover, PopoverTrigger,
+  PopoverContent
 }
 
 function setupGlobals () {

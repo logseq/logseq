@@ -21,6 +21,9 @@
 (def radio-group-item (util/lsui-wrap "RadioGroupItem"))
 (def skeleton (util/lsui-wrap "Skeleton"))
 (def calendar (util/lsui-wrap "Calendar"))
+(def popover (util/lsui-wrap "Popover"))
+(def popover-trigger (util/lsui-wrap "PopoverTrigger"))
+(def popover-content (util/lsui-wrap "PopoverContent"))
 
 (def card (util/lsui-wrap "Card"))
 (def card-header (util/lsui-wrap "CardHeader"))

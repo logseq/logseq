@@ -27501,6 +27501,316 @@ function $b2b761c5973ada37$export$e1aef45b828286de({ className: className , clas
 $b2b761c5973ada37$export$e1aef45b828286de.displayName = "Calendar";
 
 
+
+
+var $LI8jA = parcelRequire("LI8jA");
+
+
+var $LI8jA = parcelRequire("LI8jA");
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* -------------------------------------------------------------------------------------------------
+ * Popover
+ * -----------------------------------------------------------------------------------------------*/ const $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$POPOVER_NAME = "Popover";
+const [$bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$createPopoverContext, $bcb96dbf22e9ac13$export$c8393c9e73286932] = (0, $ec3315292aa721d0$export$50c7b4e9d9f19c1)($bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$POPOVER_NAME, [
+    (0, $576aaf0a88f44294$export$722aac194ae923)
+]);
+const $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$usePopperScope = (0, $576aaf0a88f44294$export$722aac194ae923)();
+const [$bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$PopoverProvider, $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$usePopoverContext] = $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$createPopoverContext($bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$POPOVER_NAME);
+const $bcb96dbf22e9ac13$export$5b6b19405a83ff9d = (props)=>{
+    const { __scopePopover: __scopePopover , children: children , open: openProp , defaultOpen: defaultOpen , onOpenChange: onOpenChange , modal: modal = false  } = props;
+    const popperScope = $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$usePopperScope(__scopePopover);
+    const triggerRef = (0, $LI8jA.useRef)(null);
+    const [hasCustomAnchor, setHasCustomAnchor] = (0, $LI8jA.useState)(false);
+    const [open = false, setOpen] = (0, $f4c632903130edee$export$6f32135080cb4c3)({
+        prop: openProp,
+        defaultProp: defaultOpen,
+        onChange: onOpenChange
+    });
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $576aaf0a88f44294$export$be92b6f5f03c0fe9), popperScope, /*#__PURE__*/ (0, $LI8jA.createElement)($bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$PopoverProvider, {
+        scope: __scopePopover,
+        contentId: (0, $d4070564f9335f17$export$f680877a34711e37)(),
+        triggerRef: triggerRef,
+        open: open,
+        onOpenChange: setOpen,
+        onOpenToggle: (0, $LI8jA.useCallback)(()=>setOpen((prevOpen)=>!prevOpen), [
+            setOpen
+        ]),
+        hasCustomAnchor: hasCustomAnchor,
+        onCustomAnchorAdd: (0, $LI8jA.useCallback)(()=>setHasCustomAnchor(true), []),
+        onCustomAnchorRemove: (0, $LI8jA.useCallback)(()=>setHasCustomAnchor(false), []),
+        modal: modal
+    }, children));
+};
+/*#__PURE__*/ Object.assign($bcb96dbf22e9ac13$export$5b6b19405a83ff9d, {
+    displayName: $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$POPOVER_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * PopoverAnchor
+ * -----------------------------------------------------------------------------------------------*/ const $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$ANCHOR_NAME = "PopoverAnchor";
+const $bcb96dbf22e9ac13$export$96e5381f42521a79 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopePopover: __scopePopover , ...anchorProps } = props;
+    const context = $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$usePopoverContext($bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$ANCHOR_NAME, __scopePopover);
+    const popperScope = $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$usePopperScope(__scopePopover);
+    const { onCustomAnchorAdd: onCustomAnchorAdd , onCustomAnchorRemove: onCustomAnchorRemove  } = context;
+    (0, $LI8jA.useEffect)(()=>{
+        onCustomAnchorAdd();
+        return ()=>onCustomAnchorRemove();
+    }, [
+        onCustomAnchorAdd,
+        onCustomAnchorRemove
+    ]);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $576aaf0a88f44294$export$b688253958b8dfe7), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, popperScope, anchorProps, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($bcb96dbf22e9ac13$export$96e5381f42521a79, {
+    displayName: $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$ANCHOR_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * PopoverTrigger
+ * -----------------------------------------------------------------------------------------------*/ const $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$TRIGGER_NAME = "PopoverTrigger";
+const $bcb96dbf22e9ac13$export$7dacb05d26466c3 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopePopover: __scopePopover , ...triggerProps } = props;
+    const context = $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$usePopoverContext($bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$TRIGGER_NAME, __scopePopover);
+    const popperScope = $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$usePopperScope(__scopePopover);
+    const composedTriggerRef = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, context.triggerRef);
+    const trigger = /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).button, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        type: "button",
+        "aria-haspopup": "dialog",
+        "aria-expanded": context.open,
+        "aria-controls": context.contentId,
+        "data-state": $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$getState(context.open)
+    }, triggerProps, {
+        ref: composedTriggerRef,
+        onClick: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onClick, context.onOpenToggle)
+    }));
+    return context.hasCustomAnchor ? trigger : /*#__PURE__*/ (0, $LI8jA.createElement)((0, $576aaf0a88f44294$export$b688253958b8dfe7), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        asChild: true
+    }, popperScope), trigger);
+});
+/*#__PURE__*/ Object.assign($bcb96dbf22e9ac13$export$7dacb05d26466c3, {
+    displayName: $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$TRIGGER_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * PopoverPortal
+ * -----------------------------------------------------------------------------------------------*/ const $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$PORTAL_NAME = "PopoverPortal";
+const [$bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$PortalProvider, $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$usePortalContext] = $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$createPopoverContext($bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$PORTAL_NAME, {
+    forceMount: undefined
+});
+const $bcb96dbf22e9ac13$export$dd679ffb4362d2d4 = (props)=>{
+    const { __scopePopover: __scopePopover , forceMount: forceMount , children: children , container: container  } = props;
+    const context = $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$usePopoverContext($bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$PORTAL_NAME, __scopePopover);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)($bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$PortalProvider, {
+        scope: __scopePopover,
+        forceMount: forceMount
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $0ac33c7c3f86b9ab$export$99c2b779aa4e8b8b), {
+        present: forceMount || context.open
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $726ec765805a08e3$export$602eac185826482c), {
+        asChild: true,
+        container: container
+    }, children)));
+};
+/*#__PURE__*/ Object.assign($bcb96dbf22e9ac13$export$dd679ffb4362d2d4, {
+    displayName: $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$PORTAL_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * PopoverContent
+ * -----------------------------------------------------------------------------------------------*/ const $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$CONTENT_NAME = "PopoverContent";
+const $bcb96dbf22e9ac13$export$d7e1f420b25549ff = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const portalContext = $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$usePortalContext($bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$CONTENT_NAME, props.__scopePopover);
+    const { forceMount: forceMount = portalContext.forceMount , ...contentProps } = props;
+    const context = $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$usePopoverContext($bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$CONTENT_NAME, props.__scopePopover);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $0ac33c7c3f86b9ab$export$99c2b779aa4e8b8b), {
+        present: forceMount || context.open
+    }, context.modal ? /*#__PURE__*/ (0, $LI8jA.createElement)($bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$PopoverContentModal, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, contentProps, {
+        ref: forwardedRef
+    })) : /*#__PURE__*/ (0, $LI8jA.createElement)($bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$PopoverContentNonModal, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, contentProps, {
+        ref: forwardedRef
+    })));
+});
+/*#__PURE__*/ Object.assign($bcb96dbf22e9ac13$export$d7e1f420b25549ff, {
+    displayName: $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$CONTENT_NAME
+});
+/* -----------------------------------------------------------------------------------------------*/ const $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$PopoverContentModal = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const context = $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$usePopoverContext($bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$CONTENT_NAME, props.__scopePopover);
+    const contentRef = (0, $LI8jA.useRef)(null);
+    const composedRefs = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, contentRef);
+    const isRightClickOutsideRef = (0, $LI8jA.useRef)(false); // aria-hide everything except the content (better supported equivalent to setting aria-modal)
+    (0, $LI8jA.useEffect)(()=>{
+        const content = contentRef.current;
+        if (content) return (0, $f51523d7bb101394$export$6e33d16126ed003c)(content);
+    }, []);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $82d0ba9afddcc0a1$export$2e2bcd8739ae039), {
+        as: (0, $db045af315cca07a$export$8c6ed5c666ac1360),
+        allowPinchZoom: true
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)($bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$PopoverContentImpl, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, props, {
+        ref: composedRefs // we make sure we're not trapping once it's been closed
+        ,
+        trapFocus: context.open,
+        disableOutsidePointerEvents: true,
+        onCloseAutoFocus: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onCloseAutoFocus, (event)=>{
+            var _context$triggerRef$c;
+            event.preventDefault();
+            if (!isRightClickOutsideRef.current) (_context$triggerRef$c = context.triggerRef.current) === null || _context$triggerRef$c === void 0 || _context$triggerRef$c.focus();
+        }),
+        onPointerDownOutside: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onPointerDownOutside, (event)=>{
+            const originalEvent = event.detail.originalEvent;
+            const ctrlLeftClick = originalEvent.button === 0 && originalEvent.ctrlKey === true;
+            const isRightClick = originalEvent.button === 2 || ctrlLeftClick;
+            isRightClickOutsideRef.current = isRightClick;
+        }, {
+            checkForDefaultPrevented: false
+        }) // When focus is trapped, a `focusout` event may still happen.
+        ,
+        onFocusOutside: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onFocusOutside, (event)=>event.preventDefault(), {
+            checkForDefaultPrevented: false
+        })
+    })));
+});
+const $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$PopoverContentNonModal = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const context = $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$usePopoverContext($bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$CONTENT_NAME, props.__scopePopover);
+    const hasInteractedOutsideRef = (0, $LI8jA.useRef)(false);
+    const hasPointerDownOutsideRef = (0, $LI8jA.useRef)(false);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)($bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$PopoverContentImpl, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, props, {
+        ref: forwardedRef,
+        trapFocus: false,
+        disableOutsidePointerEvents: false,
+        onCloseAutoFocus: (event)=>{
+            var _props$onCloseAutoFoc;
+            (_props$onCloseAutoFoc = props.onCloseAutoFocus) === null || _props$onCloseAutoFoc === void 0 || _props$onCloseAutoFoc.call(props, event);
+            if (!event.defaultPrevented) {
+                var _context$triggerRef$c2;
+                if (!hasInteractedOutsideRef.current) (_context$triggerRef$c2 = context.triggerRef.current) === null || _context$triggerRef$c2 === void 0 || _context$triggerRef$c2.focus(); // Always prevent auto focus because we either focus manually or want user agent focus
+                event.preventDefault();
+            }
+            hasInteractedOutsideRef.current = false;
+            hasPointerDownOutsideRef.current = false;
+        },
+        onInteractOutside: (event)=>{
+            var _props$onInteractOuts, _context$triggerRef$c3;
+            (_props$onInteractOuts = props.onInteractOutside) === null || _props$onInteractOuts === void 0 || _props$onInteractOuts.call(props, event);
+            if (!event.defaultPrevented) {
+                hasInteractedOutsideRef.current = true;
+                if (event.detail.originalEvent.type === "pointerdown") hasPointerDownOutsideRef.current = true;
+            } // Prevent dismissing when clicking the trigger.
+            // As the trigger is already setup to close, without doing so would
+            // cause it to close and immediately open.
+            const target = event.target;
+            const targetIsTrigger = (_context$triggerRef$c3 = context.triggerRef.current) === null || _context$triggerRef$c3 === void 0 ? void 0 : _context$triggerRef$c3.contains(target);
+            if (targetIsTrigger) event.preventDefault(); // On Safari if the trigger is inside a container with tabIndex={0}, when clicked
+            // we will get the pointer down outside event on the trigger, but then a subsequent
+            // focus outside event on the container, we ignore any focus outside event when we've
+            // already had a pointer down outside event.
+            if (event.detail.originalEvent.type === "focusin" && hasPointerDownOutsideRef.current) event.preventDefault();
+        }
+    }));
+});
+/* -----------------------------------------------------------------------------------------------*/ const $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$PopoverContentImpl = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopePopover: __scopePopover , trapFocus: trapFocus , onOpenAutoFocus: onOpenAutoFocus , onCloseAutoFocus: onCloseAutoFocus , disableOutsidePointerEvents: disableOutsidePointerEvents , onEscapeKeyDown: onEscapeKeyDown , onPointerDownOutside: onPointerDownOutside , onFocusOutside: onFocusOutside , onInteractOutside: onInteractOutside , ...contentProps } = props;
+    const context = $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$usePopoverContext($bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$CONTENT_NAME, __scopePopover);
+    const popperScope = $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$usePopperScope(__scopePopover); // Make sure the whole tree has focus guards as our `Popover` may be
+    // the last element in the DOM (beacuse of the `Portal`)
+    (0, $a8797df59e287e29$export$b7ece24a22aeda8c)();
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a69c668904a4ce70$export$20e40289641fbbb6), {
+        asChild: true,
+        loop: true,
+        trapped: trapFocus,
+        onMountAutoFocus: onOpenAutoFocus,
+        onUnmountAutoFocus: onCloseAutoFocus
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a102e9b8e3188262$export$177fb62ff3ec1f22), {
+        asChild: true,
+        disableOutsidePointerEvents: disableOutsidePointerEvents,
+        onInteractOutside: onInteractOutside,
+        onEscapeKeyDown: onEscapeKeyDown,
+        onPointerDownOutside: onPointerDownOutside,
+        onFocusOutside: onFocusOutside,
+        onDismiss: ()=>context.onOpenChange(false)
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $576aaf0a88f44294$export$7c6e2c02157bb7d2), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        "data-state": $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$getState(context.open),
+        role: "dialog",
+        id: context.contentId
+    }, popperScope, contentProps, {
+        ref: forwardedRef,
+        style: {
+            ...contentProps.style,
+            "--radix-popover-content-transform-origin": "var(--radix-popper-transform-origin)",
+            "--radix-popover-content-available-width": "var(--radix-popper-available-width)",
+            "--radix-popover-content-available-height": "var(--radix-popper-available-height)",
+            "--radix-popover-trigger-width": "var(--radix-popper-anchor-width)",
+            "--radix-popover-trigger-height": "var(--radix-popper-anchor-height)"
+        }
+    }))));
+});
+/* -------------------------------------------------------------------------------------------------
+ * PopoverClose
+ * -----------------------------------------------------------------------------------------------*/ const $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$CLOSE_NAME = "PopoverClose";
+const $bcb96dbf22e9ac13$export$d6ac43ebaa40d53e = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopePopover: __scopePopover , ...closeProps } = props;
+    const context = $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$usePopoverContext($bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$CLOSE_NAME, __scopePopover);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).button, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        type: "button"
+    }, closeProps, {
+        ref: forwardedRef,
+        onClick: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onClick, ()=>context.onOpenChange(false))
+    }));
+});
+/*#__PURE__*/ Object.assign($bcb96dbf22e9ac13$export$d6ac43ebaa40d53e, {
+    displayName: $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$CLOSE_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * PopoverArrow
+ * -----------------------------------------------------------------------------------------------*/ const $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$ARROW_NAME = "PopoverArrow";
+const $bcb96dbf22e9ac13$export$3152841115e061b2 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopePopover: __scopePopover , ...arrowProps } = props;
+    const popperScope = $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$usePopperScope(__scopePopover);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $576aaf0a88f44294$export$21b07c8f274aebd5), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, popperScope, arrowProps, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($bcb96dbf22e9ac13$export$3152841115e061b2, {
+    displayName: $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$ARROW_NAME
+});
+/* -----------------------------------------------------------------------------------------------*/ function $bcb96dbf22e9ac13$var$$cb5cc270b50c6fcd$var$getState(open) {
+    return open ? "open" : "closed";
+}
+const $bcb96dbf22e9ac13$export$be92b6f5f03c0fe9 = $bcb96dbf22e9ac13$export$5b6b19405a83ff9d;
+const $bcb96dbf22e9ac13$export$b688253958b8dfe7 = $bcb96dbf22e9ac13$export$96e5381f42521a79;
+const $bcb96dbf22e9ac13$export$41fb9f06171c75f4 = $bcb96dbf22e9ac13$export$7dacb05d26466c3;
+const $bcb96dbf22e9ac13$export$602eac185826482c = $bcb96dbf22e9ac13$export$dd679ffb4362d2d4;
+const $bcb96dbf22e9ac13$export$7c6e2c02157bb7d2 = $bcb96dbf22e9ac13$export$d7e1f420b25549ff;
+const $bcb96dbf22e9ac13$export$f39c2d165cd861fe = $bcb96dbf22e9ac13$export$d6ac43ebaa40d53e;
+const $bcb96dbf22e9ac13$export$21b07c8f274aebd5 = $bcb96dbf22e9ac13$export$3152841115e061b2;
+
+
+
+const $75b0489591a4f076$export$5b6b19405a83ff9d = $bcb96dbf22e9ac13$export$be92b6f5f03c0fe9;
+const $75b0489591a4f076$export$7dacb05d26466c3 = $bcb96dbf22e9ac13$export$41fb9f06171c75f4;
+const $75b0489591a4f076$export$d7e1f420b25549ff = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , align: align = "center" , sideOffset: sideOffset = 4 , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($bcb96dbf22e9ac13$export$602eac185826482c, {
+        children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($bcb96dbf22e9ac13$export$7c6e2c02157bb7d2, {
+            ref: ref,
+            align: align,
+            sideOffset: sideOffset,
+            className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__popover-content", "z-50 w-72 rounded-md border bg-popover p-4 text-popover-foreground shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2", className),
+            ...props
+        })
+    }));
+$75b0489591a4f076$export$d7e1f420b25549ff.displayName = $bcb96dbf22e9ac13$export$7c6e2c02157bb7d2.displayName;
+
+
 const $f4eb51170e743c4a$var$shadui = {
     Button: $0e5897524c762a41$export$353f5b6fc5456de1,
     Slider: $c38718c2690bae4e$export$472062a354075cee,
@@ -27577,7 +27887,10 @@ const $f4eb51170e743c4a$var$shadui = {
     SelectSeparator: $a6a33fe0ca01be41$export$eba4b1df07cb1d3,
     SelectScrollUpButton: $a6a33fe0ca01be41$export$d8117927658af6d7,
     SelectScrollDownButton: $a6a33fe0ca01be41$export$ff951e476c12189,
-    Calendar: $b2b761c5973ada37$export$e1aef45b828286de
+    Calendar: $b2b761c5973ada37$export$e1aef45b828286de,
+    Popover: $75b0489591a4f076$export$5b6b19405a83ff9d,
+    PopoverTrigger: $75b0489591a4f076$export$7dacb05d26466c3,
+    PopoverContent: $75b0489591a4f076$export$d7e1f420b25549ff
 };
 function $f4eb51170e743c4a$export$40e78c93e005ce8f() {
     console.debug("[ui] setup logseq ui globals");
