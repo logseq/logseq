@@ -3,9 +3,53 @@
   (:require ["@logseq/sqlite" :as sqlite-db :default wasm-bindgen-init]
             ["comlink" :as Comlink]
             [promesa.core :as p]
-            [shadow.cljs.modern :refer [defclass]]))
+            [datascript.storage :refer [IStorage]]
+            [cljs.cache :as cache]
+            [cljs.reader :as reader]
+            [datascript.core :as d]
+            [logseq.db.frontend.schema :as db-schema]
+            [shadow.cljs.modern :refer [defclass]]
+            [datascript.transit :as dt]
+            [clojure.edn :as edn]))
 
 (def *wasm-loaded (atom false))
+
+;; datascript conns
+(defonce conns (atom nil))
+
+(defn get-conn
+  [repo]
+  (get @conns repo))
+
+(defn upsert-addr-content!
+  "Upsert addr+data-seq"
+  [repo data]
+  (.upsert_addr_content sqlite-db repo data))
+
+(defn restore-data-from-addr
+  [repo addr]
+  (.get_content_by_addr sqlite-db repo addr))
+
+
+(defn new-sqlite-storage
+  [repo {:keys [threshold]
+         :or {threshold 4096}}]
+  (let [_cache (cache/lru-cache-factory {} :threshold threshold)]
+    (reify IStorage
+      (-store [_ addr+data-seq]
+        (let [data (->>
+                    (map
+                     (fn [[addr data]]
+                       #js {:addr addr
+                            :content (pr-str data)})
+                     addr+data-seq)
+                    (to-array))]
+          (upsert-addr-content! repo data)
+          {:result "ok"}))
+
+      (-restore [_ addr]
+        (let [content (restore-data-from-addr repo addr)]
+          (edn/read-string content))))))
 
 #_:clj-kondo/ignore
 (defclass SQLiteDB
@@ -51,7 +95,33 @@
    (p/do!
     (.ensure_init sqlite-db)
     (.init_db sqlite-db repo) ;; close another and init this one
-    (.new_db sqlite-db repo)))
+    (.new_db sqlite-db repo)
+    (let [db-name repo
+          storage (new-sqlite-storage db-name {})
+          conn (or (d/restore-conn storage)
+                   (d/create-conn db-schema/schema-for-db-based-graph {:storage storage}))]
+      (swap! conns assoc db-name conn)
+      nil)))
+
+  (transact
+   [_this repo tx-data tx-meta]
+   (when-let [conn (get-conn repo)]
+     (try
+       (let [tx-data (reader/read-string tx-data)
+             tx-meta (reader/read-string tx-meta)]
+         (d/transact! conn tx-data tx-meta))
+       (catch :default e
+         (prn :debug :error)
+         (js/console.error e)))))
+
+  (getInitialData
+   [_this repo]
+   (when-let [conn (get-conn repo)]
+     (let [db @conn]
+       (->> (d/datoms db :eavt)
+              ;; (remove (fn [e] (= :block/content (:a e))))
+            vec
+            dt/write-transit-str))))
 
   (openDB
    [_this repo]
