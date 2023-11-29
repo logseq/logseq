@@ -20,7 +20,7 @@
 
 (defn start-test-db!
   [& {:as opts}]
-  (let [test-db (if (:db-graph? opts)
+  (let [test-db (if (or (:db-graph? opts) (some? js/process.env.DB_GRAPH))
                   test-db-name-db-version
                   test-db-name)]
     (conn/start! test-db opts)))
@@ -232,7 +232,10 @@ This can be called in synchronous contexts as no async fns should be invoked"
   connection when done with it."
   [f & {:as start-opts}]
   ;; Set current-repo explicitly since it's not the default
-  (state/set-current-repo! test-db-name-db-version)
+  (state/set-current-repo!
+   (if (or (:db-graph? start-opts) (some? js/process.env.DB_GRAPH))
+     test-db-name-db-version
+     test-db-name))
   (start-test-db! start-opts)
   (when-let [init-f (:init-data start-opts)]
     (assert (fn? f) "init-data should be a fn")
@@ -243,9 +246,7 @@ This can be called in synchronous contexts as no async fns should be invoked"
 
 (defn db-based-start-and-destroy-db
   [f & {:as start-opts}]
-  (set! test-db "logseq_db_test-db")
-  (start-and-destroy-db f (assoc start-opts :db-graph? true))
-  (set! test-db "test-db"))
+  (start-and-destroy-db f (assoc start-opts :db-graph? true)))
 
 (def start-and-destroy-db-map-fixture
   "To avoid 'Fixtures may not be of mixed types' error
