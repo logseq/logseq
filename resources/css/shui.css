@@ -65,6 +65,10 @@ html[data-theme=dark] {
     .ui__select-content {
       --accent: 190 100% 15%;
     }
+
+    .ui__calendar {
+      --accent: 200 97% 37%;
+    }
   }
 }
 

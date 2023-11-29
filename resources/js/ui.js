@@ -19424,6 +19424,8083 @@ const $a6a33fe0ca01be41$export$eba4b1df07cb1d3 = /*#__PURE__*/ $LI8jA.forwardRef
 $a6a33fe0ca01be41$export$eba4b1df07cb1d3.displayName = $287e5cc5498c5bc4$export$1ff3c3f08ae963c0.displayName;
 
 
+
+parcelRequire("LI8jA");
+/**
+ * lucide-react v0.292.0 - ISC
+ */ 
+const $3826036570342367$export$2e2bcd8739ae039 = (0, $149557adc85d935d$export$2e2bcd8739ae039)("ChevronLeft", [
+    [
+        "path",
+        {
+            d: "m15 18-6-6 6-6",
+            key: "1wnfg3"
+        }
+    ]
+]);
+
+
+
+var $LI8jA = parcelRequire("LI8jA");
+function $f44f0a33154558e7$export$2e2bcd8739ae039(dirtyNumber) {
+    if (dirtyNumber === null || dirtyNumber === true || dirtyNumber === false) return NaN;
+    var number = Number(dirtyNumber);
+    if (isNaN(number)) return number;
+    return number < 0 ? Math.ceil(number) : Math.floor(number);
+}
+
+
+function $b4ed4f713665a055$export$2e2bcd8739ae039(o) {
+    "@babel/helpers - typeof";
+    return $b4ed4f713665a055$export$2e2bcd8739ae039 = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o) {
+        return typeof o;
+    } : function(o) {
+        return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o;
+    }, $b4ed4f713665a055$export$2e2bcd8739ae039(o);
+}
+
+
+function $7040d9e7dd2f6ed8$export$2e2bcd8739ae039(required, args) {
+    if (args.length < required) throw new TypeError(required + " argument" + (required > 1 ? "s" : "") + " required, but only " + args.length + " present");
+}
+
+
+function $804b6bac4ed888ba$export$2e2bcd8739ae039(argument) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var argStr = Object.prototype.toString.call(argument);
+    // Clone the date
+    if (argument instanceof Date || (0, $b4ed4f713665a055$export$2e2bcd8739ae039)(argument) === "object" && argStr === "[object Date]") // Prevent the date to lose the milliseconds when passed to new Date() in IE10
+    return new Date(argument.getTime());
+    else if (typeof argument === "number" || argStr === "[object Number]") return new Date(argument);
+    else {
+        if ((typeof argument === "string" || argStr === "[object String]") && typeof console !== "undefined") {
+            // eslint-disable-next-line no-console
+            console.warn("Starting with v2.0.0-beta.1 date-fns doesn't accept strings as date arguments. Please use `parseISO` to parse strings. See: https://github.com/date-fns/date-fns/blob/master/docs/upgradeGuide.md#string-arguments");
+            // eslint-disable-next-line no-console
+            console.warn(new Error().stack);
+        }
+        return new Date(NaN);
+    }
+}
+
+
+
+function $53cea08d313a73ff$export$2e2bcd8739ae039(dirtyDate, dirtyAmount) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var amount = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)(dirtyAmount);
+    if (isNaN(amount)) return new Date(NaN);
+    if (!amount) // If 0 days, no-op to avoid changing times in the hour before end of DST
+    return date;
+    date.setDate(date.getDate() + amount);
+    return date;
+}
+
+
+
+
+function $7d7938354f1f789f$export$2e2bcd8739ae039(dirtyDate, dirtyAmount) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var amount = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)(dirtyAmount);
+    if (isNaN(amount)) return new Date(NaN);
+    if (!amount) // If 0 months, no-op to avoid changing times in the hour before end of DST
+    return date;
+    var dayOfMonth = date.getDate();
+    // The JS Date object supports date math by accepting out-of-bounds values for
+    // month, day, etc. For example, new Date(2020, 0, 0) returns 31 Dec 2019 and
+    // new Date(2020, 13, 1) returns 1 Feb 2021.  This is *almost* the behavior we
+    // want except that dates will wrap around the end of a month, meaning that
+    // new Date(2020, 13, 31) will return 3 Mar 2021 not 28 Feb 2021 as desired. So
+    // we'll default to the end of the desired month by adding 1 to the desired
+    // month and using a date of 0 to back up one day to the end of the desired
+    // month.
+    var endOfDesiredMonth = new Date(date.getTime());
+    endOfDesiredMonth.setMonth(date.getMonth() + amount + 1, 0);
+    var daysInMonth = endOfDesiredMonth.getDate();
+    if (dayOfMonth >= daysInMonth) // If we're already at the end of the month, then this is the correct date
+    // and we're done.
+    return endOfDesiredMonth;
+    else {
+        // Otherwise, we now know that setting the original day-of-month value won't
+        // cause an overflow, so set the desired day-of-month. Note that we can't
+        // just set the date of `endOfDesiredMonth` because that object may have had
+        // its time changed in the unusual case where where a DST transition was on
+        // the last day of the month and its local time was in the hour skipped or
+        // repeated next to a DST transition.  So we use `date` instead which is
+        // guaranteed to still have the original time.
+        date.setFullYear(endOfDesiredMonth.getFullYear(), endOfDesiredMonth.getMonth(), dayOfMonth);
+        return date;
+    }
+}
+
+
+
+
+function $80c8d8067e4aa624$export$2e2bcd8739ae039(dirtyDate, dirtyAmount) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var amount = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)(dirtyAmount);
+    var days = amount * 7;
+    return (0, $53cea08d313a73ff$export$2e2bcd8739ae039)(dirtyDate, days);
+}
+
+
+
+
+function $1abeeb7bc17b524f$export$2e2bcd8739ae039(dirtyDate, dirtyAmount) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var amount = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)(dirtyAmount);
+    return (0, $7d7938354f1f789f$export$2e2bcd8739ae039)(dirtyDate, amount * 12);
+}
+
+/**
+ * Google Chrome as of 67.0.3396.87 introduced timezones with offset that includes seconds.
+ * They usually appear for dates that denote time before the timezones were introduced
+ * (e.g. for 'Europe/Prague' timezone the offset is GMT+00:57:44 before 1 October 1891
+ * and GMT+01:00:00 after that date)
+ *
+ * Date#getTimezoneOffset returns the offset in minutes and would return 57 for the example above,
+ * which would lead to incorrect calculations.
+ *
+ * This function returns the timezone offset in milliseconds that takes seconds in account.
+ */ function $90fb3767b2d64474$export$2e2bcd8739ae039(date) {
+    var utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), date.getMinutes(), date.getSeconds(), date.getMilliseconds()));
+    utcDate.setUTCFullYear(date.getFullYear());
+    return date.getTime() - utcDate.getTime();
+}
+
+
+
+
+function $09bb7ad4f09c575d$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    date.setHours(0, 0, 0, 0);
+    return date;
+}
+
+
+
+var $e1a58e40f6f10c3c$var$MILLISECONDS_IN_DAY = 86400000;
+function $e1a58e40f6f10c3c$export$2e2bcd8739ae039(dirtyDateLeft, dirtyDateRight) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var startOfDayLeft = (0, $09bb7ad4f09c575d$export$2e2bcd8739ae039)(dirtyDateLeft);
+    var startOfDayRight = (0, $09bb7ad4f09c575d$export$2e2bcd8739ae039)(dirtyDateRight);
+    var timestampLeft = startOfDayLeft.getTime() - (0, $90fb3767b2d64474$export$2e2bcd8739ae039)(startOfDayLeft);
+    var timestampRight = startOfDayRight.getTime() - (0, $90fb3767b2d64474$export$2e2bcd8739ae039)(startOfDayRight);
+    // Round the number of days to the nearest integer
+    // because the number of milliseconds in a day is not constant
+    // (e.g. it's different in the day of the daylight saving time clock shift)
+    return Math.round((timestampLeft - timestampRight) / $e1a58e40f6f10c3c$var$MILLISECONDS_IN_DAY);
+}
+
+
+
+function $09c24b98451c6738$export$2e2bcd8739ae039(dirtyDateLeft, dirtyDateRight) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var dateLeft = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDateLeft);
+    var dateRight = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDateRight);
+    var yearDiff = dateLeft.getFullYear() - dateRight.getFullYear();
+    var monthDiff = dateLeft.getMonth() - dateRight.getMonth();
+    return yearDiff * 12 + monthDiff;
+}
+
+var $b3eff1e32e4342a0$var$defaultOptions = {};
+function $b3eff1e32e4342a0$export$430a3269e24b912e() {
+    return $b3eff1e32e4342a0$var$defaultOptions;
+}
+function $b3eff1e32e4342a0$export$95365be1b0704abc(newOptions) {
+    $b3eff1e32e4342a0$var$defaultOptions = newOptions;
+}
+
+
+
+
+
+function $4a35ecceebc93757$export$2e2bcd8739ae039(dirtyDate, options) {
+    var _ref, _ref2, _ref3, _options$weekStartsOn, _options$locale, _options$locale$optio, _defaultOptions$local, _defaultOptions$local2;
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var defaultOptions = (0, $b3eff1e32e4342a0$export$430a3269e24b912e)();
+    var weekStartsOn = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)((_ref = (_ref2 = (_ref3 = (_options$weekStartsOn = options === null || options === void 0 ? void 0 : options.weekStartsOn) !== null && _options$weekStartsOn !== void 0 ? _options$weekStartsOn : options === null || options === void 0 ? void 0 : (_options$locale = options.locale) === null || _options$locale === void 0 ? void 0 : (_options$locale$optio = _options$locale.options) === null || _options$locale$optio === void 0 ? void 0 : _options$locale$optio.weekStartsOn) !== null && _ref3 !== void 0 ? _ref3 : defaultOptions.weekStartsOn) !== null && _ref2 !== void 0 ? _ref2 : (_defaultOptions$local = defaultOptions.locale) === null || _defaultOptions$local === void 0 ? void 0 : (_defaultOptions$local2 = _defaultOptions$local.options) === null || _defaultOptions$local2 === void 0 ? void 0 : _defaultOptions$local2.weekStartsOn) !== null && _ref !== void 0 ? _ref : 0);
+    // Test if weekStartsOn is between 0 and 6 _and_ is not NaN
+    if (!(weekStartsOn >= 0 && weekStartsOn <= 6)) throw new RangeError("weekStartsOn must be between 0 and 6 inclusively");
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var day = date.getDay();
+    var diff = (day < weekStartsOn ? -7 : 0) + 6 - (day - weekStartsOn);
+    date.setDate(date.getDate() + diff);
+    date.setHours(23, 59, 59, 999);
+    return date;
+}
+
+
+
+function $aad9bb37e813bafc$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    return (0, $4a35ecceebc93757$export$2e2bcd8739ae039)(dirtyDate, {
+        weekStartsOn: 1
+    });
+}
+
+
+
+function $bfc773451d3cb967$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var month = date.getMonth();
+    date.setFullYear(date.getFullYear(), month + 1, 0);
+    date.setHours(23, 59, 59, 999);
+    return date;
+}
+
+
+
+function $ad32d585d70534b7$export$2e2bcd8739ae039(value) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    return value instanceof Date || (0, $b4ed4f713665a055$export$2e2bcd8739ae039)(value) === "object" && Object.prototype.toString.call(value) === "[object Date]";
+}
+
+
+
+
+function $e8a7ea3627db4de9$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    if (!(0, $ad32d585d70534b7$export$2e2bcd8739ae039)(dirtyDate) && typeof dirtyDate !== "number") return false;
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    return !isNaN(Number(date));
+}
+
+
+
+
+
+function $555074944baca7cb$export$2e2bcd8739ae039(dirtyDate, dirtyAmount) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var timestamp = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate).getTime();
+    var amount = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)(dirtyAmount);
+    return new Date(timestamp + amount);
+}
+
+
+
+
+function $a89d4f81cd7ffd7f$export$2e2bcd8739ae039(dirtyDate, dirtyAmount) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var amount = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)(dirtyAmount);
+    return (0, $555074944baca7cb$export$2e2bcd8739ae039)(dirtyDate, -amount);
+}
+
+
+
+
+
+var $10311e0cb7ec85cb$var$MILLISECONDS_IN_DAY = 86400000;
+function $10311e0cb7ec85cb$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var timestamp = date.getTime();
+    date.setUTCMonth(0, 1);
+    date.setUTCHours(0, 0, 0, 0);
+    var startOfYearTimestamp = date.getTime();
+    var difference = timestamp - startOfYearTimestamp;
+    return Math.floor(difference / $10311e0cb7ec85cb$var$MILLISECONDS_IN_DAY) + 1;
+}
+
+
+
+
+
+function $3fe41f97b9b4f3b6$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var weekStartsOn = 1;
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var day = date.getUTCDay();
+    var diff = (day < weekStartsOn ? 7 : 0) + day - weekStartsOn;
+    date.setUTCDate(date.getUTCDate() - diff);
+    date.setUTCHours(0, 0, 0, 0);
+    return date;
+}
+
+
+
+
+
+function $c278ba95f4a15c6c$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var year = date.getUTCFullYear();
+    var fourthOfJanuaryOfNextYear = new Date(0);
+    fourthOfJanuaryOfNextYear.setUTCFullYear(year + 1, 0, 4);
+    fourthOfJanuaryOfNextYear.setUTCHours(0, 0, 0, 0);
+    var startOfNextYear = (0, $3fe41f97b9b4f3b6$export$2e2bcd8739ae039)(fourthOfJanuaryOfNextYear);
+    var fourthOfJanuaryOfThisYear = new Date(0);
+    fourthOfJanuaryOfThisYear.setUTCFullYear(year, 0, 4);
+    fourthOfJanuaryOfThisYear.setUTCHours(0, 0, 0, 0);
+    var startOfThisYear = (0, $3fe41f97b9b4f3b6$export$2e2bcd8739ae039)(fourthOfJanuaryOfThisYear);
+    if (date.getTime() >= startOfNextYear.getTime()) return year + 1;
+    else if (date.getTime() >= startOfThisYear.getTime()) return year;
+    else return year - 1;
+}
+
+
+
+
+function $4471e1f656251648$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var year = (0, $c278ba95f4a15c6c$export$2e2bcd8739ae039)(dirtyDate);
+    var fourthOfJanuary = new Date(0);
+    fourthOfJanuary.setUTCFullYear(year, 0, 4);
+    fourthOfJanuary.setUTCHours(0, 0, 0, 0);
+    var date = (0, $3fe41f97b9b4f3b6$export$2e2bcd8739ae039)(fourthOfJanuary);
+    return date;
+}
+
+
+
+var $9ce40eb1dd13dbc7$var$MILLISECONDS_IN_WEEK = 604800000;
+function $9ce40eb1dd13dbc7$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var diff = (0, $3fe41f97b9b4f3b6$export$2e2bcd8739ae039)(date).getTime() - (0, $4471e1f656251648$export$2e2bcd8739ae039)(date).getTime();
+    // Round the number of days to the nearest integer
+    // because the number of milliseconds in a week is not constant
+    // (e.g. it's different in the week of the daylight saving time clock shift)
+    return Math.round(diff / $9ce40eb1dd13dbc7$var$MILLISECONDS_IN_WEEK) + 1;
+}
+
+
+
+
+
+
+
+
+function $2e75c603fad4a565$export$2e2bcd8739ae039(dirtyDate, options) {
+    var _ref, _ref2, _ref3, _options$weekStartsOn, _options$locale, _options$locale$optio, _defaultOptions$local, _defaultOptions$local2;
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var defaultOptions = (0, $b3eff1e32e4342a0$export$430a3269e24b912e)();
+    var weekStartsOn = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)((_ref = (_ref2 = (_ref3 = (_options$weekStartsOn = options === null || options === void 0 ? void 0 : options.weekStartsOn) !== null && _options$weekStartsOn !== void 0 ? _options$weekStartsOn : options === null || options === void 0 ? void 0 : (_options$locale = options.locale) === null || _options$locale === void 0 ? void 0 : (_options$locale$optio = _options$locale.options) === null || _options$locale$optio === void 0 ? void 0 : _options$locale$optio.weekStartsOn) !== null && _ref3 !== void 0 ? _ref3 : defaultOptions.weekStartsOn) !== null && _ref2 !== void 0 ? _ref2 : (_defaultOptions$local = defaultOptions.locale) === null || _defaultOptions$local === void 0 ? void 0 : (_defaultOptions$local2 = _defaultOptions$local.options) === null || _defaultOptions$local2 === void 0 ? void 0 : _defaultOptions$local2.weekStartsOn) !== null && _ref !== void 0 ? _ref : 0);
+    // Test if weekStartsOn is between 0 and 6 _and_ is not NaN
+    if (!(weekStartsOn >= 0 && weekStartsOn <= 6)) throw new RangeError("weekStartsOn must be between 0 and 6 inclusively");
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var day = date.getUTCDay();
+    var diff = (day < weekStartsOn ? 7 : 0) + day - weekStartsOn;
+    date.setUTCDate(date.getUTCDate() - diff);
+    date.setUTCHours(0, 0, 0, 0);
+    return date;
+}
+
+
+
+
+
+
+
+function $44b7861f0e4b97d2$export$2e2bcd8739ae039(dirtyDate, options) {
+    var _ref, _ref2, _ref3, _options$firstWeekCon, _options$locale, _options$locale$optio, _defaultOptions$local, _defaultOptions$local2;
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var year = date.getUTCFullYear();
+    var defaultOptions = (0, $b3eff1e32e4342a0$export$430a3269e24b912e)();
+    var firstWeekContainsDate = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)((_ref = (_ref2 = (_ref3 = (_options$firstWeekCon = options === null || options === void 0 ? void 0 : options.firstWeekContainsDate) !== null && _options$firstWeekCon !== void 0 ? _options$firstWeekCon : options === null || options === void 0 ? void 0 : (_options$locale = options.locale) === null || _options$locale === void 0 ? void 0 : (_options$locale$optio = _options$locale.options) === null || _options$locale$optio === void 0 ? void 0 : _options$locale$optio.firstWeekContainsDate) !== null && _ref3 !== void 0 ? _ref3 : defaultOptions.firstWeekContainsDate) !== null && _ref2 !== void 0 ? _ref2 : (_defaultOptions$local = defaultOptions.locale) === null || _defaultOptions$local === void 0 ? void 0 : (_defaultOptions$local2 = _defaultOptions$local.options) === null || _defaultOptions$local2 === void 0 ? void 0 : _defaultOptions$local2.firstWeekContainsDate) !== null && _ref !== void 0 ? _ref : 1);
+    // Test if weekStartsOn is between 1 and 7 _and_ is not NaN
+    if (!(firstWeekContainsDate >= 1 && firstWeekContainsDate <= 7)) throw new RangeError("firstWeekContainsDate must be between 1 and 7 inclusively");
+    var firstWeekOfNextYear = new Date(0);
+    firstWeekOfNextYear.setUTCFullYear(year + 1, 0, firstWeekContainsDate);
+    firstWeekOfNextYear.setUTCHours(0, 0, 0, 0);
+    var startOfNextYear = (0, $2e75c603fad4a565$export$2e2bcd8739ae039)(firstWeekOfNextYear, options);
+    var firstWeekOfThisYear = new Date(0);
+    firstWeekOfThisYear.setUTCFullYear(year, 0, firstWeekContainsDate);
+    firstWeekOfThisYear.setUTCHours(0, 0, 0, 0);
+    var startOfThisYear = (0, $2e75c603fad4a565$export$2e2bcd8739ae039)(firstWeekOfThisYear, options);
+    if (date.getTime() >= startOfNextYear.getTime()) return year + 1;
+    else if (date.getTime() >= startOfThisYear.getTime()) return year;
+    else return year - 1;
+}
+
+
+
+
+
+
+function $d2cb6a8d214318fa$export$2e2bcd8739ae039(dirtyDate, options) {
+    var _ref, _ref2, _ref3, _options$firstWeekCon, _options$locale, _options$locale$optio, _defaultOptions$local, _defaultOptions$local2;
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var defaultOptions = (0, $b3eff1e32e4342a0$export$430a3269e24b912e)();
+    var firstWeekContainsDate = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)((_ref = (_ref2 = (_ref3 = (_options$firstWeekCon = options === null || options === void 0 ? void 0 : options.firstWeekContainsDate) !== null && _options$firstWeekCon !== void 0 ? _options$firstWeekCon : options === null || options === void 0 ? void 0 : (_options$locale = options.locale) === null || _options$locale === void 0 ? void 0 : (_options$locale$optio = _options$locale.options) === null || _options$locale$optio === void 0 ? void 0 : _options$locale$optio.firstWeekContainsDate) !== null && _ref3 !== void 0 ? _ref3 : defaultOptions.firstWeekContainsDate) !== null && _ref2 !== void 0 ? _ref2 : (_defaultOptions$local = defaultOptions.locale) === null || _defaultOptions$local === void 0 ? void 0 : (_defaultOptions$local2 = _defaultOptions$local.options) === null || _defaultOptions$local2 === void 0 ? void 0 : _defaultOptions$local2.firstWeekContainsDate) !== null && _ref !== void 0 ? _ref : 1);
+    var year = (0, $44b7861f0e4b97d2$export$2e2bcd8739ae039)(dirtyDate, options);
+    var firstWeek = new Date(0);
+    firstWeek.setUTCFullYear(year, 0, firstWeekContainsDate);
+    firstWeek.setUTCHours(0, 0, 0, 0);
+    var date = (0, $2e75c603fad4a565$export$2e2bcd8739ae039)(firstWeek, options);
+    return date;
+}
+
+
+
+var $51171cf749573388$var$MILLISECONDS_IN_WEEK = 604800000;
+function $51171cf749573388$export$2e2bcd8739ae039(dirtyDate, options) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var diff = (0, $2e75c603fad4a565$export$2e2bcd8739ae039)(date, options).getTime() - (0, $d2cb6a8d214318fa$export$2e2bcd8739ae039)(date, options).getTime();
+    // Round the number of days to the nearest integer
+    // because the number of milliseconds in a week is not constant
+    // (e.g. it's different in the week of the daylight saving time clock shift)
+    return Math.round(diff / $51171cf749573388$var$MILLISECONDS_IN_WEEK) + 1;
+}
+
+
+
+function $fc516ffd11e0e41c$export$2e2bcd8739ae039(number, targetLength) {
+    var sign = number < 0 ? "-" : "";
+    var output = Math.abs(number).toString();
+    while(output.length < targetLength)output = "0" + output;
+    return sign + output;
+}
+
+
+
+/*
+ * |     | Unit                           |     | Unit                           |
+ * |-----|--------------------------------|-----|--------------------------------|
+ * |  a  | AM, PM                         |  A* |                                |
+ * |  d  | Day of month                   |  D  |                                |
+ * |  h  | Hour [1-12]                    |  H  | Hour [0-23]                    |
+ * |  m  | Minute                         |  M  | Month                          |
+ * |  s  | Second                         |  S  | Fraction of second             |
+ * |  y  | Year (abs)                     |  Y  |                                |
+ *
+ * Letters marked by * are not implemented but reserved by Unicode standard.
+ */ var $8837a296671d42ea$var$formatters = {
+    // Year
+    y: function y(date, token) {
+        // From http://www.unicode.org/reports/tr35/tr35-31/tr35-dates.html#Date_Format_tokens
+        // | Year     |     y | yy |   yyy |  yyyy | yyyyy |
+        // |----------|-------|----|-------|-------|-------|
+        // | AD 1     |     1 | 01 |   001 |  0001 | 00001 |
+        // | AD 12    |    12 | 12 |   012 |  0012 | 00012 |
+        // | AD 123   |   123 | 23 |   123 |  0123 | 00123 |
+        // | AD 1234  |  1234 | 34 |  1234 |  1234 | 01234 |
+        // | AD 12345 | 12345 | 45 | 12345 | 12345 | 12345 |
+        var signedYear = date.getUTCFullYear();
+        // Returns 1 for 1 BC (which is year 0 in JavaScript)
+        var year = signedYear > 0 ? signedYear : 1 - signedYear;
+        return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(token === "yy" ? year % 100 : year, token.length);
+    },
+    // Month
+    M: function M(date, token) {
+        var month = date.getUTCMonth();
+        return token === "M" ? String(month + 1) : (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(month + 1, 2);
+    },
+    // Day of the month
+    d: function d(date, token) {
+        return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(date.getUTCDate(), token.length);
+    },
+    // AM or PM
+    a: function a(date, token) {
+        var dayPeriodEnumValue = date.getUTCHours() / 12 >= 1 ? "pm" : "am";
+        switch(token){
+            case "a":
+            case "aa":
+                return dayPeriodEnumValue.toUpperCase();
+            case "aaa":
+                return dayPeriodEnumValue;
+            case "aaaaa":
+                return dayPeriodEnumValue[0];
+            case "aaaa":
+            default:
+                return dayPeriodEnumValue === "am" ? "a.m." : "p.m.";
+        }
+    },
+    // Hour [1-12]
+    h: function h(date, token) {
+        return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(date.getUTCHours() % 12 || 12, token.length);
+    },
+    // Hour [0-23]
+    H: function H(date, token) {
+        return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(date.getUTCHours(), token.length);
+    },
+    // Minute
+    m: function m(date, token) {
+        return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(date.getUTCMinutes(), token.length);
+    },
+    // Second
+    s: function s(date, token) {
+        return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(date.getUTCSeconds(), token.length);
+    },
+    // Fraction of second
+    S: function S(date, token) {
+        var numberOfDigits = token.length;
+        var milliseconds = date.getUTCMilliseconds();
+        var fractionalSeconds = Math.floor(milliseconds * Math.pow(10, numberOfDigits - 3));
+        return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(fractionalSeconds, token.length);
+    }
+};
+var $8837a296671d42ea$export$2e2bcd8739ae039 = $8837a296671d42ea$var$formatters;
+
+
+var $57d31ba33bacb651$var$dayPeriodEnum = {
+    am: "am",
+    pm: "pm",
+    midnight: "midnight",
+    noon: "noon",
+    morning: "morning",
+    afternoon: "afternoon",
+    evening: "evening",
+    night: "night"
+};
+/*
+ * |     | Unit                           |     | Unit                           |
+ * |-----|--------------------------------|-----|--------------------------------|
+ * |  a  | AM, PM                         |  A* | Milliseconds in day            |
+ * |  b  | AM, PM, noon, midnight         |  B  | Flexible day period            |
+ * |  c  | Stand-alone local day of week  |  C* | Localized hour w/ day period   |
+ * |  d  | Day of month                   |  D  | Day of year                    |
+ * |  e  | Local day of week              |  E  | Day of week                    |
+ * |  f  |                                |  F* | Day of week in month           |
+ * |  g* | Modified Julian day            |  G  | Era                            |
+ * |  h  | Hour [1-12]                    |  H  | Hour [0-23]                    |
+ * |  i! | ISO day of week                |  I! | ISO week of year               |
+ * |  j* | Localized hour w/ day period   |  J* | Localized hour w/o day period  |
+ * |  k  | Hour [1-24]                    |  K  | Hour [0-11]                    |
+ * |  l* | (deprecated)                   |  L  | Stand-alone month              |
+ * |  m  | Minute                         |  M  | Month                          |
+ * |  n  |                                |  N  |                                |
+ * |  o! | Ordinal number modifier        |  O  | Timezone (GMT)                 |
+ * |  p! | Long localized time            |  P! | Long localized date            |
+ * |  q  | Stand-alone quarter            |  Q  | Quarter                        |
+ * |  r* | Related Gregorian year         |  R! | ISO week-numbering year        |
+ * |  s  | Second                         |  S  | Fraction of second             |
+ * |  t! | Seconds timestamp              |  T! | Milliseconds timestamp         |
+ * |  u  | Extended year                  |  U* | Cyclic year                    |
+ * |  v* | Timezone (generic non-locat.)  |  V* | Timezone (location)            |
+ * |  w  | Local week of year             |  W* | Week of month                  |
+ * |  x  | Timezone (ISO-8601 w/o Z)      |  X  | Timezone (ISO-8601)            |
+ * |  y  | Year (abs)                     |  Y  | Local week-numbering year      |
+ * |  z  | Timezone (specific non-locat.) |  Z* | Timezone (aliases)             |
+ *
+ * Letters marked by * are not implemented but reserved by Unicode standard.
+ *
+ * Letters marked by ! are non-standard, but implemented by date-fns:
+ * - `o` modifies the previous token to turn it into an ordinal (see `format` docs)
+ * - `i` is ISO day of week. For `i` and `ii` is returns numeric ISO week days,
+ *   i.e. 7 for Sunday, 1 for Monday, etc.
+ * - `I` is ISO week of year, as opposed to `w` which is local week of year.
+ * - `R` is ISO week-numbering year, as opposed to `Y` which is local week-numbering year.
+ *   `R` is supposed to be used in conjunction with `I` and `i`
+ *   for universal ISO week-numbering date, whereas
+ *   `Y` is supposed to be used in conjunction with `w` and `e`
+ *   for week-numbering date specific to the locale.
+ * - `P` is long localized date format
+ * - `p` is long localized time format
+ */ var $57d31ba33bacb651$var$formatters = {
+    // Era
+    G: function G(date, token, localize) {
+        var era = date.getUTCFullYear() > 0 ? 1 : 0;
+        switch(token){
+            // AD, BC
+            case "G":
+            case "GG":
+            case "GGG":
+                return localize.era(era, {
+                    width: "abbreviated"
+                });
+            // A, B
+            case "GGGGG":
+                return localize.era(era, {
+                    width: "narrow"
+                });
+            // Anno Domini, Before Christ
+            case "GGGG":
+            default:
+                return localize.era(era, {
+                    width: "wide"
+                });
+        }
+    },
+    // Year
+    y: function y(date, token, localize) {
+        // Ordinal number
+        if (token === "yo") {
+            var signedYear = date.getUTCFullYear();
+            // Returns 1 for 1 BC (which is year 0 in JavaScript)
+            var year = signedYear > 0 ? signedYear : 1 - signedYear;
+            return localize.ordinalNumber(year, {
+                unit: "year"
+            });
+        }
+        return (0, $8837a296671d42ea$export$2e2bcd8739ae039).y(date, token);
+    },
+    // Local week-numbering year
+    Y: function Y(date, token, localize, options) {
+        var signedWeekYear = (0, $44b7861f0e4b97d2$export$2e2bcd8739ae039)(date, options);
+        // Returns 1 for 1 BC (which is year 0 in JavaScript)
+        var weekYear = signedWeekYear > 0 ? signedWeekYear : 1 - signedWeekYear;
+        // Two digit year
+        if (token === "YY") {
+            var twoDigitYear = weekYear % 100;
+            return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(twoDigitYear, 2);
+        }
+        // Ordinal number
+        if (token === "Yo") return localize.ordinalNumber(weekYear, {
+            unit: "year"
+        });
+        // Padding
+        return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(weekYear, token.length);
+    },
+    // ISO week-numbering year
+    R: function R(date, token) {
+        var isoWeekYear = (0, $c278ba95f4a15c6c$export$2e2bcd8739ae039)(date);
+        // Padding
+        return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(isoWeekYear, token.length);
+    },
+    // Extended year. This is a single number designating the year of this calendar system.
+    // The main difference between `y` and `u` localizers are B.C. years:
+    // | Year | `y` | `u` |
+    // |------|-----|-----|
+    // | AC 1 |   1 |   1 |
+    // | BC 1 |   1 |   0 |
+    // | BC 2 |   2 |  -1 |
+    // Also `yy` always returns the last two digits of a year,
+    // while `uu` pads single digit years to 2 characters and returns other years unchanged.
+    u: function u(date, token) {
+        var year = date.getUTCFullYear();
+        return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(year, token.length);
+    },
+    // Quarter
+    Q: function Q(date, token, localize) {
+        var quarter = Math.ceil((date.getUTCMonth() + 1) / 3);
+        switch(token){
+            // 1, 2, 3, 4
+            case "Q":
+                return String(quarter);
+            // 01, 02, 03, 04
+            case "QQ":
+                return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(quarter, 2);
+            // 1st, 2nd, 3rd, 4th
+            case "Qo":
+                return localize.ordinalNumber(quarter, {
+                    unit: "quarter"
+                });
+            // Q1, Q2, Q3, Q4
+            case "QQQ":
+                return localize.quarter(quarter, {
+                    width: "abbreviated",
+                    context: "formatting"
+                });
+            // 1, 2, 3, 4 (narrow quarter; could be not numerical)
+            case "QQQQQ":
+                return localize.quarter(quarter, {
+                    width: "narrow",
+                    context: "formatting"
+                });
+            // 1st quarter, 2nd quarter, ...
+            case "QQQQ":
+            default:
+                return localize.quarter(quarter, {
+                    width: "wide",
+                    context: "formatting"
+                });
+        }
+    },
+    // Stand-alone quarter
+    q: function q(date, token, localize) {
+        var quarter = Math.ceil((date.getUTCMonth() + 1) / 3);
+        switch(token){
+            // 1, 2, 3, 4
+            case "q":
+                return String(quarter);
+            // 01, 02, 03, 04
+            case "qq":
+                return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(quarter, 2);
+            // 1st, 2nd, 3rd, 4th
+            case "qo":
+                return localize.ordinalNumber(quarter, {
+                    unit: "quarter"
+                });
+            // Q1, Q2, Q3, Q4
+            case "qqq":
+                return localize.quarter(quarter, {
+                    width: "abbreviated",
+                    context: "standalone"
+                });
+            // 1, 2, 3, 4 (narrow quarter; could be not numerical)
+            case "qqqqq":
+                return localize.quarter(quarter, {
+                    width: "narrow",
+                    context: "standalone"
+                });
+            // 1st quarter, 2nd quarter, ...
+            case "qqqq":
+            default:
+                return localize.quarter(quarter, {
+                    width: "wide",
+                    context: "standalone"
+                });
+        }
+    },
+    // Month
+    M: function M(date, token, localize) {
+        var month = date.getUTCMonth();
+        switch(token){
+            case "M":
+            case "MM":
+                return (0, $8837a296671d42ea$export$2e2bcd8739ae039).M(date, token);
+            // 1st, 2nd, ..., 12th
+            case "Mo":
+                return localize.ordinalNumber(month + 1, {
+                    unit: "month"
+                });
+            // Jan, Feb, ..., Dec
+            case "MMM":
+                return localize.month(month, {
+                    width: "abbreviated",
+                    context: "formatting"
+                });
+            // J, F, ..., D
+            case "MMMMM":
+                return localize.month(month, {
+                    width: "narrow",
+                    context: "formatting"
+                });
+            // January, February, ..., December
+            case "MMMM":
+            default:
+                return localize.month(month, {
+                    width: "wide",
+                    context: "formatting"
+                });
+        }
+    },
+    // Stand-alone month
+    L: function L(date, token, localize) {
+        var month = date.getUTCMonth();
+        switch(token){
+            // 1, 2, ..., 12
+            case "L":
+                return String(month + 1);
+            // 01, 02, ..., 12
+            case "LL":
+                return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(month + 1, 2);
+            // 1st, 2nd, ..., 12th
+            case "Lo":
+                return localize.ordinalNumber(month + 1, {
+                    unit: "month"
+                });
+            // Jan, Feb, ..., Dec
+            case "LLL":
+                return localize.month(month, {
+                    width: "abbreviated",
+                    context: "standalone"
+                });
+            // J, F, ..., D
+            case "LLLLL":
+                return localize.month(month, {
+                    width: "narrow",
+                    context: "standalone"
+                });
+            // January, February, ..., December
+            case "LLLL":
+            default:
+                return localize.month(month, {
+                    width: "wide",
+                    context: "standalone"
+                });
+        }
+    },
+    // Local week of year
+    w: function w(date, token, localize, options) {
+        var week = (0, $51171cf749573388$export$2e2bcd8739ae039)(date, options);
+        if (token === "wo") return localize.ordinalNumber(week, {
+            unit: "week"
+        });
+        return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(week, token.length);
+    },
+    // ISO week of year
+    I: function I(date, token, localize) {
+        var isoWeek = (0, $9ce40eb1dd13dbc7$export$2e2bcd8739ae039)(date);
+        if (token === "Io") return localize.ordinalNumber(isoWeek, {
+            unit: "week"
+        });
+        return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(isoWeek, token.length);
+    },
+    // Day of the month
+    d: function d(date, token, localize) {
+        if (token === "do") return localize.ordinalNumber(date.getUTCDate(), {
+            unit: "date"
+        });
+        return (0, $8837a296671d42ea$export$2e2bcd8739ae039).d(date, token);
+    },
+    // Day of year
+    D: function D(date, token, localize) {
+        var dayOfYear = (0, $10311e0cb7ec85cb$export$2e2bcd8739ae039)(date);
+        if (token === "Do") return localize.ordinalNumber(dayOfYear, {
+            unit: "dayOfYear"
+        });
+        return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(dayOfYear, token.length);
+    },
+    // Day of week
+    E: function E(date, token, localize) {
+        var dayOfWeek = date.getUTCDay();
+        switch(token){
+            // Tue
+            case "E":
+            case "EE":
+            case "EEE":
+                return localize.day(dayOfWeek, {
+                    width: "abbreviated",
+                    context: "formatting"
+                });
+            // T
+            case "EEEEE":
+                return localize.day(dayOfWeek, {
+                    width: "narrow",
+                    context: "formatting"
+                });
+            // Tu
+            case "EEEEEE":
+                return localize.day(dayOfWeek, {
+                    width: "short",
+                    context: "formatting"
+                });
+            // Tuesday
+            case "EEEE":
+            default:
+                return localize.day(dayOfWeek, {
+                    width: "wide",
+                    context: "formatting"
+                });
+        }
+    },
+    // Local day of week
+    e: function e(date, token, localize, options) {
+        var dayOfWeek = date.getUTCDay();
+        var localDayOfWeek = (dayOfWeek - options.weekStartsOn + 8) % 7 || 7;
+        switch(token){
+            // Numerical value (Nth day of week with current locale or weekStartsOn)
+            case "e":
+                return String(localDayOfWeek);
+            // Padded numerical value
+            case "ee":
+                return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(localDayOfWeek, 2);
+            // 1st, 2nd, ..., 7th
+            case "eo":
+                return localize.ordinalNumber(localDayOfWeek, {
+                    unit: "day"
+                });
+            case "eee":
+                return localize.day(dayOfWeek, {
+                    width: "abbreviated",
+                    context: "formatting"
+                });
+            // T
+            case "eeeee":
+                return localize.day(dayOfWeek, {
+                    width: "narrow",
+                    context: "formatting"
+                });
+            // Tu
+            case "eeeeee":
+                return localize.day(dayOfWeek, {
+                    width: "short",
+                    context: "formatting"
+                });
+            // Tuesday
+            case "eeee":
+            default:
+                return localize.day(dayOfWeek, {
+                    width: "wide",
+                    context: "formatting"
+                });
+        }
+    },
+    // Stand-alone local day of week
+    c: function c(date, token, localize, options) {
+        var dayOfWeek = date.getUTCDay();
+        var localDayOfWeek = (dayOfWeek - options.weekStartsOn + 8) % 7 || 7;
+        switch(token){
+            // Numerical value (same as in `e`)
+            case "c":
+                return String(localDayOfWeek);
+            // Padded numerical value
+            case "cc":
+                return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(localDayOfWeek, token.length);
+            // 1st, 2nd, ..., 7th
+            case "co":
+                return localize.ordinalNumber(localDayOfWeek, {
+                    unit: "day"
+                });
+            case "ccc":
+                return localize.day(dayOfWeek, {
+                    width: "abbreviated",
+                    context: "standalone"
+                });
+            // T
+            case "ccccc":
+                return localize.day(dayOfWeek, {
+                    width: "narrow",
+                    context: "standalone"
+                });
+            // Tu
+            case "cccccc":
+                return localize.day(dayOfWeek, {
+                    width: "short",
+                    context: "standalone"
+                });
+            // Tuesday
+            case "cccc":
+            default:
+                return localize.day(dayOfWeek, {
+                    width: "wide",
+                    context: "standalone"
+                });
+        }
+    },
+    // ISO day of week
+    i: function i(date, token, localize) {
+        var dayOfWeek = date.getUTCDay();
+        var isoDayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek;
+        switch(token){
+            // 2
+            case "i":
+                return String(isoDayOfWeek);
+            // 02
+            case "ii":
+                return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(isoDayOfWeek, token.length);
+            // 2nd
+            case "io":
+                return localize.ordinalNumber(isoDayOfWeek, {
+                    unit: "day"
+                });
+            // Tue
+            case "iii":
+                return localize.day(dayOfWeek, {
+                    width: "abbreviated",
+                    context: "formatting"
+                });
+            // T
+            case "iiiii":
+                return localize.day(dayOfWeek, {
+                    width: "narrow",
+                    context: "formatting"
+                });
+            // Tu
+            case "iiiiii":
+                return localize.day(dayOfWeek, {
+                    width: "short",
+                    context: "formatting"
+                });
+            // Tuesday
+            case "iiii":
+            default:
+                return localize.day(dayOfWeek, {
+                    width: "wide",
+                    context: "formatting"
+                });
+        }
+    },
+    // AM or PM
+    a: function a(date, token, localize) {
+        var hours = date.getUTCHours();
+        var dayPeriodEnumValue = hours / 12 >= 1 ? "pm" : "am";
+        switch(token){
+            case "a":
+            case "aa":
+                return localize.dayPeriod(dayPeriodEnumValue, {
+                    width: "abbreviated",
+                    context: "formatting"
+                });
+            case "aaa":
+                return localize.dayPeriod(dayPeriodEnumValue, {
+                    width: "abbreviated",
+                    context: "formatting"
+                }).toLowerCase();
+            case "aaaaa":
+                return localize.dayPeriod(dayPeriodEnumValue, {
+                    width: "narrow",
+                    context: "formatting"
+                });
+            case "aaaa":
+            default:
+                return localize.dayPeriod(dayPeriodEnumValue, {
+                    width: "wide",
+                    context: "formatting"
+                });
+        }
+    },
+    // AM, PM, midnight, noon
+    b: function b(date, token, localize) {
+        var hours = date.getUTCHours();
+        var dayPeriodEnumValue;
+        if (hours === 12) dayPeriodEnumValue = $57d31ba33bacb651$var$dayPeriodEnum.noon;
+        else if (hours === 0) dayPeriodEnumValue = $57d31ba33bacb651$var$dayPeriodEnum.midnight;
+        else dayPeriodEnumValue = hours / 12 >= 1 ? "pm" : "am";
+        switch(token){
+            case "b":
+            case "bb":
+                return localize.dayPeriod(dayPeriodEnumValue, {
+                    width: "abbreviated",
+                    context: "formatting"
+                });
+            case "bbb":
+                return localize.dayPeriod(dayPeriodEnumValue, {
+                    width: "abbreviated",
+                    context: "formatting"
+                }).toLowerCase();
+            case "bbbbb":
+                return localize.dayPeriod(dayPeriodEnumValue, {
+                    width: "narrow",
+                    context: "formatting"
+                });
+            case "bbbb":
+            default:
+                return localize.dayPeriod(dayPeriodEnumValue, {
+                    width: "wide",
+                    context: "formatting"
+                });
+        }
+    },
+    // in the morning, in the afternoon, in the evening, at night
+    B: function B(date, token, localize) {
+        var hours = date.getUTCHours();
+        var dayPeriodEnumValue;
+        if (hours >= 17) dayPeriodEnumValue = $57d31ba33bacb651$var$dayPeriodEnum.evening;
+        else if (hours >= 12) dayPeriodEnumValue = $57d31ba33bacb651$var$dayPeriodEnum.afternoon;
+        else if (hours >= 4) dayPeriodEnumValue = $57d31ba33bacb651$var$dayPeriodEnum.morning;
+        else dayPeriodEnumValue = $57d31ba33bacb651$var$dayPeriodEnum.night;
+        switch(token){
+            case "B":
+            case "BB":
+            case "BBB":
+                return localize.dayPeriod(dayPeriodEnumValue, {
+                    width: "abbreviated",
+                    context: "formatting"
+                });
+            case "BBBBB":
+                return localize.dayPeriod(dayPeriodEnumValue, {
+                    width: "narrow",
+                    context: "formatting"
+                });
+            case "BBBB":
+            default:
+                return localize.dayPeriod(dayPeriodEnumValue, {
+                    width: "wide",
+                    context: "formatting"
+                });
+        }
+    },
+    // Hour [1-12]
+    h: function h(date, token, localize) {
+        if (token === "ho") {
+            var hours = date.getUTCHours() % 12;
+            if (hours === 0) hours = 12;
+            return localize.ordinalNumber(hours, {
+                unit: "hour"
+            });
+        }
+        return (0, $8837a296671d42ea$export$2e2bcd8739ae039).h(date, token);
+    },
+    // Hour [0-23]
+    H: function H(date, token, localize) {
+        if (token === "Ho") return localize.ordinalNumber(date.getUTCHours(), {
+            unit: "hour"
+        });
+        return (0, $8837a296671d42ea$export$2e2bcd8739ae039).H(date, token);
+    },
+    // Hour [0-11]
+    K: function K(date, token, localize) {
+        var hours = date.getUTCHours() % 12;
+        if (token === "Ko") return localize.ordinalNumber(hours, {
+            unit: "hour"
+        });
+        return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(hours, token.length);
+    },
+    // Hour [1-24]
+    k: function k(date, token, localize) {
+        var hours = date.getUTCHours();
+        if (hours === 0) hours = 24;
+        if (token === "ko") return localize.ordinalNumber(hours, {
+            unit: "hour"
+        });
+        return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(hours, token.length);
+    },
+    // Minute
+    m: function m(date, token, localize) {
+        if (token === "mo") return localize.ordinalNumber(date.getUTCMinutes(), {
+            unit: "minute"
+        });
+        return (0, $8837a296671d42ea$export$2e2bcd8739ae039).m(date, token);
+    },
+    // Second
+    s: function s(date, token, localize) {
+        if (token === "so") return localize.ordinalNumber(date.getUTCSeconds(), {
+            unit: "second"
+        });
+        return (0, $8837a296671d42ea$export$2e2bcd8739ae039).s(date, token);
+    },
+    // Fraction of second
+    S: function S(date, token) {
+        return (0, $8837a296671d42ea$export$2e2bcd8739ae039).S(date, token);
+    },
+    // Timezone (ISO-8601. If offset is 0, output is always `'Z'`)
+    X: function X(date, token, _localize, options) {
+        var originalDate = options._originalDate || date;
+        var timezoneOffset = originalDate.getTimezoneOffset();
+        if (timezoneOffset === 0) return "Z";
+        switch(token){
+            // Hours and optional minutes
+            case "X":
+                return $57d31ba33bacb651$var$formatTimezoneWithOptionalMinutes(timezoneOffset);
+            // Hours, minutes and optional seconds without `:` delimiter
+            // Note: neither ISO-8601 nor JavaScript supports seconds in timezone offsets
+            // so this token always has the same output as `XX`
+            case "XXXX":
+            case "XX":
+                // Hours and minutes without `:` delimiter
+                return $57d31ba33bacb651$var$formatTimezone(timezoneOffset);
+            // Hours, minutes and optional seconds with `:` delimiter
+            // Note: neither ISO-8601 nor JavaScript supports seconds in timezone offsets
+            // so this token always has the same output as `XXX`
+            case "XXXXX":
+            case "XXX":
+            default:
+                return $57d31ba33bacb651$var$formatTimezone(timezoneOffset, ":");
+        }
+    },
+    // Timezone (ISO-8601. If offset is 0, output is `'+00:00'` or equivalent)
+    x: function x(date, token, _localize, options) {
+        var originalDate = options._originalDate || date;
+        var timezoneOffset = originalDate.getTimezoneOffset();
+        switch(token){
+            // Hours and optional minutes
+            case "x":
+                return $57d31ba33bacb651$var$formatTimezoneWithOptionalMinutes(timezoneOffset);
+            // Hours, minutes and optional seconds without `:` delimiter
+            // Note: neither ISO-8601 nor JavaScript supports seconds in timezone offsets
+            // so this token always has the same output as `xx`
+            case "xxxx":
+            case "xx":
+                // Hours and minutes without `:` delimiter
+                return $57d31ba33bacb651$var$formatTimezone(timezoneOffset);
+            // Hours, minutes and optional seconds with `:` delimiter
+            // Note: neither ISO-8601 nor JavaScript supports seconds in timezone offsets
+            // so this token always has the same output as `xxx`
+            case "xxxxx":
+            case "xxx":
+            default:
+                return $57d31ba33bacb651$var$formatTimezone(timezoneOffset, ":");
+        }
+    },
+    // Timezone (GMT)
+    O: function O(date, token, _localize, options) {
+        var originalDate = options._originalDate || date;
+        var timezoneOffset = originalDate.getTimezoneOffset();
+        switch(token){
+            // Short
+            case "O":
+            case "OO":
+            case "OOO":
+                return "GMT" + $57d31ba33bacb651$var$formatTimezoneShort(timezoneOffset, ":");
+            // Long
+            case "OOOO":
+            default:
+                return "GMT" + $57d31ba33bacb651$var$formatTimezone(timezoneOffset, ":");
+        }
+    },
+    // Timezone (specific non-location)
+    z: function z(date, token, _localize, options) {
+        var originalDate = options._originalDate || date;
+        var timezoneOffset = originalDate.getTimezoneOffset();
+        switch(token){
+            // Short
+            case "z":
+            case "zz":
+            case "zzz":
+                return "GMT" + $57d31ba33bacb651$var$formatTimezoneShort(timezoneOffset, ":");
+            // Long
+            case "zzzz":
+            default:
+                return "GMT" + $57d31ba33bacb651$var$formatTimezone(timezoneOffset, ":");
+        }
+    },
+    // Seconds timestamp
+    t: function t(date, token, _localize, options) {
+        var originalDate = options._originalDate || date;
+        var timestamp = Math.floor(originalDate.getTime() / 1000);
+        return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(timestamp, token.length);
+    },
+    // Milliseconds timestamp
+    T: function T(date, token, _localize, options) {
+        var originalDate = options._originalDate || date;
+        var timestamp = originalDate.getTime();
+        return (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(timestamp, token.length);
+    }
+};
+function $57d31ba33bacb651$var$formatTimezoneShort(offset, dirtyDelimiter) {
+    var sign = offset > 0 ? "-" : "+";
+    var absOffset = Math.abs(offset);
+    var hours = Math.floor(absOffset / 60);
+    var minutes = absOffset % 60;
+    if (minutes === 0) return sign + String(hours);
+    var delimiter = dirtyDelimiter || "";
+    return sign + String(hours) + delimiter + (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(minutes, 2);
+}
+function $57d31ba33bacb651$var$formatTimezoneWithOptionalMinutes(offset, dirtyDelimiter) {
+    if (offset % 60 === 0) {
+        var sign = offset > 0 ? "-" : "+";
+        return sign + (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(Math.abs(offset) / 60, 2);
+    }
+    return $57d31ba33bacb651$var$formatTimezone(offset, dirtyDelimiter);
+}
+function $57d31ba33bacb651$var$formatTimezone(offset, dirtyDelimiter) {
+    var delimiter = dirtyDelimiter || "";
+    var sign = offset > 0 ? "-" : "+";
+    var absOffset = Math.abs(offset);
+    var hours = (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(Math.floor(absOffset / 60), 2);
+    var minutes = (0, $fc516ffd11e0e41c$export$2e2bcd8739ae039)(absOffset % 60, 2);
+    return sign + hours + delimiter + minutes;
+}
+var $57d31ba33bacb651$export$2e2bcd8739ae039 = $57d31ba33bacb651$var$formatters;
+
+
+var $ef15ded204f22f14$var$dateLongFormatter = function dateLongFormatter(pattern, formatLong) {
+    switch(pattern){
+        case "P":
+            return formatLong.date({
+                width: "short"
+            });
+        case "PP":
+            return formatLong.date({
+                width: "medium"
+            });
+        case "PPP":
+            return formatLong.date({
+                width: "long"
+            });
+        case "PPPP":
+        default:
+            return formatLong.date({
+                width: "full"
+            });
+    }
+};
+var $ef15ded204f22f14$var$timeLongFormatter = function timeLongFormatter(pattern, formatLong) {
+    switch(pattern){
+        case "p":
+            return formatLong.time({
+                width: "short"
+            });
+        case "pp":
+            return formatLong.time({
+                width: "medium"
+            });
+        case "ppp":
+            return formatLong.time({
+                width: "long"
+            });
+        case "pppp":
+        default:
+            return formatLong.time({
+                width: "full"
+            });
+    }
+};
+var $ef15ded204f22f14$var$dateTimeLongFormatter = function dateTimeLongFormatter(pattern, formatLong) {
+    var matchResult = pattern.match(/(P+)(p+)?/) || [];
+    var datePattern = matchResult[1];
+    var timePattern = matchResult[2];
+    if (!timePattern) return $ef15ded204f22f14$var$dateLongFormatter(pattern, formatLong);
+    var dateTimeFormat;
+    switch(datePattern){
+        case "P":
+            dateTimeFormat = formatLong.dateTime({
+                width: "short"
+            });
+            break;
+        case "PP":
+            dateTimeFormat = formatLong.dateTime({
+                width: "medium"
+            });
+            break;
+        case "PPP":
+            dateTimeFormat = formatLong.dateTime({
+                width: "long"
+            });
+            break;
+        case "PPPP":
+        default:
+            dateTimeFormat = formatLong.dateTime({
+                width: "full"
+            });
+            break;
+    }
+    return dateTimeFormat.replace("{{date}}", $ef15ded204f22f14$var$dateLongFormatter(datePattern, formatLong)).replace("{{time}}", $ef15ded204f22f14$var$timeLongFormatter(timePattern, formatLong));
+};
+var $ef15ded204f22f14$var$longFormatters = {
+    p: $ef15ded204f22f14$var$timeLongFormatter,
+    P: $ef15ded204f22f14$var$dateTimeLongFormatter
+};
+var $ef15ded204f22f14$export$2e2bcd8739ae039 = $ef15ded204f22f14$var$longFormatters;
+
+
+
+var $7b0a34f600aaab54$var$protectedDayOfYearTokens = [
+    "D",
+    "DD"
+];
+var $7b0a34f600aaab54$var$protectedWeekYearTokens = [
+    "YY",
+    "YYYY"
+];
+function $7b0a34f600aaab54$export$c6cc36aa33304772(token) {
+    return $7b0a34f600aaab54$var$protectedDayOfYearTokens.indexOf(token) !== -1;
+}
+function $7b0a34f600aaab54$export$c6b49d6dceb604a1(token) {
+    return $7b0a34f600aaab54$var$protectedWeekYearTokens.indexOf(token) !== -1;
+}
+function $7b0a34f600aaab54$export$8073c1ae88f0e727(token, format, input) {
+    if (token === "YYYY") throw new RangeError("Use `yyyy` instead of `YYYY` (in `".concat(format, "`) for formatting years to the input `").concat(input, "`; see: https://github.com/date-fns/date-fns/blob/master/docs/unicodeTokens.md"));
+    else if (token === "YY") throw new RangeError("Use `yy` instead of `YY` (in `".concat(format, "`) for formatting years to the input `").concat(input, "`; see: https://github.com/date-fns/date-fns/blob/master/docs/unicodeTokens.md"));
+    else if (token === "D") throw new RangeError("Use `d` instead of `D` (in `".concat(format, "`) for formatting days of the month to the input `").concat(input, "`; see: https://github.com/date-fns/date-fns/blob/master/docs/unicodeTokens.md"));
+    else if (token === "DD") throw new RangeError("Use `dd` instead of `DD` (in `".concat(format, "`) for formatting days of the month to the input `").concat(input, "`; see: https://github.com/date-fns/date-fns/blob/master/docs/unicodeTokens.md"));
+}
+
+
+
+
+
+var $7e13b27c4d93683f$var$formatDistanceLocale = {
+    lessThanXSeconds: {
+        one: "less than a second",
+        other: "less than {{count}} seconds"
+    },
+    xSeconds: {
+        one: "1 second",
+        other: "{{count}} seconds"
+    },
+    halfAMinute: "half a minute",
+    lessThanXMinutes: {
+        one: "less than a minute",
+        other: "less than {{count}} minutes"
+    },
+    xMinutes: {
+        one: "1 minute",
+        other: "{{count}} minutes"
+    },
+    aboutXHours: {
+        one: "about 1 hour",
+        other: "about {{count}} hours"
+    },
+    xHours: {
+        one: "1 hour",
+        other: "{{count}} hours"
+    },
+    xDays: {
+        one: "1 day",
+        other: "{{count}} days"
+    },
+    aboutXWeeks: {
+        one: "about 1 week",
+        other: "about {{count}} weeks"
+    },
+    xWeeks: {
+        one: "1 week",
+        other: "{{count}} weeks"
+    },
+    aboutXMonths: {
+        one: "about 1 month",
+        other: "about {{count}} months"
+    },
+    xMonths: {
+        one: "1 month",
+        other: "{{count}} months"
+    },
+    aboutXYears: {
+        one: "about 1 year",
+        other: "about {{count}} years"
+    },
+    xYears: {
+        one: "1 year",
+        other: "{{count}} years"
+    },
+    overXYears: {
+        one: "over 1 year",
+        other: "over {{count}} years"
+    },
+    almostXYears: {
+        one: "almost 1 year",
+        other: "almost {{count}} years"
+    }
+};
+var $7e13b27c4d93683f$var$formatDistance = function formatDistance(token, count, options) {
+    var result;
+    var tokenValue = $7e13b27c4d93683f$var$formatDistanceLocale[token];
+    if (typeof tokenValue === "string") result = tokenValue;
+    else if (count === 1) result = tokenValue.one;
+    else result = tokenValue.other.replace("{{count}}", count.toString());
+    if (options !== null && options !== void 0 && options.addSuffix) {
+        if (options.comparison && options.comparison > 0) return "in " + result;
+        else return result + " ago";
+    }
+    return result;
+};
+var $7e13b27c4d93683f$export$2e2bcd8739ae039 = $7e13b27c4d93683f$var$formatDistance;
+
+
+function $c1aacc15353486d3$export$2e2bcd8739ae039(args) {
+    return function() {
+        var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
+        // TODO: Remove String()
+        var width = options.width ? String(options.width) : args.defaultWidth;
+        var format = args.formats[width] || args.formats[args.defaultWidth];
+        return format;
+    };
+}
+
+
+var $6ecdce96a1b63371$var$dateFormats = {
+    full: "EEEE, MMMM do, y",
+    long: "MMMM do, y",
+    medium: "MMM d, y",
+    short: "MM/dd/yyyy"
+};
+var $6ecdce96a1b63371$var$timeFormats = {
+    full: "h:mm:ss a zzzz",
+    long: "h:mm:ss a z",
+    medium: "h:mm:ss a",
+    short: "h:mm a"
+};
+var $6ecdce96a1b63371$var$dateTimeFormats = {
+    full: "{{date}} 'at' {{time}}",
+    long: "{{date}} 'at' {{time}}",
+    medium: "{{date}}, {{time}}",
+    short: "{{date}}, {{time}}"
+};
+var $6ecdce96a1b63371$var$formatLong = {
+    date: (0, $c1aacc15353486d3$export$2e2bcd8739ae039)({
+        formats: $6ecdce96a1b63371$var$dateFormats,
+        defaultWidth: "full"
+    }),
+    time: (0, $c1aacc15353486d3$export$2e2bcd8739ae039)({
+        formats: $6ecdce96a1b63371$var$timeFormats,
+        defaultWidth: "full"
+    }),
+    dateTime: (0, $c1aacc15353486d3$export$2e2bcd8739ae039)({
+        formats: $6ecdce96a1b63371$var$dateTimeFormats,
+        defaultWidth: "full"
+    })
+};
+var $6ecdce96a1b63371$export$2e2bcd8739ae039 = $6ecdce96a1b63371$var$formatLong;
+
+
+var $5ff26abf3eea777d$var$formatRelativeLocale = {
+    lastWeek: "'last' eeee 'at' p",
+    yesterday: "'yesterday at' p",
+    today: "'today at' p",
+    tomorrow: "'tomorrow at' p",
+    nextWeek: "eeee 'at' p",
+    other: "P"
+};
+var $5ff26abf3eea777d$var$formatRelative = function formatRelative(token, _date, _baseDate, _options) {
+    return $5ff26abf3eea777d$var$formatRelativeLocale[token];
+};
+var $5ff26abf3eea777d$export$2e2bcd8739ae039 = $5ff26abf3eea777d$var$formatRelative;
+
+
+function $f41f7a1088cf2a52$export$2e2bcd8739ae039(args) {
+    return function(dirtyIndex, options) {
+        var context = options !== null && options !== void 0 && options.context ? String(options.context) : "standalone";
+        var valuesArray;
+        if (context === "formatting" && args.formattingValues) {
+            var defaultWidth = args.defaultFormattingWidth || args.defaultWidth;
+            var width = options !== null && options !== void 0 && options.width ? String(options.width) : defaultWidth;
+            valuesArray = args.formattingValues[width] || args.formattingValues[defaultWidth];
+        } else {
+            var _defaultWidth = args.defaultWidth;
+            var _width = options !== null && options !== void 0 && options.width ? String(options.width) : args.defaultWidth;
+            valuesArray = args.values[_width] || args.values[_defaultWidth];
+        }
+        var index = args.argumentCallback ? args.argumentCallback(dirtyIndex) : dirtyIndex;
+        // @ts-ignore: For some reason TypeScript just don't want to match it, no matter how hard we try. I challenge you to try to remove it!
+        return valuesArray[index];
+    };
+}
+
+
+var $5d3b2ce6484adef2$var$eraValues = {
+    narrow: [
+        "B",
+        "A"
+    ],
+    abbreviated: [
+        "BC",
+        "AD"
+    ],
+    wide: [
+        "Before Christ",
+        "Anno Domini"
+    ]
+};
+var $5d3b2ce6484adef2$var$quarterValues = {
+    narrow: [
+        "1",
+        "2",
+        "3",
+        "4"
+    ],
+    abbreviated: [
+        "Q1",
+        "Q2",
+        "Q3",
+        "Q4"
+    ],
+    wide: [
+        "1st quarter",
+        "2nd quarter",
+        "3rd quarter",
+        "4th quarter"
+    ]
+};
+// Note: in English, the names of days of the week and months are capitalized.
+// If you are making a new locale based on this one, check if the same is true for the language you're working on.
+// Generally, formatted dates should look like they are in the middle of a sentence,
+// e.g. in Spanish language the weekdays and months should be in the lowercase.
+var $5d3b2ce6484adef2$var$monthValues = {
+    narrow: [
+        "J",
+        "F",
+        "M",
+        "A",
+        "M",
+        "J",
+        "J",
+        "A",
+        "S",
+        "O",
+        "N",
+        "D"
+    ],
+    abbreviated: [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec"
+    ],
+    wide: [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December"
+    ]
+};
+var $5d3b2ce6484adef2$var$dayValues = {
+    narrow: [
+        "S",
+        "M",
+        "T",
+        "W",
+        "T",
+        "F",
+        "S"
+    ],
+    short: [
+        "Su",
+        "Mo",
+        "Tu",
+        "We",
+        "Th",
+        "Fr",
+        "Sa"
+    ],
+    abbreviated: [
+        "Sun",
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat"
+    ],
+    wide: [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday"
+    ]
+};
+var $5d3b2ce6484adef2$var$dayPeriodValues = {
+    narrow: {
+        am: "a",
+        pm: "p",
+        midnight: "mi",
+        noon: "n",
+        morning: "morning",
+        afternoon: "afternoon",
+        evening: "evening",
+        night: "night"
+    },
+    abbreviated: {
+        am: "AM",
+        pm: "PM",
+        midnight: "midnight",
+        noon: "noon",
+        morning: "morning",
+        afternoon: "afternoon",
+        evening: "evening",
+        night: "night"
+    },
+    wide: {
+        am: "a.m.",
+        pm: "p.m.",
+        midnight: "midnight",
+        noon: "noon",
+        morning: "morning",
+        afternoon: "afternoon",
+        evening: "evening",
+        night: "night"
+    }
+};
+var $5d3b2ce6484adef2$var$formattingDayPeriodValues = {
+    narrow: {
+        am: "a",
+        pm: "p",
+        midnight: "mi",
+        noon: "n",
+        morning: "in the morning",
+        afternoon: "in the afternoon",
+        evening: "in the evening",
+        night: "at night"
+    },
+    abbreviated: {
+        am: "AM",
+        pm: "PM",
+        midnight: "midnight",
+        noon: "noon",
+        morning: "in the morning",
+        afternoon: "in the afternoon",
+        evening: "in the evening",
+        night: "at night"
+    },
+    wide: {
+        am: "a.m.",
+        pm: "p.m.",
+        midnight: "midnight",
+        noon: "noon",
+        morning: "in the morning",
+        afternoon: "in the afternoon",
+        evening: "in the evening",
+        night: "at night"
+    }
+};
+var $5d3b2ce6484adef2$var$ordinalNumber = function ordinalNumber(dirtyNumber, _options) {
+    var number = Number(dirtyNumber);
+    // If ordinal numbers depend on context, for example,
+    // if they are different for different grammatical genders,
+    // use `options.unit`.
+    //
+    // `unit` can be 'year', 'quarter', 'month', 'week', 'date', 'dayOfYear',
+    // 'day', 'hour', 'minute', 'second'.
+    var rem100 = number % 100;
+    if (rem100 > 20 || rem100 < 10) switch(rem100 % 10){
+        case 1:
+            return number + "st";
+        case 2:
+            return number + "nd";
+        case 3:
+            return number + "rd";
+    }
+    return number + "th";
+};
+var $5d3b2ce6484adef2$var$localize = {
+    ordinalNumber: $5d3b2ce6484adef2$var$ordinalNumber,
+    era: (0, $f41f7a1088cf2a52$export$2e2bcd8739ae039)({
+        values: $5d3b2ce6484adef2$var$eraValues,
+        defaultWidth: "wide"
+    }),
+    quarter: (0, $f41f7a1088cf2a52$export$2e2bcd8739ae039)({
+        values: $5d3b2ce6484adef2$var$quarterValues,
+        defaultWidth: "wide",
+        argumentCallback: function argumentCallback(quarter) {
+            return quarter - 1;
+        }
+    }),
+    month: (0, $f41f7a1088cf2a52$export$2e2bcd8739ae039)({
+        values: $5d3b2ce6484adef2$var$monthValues,
+        defaultWidth: "wide"
+    }),
+    day: (0, $f41f7a1088cf2a52$export$2e2bcd8739ae039)({
+        values: $5d3b2ce6484adef2$var$dayValues,
+        defaultWidth: "wide"
+    }),
+    dayPeriod: (0, $f41f7a1088cf2a52$export$2e2bcd8739ae039)({
+        values: $5d3b2ce6484adef2$var$dayPeriodValues,
+        defaultWidth: "wide",
+        formattingValues: $5d3b2ce6484adef2$var$formattingDayPeriodValues,
+        defaultFormattingWidth: "wide"
+    })
+};
+var $5d3b2ce6484adef2$export$2e2bcd8739ae039 = $5d3b2ce6484adef2$var$localize;
+
+
+function $d2f8fd0082838e6f$export$2e2bcd8739ae039(args) {
+    return function(string) {
+        var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+        var width = options.width;
+        var matchPattern = width && args.matchPatterns[width] || args.matchPatterns[args.defaultMatchWidth];
+        var matchResult = string.match(matchPattern);
+        if (!matchResult) return null;
+        var matchedString = matchResult[0];
+        var parsePatterns = width && args.parsePatterns[width] || args.parsePatterns[args.defaultParseWidth];
+        var key = Array.isArray(parsePatterns) ? $d2f8fd0082838e6f$var$findIndex(parsePatterns, function(pattern) {
+            return pattern.test(matchedString);
+        }) : $d2f8fd0082838e6f$var$findKey(parsePatterns, function(pattern) {
+            return pattern.test(matchedString);
+        });
+        var value;
+        value = args.valueCallback ? args.valueCallback(key) : key;
+        value = options.valueCallback ? options.valueCallback(value) : value;
+        var rest = string.slice(matchedString.length);
+        return {
+            value: value,
+            rest: rest
+        };
+    };
+}
+function $d2f8fd0082838e6f$var$findKey(object, predicate) {
+    for(var key in object){
+        if (object.hasOwnProperty(key) && predicate(object[key])) return key;
+    }
+    return undefined;
+}
+function $d2f8fd0082838e6f$var$findIndex(array, predicate) {
+    for(var key = 0; key < array.length; key++){
+        if (predicate(array[key])) return key;
+    }
+    return undefined;
+}
+
+
+function $0603890808a9075d$export$2e2bcd8739ae039(args) {
+    return function(string) {
+        var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+        var matchResult = string.match(args.matchPattern);
+        if (!matchResult) return null;
+        var matchedString = matchResult[0];
+        var parseResult = string.match(args.parsePattern);
+        if (!parseResult) return null;
+        var value = args.valueCallback ? args.valueCallback(parseResult[0]) : parseResult[0];
+        value = options.valueCallback ? options.valueCallback(value) : value;
+        var rest = string.slice(matchedString.length);
+        return {
+            value: value,
+            rest: rest
+        };
+    };
+}
+
+
+var $55eb479ea8e136ba$var$matchOrdinalNumberPattern = /^(\d+)(th|st|nd|rd)?/i;
+var $55eb479ea8e136ba$var$parseOrdinalNumberPattern = /\d+/i;
+var $55eb479ea8e136ba$var$matchEraPatterns = {
+    narrow: /^(b|a)/i,
+    abbreviated: /^(b\.?\s?c\.?|b\.?\s?c\.?\s?e\.?|a\.?\s?d\.?|c\.?\s?e\.?)/i,
+    wide: /^(before christ|before common era|anno domini|common era)/i
+};
+var $55eb479ea8e136ba$var$parseEraPatterns = {
+    any: [
+        /^b/i,
+        /^(a|c)/i
+    ]
+};
+var $55eb479ea8e136ba$var$matchQuarterPatterns = {
+    narrow: /^[1234]/i,
+    abbreviated: /^q[1234]/i,
+    wide: /^[1234](th|st|nd|rd)? quarter/i
+};
+var $55eb479ea8e136ba$var$parseQuarterPatterns = {
+    any: [
+        /1/i,
+        /2/i,
+        /3/i,
+        /4/i
+    ]
+};
+var $55eb479ea8e136ba$var$matchMonthPatterns = {
+    narrow: /^[jfmasond]/i,
+    abbreviated: /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i,
+    wide: /^(january|february|march|april|may|june|july|august|september|october|november|december)/i
+};
+var $55eb479ea8e136ba$var$parseMonthPatterns = {
+    narrow: [
+        /^j/i,
+        /^f/i,
+        /^m/i,
+        /^a/i,
+        /^m/i,
+        /^j/i,
+        /^j/i,
+        /^a/i,
+        /^s/i,
+        /^o/i,
+        /^n/i,
+        /^d/i
+    ],
+    any: [
+        /^ja/i,
+        /^f/i,
+        /^mar/i,
+        /^ap/i,
+        /^may/i,
+        /^jun/i,
+        /^jul/i,
+        /^au/i,
+        /^s/i,
+        /^o/i,
+        /^n/i,
+        /^d/i
+    ]
+};
+var $55eb479ea8e136ba$var$matchDayPatterns = {
+    narrow: /^[smtwf]/i,
+    short: /^(su|mo|tu|we|th|fr|sa)/i,
+    abbreviated: /^(sun|mon|tue|wed|thu|fri|sat)/i,
+    wide: /^(sunday|monday|tuesday|wednesday|thursday|friday|saturday)/i
+};
+var $55eb479ea8e136ba$var$parseDayPatterns = {
+    narrow: [
+        /^s/i,
+        /^m/i,
+        /^t/i,
+        /^w/i,
+        /^t/i,
+        /^f/i,
+        /^s/i
+    ],
+    any: [
+        /^su/i,
+        /^m/i,
+        /^tu/i,
+        /^w/i,
+        /^th/i,
+        /^f/i,
+        /^sa/i
+    ]
+};
+var $55eb479ea8e136ba$var$matchDayPeriodPatterns = {
+    narrow: /^(a|p|mi|n|(in the|at) (morning|afternoon|evening|night))/i,
+    any: /^([ap]\.?\s?m\.?|midnight|noon|(in the|at) (morning|afternoon|evening|night))/i
+};
+var $55eb479ea8e136ba$var$parseDayPeriodPatterns = {
+    any: {
+        am: /^a/i,
+        pm: /^p/i,
+        midnight: /^mi/i,
+        noon: /^no/i,
+        morning: /morning/i,
+        afternoon: /afternoon/i,
+        evening: /evening/i,
+        night: /night/i
+    }
+};
+var $55eb479ea8e136ba$var$match = {
+    ordinalNumber: (0, $0603890808a9075d$export$2e2bcd8739ae039)({
+        matchPattern: $55eb479ea8e136ba$var$matchOrdinalNumberPattern,
+        parsePattern: $55eb479ea8e136ba$var$parseOrdinalNumberPattern,
+        valueCallback: function valueCallback(value) {
+            return parseInt(value, 10);
+        }
+    }),
+    era: (0, $d2f8fd0082838e6f$export$2e2bcd8739ae039)({
+        matchPatterns: $55eb479ea8e136ba$var$matchEraPatterns,
+        defaultMatchWidth: "wide",
+        parsePatterns: $55eb479ea8e136ba$var$parseEraPatterns,
+        defaultParseWidth: "any"
+    }),
+    quarter: (0, $d2f8fd0082838e6f$export$2e2bcd8739ae039)({
+        matchPatterns: $55eb479ea8e136ba$var$matchQuarterPatterns,
+        defaultMatchWidth: "wide",
+        parsePatterns: $55eb479ea8e136ba$var$parseQuarterPatterns,
+        defaultParseWidth: "any",
+        valueCallback: function valueCallback(index) {
+            return index + 1;
+        }
+    }),
+    month: (0, $d2f8fd0082838e6f$export$2e2bcd8739ae039)({
+        matchPatterns: $55eb479ea8e136ba$var$matchMonthPatterns,
+        defaultMatchWidth: "wide",
+        parsePatterns: $55eb479ea8e136ba$var$parseMonthPatterns,
+        defaultParseWidth: "any"
+    }),
+    day: (0, $d2f8fd0082838e6f$export$2e2bcd8739ae039)({
+        matchPatterns: $55eb479ea8e136ba$var$matchDayPatterns,
+        defaultMatchWidth: "wide",
+        parsePatterns: $55eb479ea8e136ba$var$parseDayPatterns,
+        defaultParseWidth: "any"
+    }),
+    dayPeriod: (0, $d2f8fd0082838e6f$export$2e2bcd8739ae039)({
+        matchPatterns: $55eb479ea8e136ba$var$matchDayPeriodPatterns,
+        defaultMatchWidth: "any",
+        parsePatterns: $55eb479ea8e136ba$var$parseDayPeriodPatterns,
+        defaultParseWidth: "any"
+    })
+};
+var $55eb479ea8e136ba$export$2e2bcd8739ae039 = $55eb479ea8e136ba$var$match;
+
+
+/**
+ * @type {Locale}
+ * @category Locales
+ * @summary English locale (United States).
+ * @language English
+ * @iso-639-2 eng
+ * @author Sasha Koss [@kossnocorp]{@link https://github.com/kossnocorp}
+ * @author Lesha Koss [@leshakoss]{@link https://github.com/leshakoss}
+ */ var $5d2cb7e2acfbd0aa$var$locale = {
+    code: "en-US",
+    formatDistance: (0, $7e13b27c4d93683f$export$2e2bcd8739ae039),
+    formatLong: (0, $6ecdce96a1b63371$export$2e2bcd8739ae039),
+    formatRelative: (0, $5ff26abf3eea777d$export$2e2bcd8739ae039),
+    localize: (0, $5d3b2ce6484adef2$export$2e2bcd8739ae039),
+    match: (0, $55eb479ea8e136ba$export$2e2bcd8739ae039),
+    options: {
+        weekStartsOn: 0 /* Sunday */ ,
+        firstWeekContainsDate: 1
+    }
+};
+var $5d2cb7e2acfbd0aa$export$2e2bcd8739ae039 = $5d2cb7e2acfbd0aa$var$locale;
+
+
+var $dd66ba7a4fdce0d2$export$2e2bcd8739ae039 = (0, $5d2cb7e2acfbd0aa$export$2e2bcd8739ae039);
+
+
+// - [yYQqMLwIdDecihHKkms]o matches any available ordinal number token
+//   (one of the certain letters followed by `o`)
+// - (\w)\1* matches any sequences of the same letter
+// - '' matches two quote characters in a row
+// - '(''|[^'])+('|$) matches anything surrounded by two quote characters ('),
+//   except a single quote symbol, which ends the sequence.
+//   Two quote characters do not end the sequence.
+//   If there is no matching single quote
+//   then the sequence will continue until the end of the string.
+// - . matches any single character unmatched by previous parts of the RegExps
+var $c0a60053e1df89de$var$formattingTokensRegExp = /[yYQqMLwIdDecihHKkms]o|(\w)\1*|''|'(''|[^'])+('|$)|./g;
+// This RegExp catches symbols escaped by quotes, and also
+// sequences of symbols P, p, and the combinations like `PPPPPPPppppp`
+var $c0a60053e1df89de$var$longFormattingTokensRegExp = /P+p+|P+|p+|''|'(''|[^'])+('|$)|./g;
+var $c0a60053e1df89de$var$escapedStringRegExp = /^'([^]*?)'?$/;
+var $c0a60053e1df89de$var$doubleQuoteRegExp = /''/g;
+var $c0a60053e1df89de$var$unescapedLatinCharacterRegExp = /[a-zA-Z]/;
+function $c0a60053e1df89de$export$2e2bcd8739ae039(dirtyDate, dirtyFormatStr, options) {
+    var _ref, _options$locale, _ref2, _ref3, _ref4, _options$firstWeekCon, _options$locale2, _options$locale2$opti, _defaultOptions$local, _defaultOptions$local2, _ref5, _ref6, _ref7, _options$weekStartsOn, _options$locale3, _options$locale3$opti, _defaultOptions$local3, _defaultOptions$local4;
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var formatStr = String(dirtyFormatStr);
+    var defaultOptions = (0, $b3eff1e32e4342a0$export$430a3269e24b912e)();
+    var locale = (_ref = (_options$locale = options === null || options === void 0 ? void 0 : options.locale) !== null && _options$locale !== void 0 ? _options$locale : defaultOptions.locale) !== null && _ref !== void 0 ? _ref : (0, $dd66ba7a4fdce0d2$export$2e2bcd8739ae039);
+    var firstWeekContainsDate = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)((_ref2 = (_ref3 = (_ref4 = (_options$firstWeekCon = options === null || options === void 0 ? void 0 : options.firstWeekContainsDate) !== null && _options$firstWeekCon !== void 0 ? _options$firstWeekCon : options === null || options === void 0 ? void 0 : (_options$locale2 = options.locale) === null || _options$locale2 === void 0 ? void 0 : (_options$locale2$opti = _options$locale2.options) === null || _options$locale2$opti === void 0 ? void 0 : _options$locale2$opti.firstWeekContainsDate) !== null && _ref4 !== void 0 ? _ref4 : defaultOptions.firstWeekContainsDate) !== null && _ref3 !== void 0 ? _ref3 : (_defaultOptions$local = defaultOptions.locale) === null || _defaultOptions$local === void 0 ? void 0 : (_defaultOptions$local2 = _defaultOptions$local.options) === null || _defaultOptions$local2 === void 0 ? void 0 : _defaultOptions$local2.firstWeekContainsDate) !== null && _ref2 !== void 0 ? _ref2 : 1);
+    // Test if weekStartsOn is between 1 and 7 _and_ is not NaN
+    if (!(firstWeekContainsDate >= 1 && firstWeekContainsDate <= 7)) throw new RangeError("firstWeekContainsDate must be between 1 and 7 inclusively");
+    var weekStartsOn = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)((_ref5 = (_ref6 = (_ref7 = (_options$weekStartsOn = options === null || options === void 0 ? void 0 : options.weekStartsOn) !== null && _options$weekStartsOn !== void 0 ? _options$weekStartsOn : options === null || options === void 0 ? void 0 : (_options$locale3 = options.locale) === null || _options$locale3 === void 0 ? void 0 : (_options$locale3$opti = _options$locale3.options) === null || _options$locale3$opti === void 0 ? void 0 : _options$locale3$opti.weekStartsOn) !== null && _ref7 !== void 0 ? _ref7 : defaultOptions.weekStartsOn) !== null && _ref6 !== void 0 ? _ref6 : (_defaultOptions$local3 = defaultOptions.locale) === null || _defaultOptions$local3 === void 0 ? void 0 : (_defaultOptions$local4 = _defaultOptions$local3.options) === null || _defaultOptions$local4 === void 0 ? void 0 : _defaultOptions$local4.weekStartsOn) !== null && _ref5 !== void 0 ? _ref5 : 0);
+    // Test if weekStartsOn is between 0 and 6 _and_ is not NaN
+    if (!(weekStartsOn >= 0 && weekStartsOn <= 6)) throw new RangeError("weekStartsOn must be between 0 and 6 inclusively");
+    if (!locale.localize) throw new RangeError("locale must contain localize property");
+    if (!locale.formatLong) throw new RangeError("locale must contain formatLong property");
+    var originalDate = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    if (!(0, $e8a7ea3627db4de9$export$2e2bcd8739ae039)(originalDate)) throw new RangeError("Invalid time value");
+    // Convert the date in system timezone to the same date in UTC+00:00 timezone.
+    // This ensures that when UTC functions will be implemented, locales will be compatible with them.
+    // See an issue about UTC functions: https://github.com/date-fns/date-fns/issues/376
+    var timezoneOffset = (0, $90fb3767b2d64474$export$2e2bcd8739ae039)(originalDate);
+    var utcDate = (0, $a89d4f81cd7ffd7f$export$2e2bcd8739ae039)(originalDate, timezoneOffset);
+    var formatterOptions = {
+        firstWeekContainsDate: firstWeekContainsDate,
+        weekStartsOn: weekStartsOn,
+        locale: locale,
+        _originalDate: originalDate
+    };
+    var result = formatStr.match($c0a60053e1df89de$var$longFormattingTokensRegExp).map(function(substring) {
+        var firstCharacter = substring[0];
+        if (firstCharacter === "p" || firstCharacter === "P") {
+            var longFormatter = (0, $ef15ded204f22f14$export$2e2bcd8739ae039)[firstCharacter];
+            return longFormatter(substring, locale.formatLong);
+        }
+        return substring;
+    }).join("").match($c0a60053e1df89de$var$formattingTokensRegExp).map(function(substring) {
+        // Replace two single quote characters with one single quote character
+        if (substring === "''") return "'";
+        var firstCharacter = substring[0];
+        if (firstCharacter === "'") return $c0a60053e1df89de$var$cleanEscapedString(substring);
+        var formatter = (0, $57d31ba33bacb651$export$2e2bcd8739ae039)[firstCharacter];
+        if (formatter) {
+            if (!(options !== null && options !== void 0 && options.useAdditionalWeekYearTokens) && (0, $7b0a34f600aaab54$export$c6b49d6dceb604a1)(substring)) (0, $7b0a34f600aaab54$export$8073c1ae88f0e727)(substring, dirtyFormatStr, String(dirtyDate));
+            if (!(options !== null && options !== void 0 && options.useAdditionalDayOfYearTokens) && (0, $7b0a34f600aaab54$export$c6cc36aa33304772)(substring)) (0, $7b0a34f600aaab54$export$8073c1ae88f0e727)(substring, dirtyFormatStr, String(dirtyDate));
+            return formatter(utcDate, substring, locale.localize, formatterOptions);
+        }
+        if (firstCharacter.match($c0a60053e1df89de$var$unescapedLatinCharacterRegExp)) throw new RangeError("Format string contains an unescaped latin alphabet character `" + firstCharacter + "`");
+        return substring;
+    }).join("");
+    return result;
+}
+function $c0a60053e1df89de$var$cleanEscapedString(input) {
+    var matched = input.match($c0a60053e1df89de$var$escapedStringRegExp);
+    if (!matched) return input;
+    return matched[1].replace($c0a60053e1df89de$var$doubleQuoteRegExp, "'");
+}
+
+
+
+
+
+
+function $2df4b5ee75220800$export$2e2bcd8739ae039(dirtyDate, options) {
+    var _ref, _ref2, _ref3, _options$weekStartsOn, _options$locale, _options$locale$optio, _defaultOptions$local, _defaultOptions$local2;
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var defaultOptions = (0, $b3eff1e32e4342a0$export$430a3269e24b912e)();
+    var weekStartsOn = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)((_ref = (_ref2 = (_ref3 = (_options$weekStartsOn = options === null || options === void 0 ? void 0 : options.weekStartsOn) !== null && _options$weekStartsOn !== void 0 ? _options$weekStartsOn : options === null || options === void 0 ? void 0 : (_options$locale = options.locale) === null || _options$locale === void 0 ? void 0 : (_options$locale$optio = _options$locale.options) === null || _options$locale$optio === void 0 ? void 0 : _options$locale$optio.weekStartsOn) !== null && _ref3 !== void 0 ? _ref3 : defaultOptions.weekStartsOn) !== null && _ref2 !== void 0 ? _ref2 : (_defaultOptions$local = defaultOptions.locale) === null || _defaultOptions$local === void 0 ? void 0 : (_defaultOptions$local2 = _defaultOptions$local.options) === null || _defaultOptions$local2 === void 0 ? void 0 : _defaultOptions$local2.weekStartsOn) !== null && _ref !== void 0 ? _ref : 0);
+    // Test if weekStartsOn is between 0 and 6 _and_ is not NaN
+    if (!(weekStartsOn >= 0 && weekStartsOn <= 6)) throw new RangeError("weekStartsOn must be between 0 and 6 inclusively");
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var day = date.getDay();
+    var diff = (day < weekStartsOn ? 7 : 0) + day - weekStartsOn;
+    date.setDate(date.getDate() - diff);
+    date.setHours(0, 0, 0, 0);
+    return date;
+}
+
+
+
+function $43fb72b230ef1caa$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    return (0, $2df4b5ee75220800$export$2e2bcd8739ae039)(dirtyDate, {
+        weekStartsOn: 1
+    });
+}
+
+
+
+
+
+function $5ea6539bcc4d3f85$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var year = date.getFullYear();
+    var fourthOfJanuaryOfNextYear = new Date(0);
+    fourthOfJanuaryOfNextYear.setFullYear(year + 1, 0, 4);
+    fourthOfJanuaryOfNextYear.setHours(0, 0, 0, 0);
+    var startOfNextYear = (0, $43fb72b230ef1caa$export$2e2bcd8739ae039)(fourthOfJanuaryOfNextYear);
+    var fourthOfJanuaryOfThisYear = new Date(0);
+    fourthOfJanuaryOfThisYear.setFullYear(year, 0, 4);
+    fourthOfJanuaryOfThisYear.setHours(0, 0, 0, 0);
+    var startOfThisYear = (0, $43fb72b230ef1caa$export$2e2bcd8739ae039)(fourthOfJanuaryOfThisYear);
+    if (date.getTime() >= startOfNextYear.getTime()) return year + 1;
+    else if (date.getTime() >= startOfThisYear.getTime()) return year;
+    else return year - 1;
+}
+
+
+
+
+function $991c3d4dd79b2cbc$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var year = (0, $5ea6539bcc4d3f85$export$2e2bcd8739ae039)(dirtyDate);
+    var fourthOfJanuary = new Date(0);
+    fourthOfJanuary.setFullYear(year, 0, 4);
+    fourthOfJanuary.setHours(0, 0, 0, 0);
+    var date = (0, $43fb72b230ef1caa$export$2e2bcd8739ae039)(fourthOfJanuary);
+    return date;
+}
+
+
+
+var $b1bef26d76e06400$var$MILLISECONDS_IN_WEEK = 604800000;
+function $b1bef26d76e06400$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var diff = (0, $43fb72b230ef1caa$export$2e2bcd8739ae039)(date).getTime() - (0, $991c3d4dd79b2cbc$export$2e2bcd8739ae039)(date).getTime();
+    // Round the number of days to the nearest integer
+    // because the number of milliseconds in a week is not constant
+    // (e.g. it's different in the week of the daylight saving time clock shift)
+    return Math.round(diff / $b1bef26d76e06400$var$MILLISECONDS_IN_WEEK) + 1;
+}
+
+
+
+function $52c856a4e4f4d3e5$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var timestamp = date.getTime();
+    return timestamp;
+}
+
+
+
+function $28dd8ed659462044$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    return Math.floor((0, $52c856a4e4f4d3e5$export$2e2bcd8739ae039)(dirtyDate) / 1000);
+}
+
+
+
+
+
+
+
+function $8b8010a186db615f$export$2e2bcd8739ae039(dirtyDate, options) {
+    var _ref, _ref2, _ref3, _options$firstWeekCon, _options$locale, _options$locale$optio, _defaultOptions$local, _defaultOptions$local2;
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var year = date.getFullYear();
+    var defaultOptions = (0, $b3eff1e32e4342a0$export$430a3269e24b912e)();
+    var firstWeekContainsDate = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)((_ref = (_ref2 = (_ref3 = (_options$firstWeekCon = options === null || options === void 0 ? void 0 : options.firstWeekContainsDate) !== null && _options$firstWeekCon !== void 0 ? _options$firstWeekCon : options === null || options === void 0 ? void 0 : (_options$locale = options.locale) === null || _options$locale === void 0 ? void 0 : (_options$locale$optio = _options$locale.options) === null || _options$locale$optio === void 0 ? void 0 : _options$locale$optio.firstWeekContainsDate) !== null && _ref3 !== void 0 ? _ref3 : defaultOptions.firstWeekContainsDate) !== null && _ref2 !== void 0 ? _ref2 : (_defaultOptions$local = defaultOptions.locale) === null || _defaultOptions$local === void 0 ? void 0 : (_defaultOptions$local2 = _defaultOptions$local.options) === null || _defaultOptions$local2 === void 0 ? void 0 : _defaultOptions$local2.firstWeekContainsDate) !== null && _ref !== void 0 ? _ref : 1);
+    // Test if weekStartsOn is between 1 and 7 _and_ is not NaN
+    if (!(firstWeekContainsDate >= 1 && firstWeekContainsDate <= 7)) throw new RangeError("firstWeekContainsDate must be between 1 and 7 inclusively");
+    var firstWeekOfNextYear = new Date(0);
+    firstWeekOfNextYear.setFullYear(year + 1, 0, firstWeekContainsDate);
+    firstWeekOfNextYear.setHours(0, 0, 0, 0);
+    var startOfNextYear = (0, $2df4b5ee75220800$export$2e2bcd8739ae039)(firstWeekOfNextYear, options);
+    var firstWeekOfThisYear = new Date(0);
+    firstWeekOfThisYear.setFullYear(year, 0, firstWeekContainsDate);
+    firstWeekOfThisYear.setHours(0, 0, 0, 0);
+    var startOfThisYear = (0, $2df4b5ee75220800$export$2e2bcd8739ae039)(firstWeekOfThisYear, options);
+    if (date.getTime() >= startOfNextYear.getTime()) return year + 1;
+    else if (date.getTime() >= startOfThisYear.getTime()) return year;
+    else return year - 1;
+}
+
+
+
+
+
+
+function $60d547ef35418131$export$2e2bcd8739ae039(dirtyDate, options) {
+    var _ref, _ref2, _ref3, _options$firstWeekCon, _options$locale, _options$locale$optio, _defaultOptions$local, _defaultOptions$local2;
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var defaultOptions = (0, $b3eff1e32e4342a0$export$430a3269e24b912e)();
+    var firstWeekContainsDate = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)((_ref = (_ref2 = (_ref3 = (_options$firstWeekCon = options === null || options === void 0 ? void 0 : options.firstWeekContainsDate) !== null && _options$firstWeekCon !== void 0 ? _options$firstWeekCon : options === null || options === void 0 ? void 0 : (_options$locale = options.locale) === null || _options$locale === void 0 ? void 0 : (_options$locale$optio = _options$locale.options) === null || _options$locale$optio === void 0 ? void 0 : _options$locale$optio.firstWeekContainsDate) !== null && _ref3 !== void 0 ? _ref3 : defaultOptions.firstWeekContainsDate) !== null && _ref2 !== void 0 ? _ref2 : (_defaultOptions$local = defaultOptions.locale) === null || _defaultOptions$local === void 0 ? void 0 : (_defaultOptions$local2 = _defaultOptions$local.options) === null || _defaultOptions$local2 === void 0 ? void 0 : _defaultOptions$local2.firstWeekContainsDate) !== null && _ref !== void 0 ? _ref : 1);
+    var year = (0, $8b8010a186db615f$export$2e2bcd8739ae039)(dirtyDate, options);
+    var firstWeek = new Date(0);
+    firstWeek.setFullYear(year, 0, firstWeekContainsDate);
+    firstWeek.setHours(0, 0, 0, 0);
+    var date = (0, $2df4b5ee75220800$export$2e2bcd8739ae039)(firstWeek, options);
+    return date;
+}
+
+
+
+
+var $64bd3bfba020293a$var$MILLISECONDS_IN_WEEK = 604800000;
+function $64bd3bfba020293a$export$2e2bcd8739ae039(dirtyDate, options) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var diff = (0, $2df4b5ee75220800$export$2e2bcd8739ae039)(date, options).getTime() - (0, $60d547ef35418131$export$2e2bcd8739ae039)(date, options).getTime();
+    // Round the number of days to the nearest integer
+    // because the number of milliseconds in a week is not constant
+    // (e.g. it's different in the week of the daylight saving time clock shift)
+    return Math.round(diff / $64bd3bfba020293a$var$MILLISECONDS_IN_WEEK) + 1;
+}
+
+
+
+
+var $9a220504620d9400$var$MILLISECONDS_IN_WEEK = 604800000;
+function $9a220504620d9400$export$2e2bcd8739ae039(dirtyDateLeft, dirtyDateRight, options) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var startOfWeekLeft = (0, $2df4b5ee75220800$export$2e2bcd8739ae039)(dirtyDateLeft, options);
+    var startOfWeekRight = (0, $2df4b5ee75220800$export$2e2bcd8739ae039)(dirtyDateRight, options);
+    var timestampLeft = startOfWeekLeft.getTime() - (0, $90fb3767b2d64474$export$2e2bcd8739ae039)(startOfWeekLeft);
+    var timestampRight = startOfWeekRight.getTime() - (0, $90fb3767b2d64474$export$2e2bcd8739ae039)(startOfWeekRight);
+    // Round the number of days to the nearest integer
+    // because the number of milliseconds in a week is not constant
+    // (e.g. it's different in the week of the daylight saving time clock shift)
+    return Math.round((timestampLeft - timestampRight) / $9a220504620d9400$var$MILLISECONDS_IN_WEEK);
+}
+
+
+
+
+function $ee528df72dfb8374$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var month = date.getMonth();
+    date.setFullYear(date.getFullYear(), month + 1, 0);
+    date.setHours(0, 0, 0, 0);
+    return date;
+}
+
+
+
+
+function $5414d5cc86bb45d3$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    date.setDate(1);
+    date.setHours(0, 0, 0, 0);
+    return date;
+}
+
+
+
+function $4948eb540a22a8bc$export$2e2bcd8739ae039(date, options) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    return (0, $9a220504620d9400$export$2e2bcd8739ae039)((0, $ee528df72dfb8374$export$2e2bcd8739ae039)(date), (0, $5414d5cc86bb45d3$export$2e2bcd8739ae039)(date), options) + 1;
+}
+
+
+
+function $8ea5ab803a6411cd$export$2e2bcd8739ae039(dirtyDate, dirtyDateToCompare) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var dateToCompare = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDateToCompare);
+    return date.getTime() > dateToCompare.getTime();
+}
+
+
+
+function $a2bd70363db746b6$export$2e2bcd8739ae039(dirtyDate, dirtyDateToCompare) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var dateToCompare = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDateToCompare);
+    return date.getTime() < dateToCompare.getTime();
+}
+
+
+
+function $a866727ccd092b8f$export$2e2bcd8739ae039(dirtyDateLeft, dirtyDateRight) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var dateLeftStartOfDay = (0, $09bb7ad4f09c575d$export$2e2bcd8739ae039)(dirtyDateLeft);
+    var dateRightStartOfDay = (0, $09bb7ad4f09c575d$export$2e2bcd8739ae039)(dirtyDateRight);
+    return dateLeftStartOfDay.getTime() === dateRightStartOfDay.getTime();
+}
+
+
+
+function $6a206201f1dba31f$export$2e2bcd8739ae039(dirtyDateLeft, dirtyDateRight) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var dateLeft = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDateLeft);
+    var dateRight = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDateRight);
+    return dateLeft.getFullYear() === dateRight.getFullYear() && dateLeft.getMonth() === dateRight.getMonth();
+}
+
+
+
+function $f5b7167297778ce6$export$2e2bcd8739ae039(dirtyDateLeft, dirtyDateRight) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var dateLeft = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDateLeft);
+    var dateRight = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDateRight);
+    return dateLeft.getFullYear() === dateRight.getFullYear();
+}
+
+
+
+
+function $bc2f3de3cd4d49c9$export$2e2bcd8739ae039(dirtyDatesArray) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var datesArray;
+    // `dirtyDatesArray` is Array, Set or Map, or object with custom `forEach` method
+    if (dirtyDatesArray && typeof dirtyDatesArray.forEach === "function") datesArray = dirtyDatesArray;
+    else if ((0, $b4ed4f713665a055$export$2e2bcd8739ae039)(dirtyDatesArray) === "object" && dirtyDatesArray !== null) datesArray = Array.prototype.slice.call(dirtyDatesArray);
+    else // `dirtyDatesArray` is non-iterable, return Invalid Date
+    return new Date(NaN);
+    var result;
+    datesArray.forEach(function(dirtyDate) {
+        var currentDate = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+        if (result === undefined || result < currentDate || isNaN(Number(currentDate))) result = currentDate;
+    });
+    return result || new Date(NaN);
+}
+
+
+
+
+function $9c360d1e505296c0$export$2e2bcd8739ae039(dirtyDatesArray) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var datesArray;
+    // `dirtyDatesArray` is Array, Set or Map, or object with custom `forEach` method
+    if (dirtyDatesArray && typeof dirtyDatesArray.forEach === "function") datesArray = dirtyDatesArray;
+    else if ((0, $b4ed4f713665a055$export$2e2bcd8739ae039)(dirtyDatesArray) === "object" && dirtyDatesArray !== null) datesArray = Array.prototype.slice.call(dirtyDatesArray);
+    else // `dirtyDatesArray` is non-iterable, return Invalid Date
+    return new Date(NaN);
+    var result;
+    datesArray.forEach(function(dirtyDate) {
+        var currentDate = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+        if (result === undefined || result > currentDate || isNaN(currentDate.getDate())) result = currentDate;
+    });
+    return result || new Date(NaN);
+}
+
+
+function $1a2faff41423fbe2$export$2e2bcd8739ae039(arr, len) {
+    if (len == null || len > arr.length) len = arr.length;
+    for(var i = 0, arr2 = new Array(len); i < len; i++)arr2[i] = arr[i];
+    return arr2;
+}
+
+
+function $6005d41b9183f33d$export$2e2bcd8739ae039(o, minLen) {
+    if (!o) return;
+    if (typeof o === "string") return (0, $1a2faff41423fbe2$export$2e2bcd8739ae039)(o, minLen);
+    var n = Object.prototype.toString.call(o).slice(8, -1);
+    if (n === "Object" && o.constructor) n = o.constructor.name;
+    if (n === "Map" || n === "Set") return Array.from(o);
+    if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return (0, $1a2faff41423fbe2$export$2e2bcd8739ae039)(o, minLen);
+}
+
+
+function $1c1acfcc5d66a374$export$2e2bcd8739ae039(o, allowArrayLike) {
+    var it = typeof Symbol !== "undefined" && o[Symbol.iterator] || o["@@iterator"];
+    if (!it) {
+        if (Array.isArray(o) || (it = (0, $6005d41b9183f33d$export$2e2bcd8739ae039)(o)) || allowArrayLike && o && typeof o.length === "number") {
+            if (it) o = it;
+            var i = 0;
+            var F = function F() {};
+            return {
+                s: F,
+                n: function n() {
+                    if (i >= o.length) return {
+                        done: true
+                    };
+                    return {
+                        done: false,
+                        value: o[i++]
+                    };
+                },
+                e: function e(_e) {
+                    throw _e;
+                },
+                f: F
+            };
+        }
+        throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
+    }
+    var normalCompletion = true, didErr = false, err;
+    return {
+        s: function s() {
+            it = it.call(o);
+        },
+        n: function n() {
+            var step = it.next();
+            normalCompletion = step.done;
+            return step;
+        },
+        e: function e(_e2) {
+            didErr = true;
+            err = _e2;
+        },
+        f: function f() {
+            try {
+                if (!normalCompletion && it["return"] != null) it["return"]();
+            } finally{
+                if (didErr) throw err;
+            }
+        }
+    };
+}
+
+
+
+
+
+function $0e10b21992f80b56$export$2e2bcd8739ae039(target, object) {
+    if (target == null) throw new TypeError("assign requires that input parameter not be null or undefined");
+    for(var property in object)if (Object.prototype.hasOwnProperty.call(object, property)) target[property] = object[property];
+    return target;
+}
+
+
+
+
+
+
+
+function $802d99efb9813d8e$export$2e2bcd8739ae039(self) {
+    if (self === void 0) throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
+    return self;
+}
+
+
+function $dcc8d2f0e731b484$export$2e2bcd8739ae039(o, p) {
+    $dcc8d2f0e731b484$export$2e2bcd8739ae039 = Object.setPrototypeOf ? Object.setPrototypeOf.bind() : function _setPrototypeOf(o, p) {
+        o.__proto__ = p;
+        return o;
+    };
+    return $dcc8d2f0e731b484$export$2e2bcd8739ae039(o, p);
+}
+
+
+function $e701166c449f015b$export$2e2bcd8739ae039(subClass, superClass) {
+    if (typeof superClass !== "function" && superClass !== null) throw new TypeError("Super expression must either be null or a function");
+    subClass.prototype = Object.create(superClass && superClass.prototype, {
+        constructor: {
+            value: subClass,
+            writable: true,
+            configurable: true
+        }
+    });
+    Object.defineProperty(subClass, "prototype", {
+        writable: false
+    });
+    if (superClass) (0, $dcc8d2f0e731b484$export$2e2bcd8739ae039)(subClass, superClass);
+}
+
+
+function $9335772c5502d670$export$2e2bcd8739ae039(o) {
+    $9335772c5502d670$export$2e2bcd8739ae039 = Object.setPrototypeOf ? Object.getPrototypeOf.bind() : function _getPrototypeOf(o) {
+        return o.__proto__ || Object.getPrototypeOf(o);
+    };
+    return $9335772c5502d670$export$2e2bcd8739ae039(o);
+}
+
+
+function $79188730e672f316$export$2e2bcd8739ae039() {
+    if (typeof Reflect === "undefined" || !Reflect.construct) return false;
+    if (Reflect.construct.sham) return false;
+    if (typeof Proxy === "function") return true;
+    try {
+        Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function() {}));
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+
+
+
+function $eedfcb52bebe7426$export$2e2bcd8739ae039(self, call) {
+    if (call && ((0, $b4ed4f713665a055$export$2e2bcd8739ae039)(call) === "object" || typeof call === "function")) return call;
+    else if (call !== void 0) throw new TypeError("Derived constructors may only return object or undefined");
+    return (0, $802d99efb9813d8e$export$2e2bcd8739ae039)(self);
+}
+
+
+function $122a5980f25b6c3e$export$2e2bcd8739ae039(Derived) {
+    var hasNativeReflectConstruct = (0, $79188730e672f316$export$2e2bcd8739ae039)();
+    return function _createSuperInternal() {
+        var Super = (0, $9335772c5502d670$export$2e2bcd8739ae039)(Derived), result;
+        if (hasNativeReflectConstruct) {
+            var NewTarget = (0, $9335772c5502d670$export$2e2bcd8739ae039)(this).constructor;
+            result = Reflect.construct(Super, arguments, NewTarget);
+        } else result = Super.apply(this, arguments);
+        return (0, $eedfcb52bebe7426$export$2e2bcd8739ae039)(this, result);
+    };
+}
+
+
+function $5c447d601d5ad977$export$2e2bcd8739ae039(instance, Constructor) {
+    if (!(instance instanceof Constructor)) throw new TypeError("Cannot call a class as a function");
+}
+
+
+
+
+function $1f40d3b36cb17203$export$2e2bcd8739ae039(input, hint) {
+    if ((0, $b4ed4f713665a055$export$2e2bcd8739ae039)(input) !== "object" || input === null) return input;
+    var prim = input[Symbol.toPrimitive];
+    if (prim !== undefined) {
+        var res = prim.call(input, hint || "default");
+        if ((0, $b4ed4f713665a055$export$2e2bcd8739ae039)(res) !== "object") return res;
+        throw new TypeError("@@toPrimitive must return a primitive value.");
+    }
+    return (hint === "string" ? String : Number)(input);
+}
+
+
+function $23a820dd48327c6f$export$2e2bcd8739ae039(arg) {
+    var key = (0, $1f40d3b36cb17203$export$2e2bcd8739ae039)(arg, "string");
+    return (0, $b4ed4f713665a055$export$2e2bcd8739ae039)(key) === "symbol" ? key : String(key);
+}
+
+
+function $d4340767544618bb$var$_defineProperties(target, props) {
+    for(var i = 0; i < props.length; i++){
+        var descriptor = props[i];
+        descriptor.enumerable = descriptor.enumerable || false;
+        descriptor.configurable = true;
+        if ("value" in descriptor) descriptor.writable = true;
+        Object.defineProperty(target, (0, $23a820dd48327c6f$export$2e2bcd8739ae039)(descriptor.key), descriptor);
+    }
+}
+function $d4340767544618bb$export$2e2bcd8739ae039(Constructor, protoProps, staticProps) {
+    if (protoProps) $d4340767544618bb$var$_defineProperties(Constructor.prototype, protoProps);
+    if (staticProps) $d4340767544618bb$var$_defineProperties(Constructor, staticProps);
+    Object.defineProperty(Constructor, "prototype", {
+        writable: false
+    });
+    return Constructor;
+}
+
+
+
+function $0c7a129f02c6b3e1$export$2e2bcd8739ae039(obj, key, value) {
+    key = (0, $23a820dd48327c6f$export$2e2bcd8739ae039)(key);
+    if (key in obj) Object.defineProperty(obj, key, {
+        value: value,
+        enumerable: true,
+        configurable: true,
+        writable: true
+    });
+    else obj[key] = value;
+    return obj;
+}
+
+
+var $9f98cd039ca2f702$var$TIMEZONE_UNIT_PRIORITY = 10;
+var $9f98cd039ca2f702$export$81d53e3678089a6 = /*#__PURE__*/ function() {
+    function Setter() {
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, Setter);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)(this, "priority", void 0);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)(this, "subPriority", 0);
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(Setter, [
+        {
+            key: "validate",
+            value: function validate(_utcDate, _options) {
+                return true;
+            }
+        }
+    ]);
+    return Setter;
+}();
+var $9f98cd039ca2f702$export$9a09e32dd4990fd5 = /*#__PURE__*/ function(_Setter) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(ValueSetter, _Setter);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(ValueSetter);
+    function ValueSetter(value, validateValue, setValue, priority, subPriority) {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, ValueSetter);
+        _this = _super.call(this);
+        _this.value = value;
+        _this.validateValue = validateValue;
+        _this.setValue = setValue;
+        _this.priority = priority;
+        if (subPriority) _this.subPriority = subPriority;
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(ValueSetter, [
+        {
+            key: "validate",
+            value: function validate(utcDate, options) {
+                return this.validateValue(utcDate, this.value, options);
+            }
+        },
+        {
+            key: "set",
+            value: function set(utcDate, flags, options) {
+                return this.setValue(utcDate, flags, this.value, options);
+            }
+        }
+    ]);
+    return ValueSetter;
+}($9f98cd039ca2f702$export$81d53e3678089a6);
+var $9f98cd039ca2f702$export$5aaf7ff7f09ea4ee = /*#__PURE__*/ function(_Setter2) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(DateToSystemTimezoneSetter, _Setter2);
+    var _super2 = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(DateToSystemTimezoneSetter);
+    function DateToSystemTimezoneSetter() {
+        var _this2;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, DateToSystemTimezoneSetter);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this2 = _super2.call.apply(_super2, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this2), "priority", $9f98cd039ca2f702$var$TIMEZONE_UNIT_PRIORITY);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this2), "subPriority", -1);
+        return _this2;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(DateToSystemTimezoneSetter, [
+        {
+            key: "set",
+            value: function set(date, flags) {
+                if (flags.timestampIsSet) return date;
+                var convertedDate = new Date(0);
+                convertedDate.setFullYear(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+                convertedDate.setHours(date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds(), date.getUTCMilliseconds());
+                return convertedDate;
+            }
+        }
+    ]);
+    return DateToSystemTimezoneSetter;
+}($9f98cd039ca2f702$export$81d53e3678089a6);
+
+
+
+
+
+
+
+
+
+
+
+
+var $02bebf8323dab822$export$7acfa6ed01010e37 = /*#__PURE__*/ function() {
+    function Parser() {
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, Parser);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)(this, "incompatibleTokens", void 0);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)(this, "priority", void 0);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)(this, "subPriority", void 0);
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(Parser, [
+        {
+            key: "run",
+            value: function run(dateString, token, match, options) {
+                var result = this.parse(dateString, token, match, options);
+                if (!result) return null;
+                return {
+                    setter: new (0, $9f98cd039ca2f702$export$9a09e32dd4990fd5)(result.value, this.validate, this.set, this.priority, this.subPriority),
+                    rest: result.rest
+                };
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_utcDate, _value, _options) {
+                return true;
+            }
+        }
+    ]);
+    return Parser;
+}();
+
+
+var $e0263b0fc7a3abe5$export$8e5a1d3f85a9688 = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(EraParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(EraParser);
+    function EraParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, EraParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 140);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "R",
+            "u",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(EraParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                switch(token){
+                    // AD, BC
+                    case "G":
+                    case "GG":
+                    case "GGG":
+                        return match.era(dateString, {
+                            width: "abbreviated"
+                        }) || match.era(dateString, {
+                            width: "narrow"
+                        });
+                    // A, B
+                    case "GGGGG":
+                        return match.era(dateString, {
+                            width: "narrow"
+                        });
+                    // Anno Domini, Before Christ
+                    case "GGGG":
+                    default:
+                        return match.era(dateString, {
+                            width: "wide"
+                        }) || match.era(dateString, {
+                            width: "abbreviated"
+                        }) || match.era(dateString, {
+                            width: "narrow"
+                        });
+                }
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, flags, value) {
+                flags.era = value;
+                date.setUTCFullYear(value, 0, 1);
+                date.setUTCHours(0, 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return EraParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+/**
+ * Days in 1 week.
+ *
+ * @name daysInWeek
+ * @constant
+ * @type {number}
+ * @default
+ */ var $c84ff967f4381a45$export$dfd9b671c89acc8e = 7;
+var $c84ff967f4381a45$export$3913210603d8e9ae = 365.2425;
+var $c84ff967f4381a45$export$81caae6e1cc7a622 = Math.pow(10, 8) * 86400000;
+var $c84ff967f4381a45$export$91246f0b9bd9beff = 60000;
+var $c84ff967f4381a45$export$7f72910d6dfd237a = 3600000;
+var $c84ff967f4381a45$export$397c2d5776aa9055 = 1000;
+var $c84ff967f4381a45$export$4dec998e48f9c246 = -$c84ff967f4381a45$export$81caae6e1cc7a622;
+var $c84ff967f4381a45$export$f2f5ae5a8e2d8f9f = 60;
+var $c84ff967f4381a45$export$3c58128db900d44e = 3;
+var $c84ff967f4381a45$export$80d7e435f744f319 = 12;
+var $c84ff967f4381a45$export$4db7641526e3241f = 4;
+var $c84ff967f4381a45$export$698aec755e92c695 = 3600;
+var $c84ff967f4381a45$export$a77c1a7ebebe2a5a = 60;
+var $c84ff967f4381a45$export$815a9362476d2fe3 = $c84ff967f4381a45$export$698aec755e92c695 * 24;
+var $c84ff967f4381a45$export$34804a017b31e2fe = $c84ff967f4381a45$export$815a9362476d2fe3 * 7;
+var $c84ff967f4381a45$export$7271e9e3478110d1 = $c84ff967f4381a45$export$815a9362476d2fe3 * $c84ff967f4381a45$export$3913210603d8e9ae;
+var $c84ff967f4381a45$export$8e6600bbdee7dabb = $c84ff967f4381a45$export$7271e9e3478110d1 / 12;
+var $c84ff967f4381a45$export$be1dccf2de902d31 = $c84ff967f4381a45$export$8e6600bbdee7dabb * 3;
+
+
+var $3c0d4344655587e1$export$c123ee06d9da8480 = {
+    month: /^(1[0-2]|0?\d)/,
+    // 0 to 12
+    date: /^(3[0-1]|[0-2]?\d)/,
+    // 0 to 31
+    dayOfYear: /^(36[0-6]|3[0-5]\d|[0-2]?\d?\d)/,
+    // 0 to 366
+    week: /^(5[0-3]|[0-4]?\d)/,
+    // 0 to 53
+    hour23h: /^(2[0-3]|[0-1]?\d)/,
+    // 0 to 23
+    hour24h: /^(2[0-4]|[0-1]?\d)/,
+    // 0 to 24
+    hour11h: /^(1[0-1]|0?\d)/,
+    // 0 to 11
+    hour12h: /^(1[0-2]|0?\d)/,
+    // 0 to 12
+    minute: /^[0-5]?\d/,
+    // 0 to 59
+    second: /^[0-5]?\d/,
+    // 0 to 59
+    singleDigit: /^\d/,
+    // 0 to 9
+    twoDigits: /^\d{1,2}/,
+    // 0 to 99
+    threeDigits: /^\d{1,3}/,
+    // 0 to 999
+    fourDigits: /^\d{1,4}/,
+    // 0 to 9999
+    anyDigitsSigned: /^-?\d+/,
+    singleDigitSigned: /^-?\d/,
+    // 0 to 9, -0 to -9
+    twoDigitsSigned: /^-?\d{1,2}/,
+    // 0 to 99, -0 to -99
+    threeDigitsSigned: /^-?\d{1,3}/,
+    // 0 to 999, -0 to -999
+    fourDigitsSigned: /^-?\d{1,4}/ // 0 to 9999, -0 to -9999
+};
+var $3c0d4344655587e1$export$a7ee192b982af9c1 = {
+    basicOptionalMinutes: /^([+-])(\d{2})(\d{2})?|Z/,
+    basic: /^([+-])(\d{2})(\d{2})|Z/,
+    basicOptionalSeconds: /^([+-])(\d{2})(\d{2})((\d{2}))?|Z/,
+    extended: /^([+-])(\d{2}):(\d{2})|Z/,
+    extendedOptionalSeconds: /^([+-])(\d{2}):(\d{2})(:(\d{2}))?|Z/
+};
+
+
+function $e0a82a0c16c4b0b5$export$4f84e3a82c7b538(parseFnResult, mapFn) {
+    if (!parseFnResult) return parseFnResult;
+    return {
+        value: mapFn(parseFnResult.value),
+        rest: parseFnResult.rest
+    };
+}
+function $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388(pattern, dateString) {
+    var matchResult = dateString.match(pattern);
+    if (!matchResult) return null;
+    return {
+        value: parseInt(matchResult[0], 10),
+        rest: dateString.slice(matchResult[0].length)
+    };
+}
+function $e0a82a0c16c4b0b5$export$6497f4c0ecdfba8e(pattern, dateString) {
+    var matchResult = dateString.match(pattern);
+    if (!matchResult) return null;
+    // Input is 'Z'
+    if (matchResult[0] === "Z") return {
+        value: 0,
+        rest: dateString.slice(1)
+    };
+    var sign = matchResult[1] === "+" ? 1 : -1;
+    var hours = matchResult[2] ? parseInt(matchResult[2], 10) : 0;
+    var minutes = matchResult[3] ? parseInt(matchResult[3], 10) : 0;
+    var seconds = matchResult[5] ? parseInt(matchResult[5], 10) : 0;
+    return {
+        value: sign * (hours * (0, $c84ff967f4381a45$export$7f72910d6dfd237a) + minutes * (0, $c84ff967f4381a45$export$91246f0b9bd9beff) + seconds * (0, $c84ff967f4381a45$export$397c2d5776aa9055)),
+        rest: dateString.slice(matchResult[0].length)
+    };
+}
+function $e0a82a0c16c4b0b5$export$d931c43c4608a164(dateString) {
+    return $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388((0, $3c0d4344655587e1$export$c123ee06d9da8480).anyDigitsSigned, dateString);
+}
+function $e0a82a0c16c4b0b5$export$513bb01536146ab6(n, dateString) {
+    switch(n){
+        case 1:
+            return $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388((0, $3c0d4344655587e1$export$c123ee06d9da8480).singleDigit, dateString);
+        case 2:
+            return $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388((0, $3c0d4344655587e1$export$c123ee06d9da8480).twoDigits, dateString);
+        case 3:
+            return $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388((0, $3c0d4344655587e1$export$c123ee06d9da8480).threeDigits, dateString);
+        case 4:
+            return $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388((0, $3c0d4344655587e1$export$c123ee06d9da8480).fourDigits, dateString);
+        default:
+            return $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388(new RegExp("^\\d{1," + n + "}"), dateString);
+    }
+}
+function $e0a82a0c16c4b0b5$export$2c9307b2e29c533c(n, dateString) {
+    switch(n){
+        case 1:
+            return $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388((0, $3c0d4344655587e1$export$c123ee06d9da8480).singleDigitSigned, dateString);
+        case 2:
+            return $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388((0, $3c0d4344655587e1$export$c123ee06d9da8480).twoDigitsSigned, dateString);
+        case 3:
+            return $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388((0, $3c0d4344655587e1$export$c123ee06d9da8480).threeDigitsSigned, dateString);
+        case 4:
+            return $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388((0, $3c0d4344655587e1$export$c123ee06d9da8480).fourDigitsSigned, dateString);
+        default:
+            return $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388(new RegExp("^-?\\d{1," + n + "}"), dateString);
+    }
+}
+function $e0a82a0c16c4b0b5$export$fb506d2676e7f207(dayPeriod) {
+    switch(dayPeriod){
+        case "morning":
+            return 4;
+        case "evening":
+            return 17;
+        case "pm":
+        case "noon":
+        case "afternoon":
+            return 12;
+        case "am":
+        case "midnight":
+        case "night":
+        default:
+            return 0;
+    }
+}
+function $e0a82a0c16c4b0b5$export$29126f735cbf69f7(twoDigitYear, currentYear) {
+    var isCommonEra = currentYear > 0;
+    // Absolute number of the current year:
+    // 1 -> 1 AC
+    // 0 -> 1 BC
+    // -1 -> 2 BC
+    var absCurrentYear = isCommonEra ? currentYear : 1 - currentYear;
+    var result;
+    if (absCurrentYear <= 50) result = twoDigitYear || 100;
+    else {
+        var rangeEnd = absCurrentYear + 50;
+        var rangeEndCentury = Math.floor(rangeEnd / 100) * 100;
+        var isPreviousCentury = twoDigitYear >= rangeEnd % 100;
+        result = twoDigitYear + rangeEndCentury - (isPreviousCentury ? 100 : 0);
+    }
+    return isCommonEra ? result : 1 - result;
+}
+function $e0a82a0c16c4b0b5$export$3d50627710b84d75(year) {
+    return year % 400 === 0 || year % 4 === 0 && year % 100 !== 0;
+}
+
+
+var $5a39bcfa7efa4851$export$48d352de7cd4a988 = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(YearParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(YearParser);
+    function YearParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, YearParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 130);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "Y",
+            "R",
+            "u",
+            "w",
+            "I",
+            "i",
+            "e",
+            "c",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(YearParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                var valueCallback = function valueCallback(year) {
+                    return {
+                        year: year,
+                        isTwoDigitYear: token === "yy"
+                    };
+                };
+                switch(token){
+                    case "y":
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)((0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(4, dateString), valueCallback);
+                    case "yo":
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)(match.ordinalNumber(dateString, {
+                            unit: "year"
+                        }), valueCallback);
+                    default:
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)((0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(token.length, dateString), valueCallback);
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_date, value) {
+                return value.isTwoDigitYear || value.year > 0;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, flags, value) {
+                var currentYear = date.getUTCFullYear();
+                if (value.isTwoDigitYear) {
+                    var normalizedTwoDigitYear = (0, $e0a82a0c16c4b0b5$export$29126f735cbf69f7)(value.year, currentYear);
+                    date.setUTCFullYear(normalizedTwoDigitYear, 0, 1);
+                    date.setUTCHours(0, 0, 0, 0);
+                    return date;
+                }
+                var year = !("era" in flags) || flags.era === 1 ? value.year : 1 - value.year;
+                date.setUTCFullYear(year, 0, 1);
+                date.setUTCHours(0, 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return YearParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+
+var $72197dceee227076$export$b8ef38dfcf05d5db = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(LocalWeekYearParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(LocalWeekYearParser);
+    function LocalWeekYearParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, LocalWeekYearParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 130);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "y",
+            "R",
+            "u",
+            "Q",
+            "q",
+            "M",
+            "L",
+            "I",
+            "d",
+            "D",
+            "i",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(LocalWeekYearParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                var valueCallback = function valueCallback(year) {
+                    return {
+                        year: year,
+                        isTwoDigitYear: token === "YY"
+                    };
+                };
+                switch(token){
+                    case "Y":
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)((0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(4, dateString), valueCallback);
+                    case "Yo":
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)(match.ordinalNumber(dateString, {
+                            unit: "year"
+                        }), valueCallback);
+                    default:
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)((0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(token.length, dateString), valueCallback);
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_date, value) {
+                return value.isTwoDigitYear || value.year > 0;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, flags, value, options) {
+                var currentYear = (0, $44b7861f0e4b97d2$export$2e2bcd8739ae039)(date, options);
+                if (value.isTwoDigitYear) {
+                    var normalizedTwoDigitYear = (0, $e0a82a0c16c4b0b5$export$29126f735cbf69f7)(value.year, currentYear);
+                    date.setUTCFullYear(normalizedTwoDigitYear, 0, options.firstWeekContainsDate);
+                    date.setUTCHours(0, 0, 0, 0);
+                    return (0, $2e75c603fad4a565$export$2e2bcd8739ae039)(date, options);
+                }
+                var year = !("era" in flags) || flags.era === 1 ? value.year : 1 - value.year;
+                date.setUTCFullYear(year, 0, options.firstWeekContainsDate);
+                date.setUTCHours(0, 0, 0, 0);
+                return (0, $2e75c603fad4a565$export$2e2bcd8739ae039)(date, options);
+            }
+        }
+    ]);
+    return LocalWeekYearParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+var $d9485e93731d71d5$export$951d1df011fde06f = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(ISOWeekYearParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(ISOWeekYearParser);
+    function ISOWeekYearParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, ISOWeekYearParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 130);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "G",
+            "y",
+            "Y",
+            "u",
+            "Q",
+            "q",
+            "M",
+            "L",
+            "w",
+            "d",
+            "D",
+            "e",
+            "c",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(ISOWeekYearParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token) {
+                if (token === "R") return (0, $e0a82a0c16c4b0b5$export$2c9307b2e29c533c)(4, dateString);
+                return (0, $e0a82a0c16c4b0b5$export$2c9307b2e29c533c)(token.length, dateString);
+            }
+        },
+        {
+            key: "set",
+            value: function set(_date, _flags, value) {
+                var firstWeekOfYear = new Date(0);
+                firstWeekOfYear.setUTCFullYear(value, 0, 4);
+                firstWeekOfYear.setUTCHours(0, 0, 0, 0);
+                return (0, $3fe41f97b9b4f3b6$export$2e2bcd8739ae039)(firstWeekOfYear);
+            }
+        }
+    ]);
+    return ISOWeekYearParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+var $0b013889cd30b8c3$export$bad9d2ea38e8f1a = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(ExtendedYearParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(ExtendedYearParser);
+    function ExtendedYearParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, ExtendedYearParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 130);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "G",
+            "y",
+            "Y",
+            "R",
+            "w",
+            "I",
+            "i",
+            "e",
+            "c",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(ExtendedYearParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token) {
+                if (token === "u") return (0, $e0a82a0c16c4b0b5$export$2c9307b2e29c533c)(4, dateString);
+                return (0, $e0a82a0c16c4b0b5$export$2c9307b2e29c533c)(token.length, dateString);
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                date.setUTCFullYear(value, 0, 1);
+                date.setUTCHours(0, 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return ExtendedYearParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+var $8d188d931a1f8fe2$export$5cb0f701186dde1d = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(QuarterParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(QuarterParser);
+    function QuarterParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, QuarterParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 120);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "Y",
+            "R",
+            "q",
+            "M",
+            "L",
+            "w",
+            "I",
+            "d",
+            "D",
+            "i",
+            "e",
+            "c",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(QuarterParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                switch(token){
+                    // 1, 2, 3, 4
+                    case "Q":
+                    case "QQ":
+                        // 01, 02, 03, 04
+                        return (0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(token.length, dateString);
+                    // 1st, 2nd, 3rd, 4th
+                    case "Qo":
+                        return match.ordinalNumber(dateString, {
+                            unit: "quarter"
+                        });
+                    // Q1, Q2, Q3, Q4
+                    case "QQQ":
+                        return match.quarter(dateString, {
+                            width: "abbreviated",
+                            context: "formatting"
+                        }) || match.quarter(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                    // 1, 2, 3, 4 (narrow quarter; could be not numerical)
+                    case "QQQQQ":
+                        return match.quarter(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                    // 1st quarter, 2nd quarter, ...
+                    case "QQQQ":
+                    default:
+                        return match.quarter(dateString, {
+                            width: "wide",
+                            context: "formatting"
+                        }) || match.quarter(dateString, {
+                            width: "abbreviated",
+                            context: "formatting"
+                        }) || match.quarter(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_date, value) {
+                return value >= 1 && value <= 4;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                date.setUTCMonth((value - 1) * 3, 1);
+                date.setUTCHours(0, 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return QuarterParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+var $d4b290e5c6e40db3$export$300c0c2990e20e6d = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(StandAloneQuarterParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(StandAloneQuarterParser);
+    function StandAloneQuarterParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, StandAloneQuarterParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 120);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "Y",
+            "R",
+            "Q",
+            "M",
+            "L",
+            "w",
+            "I",
+            "d",
+            "D",
+            "i",
+            "e",
+            "c",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(StandAloneQuarterParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                switch(token){
+                    // 1, 2, 3, 4
+                    case "q":
+                    case "qq":
+                        // 01, 02, 03, 04
+                        return (0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(token.length, dateString);
+                    // 1st, 2nd, 3rd, 4th
+                    case "qo":
+                        return match.ordinalNumber(dateString, {
+                            unit: "quarter"
+                        });
+                    // Q1, Q2, Q3, Q4
+                    case "qqq":
+                        return match.quarter(dateString, {
+                            width: "abbreviated",
+                            context: "standalone"
+                        }) || match.quarter(dateString, {
+                            width: "narrow",
+                            context: "standalone"
+                        });
+                    // 1, 2, 3, 4 (narrow quarter; could be not numerical)
+                    case "qqqqq":
+                        return match.quarter(dateString, {
+                            width: "narrow",
+                            context: "standalone"
+                        });
+                    // 1st quarter, 2nd quarter, ...
+                    case "qqqq":
+                    default:
+                        return match.quarter(dateString, {
+                            width: "wide",
+                            context: "standalone"
+                        }) || match.quarter(dateString, {
+                            width: "abbreviated",
+                            context: "standalone"
+                        }) || match.quarter(dateString, {
+                            width: "narrow",
+                            context: "standalone"
+                        });
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_date, value) {
+                return value >= 1 && value <= 4;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                date.setUTCMonth((value - 1) * 3, 1);
+                date.setUTCHours(0, 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return StandAloneQuarterParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+var $3f39acde61d867f4$export$400dd8b40ef138a3 = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(MonthParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(MonthParser);
+    function MonthParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, MonthParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "Y",
+            "R",
+            "q",
+            "Q",
+            "L",
+            "w",
+            "I",
+            "D",
+            "i",
+            "e",
+            "c",
+            "t",
+            "T"
+        ]);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 110);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(MonthParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                var valueCallback = function valueCallback(value) {
+                    return value - 1;
+                };
+                switch(token){
+                    // 1, 2, ..., 12
+                    case "M":
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)((0, $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388)((0, $3c0d4344655587e1$export$c123ee06d9da8480).month, dateString), valueCallback);
+                    // 01, 02, ..., 12
+                    case "MM":
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)((0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(2, dateString), valueCallback);
+                    // 1st, 2nd, ..., 12th
+                    case "Mo":
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)(match.ordinalNumber(dateString, {
+                            unit: "month"
+                        }), valueCallback);
+                    // Jan, Feb, ..., Dec
+                    case "MMM":
+                        return match.month(dateString, {
+                            width: "abbreviated",
+                            context: "formatting"
+                        }) || match.month(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                    // J, F, ..., D
+                    case "MMMMM":
+                        return match.month(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                    // January, February, ..., December
+                    case "MMMM":
+                    default:
+                        return match.month(dateString, {
+                            width: "wide",
+                            context: "formatting"
+                        }) || match.month(dateString, {
+                            width: "abbreviated",
+                            context: "formatting"
+                        }) || match.month(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_date, value) {
+                return value >= 0 && value <= 11;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                date.setUTCMonth(value, 1);
+                date.setUTCHours(0, 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return MonthParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+var $25632283d7ca5046$export$1d7eaa53eaa5deba = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(StandAloneMonthParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(StandAloneMonthParser);
+    function StandAloneMonthParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, StandAloneMonthParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 110);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "Y",
+            "R",
+            "q",
+            "Q",
+            "M",
+            "w",
+            "I",
+            "D",
+            "i",
+            "e",
+            "c",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(StandAloneMonthParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                var valueCallback = function valueCallback(value) {
+                    return value - 1;
+                };
+                switch(token){
+                    // 1, 2, ..., 12
+                    case "L":
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)((0, $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388)((0, $3c0d4344655587e1$export$c123ee06d9da8480).month, dateString), valueCallback);
+                    // 01, 02, ..., 12
+                    case "LL":
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)((0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(2, dateString), valueCallback);
+                    // 1st, 2nd, ..., 12th
+                    case "Lo":
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)(match.ordinalNumber(dateString, {
+                            unit: "month"
+                        }), valueCallback);
+                    // Jan, Feb, ..., Dec
+                    case "LLL":
+                        return match.month(dateString, {
+                            width: "abbreviated",
+                            context: "standalone"
+                        }) || match.month(dateString, {
+                            width: "narrow",
+                            context: "standalone"
+                        });
+                    // J, F, ..., D
+                    case "LLLLL":
+                        return match.month(dateString, {
+                            width: "narrow",
+                            context: "standalone"
+                        });
+                    // January, February, ..., December
+                    case "LLLL":
+                    default:
+                        return match.month(dateString, {
+                            width: "wide",
+                            context: "standalone"
+                        }) || match.month(dateString, {
+                            width: "abbreviated",
+                            context: "standalone"
+                        }) || match.month(dateString, {
+                            width: "narrow",
+                            context: "standalone"
+                        });
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_date, value) {
+                return value >= 0 && value <= 11;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                date.setUTCMonth(value, 1);
+                date.setUTCHours(0, 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return StandAloneMonthParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function $b6704dbd09fc1348$export$2e2bcd8739ae039(dirtyDate, dirtyWeek, options) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var week = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)(dirtyWeek);
+    var diff = (0, $51171cf749573388$export$2e2bcd8739ae039)(date, options) - week;
+    date.setUTCDate(date.getUTCDate() - diff * 7);
+    return date;
+}
+
+
+
+var $ea2c2270f6f49c68$export$c4005ffc174e07c0 = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(LocalWeekParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(LocalWeekParser);
+    function LocalWeekParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, LocalWeekParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 100);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "y",
+            "R",
+            "u",
+            "q",
+            "Q",
+            "M",
+            "L",
+            "I",
+            "d",
+            "D",
+            "i",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(LocalWeekParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                switch(token){
+                    case "w":
+                        return (0, $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388)((0, $3c0d4344655587e1$export$c123ee06d9da8480).week, dateString);
+                    case "wo":
+                        return match.ordinalNumber(dateString, {
+                            unit: "week"
+                        });
+                    default:
+                        return (0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(token.length, dateString);
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_date, value) {
+                return value >= 1 && value <= 53;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value, options) {
+                return (0, $2e75c603fad4a565$export$2e2bcd8739ae039)((0, $b6704dbd09fc1348$export$2e2bcd8739ae039)(date, value, options), options);
+            }
+        }
+    ]);
+    return LocalWeekParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function $2472c3d845976aec$export$2e2bcd8739ae039(dirtyDate, dirtyISOWeek) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var isoWeek = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)(dirtyISOWeek);
+    var diff = (0, $9ce40eb1dd13dbc7$export$2e2bcd8739ae039)(date) - isoWeek;
+    date.setUTCDate(date.getUTCDate() - diff * 7);
+    return date;
+}
+
+
+
+var $ea4314e4eac27d32$export$6fc8dbedd560a6af = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(ISOWeekParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(ISOWeekParser);
+    function ISOWeekParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, ISOWeekParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 100);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "y",
+            "Y",
+            "u",
+            "q",
+            "Q",
+            "M",
+            "L",
+            "w",
+            "d",
+            "D",
+            "e",
+            "c",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(ISOWeekParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                switch(token){
+                    case "I":
+                        return (0, $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388)((0, $3c0d4344655587e1$export$c123ee06d9da8480).week, dateString);
+                    case "Io":
+                        return match.ordinalNumber(dateString, {
+                            unit: "week"
+                        });
+                    default:
+                        return (0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(token.length, dateString);
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_date, value) {
+                return value >= 1 && value <= 53;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                return (0, $3fe41f97b9b4f3b6$export$2e2bcd8739ae039)((0, $2472c3d845976aec$export$2e2bcd8739ae039)(date, value));
+            }
+        }
+    ]);
+    return ISOWeekParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+var $4575e7e688b591bf$var$DAYS_IN_MONTH = [
+    31,
+    28,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31
+];
+var $4575e7e688b591bf$var$DAYS_IN_MONTH_LEAP_YEAR = [
+    31,
+    29,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31
+];
+var $4575e7e688b591bf$export$e8d4b28a20981dd2 = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(DateParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(DateParser);
+    function DateParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, DateParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 90);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "subPriority", 1);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "Y",
+            "R",
+            "q",
+            "Q",
+            "w",
+            "I",
+            "D",
+            "i",
+            "e",
+            "c",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(DateParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                switch(token){
+                    case "d":
+                        return (0, $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388)((0, $3c0d4344655587e1$export$c123ee06d9da8480).date, dateString);
+                    case "do":
+                        return match.ordinalNumber(dateString, {
+                            unit: "date"
+                        });
+                    default:
+                        return (0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(token.length, dateString);
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(date, value) {
+                var year = date.getUTCFullYear();
+                var isLeapYear = (0, $e0a82a0c16c4b0b5$export$3d50627710b84d75)(year);
+                var month = date.getUTCMonth();
+                if (isLeapYear) return value >= 1 && value <= $4575e7e688b591bf$var$DAYS_IN_MONTH_LEAP_YEAR[month];
+                else return value >= 1 && value <= $4575e7e688b591bf$var$DAYS_IN_MONTH[month];
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                date.setUTCDate(value);
+                date.setUTCHours(0, 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return DateParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+var $c163465f3c7ca99f$export$6cfe0d613455f615 = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(DayOfYearParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(DayOfYearParser);
+    function DayOfYearParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, DayOfYearParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 90);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "subpriority", 1);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "Y",
+            "R",
+            "q",
+            "Q",
+            "M",
+            "L",
+            "w",
+            "I",
+            "d",
+            "E",
+            "i",
+            "e",
+            "c",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(DayOfYearParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                switch(token){
+                    case "D":
+                    case "DD":
+                        return (0, $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388)((0, $3c0d4344655587e1$export$c123ee06d9da8480).dayOfYear, dateString);
+                    case "Do":
+                        return match.ordinalNumber(dateString, {
+                            unit: "date"
+                        });
+                    default:
+                        return (0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(token.length, dateString);
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(date, value) {
+                var year = date.getUTCFullYear();
+                var isLeapYear = (0, $e0a82a0c16c4b0b5$export$3d50627710b84d75)(year);
+                if (isLeapYear) return value >= 1 && value <= 366;
+                else return value >= 1 && value <= 365;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                date.setUTCMonth(0, value);
+                date.setUTCHours(0, 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return DayOfYearParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+
+
+function $84698ad11d81cdc4$export$2e2bcd8739ae039(dirtyDate, dirtyDay, options) {
+    var _ref, _ref2, _ref3, _options$weekStartsOn, _options$locale, _options$locale$optio, _defaultOptions$local, _defaultOptions$local2;
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var defaultOptions = (0, $b3eff1e32e4342a0$export$430a3269e24b912e)();
+    var weekStartsOn = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)((_ref = (_ref2 = (_ref3 = (_options$weekStartsOn = options === null || options === void 0 ? void 0 : options.weekStartsOn) !== null && _options$weekStartsOn !== void 0 ? _options$weekStartsOn : options === null || options === void 0 ? void 0 : (_options$locale = options.locale) === null || _options$locale === void 0 ? void 0 : (_options$locale$optio = _options$locale.options) === null || _options$locale$optio === void 0 ? void 0 : _options$locale$optio.weekStartsOn) !== null && _ref3 !== void 0 ? _ref3 : defaultOptions.weekStartsOn) !== null && _ref2 !== void 0 ? _ref2 : (_defaultOptions$local = defaultOptions.locale) === null || _defaultOptions$local === void 0 ? void 0 : (_defaultOptions$local2 = _defaultOptions$local.options) === null || _defaultOptions$local2 === void 0 ? void 0 : _defaultOptions$local2.weekStartsOn) !== null && _ref !== void 0 ? _ref : 0);
+    // Test if weekStartsOn is between 0 and 6 _and_ is not NaN
+    if (!(weekStartsOn >= 0 && weekStartsOn <= 6)) throw new RangeError("weekStartsOn must be between 0 and 6 inclusively");
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var day = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)(dirtyDay);
+    var currentDay = date.getUTCDay();
+    var remainder = day % 7;
+    var dayIndex = (remainder + 7) % 7;
+    var diff = (dayIndex < weekStartsOn ? 7 : 0) + day - currentDay;
+    date.setUTCDate(date.getUTCDate() + diff);
+    return date;
+}
+
+
+var $0430189c724fc13c$export$1b03c8b76262f7bd = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(DayParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(DayParser);
+    function DayParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, DayParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 90);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "D",
+            "i",
+            "e",
+            "c",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(DayParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                switch(token){
+                    // Tue
+                    case "E":
+                    case "EE":
+                    case "EEE":
+                        return match.day(dateString, {
+                            width: "abbreviated",
+                            context: "formatting"
+                        }) || match.day(dateString, {
+                            width: "short",
+                            context: "formatting"
+                        }) || match.day(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                    // T
+                    case "EEEEE":
+                        return match.day(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                    // Tu
+                    case "EEEEEE":
+                        return match.day(dateString, {
+                            width: "short",
+                            context: "formatting"
+                        }) || match.day(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                    // Tuesday
+                    case "EEEE":
+                    default:
+                        return match.day(dateString, {
+                            width: "wide",
+                            context: "formatting"
+                        }) || match.day(dateString, {
+                            width: "abbreviated",
+                            context: "formatting"
+                        }) || match.day(dateString, {
+                            width: "short",
+                            context: "formatting"
+                        }) || match.day(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_date, value) {
+                return value >= 0 && value <= 6;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value, options) {
+                date = (0, $84698ad11d81cdc4$export$2e2bcd8739ae039)(date, value, options);
+                date.setUTCHours(0, 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return DayParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+var $28212040460c6b4e$export$44d1c127ab42c480 = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(LocalDayParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(LocalDayParser);
+    function LocalDayParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, LocalDayParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 90);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "y",
+            "R",
+            "u",
+            "q",
+            "Q",
+            "M",
+            "L",
+            "I",
+            "d",
+            "D",
+            "E",
+            "i",
+            "c",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(LocalDayParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match, options) {
+                var valueCallback = function valueCallback(value) {
+                    var wholeWeekDays = Math.floor((value - 1) / 7) * 7;
+                    return (value + options.weekStartsOn + 6) % 7 + wholeWeekDays;
+                };
+                switch(token){
+                    // 3
+                    case "e":
+                    case "ee":
+                        // 03
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)((0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(token.length, dateString), valueCallback);
+                    // 3rd
+                    case "eo":
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)(match.ordinalNumber(dateString, {
+                            unit: "day"
+                        }), valueCallback);
+                    // Tue
+                    case "eee":
+                        return match.day(dateString, {
+                            width: "abbreviated",
+                            context: "formatting"
+                        }) || match.day(dateString, {
+                            width: "short",
+                            context: "formatting"
+                        }) || match.day(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                    // T
+                    case "eeeee":
+                        return match.day(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                    // Tu
+                    case "eeeeee":
+                        return match.day(dateString, {
+                            width: "short",
+                            context: "formatting"
+                        }) || match.day(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                    // Tuesday
+                    case "eeee":
+                    default:
+                        return match.day(dateString, {
+                            width: "wide",
+                            context: "formatting"
+                        }) || match.day(dateString, {
+                            width: "abbreviated",
+                            context: "formatting"
+                        }) || match.day(dateString, {
+                            width: "short",
+                            context: "formatting"
+                        }) || match.day(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_date, value) {
+                return value >= 0 && value <= 6;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value, options) {
+                date = (0, $84698ad11d81cdc4$export$2e2bcd8739ae039)(date, value, options);
+                date.setUTCHours(0, 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return LocalDayParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+var $b988bda81d2cc6c2$export$e447a647caaaec1d = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(StandAloneLocalDayParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(StandAloneLocalDayParser);
+    function StandAloneLocalDayParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, StandAloneLocalDayParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 90);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "y",
+            "R",
+            "u",
+            "q",
+            "Q",
+            "M",
+            "L",
+            "I",
+            "d",
+            "D",
+            "E",
+            "i",
+            "e",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(StandAloneLocalDayParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match, options) {
+                var valueCallback = function valueCallback(value) {
+                    var wholeWeekDays = Math.floor((value - 1) / 7) * 7;
+                    return (value + options.weekStartsOn + 6) % 7 + wholeWeekDays;
+                };
+                switch(token){
+                    // 3
+                    case "c":
+                    case "cc":
+                        // 03
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)((0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(token.length, dateString), valueCallback);
+                    // 3rd
+                    case "co":
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)(match.ordinalNumber(dateString, {
+                            unit: "day"
+                        }), valueCallback);
+                    // Tue
+                    case "ccc":
+                        return match.day(dateString, {
+                            width: "abbreviated",
+                            context: "standalone"
+                        }) || match.day(dateString, {
+                            width: "short",
+                            context: "standalone"
+                        }) || match.day(dateString, {
+                            width: "narrow",
+                            context: "standalone"
+                        });
+                    // T
+                    case "ccccc":
+                        return match.day(dateString, {
+                            width: "narrow",
+                            context: "standalone"
+                        });
+                    // Tu
+                    case "cccccc":
+                        return match.day(dateString, {
+                            width: "short",
+                            context: "standalone"
+                        }) || match.day(dateString, {
+                            width: "narrow",
+                            context: "standalone"
+                        });
+                    // Tuesday
+                    case "cccc":
+                    default:
+                        return match.day(dateString, {
+                            width: "wide",
+                            context: "standalone"
+                        }) || match.day(dateString, {
+                            width: "abbreviated",
+                            context: "standalone"
+                        }) || match.day(dateString, {
+                            width: "short",
+                            context: "standalone"
+                        }) || match.day(dateString, {
+                            width: "narrow",
+                            context: "standalone"
+                        });
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_date, value) {
+                return value >= 0 && value <= 6;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value, options) {
+                date = (0, $84698ad11d81cdc4$export$2e2bcd8739ae039)(date, value, options);
+                date.setUTCHours(0, 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return StandAloneLocalDayParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+
+
+function $1b9f09273835045c$export$2e2bcd8739ae039(dirtyDate, dirtyDay) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var day = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)(dirtyDay);
+    if (day % 7 === 0) day = day - 7;
+    var weekStartsOn = 1;
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var currentDay = date.getUTCDay();
+    var remainder = day % 7;
+    var dayIndex = (remainder + 7) % 7;
+    var diff = (dayIndex < weekStartsOn ? 7 : 0) + day - currentDay;
+    date.setUTCDate(date.getUTCDate() + diff);
+    return date;
+}
+
+
+var $eb9471835e054cff$export$693fb1e525095b2a = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(ISODayParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(ISODayParser);
+    function ISODayParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, ISODayParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 90);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "y",
+            "Y",
+            "u",
+            "q",
+            "Q",
+            "M",
+            "L",
+            "w",
+            "d",
+            "D",
+            "E",
+            "e",
+            "c",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(ISODayParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                var valueCallback = function valueCallback(value) {
+                    if (value === 0) return 7;
+                    return value;
+                };
+                switch(token){
+                    // 2
+                    case "i":
+                    case "ii":
+                        // 02
+                        return (0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(token.length, dateString);
+                    // 2nd
+                    case "io":
+                        return match.ordinalNumber(dateString, {
+                            unit: "day"
+                        });
+                    // Tue
+                    case "iii":
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)(match.day(dateString, {
+                            width: "abbreviated",
+                            context: "formatting"
+                        }) || match.day(dateString, {
+                            width: "short",
+                            context: "formatting"
+                        }) || match.day(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        }), valueCallback);
+                    // T
+                    case "iiiii":
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)(match.day(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        }), valueCallback);
+                    // Tu
+                    case "iiiiii":
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)(match.day(dateString, {
+                            width: "short",
+                            context: "formatting"
+                        }) || match.day(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        }), valueCallback);
+                    // Tuesday
+                    case "iiii":
+                    default:
+                        return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)(match.day(dateString, {
+                            width: "wide",
+                            context: "formatting"
+                        }) || match.day(dateString, {
+                            width: "abbreviated",
+                            context: "formatting"
+                        }) || match.day(dateString, {
+                            width: "short",
+                            context: "formatting"
+                        }) || match.day(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        }), valueCallback);
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_date, value) {
+                return value >= 1 && value <= 7;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                date = (0, $1b9f09273835045c$export$2e2bcd8739ae039)(date, value);
+                date.setUTCHours(0, 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return ISODayParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+var $ea1a1b653403cc94$export$8d1e08492351df91 = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(AMPMParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(AMPMParser);
+    function AMPMParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, AMPMParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 80);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "b",
+            "B",
+            "H",
+            "k",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(AMPMParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                switch(token){
+                    case "a":
+                    case "aa":
+                    case "aaa":
+                        return match.dayPeriod(dateString, {
+                            width: "abbreviated",
+                            context: "formatting"
+                        }) || match.dayPeriod(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                    case "aaaaa":
+                        return match.dayPeriod(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                    case "aaaa":
+                    default:
+                        return match.dayPeriod(dateString, {
+                            width: "wide",
+                            context: "formatting"
+                        }) || match.dayPeriod(dateString, {
+                            width: "abbreviated",
+                            context: "formatting"
+                        }) || match.dayPeriod(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                }
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                date.setUTCHours((0, $e0a82a0c16c4b0b5$export$fb506d2676e7f207)(value), 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return AMPMParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+var $202f0d95b7705d92$export$73ca2bd0a17d273 = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(AMPMMidnightParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(AMPMMidnightParser);
+    function AMPMMidnightParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, AMPMMidnightParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 80);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "a",
+            "B",
+            "H",
+            "k",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(AMPMMidnightParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                switch(token){
+                    case "b":
+                    case "bb":
+                    case "bbb":
+                        return match.dayPeriod(dateString, {
+                            width: "abbreviated",
+                            context: "formatting"
+                        }) || match.dayPeriod(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                    case "bbbbb":
+                        return match.dayPeriod(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                    case "bbbb":
+                    default:
+                        return match.dayPeriod(dateString, {
+                            width: "wide",
+                            context: "formatting"
+                        }) || match.dayPeriod(dateString, {
+                            width: "abbreviated",
+                            context: "formatting"
+                        }) || match.dayPeriod(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                }
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                date.setUTCHours((0, $e0a82a0c16c4b0b5$export$fb506d2676e7f207)(value), 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return AMPMMidnightParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+var $a8893b161c478d83$export$bb9212adf05373db = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(DayPeriodParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(DayPeriodParser);
+    function DayPeriodParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, DayPeriodParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 80);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "a",
+            "b",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(DayPeriodParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                switch(token){
+                    case "B":
+                    case "BB":
+                    case "BBB":
+                        return match.dayPeriod(dateString, {
+                            width: "abbreviated",
+                            context: "formatting"
+                        }) || match.dayPeriod(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                    case "BBBBB":
+                        return match.dayPeriod(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                    case "BBBB":
+                    default:
+                        return match.dayPeriod(dateString, {
+                            width: "wide",
+                            context: "formatting"
+                        }) || match.dayPeriod(dateString, {
+                            width: "abbreviated",
+                            context: "formatting"
+                        }) || match.dayPeriod(dateString, {
+                            width: "narrow",
+                            context: "formatting"
+                        });
+                }
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                date.setUTCHours((0, $e0a82a0c16c4b0b5$export$fb506d2676e7f207)(value), 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return DayPeriodParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+var $827b382e424d98da$export$8a04050a727a1756 = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(Hour1to12Parser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(Hour1to12Parser);
+    function Hour1to12Parser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, Hour1to12Parser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 70);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "H",
+            "K",
+            "k",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(Hour1to12Parser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                switch(token){
+                    case "h":
+                        return (0, $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388)((0, $3c0d4344655587e1$export$c123ee06d9da8480).hour12h, dateString);
+                    case "ho":
+                        return match.ordinalNumber(dateString, {
+                            unit: "hour"
+                        });
+                    default:
+                        return (0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(token.length, dateString);
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_date, value) {
+                return value >= 1 && value <= 12;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                var isPM = date.getUTCHours() >= 12;
+                if (isPM && value < 12) date.setUTCHours(value + 12, 0, 0, 0);
+                else if (!isPM && value === 12) date.setUTCHours(0, 0, 0, 0);
+                else date.setUTCHours(value, 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return Hour1to12Parser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+var $fc2c9cda61ea084d$export$e56f4dea2c3e56dd = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(Hour0to23Parser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(Hour0to23Parser);
+    function Hour0to23Parser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, Hour0to23Parser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 70);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "a",
+            "b",
+            "h",
+            "K",
+            "k",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(Hour0to23Parser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                switch(token){
+                    case "H":
+                        return (0, $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388)((0, $3c0d4344655587e1$export$c123ee06d9da8480).hour23h, dateString);
+                    case "Ho":
+                        return match.ordinalNumber(dateString, {
+                            unit: "hour"
+                        });
+                    default:
+                        return (0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(token.length, dateString);
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_date, value) {
+                return value >= 0 && value <= 23;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                date.setUTCHours(value, 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return Hour0to23Parser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+var $62c4f5817d916f2e$export$cbbe855312f87d77 = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(Hour0To11Parser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(Hour0To11Parser);
+    function Hour0To11Parser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, Hour0To11Parser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 70);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "h",
+            "H",
+            "k",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(Hour0To11Parser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                switch(token){
+                    case "K":
+                        return (0, $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388)((0, $3c0d4344655587e1$export$c123ee06d9da8480).hour11h, dateString);
+                    case "Ko":
+                        return match.ordinalNumber(dateString, {
+                            unit: "hour"
+                        });
+                    default:
+                        return (0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(token.length, dateString);
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_date, value) {
+                return value >= 0 && value <= 11;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                var isPM = date.getUTCHours() >= 12;
+                if (isPM && value < 12) date.setUTCHours(value + 12, 0, 0, 0);
+                else date.setUTCHours(value, 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return Hour0To11Parser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+var $3880126c9569d6e7$export$6008046d2b34b6a5 = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(Hour1To24Parser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(Hour1To24Parser);
+    function Hour1To24Parser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, Hour1To24Parser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 70);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "a",
+            "b",
+            "h",
+            "H",
+            "K",
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(Hour1To24Parser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                switch(token){
+                    case "k":
+                        return (0, $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388)((0, $3c0d4344655587e1$export$c123ee06d9da8480).hour24h, dateString);
+                    case "ko":
+                        return match.ordinalNumber(dateString, {
+                            unit: "hour"
+                        });
+                    default:
+                        return (0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(token.length, dateString);
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_date, value) {
+                return value >= 1 && value <= 24;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                var hours = value <= 24 ? value % 24 : value;
+                date.setUTCHours(hours, 0, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return Hour1To24Parser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+var $5fe0fa01f6591408$export$2b52670d9e2be53 = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(MinuteParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(MinuteParser);
+    function MinuteParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, MinuteParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 60);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(MinuteParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                switch(token){
+                    case "m":
+                        return (0, $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388)((0, $3c0d4344655587e1$export$c123ee06d9da8480).minute, dateString);
+                    case "mo":
+                        return match.ordinalNumber(dateString, {
+                            unit: "minute"
+                        });
+                    default:
+                        return (0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(token.length, dateString);
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_date, value) {
+                return value >= 0 && value <= 59;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                date.setUTCMinutes(value, 0, 0);
+                return date;
+            }
+        }
+    ]);
+    return MinuteParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+var $edef440c7c505c22$export$94d46d540cf1366a = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(SecondParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(SecondParser);
+    function SecondParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, SecondParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 50);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(SecondParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token, match) {
+                switch(token){
+                    case "s":
+                        return (0, $e0a82a0c16c4b0b5$export$cc7cc9e2a3ff9388)((0, $3c0d4344655587e1$export$c123ee06d9da8480).second, dateString);
+                    case "so":
+                        return match.ordinalNumber(dateString, {
+                            unit: "second"
+                        });
+                    default:
+                        return (0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(token.length, dateString);
+                }
+            }
+        },
+        {
+            key: "validate",
+            value: function validate(_date, value) {
+                return value >= 0 && value <= 59;
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                date.setUTCSeconds(value, 0);
+                return date;
+            }
+        }
+    ]);
+    return SecondParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+var $e8cc5ab7388e1e07$export$b8e6f8b2d70893b1 = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(FractionOfSecondParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(FractionOfSecondParser);
+    function FractionOfSecondParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, FractionOfSecondParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 30);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "t",
+            "T"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(FractionOfSecondParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token) {
+                var valueCallback = function valueCallback(value) {
+                    return Math.floor(value * Math.pow(10, -token.length + 3));
+                };
+                return (0, $e0a82a0c16c4b0b5$export$4f84e3a82c7b538)((0, $e0a82a0c16c4b0b5$export$513bb01536146ab6)(token.length, dateString), valueCallback);
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, _flags, value) {
+                date.setUTCMilliseconds(value);
+                return date;
+            }
+        }
+    ]);
+    return FractionOfSecondParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+var $7ee99b5fab9884ce$export$104d901d49fea29b = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(ISOTimezoneWithZParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(ISOTimezoneWithZParser);
+    function ISOTimezoneWithZParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, ISOTimezoneWithZParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 10);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "t",
+            "T",
+            "x"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(ISOTimezoneWithZParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token) {
+                switch(token){
+                    case "X":
+                        return (0, $e0a82a0c16c4b0b5$export$6497f4c0ecdfba8e)((0, $3c0d4344655587e1$export$a7ee192b982af9c1).basicOptionalMinutes, dateString);
+                    case "XX":
+                        return (0, $e0a82a0c16c4b0b5$export$6497f4c0ecdfba8e)((0, $3c0d4344655587e1$export$a7ee192b982af9c1).basic, dateString);
+                    case "XXXX":
+                        return (0, $e0a82a0c16c4b0b5$export$6497f4c0ecdfba8e)((0, $3c0d4344655587e1$export$a7ee192b982af9c1).basicOptionalSeconds, dateString);
+                    case "XXXXX":
+                        return (0, $e0a82a0c16c4b0b5$export$6497f4c0ecdfba8e)((0, $3c0d4344655587e1$export$a7ee192b982af9c1).extendedOptionalSeconds, dateString);
+                    case "XXX":
+                    default:
+                        return (0, $e0a82a0c16c4b0b5$export$6497f4c0ecdfba8e)((0, $3c0d4344655587e1$export$a7ee192b982af9c1).extended, dateString);
+                }
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, flags, value) {
+                if (flags.timestampIsSet) return date;
+                return new Date(date.getTime() - value);
+            }
+        }
+    ]);
+    return ISOTimezoneWithZParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+
+var $0afb158ddb7c3179$export$12910e5204b52b9 = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(ISOTimezoneParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(ISOTimezoneParser);
+    function ISOTimezoneParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, ISOTimezoneParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 10);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", [
+            "t",
+            "T",
+            "X"
+        ]);
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(ISOTimezoneParser, [
+        {
+            key: "parse",
+            value: function parse(dateString, token) {
+                switch(token){
+                    case "x":
+                        return (0, $e0a82a0c16c4b0b5$export$6497f4c0ecdfba8e)((0, $3c0d4344655587e1$export$a7ee192b982af9c1).basicOptionalMinutes, dateString);
+                    case "xx":
+                        return (0, $e0a82a0c16c4b0b5$export$6497f4c0ecdfba8e)((0, $3c0d4344655587e1$export$a7ee192b982af9c1).basic, dateString);
+                    case "xxxx":
+                        return (0, $e0a82a0c16c4b0b5$export$6497f4c0ecdfba8e)((0, $3c0d4344655587e1$export$a7ee192b982af9c1).basicOptionalSeconds, dateString);
+                    case "xxxxx":
+                        return (0, $e0a82a0c16c4b0b5$export$6497f4c0ecdfba8e)((0, $3c0d4344655587e1$export$a7ee192b982af9c1).extendedOptionalSeconds, dateString);
+                    case "xxx":
+                    default:
+                        return (0, $e0a82a0c16c4b0b5$export$6497f4c0ecdfba8e)((0, $3c0d4344655587e1$export$a7ee192b982af9c1).extended, dateString);
+                }
+            }
+        },
+        {
+            key: "set",
+            value: function set(date, flags, value) {
+                if (flags.timestampIsSet) return date;
+                return new Date(date.getTime() - value);
+            }
+        }
+    ]);
+    return ISOTimezoneParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+var $0e3e3705378c38e5$export$2cd8bf877a05e96 = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(TimestampSecondsParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(TimestampSecondsParser);
+    function TimestampSecondsParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, TimestampSecondsParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 40);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", "*");
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(TimestampSecondsParser, [
+        {
+            key: "parse",
+            value: function parse(dateString) {
+                return (0, $e0a82a0c16c4b0b5$export$d931c43c4608a164)(dateString);
+            }
+        },
+        {
+            key: "set",
+            value: function set(_date, _flags, value) {
+                return [
+                    new Date(value * 1000),
+                    {
+                        timestampIsSet: true
+                    }
+                ];
+            }
+        }
+    ]);
+    return TimestampSecondsParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+
+
+
+
+
+
+
+
+var $2f634054a07f4b71$export$6d8f69c6906d6368 = /*#__PURE__*/ function(_Parser) {
+    (0, $e701166c449f015b$export$2e2bcd8739ae039)(TimestampMillisecondsParser, _Parser);
+    var _super = (0, $122a5980f25b6c3e$export$2e2bcd8739ae039)(TimestampMillisecondsParser);
+    function TimestampMillisecondsParser() {
+        var _this;
+        (0, $5c447d601d5ad977$export$2e2bcd8739ae039)(this, TimestampMillisecondsParser);
+        for(var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++)args[_key] = arguments[_key];
+        _this = _super.call.apply(_super, [
+            this
+        ].concat(args));
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "priority", 20);
+        (0, $0c7a129f02c6b3e1$export$2e2bcd8739ae039)((0, $802d99efb9813d8e$export$2e2bcd8739ae039)(_this), "incompatibleTokens", "*");
+        return _this;
+    }
+    (0, $d4340767544618bb$export$2e2bcd8739ae039)(TimestampMillisecondsParser, [
+        {
+            key: "parse",
+            value: function parse(dateString) {
+                return (0, $e0a82a0c16c4b0b5$export$d931c43c4608a164)(dateString);
+            }
+        },
+        {
+            key: "set",
+            value: function set(_date, _flags, value) {
+                return [
+                    new Date(value),
+                    {
+                        timestampIsSet: true
+                    }
+                ];
+            }
+        }
+    ]);
+    return TimestampMillisecondsParser;
+}((0, $02bebf8323dab822$export$7acfa6ed01010e37));
+
+
+var $116f26d3d9a764ef$export$19131010e7fd8373 = {
+    G: new (0, $e0263b0fc7a3abe5$export$8e5a1d3f85a9688)(),
+    y: new (0, $5a39bcfa7efa4851$export$48d352de7cd4a988)(),
+    Y: new (0, $72197dceee227076$export$b8ef38dfcf05d5db)(),
+    R: new (0, $d9485e93731d71d5$export$951d1df011fde06f)(),
+    u: new (0, $0b013889cd30b8c3$export$bad9d2ea38e8f1a)(),
+    Q: new (0, $8d188d931a1f8fe2$export$5cb0f701186dde1d)(),
+    q: new (0, $d4b290e5c6e40db3$export$300c0c2990e20e6d)(),
+    M: new (0, $3f39acde61d867f4$export$400dd8b40ef138a3)(),
+    L: new (0, $25632283d7ca5046$export$1d7eaa53eaa5deba)(),
+    w: new (0, $ea2c2270f6f49c68$export$c4005ffc174e07c0)(),
+    I: new (0, $ea4314e4eac27d32$export$6fc8dbedd560a6af)(),
+    d: new (0, $4575e7e688b591bf$export$e8d4b28a20981dd2)(),
+    D: new (0, $c163465f3c7ca99f$export$6cfe0d613455f615)(),
+    E: new (0, $0430189c724fc13c$export$1b03c8b76262f7bd)(),
+    e: new (0, $28212040460c6b4e$export$44d1c127ab42c480)(),
+    c: new (0, $b988bda81d2cc6c2$export$e447a647caaaec1d)(),
+    i: new (0, $eb9471835e054cff$export$693fb1e525095b2a)(),
+    a: new (0, $ea1a1b653403cc94$export$8d1e08492351df91)(),
+    b: new (0, $202f0d95b7705d92$export$73ca2bd0a17d273)(),
+    B: new (0, $a8893b161c478d83$export$bb9212adf05373db)(),
+    h: new (0, $827b382e424d98da$export$8a04050a727a1756)(),
+    H: new (0, $fc2c9cda61ea084d$export$e56f4dea2c3e56dd)(),
+    K: new (0, $62c4f5817d916f2e$export$cbbe855312f87d77)(),
+    k: new (0, $3880126c9569d6e7$export$6008046d2b34b6a5)(),
+    m: new (0, $5fe0fa01f6591408$export$2b52670d9e2be53)(),
+    s: new (0, $edef440c7c505c22$export$94d46d540cf1366a)(),
+    S: new (0, $e8cc5ab7388e1e07$export$b8e6f8b2d70893b1)(),
+    X: new (0, $7ee99b5fab9884ce$export$104d901d49fea29b)(),
+    x: new (0, $0afb158ddb7c3179$export$12910e5204b52b9)(),
+    t: new (0, $0e3e3705378c38e5$export$2cd8bf877a05e96)(),
+    T: new (0, $2f634054a07f4b71$export$6d8f69c6906d6368)()
+};
+
+
+
+// - [yYQqMLwIdDecihHKkms]o matches any available ordinal number token
+//   (one of the certain letters followed by `o`)
+// - (\w)\1* matches any sequences of the same letter
+// - '' matches two quote characters in a row
+// - '(''|[^'])+('|$) matches anything surrounded by two quote characters ('),
+//   except a single quote symbol, which ends the sequence.
+//   Two quote characters do not end the sequence.
+//   If there is no matching single quote
+//   then the sequence will continue until the end of the string.
+// - . matches any single character unmatched by previous parts of the RegExps
+var $e77346bca8e276c5$var$formattingTokensRegExp = /[yYQqMLwIdDecihHKkms]o|(\w)\1*|''|'(''|[^'])+('|$)|./g;
+// This RegExp catches symbols escaped by quotes, and also
+// sequences of symbols P, p, and the combinations like `PPPPPPPppppp`
+var $e77346bca8e276c5$var$longFormattingTokensRegExp = /P+p+|P+|p+|''|'(''|[^'])+('|$)|./g;
+var $e77346bca8e276c5$var$escapedStringRegExp = /^'([^]*?)'?$/;
+var $e77346bca8e276c5$var$doubleQuoteRegExp = /''/g;
+var $e77346bca8e276c5$var$notWhitespaceRegExp = /\S/;
+var $e77346bca8e276c5$var$unescapedLatinCharacterRegExp = /[a-zA-Z]/;
+function $e77346bca8e276c5$export$2e2bcd8739ae039(dirtyDateString, dirtyFormatString, dirtyReferenceDate, options) {
+    var _ref, _options$locale, _ref2, _ref3, _ref4, _options$firstWeekCon, _options$locale2, _options$locale2$opti, _defaultOptions$local, _defaultOptions$local2, _ref5, _ref6, _ref7, _options$weekStartsOn, _options$locale3, _options$locale3$opti, _defaultOptions$local3, _defaultOptions$local4;
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(3, arguments);
+    var dateString = String(dirtyDateString);
+    var formatString = String(dirtyFormatString);
+    var defaultOptions = (0, $b3eff1e32e4342a0$export$430a3269e24b912e)();
+    var locale = (_ref = (_options$locale = options === null || options === void 0 ? void 0 : options.locale) !== null && _options$locale !== void 0 ? _options$locale : defaultOptions.locale) !== null && _ref !== void 0 ? _ref : (0, $dd66ba7a4fdce0d2$export$2e2bcd8739ae039);
+    if (!locale.match) throw new RangeError("locale must contain match property");
+    var firstWeekContainsDate = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)((_ref2 = (_ref3 = (_ref4 = (_options$firstWeekCon = options === null || options === void 0 ? void 0 : options.firstWeekContainsDate) !== null && _options$firstWeekCon !== void 0 ? _options$firstWeekCon : options === null || options === void 0 ? void 0 : (_options$locale2 = options.locale) === null || _options$locale2 === void 0 ? void 0 : (_options$locale2$opti = _options$locale2.options) === null || _options$locale2$opti === void 0 ? void 0 : _options$locale2$opti.firstWeekContainsDate) !== null && _ref4 !== void 0 ? _ref4 : defaultOptions.firstWeekContainsDate) !== null && _ref3 !== void 0 ? _ref3 : (_defaultOptions$local = defaultOptions.locale) === null || _defaultOptions$local === void 0 ? void 0 : (_defaultOptions$local2 = _defaultOptions$local.options) === null || _defaultOptions$local2 === void 0 ? void 0 : _defaultOptions$local2.firstWeekContainsDate) !== null && _ref2 !== void 0 ? _ref2 : 1);
+    // Test if weekStartsOn is between 1 and 7 _and_ is not NaN
+    if (!(firstWeekContainsDate >= 1 && firstWeekContainsDate <= 7)) throw new RangeError("firstWeekContainsDate must be between 1 and 7 inclusively");
+    var weekStartsOn = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)((_ref5 = (_ref6 = (_ref7 = (_options$weekStartsOn = options === null || options === void 0 ? void 0 : options.weekStartsOn) !== null && _options$weekStartsOn !== void 0 ? _options$weekStartsOn : options === null || options === void 0 ? void 0 : (_options$locale3 = options.locale) === null || _options$locale3 === void 0 ? void 0 : (_options$locale3$opti = _options$locale3.options) === null || _options$locale3$opti === void 0 ? void 0 : _options$locale3$opti.weekStartsOn) !== null && _ref7 !== void 0 ? _ref7 : defaultOptions.weekStartsOn) !== null && _ref6 !== void 0 ? _ref6 : (_defaultOptions$local3 = defaultOptions.locale) === null || _defaultOptions$local3 === void 0 ? void 0 : (_defaultOptions$local4 = _defaultOptions$local3.options) === null || _defaultOptions$local4 === void 0 ? void 0 : _defaultOptions$local4.weekStartsOn) !== null && _ref5 !== void 0 ? _ref5 : 0);
+    // Test if weekStartsOn is between 0 and 6 _and_ is not NaN
+    if (!(weekStartsOn >= 0 && weekStartsOn <= 6)) throw new RangeError("weekStartsOn must be between 0 and 6 inclusively");
+    if (formatString === "") {
+        if (dateString === "") return (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyReferenceDate);
+        else return new Date(NaN);
+    }
+    var subFnOptions = {
+        firstWeekContainsDate: firstWeekContainsDate,
+        weekStartsOn: weekStartsOn,
+        locale: locale
+    };
+    // If timezone isn't specified, it will be set to the system timezone
+    var setters = [
+        new (0, $9f98cd039ca2f702$export$5aaf7ff7f09ea4ee)()
+    ];
+    var tokens = formatString.match($e77346bca8e276c5$var$longFormattingTokensRegExp).map(function(substring) {
+        var firstCharacter = substring[0];
+        if (firstCharacter in (0, $ef15ded204f22f14$export$2e2bcd8739ae039)) {
+            var longFormatter = (0, $ef15ded204f22f14$export$2e2bcd8739ae039)[firstCharacter];
+            return longFormatter(substring, locale.formatLong);
+        }
+        return substring;
+    }).join("").match($e77346bca8e276c5$var$formattingTokensRegExp);
+    var usedTokens = [];
+    var _iterator = (0, $1c1acfcc5d66a374$export$2e2bcd8739ae039)(tokens), _step;
+    try {
+        var _loop = function _loop() {
+            var token = _step.value;
+            if (!(options !== null && options !== void 0 && options.useAdditionalWeekYearTokens) && (0, $7b0a34f600aaab54$export$c6b49d6dceb604a1)(token)) (0, $7b0a34f600aaab54$export$8073c1ae88f0e727)(token, formatString, dirtyDateString);
+            if (!(options !== null && options !== void 0 && options.useAdditionalDayOfYearTokens) && (0, $7b0a34f600aaab54$export$c6cc36aa33304772)(token)) (0, $7b0a34f600aaab54$export$8073c1ae88f0e727)(token, formatString, dirtyDateString);
+            var firstCharacter = token[0];
+            var parser = (0, $116f26d3d9a764ef$export$19131010e7fd8373)[firstCharacter];
+            if (parser) {
+                var incompatibleTokens = parser.incompatibleTokens;
+                if (Array.isArray(incompatibleTokens)) {
+                    var incompatibleToken = usedTokens.find(function(usedToken) {
+                        return incompatibleTokens.includes(usedToken.token) || usedToken.token === firstCharacter;
+                    });
+                    if (incompatibleToken) throw new RangeError("The format string mustn't contain `".concat(incompatibleToken.fullToken, "` and `").concat(token, "` at the same time"));
+                } else if (parser.incompatibleTokens === "*" && usedTokens.length > 0) throw new RangeError("The format string mustn't contain `".concat(token, "` and any other token at the same time"));
+                usedTokens.push({
+                    token: firstCharacter,
+                    fullToken: token
+                });
+                var parseResult = parser.run(dateString, token, locale.match, subFnOptions);
+                if (!parseResult) return {
+                    v: new Date(NaN)
+                };
+                setters.push(parseResult.setter);
+                dateString = parseResult.rest;
+            } else {
+                if (firstCharacter.match($e77346bca8e276c5$var$unescapedLatinCharacterRegExp)) throw new RangeError("Format string contains an unescaped latin alphabet character `" + firstCharacter + "`");
+                // Replace two single quote characters with one single quote character
+                if (token === "''") token = "'";
+                else if (firstCharacter === "'") token = $e77346bca8e276c5$var$cleanEscapedString(token);
+                // Cut token from string, or, if string doesn't match the token, return Invalid Date
+                if (dateString.indexOf(token) === 0) dateString = dateString.slice(token.length);
+                else return {
+                    v: new Date(NaN)
+                };
+            }
+        };
+        for(_iterator.s(); !(_step = _iterator.n()).done;){
+            var _ret = _loop();
+            if ((0, $b4ed4f713665a055$export$2e2bcd8739ae039)(_ret) === "object") return _ret.v;
+        }
+    // Check if the remaining input contains something other than whitespace
+    } catch (err) {
+        _iterator.e(err);
+    } finally{
+        _iterator.f();
+    }
+    if (dateString.length > 0 && $e77346bca8e276c5$var$notWhitespaceRegExp.test(dateString)) return new Date(NaN);
+    var uniquePrioritySetters = setters.map(function(setter) {
+        return setter.priority;
+    }).sort(function(a, b) {
+        return b - a;
+    }).filter(function(priority, index, array) {
+        return array.indexOf(priority) === index;
+    }).map(function(priority) {
+        return setters.filter(function(setter) {
+            return setter.priority === priority;
+        }).sort(function(a, b) {
+            return b.subPriority - a.subPriority;
+        });
+    }).map(function(setterArray) {
+        return setterArray[0];
+    });
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyReferenceDate);
+    if (isNaN(date.getTime())) return new Date(NaN);
+    // Convert the date in system timezone to the same date in UTC+00:00 timezone.
+    var utcDate = (0, $a89d4f81cd7ffd7f$export$2e2bcd8739ae039)(date, (0, $90fb3767b2d64474$export$2e2bcd8739ae039)(date));
+    var flags = {};
+    var _iterator2 = (0, $1c1acfcc5d66a374$export$2e2bcd8739ae039)(uniquePrioritySetters), _step2;
+    try {
+        for(_iterator2.s(); !(_step2 = _iterator2.n()).done;){
+            var setter = _step2.value;
+            if (!setter.validate(utcDate, subFnOptions)) return new Date(NaN);
+            var result = setter.set(utcDate, flags, subFnOptions);
+            // Result is tuple (date, flags)
+            if (Array.isArray(result)) {
+                utcDate = result[0];
+                (0, $0e10b21992f80b56$export$2e2bcd8739ae039)(flags, result[1]);
+            // Result is date
+            } else utcDate = result;
+        }
+    } catch (err) {
+        _iterator2.e(err);
+    } finally{
+        _iterator2.f();
+    }
+    return utcDate;
+}
+function $e77346bca8e276c5$var$cleanEscapedString(input) {
+    return input.match($e77346bca8e276c5$var$escapedStringRegExp)[1].replace($e77346bca8e276c5$var$doubleQuoteRegExp, "'");
+}
+
+
+
+
+
+function $38a5f53338691da5$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var year = date.getFullYear();
+    var monthIndex = date.getMonth();
+    var lastDayOfMonth = new Date(0);
+    lastDayOfMonth.setFullYear(year, monthIndex + 1, 0);
+    lastDayOfMonth.setHours(0, 0, 0, 0);
+    return lastDayOfMonth.getDate();
+}
+
+
+
+function $45131f6d0dca97f3$export$2e2bcd8739ae039(dirtyDate, dirtyMonth) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var month = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)(dirtyMonth);
+    var year = date.getFullYear();
+    var day = date.getDate();
+    var dateWithDesiredMonth = new Date(0);
+    dateWithDesiredMonth.setFullYear(year, month, 15);
+    dateWithDesiredMonth.setHours(0, 0, 0, 0);
+    var daysInMonth = (0, $38a5f53338691da5$export$2e2bcd8739ae039)(dateWithDesiredMonth);
+    // Set the last day of the new month
+    // if the original date was the last day of the longer month
+    date.setMonth(month, Math.min(day, daysInMonth));
+    return date;
+}
+
+
+
+
+function $019f0ace62c813f7$export$2e2bcd8739ae039(dirtyDate, dirtyYear) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var date = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var year = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)(dirtyYear);
+    // Check if date is Invalid Date because Date.prototype.setFullYear ignores the value of Invalid Date
+    if (isNaN(date.getTime())) return new Date(NaN);
+    date.setFullYear(year);
+    return date;
+}
+
+
+
+function $0d388faa1fba3b62$export$2e2bcd8739ae039(dirtyDate) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(1, arguments);
+    var cleanDate = (0, $804b6bac4ed888ba$export$2e2bcd8739ae039)(dirtyDate);
+    var date = new Date(0);
+    date.setFullYear(cleanDate.getFullYear(), 0, 1);
+    date.setHours(0, 0, 0, 0);
+    return date;
+}
+
+
+
+
+function $75dd9cd5049e11dc$export$2e2bcd8739ae039(dirtyDate, dirtyAmount) {
+    (0, $7040d9e7dd2f6ed8$export$2e2bcd8739ae039)(2, arguments);
+    var amount = (0, $f44f0a33154558e7$export$2e2bcd8739ae039)(dirtyAmount);
+    return (0, $53cea08d313a73ff$export$2e2bcd8739ae039)(dirtyDate, -amount);
+}
+
+
+
+/******************************************************************************
+Copyright (c) Microsoft Corporation.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+***************************************************************************** */ /* global Reflect, Promise, SuppressedError, Symbol */ var $a66560f34356fabb$var$__assign = function() {
+    $a66560f34356fabb$var$__assign = Object.assign || function __assign(t) {
+        for(var s, i = 1, n = arguments.length; i < n; i++){
+            s = arguments[i];
+            for(var p in s)if (Object.prototype.hasOwnProperty.call(s, p)) t[p] = s[p];
+        }
+        return t;
+    };
+    return $a66560f34356fabb$var$__assign.apply(this, arguments);
+};
+function $a66560f34356fabb$var$__rest(s, e) {
+    var t = {};
+    for(var p in s)if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0) t[p] = s[p];
+    if (s != null && typeof Object.getOwnPropertySymbols === "function") {
+        for(var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++)if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i])) t[p[i]] = s[p[i]];
+    }
+    return t;
+}
+function $a66560f34356fabb$var$__spreadArray(to, from, pack) {
+    if (pack || arguments.length === 2) {
+        for(var i = 0, l = from.length, ar; i < l; i++)if (ar || !(i in from)) {
+            if (!ar) ar = Array.prototype.slice.call(from, 0, i);
+            ar[i] = from[i];
+        }
+    }
+    return to.concat(ar || Array.prototype.slice.call(from));
+}
+typeof SuppressedError === "function" && SuppressedError;
+var $a66560f34356fabb$var$jsxRuntime = {
+    exports: {}
+};
+var $a66560f34356fabb$var$reactJsxRuntime_production_min = {};
+/**
+ * @license React
+ * react-jsx-runtime.production.min.js
+ *
+ * Copyright (c) Facebook, Inc. and its affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */ var $a66560f34356fabb$var$hasRequiredReactJsxRuntime_production_min;
+function $a66560f34356fabb$var$requireReactJsxRuntime_production_min() {
+    if ($a66560f34356fabb$var$hasRequiredReactJsxRuntime_production_min) return $a66560f34356fabb$var$reactJsxRuntime_production_min;
+    $a66560f34356fabb$var$hasRequiredReactJsxRuntime_production_min = 1;
+    var f = (0, (/*@__PURE__*/$parcel$interopDefault($LI8jA))), k = Symbol.for("react.element"), l = Symbol.for("react.fragment"), m = Object.prototype.hasOwnProperty, n = f.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentOwner, p = {
+        key: !0,
+        ref: !0,
+        __self: !0,
+        __source: !0
+    };
+    function q(c, a, g) {
+        var b, d = {}, e = null, h = null;
+        void 0 !== g && (e = "" + g);
+        void 0 !== a.key && (e = "" + a.key);
+        void 0 !== a.ref && (h = a.ref);
+        for(b in a)m.call(a, b) && !p.hasOwnProperty(b) && (d[b] = a[b]);
+        if (c && c.defaultProps) for(b in a = c.defaultProps, a)void 0 === d[b] && (d[b] = a[b]);
+        return {
+            $$typeof: k,
+            type: c,
+            key: e,
+            ref: h,
+            props: d,
+            _owner: n.current
+        };
+    }
+    $a66560f34356fabb$var$reactJsxRuntime_production_min.Fragment = l;
+    $a66560f34356fabb$var$reactJsxRuntime_production_min.jsx = q;
+    $a66560f34356fabb$var$reactJsxRuntime_production_min.jsxs = q;
+    return $a66560f34356fabb$var$reactJsxRuntime_production_min;
+}
+var $a66560f34356fabb$var$reactJsxRuntime_development = {};
+/**
+ * @license React
+ * react-jsx-runtime.development.js
+ *
+ * Copyright (c) Facebook, Inc. and its affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */ var $a66560f34356fabb$var$hasRequiredReactJsxRuntime_development;
+function $a66560f34356fabb$var$requireReactJsxRuntime_development() {
+    if ($a66560f34356fabb$var$hasRequiredReactJsxRuntime_development) return $a66560f34356fabb$var$reactJsxRuntime_development;
+    $a66560f34356fabb$var$hasRequiredReactJsxRuntime_development = 1;
+    return $a66560f34356fabb$var$reactJsxRuntime_development;
+}
+$a66560f34356fabb$var$jsxRuntime.exports = $a66560f34356fabb$var$requireReactJsxRuntime_production_min();
+var $a66560f34356fabb$var$jsxRuntimeExports = $a66560f34356fabb$var$jsxRuntime.exports;
+/** Returns true when the props are of type {@link DayPickerMultipleProps}. */ function $a66560f34356fabb$export$2d8c2b43ec0e528(props) {
+    return props.mode === "multiple";
+}
+/** Returns true when the props are of type {@link DayPickerRangeProps}. */ function $a66560f34356fabb$export$f7b9f96866ec1964(props) {
+    return props.mode === "range";
+}
+/** Returns true when the props are of type {@link DayPickerSingleProps}. */ function $a66560f34356fabb$export$e659ce9b264ea61(props) {
+    return props.mode === "single";
+}
+/**
+ * The name of the default CSS classes.
+ */ var $a66560f34356fabb$var$defaultClassNames = {
+    root: "rdp",
+    multiple_months: "rdp-multiple_months",
+    with_weeknumber: "rdp-with_weeknumber",
+    vhidden: "rdp-vhidden",
+    button_reset: "rdp-button_reset",
+    button: "rdp-button",
+    caption: "rdp-caption",
+    caption_start: "rdp-caption_start",
+    caption_end: "rdp-caption_end",
+    caption_between: "rdp-caption_between",
+    caption_label: "rdp-caption_label",
+    caption_dropdowns: "rdp-caption_dropdowns",
+    dropdown: "rdp-dropdown",
+    dropdown_month: "rdp-dropdown_month",
+    dropdown_year: "rdp-dropdown_year",
+    dropdown_icon: "rdp-dropdown_icon",
+    months: "rdp-months",
+    month: "rdp-month",
+    table: "rdp-table",
+    tbody: "rdp-tbody",
+    tfoot: "rdp-tfoot",
+    head: "rdp-head",
+    head_row: "rdp-head_row",
+    head_cell: "rdp-head_cell",
+    nav: "rdp-nav",
+    nav_button: "rdp-nav_button",
+    nav_button_previous: "rdp-nav_button_previous",
+    nav_button_next: "rdp-nav_button_next",
+    nav_icon: "rdp-nav_icon",
+    row: "rdp-row",
+    weeknumber: "rdp-weeknumber",
+    cell: "rdp-cell",
+    day: "rdp-day",
+    day_today: "rdp-day_today",
+    day_outside: "rdp-day_outside",
+    day_selected: "rdp-day_selected",
+    day_disabled: "rdp-day_disabled",
+    day_hidden: "rdp-day_hidden",
+    day_range_start: "rdp-day_range_start",
+    day_range_end: "rdp-day_range_end",
+    day_range_middle: "rdp-day_range_middle"
+};
+/**
+ * The default formatter for the caption.
+ */ function $a66560f34356fabb$var$formatCaption(month, options) {
+    return (0, $c0a60053e1df89de$export$2e2bcd8739ae039)(month, "LLLL y", options);
+}
+/**
+ * The default formatter for the Day button.
+ */ function $a66560f34356fabb$var$formatDay(day, options) {
+    return (0, $c0a60053e1df89de$export$2e2bcd8739ae039)(day, "d", options);
+}
+/**
+ * The default formatter for the Month caption.
+ */ function $a66560f34356fabb$var$formatMonthCaption(month, options) {
+    return (0, $c0a60053e1df89de$export$2e2bcd8739ae039)(month, "LLLL", options);
+}
+/**
+ * The default formatter for the week number.
+ */ function $a66560f34356fabb$var$formatWeekNumber(weekNumber) {
+    return "".concat(weekNumber);
+}
+/**
+ * The default formatter for the name of the weekday.
+ */ function $a66560f34356fabb$var$formatWeekdayName(weekday, options) {
+    return (0, $c0a60053e1df89de$export$2e2bcd8739ae039)(weekday, "cccccc", options);
+}
+/**
+ * The default formatter for the Year caption.
+ */ function $a66560f34356fabb$var$formatYearCaption(year, options) {
+    return (0, $c0a60053e1df89de$export$2e2bcd8739ae039)(year, "yyyy", options);
+}
+var $a66560f34356fabb$var$formatters = /*#__PURE__*/ Object.freeze({
+    __proto__: null,
+    formatCaption: $a66560f34356fabb$var$formatCaption,
+    formatDay: $a66560f34356fabb$var$formatDay,
+    formatMonthCaption: $a66560f34356fabb$var$formatMonthCaption,
+    formatWeekNumber: $a66560f34356fabb$var$formatWeekNumber,
+    formatWeekdayName: $a66560f34356fabb$var$formatWeekdayName,
+    formatYearCaption: $a66560f34356fabb$var$formatYearCaption
+});
+/**
+ * The default ARIA label for the day button.
+ */ var $a66560f34356fabb$var$labelDay = function(day, activeModifiers, options) {
+    return (0, $c0a60053e1df89de$export$2e2bcd8739ae039)(day, "do MMMM (EEEE)", options);
+};
+/**
+ * The default ARIA label for the WeekNumber element.
+ */ var $a66560f34356fabb$var$labelMonthDropdown = function() {
+    return "Month: ";
+};
+/**
+ * The default ARIA label for next month button in navigation
+ */ var $a66560f34356fabb$var$labelNext = function() {
+    return "Go to next month";
+};
+/**
+ * The default ARIA label for previous month button in navigation
+ */ var $a66560f34356fabb$var$labelPrevious = function() {
+    return "Go to previous month";
+};
+/**
+ * The default ARIA label for the Weekday element.
+ */ var $a66560f34356fabb$var$labelWeekday = function(day, options) {
+    return (0, $c0a60053e1df89de$export$2e2bcd8739ae039)(day, "cccc", options);
+};
+/**
+ * The default ARIA label for the WeekNumber element.
+ */ var $a66560f34356fabb$var$labelWeekNumber = function(n) {
+    return "Week n. ".concat(n);
+};
+/**
+ * The default ARIA label for the WeekNumber element.
+ */ var $a66560f34356fabb$var$labelYearDropdown = function() {
+    return "Year: ";
+};
+var $a66560f34356fabb$var$labels = /*#__PURE__*/ Object.freeze({
+    __proto__: null,
+    labelDay: $a66560f34356fabb$var$labelDay,
+    labelMonthDropdown: $a66560f34356fabb$var$labelMonthDropdown,
+    labelNext: $a66560f34356fabb$var$labelNext,
+    labelPrevious: $a66560f34356fabb$var$labelPrevious,
+    labelWeekNumber: $a66560f34356fabb$var$labelWeekNumber,
+    labelWeekday: $a66560f34356fabb$var$labelWeekday,
+    labelYearDropdown: $a66560f34356fabb$var$labelYearDropdown
+});
+/**
+ * Returns the default values to use in the DayPickerContext, in case they are
+ * not passed down with the DayPicker initial props.
+ */ function $a66560f34356fabb$var$getDefaultContextValues() {
+    var captionLayout = "buttons";
+    var classNames = $a66560f34356fabb$var$defaultClassNames;
+    var locale = (0, $5d2cb7e2acfbd0aa$export$2e2bcd8739ae039);
+    var modifiersClassNames = {};
+    var modifiers = {};
+    var numberOfMonths = 1;
+    var styles = {};
+    var today = new Date();
+    return {
+        captionLayout: captionLayout,
+        classNames: classNames,
+        formatters: $a66560f34356fabb$var$formatters,
+        labels: $a66560f34356fabb$var$labels,
+        locale: locale,
+        modifiersClassNames: modifiersClassNames,
+        modifiers: modifiers,
+        numberOfMonths: numberOfMonths,
+        styles: styles,
+        today: today,
+        mode: "default"
+    };
+}
+/** Return the `fromDate` and `toDate` prop values values parsing the DayPicker props. */ function $a66560f34356fabb$var$parseFromToProps(props) {
+    var fromYear = props.fromYear, toYear = props.toYear, fromMonth = props.fromMonth, toMonth = props.toMonth;
+    var fromDate = props.fromDate, toDate = props.toDate;
+    if (fromMonth) fromDate = (0, $5414d5cc86bb45d3$export$2e2bcd8739ae039)(fromMonth);
+    else if (fromYear) fromDate = new Date(fromYear, 0, 1);
+    if (toMonth) toDate = (0, $bfc773451d3cb967$export$2e2bcd8739ae039)(toMonth);
+    else if (toYear) toDate = new Date(toYear, 11, 31);
+    return {
+        fromDate: fromDate ? (0, $09bb7ad4f09c575d$export$2e2bcd8739ae039)(fromDate) : undefined,
+        toDate: toDate ? (0, $09bb7ad4f09c575d$export$2e2bcd8739ae039)(toDate) : undefined
+    };
+}
+/**
+ * The DayPicker context shares the props passed to DayPicker within internal
+ * and custom components. It is used to set the default values and perform
+ * one-time calculations required to render the days.
+ *
+ * Access to this context from the {@link useDayPicker} hook.
+ */ var $a66560f34356fabb$export$5e463664ac32e9a9 = (0, $LI8jA.createContext)(undefined);
+/**
+ * The provider for the {@link DayPickerContext}, assigning the defaults from the
+ * initial DayPicker props.
+ */ function $a66560f34356fabb$export$a84f964d022d25c(props) {
+    var _a;
+    var initialProps = props.initialProps;
+    var defaultContextValues = $a66560f34356fabb$var$getDefaultContextValues();
+    var _b = $a66560f34356fabb$var$parseFromToProps(initialProps), fromDate = _b.fromDate, toDate = _b.toDate;
+    var captionLayout = (_a = initialProps.captionLayout) !== null && _a !== void 0 ? _a : defaultContextValues.captionLayout;
+    if (captionLayout !== "buttons" && (!fromDate || !toDate)) // When no from/to dates are set, the caption is always buttons
+    captionLayout = "buttons";
+    var onSelect;
+    if ($a66560f34356fabb$export$e659ce9b264ea61(initialProps) || $a66560f34356fabb$export$2d8c2b43ec0e528(initialProps) || $a66560f34356fabb$export$f7b9f96866ec1964(initialProps)) onSelect = initialProps.onSelect;
+    var value = $a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign({}, defaultContextValues), initialProps), {
+        captionLayout: captionLayout,
+        classNames: $a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign({}, defaultContextValues.classNames), initialProps.classNames),
+        components: $a66560f34356fabb$var$__assign({}, initialProps.components),
+        formatters: $a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign({}, defaultContextValues.formatters), initialProps.formatters),
+        fromDate: fromDate,
+        labels: $a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign({}, defaultContextValues.labels), initialProps.labels),
+        mode: initialProps.mode || defaultContextValues.mode,
+        modifiers: $a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign({}, defaultContextValues.modifiers), initialProps.modifiers),
+        modifiersClassNames: $a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign({}, defaultContextValues.modifiersClassNames), initialProps.modifiersClassNames),
+        onSelect: onSelect,
+        styles: $a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign({}, defaultContextValues.styles), initialProps.styles),
+        toDate: toDate
+    });
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$5e463664ac32e9a9.Provider, $a66560f34356fabb$var$__assign({
+        value: value
+    }, {
+        children: props.children
+    }));
+}
+/**
+ * Hook to access the {@link DayPickerContextValue}.
+ *
+ * Use the DayPicker context to access to the props passed to DayPicker inside
+ * internal or custom components.
+ */ function $a66560f34356fabb$export$332e9e0d64b1f294() {
+    var context = (0, $LI8jA.useContext)($a66560f34356fabb$export$5e463664ac32e9a9);
+    if (!context) throw new Error("useDayPicker must be used within a DayPickerProvider.");
+    return context;
+}
+/** Render the caption for the displayed month. This component is used when `captionLayout="buttons"`. */ function $a66560f34356fabb$export$5b9f95302ae85eba(props) {
+    var _a = $a66560f34356fabb$export$332e9e0d64b1f294(), locale = _a.locale, classNames = _a.classNames, styles = _a.styles, formatCaption = _a.formatters.formatCaption;
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx("div", $a66560f34356fabb$var$__assign({
+        className: classNames.caption_label,
+        style: styles.caption_label,
+        "aria-live": "polite",
+        role: "presentation",
+        id: props.id
+    }, {
+        children: formatCaption(props.displayMonth, {
+            locale: locale
+        })
+    }));
+}
+/**
+ * Render the icon in the styled drop-down.
+ */ function $a66560f34356fabb$export$eaf28e65c2d9267c(props) {
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx("svg", $a66560f34356fabb$var$__assign({
+        width: "8px",
+        height: "8px",
+        viewBox: "0 0 120 120",
+        "data-testid": "iconDropdown"
+    }, props, {
+        children: $a66560f34356fabb$var$jsxRuntimeExports.jsx("path", {
+            d: "M4.22182541,48.2218254 C8.44222828,44.0014225 15.2388494,43.9273804 19.5496459,47.9996989 L19.7781746,48.2218254 L60,88.443 L100.221825,48.2218254 C104.442228,44.0014225 111.238849,43.9273804 115.549646,47.9996989 L115.778175,48.2218254 C119.998577,52.4422283 120.07262,59.2388494 116.000301,63.5496459 L115.778175,63.7781746 L67.7781746,111.778175 C63.5577717,115.998577 56.7611506,116.07262 52.4503541,112.000301 L52.2218254,111.778175 L4.22182541,63.7781746 C-0.0739418023,59.4824074 -0.0739418023,52.5175926 4.22182541,48.2218254 Z",
+            fill: "currentColor",
+            fillRule: "nonzero"
+        })
+    }));
+}
+/**
+ * Render a styled select component – displaying a caption and a custom
+ * drop-down icon.
+ */ function $a66560f34356fabb$export$931cbfb6bfb85fc(props) {
+    var _a, _b;
+    var onChange = props.onChange, value = props.value, children = props.children, caption = props.caption, className = props.className, style = props.style;
+    var dayPicker = $a66560f34356fabb$export$332e9e0d64b1f294();
+    var IconDropdownComponent = (_b = (_a = dayPicker.components) === null || _a === void 0 ? void 0 : _a.IconDropdown) !== null && _b !== void 0 ? _b : $a66560f34356fabb$export$eaf28e65c2d9267c;
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsxs("div", $a66560f34356fabb$var$__assign({
+        className: className,
+        style: style
+    }, {
+        children: [
+            $a66560f34356fabb$var$jsxRuntimeExports.jsx("span", $a66560f34356fabb$var$__assign({
+                className: dayPicker.classNames.vhidden
+            }, {
+                children: props["aria-label"]
+            })),
+            $a66560f34356fabb$var$jsxRuntimeExports.jsx("select", $a66560f34356fabb$var$__assign({
+                name: props.name,
+                "aria-label": props["aria-label"],
+                className: dayPicker.classNames.dropdown,
+                style: dayPicker.styles.dropdown,
+                value: value,
+                onChange: onChange
+            }, {
+                children: children
+            })),
+            $a66560f34356fabb$var$jsxRuntimeExports.jsxs("div", $a66560f34356fabb$var$__assign({
+                className: dayPicker.classNames.caption_label,
+                style: dayPicker.styles.caption_label,
+                "aria-hidden": "true"
+            }, {
+                children: [
+                    caption,
+                    $a66560f34356fabb$var$jsxRuntimeExports.jsx(IconDropdownComponent, {
+                        className: dayPicker.classNames.dropdown_icon,
+                        style: dayPicker.styles.dropdown_icon
+                    })
+                ]
+            }))
+        ]
+    }));
+}
+/** Render the dropdown to navigate between months. */ function $a66560f34356fabb$var$MonthsDropdown(props) {
+    var _a;
+    var _b = $a66560f34356fabb$export$332e9e0d64b1f294(), fromDate = _b.fromDate, toDate = _b.toDate, styles = _b.styles, locale = _b.locale, formatMonthCaption = _b.formatters.formatMonthCaption, classNames = _b.classNames, components = _b.components, labelMonthDropdown = _b.labels.labelMonthDropdown;
+    // Dropdown should appear only when both from/toDate is set
+    if (!fromDate) return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$var$jsxRuntimeExports.Fragment, {});
+    if (!toDate) return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$var$jsxRuntimeExports.Fragment, {});
+    var dropdownMonths = [];
+    if ((0, $f5b7167297778ce6$export$2e2bcd8739ae039)(fromDate, toDate)) {
+        // only display the months included in the range
+        var date = (0, $5414d5cc86bb45d3$export$2e2bcd8739ae039)(fromDate);
+        for(var month = fromDate.getMonth(); month <= toDate.getMonth(); month++)dropdownMonths.push((0, $45131f6d0dca97f3$export$2e2bcd8739ae039)(date, month));
+    } else {
+        // display all the 12 months
+        var date = (0, $5414d5cc86bb45d3$export$2e2bcd8739ae039)(new Date()); // Any date should be OK, as we just need the year
+        for(var month = 0; month <= 11; month++)dropdownMonths.push((0, $45131f6d0dca97f3$export$2e2bcd8739ae039)(date, month));
+    }
+    var handleChange = function(e) {
+        var selectedMonth = Number(e.target.value);
+        var newMonth = (0, $45131f6d0dca97f3$export$2e2bcd8739ae039)((0, $5414d5cc86bb45d3$export$2e2bcd8739ae039)(props.displayMonth), selectedMonth);
+        props.onChange(newMonth);
+    };
+    var DropdownComponent = (_a = components === null || components === void 0 ? void 0 : components.Dropdown) !== null && _a !== void 0 ? _a : $a66560f34356fabb$export$931cbfb6bfb85fc;
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx(DropdownComponent, $a66560f34356fabb$var$__assign({
+        name: "months",
+        "aria-label": labelMonthDropdown(),
+        className: classNames.dropdown_month,
+        style: styles.dropdown_month,
+        onChange: handleChange,
+        value: props.displayMonth.getMonth(),
+        caption: formatMonthCaption(props.displayMonth, {
+            locale: locale
+        })
+    }, {
+        children: dropdownMonths.map(function(m) {
+            return $a66560f34356fabb$var$jsxRuntimeExports.jsx("option", $a66560f34356fabb$var$__assign({
+                value: m.getMonth()
+            }, {
+                children: formatMonthCaption(m, {
+                    locale: locale
+                })
+            }), m.getMonth());
+        })
+    }));
+}
+/**
+ * Render a dropdown to change the year. Take in account the `nav.fromDate` and
+ * `toDate` from context.
+ */ function $a66560f34356fabb$var$YearsDropdown(props) {
+    var _a;
+    var displayMonth = props.displayMonth;
+    var _b = $a66560f34356fabb$export$332e9e0d64b1f294(), fromDate = _b.fromDate, toDate = _b.toDate, locale = _b.locale, styles = _b.styles, classNames = _b.classNames, components = _b.components, formatYearCaption = _b.formatters.formatYearCaption, labelYearDropdown = _b.labels.labelYearDropdown;
+    var years = [];
+    // Dropdown should appear only when both from/toDate is set
+    if (!fromDate) return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$var$jsxRuntimeExports.Fragment, {});
+    if (!toDate) return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$var$jsxRuntimeExports.Fragment, {});
+    var fromYear = fromDate.getFullYear();
+    var toYear = toDate.getFullYear();
+    for(var year = fromYear; year <= toYear; year++)years.push((0, $019f0ace62c813f7$export$2e2bcd8739ae039)((0, $0d388faa1fba3b62$export$2e2bcd8739ae039)(new Date()), year));
+    var handleChange = function(e) {
+        var newMonth = (0, $019f0ace62c813f7$export$2e2bcd8739ae039)((0, $5414d5cc86bb45d3$export$2e2bcd8739ae039)(displayMonth), Number(e.target.value));
+        props.onChange(newMonth);
+    };
+    var DropdownComponent = (_a = components === null || components === void 0 ? void 0 : components.Dropdown) !== null && _a !== void 0 ? _a : $a66560f34356fabb$export$931cbfb6bfb85fc;
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx(DropdownComponent, $a66560f34356fabb$var$__assign({
+        name: "years",
+        "aria-label": labelYearDropdown(),
+        className: classNames.dropdown_year,
+        style: styles.dropdown_year,
+        onChange: handleChange,
+        value: displayMonth.getFullYear(),
+        caption: formatYearCaption(displayMonth, {
+            locale: locale
+        })
+    }, {
+        children: years.map(function(year) {
+            return $a66560f34356fabb$var$jsxRuntimeExports.jsx("option", $a66560f34356fabb$var$__assign({
+                value: year.getFullYear()
+            }, {
+                children: formatYearCaption(year, {
+                    locale: locale
+                })
+            }), year.getFullYear());
+        })
+    }));
+}
+/**
+ * Helper hook for using controlled/uncontrolled values from a component props.
+ *
+ * When the value is not controlled, pass `undefined` as `controlledValue` and
+ * use the returned setter to update it.
+ *
+ * When the value is controlled, pass the controlled value as second
+ * argument, which will be always returned as `value`.
+ */ function $a66560f34356fabb$var$useControlledValue(defaultValue, controlledValue) {
+    var _a = (0, $LI8jA.useState)(defaultValue), uncontrolledValue = _a[0], setValue = _a[1];
+    var value = controlledValue === undefined ? uncontrolledValue : controlledValue;
+    return [
+        value,
+        setValue
+    ];
+}
+/** Return the initial month according to the given options. */ function $a66560f34356fabb$var$getInitialMonth(context) {
+    var month = context.month, defaultMonth = context.defaultMonth, today = context.today;
+    var initialMonth = month || defaultMonth || today || new Date();
+    var toDate = context.toDate, fromDate = context.fromDate, _a = context.numberOfMonths, numberOfMonths = _a === void 0 ? 1 : _a;
+    // Fix the initialMonth if is after the to-date
+    if (toDate && (0, $09c24b98451c6738$export$2e2bcd8739ae039)(toDate, initialMonth) < 0) {
+        var offset = -1 * (numberOfMonths - 1);
+        initialMonth = (0, $7d7938354f1f789f$export$2e2bcd8739ae039)(toDate, offset);
+    }
+    // Fix the initialMonth if is before the from-date
+    if (fromDate && (0, $09c24b98451c6738$export$2e2bcd8739ae039)(initialMonth, fromDate) < 0) initialMonth = fromDate;
+    return (0, $5414d5cc86bb45d3$export$2e2bcd8739ae039)(initialMonth);
+}
+/** Controls the navigation state. */ function $a66560f34356fabb$var$useNavigationState() {
+    var context = $a66560f34356fabb$export$332e9e0d64b1f294();
+    var initialMonth = $a66560f34356fabb$var$getInitialMonth(context);
+    var _a = $a66560f34356fabb$var$useControlledValue(initialMonth, context.month), month = _a[0], setMonth = _a[1];
+    var goToMonth = function(date) {
+        var _a;
+        if (context.disableNavigation) return;
+        var month = (0, $5414d5cc86bb45d3$export$2e2bcd8739ae039)(date);
+        setMonth(month);
+        (_a = context.onMonthChange) === null || _a === void 0 || _a.call(context, month);
+    };
+    return [
+        month,
+        goToMonth
+    ];
+}
+/**
+ * Return the months to display in the component according to the number of
+ * months and the from/to date.
+ */ function $a66560f34356fabb$var$getDisplayMonths(month, _a) {
+    var reverseMonths = _a.reverseMonths, numberOfMonths = _a.numberOfMonths;
+    var start = (0, $5414d5cc86bb45d3$export$2e2bcd8739ae039)(month);
+    var end = (0, $5414d5cc86bb45d3$export$2e2bcd8739ae039)((0, $7d7938354f1f789f$export$2e2bcd8739ae039)(start, numberOfMonths));
+    var monthsDiff = (0, $09c24b98451c6738$export$2e2bcd8739ae039)(end, start);
+    var months = [];
+    for(var i = 0; i < monthsDiff; i++){
+        var nextMonth = (0, $7d7938354f1f789f$export$2e2bcd8739ae039)(start, i);
+        months.push(nextMonth);
+    }
+    if (reverseMonths) months = months.reverse();
+    return months;
+}
+/**
+ * Returns the next month the user can navigate to according to the given
+ * options.
+ *
+ * Please note that the next month is not always the next calendar month:
+ *
+ * - if after the `toDate` range, is undefined;
+ * - if the navigation is paged, is the number of months displayed ahead.
+ *
+ */ function $a66560f34356fabb$var$getNextMonth(startingMonth, options) {
+    if (options.disableNavigation) return undefined;
+    var toDate = options.toDate, pagedNavigation = options.pagedNavigation, _a = options.numberOfMonths, numberOfMonths = _a === void 0 ? 1 : _a;
+    var offset = pagedNavigation ? numberOfMonths : 1;
+    var month = (0, $5414d5cc86bb45d3$export$2e2bcd8739ae039)(startingMonth);
+    if (!toDate) return (0, $7d7938354f1f789f$export$2e2bcd8739ae039)(month, offset);
+    var monthsDiff = (0, $09c24b98451c6738$export$2e2bcd8739ae039)(toDate, startingMonth);
+    if (monthsDiff < numberOfMonths) return undefined;
+    // Jump forward as the number of months when paged navigation
+    return (0, $7d7938354f1f789f$export$2e2bcd8739ae039)(month, offset);
+}
+/**
+ * Returns the next previous the user can navigate to, according to the given
+ * options.
+ *
+ * Please note that the previous month is not always the previous calendar
+ * month:
+ *
+ * - if before the `fromDate` date, is `undefined`;
+ * - if the navigation is paged, is the number of months displayed before.
+ *
+ */ function $a66560f34356fabb$var$getPreviousMonth(startingMonth, options) {
+    if (options.disableNavigation) return undefined;
+    var fromDate = options.fromDate, pagedNavigation = options.pagedNavigation, _a = options.numberOfMonths, numberOfMonths = _a === void 0 ? 1 : _a;
+    var offset = pagedNavigation ? numberOfMonths : 1;
+    var month = (0, $5414d5cc86bb45d3$export$2e2bcd8739ae039)(startingMonth);
+    if (!fromDate) return (0, $7d7938354f1f789f$export$2e2bcd8739ae039)(month, -offset);
+    var monthsDiff = (0, $09c24b98451c6738$export$2e2bcd8739ae039)(month, fromDate);
+    if (monthsDiff <= 0) return undefined;
+    // Jump back as the number of months when paged navigation
+    return (0, $7d7938354f1f789f$export$2e2bcd8739ae039)(month, -offset);
+}
+/**
+ * The Navigation context shares details and methods to navigate the months in DayPicker.
+ * Access this context from the {@link useNavigation} hook.
+ */ var $a66560f34356fabb$export$3044ab7fdabeaee6 = (0, $LI8jA.createContext)(undefined);
+/** Provides the values for the {@link NavigationContext}. */ function $a66560f34356fabb$export$d91daf425539f32f(props) {
+    var dayPicker = $a66560f34356fabb$export$332e9e0d64b1f294();
+    var _a = $a66560f34356fabb$var$useNavigationState(), currentMonth = _a[0], goToMonth = _a[1];
+    var displayMonths = $a66560f34356fabb$var$getDisplayMonths(currentMonth, dayPicker);
+    var nextMonth = $a66560f34356fabb$var$getNextMonth(currentMonth, dayPicker);
+    var previousMonth = $a66560f34356fabb$var$getPreviousMonth(currentMonth, dayPicker);
+    var isDateDisplayed = function(date) {
+        return displayMonths.some(function(displayMonth) {
+            return (0, $6a206201f1dba31f$export$2e2bcd8739ae039)(date, displayMonth);
+        });
+    };
+    var goToDate = function(date, refDate) {
+        if (isDateDisplayed(date)) return;
+        if (refDate && (0, $a2bd70363db746b6$export$2e2bcd8739ae039)(date, refDate)) goToMonth((0, $7d7938354f1f789f$export$2e2bcd8739ae039)(date, 1 + dayPicker.numberOfMonths * -1));
+        else goToMonth(date);
+    };
+    var value = {
+        currentMonth: currentMonth,
+        displayMonths: displayMonths,
+        goToMonth: goToMonth,
+        goToDate: goToDate,
+        previousMonth: previousMonth,
+        nextMonth: nextMonth,
+        isDateDisplayed: isDateDisplayed
+    };
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$3044ab7fdabeaee6.Provider, $a66560f34356fabb$var$__assign({
+        value: value
+    }, {
+        children: props.children
+    }));
+}
+/**
+ * Hook to access the {@link NavigationContextValue}. Use this hook to navigate
+ * between months or years in DayPicker.
+ *
+ * This hook is meant to be used inside internal or custom components.
+ */ function $a66560f34356fabb$export$d0fd4b7106de2769() {
+    var context = (0, $LI8jA.useContext)($a66560f34356fabb$export$3044ab7fdabeaee6);
+    if (!context) throw new Error("useNavigation must be used within a NavigationProvider");
+    return context;
+}
+/**
+ * Render a caption with the dropdowns to navigate between months and years.
+ */ function $a66560f34356fabb$export$6a3605aba74bcb3d(props) {
+    var _a;
+    var _b = $a66560f34356fabb$export$332e9e0d64b1f294(), classNames = _b.classNames, styles = _b.styles, components = _b.components;
+    var goToMonth = $a66560f34356fabb$export$d0fd4b7106de2769().goToMonth;
+    var handleMonthChange = function(newMonth) {
+        goToMonth((0, $7d7938354f1f789f$export$2e2bcd8739ae039)(newMonth, props.displayIndex ? -props.displayIndex : 0));
+    };
+    var CaptionLabelComponent = (_a = components === null || components === void 0 ? void 0 : components.CaptionLabel) !== null && _a !== void 0 ? _a : $a66560f34356fabb$export$5b9f95302ae85eba;
+    var captionLabel = $a66560f34356fabb$var$jsxRuntimeExports.jsx(CaptionLabelComponent, {
+        id: props.id,
+        displayMonth: props.displayMonth
+    });
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsxs("div", $a66560f34356fabb$var$__assign({
+        className: classNames.caption_dropdowns,
+        style: styles.caption_dropdowns
+    }, {
+        children: [
+            $a66560f34356fabb$var$jsxRuntimeExports.jsx("div", $a66560f34356fabb$var$__assign({
+                className: classNames.vhidden
+            }, {
+                children: captionLabel
+            })),
+            $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$var$MonthsDropdown, {
+                onChange: handleMonthChange,
+                displayMonth: props.displayMonth
+            }),
+            $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$var$YearsDropdown, {
+                onChange: handleMonthChange,
+                displayMonth: props.displayMonth
+            })
+        ]
+    }));
+}
+/**
+ * Render the "previous month" button in the navigation.
+ */ function $a66560f34356fabb$export$fac286bb0d0d0385(props) {
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx("svg", $a66560f34356fabb$var$__assign({
+        width: "16px",
+        height: "16px",
+        viewBox: "0 0 120 120"
+    }, props, {
+        children: $a66560f34356fabb$var$jsxRuntimeExports.jsx("path", {
+            d: "M69.490332,3.34314575 C72.6145263,0.218951416 77.6798462,0.218951416 80.8040405,3.34314575 C83.8617626,6.40086786 83.9268205,11.3179931 80.9992143,14.4548388 L80.8040405,14.6568542 L35.461,60 L80.8040405,105.343146 C83.8617626,108.400868 83.9268205,113.317993 80.9992143,116.454839 L80.8040405,116.656854 C77.7463184,119.714576 72.8291931,119.779634 69.6923475,116.852028 L69.490332,116.656854 L18.490332,65.6568542 C15.4326099,62.5991321 15.367552,57.6820069 18.2951583,54.5451612 L18.490332,54.3431458 L69.490332,3.34314575 Z",
+            fill: "currentColor",
+            fillRule: "nonzero"
+        })
+    }));
+}
+/**
+ * Render the "next month" button in the navigation.
+ */ function $a66560f34356fabb$export$142e5a7835580ff5(props) {
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx("svg", $a66560f34356fabb$var$__assign({
+        width: "16px",
+        height: "16px",
+        viewBox: "0 0 120 120"
+    }, props, {
+        children: $a66560f34356fabb$var$jsxRuntimeExports.jsx("path", {
+            d: "M49.8040405,3.34314575 C46.6798462,0.218951416 41.6145263,0.218951416 38.490332,3.34314575 C35.4326099,6.40086786 35.367552,11.3179931 38.2951583,14.4548388 L38.490332,14.6568542 L83.8333725,60 L38.490332,105.343146 C35.4326099,108.400868 35.367552,113.317993 38.2951583,116.454839 L38.490332,116.656854 C41.5480541,119.714576 46.4651794,119.779634 49.602025,116.852028 L49.8040405,116.656854 L100.804041,65.6568542 C103.861763,62.5991321 103.926821,57.6820069 100.999214,54.5451612 L100.804041,54.3431458 L49.8040405,3.34314575 Z",
+            fill: "currentColor"
+        })
+    }));
+}
+/** Render a button HTML element applying the reset class name. */ var $a66560f34356fabb$export$353f5b6fc5456de1 = (0, $LI8jA.forwardRef)(function(props, ref) {
+    var _a = $a66560f34356fabb$export$332e9e0d64b1f294(), classNames = _a.classNames, styles = _a.styles;
+    var classNamesArr = [
+        classNames.button_reset,
+        classNames.button
+    ];
+    if (props.className) classNamesArr.push(props.className);
+    var className = classNamesArr.join(" ");
+    var style = $a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign({}, styles.button_reset), styles.button);
+    if (props.style) Object.assign(style, props.style);
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx("button", $a66560f34356fabb$var$__assign({}, props, {
+        ref: ref,
+        type: "button",
+        className: className,
+        style: style
+    }));
+});
+/** A component rendering the navigation buttons or the drop-downs. */ function $a66560f34356fabb$var$Navigation(props) {
+    var _a, _b;
+    var _c = $a66560f34356fabb$export$332e9e0d64b1f294(), dir = _c.dir, locale = _c.locale, classNames = _c.classNames, styles = _c.styles, _d = _c.labels, labelPrevious = _d.labelPrevious, labelNext = _d.labelNext, components = _c.components;
+    if (!props.nextMonth && !props.previousMonth) return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$var$jsxRuntimeExports.Fragment, {});
+    var previousLabel = labelPrevious(props.previousMonth, {
+        locale: locale
+    });
+    var previousClassName = [
+        classNames.nav_button,
+        classNames.nav_button_previous
+    ].join(" ");
+    var nextLabel = labelNext(props.nextMonth, {
+        locale: locale
+    });
+    var nextClassName = [
+        classNames.nav_button,
+        classNames.nav_button_next
+    ].join(" ");
+    var IconRightComponent = (_a = components === null || components === void 0 ? void 0 : components.IconRight) !== null && _a !== void 0 ? _a : $a66560f34356fabb$export$142e5a7835580ff5;
+    var IconLeftComponent = (_b = components === null || components === void 0 ? void 0 : components.IconLeft) !== null && _b !== void 0 ? _b : $a66560f34356fabb$export$fac286bb0d0d0385;
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsxs("div", $a66560f34356fabb$var$__assign({
+        className: classNames.nav,
+        style: styles.nav
+    }, {
+        children: [
+            !props.hidePrevious && $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$353f5b6fc5456de1, $a66560f34356fabb$var$__assign({
+                name: "previous-month",
+                "aria-label": previousLabel,
+                className: previousClassName,
+                style: styles.nav_button_previous,
+                disabled: !props.previousMonth,
+                onClick: props.onPreviousClick
+            }, {
+                children: dir === "rtl" ? $a66560f34356fabb$var$jsxRuntimeExports.jsx(IconRightComponent, {
+                    className: classNames.nav_icon,
+                    style: styles.nav_icon
+                }) : $a66560f34356fabb$var$jsxRuntimeExports.jsx(IconLeftComponent, {
+                    className: classNames.nav_icon,
+                    style: styles.nav_icon
+                })
+            })),
+            !props.hideNext && $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$353f5b6fc5456de1, $a66560f34356fabb$var$__assign({
+                name: "next-month",
+                "aria-label": nextLabel,
+                className: nextClassName,
+                style: styles.nav_button_next,
+                disabled: !props.nextMonth,
+                onClick: props.onNextClick
+            }, {
+                children: dir === "rtl" ? $a66560f34356fabb$var$jsxRuntimeExports.jsx(IconLeftComponent, {
+                    className: classNames.nav_icon,
+                    style: styles.nav_icon
+                }) : $a66560f34356fabb$var$jsxRuntimeExports.jsx(IconRightComponent, {
+                    className: classNames.nav_icon,
+                    style: styles.nav_icon
+                })
+            }))
+        ]
+    }));
+}
+/**
+ * Render a caption with a button-based navigation.
+ */ function $a66560f34356fabb$export$f6e46da460a028c1(props) {
+    var numberOfMonths = $a66560f34356fabb$export$332e9e0d64b1f294().numberOfMonths;
+    var _a = $a66560f34356fabb$export$d0fd4b7106de2769(), previousMonth = _a.previousMonth, nextMonth = _a.nextMonth, goToMonth = _a.goToMonth, displayMonths = _a.displayMonths;
+    var displayIndex = displayMonths.findIndex(function(month) {
+        return (0, $6a206201f1dba31f$export$2e2bcd8739ae039)(props.displayMonth, month);
+    });
+    var isFirst = displayIndex === 0;
+    var isLast = displayIndex === displayMonths.length - 1;
+    var hideNext = numberOfMonths > 1 && (isFirst || !isLast);
+    var hidePrevious = numberOfMonths > 1 && (isLast || !isFirst);
+    var handlePreviousClick = function() {
+        if (!previousMonth) return;
+        goToMonth(previousMonth);
+    };
+    var handleNextClick = function() {
+        if (!nextMonth) return;
+        goToMonth(nextMonth);
+    };
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$var$Navigation, {
+        displayMonth: props.displayMonth,
+        hideNext: hideNext,
+        hidePrevious: hidePrevious,
+        nextMonth: nextMonth,
+        previousMonth: previousMonth,
+        onPreviousClick: handlePreviousClick,
+        onNextClick: handleNextClick
+    });
+}
+/**
+ * Render the caption of a month. The caption has a different layout when
+ * setting the {@link DayPickerBase.captionLayout} prop.
+ */ function $a66560f34356fabb$export$32fbfacc5d962e0c(props) {
+    var _a;
+    var _b = $a66560f34356fabb$export$332e9e0d64b1f294(), classNames = _b.classNames, disableNavigation = _b.disableNavigation, styles = _b.styles, captionLayout = _b.captionLayout, components = _b.components;
+    var CaptionLabelComponent = (_a = components === null || components === void 0 ? void 0 : components.CaptionLabel) !== null && _a !== void 0 ? _a : $a66560f34356fabb$export$5b9f95302ae85eba;
+    var caption;
+    if (disableNavigation) caption = $a66560f34356fabb$var$jsxRuntimeExports.jsx(CaptionLabelComponent, {
+        id: props.id,
+        displayMonth: props.displayMonth
+    });
+    else if (captionLayout === "dropdown") caption = $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$6a3605aba74bcb3d, {
+        displayMonth: props.displayMonth,
+        id: props.id
+    });
+    else if (captionLayout === "dropdown-buttons") caption = $a66560f34356fabb$var$jsxRuntimeExports.jsxs($a66560f34356fabb$var$jsxRuntimeExports.Fragment, {
+        children: [
+            $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$6a3605aba74bcb3d, {
+                displayMonth: props.displayMonth,
+                displayIndex: props.displayIndex,
+                id: props.id
+            }),
+            $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$f6e46da460a028c1, {
+                displayMonth: props.displayMonth,
+                displayIndex: props.displayIndex,
+                id: props.id
+            })
+        ]
+    });
+    else caption = $a66560f34356fabb$var$jsxRuntimeExports.jsxs($a66560f34356fabb$var$jsxRuntimeExports.Fragment, {
+        children: [
+            $a66560f34356fabb$var$jsxRuntimeExports.jsx(CaptionLabelComponent, {
+                id: props.id,
+                displayMonth: props.displayMonth,
+                displayIndex: props.displayIndex
+            }),
+            $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$f6e46da460a028c1, {
+                displayMonth: props.displayMonth,
+                id: props.id
+            })
+        ]
+    });
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx("div", $a66560f34356fabb$var$__assign({
+        className: classNames.caption,
+        style: styles.caption
+    }, {
+        children: caption
+    }));
+}
+/** Render the Footer component (empty as default).*/ // eslint-disable-next-line @typescript-eslint/no-unused-vars
+function $a66560f34356fabb$export$a06f1c675e846f6f(props) {
+    var _a = $a66560f34356fabb$export$332e9e0d64b1f294(), footer = _a.footer, styles = _a.styles, tfoot = _a.classNames.tfoot;
+    if (!footer) return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$var$jsxRuntimeExports.Fragment, {});
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx("tfoot", $a66560f34356fabb$var$__assign({
+        className: tfoot,
+        style: styles.tfoot
+    }, {
+        children: $a66560f34356fabb$var$jsxRuntimeExports.jsx("tr", {
+            children: $a66560f34356fabb$var$jsxRuntimeExports.jsx("td", $a66560f34356fabb$var$__assign({
+                colSpan: 8
+            }, {
+                children: footer
+            }))
+        })
+    }));
+}
+/**
+ * Generate a series of 7 days, starting from the week, to use for formatting
+ * the weekday names (Monday, Tuesday, etc.).
+ */ function $a66560f34356fabb$var$getWeekdays(locale, /** The index of the first day of the week (0 - Sunday). */ weekStartsOn, /** Use ISOWeek instead of locale/ */ ISOWeek) {
+    var start = ISOWeek ? (0, $43fb72b230ef1caa$export$2e2bcd8739ae039)(new Date()) : (0, $2df4b5ee75220800$export$2e2bcd8739ae039)(new Date(), {
+        locale: locale,
+        weekStartsOn: weekStartsOn
+    });
+    var days = [];
+    for(var i = 0; i < 7; i++){
+        var day = (0, $53cea08d313a73ff$export$2e2bcd8739ae039)(start, i);
+        days.push(day);
+    }
+    return days;
+}
+/**
+ * Render the HeadRow component - i.e. the table head row with the weekday names.
+ */ function $a66560f34356fabb$export$b008e842a2213343() {
+    var _a = $a66560f34356fabb$export$332e9e0d64b1f294(), classNames = _a.classNames, styles = _a.styles, showWeekNumber = _a.showWeekNumber, locale = _a.locale, weekStartsOn = _a.weekStartsOn, ISOWeek = _a.ISOWeek, formatWeekdayName = _a.formatters.formatWeekdayName, labelWeekday = _a.labels.labelWeekday;
+    var weekdays = $a66560f34356fabb$var$getWeekdays(locale, weekStartsOn, ISOWeek);
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsxs("tr", $a66560f34356fabb$var$__assign({
+        style: styles.head_row,
+        className: classNames.head_row
+    }, {
+        children: [
+            showWeekNumber && $a66560f34356fabb$var$jsxRuntimeExports.jsx("td", {
+                style: styles.head_cell,
+                className: classNames.head_cell
+            }),
+            weekdays.map(function(weekday, i) {
+                return $a66560f34356fabb$var$jsxRuntimeExports.jsx("th", $a66560f34356fabb$var$__assign({
+                    scope: "col",
+                    className: classNames.head_cell,
+                    style: styles.head_cell,
+                    "aria-label": labelWeekday(weekday, {
+                        locale: locale
+                    })
+                }, {
+                    children: formatWeekdayName(weekday, {
+                        locale: locale
+                    })
+                }), i);
+            })
+        ]
+    }));
+}
+/** Render the table head. */ function $a66560f34356fabb$export$e93312b7773dfcac() {
+    var _a;
+    var _b = $a66560f34356fabb$export$332e9e0d64b1f294(), classNames = _b.classNames, styles = _b.styles, components = _b.components;
+    var HeadRowComponent = (_a = components === null || components === void 0 ? void 0 : components.HeadRow) !== null && _a !== void 0 ? _a : $a66560f34356fabb$export$b008e842a2213343;
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx("thead", $a66560f34356fabb$var$__assign({
+        style: styles.head,
+        className: classNames.head
+    }, {
+        children: $a66560f34356fabb$var$jsxRuntimeExports.jsx(HeadRowComponent, {})
+    }));
+}
+/** Render the content of the day cell. */ function $a66560f34356fabb$export$16d0634337daf8ec(props) {
+    var _a = $a66560f34356fabb$export$332e9e0d64b1f294(), locale = _a.locale, formatDay = _a.formatters.formatDay;
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$var$jsxRuntimeExports.Fragment, {
+        children: formatDay(props.date, {
+            locale: locale
+        })
+    });
+}
+/**
+ * The SelectMultiple context shares details about the selected days when in
+ * multiple selection mode.
+ *
+ * Access this context from the {@link useSelectMultiple} hook.
+ */ var $a66560f34356fabb$export$26e3e4d6f601d4d6 = (0, $LI8jA.createContext)(undefined);
+/** Provides the values for the {@link SelectMultipleContext}. */ function $a66560f34356fabb$export$913827019032c8d4(props) {
+    if (!$a66560f34356fabb$export$2d8c2b43ec0e528(props.initialProps)) {
+        var emptyContextValue = {
+            selected: undefined,
+            modifiers: {
+                disabled: []
+            }
+        };
+        return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$26e3e4d6f601d4d6.Provider, $a66560f34356fabb$var$__assign({
+            value: emptyContextValue
+        }, {
+            children: props.children
+        }));
+    }
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$91128e1c5ca64a0d, {
+        initialProps: props.initialProps,
+        children: props.children
+    });
+}
+function $a66560f34356fabb$export$91128e1c5ca64a0d(_a) {
+    var initialProps = _a.initialProps, children = _a.children;
+    var selected = initialProps.selected, min = initialProps.min, max = initialProps.max;
+    var onDayClick = function(day, activeModifiers, e) {
+        var _a, _b;
+        (_a = initialProps.onDayClick) === null || _a === void 0 || _a.call(initialProps, day, activeModifiers, e);
+        var isMinSelected = Boolean(activeModifiers.selected && min && (selected === null || selected === void 0 ? void 0 : selected.length) === min);
+        if (isMinSelected) return;
+        var isMaxSelected = Boolean(!activeModifiers.selected && max && (selected === null || selected === void 0 ? void 0 : selected.length) === max);
+        if (isMaxSelected) return;
+        var selectedDays = selected ? $a66560f34356fabb$var$__spreadArray([], selected, true) : [];
+        if (activeModifiers.selected) {
+            var index = selectedDays.findIndex(function(selectedDay) {
+                return (0, $a866727ccd092b8f$export$2e2bcd8739ae039)(day, selectedDay);
+            });
+            selectedDays.splice(index, 1);
+        } else selectedDays.push(day);
+        (_b = initialProps.onSelect) === null || _b === void 0 || _b.call(initialProps, selectedDays, day, activeModifiers, e);
+    };
+    var modifiers = {
+        disabled: []
+    };
+    if (selected) modifiers.disabled.push(function(day) {
+        var isMaxSelected = max && selected.length > max - 1;
+        var isSelected = selected.some(function(selectedDay) {
+            return (0, $a866727ccd092b8f$export$2e2bcd8739ae039)(selectedDay, day);
+        });
+        return Boolean(isMaxSelected && !isSelected);
+    });
+    var contextValue = {
+        selected: selected,
+        onDayClick: onDayClick,
+        modifiers: modifiers
+    };
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$26e3e4d6f601d4d6.Provider, $a66560f34356fabb$var$__assign({
+        value: contextValue
+    }, {
+        children: children
+    }));
+}
+/**
+ * Hook to access the {@link SelectMultipleContextValue}.
+ *
+ * This hook is meant to be used inside internal or custom components.
+ */ function $a66560f34356fabb$export$458361db477d8ed0() {
+    var context = (0, $LI8jA.useContext)($a66560f34356fabb$export$26e3e4d6f601d4d6);
+    if (!context) throw new Error("useSelectMultiple must be used within a SelectMultipleProvider");
+    return context;
+}
+/**
+ * Add a day to an existing range.
+ *
+ * The returned range takes in account the `undefined` values and if the added
+ * day is already present in the range.
+ */ function $a66560f34356fabb$export$27ef550b4e6acc0c(day, range) {
+    var _a = range || {}, from = _a.from, to = _a.to;
+    if (from && to) {
+        if ((0, $a866727ccd092b8f$export$2e2bcd8739ae039)(to, day) && (0, $a866727ccd092b8f$export$2e2bcd8739ae039)(from, day)) return undefined;
+        if ((0, $a866727ccd092b8f$export$2e2bcd8739ae039)(to, day)) return {
+            from: to,
+            to: undefined
+        };
+        if ((0, $a866727ccd092b8f$export$2e2bcd8739ae039)(from, day)) return undefined;
+        if ((0, $8ea5ab803a6411cd$export$2e2bcd8739ae039)(from, day)) return {
+            from: day,
+            to: to
+        };
+        return {
+            from: from,
+            to: day
+        };
+    }
+    if (to) {
+        if ((0, $8ea5ab803a6411cd$export$2e2bcd8739ae039)(day, to)) return {
+            from: to,
+            to: day
+        };
+        return {
+            from: day,
+            to: to
+        };
+    }
+    if (from) {
+        if ((0, $a2bd70363db746b6$export$2e2bcd8739ae039)(day, from)) return {
+            from: day,
+            to: from
+        };
+        return {
+            from: from,
+            to: day
+        };
+    }
+    return {
+        from: day,
+        to: undefined
+    };
+}
+/**
+ * The SelectRange context shares details about the selected days when in
+ * range selection mode.
+ *
+ * Access this context from the {@link useSelectRange} hook.
+ */ var $a66560f34356fabb$export$49c734aed8c840bb = (0, $LI8jA.createContext)(undefined);
+/** Provides the values for the {@link SelectRangeProvider}. */ function $a66560f34356fabb$export$deb49a47c7ee5fdf(props) {
+    if (!$a66560f34356fabb$export$f7b9f96866ec1964(props.initialProps)) {
+        var emptyContextValue = {
+            selected: undefined,
+            modifiers: {
+                range_start: [],
+                range_end: [],
+                range_middle: [],
+                disabled: []
+            }
+        };
+        return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$49c734aed8c840bb.Provider, $a66560f34356fabb$var$__assign({
+            value: emptyContextValue
+        }, {
+            children: props.children
+        }));
+    }
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$cca59e032fbbe71f, {
+        initialProps: props.initialProps,
+        children: props.children
+    });
+}
+function $a66560f34356fabb$export$cca59e032fbbe71f(_a) {
+    var initialProps = _a.initialProps, children = _a.children;
+    var selected = initialProps.selected;
+    var _b = selected || {}, selectedFrom = _b.from, selectedTo = _b.to;
+    var min = initialProps.min;
+    var max = initialProps.max;
+    var onDayClick = function(day, activeModifiers, e) {
+        var _a, _b;
+        (_a = initialProps.onDayClick) === null || _a === void 0 || _a.call(initialProps, day, activeModifiers, e);
+        var newRange = $a66560f34356fabb$export$27ef550b4e6acc0c(day, selected);
+        (_b = initialProps.onSelect) === null || _b === void 0 || _b.call(initialProps, newRange, day, activeModifiers, e);
+    };
+    var modifiers = {
+        range_start: [],
+        range_end: [],
+        range_middle: [],
+        disabled: []
+    };
+    if (selectedFrom) {
+        modifiers.range_start = [
+            selectedFrom
+        ];
+        if (!selectedTo) modifiers.range_end = [
+            selectedFrom
+        ];
+        else {
+            modifiers.range_end = [
+                selectedTo
+            ];
+            if (!(0, $a866727ccd092b8f$export$2e2bcd8739ae039)(selectedFrom, selectedTo)) modifiers.range_middle = [
+                {
+                    after: selectedFrom,
+                    before: selectedTo
+                }
+            ];
+        }
+    } else if (selectedTo) {
+        modifiers.range_start = [
+            selectedTo
+        ];
+        modifiers.range_end = [
+            selectedTo
+        ];
+    }
+    if (min) {
+        if (selectedFrom && !selectedTo) modifiers.disabled.push({
+            after: (0, $75dd9cd5049e11dc$export$2e2bcd8739ae039)(selectedFrom, min - 1),
+            before: (0, $53cea08d313a73ff$export$2e2bcd8739ae039)(selectedFrom, min - 1)
+        });
+        if (selectedFrom && selectedTo) modifiers.disabled.push({
+            after: selectedFrom,
+            before: (0, $53cea08d313a73ff$export$2e2bcd8739ae039)(selectedFrom, min - 1)
+        });
+        if (!selectedFrom && selectedTo) modifiers.disabled.push({
+            after: (0, $75dd9cd5049e11dc$export$2e2bcd8739ae039)(selectedTo, min - 1),
+            before: (0, $53cea08d313a73ff$export$2e2bcd8739ae039)(selectedTo, min - 1)
+        });
+    }
+    if (max) {
+        if (selectedFrom && !selectedTo) {
+            modifiers.disabled.push({
+                before: (0, $53cea08d313a73ff$export$2e2bcd8739ae039)(selectedFrom, -max + 1)
+            });
+            modifiers.disabled.push({
+                after: (0, $53cea08d313a73ff$export$2e2bcd8739ae039)(selectedFrom, max - 1)
+            });
+        }
+        if (selectedFrom && selectedTo) {
+            var selectedCount = (0, $e1a58e40f6f10c3c$export$2e2bcd8739ae039)(selectedTo, selectedFrom) + 1;
+            var offset = max - selectedCount;
+            modifiers.disabled.push({
+                before: (0, $75dd9cd5049e11dc$export$2e2bcd8739ae039)(selectedFrom, offset)
+            });
+            modifiers.disabled.push({
+                after: (0, $53cea08d313a73ff$export$2e2bcd8739ae039)(selectedTo, offset)
+            });
+        }
+        if (!selectedFrom && selectedTo) {
+            modifiers.disabled.push({
+                before: (0, $53cea08d313a73ff$export$2e2bcd8739ae039)(selectedTo, -max + 1)
+            });
+            modifiers.disabled.push({
+                after: (0, $53cea08d313a73ff$export$2e2bcd8739ae039)(selectedTo, max - 1)
+            });
+        }
+    }
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$49c734aed8c840bb.Provider, $a66560f34356fabb$var$__assign({
+        value: {
+            selected: selected,
+            onDayClick: onDayClick,
+            modifiers: modifiers
+        }
+    }, {
+        children: children
+    }));
+}
+/**
+ * Hook to access the {@link SelectRangeContextValue}.
+ *
+ * This hook is meant to be used inside internal or custom components.
+ */ function $a66560f34356fabb$export$ad0998138eb321e7() {
+    var context = (0, $LI8jA.useContext)($a66560f34356fabb$export$49c734aed8c840bb);
+    if (!context) throw new Error("useSelectRange must be used within a SelectRangeProvider");
+    return context;
+}
+/** Normalize to array a matcher input. */ function $a66560f34356fabb$var$matcherToArray(matcher) {
+    if (Array.isArray(matcher)) return $a66560f34356fabb$var$__spreadArray([], matcher, true);
+    else if (matcher !== undefined) return [
+        matcher
+    ];
+    else return [];
+}
+/** Create CustomModifiers from dayModifiers */ function $a66560f34356fabb$var$getCustomModifiers(dayModifiers) {
+    var customModifiers = {};
+    Object.entries(dayModifiers).forEach(function(_a) {
+        var modifier = _a[0], matcher = _a[1];
+        customModifiers[modifier] = $a66560f34356fabb$var$matcherToArray(matcher);
+    });
+    return customModifiers;
+}
+/** The name of the modifiers that are used internally by DayPicker. */ var $a66560f34356fabb$export$7652a4f8ecc53eb5;
+(function(InternalModifier) {
+    InternalModifier["Outside"] = "outside";
+    /** Name of the modifier applied to the disabled days, using the `disabled` prop. */ InternalModifier["Disabled"] = "disabled";
+    /** Name of the modifier applied to the selected days using the `selected` prop). */ InternalModifier["Selected"] = "selected";
+    /** Name of the modifier applied to the hidden days using the `hidden` prop). */ InternalModifier["Hidden"] = "hidden";
+    /** Name of the modifier applied to the day specified using the `today` prop). */ InternalModifier["Today"] = "today";
+    /** The modifier applied to the day starting a selected range, when in range selection mode.  */ InternalModifier["RangeStart"] = "range_start";
+    /** The modifier applied to the day ending a selected range, when in range selection mode.  */ InternalModifier["RangeEnd"] = "range_end";
+    /** The modifier applied to the days between the start and the end of a selected range, when in range selection mode.  */ InternalModifier["RangeMiddle"] = "range_middle";
+})($a66560f34356fabb$export$7652a4f8ecc53eb5 || ($a66560f34356fabb$export$7652a4f8ecc53eb5 = {}));
+var $a66560f34356fabb$var$Selected = $a66560f34356fabb$export$7652a4f8ecc53eb5.Selected, $a66560f34356fabb$var$Disabled = $a66560f34356fabb$export$7652a4f8ecc53eb5.Disabled, $a66560f34356fabb$var$Hidden = $a66560f34356fabb$export$7652a4f8ecc53eb5.Hidden, $a66560f34356fabb$var$Today = $a66560f34356fabb$export$7652a4f8ecc53eb5.Today, $a66560f34356fabb$var$RangeEnd = $a66560f34356fabb$export$7652a4f8ecc53eb5.RangeEnd, $a66560f34356fabb$var$RangeMiddle = $a66560f34356fabb$export$7652a4f8ecc53eb5.RangeMiddle, $a66560f34356fabb$var$RangeStart = $a66560f34356fabb$export$7652a4f8ecc53eb5.RangeStart, $a66560f34356fabb$var$Outside = $a66560f34356fabb$export$7652a4f8ecc53eb5.Outside;
+/** Return the {@link InternalModifiers} from the DayPicker and select contexts. */ function $a66560f34356fabb$var$getInternalModifiers(dayPicker, selectMultiple, selectRange) {
+    var _a;
+    var internalModifiers = (_a = {}, _a[$a66560f34356fabb$var$Selected] = $a66560f34356fabb$var$matcherToArray(dayPicker.selected), _a[$a66560f34356fabb$var$Disabled] = $a66560f34356fabb$var$matcherToArray(dayPicker.disabled), _a[$a66560f34356fabb$var$Hidden] = $a66560f34356fabb$var$matcherToArray(dayPicker.hidden), _a[$a66560f34356fabb$var$Today] = [
+        dayPicker.today
+    ], _a[$a66560f34356fabb$var$RangeEnd] = [], _a[$a66560f34356fabb$var$RangeMiddle] = [], _a[$a66560f34356fabb$var$RangeStart] = [], _a[$a66560f34356fabb$var$Outside] = [], _a);
+    if (dayPicker.fromDate) internalModifiers[$a66560f34356fabb$var$Disabled].push({
+        before: dayPicker.fromDate
+    });
+    if (dayPicker.toDate) internalModifiers[$a66560f34356fabb$var$Disabled].push({
+        after: dayPicker.toDate
+    });
+    if ($a66560f34356fabb$export$2d8c2b43ec0e528(dayPicker)) internalModifiers[$a66560f34356fabb$var$Disabled] = internalModifiers[$a66560f34356fabb$var$Disabled].concat(selectMultiple.modifiers[$a66560f34356fabb$var$Disabled]);
+    else if ($a66560f34356fabb$export$f7b9f96866ec1964(dayPicker)) {
+        internalModifiers[$a66560f34356fabb$var$Disabled] = internalModifiers[$a66560f34356fabb$var$Disabled].concat(selectRange.modifiers[$a66560f34356fabb$var$Disabled]);
+        internalModifiers[$a66560f34356fabb$var$RangeStart] = selectRange.modifiers[$a66560f34356fabb$var$RangeStart];
+        internalModifiers[$a66560f34356fabb$var$RangeMiddle] = selectRange.modifiers[$a66560f34356fabb$var$RangeMiddle];
+        internalModifiers[$a66560f34356fabb$var$RangeEnd] = selectRange.modifiers[$a66560f34356fabb$var$RangeEnd];
+    }
+    return internalModifiers;
+}
+/** The Modifiers context store the modifiers used in DayPicker. To access the value of this context, use {@link useModifiers}. */ var $a66560f34356fabb$var$ModifiersContext = (0, $LI8jA.createContext)(undefined);
+/** Provide the value for the {@link ModifiersContext}. */ function $a66560f34356fabb$var$ModifiersProvider(props) {
+    var dayPicker = $a66560f34356fabb$export$332e9e0d64b1f294();
+    var selectMultiple = $a66560f34356fabb$export$458361db477d8ed0();
+    var selectRange = $a66560f34356fabb$export$ad0998138eb321e7();
+    var internalModifiers = $a66560f34356fabb$var$getInternalModifiers(dayPicker, selectMultiple, selectRange);
+    var customModifiers = $a66560f34356fabb$var$getCustomModifiers(dayPicker.modifiers);
+    var modifiers = $a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign({}, internalModifiers), customModifiers);
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$var$ModifiersContext.Provider, $a66560f34356fabb$var$__assign({
+        value: modifiers
+    }, {
+        children: props.children
+    }));
+}
+/**
+ * Return the modifiers used by DayPicker.
+ *
+ * This hook is meant to be used inside internal or custom components.
+ * Requires to be wrapped into {@link ModifiersProvider}.
+ *
+ */ function $a66560f34356fabb$var$useModifiers() {
+    var context = (0, $LI8jA.useContext)($a66560f34356fabb$var$ModifiersContext);
+    if (!context) throw new Error("useModifiers must be used within a ModifiersProvider");
+    return context;
+}
+/** Returns true if `matcher` is of type {@link DateInterval}. */ function $a66560f34356fabb$export$654311eaff47f3cd(matcher) {
+    return Boolean(matcher && typeof matcher === "object" && "before" in matcher && "after" in matcher);
+}
+/** Returns true if `value` is a {@link DateRange} type. */ function $a66560f34356fabb$export$dd455b9c98fea187(value) {
+    return Boolean(value && typeof value === "object" && "from" in value);
+}
+/** Returns true if `value` is of type {@link DateAfter}. */ function $a66560f34356fabb$export$4760905e07020cd4(value) {
+    return Boolean(value && typeof value === "object" && "after" in value);
+}
+/** Returns true if `value` is of type {@link DateBefore}. */ function $a66560f34356fabb$export$a3bef2c4e855ef4e(value) {
+    return Boolean(value && typeof value === "object" && "before" in value);
+}
+/** Returns true if `value` is a {@link DayOfWeek} type. */ function $a66560f34356fabb$export$483c833837970a3(value) {
+    return Boolean(value && typeof value === "object" && "dayOfWeek" in value);
+}
+/** Return `true` whether `date` is inside `range`. */ function $a66560f34356fabb$var$isDateInRange(date, range) {
+    var _a;
+    var from = range.from, to = range.to;
+    if (from && to) {
+        var isRangeInverted = (0, $e1a58e40f6f10c3c$export$2e2bcd8739ae039)(to, from) < 0;
+        if (isRangeInverted) _a = [
+            to,
+            from
+        ], from = _a[0], to = _a[1];
+        var isInRange = (0, $e1a58e40f6f10c3c$export$2e2bcd8739ae039)(date, from) >= 0 && (0, $e1a58e40f6f10c3c$export$2e2bcd8739ae039)(to, date) >= 0;
+        return isInRange;
+    }
+    if (to) return (0, $a866727ccd092b8f$export$2e2bcd8739ae039)(to, date);
+    if (from) return (0, $a866727ccd092b8f$export$2e2bcd8739ae039)(from, date);
+    return false;
+}
+/** Returns true if `value` is a Date type. */ function $a66560f34356fabb$var$isDateType(value) {
+    return (0, $ad32d585d70534b7$export$2e2bcd8739ae039)(value);
+}
+/** Returns true if `value` is an array of valid dates. */ function $a66560f34356fabb$var$isArrayOfDates(value) {
+    return Array.isArray(value) && value.every((0, $ad32d585d70534b7$export$2e2bcd8739ae039));
+}
+/**
+ * Returns whether a day matches against at least one of the given Matchers.
+ *
+ * ```
+ * const day = new Date(2022, 5, 19);
+ * const matcher1: DateRange = {
+ *    from: new Date(2021, 12, 21),
+ *    to: new Date(2021, 12, 30)
+ * }
+ * const matcher2: DateRange = {
+ *    from: new Date(2022, 5, 1),
+ *    to: new Date(2022, 5, 23)
+ * }
+ *
+ * const isMatch(day, [matcher1, matcher2]); // true, since day is in the matcher1 range.
+ * ```
+ * */ function $a66560f34356fabb$export$b74c33566721f70f(day, matchers) {
+    return matchers.some(function(matcher) {
+        if (typeof matcher === "boolean") return matcher;
+        if ($a66560f34356fabb$var$isDateType(matcher)) return (0, $a866727ccd092b8f$export$2e2bcd8739ae039)(day, matcher);
+        if ($a66560f34356fabb$var$isArrayOfDates(matcher)) return matcher.includes(day);
+        if ($a66560f34356fabb$export$dd455b9c98fea187(matcher)) return $a66560f34356fabb$var$isDateInRange(day, matcher);
+        if ($a66560f34356fabb$export$483c833837970a3(matcher)) return matcher.dayOfWeek.includes(day.getDay());
+        if ($a66560f34356fabb$export$654311eaff47f3cd(matcher)) {
+            var diffBefore = (0, $e1a58e40f6f10c3c$export$2e2bcd8739ae039)(matcher.before, day);
+            var diffAfter = (0, $e1a58e40f6f10c3c$export$2e2bcd8739ae039)(matcher.after, day);
+            var isDayBefore = diffBefore > 0;
+            var isDayAfter = diffAfter < 0;
+            var isClosedInterval = (0, $8ea5ab803a6411cd$export$2e2bcd8739ae039)(matcher.before, matcher.after);
+            if (isClosedInterval) return isDayAfter && isDayBefore;
+            else return isDayBefore || isDayAfter;
+        }
+        if ($a66560f34356fabb$export$4760905e07020cd4(matcher)) return (0, $e1a58e40f6f10c3c$export$2e2bcd8739ae039)(day, matcher.after) > 0;
+        if ($a66560f34356fabb$export$a3bef2c4e855ef4e(matcher)) return (0, $e1a58e40f6f10c3c$export$2e2bcd8739ae039)(matcher.before, day) > 0;
+        if (typeof matcher === "function") return matcher(day);
+        return false;
+    });
+}
+/** Return the active modifiers for the given day. */ function $a66560f34356fabb$var$getActiveModifiers(day, /** The modifiers to match for the given date. */ modifiers, /** The month where the day is displayed, to add the "outside" modifiers.  */ displayMonth) {
+    var matchedModifiers = Object.keys(modifiers).reduce(function(result, key) {
+        var modifier = modifiers[key];
+        if ($a66560f34356fabb$export$b74c33566721f70f(day, modifier)) result.push(key);
+        return result;
+    }, []);
+    var activeModifiers = {};
+    matchedModifiers.forEach(function(modifier) {
+        return activeModifiers[modifier] = true;
+    });
+    if (displayMonth && !(0, $6a206201f1dba31f$export$2e2bcd8739ae039)(day, displayMonth)) activeModifiers.outside = true;
+    return activeModifiers;
+}
+/**
+ * Returns the day that should be the target of the focus when DayPicker is
+ * rendered the first time.
+ *
+ * TODO: this function doesn't consider if the day is outside the month. We
+ * implemented this check in `useDayRender` but it should probably go here. See
+ * https://github.com/gpbl/react-day-picker/pull/1576
+ */ function $a66560f34356fabb$var$getInitialFocusTarget(displayMonths, modifiers) {
+    var firstDayInMonth = (0, $5414d5cc86bb45d3$export$2e2bcd8739ae039)(displayMonths[0]);
+    var lastDayInMonth = (0, $bfc773451d3cb967$export$2e2bcd8739ae039)(displayMonths[displayMonths.length - 1]);
+    // TODO: cleanup code
+    var firstFocusableDay;
+    var today;
+    var date = firstDayInMonth;
+    while(date <= lastDayInMonth){
+        var activeModifiers = $a66560f34356fabb$var$getActiveModifiers(date, modifiers);
+        var isFocusable = !activeModifiers.disabled && !activeModifiers.hidden;
+        if (!isFocusable) {
+            date = (0, $53cea08d313a73ff$export$2e2bcd8739ae039)(date, 1);
+            continue;
+        }
+        if (activeModifiers.selected) return date;
+        if (activeModifiers.today && !today) today = date;
+        if (!firstFocusableDay) firstFocusableDay = date;
+        date = (0, $53cea08d313a73ff$export$2e2bcd8739ae039)(date, 1);
+    }
+    if (today) return today;
+    else return firstFocusableDay;
+}
+var $a66560f34356fabb$var$MAX_RETRY = 365;
+/** Return the next date to be focused. */ function $a66560f34356fabb$var$getNextFocus(focusedDay, options) {
+    var moveBy = options.moveBy, direction = options.direction, context = options.context, modifiers = options.modifiers, _a = options.retry, retry = _a === void 0 ? {
+        count: 0,
+        lastFocused: focusedDay
+    } : _a;
+    var weekStartsOn = context.weekStartsOn, fromDate = context.fromDate, toDate = context.toDate, locale = context.locale;
+    var moveFns = {
+        day: (0, $53cea08d313a73ff$export$2e2bcd8739ae039),
+        week: (0, $80c8d8067e4aa624$export$2e2bcd8739ae039),
+        month: (0, $7d7938354f1f789f$export$2e2bcd8739ae039),
+        year: (0, $1abeeb7bc17b524f$export$2e2bcd8739ae039),
+        startOfWeek: function(date) {
+            return context.ISOWeek ? (0, $43fb72b230ef1caa$export$2e2bcd8739ae039)(date) : (0, $2df4b5ee75220800$export$2e2bcd8739ae039)(date, {
+                locale: locale,
+                weekStartsOn: weekStartsOn
+            });
+        },
+        endOfWeek: function(date) {
+            return context.ISOWeek ? (0, $aad9bb37e813bafc$export$2e2bcd8739ae039)(date) : (0, $4a35ecceebc93757$export$2e2bcd8739ae039)(date, {
+                locale: locale,
+                weekStartsOn: weekStartsOn
+            });
+        }
+    };
+    var newFocusedDay = moveFns[moveBy](focusedDay, direction === "after" ? 1 : -1);
+    if (direction === "before" && fromDate) newFocusedDay = (0, $bc2f3de3cd4d49c9$export$2e2bcd8739ae039)([
+        fromDate,
+        newFocusedDay
+    ]);
+    else if (direction === "after" && toDate) newFocusedDay = (0, $9c360d1e505296c0$export$2e2bcd8739ae039)([
+        toDate,
+        newFocusedDay
+    ]);
+    var isFocusable = true;
+    if (modifiers) {
+        var activeModifiers = $a66560f34356fabb$var$getActiveModifiers(newFocusedDay, modifiers);
+        isFocusable = !activeModifiers.disabled && !activeModifiers.hidden;
+    }
+    if (isFocusable) return newFocusedDay;
+    else {
+        if (retry.count > $a66560f34356fabb$var$MAX_RETRY) return retry.lastFocused;
+        return $a66560f34356fabb$var$getNextFocus(newFocusedDay, {
+            moveBy: moveBy,
+            direction: direction,
+            context: context,
+            modifiers: modifiers,
+            retry: $a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign({}, retry), {
+                count: retry.count + 1
+            })
+        });
+    }
+}
+/**
+ * The Focus context shares details about the focused day for the keyboard
+ *
+ * Access this context from the {@link useFocusContext} hook.
+ */ var $a66560f34356fabb$export$e1f21ba6aeca320f = (0, $LI8jA.createContext)(undefined);
+/** The provider for the {@link FocusContext}. */ function $a66560f34356fabb$export$97cf4ab9b312b61a(props) {
+    var navigation = $a66560f34356fabb$export$d0fd4b7106de2769();
+    var modifiers = $a66560f34356fabb$var$useModifiers();
+    var _a = (0, $LI8jA.useState)(), focusedDay = _a[0], setFocusedDay = _a[1];
+    var _b = (0, $LI8jA.useState)(), lastFocused = _b[0], setLastFocused = _b[1];
+    var initialFocusTarget = $a66560f34356fabb$var$getInitialFocusTarget(navigation.displayMonths, modifiers);
+    // TODO: cleanup and test obscure code below
+    var focusTarget = (focusedDay !== null && focusedDay !== void 0 ? focusedDay : lastFocused && navigation.isDateDisplayed(lastFocused)) ? lastFocused : initialFocusTarget;
+    var blur = function() {
+        setLastFocused(focusedDay);
+        setFocusedDay(undefined);
+    };
+    var focus = function(date) {
+        setFocusedDay(date);
+    };
+    var context = $a66560f34356fabb$export$332e9e0d64b1f294();
+    var moveFocus = function(moveBy, direction) {
+        if (!focusedDay) return;
+        var nextFocused = $a66560f34356fabb$var$getNextFocus(focusedDay, {
+            moveBy: moveBy,
+            direction: direction,
+            context: context,
+            modifiers: modifiers
+        });
+        if ((0, $a866727ccd092b8f$export$2e2bcd8739ae039)(focusedDay, nextFocused)) return undefined;
+        navigation.goToDate(nextFocused, focusedDay);
+        focus(nextFocused);
+    };
+    var value = {
+        focusedDay: focusedDay,
+        focusTarget: focusTarget,
+        blur: blur,
+        focus: focus,
+        focusDayAfter: function() {
+            return moveFocus("day", "after");
+        },
+        focusDayBefore: function() {
+            return moveFocus("day", "before");
+        },
+        focusWeekAfter: function() {
+            return moveFocus("week", "after");
+        },
+        focusWeekBefore: function() {
+            return moveFocus("week", "before");
+        },
+        focusMonthBefore: function() {
+            return moveFocus("month", "before");
+        },
+        focusMonthAfter: function() {
+            return moveFocus("month", "after");
+        },
+        focusYearBefore: function() {
+            return moveFocus("year", "before");
+        },
+        focusYearAfter: function() {
+            return moveFocus("year", "after");
+        },
+        focusStartOfWeek: function() {
+            return moveFocus("startOfWeek", "before");
+        },
+        focusEndOfWeek: function() {
+            return moveFocus("endOfWeek", "after");
+        }
+    };
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$e1f21ba6aeca320f.Provider, $a66560f34356fabb$var$__assign({
+        value: value
+    }, {
+        children: props.children
+    }));
+}
+/**
+ * Hook to access the {@link FocusContextValue}. Use this hook to handle the
+ * focus state of the elements.
+ *
+ * This hook is meant to be used inside internal or custom components.
+ */ function $a66560f34356fabb$export$69130071837c676e() {
+    var context = (0, $LI8jA.useContext)($a66560f34356fabb$export$e1f21ba6aeca320f);
+    if (!context) throw new Error("useFocusContext must be used within a FocusProvider");
+    return context;
+}
+/**
+ * Return the active modifiers for the specified day.
+ *
+ * This hook is meant to be used inside internal or custom components.
+ *
+ * @param day
+ * @param displayMonth
+ */ function $a66560f34356fabb$export$174df9b23ec1eb4b(day, /**
+ * The month where the date is displayed. If not the same as `date`, the day
+ * is an "outside day".
+ */ displayMonth) {
+    var modifiers = $a66560f34356fabb$var$useModifiers();
+    var activeModifiers = $a66560f34356fabb$var$getActiveModifiers(day, modifiers, displayMonth);
+    return activeModifiers;
+}
+/**
+ * The SelectSingle context shares details about the selected days when in
+ * single selection mode.
+ *
+ * Access this context from the {@link useSelectSingle} hook.
+ */ var $a66560f34356fabb$export$9632b0427d86eff3 = (0, $LI8jA.createContext)(undefined);
+/** Provides the values for the {@link SelectSingleProvider}. */ function $a66560f34356fabb$export$d40a11a5bbe785ba(props) {
+    if (!$a66560f34356fabb$export$e659ce9b264ea61(props.initialProps)) {
+        var emptyContextValue = {
+            selected: undefined
+        };
+        return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$9632b0427d86eff3.Provider, $a66560f34356fabb$var$__assign({
+            value: emptyContextValue
+        }, {
+            children: props.children
+        }));
+    }
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$37bf09040cff7c3b, {
+        initialProps: props.initialProps,
+        children: props.children
+    });
+}
+function $a66560f34356fabb$export$37bf09040cff7c3b(_a) {
+    var initialProps = _a.initialProps, children = _a.children;
+    var onDayClick = function(day, activeModifiers, e) {
+        var _a, _b, _c;
+        (_a = initialProps.onDayClick) === null || _a === void 0 || _a.call(initialProps, day, activeModifiers, e);
+        if (activeModifiers.selected && !initialProps.required) {
+            (_b = initialProps.onSelect) === null || _b === void 0 || _b.call(initialProps, undefined, day, activeModifiers, e);
+            return;
+        }
+        (_c = initialProps.onSelect) === null || _c === void 0 || _c.call(initialProps, day, day, activeModifiers, e);
+    };
+    var contextValue = {
+        selected: initialProps.selected,
+        onDayClick: onDayClick
+    };
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$9632b0427d86eff3.Provider, $a66560f34356fabb$var$__assign({
+        value: contextValue
+    }, {
+        children: children
+    }));
+}
+/**
+ * Hook to access the {@link SelectSingleContextValue}.
+ *
+ * This hook is meant to be used inside internal or custom components.
+ */ function $a66560f34356fabb$export$2d75d772c98e4b05() {
+    var context = (0, $LI8jA.useContext)($a66560f34356fabb$export$9632b0427d86eff3);
+    if (!context) throw new Error("useSelectSingle must be used within a SelectSingleProvider");
+    return context;
+}
+/**
+ * This hook returns details about the content to render in the day cell.
+ *
+ *
+ * When a day cell is rendered in the table, DayPicker can either:
+ *
+ * - render nothing: when the day is outside the month or has matched the
+ *   "hidden" modifier.
+ * - render a button when `onDayClick` or a selection mode is set.
+ * - render a non-interactive element: when no selection mode is set, the day
+ *   cell shouldn’t respond to any interaction. DayPicker should render a `div`
+ *   or a `span`.
+ *
+ * ### Usage
+ *
+ * Use this hook to customize the behavior of the {@link Day} component. Create a
+ * new `Day` component using this hook and pass it to the `components` prop.
+ * The source of {@link Day} can be a good starting point.
+ *
+ */ function $a66560f34356fabb$var$useDayEventHandlers(date, activeModifiers) {
+    var dayPicker = $a66560f34356fabb$export$332e9e0d64b1f294();
+    var single = $a66560f34356fabb$export$2d75d772c98e4b05();
+    var multiple = $a66560f34356fabb$export$458361db477d8ed0();
+    var range = $a66560f34356fabb$export$ad0998138eb321e7();
+    var _a = $a66560f34356fabb$export$69130071837c676e(), focusDayAfter = _a.focusDayAfter, focusDayBefore = _a.focusDayBefore, focusWeekAfter = _a.focusWeekAfter, focusWeekBefore = _a.focusWeekBefore, blur = _a.blur, focus = _a.focus, focusMonthBefore = _a.focusMonthBefore, focusMonthAfter = _a.focusMonthAfter, focusYearBefore = _a.focusYearBefore, focusYearAfter = _a.focusYearAfter, focusStartOfWeek = _a.focusStartOfWeek, focusEndOfWeek = _a.focusEndOfWeek;
+    var onClick = function(e) {
+        var _a, _b, _c, _d;
+        if ($a66560f34356fabb$export$e659ce9b264ea61(dayPicker)) (_a = single.onDayClick) === null || _a === void 0 || _a.call(single, date, activeModifiers, e);
+        else if ($a66560f34356fabb$export$2d8c2b43ec0e528(dayPicker)) (_b = multiple.onDayClick) === null || _b === void 0 || _b.call(multiple, date, activeModifiers, e);
+        else if ($a66560f34356fabb$export$f7b9f96866ec1964(dayPicker)) (_c = range.onDayClick) === null || _c === void 0 || _c.call(range, date, activeModifiers, e);
+        else (_d = dayPicker.onDayClick) === null || _d === void 0 || _d.call(dayPicker, date, activeModifiers, e);
+    };
+    var onFocus = function(e) {
+        var _a;
+        focus(date);
+        (_a = dayPicker.onDayFocus) === null || _a === void 0 || _a.call(dayPicker, date, activeModifiers, e);
+    };
+    var onBlur = function(e) {
+        var _a;
+        blur();
+        (_a = dayPicker.onDayBlur) === null || _a === void 0 || _a.call(dayPicker, date, activeModifiers, e);
+    };
+    var onMouseEnter = function(e) {
+        var _a;
+        (_a = dayPicker.onDayMouseEnter) === null || _a === void 0 || _a.call(dayPicker, date, activeModifiers, e);
+    };
+    var onMouseLeave = function(e) {
+        var _a;
+        (_a = dayPicker.onDayMouseLeave) === null || _a === void 0 || _a.call(dayPicker, date, activeModifiers, e);
+    };
+    var onPointerEnter = function(e) {
+        var _a;
+        (_a = dayPicker.onDayPointerEnter) === null || _a === void 0 || _a.call(dayPicker, date, activeModifiers, e);
+    };
+    var onPointerLeave = function(e) {
+        var _a;
+        (_a = dayPicker.onDayPointerLeave) === null || _a === void 0 || _a.call(dayPicker, date, activeModifiers, e);
+    };
+    var onTouchCancel = function(e) {
+        var _a;
+        (_a = dayPicker.onDayTouchCancel) === null || _a === void 0 || _a.call(dayPicker, date, activeModifiers, e);
+    };
+    var onTouchEnd = function(e) {
+        var _a;
+        (_a = dayPicker.onDayTouchEnd) === null || _a === void 0 || _a.call(dayPicker, date, activeModifiers, e);
+    };
+    var onTouchMove = function(e) {
+        var _a;
+        (_a = dayPicker.onDayTouchMove) === null || _a === void 0 || _a.call(dayPicker, date, activeModifiers, e);
+    };
+    var onTouchStart = function(e) {
+        var _a;
+        (_a = dayPicker.onDayTouchStart) === null || _a === void 0 || _a.call(dayPicker, date, activeModifiers, e);
+    };
+    var onKeyUp = function(e) {
+        var _a;
+        (_a = dayPicker.onDayKeyUp) === null || _a === void 0 || _a.call(dayPicker, date, activeModifiers, e);
+    };
+    var onKeyDown = function(e) {
+        var _a;
+        switch(e.key){
+            case "ArrowLeft":
+                e.preventDefault();
+                e.stopPropagation();
+                dayPicker.dir === "rtl" ? focusDayAfter() : focusDayBefore();
+                break;
+            case "ArrowRight":
+                e.preventDefault();
+                e.stopPropagation();
+                dayPicker.dir === "rtl" ? focusDayBefore() : focusDayAfter();
+                break;
+            case "ArrowDown":
+                e.preventDefault();
+                e.stopPropagation();
+                focusWeekAfter();
+                break;
+            case "ArrowUp":
+                e.preventDefault();
+                e.stopPropagation();
+                focusWeekBefore();
+                break;
+            case "PageUp":
+                e.preventDefault();
+                e.stopPropagation();
+                e.shiftKey ? focusYearBefore() : focusMonthBefore();
+                break;
+            case "PageDown":
+                e.preventDefault();
+                e.stopPropagation();
+                e.shiftKey ? focusYearAfter() : focusMonthAfter();
+                break;
+            case "Home":
+                e.preventDefault();
+                e.stopPropagation();
+                focusStartOfWeek();
+                break;
+            case "End":
+                e.preventDefault();
+                e.stopPropagation();
+                focusEndOfWeek();
+                break;
+        }
+        (_a = dayPicker.onDayKeyDown) === null || _a === void 0 || _a.call(dayPicker, date, activeModifiers, e);
+    };
+    var eventHandlers = {
+        onClick: onClick,
+        onFocus: onFocus,
+        onBlur: onBlur,
+        onKeyDown: onKeyDown,
+        onKeyUp: onKeyUp,
+        onMouseEnter: onMouseEnter,
+        onMouseLeave: onMouseLeave,
+        onPointerEnter: onPointerEnter,
+        onPointerLeave: onPointerLeave,
+        onTouchCancel: onTouchCancel,
+        onTouchEnd: onTouchEnd,
+        onTouchMove: onTouchMove,
+        onTouchStart: onTouchStart
+    };
+    return eventHandlers;
+}
+/**
+ * Return the current selected days when DayPicker is in selection mode. Days
+ * selected by the custom selection mode are not returned.
+ *
+ * This hook is meant to be used inside internal or custom components.
+ *
+ */ function $a66560f34356fabb$var$useSelectedDays() {
+    var dayPicker = $a66560f34356fabb$export$332e9e0d64b1f294();
+    var single = $a66560f34356fabb$export$2d75d772c98e4b05();
+    var multiple = $a66560f34356fabb$export$458361db477d8ed0();
+    var range = $a66560f34356fabb$export$ad0998138eb321e7();
+    var selectedDays = $a66560f34356fabb$export$e659ce9b264ea61(dayPicker) ? single.selected : $a66560f34356fabb$export$2d8c2b43ec0e528(dayPicker) ? multiple.selected : $a66560f34356fabb$export$f7b9f96866ec1964(dayPicker) ? range.selected : undefined;
+    return selectedDays;
+}
+function $a66560f34356fabb$var$isInternalModifier(modifier) {
+    return Object.values($a66560f34356fabb$export$7652a4f8ecc53eb5).includes(modifier);
+}
+/**
+ * Return the class names for the Day element, according to the given active
+ * modifiers.
+ *
+ * Custom class names are set via `modifiersClassNames` or `classNames`,
+ * where the first have the precedence.
+ */ function $a66560f34356fabb$var$getDayClassNames(dayPicker, activeModifiers) {
+    var classNames = [
+        dayPicker.classNames.day
+    ];
+    Object.keys(activeModifiers).forEach(function(modifier) {
+        var customClassName = dayPicker.modifiersClassNames[modifier];
+        if (customClassName) classNames.push(customClassName);
+        else if ($a66560f34356fabb$var$isInternalModifier(modifier)) {
+            var internalClassName = dayPicker.classNames["day_".concat(modifier)];
+            if (internalClassName) classNames.push(internalClassName);
+        }
+    });
+    return classNames;
+}
+/** Return the style for the Day element, according to the given active modifiers. */ function $a66560f34356fabb$var$getDayStyle(dayPicker, activeModifiers) {
+    var style = $a66560f34356fabb$var$__assign({}, dayPicker.styles.day);
+    Object.keys(activeModifiers).forEach(function(modifier) {
+        var _a;
+        style = $a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign({}, style), (_a = dayPicker.modifiersStyles) === null || _a === void 0 ? void 0 : _a[modifier]);
+    });
+    return style;
+}
+/**
+ * Return props and data used to render the {@link Day} component.
+ *
+ * Use this hook when creating a component to replace the built-in `Day`
+ * component.
+ */ function $a66560f34356fabb$export$634dab6d85b953fc(/** The date to render. */ day, /** The month where the date is displayed (if not the same as `date`, it means it is an "outside" day). */ displayMonth, /** A ref to the button element that will be target of focus when rendered (if required). */ buttonRef) {
+    var _a;
+    var _b, _c;
+    var dayPicker = $a66560f34356fabb$export$332e9e0d64b1f294();
+    var focusContext = $a66560f34356fabb$export$69130071837c676e();
+    var activeModifiers = $a66560f34356fabb$export$174df9b23ec1eb4b(day, displayMonth);
+    var eventHandlers = $a66560f34356fabb$var$useDayEventHandlers(day, activeModifiers);
+    var selectedDays = $a66560f34356fabb$var$useSelectedDays();
+    var isButton = Boolean(dayPicker.onDayClick || dayPicker.mode !== "default");
+    // Focus the button if the day is focused according to the focus context
+    (0, $LI8jA.useEffect)(function() {
+        var _a;
+        if (activeModifiers.outside) return;
+        if (!focusContext.focusedDay) return;
+        if (!isButton) return;
+        if ((0, $a866727ccd092b8f$export$2e2bcd8739ae039)(focusContext.focusedDay, day)) (_a = buttonRef.current) === null || _a === void 0 || _a.focus();
+    }, [
+        focusContext.focusedDay,
+        day,
+        buttonRef,
+        isButton,
+        activeModifiers.outside
+    ]);
+    var className = $a66560f34356fabb$var$getDayClassNames(dayPicker, activeModifiers).join(" ");
+    var style = $a66560f34356fabb$var$getDayStyle(dayPicker, activeModifiers);
+    var isHidden = Boolean(activeModifiers.outside && !dayPicker.showOutsideDays || activeModifiers.hidden);
+    var DayContentComponent = (_c = (_b = dayPicker.components) === null || _b === void 0 ? void 0 : _b.DayContent) !== null && _c !== void 0 ? _c : $a66560f34356fabb$export$16d0634337daf8ec;
+    var children = $a66560f34356fabb$var$jsxRuntimeExports.jsx(DayContentComponent, {
+        date: day,
+        displayMonth: displayMonth,
+        activeModifiers: activeModifiers
+    });
+    var divProps = {
+        style: style,
+        className: className,
+        children: children,
+        role: "gridcell"
+    };
+    var isFocusTarget = focusContext.focusTarget && (0, $a866727ccd092b8f$export$2e2bcd8739ae039)(focusContext.focusTarget, day) && !activeModifiers.outside;
+    var isFocused = focusContext.focusedDay && (0, $a866727ccd092b8f$export$2e2bcd8739ae039)(focusContext.focusedDay, day);
+    var buttonProps = $a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign({}, divProps), (_a = {
+        disabled: activeModifiers.disabled,
+        role: "gridcell"
+    }, _a["aria-selected"] = activeModifiers.selected, _a.tabIndex = isFocused || isFocusTarget ? 0 : -1, _a)), eventHandlers);
+    var dayRender = {
+        isButton: isButton,
+        isHidden: isHidden,
+        activeModifiers: activeModifiers,
+        selectedDays: selectedDays,
+        buttonProps: buttonProps,
+        divProps: divProps
+    };
+    return dayRender;
+}
+/**
+ * The content of a day cell – as a button or span element according to its
+ * modifiers.
+ */ function $a66560f34356fabb$export$7a9a31a911eb9a20(props) {
+    var buttonRef = (0, $LI8jA.useRef)(null);
+    var dayRender = $a66560f34356fabb$export$634dab6d85b953fc(props.date, props.displayMonth, buttonRef);
+    if (dayRender.isHidden) return $a66560f34356fabb$var$jsxRuntimeExports.jsx("div", {
+        role: "gridcell"
+    });
+    if (!dayRender.isButton) return $a66560f34356fabb$var$jsxRuntimeExports.jsx("div", $a66560f34356fabb$var$__assign({}, dayRender.divProps));
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$353f5b6fc5456de1, $a66560f34356fabb$var$__assign({
+        name: "day",
+        ref: buttonRef
+    }, dayRender.buttonProps));
+}
+/**
+ * Render the week number element. If `onWeekNumberClick` is passed to DayPicker, it
+ * renders a button, otherwise a span element.
+ */ function $a66560f34356fabb$export$f52f5e0fedb732da(props) {
+    var weekNumber = props.number, dates = props.dates;
+    var _a = $a66560f34356fabb$export$332e9e0d64b1f294(), onWeekNumberClick = _a.onWeekNumberClick, styles = _a.styles, classNames = _a.classNames, locale = _a.locale, labelWeekNumber = _a.labels.labelWeekNumber, formatWeekNumber = _a.formatters.formatWeekNumber;
+    var content = formatWeekNumber(Number(weekNumber), {
+        locale: locale
+    });
+    if (!onWeekNumberClick) return $a66560f34356fabb$var$jsxRuntimeExports.jsx("span", $a66560f34356fabb$var$__assign({
+        className: classNames.weeknumber,
+        style: styles.weeknumber
+    }, {
+        children: content
+    }));
+    var label = labelWeekNumber(Number(weekNumber), {
+        locale: locale
+    });
+    var handleClick = function(e) {
+        onWeekNumberClick(weekNumber, dates, e);
+    };
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$353f5b6fc5456de1, $a66560f34356fabb$var$__assign({
+        name: "week-number",
+        "aria-label": label,
+        className: classNames.weeknumber,
+        style: styles.weeknumber,
+        onClick: handleClick
+    }, {
+        children: content
+    }));
+}
+/** Render a row in the calendar, with the days and the week number. */ function $a66560f34356fabb$export$b59bdbef9ce70de2(props) {
+    var _a, _b;
+    var _c = $a66560f34356fabb$export$332e9e0d64b1f294(), styles = _c.styles, classNames = _c.classNames, showWeekNumber = _c.showWeekNumber, components = _c.components;
+    var DayComponent = (_a = components === null || components === void 0 ? void 0 : components.Day) !== null && _a !== void 0 ? _a : $a66560f34356fabb$export$7a9a31a911eb9a20;
+    var WeeknumberComponent = (_b = components === null || components === void 0 ? void 0 : components.WeekNumber) !== null && _b !== void 0 ? _b : $a66560f34356fabb$export$f52f5e0fedb732da;
+    var weekNumberCell;
+    if (showWeekNumber) weekNumberCell = $a66560f34356fabb$var$jsxRuntimeExports.jsx("td", $a66560f34356fabb$var$__assign({
+        className: classNames.cell,
+        style: styles.cell
+    }, {
+        children: $a66560f34356fabb$var$jsxRuntimeExports.jsx(WeeknumberComponent, {
+            number: props.weekNumber,
+            dates: props.dates
+        })
+    }));
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsxs("tr", $a66560f34356fabb$var$__assign({
+        className: classNames.row,
+        style: styles.row
+    }, {
+        children: [
+            weekNumberCell,
+            props.dates.map(function(date) {
+                return $a66560f34356fabb$var$jsxRuntimeExports.jsx("td", $a66560f34356fabb$var$__assign({
+                    className: classNames.cell,
+                    style: styles.cell,
+                    role: "presentation"
+                }, {
+                    children: $a66560f34356fabb$var$jsxRuntimeExports.jsx(DayComponent, {
+                        displayMonth: props.displayMonth,
+                        date: date
+                    })
+                }), (0, $28dd8ed659462044$export$2e2bcd8739ae039)(date));
+            })
+        ]
+    }));
+}
+/** Return the weeks between two dates.  */ function $a66560f34356fabb$var$daysToMonthWeeks(fromDate, toDate, options) {
+    var toWeek = (options === null || options === void 0 ? void 0 : options.ISOWeek) ? (0, $aad9bb37e813bafc$export$2e2bcd8739ae039)(toDate) : (0, $4a35ecceebc93757$export$2e2bcd8739ae039)(toDate, options);
+    var fromWeek = (options === null || options === void 0 ? void 0 : options.ISOWeek) ? (0, $43fb72b230ef1caa$export$2e2bcd8739ae039)(fromDate) : (0, $2df4b5ee75220800$export$2e2bcd8739ae039)(fromDate, options);
+    var nOfDays = (0, $e1a58e40f6f10c3c$export$2e2bcd8739ae039)(toWeek, fromWeek);
+    var days = [];
+    for(var i = 0; i <= nOfDays; i++)days.push((0, $53cea08d313a73ff$export$2e2bcd8739ae039)(fromWeek, i));
+    var weeksInMonth = days.reduce(function(result, date) {
+        var weekNumber = (options === null || options === void 0 ? void 0 : options.ISOWeek) ? (0, $b1bef26d76e06400$export$2e2bcd8739ae039)(date) : (0, $64bd3bfba020293a$export$2e2bcd8739ae039)(date, options);
+        var existingWeek = result.find(function(value) {
+            return value.weekNumber === weekNumber;
+        });
+        if (existingWeek) {
+            existingWeek.dates.push(date);
+            return result;
+        }
+        result.push({
+            weekNumber: weekNumber,
+            dates: [
+                date
+            ]
+        });
+        return result;
+    }, []);
+    return weeksInMonth;
+}
+/**
+ * Return the weeks belonging to the given month, adding the "outside days" to
+ * the first and last week.
+ */ function $a66560f34356fabb$var$getMonthWeeks(month, options) {
+    var weeksInMonth = $a66560f34356fabb$var$daysToMonthWeeks((0, $5414d5cc86bb45d3$export$2e2bcd8739ae039)(month), (0, $bfc773451d3cb967$export$2e2bcd8739ae039)(month), options);
+    if (options === null || options === void 0 ? void 0 : options.useFixedWeeks) {
+        // Add extra weeks to the month, up to 6 weeks
+        var nrOfMonthWeeks = (0, $4948eb540a22a8bc$export$2e2bcd8739ae039)(month, options);
+        if (nrOfMonthWeeks < 6) {
+            var lastWeek = weeksInMonth[weeksInMonth.length - 1];
+            var lastDate = lastWeek.dates[lastWeek.dates.length - 1];
+            var toDate = (0, $80c8d8067e4aa624$export$2e2bcd8739ae039)(lastDate, 6 - nrOfMonthWeeks);
+            var extraWeeks = $a66560f34356fabb$var$daysToMonthWeeks((0, $80c8d8067e4aa624$export$2e2bcd8739ae039)(lastDate, 1), toDate, options);
+            weeksInMonth.push.apply(weeksInMonth, extraWeeks);
+        }
+    }
+    return weeksInMonth;
+}
+/** Render the table with the calendar. */ function $a66560f34356fabb$var$Table(props) {
+    var _a, _b, _c;
+    var _d = $a66560f34356fabb$export$332e9e0d64b1f294(), locale = _d.locale, classNames = _d.classNames, styles = _d.styles, hideHead = _d.hideHead, fixedWeeks = _d.fixedWeeks, components = _d.components, weekStartsOn = _d.weekStartsOn, firstWeekContainsDate = _d.firstWeekContainsDate, ISOWeek = _d.ISOWeek;
+    var weeks = $a66560f34356fabb$var$getMonthWeeks(props.displayMonth, {
+        useFixedWeeks: Boolean(fixedWeeks),
+        ISOWeek: ISOWeek,
+        locale: locale,
+        weekStartsOn: weekStartsOn,
+        firstWeekContainsDate: firstWeekContainsDate
+    });
+    var HeadComponent = (_a = components === null || components === void 0 ? void 0 : components.Head) !== null && _a !== void 0 ? _a : $a66560f34356fabb$export$e93312b7773dfcac;
+    var RowComponent = (_b = components === null || components === void 0 ? void 0 : components.Row) !== null && _b !== void 0 ? _b : $a66560f34356fabb$export$b59bdbef9ce70de2;
+    var FooterComponent = (_c = components === null || components === void 0 ? void 0 : components.Footer) !== null && _c !== void 0 ? _c : $a66560f34356fabb$export$a06f1c675e846f6f;
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsxs("table", $a66560f34356fabb$var$__assign({
+        id: props.id,
+        className: classNames.table,
+        style: styles.table,
+        role: "grid",
+        "aria-labelledby": props["aria-labelledby"]
+    }, {
+        children: [
+            !hideHead && $a66560f34356fabb$var$jsxRuntimeExports.jsx(HeadComponent, {}),
+            $a66560f34356fabb$var$jsxRuntimeExports.jsx("tbody", $a66560f34356fabb$var$__assign({
+                className: classNames.tbody,
+                style: styles.tbody
+            }, {
+                children: weeks.map(function(week) {
+                    return $a66560f34356fabb$var$jsxRuntimeExports.jsx(RowComponent, {
+                        displayMonth: props.displayMonth,
+                        dates: week.dates,
+                        weekNumber: week.weekNumber
+                    }, week.weekNumber);
+                })
+            })),
+            $a66560f34356fabb$var$jsxRuntimeExports.jsx(FooterComponent, {
+                displayMonth: props.displayMonth
+            })
+        ]
+    }));
+}
+/*
+The MIT License (MIT)
+
+Copyright (c) 2018-present, React Training LLC
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/ /* eslint-disable prefer-const */ /* eslint-disable @typescript-eslint/ban-ts-comment */ /*
+ * Welcome to @reach/auto-id!
+ * Let's see if we can make sense of why this hook exists and its
+ * implementation.
+ *
+ * Some background:
+ *   1. Accessibility APIs rely heavily on element IDs
+ *   2. Requiring developers to put IDs on every element in Reach UI is both
+ *      cumbersome and error-prone
+ *   3. With a component model, we can generate IDs for them!
+ *
+ * Solution 1: Generate random IDs.
+ *
+ * This works great as long as you don't server render your app. When React (in
+ * the client) tries to reuse the markup from the server, the IDs won't match
+ * and React will then recreate the entire DOM tree.
+ *
+ * Solution 2: Increment an integer
+ *
+ * This sounds great. Since we're rendering the exact same tree on the server
+ * and client, we can increment a counter and get a deterministic result between
+ * client and server. Also, JS integers can go up to nine-quadrillion. I'm
+ * pretty sure the tab will be closed before an app never needs
+ * 10 quadrillion IDs!
+ *
+ * Problem solved, right?
+ *
+ * Ah, but there's a catch! React's concurrent rendering makes this approach
+ * non-deterministic. While the client and server will end up with the same
+ * elements in the end, depending on suspense boundaries (and possibly some user
+ * input during the initial render) the incrementing integers won't always match
+ * up.
+ *
+ * Solution 3: Don't use IDs at all on the server; patch after first render.
+ *
+ * What we've done here is solution 2 with some tricks. With this approach, the
+ * ID returned is an empty string on the first render. This way the server and
+ * client have the same markup no matter how wild the concurrent rendering may
+ * have gotten.
+ *
+ * After the render, we patch up the components with an incremented ID. This
+ * causes a double render on any components with `useId`. Shouldn't be a problem
+ * since the components using this hook should be small, and we're only updating
+ * the ID attribute on the DOM, nothing big is happening.
+ *
+ * It doesn't have to be an incremented number, though--we could do generate
+ * random strings instead, but incrementing a number is probably the cheapest
+ * thing we can do.
+ *
+ * Additionally, we only do this patchup on the very first client render ever.
+ * Any calls to `useId` that happen dynamically in the client will be
+ * populated immediately with a value. So, we only get the double render after
+ * server hydration and never again, SO BACK OFF ALRIGHT?
+ */ function $a66560f34356fabb$var$canUseDOM() {
+    return !!(typeof window !== "undefined" && window.document && window.document.createElement);
+}
+/**
+ * React currently throws a warning when using useLayoutEffect on the server. To
+ * get around it, we can conditionally useEffect on the server (no-op) and
+ * useLayoutEffect in the browser. We occasionally need useLayoutEffect to
+ * ensure we don't get a render flash for certain operations, but we may also
+ * need affected components to render on the server. One example is when setting
+ * a component's descendants to retrieve their index values.
+ *
+ * Important to note that using this hook as an escape hatch will break the
+ * eslint dependency warnings unless you rename the import to `useLayoutEffect`.
+ * Use sparingly only when the effect won't effect the rendered HTML to avoid
+ * any server/client mismatch.
+ *
+ * If a useLayoutEffect is needed and the result would create a mismatch, it's
+ * likely that the component in question shouldn't be rendered on the server at
+ * all, so a better approach would be to lazily render those in a parent
+ * component after client-side hydration.
+ *
+ * https://gist.github.com/gaearon/e7d97cdf38a2907924ea12e4ebdf3c85
+ * https://github.com/reduxjs/react-redux/blob/master/src/utils/useIsomorphicLayoutEffect.js
+ *
+ * @param effect
+ * @param deps
+ */ var $a66560f34356fabb$var$useIsomorphicLayoutEffect = $a66560f34356fabb$var$canUseDOM() ? (0, $LI8jA.useLayoutEffect) : (0, $LI8jA.useEffect);
+var $a66560f34356fabb$var$serverHandoffComplete = false;
+var $a66560f34356fabb$var$id = 0;
+function $a66560f34356fabb$var$genId() {
+    return "react-day-picker-".concat(++$a66560f34356fabb$var$id);
+}
+function $a66560f34356fabb$var$useId(providedId) {
+    // TODO: Remove error flag when updating internal deps to React 18. None of
+    // our tricks will play well with concurrent rendering anyway.
+    var _a;
+    // If this instance isn't part of the initial render, we don't have to do the
+    // double render/patch-up dance. We can just generate the ID and return it.
+    var initialId = providedId !== null && providedId !== void 0 ? providedId : $a66560f34356fabb$var$serverHandoffComplete ? $a66560f34356fabb$var$genId() : null;
+    var _b = (0, $LI8jA.useState)(initialId), id = _b[0], setId = _b[1];
+    $a66560f34356fabb$var$useIsomorphicLayoutEffect(function() {
+        if (id === null) // Patch the ID after render. We do this in `useLayoutEffect` to avoid any
+        // rendering flicker, though it'll make the first render slower (unlikely
+        // to matter, but you're welcome to measure your app and let us know if
+        // it's a problem).
+        setId($a66560f34356fabb$var$genId());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    (0, $LI8jA.useEffect)(function() {
+        if ($a66560f34356fabb$var$serverHandoffComplete === false) // Flag all future uses of `useId` to skip the update dance. This is in
+        // `useEffect` because it goes after `useLayoutEffect`, ensuring we don't
+        // accidentally bail out of the patch-up dance prematurely.
+        $a66560f34356fabb$var$serverHandoffComplete = true;
+    }, []);
+    return (_a = providedId !== null && providedId !== void 0 ? providedId : id) !== null && _a !== void 0 ? _a : undefined;
+}
+/** Render a month. */ function $a66560f34356fabb$var$Month(props) {
+    var _a;
+    var _b;
+    var dayPicker = $a66560f34356fabb$export$332e9e0d64b1f294();
+    var dir = dayPicker.dir, classNames = dayPicker.classNames, styles = dayPicker.styles, components = dayPicker.components;
+    var displayMonths = $a66560f34356fabb$export$d0fd4b7106de2769().displayMonths;
+    var captionId = $a66560f34356fabb$var$useId(dayPicker.id ? "".concat(dayPicker.id, "-").concat(props.displayIndex) : undefined);
+    var tableId = dayPicker.id ? "".concat(dayPicker.id, "-grid-").concat(props.displayIndex) : undefined;
+    var className = [
+        classNames.month
+    ];
+    var style = styles.month;
+    var isStart = props.displayIndex === 0;
+    var isEnd = props.displayIndex === displayMonths.length - 1;
+    var isCenter = !isStart && !isEnd;
+    if (dir === "rtl") _a = [
+        isStart,
+        isEnd
+    ], isEnd = _a[0], isStart = _a[1];
+    if (isStart) {
+        className.push(classNames.caption_start);
+        style = $a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign({}, style), styles.caption_start);
+    }
+    if (isEnd) {
+        className.push(classNames.caption_end);
+        style = $a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign({}, style), styles.caption_end);
+    }
+    if (isCenter) {
+        className.push(classNames.caption_between);
+        style = $a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign({}, style), styles.caption_between);
+    }
+    var CaptionComponent = (_b = components === null || components === void 0 ? void 0 : components.Caption) !== null && _b !== void 0 ? _b : $a66560f34356fabb$export$32fbfacc5d962e0c;
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsxs("div", $a66560f34356fabb$var$__assign({
+        className: className.join(" "),
+        style: style
+    }, {
+        children: [
+            $a66560f34356fabb$var$jsxRuntimeExports.jsx(CaptionComponent, {
+                id: captionId,
+                displayMonth: props.displayMonth,
+                displayIndex: props.displayIndex
+            }),
+            $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$var$Table, {
+                id: tableId,
+                "aria-labelledby": captionId,
+                displayMonth: props.displayMonth
+            })
+        ]
+    }), props.displayIndex);
+}
+/**
+ * Render the wrapper for the month grids.
+ */ function $a66560f34356fabb$export$a0ec4efdb90fa181(props) {
+    var _a = $a66560f34356fabb$export$332e9e0d64b1f294(), classNames = _a.classNames, styles = _a.styles;
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx("div", $a66560f34356fabb$var$__assign({
+        className: classNames.months,
+        style: styles.months
+    }, {
+        children: props.children
+    }));
+}
+/** Render the container with the months according to the number of months to display. */ function $a66560f34356fabb$var$Root(_a) {
+    var _b, _c;
+    var initialProps = _a.initialProps;
+    var dayPicker = $a66560f34356fabb$export$332e9e0d64b1f294();
+    var focusContext = $a66560f34356fabb$export$69130071837c676e();
+    var navigation = $a66560f34356fabb$export$d0fd4b7106de2769();
+    var _d = (0, $LI8jA.useState)(false), hasInitialFocus = _d[0], setHasInitialFocus = _d[1];
+    // Focus the focus target when initialFocus is passed in
+    (0, $LI8jA.useEffect)(function() {
+        if (!dayPicker.initialFocus) return;
+        if (!focusContext.focusTarget) return;
+        if (hasInitialFocus) return;
+        focusContext.focus(focusContext.focusTarget);
+        setHasInitialFocus(true);
+    }, [
+        dayPicker.initialFocus,
+        hasInitialFocus,
+        focusContext.focus,
+        focusContext.focusTarget,
+        focusContext
+    ]);
+    // Apply classnames according to props
+    var classNames = [
+        dayPicker.classNames.root,
+        dayPicker.className
+    ];
+    if (dayPicker.numberOfMonths > 1) classNames.push(dayPicker.classNames.multiple_months);
+    if (dayPicker.showWeekNumber) classNames.push(dayPicker.classNames.with_weeknumber);
+    var style = $a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign({}, dayPicker.styles.root), dayPicker.style);
+    var dataAttributes = Object.keys(initialProps).filter(function(key) {
+        return key.startsWith("data-");
+    }).reduce(function(attrs, key) {
+        var _a;
+        return $a66560f34356fabb$var$__assign($a66560f34356fabb$var$__assign({}, attrs), (_a = {}, _a[key] = initialProps[key], _a));
+    }, {});
+    var MonthsComponent = (_c = (_b = initialProps.components) === null || _b === void 0 ? void 0 : _b.Months) !== null && _c !== void 0 ? _c : $a66560f34356fabb$export$a0ec4efdb90fa181;
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx("div", $a66560f34356fabb$var$__assign({
+        className: classNames.join(" "),
+        style: style,
+        dir: dayPicker.dir,
+        id: dayPicker.id,
+        nonce: initialProps.nonce,
+        title: initialProps.title,
+        lang: initialProps.lang
+    }, dataAttributes, {
+        children: $a66560f34356fabb$var$jsxRuntimeExports.jsx(MonthsComponent, {
+            children: navigation.displayMonths.map(function(month, i) {
+                return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$var$Month, {
+                    displayIndex: i,
+                    displayMonth: month
+                }, i);
+            })
+        })
+    }));
+}
+/** Provide the value for all the context providers. */ function $a66560f34356fabb$export$8f349d07558f59c4(props) {
+    var children = props.children, initialProps = $a66560f34356fabb$var$__rest(props, [
+        "children"
+    ]);
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$a84f964d022d25c, $a66560f34356fabb$var$__assign({
+        initialProps: initialProps
+    }, {
+        children: $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$d91daf425539f32f, {
+            children: $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$d40a11a5bbe785ba, $a66560f34356fabb$var$__assign({
+                initialProps: initialProps
+            }, {
+                children: $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$913827019032c8d4, $a66560f34356fabb$var$__assign({
+                    initialProps: initialProps
+                }, {
+                    children: $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$deb49a47c7ee5fdf, $a66560f34356fabb$var$__assign({
+                        initialProps: initialProps
+                    }, {
+                        children: $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$var$ModifiersProvider, {
+                            children: $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$97cf4ab9b312b61a, {
+                                children: children
+                            })
+                        })
+                    }))
+                }))
+            }))
+        })
+    }));
+}
+/**
+ * DayPicker render a date picker component to let users pick dates from a
+ * calendar. See http://react-day-picker.js.org for updated documentation and
+ * examples.
+ *
+ * ### Customization
+ *
+ * DayPicker offers different customization props. For example,
+ *
+ * - show multiple months using `numberOfMonths`
+ * - display a dropdown to navigate the months via `captionLayout`
+ * - display the week numbers with `showWeekNumbers`
+ * - disable or hide days with `disabled` or `hidden`
+ *
+ * ### Controlling the months
+ *
+ * Change the initially displayed month using the `defaultMonth` prop. The
+ * displayed months are controlled by DayPicker and stored in its internal
+ * state. To control the months yourself, use `month` instead of `defaultMonth`
+ * and use the `onMonthChange` event to set it.
+ *
+ * To limit the months the user can navigate to, use
+ * `fromDate`/`fromMonth`/`fromYear` or `toDate`/`toMonth`/`toYear`.
+ *
+ * ### Selection modes
+ *
+ * DayPicker supports different selection mode that can be toggled using the
+ * `mode` prop:
+ *
+ * - `mode="single"`: only one day can be selected. Use `required` to make the
+ *   selection required. Use the `onSelect` event handler to get the selected
+ *   days.
+ * - `mode="multiple"`: users can select one or more days. Limit the amount of
+ *   days that can be selected with the `min` or the `max` props.
+ * - `mode="range"`: users can select a range of days. Limit the amount of days
+ *   in the range with the `min` or the `max` props.
+ * - `mode="default"` (default): the built-in selections are disabled. Implement
+ *   your own selection mode with `onDayClick`.
+ *
+ * The selection modes should cover the most common use cases. In case you
+ * need a more refined way of selecting days, use `mode="default"`. Use the
+ * `selected` props and add the day event handlers to add/remove days from the
+ * selection.
+ *
+ * ### Modifiers
+ *
+ * A _modifier_ represents different styles or states for the days displayed in
+ * the calendar (like "selected" or "disabled"). Define custom modifiers using
+ * the `modifiers` prop.
+ *
+ * ### Formatters and custom component
+ *
+ * You can customize how the content is displayed in the date picker by using
+ * either the formatters or replacing the internal components.
+ *
+ * For the most common cases you want to use the `formatters` prop to change how
+ * the content is formatted in the calendar. Use the `components` prop to
+ * replace the internal components, like the navigation icons.
+ *
+ * ### Styling
+ *
+ * DayPicker comes with a default, basic style in `react-day-picker/style` – use
+ * it as template for your own style.
+ *
+ * If you are using CSS modules, pass the imported styles object the
+ * `classNames` props.
+ *
+ * You can also style the elements via inline styles using the `styles` prop.
+ *
+ * ### Form fields
+ *
+ * If you need to bind the date picker to a form field, you can use the
+ * `useInput` hooks for a basic behavior. See the `useInput` source as an
+ * example to bind the date picker with form fields.
+ *
+ * ### Localization
+ *
+ * To localize DayPicker, import the locale from `date-fns` package and use the
+ * `locale` prop.
+ *
+ * For example, to use Spanish locale:
+ *
+ * ```
+ * import { es } from 'date-fns/locale';
+ * <DayPicker locale={es} />
+ * ```
+ */ function $a66560f34356fabb$export$97e6db89a86ff7ab(props) {
+    return $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$export$8f349d07558f59c4, $a66560f34356fabb$var$__assign({}, props, {
+        children: $a66560f34356fabb$var$jsxRuntimeExports.jsx($a66560f34356fabb$var$Root, {
+            initialProps: props
+        })
+    }));
+}
+/** @private */ function $a66560f34356fabb$var$isValidDate(day) {
+    return !isNaN(day.getTime());
+}
+/** Return props and setters for binding an input field to DayPicker. */ function $a66560f34356fabb$export$1e36b9f257eee5fa(options) {
+    if (options === void 0) options = {};
+    var _a = options.locale, locale = _a === void 0 ? (0, $5d2cb7e2acfbd0aa$export$2e2bcd8739ae039) : _a, required = options.required, _b = options.format, format$1 = _b === void 0 ? "PP" : _b, defaultSelected = options.defaultSelected, _c = options.today, today = _c === void 0 ? new Date() : _c;
+    var _d = $a66560f34356fabb$var$parseFromToProps(options), fromDate = _d.fromDate, toDate = _d.toDate;
+    // Shortcut to the DateFns functions
+    var parseValue = function(value) {
+        return (0, $e77346bca8e276c5$export$2e2bcd8739ae039)(value, format$1, today, {
+            locale: locale
+        });
+    };
+    // Initialize states
+    var _e = (0, $LI8jA.useState)(defaultSelected !== null && defaultSelected !== void 0 ? defaultSelected : today), month = _e[0], setMonth = _e[1];
+    var _f = (0, $LI8jA.useState)(defaultSelected), selectedDay = _f[0], setSelectedDay = _f[1];
+    var defaultInputValue = defaultSelected ? (0, $c0a60053e1df89de$export$2e2bcd8739ae039)(defaultSelected, format$1, {
+        locale: locale
+    }) : "";
+    var _g = (0, $LI8jA.useState)(defaultInputValue), inputValue = _g[0], setInputValue = _g[1];
+    var reset = function() {
+        setSelectedDay(defaultSelected);
+        setMonth(defaultSelected !== null && defaultSelected !== void 0 ? defaultSelected : today);
+        setInputValue(defaultInputValue !== null && defaultInputValue !== void 0 ? defaultInputValue : "");
+    };
+    var setSelected = function(date) {
+        setSelectedDay(date);
+        setMonth(date !== null && date !== void 0 ? date : today);
+        setInputValue(date ? (0, $c0a60053e1df89de$export$2e2bcd8739ae039)(date, format$1, {
+            locale: locale
+        }) : "");
+    };
+    var handleDayClick = function(day, _a) {
+        var selected = _a.selected;
+        if (!required && selected) {
+            setSelectedDay(undefined);
+            setInputValue("");
+            return;
+        }
+        setSelectedDay(day);
+        setInputValue(day ? (0, $c0a60053e1df89de$export$2e2bcd8739ae039)(day, format$1, {
+            locale: locale
+        }) : "");
+    };
+    var handleMonthChange = function(month) {
+        setMonth(month);
+    };
+    // When changing the input field, save its value in state and check if the
+    // string is a valid date. If it is a valid day, set it as selected and update
+    // the calendar’s month.
+    var handleChange = function(e) {
+        setInputValue(e.target.value);
+        var day = parseValue(e.target.value);
+        var isBefore = fromDate && (0, $e1a58e40f6f10c3c$export$2e2bcd8739ae039)(fromDate, day) > 0;
+        var isAfter = toDate && (0, $e1a58e40f6f10c3c$export$2e2bcd8739ae039)(day, toDate) > 0;
+        if (!$a66560f34356fabb$var$isValidDate(day) || isBefore || isAfter) {
+            setSelectedDay(undefined);
+            return;
+        }
+        setSelectedDay(day);
+        setMonth(day);
+    };
+    // Special case for _required_ fields: on blur, if the value of the input is not
+    // a valid date, reset the calendar and the input value.
+    var handleBlur = function(e) {
+        var day = parseValue(e.target.value);
+        if (!$a66560f34356fabb$var$isValidDate(day)) reset();
+    };
+    // When focusing, make sure DayPicker visualizes the month of the date in the
+    // input field.
+    var handleFocus = function(e) {
+        if (!e.target.value) {
+            reset();
+            return;
+        }
+        var day = parseValue(e.target.value);
+        if ($a66560f34356fabb$var$isValidDate(day)) setMonth(day);
+    };
+    var dayPickerProps = {
+        month: month,
+        onDayClick: handleDayClick,
+        onMonthChange: handleMonthChange,
+        selected: selectedDay,
+        locale: locale,
+        fromDate: fromDate,
+        toDate: toDate,
+        today: today
+    };
+    var inputProps = {
+        onBlur: handleBlur,
+        onChange: handleChange,
+        onFocus: handleFocus,
+        value: inputValue,
+        placeholder: (0, $c0a60053e1df89de$export$2e2bcd8739ae039)(new Date(), format$1, {
+            locale: locale
+        })
+    };
+    return {
+        dayPickerProps: dayPickerProps,
+        inputProps: inputProps,
+        reset: reset,
+        setSelected: setSelected
+    };
+}
+/** Returns true when the props are of type {@link DayPickerDefaultProps}. */ function $a66560f34356fabb$export$92cab9761365b1ec(props) {
+    return props.mode === undefined || props.mode === "default";
+}
+
+
+
+
+function $b2b761c5973ada37$export$e1aef45b828286de({ className: className , classNames: classNames , showOutsideDays: showOutsideDays = true , ...props }) {
+    return /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)((0, $a66560f34356fabb$export$97e6db89a86ff7ab), {
+        showOutsideDays: showOutsideDays,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__calendar p-3", className),
+        classNames: {
+            months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
+            month: "space-y-4",
+            caption: "flex justify-center pt-1 relative items-center",
+            caption_label: "text-sm font-medium",
+            nav: "space-x-1 flex items-center",
+            nav_button: (0, $66adb88ac93a30d5$export$1343a74baacb0543)((0, $0e5897524c762a41$export$dca1ee5a936bb312)({
+                variant: "outline"
+            }), "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100"),
+            nav_button_previous: "absolute left-1",
+            nav_button_next: "absolute right-1",
+            table: "w-full border-collapse space-y-1",
+            head_row: "flex",
+            head_cell: "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem]",
+            row: "flex w-full mt-2",
+            cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
+            day: (0, $66adb88ac93a30d5$export$1343a74baacb0543)((0, $0e5897524c762a41$export$dca1ee5a936bb312)({
+                variant: "ghost"
+            }), "h-9 w-9 p-0 font-normal aria-selected:opacity-100"),
+            day_range_end: "day-range-end",
+            day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+            day_today: "bg-accent text-accent-foreground",
+            day_outside: "day-outside text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30",
+            day_disabled: "text-muted-foreground opacity-50",
+            day_range_middle: "aria-selected:bg-accent aria-selected:text-accent-foreground",
+            day_hidden: "invisible",
+            ...classNames
+        },
+        components: {
+            IconLeft: ({ ...props })=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)((0, $3826036570342367$export$2e2bcd8739ae039), {
+                    className: "h-4 w-4"
+                }),
+            IconRight: ({ ...props })=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)((0, $128d882bc0fdb62f$export$2e2bcd8739ae039), {
+                    className: "h-4 w-4"
+                })
+        },
+        ...props
+    });
+}
+$b2b761c5973ada37$export$e1aef45b828286de.displayName = "Calendar";
+
+
 const $f4eb51170e743c4a$var$shadui = {
     Button: $0e5897524c762a41$export$353f5b6fc5456de1,
     Slider: $c38718c2690bae4e$export$472062a354075cee,
@@ -19499,7 +27576,8 @@ const $f4eb51170e743c4a$var$shadui = {
     SelectItem: $a6a33fe0ca01be41$export$13ef48a934230896,
     SelectSeparator: $a6a33fe0ca01be41$export$eba4b1df07cb1d3,
     SelectScrollUpButton: $a6a33fe0ca01be41$export$d8117927658af6d7,
-    SelectScrollDownButton: $a6a33fe0ca01be41$export$ff951e476c12189
+    SelectScrollDownButton: $a6a33fe0ca01be41$export$ff951e476c12189,
+    Calendar: $b2b761c5973ada37$export$e1aef45b828286de
 };
 function $f4eb51170e743c4a$export$40e78c93e005ce8f() {
     console.debug("[ui] setup logseq ui globals");

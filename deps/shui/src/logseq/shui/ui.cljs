@@ -20,6 +20,7 @@
 (def radio-group (util/lsui-wrap "RadioGroup"))
 (def radio-group-item (util/lsui-wrap "RadioGroupItem"))
 (def skeleton (util/lsui-wrap "Skeleton"))
+(def calendar (util/lsui-wrap "Calendar"))
 
 (def card (util/lsui-wrap "Card"))
 (def card-header (util/lsui-wrap "CardHeader"))

@@ -341,4 +341,13 @@
         (ui/card-footer
           (ui/skeleton {:class "h-4 w-full mb-2"}))))]
 
+   ;; Calendar
+   [:div.grid.grid-cols-2.gap-8
+    (section-item "Calendar"
+      (ui/card
+        {:class "inline-flex"}
+        (ui/calendar {:on-day-click #(ui/toast! (.toString %) :success)})))
+    (section-item "Date Picker"
+      [:h1 "TODO: Date picker input with popup pane"])]
+
    [:hr.mb-60]])

@@ -65,6 +65,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select'
+import { Calendar } from '@/components/ui/calendar'
 
 declare global {
   var LSUI: any
@@ -125,6 +126,7 @@ const shadui = {
   SelectSeparator,
   SelectScrollUpButton,
   SelectScrollDownButton,
+  Calendar,
 }
 
 function setupGlobals () {
