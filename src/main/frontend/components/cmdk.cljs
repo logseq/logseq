@@ -560,7 +560,7 @@
 (defn- keydown-handler
   [state e]
   (let [shift? (.-shiftKey e)
-        meta? (.-metaKey e)
+        meta? (util/meta-key? e)
         alt? (.-altKey e)
         ctrl? (.-ctrlKey e)
         keyname (.-key e)
@@ -608,7 +608,7 @@
 (defn- keyup-handler
   [state e]
   (let [shift? (.-shiftKey e)
-        meta? (.-metaKey e)
+        meta? (util/meta-key? e)
         alt? (.-altKey e)]
     (reset! (::shift? state) shift?)
     (reset! (::alt? state) alt?)
