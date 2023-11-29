@@ -90,7 +90,7 @@
                        :block/type "property"})))))
              db-property/built-in-properties)]
     (when (seq txs)
-      (d/transact! conn txs))))
+      (db/transact! conn txs))))
 
 (defn- restore-other-data-from-sqlite!
   [repo data uuid->db-id-map]
