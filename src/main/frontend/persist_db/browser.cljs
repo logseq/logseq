@@ -112,7 +112,7 @@
         (p/catch (fn [error]
                    (if (string/includes? (str error) "NoModificationAllowedError")
                      (notification/show! [:div (str "Avoid opening the same graph in multi-tabs. Error: " error)] :error)
-                     (notification/show! [:div (str "SQLiteDB backend error: " error)] :error))
+                     (notification/show! [:div (str "SQLiteDB creation error: " error)] :error))
 
                    nil))))
 
@@ -127,34 +127,28 @@
     (p/let [^js sqlite (ensure-sqlite-init)]
       (.unsafeUnlinkDB sqlite repo)))
 
-  (<transact-data [_this repo upsert-blocks deleted-uuids]
-    (p->c (p/let [^js sqlite (ensure-sqlite-init)
-                  deleted (clj->js (map str deleted-uuids))
-                  _ (when (seq deleted)
-                      (.deleteBlocks sqlite repo deleted))
-                  upsert-blocks (clj->js (map ds->sqlite-block upsert-blocks))]
-            (.upsertBlocks sqlite repo upsert-blocks))))
+  (<transact-data [_this repo tx-data tx-meta]
+    (prn ::transact-data repo (count tx-data) (count tx-meta))
+    (p->c
+     (p/let [^js sqlite (ensure-sqlite-init)
+             _ (.transact sqlite repo (pr-str tx-data) (pr-str tx-meta))]
+       nil)))
 
   (<fetch-initital-data [_this repo _opts]
+    (prn ::fetch-initital-data repo)
     (-> (p/let [^js sqlite (ensure-sqlite-init)
-            ;; <fetch-initital-data is called when init/re-loading graph
-            ;; the underlying DB should be opened
-                _ (.openDB sqlite repo)
-                all-pages (.fetchAllPages sqlite repo)
-                all-blocks (.fetchAllBlocks sqlite repo)
-                journal-blocks (.fetchRecentJournals sqlite repo)
-                init-data (.fetchInitData sqlite repo)]
-
-          #js {:all-blocks all-blocks
-               :all-pages all-pages
-               :journal-blocks journal-blocks
-               :init-data init-data})
+                ;; <fetch-initital-data is called when init/re-loading graph
+                ;; the underlying DB should be opened
+                _ (.openDB sqlite repo)]
+          (.getInitialData sqlite repo))
         (p/catch (fn [error]
+                   (prn ::fuck-error)
                    (if (string/includes? (str error) "NoModificationAllowedError")
                      (notification/show! [:div (str "Avoid opening the same graph in multi-tabs. Error: " error)] :error)
-                     (notification/show! [:div (str "SQLiteDB backend error: " error)] :error))
+                     (notification/show! [:div (str "SQLiteDB fetch error: " error)] :error))
 
                    {}))))
+
   (<fetch-blocks-excluding [_this repo exclude-uuids _opts]
     (p/let [^js sqlite (ensure-sqlite-init)]
       (.fetchBlocksExcluding sqlite repo (clj->js exclude-uuids)))))
