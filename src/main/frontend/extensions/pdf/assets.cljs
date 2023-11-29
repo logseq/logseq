@@ -204,7 +204,7 @@
                        (assoc (pu/get-pid :id) (str id)))
                properties (->>
                            (wrap-props props)
-                           (property-handler/replace-key-with-id! (state/get-current-repo)))]
+                           (property-handler/replace-key-with-id (state/get-current-repo)))]
            (when (string? text)
              (editor-handler/api-insert-new-block!
               text (merge {:page        (:block/name ref-page)
