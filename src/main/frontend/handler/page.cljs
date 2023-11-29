@@ -34,7 +34,8 @@
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
             [logseq.common.path :as path]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [electron.ipc :as ipc]))
 
 (def create! page-common-handler/create!)
 (def delete! page-common-handler/delete!)
@@ -319,7 +320,7 @@
   (if-let [file-rpath (and (util/electron?) (page-util/get-page-file-rpath))]
     (let [repo-dir (config/get-repo-dir (state/get-current-repo))
           file-fpath (path/path-join repo-dir file-rpath)]
-      (js/window.apis.showItemInFolder file-fpath))
+      (ipc/ipc "openFileInFolder" file-fpath))
     (notification/show! "No file found" :warning)))
 
 (defn copy-page-url

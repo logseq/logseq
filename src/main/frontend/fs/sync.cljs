@@ -2701,7 +2701,7 @@
                     v)))))
        :flush-fn #(swap! *sync-state sync-state-reset-queued-local->remote-files)
        :stop-ch stop-chan
-       :distinct-coll? true
+       :distinct-key-fn identity
        :flush-now-ch private-immediately-local->remote-chan
        :refresh-timeout-ch private-recent-edited-chan)))
 
