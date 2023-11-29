@@ -162,7 +162,7 @@
                                   :block/refs refs}]
                                 {:outliner-op :save-block}))))))))))
 
-(defn resolve-tag
+(defn- resolve-tag
   "Change `v` to a tag's UUID if v is a string tag, e.g. `#book`"
   [v]
   (when (and (string? v)
@@ -477,7 +477,7 @@
                                      {})
                 (remove-block-property! repo (:block/uuid block) property-id)))))))))
 
-(defn replace-key-with-id!
+(defn replace-key-with-id
   "Notice: properties need to be created first"
   [m]
   (zipmap
