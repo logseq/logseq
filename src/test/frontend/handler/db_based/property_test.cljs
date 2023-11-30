@@ -98,17 +98,17 @@
         2)))
 
   (testing "Add a multi-values property"
-    (db-property-handler/upsert-property! repo "property-3" {:type :default :cardinality :many} {})
-    (db-property-handler/set-block-property! repo fbid "property-3" "value 1" {})
-    (db-property-handler/set-block-property! repo fbid "property-3" "value 2" {})
-    (db-property-handler/set-block-property! repo fbid "property-3" "value 3" {})
+    (db-property-handler/upsert-property! repo "property-3" {:type :number :cardinality :many} {})
+    (db-property-handler/set-block-property! repo fbid "property-3" 1 {})
+    (db-property-handler/set-block-property! repo fbid "property-3" 2 {})
+    (db-property-handler/set-block-property! repo fbid "property-3" 3 {})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)
           property (db/entity [:block/name "property-3"])]
       ;; ensure property exists
       (are [x y] (= x y)
         (:block/schema property)
-        {:type :default :cardinality :many}
+        {:type :number :cardinality :many}
         (:block/type property)
         #{"property"})
       ;; check block's properties
@@ -116,10 +116,10 @@
         (count properties)
         3
         (get properties (:block/uuid property))
-        #{"value 1" "value 2" "value 3"}))
+        #{1 2 3}))
 
-    ;; update property value from "value 1" to "value 4"
-    (db-property-handler/set-block-property! repo fbid "property-3" "value 4" {:old-value "value 1"})
+    ;; update property value from 1 to 4
+    (db-property-handler/set-block-property! repo fbid "property-3" 4 {:old-value 1})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)
           property (db/entity [:block/name "property-3"])]
@@ -128,7 +128,7 @@
         (count properties)
         3
         (get properties (:block/uuid property))
-        #{"value 4" "value 2" "value 3"})
+        #{4 2 3})
 
       (db-property-handler/delete-property-value! repo block (:block/uuid property) "value 4")
       (let [properties (:block/properties block)]

@@ -189,15 +189,17 @@
             (ui/select schema-types
                        (fn [_e v]
                          (let [type (keyword (string/lower-case v))
-                               update-schema-fn (comp
-                                                 (if (contains? db-property-type/property-types-with-cardinality type)
-                                                   identity
-                                                   #(dissoc % :cardinality))
-                                                 #(assoc % :type type))]
+                               update-schema-fn (apply comp
+                                                       #(assoc % :type type)
+                                                       (keep
+                                                        (fn [attr]
+                                                          (when-not (db-property-type/property-type-allows-schema-attribute? type attr)
+                                                           #(dissoc % attr)))
+                                                        [:values :position :cardinality :classes]))]
                            (swap! *property-schema update-schema-fn)
                            (components-pu/update-property! property @*property-name @*property-schema))))]))]
 
-      (when (contains? db-property-type/property-types-with-cardinality (:type @*property-schema))
+      (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :cardinality)
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
          [:label "Multiple values:"]
          (let [many? (boolean (= :many (:cardinality @*property-schema)))]
@@ -208,27 +210,28 @@
                                       (save-property-fn))}))])
 
 
-      (case (:type @*property-schema)
-        :page
-        (when (empty? (:values @*property-schema))
-          [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-           [:label "Specify classes:"]
-           (class-select *property-schema
-                         (:classes @*property-schema)
-                         (assoc opts
-                                :disabled? disabled?
-                                :save-property-fn save-property-fn))])
+      (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :classes)
+       (case (:type @*property-schema)
+         :page
+         (when (empty? (:values @*property-schema))
+           [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+            [:label "Specify classes:"]
+            (class-select *property-schema
+                          (:classes @*property-schema)
+                          (assoc opts
+                                 :disabled? disabled?
+                                 :save-property-fn save-property-fn))])
 
-        :template
-        [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-         [:label "Specify template:"]
-         (class-select *property-schema (:classes @*property-schema)
-                       (assoc opts
-                              :multiple-choices? false
-                              :disabled? disabled?
-                              :save-property-fn save-property-fn))]
+         :template
+         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+          [:label "Specify template:"]
+          (class-select *property-schema (:classes @*property-schema)
+                        (assoc opts
+                               :multiple-choices? false
+                               :disabled? disabled?
+                               :save-property-fn save-property-fn))]
 
-        nil)
+         nil))
 
       (when (and enable-closed-values? (empty? (:classes @*property-schema)))
         [:div.grid.grid-cols-4.gap-1.items-start.leading-8
