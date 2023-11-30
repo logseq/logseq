@@ -49,7 +49,7 @@
   [versions path get-content]
   (let
    [[content set-content!] (rum/use-state  nil)
-    [hash  set-hash!] (rum/use-state  nil)]
+    [hash  set-hash!] (rum/use-state   "HEAD")]
     (rum/use-effect! (fn [] (p/let [c (get-content hash path)] (set-content! c)) [hash path]))
     [:div.flex
      [:div.overflow-y-auto {:class "w-48 max-h-[calc(85vh_-_4rem)] "}
