@@ -4,6 +4,7 @@
    NOTE: This script is also used in CI to confirm graph creation works"
   (:require [logseq.tasks.db-graph.create-graph :as create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.frontend.property.type :as db-property-type]
             [clojure.string :as string]
             [datascript.core :as d]
             ["path" :as node-path]
@@ -70,7 +71,7 @@
      :properties
      (->> [:default :url :checkbox :number :page :date]
           (mapcat #(cond-> [[% {:block/schema {:type %}}]]
-                     (not (#{:checkbox :default} %))
+                     (db-property-type/property-type-allows-schema-attribute? % :cardinality)
                      (conj [(keyword (str (name %) "-many")) {:block/schema {:type % :cardinality :many}}])))
           (into {}))}))
 

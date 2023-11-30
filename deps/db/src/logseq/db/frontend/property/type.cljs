@@ -1,7 +1,13 @@
 (ns logseq.db.frontend.property.type
-  "Provides property types including fns to validate them"
+  "Provides property types and related helper fns e.g. property value validation
+  fns and their allowed schema attributes"
   (:require [datascript.core :as d]
             [clojure.set :as set]))
+
+;; Config vars
+;; ===========
+;; These vars enumerate all known property types and their associated behaviors
+;; except for validation which is in its own section
 
 (def internal-builtin-schema-types
   "Valid schema :type only to be used by built-in-properties"
@@ -18,6 +24,22 @@
 (assert (set/subset? closed-values-schema-types (set user-builtin-schema-types))
         "All closed value types are valid property types")
 
+(def ^:private user-built-in-allowed-schema-attributes
+  "Map of types to their set of allowed :schema attributes"
+  (merge-with into
+              (zipmap closed-values-schema-types (repeat #{:values :position}))
+              {:number #{:cardinality}
+               :date #{:cardinality}
+               :url #{:cardinality}
+               :page #{:cardinality :classes}
+               :template #{:classes}
+               :checkbox #{}}))
+
+(assert (= (set user-builtin-schema-types) (set (keys user-built-in-allowed-schema-attributes)))
+        "Each user built in type should have an allowed schema attribute")
+
+;; Property value validation
+;; =========================
 ;; TODO:
 ;; Validate && list fixes for non-validated values when updating property schema
 
@@ -69,6 +91,7 @@
       (type-validate-fn value))))
 
 (def builtin-schema-types
+  "Map of types to malli fns that validate a property value for that type"
   {:default  [:fn
               {:error/message "should be a text"}
               ;; uuid check needed for property block values
@@ -97,9 +120,6 @@
    :coll     coll?
    :any      some?})
 
-(def property-types-with-cardinality
-  #{:number :date :url :page})
-
 (def property-types-with-db
   "Property types whose validation fn requires a datascript db"
   #{:date :page :template})
@@ -108,3 +128,11 @@
            (into internal-builtin-schema-types
                  user-builtin-schema-types))
         "Built-in schema types must be equal")
+
+;; Helper fns
+;; ==========
+(defn property-type-allows-schema-attribute?
+  "Returns boolean to indicate if property type allows the given :schema attribute"
+  [property-type schema-attribute]
+  (contains? (get user-built-in-allowed-schema-attributes property-type)
+             schema-attribute))
