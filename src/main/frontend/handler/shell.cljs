@@ -77,20 +77,8 @@
         (p/let [result (run-git-command! ["log" (str "-" n) "--pretty=format:Commit: %C(auto)%h$$$%s$$$%ad" "-p" path])
                 lines (->> (string/split-lines result)
                            (filter #(string/starts-with? % "Commit: ")))]
-          (notification/show! [:div
-                               [:div.font-bold "File history - " path]
-                               (for [line lines]
-                                 (let [[hash title time] (string/split line "$$$")
-                                       hash (subs hash 8)]
-                                   [:div.my-4 {:key hash}
-                                    [:hr]
-                                    [:div.mb-2
-                                     [:a.font-medium.mr-1.inline
-                                      {:on-click (fn [] ((notification/clear-all!)
-                                                         (get-versioned-file-content hash path)))}
-                                      hash]
-                                     title]
-                                    [:div.opacity-50 time]]))] :success false))))))
+          (state/pub-event! [:modal/display-file-version-selector  lines path  (fn [hash path] (run-git-command! ["show" (str hash ":" path)]))]))))))
+
 
 (defn set-git-username-and-email
   [username email]

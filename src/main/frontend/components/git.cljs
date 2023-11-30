@@ -1,6 +1,7 @@
 (ns frontend.components.git
   (:require [rum.core :as rum]
             [frontend.ui :as ui]
+            [promesa.core :as p]
             [frontend.util :as util]
             [clojure.string :as string]
             [frontend.handler.shell :as shell]
@@ -36,23 +37,42 @@
 
      [:div.mt-5.sm:mt-4.flex
       (ui/button
-        "Submit"
-        {:on-click (fn []
-                     (let [username @username
-                           email @email]
-                       (when (and (not (string/blank? username))
-                                  (not (string/blank? email)))
-                         (shell/set-git-username-and-email username email))))})]]))
+       "Submit"
+       {:on-click (fn []
+                    (let [username @username
+                          email @email]
+                      (when (and (not (string/blank? username))
+                                 (not (string/blank? email)))
+                        (shell/set-git-username-and-email username email))))})]]))
 
-(rum/defc file-specific-version
-  [path hash content]
-  [:div.w-full.sm:max-w-lg {:style {:width 700}}
-   [:div.font-bold.mb-4 (str path (util/format " (%s)" hash)) ]
-   [:pre content]
-   (ui/button "Revert"
-     :on-click (fn []
-                 (file/alter-file (state/get-current-repo)
-                                  path
-                                  content
-                                  {:re-render-root? true
-                                   :skip-compare? true})))])
+(rum/defc file-version-selector
+  [versions path get-content]
+  (let
+   [[content set-content!] (rum/use-state  nil)
+    [hash  set-hash!] (rum/use-state  nil)]
+    (rum/use-effect! (fn [] (p/let [c (get-content hash path)] (set-content! c)) [hash path]))
+    [:div.flex
+     [:div.overflow-y-auto {:class "w-48 max-h-[calc(85vh_-_4rem)] "}
+      [:div.font-bold "File history - " path]
+      (for [line  versions]
+        (let [[hash title time] (string/split line "$$$")
+              hash (subs hash 8)]
+          [:div.my-4 {:key hash}
+           [:hr]
+           [:div.mb-2
+            [:a.font-medium.mr-1.block
+             {:on-click (fn []  (set-hash!  hash))}
+             hash]
+            title]
+           [:div.opacity-50 time]]))]
+     [:div.flex-1.p-4
+      [:div.w-full.sm:max-w-lg {:style {:width 700}}
+       [:div.font-bold.mb-4 (str path (util/format " (%s)" hash))]
+       [:pre content]
+       (ui/button "Revert"
+                  :on-click (fn []
+                              (file/alter-file (state/get-current-repo)
+                                               path
+                                               content
+                                               {:re-render-root? true
+                                                :skip-compare? true})))]]]))
