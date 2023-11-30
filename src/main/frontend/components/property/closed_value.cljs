@@ -195,20 +195,22 @@
                                        :dropdown? false
                                        :close-modal? false
                                        :on-chosen (fn [chosen]
-                                                    (upsert-closed-value! property {:value chosen}))})
+                                                    (let [closed-value (upsert-closed-value! property {:value chosen})]
+                                                      (swap! *property-schema update :values (fnil conj []) closed-value)))})
           (let [values (->> (model/get-block-property-values (:block/uuid property))
                             (map second)
                             (remove uuid?)
                             (remove string/blank?)
                             distinct)]
             (if (seq values)
-              (add-existing-values property values opts)
+              (add-existing-values property *property-schema values opts)
               (item-config
                property
                nil
                (assoc opts :on-save
                       (fn [value icon description]
-                        (upsert-closed-value! property {:value value
-                                                        :description description
-                                                        :icon icon}))))))))
+                        (let [closed-value (upsert-closed-value! property {:value value
+                                                                       :description description
+                                                                       :icon icon})]
+                          (swap! *property-schema update :values (fnil conj []) closed-value)))))))))
       dropdown-opts)]))
