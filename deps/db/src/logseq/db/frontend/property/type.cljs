@@ -9,25 +9,25 @@
 ;; These vars enumerate all known property types and their associated behaviors
 ;; except for validation which is in its own section
 
-(def internal-builtin-schema-types
-  "Valid schema :type only to be used by built-in-properties"
+(def internal-built-in-property-types
+  "Valid property types only for use by internal built-in-properties"
   #{:keyword :map :coll :any})
 
-(def user-builtin-schema-types
-  "Valid schema :type for users in order they appear in the UI"
+(def user-built-in-property-types
+  "Valid property types for users in order they appear in the UI"
   [:default :number :date :checkbox :url :page :template])
 
-(def closed-values-schema-types
+(def closed-value-property-types
   "Valid schema :type for closed values"
   #{:default :number :date :url :page})
 
-(assert (set/subset? closed-values-schema-types (set user-builtin-schema-types))
+(assert (set/subset? closed-value-property-types (set user-built-in-property-types))
         "All closed value types are valid property types")
 
 (def ^:private user-built-in-allowed-schema-attributes
   "Map of types to their set of allowed :schema attributes"
   (merge-with into
-              (zipmap closed-values-schema-types (repeat #{:values :position}))
+              (zipmap closed-value-property-types (repeat #{:values :position}))
               {:number #{:cardinality}
                :date #{:cardinality}
                :url #{:cardinality}
@@ -35,7 +35,7 @@
                :template #{:classes}
                :checkbox #{}}))
 
-(assert (= (set user-builtin-schema-types) (set (keys user-built-in-allowed-schema-attributes)))
+(assert (= (set user-built-in-property-types) (set (keys user-built-in-allowed-schema-attributes)))
         "Each user built in type should have an allowed schema attribute")
 
 ;; Property value validation
@@ -90,8 +90,8 @@
       (existing-closed-value-valid? db property type-validate-fn value)
       (type-validate-fn value))))
 
-(def builtin-schema-types
-  "Map of types to malli fns that validate a property value for that type"
+(def built-in-validation-schemas
+  "Map of types to malli validation schemas that validate a property value for that type"
   {:default  [:fn
               {:error/message "should be a text"}
               ;; uuid check needed for property block values
@@ -120,14 +120,14 @@
    :coll     coll?
    :any      some?})
 
+(assert (= (set (keys built-in-validation-schemas))
+           (into internal-built-in-property-types
+                 user-built-in-property-types))
+        "Built-in property types must be equal")
+
 (def property-types-with-db
   "Property types whose validation fn requires a datascript db"
   #{:date :page :template})
-
-(assert (= (set (keys builtin-schema-types))
-           (into internal-builtin-schema-types
-                 user-builtin-schema-types))
-        "Built-in schema types must be equal")
 
 ;; Helper fns
 ;; ==========

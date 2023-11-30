@@ -20,15 +20,15 @@
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
 
-(defn builtin-schema-types
-  "A frontend version of builtin-schema-types that adds the current database to
+(defn built-in-validation-schemas
+  "A frontend version of built-in-validation-schemas that adds the current database to
    schema fns"
   [property & {:keys [new-closed-value?]
                :or {new-closed-value? false}}]
   (into {}
         (map (fn [[property-type property-val-schema]]
                (cond
-                 (db-property-type/closed-values-schema-types property-type)
+                 (db-property-type/closed-value-property-types property-type)
                  (let [[_ schema-opts schema-fn] property-val-schema
                        schema-fn' (if (db-property-type/property-types-with-db property-type) #(schema-fn (db/get-db) %) schema-fn)]
                    [property-type [:fn
@@ -39,7 +39,7 @@
                    [property-type [:fn schema-opts #(schema-fn (db/get-db) %)]])
                  :else
                  [property-type property-val-schema]))
-             db-property-type/builtin-schema-types)))
+             db-property-type/built-in-validation-schemas)))
 
 (defn- fail-parse-long
   [v-str]
@@ -122,7 +122,7 @@
     (when (and multiple-values? (seq values))
       (let [infer-schema (when-not type (infer-schema-from-input-string (first values)))
             property-type (or type infer-schema :default)
-            schema (get (builtin-schema-types property) property-type)
+            schema (get (built-in-validation-schemas property) property-type)
             properties (:block/properties block)
             values' (try
                       (set (map #(convert-property-input-string property-type %) values))
@@ -199,7 +199,7 @@
         (when (some? v)
           (let [infer-schema (when-not type (infer-schema-from-input-string v))
                 property-type (or type infer-schema :default)
-                schema (get (builtin-schema-types property) property-type)
+                schema (get (built-in-validation-schemas property) property-type)
                 properties (:block/properties block)
                 value (get properties property-uuid)
                 v* (try
@@ -645,7 +645,7 @@
   [property {:keys [id value icon description]}]
   (assert (or (nil? id) (uuid? id)))
   (let [property-type (get-in property [:block/schema :type] :default)]
-    (when (contains? db-property-type/closed-values-schema-types property-type)
+    (when (contains? db-property-type/closed-value-property-types property-type)
       (let [value (if (string? value) (string/trim value) value)
             property-schema (:block/schema property)
             closed-values (:values property-schema)
@@ -659,7 +659,7 @@
             block (when id (db/entity [:block/uuid id]))
             value-block (when (uuid? value) (db/entity [:block/uuid value]))
             validate-message (validate-property-value
-                              (get (builtin-schema-types property {:new-closed-value? true}) property-type)
+                              (get (built-in-validation-schemas property {:new-closed-value? true}) property-type)
                               resolved-value)]
         (cond
           (nil? resolved-value)
