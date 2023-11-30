@@ -7,7 +7,7 @@
 
 (rum/defcs root < rum/reactive
   (rum/local nil ::hover-theme)
-  [state {:keys [theme hover-theme color text depth size icon interactive shortcut tiled on-click muted disabled? class href button-props icon-props]
+  [state {:keys [theme hover-theme color text depth size icon interactive shortcut tiled tiles on-click muted disabled? class href button-props icon-props]
           :or {theme :color depth 1 size :md interactive true muted false class ""}} context]
   (let [*hover-theme (::hover-theme state)
         color-string (or (some-> color name) (some-> context :state rum/react :ui/radix-color name) "custom")
@@ -31,12 +31,14 @@
         :on-mouse-out #(reset! *hover-theme nil)}
         on-click
         (assoc :on-click on-click)))
-     (if-not tiled text
-             (for [[index tile] (map-indexed vector (rest (string/split text #"")))]
-               [:<>
-                (when (< 0 index)
-                  [:div.ui__button__tile-separator])
-                [:div.ui__button__tile tile]]))
+     (if (and tiled (or text tiles))
+       (for [[index tile] (map-indexed vector
+                                       (or tiles (and text (rest (string/split text #"")))))]
+         [:<>
+          (when (< 0 index)
+            [:div.ui__button__tile-separator])
+          [:div.ui__button__tile tile]])
+       text)
 
      (when icon
        (icon/root icon icon-props))
