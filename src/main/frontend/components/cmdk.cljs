@@ -212,21 +212,22 @@
         repo (state/get-current-repo)]
     (swap! !results assoc-in [group :status] :loading)
     (p/let [pages (search/page-search @!input)
-            items (map
-                   (fn [page]
-                     (let [entity (db/entity [:block/name (util/page-name-sanity-lc page)])
-                           whiteboard? (= (:block/type entity) "whiteboard")
-                           source-page (model/get-alias-source-page repo page)]
-                       (hash-map :icon (if whiteboard? "whiteboard" "page")
-                                 :icon-theme :gray
-                                 :text (if source-page
-                                         [:div.flex.flex-row.items-center.gap-2
-                                          page
-                                          [:div.opacity-50.font-normal "alias of"]
-                                          (:block/original-name source-page)]
-                                         page)
-                                 :source-page page)))
-                   pages)]
+            items (->> pages
+                       (remove nil?)
+                       (map
+                        (fn [page]
+                          (let [entity (db/entity [:block/name (util/page-name-sanity-lc page)])
+                                whiteboard? (= (:block/type entity) "whiteboard")
+                                source-page (model/get-alias-source-page repo page)]
+                            (hash-map :icon (if whiteboard? "whiteboard" "page")
+                                      :icon-theme :gray
+                                      :text (if source-page
+                                              [:div.flex.flex-row.items-center.gap-2
+                                               page
+                                               [:div.opacity-50.font-normal "alias of"]
+                                               (:block/original-name source-page)]
+                                              page)
+                                      :source-page page)))))]
       (swap! !results update group        merge {:status :success :items items}))))
 
 ;; The blocks search action uses an existing handler
