@@ -2,7 +2,6 @@
   "Git related handler fns"
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
@@ -59,15 +58,6 @@
         :else
         (run-cli-command! command args)))))
 
-;; git show $REV:$FILE
-(defn- get-versioned-file-content
-  [hash path]
-  (when (and hash path)
-    (let [repo (state/get-current-repo)
-          local-dir (config/get-local-dir repo)
-          path (string/replace path (str local-dir "/") "")]
-      (p/let [content (run-git-command! ["show" (str hash ":" path)])]
-        (state/pub-event! [:modal/display-file-version path content hash])))))
 
 (defn get-file-latest-git-log
   [page n]
