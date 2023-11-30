@@ -1,6 +1,6 @@
 const radix = require('@radix-ui/colors')
 
-function mapRadixColorToTailwind (color) {
+function mapRadixColorToTailwind(color) {
   const radixColor = radix[color]
   if (!radixColor) throw new Error(`[radix color] not exist for ${color}`)
   const twSteps = [10, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]
@@ -125,11 +125,11 @@ module.exports = {
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
-      },
+      }
     },
   },
   plugins: [require('tailwindcss-animate')],
   corePlugins: {
-    preflight: true,
+    preflight: false,
   }
 }

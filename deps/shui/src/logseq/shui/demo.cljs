@@ -169,6 +169,33 @@
         [:p.relative.px-2
          (ui/button {:type "submit" :class "!absolute right-0 top-[-40px]"} "Submit")]]))])
 
+(rum/defc sample-date-picker
+  []
+  (let [[open? set-open!] (rum/use-state false)
+        [date set-date!] (rum/use-state (js/Date.))]
+    (ui/popover
+      {:open           open?
+       :on-open-change (fn [o] (set-open! o))}
+      ;; trigger
+      (ui/popover-trigger
+        {:as-child true
+         :class    "w-2/3"}
+        (ui/input
+          {:type        :text
+           :placeholder "pick a date"
+           :value       (.toDateString date)}))
+      ;; content
+      (ui/popover-content
+        {:on-open-auto-focus #(.preventDefault %)
+         :side-offset        8
+         :class "p-0"}
+        (ui/calendar
+          {:selected date
+           :on-day-click
+           (fn [^js d]
+             (set-date! d)
+             (set-open! false))})))))
+
 (rum/defc page []
   [:div.p-10
    [:h1.text-3xl.font-bold "Logseq UI"]
@@ -348,6 +375,6 @@
         {:class "inline-flex"}
         (ui/calendar {:on-day-click #(ui/toast! (.toString %) :success)})))
     (section-item "Date Picker"
-      [:h1 "TODO: Date picker input with popup pane"])]
+      (sample-date-picker))]
 
    [:hr.mb-60]])

@@ -11,6 +11,11 @@ html {
       --accent-foreground: var(--rx-gray-12-hsl);
     }
   }
+
+  .ui__calendar {
+    --accent: var(--rx-gray-04-hsl);
+    --accent-foreground: var(--rx-gray-12-hsl);
+  }
 }
 
 html[data-theme=light] {
@@ -67,7 +72,7 @@ html[data-theme=dark] {
     }
 
     .ui__calendar {
-      --accent: 200 97% 37%;
+      --accent: 196 100% 15%;
     }
   }
 }

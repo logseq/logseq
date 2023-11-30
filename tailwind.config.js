@@ -233,6 +233,11 @@ module.exports = {
       },
     },
     colors: {
+      // Theme basic
+      border: 'hsl(var(--border))',
+      input: 'hsl(var(--input))',
+      ring: 'hsl(var(--ring))',
+
       // Tailwind colors
       gray: gray,
       accent: accent,
@@ -273,6 +278,6 @@ module.exports = {
     }
   },
   corePlugins: {
-    preflight: false
+    preflight: true
   }
 }
