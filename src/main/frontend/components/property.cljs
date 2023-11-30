@@ -185,19 +185,27 @@
                        :interactive true
                        :disabled    false}
                       (svg/help-circle))]
-           [:div.col-span-2
+           [:div.flex.items-center.col-span-2
             (ui/select schema-types
                        (fn [_e v]
                          (let [type (keyword (string/lower-case v))
                                update-schema-fn (apply comp
                                                        #(assoc % :type type)
+                                                       ;; always delete previous closed values as they
+                                                       ;; are not valid for the new type
+                                                       #(dissoc % :values)
                                                        (keep
                                                         (fn [attr]
                                                           (when-not (db-property-type/property-type-allows-schema-attribute? type attr)
-                                                           #(dissoc % attr)))
-                                                        [:values :position :cardinality :classes]))]
+                                                            #(dissoc % attr)))
+                                                        [:cardinality :classes :position]))]
                            (swap! *property-schema update-schema-fn)
-                           (components-pu/update-property! property @*property-name @*property-schema))))]))]
+                           (components-pu/update-property! property @*property-name @*property-schema))))
+            (ui/tippy {:html        "Changing the property type clears some property configurations."
+                       :class       "tippy-hover ml-2"
+                       :interactive true
+                       :disabled    false}
+                      (svg/info))]))]
 
       (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :cardinality)
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
