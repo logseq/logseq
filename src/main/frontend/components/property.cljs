@@ -109,7 +109,10 @@
     "Text"
     ((comp string/capitalize name) property-type)))
 
-(rum/defcs ^:large-vars/cleanup-todo property-config <
+(rum/defcs ^:large-vars/cleanup-todo property-config
+  "All changes to a property must update the db and the *property-schema. Failure to do
+   so can result in data loss"
+  <
   shortcut/disable-all-shortcuts
   rum/reactive
   db-mixins/query
