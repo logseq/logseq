@@ -273,7 +273,10 @@
   (let [!input (::input state)
         !results (::results state)
         recent-searches (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
-        recent-pages (mapv (fn [page] {:type :page :data page}) (db/get-key-value :recent/pages))]
+        recent-pages (->> (keep (fn [page]
+                                  (when-let [page-entity (db/entity [:block/name (util/page-name-sanity-lc page)])]
+                                    {:type :page :data (:block/original-name page-entity)})) (db/get-key-value :recent/pages))
+                          vec)]
     (swap! !results assoc-in [group :status] :loading)
     (let [items (->> (concat recent-searches recent-pages)
                      (filter #(string/includes? (lower-case-str (:data %)) (lower-case-str @!input)))
