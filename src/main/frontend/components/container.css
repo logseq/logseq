@@ -80,7 +80,7 @@
 }
 
 .dark .left-sidebar-inner {
-  background-color: or(--ls-left-sidebar-background-color, --lx-gray-01, --ls-primary-background);
+  background-color: or(--ls-left-sidebar-background-color, --lx-gray-01, --ls-primary-background-color);
 }
 
 .left-sidebar-inner {
