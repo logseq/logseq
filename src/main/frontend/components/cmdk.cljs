@@ -501,7 +501,6 @@
                                       :rounded false
                                       :hoverable @*mouse-active?
                                       :highlighted highlighted?
-                                      :display-shortcut-on-highlight? true
                                       ;; for some reason, the highlight effect does not always trigger on a
                                       ;; boolean value change so manually pass in the dep
                                       :on-highlight-dep highlighted-item
