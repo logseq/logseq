@@ -137,7 +137,7 @@
         class? (contains? (:block/type block) "class")
         property-type (get-in property [:block/schema :type])
         save-property-fn (fn [] (components-pu/update-property! property @*property-name @*property-schema))
-        enable-closed-values? (contains? db-property-type/closed-values-schema-types (or property-type :default))]
+        enable-closed-values? (contains? db-property-type/closed-value-property-types (or property-type :default))]
     [:div.property-configure.flex.flex-1.flex-col
      {:on-mouse-down #(state/set-state! :editor/mouse-down-from-property-configure? true)
       :on-mouse-up #(state/set-state! :editor/mouse-down-from-property-configure? nil)}
@@ -168,9 +168,9 @@
 
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Schema type:"]
-       (let [schema-types (->> (concat db-property-type/user-builtin-schema-types
+       (let [schema-types (->> (concat db-property-type/user-built-in-property-types
                                        (when built-in-property?
-                                         db-property-type/internal-builtin-schema-types))
+                                         db-property-type/internal-built-in-property-types))
                                (map (fn [type]
                                       {:label (property-type-label type)
                                        :disabled disabled?

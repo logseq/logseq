@@ -65,7 +65,7 @@
                                          [:block/schema :type]))}]
    (map (fn [[prop-type value-schema]]
           ^:property-value [prop-type (if (vector? value-schema) (last value-schema) value-schema)])
-        db-property-type/builtin-schema-types)))
+        db-property-type/built-in-validation-schemas)))
 
 (def block-properties
   "Validates a slightly modified version of :block/properties. Properties are
@@ -142,8 +142,8 @@
       (vec
        (concat
         [:map
-         [:type (apply vector :enum (into db-property-type/internal-builtin-schema-types
-                                          db-property-type/user-builtin-schema-types))]]
+         [:type (apply vector :enum (into db-property-type/internal-built-in-property-types
+                                          db-property-type/user-built-in-property-types))]]
         property-common-schema-attrs
         property-type-schema-attrs))]]
     page-attrs
@@ -163,7 +163,7 @@
          property-common-schema-attrs
          (remove #(not (db-property-type/property-type-allows-schema-attribute? prop-type (first %)))
                  property-type-schema-attrs)))])
-    db-property-type/user-builtin-schema-types)))
+    db-property-type/user-built-in-property-types)))
 
 (def user-property
   (vec
