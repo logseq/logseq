@@ -9,13 +9,14 @@
             [electron.ipc :as ipc]
             [frontend.colors :as colors]
             [frontend.mobile.util :as mobile-util]
-            [frontend.storage :as storage]
             [frontend.spec.storage :as storage-spec]
+            [frontend.storage :as storage]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.graph-parser.config :as gp-config]
+            [malli.core :as m]
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -31,10 +32,12 @@
      :today                                 nil
      :system/events                         (async/chan 1000)
      :db/batch-txs                          (async/chan 1000)
-     :file/writes                           (async/chan 10000
-                                                        (util/dedupe-by
-                                                         (fn [[repo page-id outliner-op _epoch]]
-                                                           [repo page-id outliner-op])))
+     :file/writes                           (let [coercer (m/coercer [:catn
+                                                                      [:repo :string]
+                                                                      [:page-id :any]
+                                                                      [:outliner-op :any]
+                                                                      [:epoch :int]])]
+                                              (async/chan 10000 (map coercer)))
      :file/unlinked-dirs                    #{}
      :reactive/custom-queries               (async/chan 1000)
      :notification/show?                    false

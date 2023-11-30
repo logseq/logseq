@@ -1470,7 +1470,7 @@
         (assets-handler/resolve-asset-real-path-url (state/get-current-repo) path)
 
         (util/electron?)
-        (path/path-join "assets://" full-path)
+        (path/prepend-protocol "assets:" full-path)
 
         (mobile-util/native-platform?)
         (mobile-util/convert-file-src full-path)
@@ -1643,7 +1643,7 @@
         editing-page (and block
                           (when-let [page-id (:db/id (:block/page block))]
                             (:block/name (db/entity page-id))))
-        pages (search/page-search q 100)]
+        pages (search/page-search q)]
     (if editing-page
       ;; To prevent self references
       (remove (fn [p] (= (util/page-name-sanity-lc p) editing-page)) pages)
