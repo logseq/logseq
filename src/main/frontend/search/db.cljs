@@ -5,7 +5,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             ["fuse.js" :as fuse]
-            [frontend.util.property :as property-util]))
+            [frontend.util.property :as property]))
 
 ;; Notice: When breaking changes happen, bump version in src/electron/electron/search.cljs
 
@@ -25,7 +25,7 @@
   [{:block/keys [uuid page content format] :as block
     :or {format :markdown}}]
   (when-not (> (count content) (max-len))
-    (let [content (property-util/remove-built-in-properties format content)]
+    (let [content (property/remove-built-in-properties format content)]
       (when-not (string/blank? content)
         {:id (:db/id block)
          :uuid (str uuid)
