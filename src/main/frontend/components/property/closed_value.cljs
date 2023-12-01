@@ -212,7 +212,7 @@
                (assoc opts :on-save
                       (fn [value icon description]
                         (let [closed-value (upsert-closed-value! property {:value value
-                                                                       :description description
-                                                                       :icon icon})]
+                                                                           :description description
+                                                                           :icon icon})]
                           (swap! *property-schema update :values (fnil conj []) closed-value)))))))))
       dropdown-opts)]))

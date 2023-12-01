@@ -704,7 +704,7 @@
                                 page-tx (when-not (e/entity? page) page)
                                 page-id [:block/uuid (:block/uuid page)]
                                 new-block (cond->
-                                           (closed-value-new-block page-id block-id value property)
+                                           (closed-value-new-block page-id block-id resolved-value property)
                                             icon
                                             (assoc :block/properties {icon-id icon})
 
