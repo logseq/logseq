@@ -795,7 +795,7 @@
                 (when-let [f (:init-collapsed (last (:rum/args state)))]
                   (f (::collapsed? state)))
                 state)}
-  [state header content {:keys [title-trigger? on-mouse-down
+  [state header content {:keys [title-trigger? on-mouse-down class
                                 _default-collapsed? _init-collapsed]}]
   (let [collapsed? (get state ::collapsed?)
         on-mouse-down (fn [e]
@@ -804,6 +804,7 @@
                         (when on-mouse-down
                           (on-mouse-down @collapsed?)))]
     [:div.flex.flex-col
+     {:class class}
      (foldable-title {:on-mouse-down on-mouse-down
                       :header header
                       :title-trigger? title-trigger?

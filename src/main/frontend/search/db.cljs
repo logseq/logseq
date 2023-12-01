@@ -4,7 +4,8 @@
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.util :as util]
-            ["fuse.js" :as fuse]))
+            ["fuse.js" :as fuse]
+            [frontend.util.property :as property]))
 
 ;; Notice: When breaking changes happen, bump version in src/electron/electron/search.cljs
 
@@ -21,13 +22,15 @@
 
 (defn block->index
   "Convert a block to the index for searching"
-  [{:block/keys [uuid page content] :as block}]
+  [{:block/keys [uuid page content format] :as block
+    :or {format :markdown}}]
   (when-not (> (count content) (max-len))
-    (when-not (string/blank? content)
-      {:id (:db/id block)
-       :uuid (str uuid)
-       :page page
-       :content (sanitize content)})))
+    (let [content (property/remove-built-in-properties format content)]
+      (when-not (string/blank? content)
+        {:id (:db/id block)
+         :uuid (str uuid)
+         :page page
+         :content (sanitize content)}))))
 
 (defn page->index
   "Convert a page name to the index for searching (page content level)

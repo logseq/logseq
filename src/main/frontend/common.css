@@ -912,6 +912,10 @@ html.is-mobile {
   #journals .journal-item:first-child {
     margin-top: 5px;
   }
+
+  main.theme-inner {
+    @apply overflow-x-hidden;
+  }
 }
 
 @layer base {
