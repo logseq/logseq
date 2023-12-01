@@ -2320,7 +2320,7 @@
       [:div.closed-values-properties.flex.flex-row.items-center.gap-1.select-none.h-full
        (for [pid closed-values-properties]
          (when-let [property (db/entity [:block/uuid pid])]
-           (pv/property-value block property (get (:block/properties block) pid) {:icon? true})))])))
+           (pv/property-value block property (get (:block/properties block) pid) {:icon? true :page-cp page-cp})))])))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
   [config {:block/keys [uuid content properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide? selected? *ref]
