@@ -144,6 +144,13 @@
   padding-left: 1.75rem;
 }
 
+.ui__dialog-overlay {
+  place-items: center;
+  display: grid;
+  inset: 0;
+  overflow-y: auto;
+}
+
 .sr-only {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
@@ -192,10 +199,6 @@
   inset: 0;
 }
 
-.left-0 {
-  left: 0;
-}
-
 .left-1 {
   left: .25rem;
 }
@@ -224,10 +227,6 @@
   right: 1rem;
 }
 
-.right-full {
-  right: 100%;
-}
-
 .top-0 {
   top: 0;
 }
@@ -250,10 +249,6 @@
 
 .top-\[50\%\] {
   top: 50%;
-}
-
-.top-full {
-  top: 100%;
 }
 
 .z-50 {
@@ -530,10 +525,6 @@
 
 .w-60 {
   width: 15rem;
-}
-
-.w-64 {
-  width: 16rem;
 }
 
 .w-7 {
@@ -1319,11 +1310,6 @@
   color: hsl(var(--secondary-foreground));
 }
 
-.text-white {
-  --tw-text-opacity: 1;
-  color: rgb(255 255 255 / var(--tw-text-opacity));
-}
-
 .underline-offset-4 {
   text-underline-offset: 4px;
 }
@@ -1483,10 +1469,6 @@
   --tw-enter-translate-y: initial;
   animation-name: enter;
   animation-duration: .15s;
-}
-
-.fade-in {
-  --tw-enter-opacity: 0;
 }
 
 .fade-in-80 {

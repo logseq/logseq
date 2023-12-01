@@ -27811,6 +27811,409 @@ const $75b0489591a4f076$export$d7e1f420b25549ff = /*#__PURE__*/ $LI8jA.forwardRe
 $75b0489591a4f076$export$d7e1f420b25549ff.displayName = $bcb96dbf22e9ac13$export$7c6e2c02157bb7d2.displayName;
 
 
+
+
+var $LI8jA = parcelRequire("LI8jA");
+
+
+var $LI8jA = parcelRequire("LI8jA");
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* -------------------------------------------------------------------------------------------------
+ * Dialog
+ * -----------------------------------------------------------------------------------------------*/ const $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DIALOG_NAME = "Dialog";
+const [$3731a91f04245377$var$$5d3850c4d0b4e6c7$var$createDialogContext, $3731a91f04245377$export$cc702773b8ea3e41] = (0, $ec3315292aa721d0$export$50c7b4e9d9f19c1)($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DIALOG_NAME);
+const [$3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DialogProvider, $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$useDialogContext] = $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$createDialogContext($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DIALOG_NAME);
+const $3731a91f04245377$export$3ddf2d174ce01153 = (props)=>{
+    const { __scopeDialog: __scopeDialog , children: children , open: openProp , defaultOpen: defaultOpen , onOpenChange: onOpenChange , modal: modal = true  } = props;
+    const triggerRef = (0, $LI8jA.useRef)(null);
+    const contentRef = (0, $LI8jA.useRef)(null);
+    const [open = false, setOpen] = (0, $f4c632903130edee$export$6f32135080cb4c3)({
+        prop: openProp,
+        defaultProp: defaultOpen,
+        onChange: onOpenChange
+    });
+    return /*#__PURE__*/ (0, $LI8jA.createElement)($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DialogProvider, {
+        scope: __scopeDialog,
+        triggerRef: triggerRef,
+        contentRef: contentRef,
+        contentId: (0, $d4070564f9335f17$export$f680877a34711e37)(),
+        titleId: (0, $d4070564f9335f17$export$f680877a34711e37)(),
+        descriptionId: (0, $d4070564f9335f17$export$f680877a34711e37)(),
+        open: open,
+        onOpenChange: setOpen,
+        onOpenToggle: (0, $LI8jA.useCallback)(()=>setOpen((prevOpen)=>!prevOpen), [
+            setOpen
+        ]),
+        modal: modal
+    }, children);
+};
+/*#__PURE__*/ Object.assign($3731a91f04245377$export$3ddf2d174ce01153, {
+    displayName: $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DIALOG_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * DialogTrigger
+ * -----------------------------------------------------------------------------------------------*/ const $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$TRIGGER_NAME = "DialogTrigger";
+const $3731a91f04245377$export$2e1e1122cf0cba88 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeDialog: __scopeDialog , ...triggerProps } = props;
+    const context = $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$useDialogContext($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$TRIGGER_NAME, __scopeDialog);
+    const composedTriggerRef = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, context.triggerRef);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).button, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        type: "button",
+        "aria-haspopup": "dialog",
+        "aria-expanded": context.open,
+        "aria-controls": context.contentId,
+        "data-state": $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$getState(context.open)
+    }, triggerProps, {
+        ref: composedTriggerRef,
+        onClick: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onClick, context.onOpenToggle)
+    }));
+});
+/*#__PURE__*/ Object.assign($3731a91f04245377$export$2e1e1122cf0cba88, {
+    displayName: $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$TRIGGER_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * DialogPortal
+ * -----------------------------------------------------------------------------------------------*/ const $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$PORTAL_NAME = "DialogPortal";
+const [$3731a91f04245377$var$$5d3850c4d0b4e6c7$var$PortalProvider, $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$usePortalContext] = $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$createDialogContext($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$PORTAL_NAME, {
+    forceMount: undefined
+});
+const $3731a91f04245377$export$dad7c95542bacce0 = (props)=>{
+    const { __scopeDialog: __scopeDialog , forceMount: forceMount , children: children , container: container  } = props;
+    const context = $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$useDialogContext($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$PORTAL_NAME, __scopeDialog);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$PortalProvider, {
+        scope: __scopeDialog,
+        forceMount: forceMount
+    }, (0, $LI8jA.Children).map(children, (child)=>/*#__PURE__*/ (0, $LI8jA.createElement)((0, $0ac33c7c3f86b9ab$export$99c2b779aa4e8b8b), {
+            present: forceMount || context.open
+        }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $726ec765805a08e3$export$602eac185826482c), {
+            asChild: true,
+            container: container
+        }, child))));
+};
+/*#__PURE__*/ Object.assign($3731a91f04245377$export$dad7c95542bacce0, {
+    displayName: $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$PORTAL_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * DialogOverlay
+ * -----------------------------------------------------------------------------------------------*/ const $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$OVERLAY_NAME = "DialogOverlay";
+const $3731a91f04245377$export$bd1d06c79be19e17 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const portalContext = $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$usePortalContext($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$OVERLAY_NAME, props.__scopeDialog);
+    const { forceMount: forceMount = portalContext.forceMount , ...overlayProps } = props;
+    const context = $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$useDialogContext($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$OVERLAY_NAME, props.__scopeDialog);
+    return context.modal ? /*#__PURE__*/ (0, $LI8jA.createElement)((0, $0ac33c7c3f86b9ab$export$99c2b779aa4e8b8b), {
+        present: forceMount || context.open
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DialogOverlayImpl, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, overlayProps, {
+        ref: forwardedRef
+    }))) : null;
+});
+/*#__PURE__*/ Object.assign($3731a91f04245377$export$bd1d06c79be19e17, {
+    displayName: $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$OVERLAY_NAME
+});
+const $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DialogOverlayImpl = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeDialog: __scopeDialog , ...overlayProps } = props;
+    const context = $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$useDialogContext($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$OVERLAY_NAME, __scopeDialog);
+    return(/*#__PURE__*/ // ie. when `Overlay` and `Content` are siblings
+    (0, $LI8jA.createElement)((0, $82d0ba9afddcc0a1$export$2e2bcd8739ae039), {
+        as: (0, $db045af315cca07a$export$8c6ed5c666ac1360),
+        allowPinchZoom: true,
+        shards: [
+            context.contentRef
+        ]
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).div, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        "data-state": $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$getState(context.open)
+    }, overlayProps, {
+        ref: forwardedRef // We re-enable pointer-events prevented by `Dialog.Content` to allow scrolling the overlay.
+        ,
+        style: {
+            pointerEvents: "auto",
+            ...overlayProps.style
+        }
+    }))));
+});
+/* -------------------------------------------------------------------------------------------------
+ * DialogContent
+ * -----------------------------------------------------------------------------------------------*/ const $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$CONTENT_NAME = "DialogContent";
+const $3731a91f04245377$export$b6d9565de1e068cf = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const portalContext = $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$usePortalContext($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$CONTENT_NAME, props.__scopeDialog);
+    const { forceMount: forceMount = portalContext.forceMount , ...contentProps } = props;
+    const context = $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$useDialogContext($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$CONTENT_NAME, props.__scopeDialog);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $0ac33c7c3f86b9ab$export$99c2b779aa4e8b8b), {
+        present: forceMount || context.open
+    }, context.modal ? /*#__PURE__*/ (0, $LI8jA.createElement)($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DialogContentModal, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, contentProps, {
+        ref: forwardedRef
+    })) : /*#__PURE__*/ (0, $LI8jA.createElement)($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DialogContentNonModal, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, contentProps, {
+        ref: forwardedRef
+    })));
+});
+/*#__PURE__*/ Object.assign($3731a91f04245377$export$b6d9565de1e068cf, {
+    displayName: $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$CONTENT_NAME
+});
+/* -----------------------------------------------------------------------------------------------*/ const $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DialogContentModal = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const context = $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$useDialogContext($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$CONTENT_NAME, props.__scopeDialog);
+    const contentRef = (0, $LI8jA.useRef)(null);
+    const composedRefs = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, context.contentRef, contentRef); // aria-hide everything except the content (better supported equivalent to setting aria-modal)
+    (0, $LI8jA.useEffect)(()=>{
+        const content = contentRef.current;
+        if (content) return (0, $f51523d7bb101394$export$6e33d16126ed003c)(content);
+    }, []);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DialogContentImpl, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, props, {
+        ref: composedRefs // we make sure focus isn't trapped once `DialogContent` has been closed
+        ,
+        trapFocus: context.open,
+        disableOutsidePointerEvents: true,
+        onCloseAutoFocus: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onCloseAutoFocus, (event)=>{
+            var _context$triggerRef$c;
+            event.preventDefault();
+            (_context$triggerRef$c = context.triggerRef.current) === null || _context$triggerRef$c === void 0 || _context$triggerRef$c.focus();
+        }),
+        onPointerDownOutside: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onPointerDownOutside, (event)=>{
+            const originalEvent = event.detail.originalEvent;
+            const ctrlLeftClick = originalEvent.button === 0 && originalEvent.ctrlKey === true;
+            const isRightClick = originalEvent.button === 2 || ctrlLeftClick; // If the event is a right-click, we shouldn't close because
+            // it is effectively as if we right-clicked the `Overlay`.
+            if (isRightClick) event.preventDefault();
+        }) // When focus is trapped, a `focusout` event may still happen.
+        ,
+        onFocusOutside: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onFocusOutside, (event)=>event.preventDefault())
+    }));
+});
+/* -----------------------------------------------------------------------------------------------*/ const $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DialogContentNonModal = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const context = $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$useDialogContext($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$CONTENT_NAME, props.__scopeDialog);
+    const hasInteractedOutsideRef = (0, $LI8jA.useRef)(false);
+    const hasPointerDownOutsideRef = (0, $LI8jA.useRef)(false);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DialogContentImpl, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({}, props, {
+        ref: forwardedRef,
+        trapFocus: false,
+        disableOutsidePointerEvents: false,
+        onCloseAutoFocus: (event)=>{
+            var _props$onCloseAutoFoc;
+            (_props$onCloseAutoFoc = props.onCloseAutoFocus) === null || _props$onCloseAutoFoc === void 0 || _props$onCloseAutoFoc.call(props, event);
+            if (!event.defaultPrevented) {
+                var _context$triggerRef$c2;
+                if (!hasInteractedOutsideRef.current) (_context$triggerRef$c2 = context.triggerRef.current) === null || _context$triggerRef$c2 === void 0 || _context$triggerRef$c2.focus(); // Always prevent auto focus because we either focus manually or want user agent focus
+                event.preventDefault();
+            }
+            hasInteractedOutsideRef.current = false;
+            hasPointerDownOutsideRef.current = false;
+        },
+        onInteractOutside: (event)=>{
+            var _props$onInteractOuts, _context$triggerRef$c3;
+            (_props$onInteractOuts = props.onInteractOutside) === null || _props$onInteractOuts === void 0 || _props$onInteractOuts.call(props, event);
+            if (!event.defaultPrevented) {
+                hasInteractedOutsideRef.current = true;
+                if (event.detail.originalEvent.type === "pointerdown") hasPointerDownOutsideRef.current = true;
+            } // Prevent dismissing when clicking the trigger.
+            // As the trigger is already setup to close, without doing so would
+            // cause it to close and immediately open.
+            const target = event.target;
+            const targetIsTrigger = (_context$triggerRef$c3 = context.triggerRef.current) === null || _context$triggerRef$c3 === void 0 ? void 0 : _context$triggerRef$c3.contains(target);
+            if (targetIsTrigger) event.preventDefault(); // On Safari if the trigger is inside a container with tabIndex={0}, when clicked
+            // we will get the pointer down outside event on the trigger, but then a subsequent
+            // focus outside event on the container, we ignore any focus outside event when we've
+            // already had a pointer down outside event.
+            if (event.detail.originalEvent.type === "focusin" && hasPointerDownOutsideRef.current) event.preventDefault();
+        }
+    }));
+});
+/* -----------------------------------------------------------------------------------------------*/ const $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DialogContentImpl = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeDialog: __scopeDialog , trapFocus: trapFocus , onOpenAutoFocus: onOpenAutoFocus , onCloseAutoFocus: onCloseAutoFocus , ...contentProps } = props;
+    const context = $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$useDialogContext($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$CONTENT_NAME, __scopeDialog);
+    const contentRef = (0, $LI8jA.useRef)(null);
+    const composedRefs = (0, $7ec60ad3718be6bb$export$c7b2cbe3552a0d05)(forwardedRef, contentRef); // Make sure the whole tree has focus guards as our `Dialog` will be
+    // the last element in the DOM (beacuse of the `Portal`)
+    (0, $a8797df59e287e29$export$b7ece24a22aeda8c)();
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $LI8jA.Fragment), null, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a69c668904a4ce70$export$20e40289641fbbb6), {
+        asChild: true,
+        loop: true,
+        trapped: trapFocus,
+        onMountAutoFocus: onOpenAutoFocus,
+        onUnmountAutoFocus: onCloseAutoFocus
+    }, /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a102e9b8e3188262$export$177fb62ff3ec1f22), (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        role: "dialog",
+        id: context.contentId,
+        "aria-describedby": context.descriptionId,
+        "aria-labelledby": context.titleId,
+        "data-state": $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$getState(context.open)
+    }, contentProps, {
+        ref: composedRefs,
+        onDismiss: ()=>context.onOpenChange(false)
+    }))), false);
+});
+/* -------------------------------------------------------------------------------------------------
+ * DialogTitle
+ * -----------------------------------------------------------------------------------------------*/ const $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$TITLE_NAME = "DialogTitle";
+const $3731a91f04245377$export$16f7638e4a34b909 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeDialog: __scopeDialog , ...titleProps } = props;
+    const context = $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$useDialogContext($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$TITLE_NAME, __scopeDialog);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).h2, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        id: context.titleId
+    }, titleProps, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($3731a91f04245377$export$16f7638e4a34b909, {
+    displayName: $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$TITLE_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * DialogDescription
+ * -----------------------------------------------------------------------------------------------*/ const $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DESCRIPTION_NAME = "DialogDescription";
+const $3731a91f04245377$export$94e94c2ec2c954d5 = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeDialog: __scopeDialog , ...descriptionProps } = props;
+    const context = $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$useDialogContext($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DESCRIPTION_NAME, __scopeDialog);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).p, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        id: context.descriptionId
+    }, descriptionProps, {
+        ref: forwardedRef
+    }));
+});
+/*#__PURE__*/ Object.assign($3731a91f04245377$export$94e94c2ec2c954d5, {
+    displayName: $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DESCRIPTION_NAME
+});
+/* -------------------------------------------------------------------------------------------------
+ * DialogClose
+ * -----------------------------------------------------------------------------------------------*/ const $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$CLOSE_NAME = "DialogClose";
+const $3731a91f04245377$export$fba2fb7cd781b7ac = /*#__PURE__*/ (0, $LI8jA.forwardRef)((props, forwardedRef)=>{
+    const { __scopeDialog: __scopeDialog , ...closeProps } = props;
+    const context = $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$useDialogContext($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$CLOSE_NAME, __scopeDialog);
+    return /*#__PURE__*/ (0, $LI8jA.createElement)((0, $a68e7d99b5d35ecf$export$250ffa63cdc0d034).button, (0, $03526de71b5892e9$export$2e2bcd8739ae039)({
+        type: "button"
+    }, closeProps, {
+        ref: forwardedRef,
+        onClick: (0, $890940bb4b8db948$export$b9ecd428b558ff10)(props.onClick, ()=>context.onOpenChange(false))
+    }));
+});
+/*#__PURE__*/ Object.assign($3731a91f04245377$export$fba2fb7cd781b7ac, {
+    displayName: $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$CLOSE_NAME
+});
+/* -----------------------------------------------------------------------------------------------*/ function $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$getState(open) {
+    return open ? "open" : "closed";
+}
+const $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$TITLE_WARNING_NAME = "DialogTitleWarning";
+const [$3731a91f04245377$export$69b62a49393917d6, $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$useWarningContext] = (0, $ec3315292aa721d0$export$fd42f52fd3ae1109)($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$TITLE_WARNING_NAME, {
+    contentName: $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$CONTENT_NAME,
+    titleName: $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$TITLE_NAME,
+    docsSlug: "dialog"
+});
+const $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$TitleWarning = ({ titleId: titleId  })=>{
+    const titleWarningContext = $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$useWarningContext($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$TITLE_WARNING_NAME);
+    const MESSAGE = `\`${titleWarningContext.contentName}\` requires a \`${titleWarningContext.titleName}\` for the component to be accessible for screen reader users.
+
+If you want to hide the \`${titleWarningContext.titleName}\`, you can wrap it with our VisuallyHidden component.
+
+For more information, see https://radix-ui.com/primitives/docs/components/${titleWarningContext.docsSlug}`;
+    (0, $LI8jA.useEffect)(()=>{
+        if (titleId) {
+            const hasTitle = document.getElementById(titleId);
+            if (!hasTitle) throw new Error(MESSAGE);
+        }
+    }, [
+        MESSAGE,
+        titleId
+    ]);
+    return null;
+};
+const $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DESCRIPTION_WARNING_NAME = "DialogDescriptionWarning";
+const $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DescriptionWarning = ({ contentRef: contentRef , descriptionId: descriptionId  })=>{
+    const descriptionWarningContext = $3731a91f04245377$var$$5d3850c4d0b4e6c7$var$useWarningContext($3731a91f04245377$var$$5d3850c4d0b4e6c7$var$DESCRIPTION_WARNING_NAME);
+    const MESSAGE = `Warning: Missing \`Description\` or \`aria-describedby={undefined}\` for {${descriptionWarningContext.contentName}}.`;
+    (0, $LI8jA.useEffect)(()=>{
+        var _contentRef$current;
+        const describedById = (_contentRef$current = contentRef.current) === null || _contentRef$current === void 0 ? void 0 : _contentRef$current.getAttribute("aria-describedby"); // if we have an id and the user hasn't set aria-describedby={undefined}
+        if (descriptionId && describedById) {
+            const hasDescription = document.getElementById(descriptionId);
+            if (!hasDescription) console.warn(MESSAGE);
+        }
+    }, [
+        MESSAGE,
+        contentRef,
+        descriptionId
+    ]);
+    return null;
+};
+const $3731a91f04245377$export$be92b6f5f03c0fe9 = $3731a91f04245377$export$3ddf2d174ce01153;
+const $3731a91f04245377$export$41fb9f06171c75f4 = $3731a91f04245377$export$2e1e1122cf0cba88;
+const $3731a91f04245377$export$602eac185826482c = $3731a91f04245377$export$dad7c95542bacce0;
+const $3731a91f04245377$export$c6fdb837b070b4ff = $3731a91f04245377$export$bd1d06c79be19e17;
+const $3731a91f04245377$export$7c6e2c02157bb7d2 = $3731a91f04245377$export$b6d9565de1e068cf;
+const $3731a91f04245377$export$f99233281efd08a0 = $3731a91f04245377$export$16f7638e4a34b909;
+const $3731a91f04245377$export$393edc798c47379d = $3731a91f04245377$export$94e94c2ec2c954d5;
+const $3731a91f04245377$export$f39c2d165cd861fe = $3731a91f04245377$export$fba2fb7cd781b7ac;
+
+
+
+
+const $346e2ec8fd7bd695$export$3ddf2d174ce01153 = $3731a91f04245377$export$be92b6f5f03c0fe9;
+const $346e2ec8fd7bd695$export$2e1e1122cf0cba88 = $3731a91f04245377$export$41fb9f06171c75f4;
+const $346e2ec8fd7bd695$export$dad7c95542bacce0 = $3731a91f04245377$export$602eac185826482c;
+const $346e2ec8fd7bd695$export$fba2fb7cd781b7ac = $3731a91f04245377$export$f39c2d165cd861fe;
+const $346e2ec8fd7bd695$export$bd1d06c79be19e17 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($3731a91f04245377$export$c6fdb837b070b4ff, {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__dialog-overlay", "fixed inset-0 z-50 bg-background/80 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", className),
+        ...props
+    }));
+$346e2ec8fd7bd695$export$bd1d06c79be19e17.displayName = $3731a91f04245377$export$c6fdb837b070b4ff.displayName;
+const $346e2ec8fd7bd695$export$b6d9565de1e068cf = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , children: children , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($346e2ec8fd7bd695$export$dad7c95542bacce0, {
+        children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($346e2ec8fd7bd695$export$bd1d06c79be19e17, {
+            children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsxs)($3731a91f04245377$export$7c6e2c02157bb7d2, {
+                ref: ref,
+                className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__dialog-content", "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg", className),
+                ...props,
+                children: [
+                    children,
+                    /*#__PURE__*/ (0, $59024eba873adb50$exports.jsxs)($3731a91f04245377$export$f39c2d165cd861fe, {
+                        className: "ui__dialog-close absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground",
+                        children: [
+                            /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)((0, $316428a5e3faa045$export$2e2bcd8739ae039), {
+                                className: "h-4 w-4"
+                            }),
+                            /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)("span", {
+                                className: "sr-only",
+                                children: "Close"
+                            })
+                        ]
+                    })
+                ]
+            })
+        })
+    }));
+$346e2ec8fd7bd695$export$b6d9565de1e068cf.displayName = $3731a91f04245377$export$7c6e2c02157bb7d2.displayName;
+const $346e2ec8fd7bd695$export$742513523b177e3b = ({ className: className , ...props })=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)("div", {
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__dialog-header", "flex flex-col space-y-1.5 text-center sm:text-left", className),
+        ...props
+    });
+$346e2ec8fd7bd695$export$742513523b177e3b.displayName = "DialogHeader";
+const $346e2ec8fd7bd695$export$7bbfb2d443473050 = ({ className: className , ...props })=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)("div", {
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__dialog-footer", "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2", className),
+        ...props
+    });
+$346e2ec8fd7bd695$export$7bbfb2d443473050.displayName = "DialogFooter";
+const $346e2ec8fd7bd695$export$16f7638e4a34b909 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($3731a91f04245377$export$f99233281efd08a0, {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__dialog-title", "text-lg font-semibold leading-none tracking-tight", className),
+        ...props
+    }));
+$346e2ec8fd7bd695$export$16f7638e4a34b909.displayName = $3731a91f04245377$export$f99233281efd08a0.displayName;
+const $346e2ec8fd7bd695$export$94e94c2ec2c954d5 = /*#__PURE__*/ $LI8jA.forwardRef(({ className: className , ...props }, ref)=>/*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($3731a91f04245377$export$393edc798c47379d, {
+        ref: ref,
+        className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__dialog-description text-sm text-muted-foreground", className),
+        ...props
+    }));
+$346e2ec8fd7bd695$export$94e94c2ec2c954d5.displayName = $3731a91f04245377$export$393edc798c47379d.displayName;
+
+
 const $f4eb51170e743c4a$var$shadui = {
     Button: $0e5897524c762a41$export$353f5b6fc5456de1,
     Slider: $c38718c2690bae4e$export$472062a354075cee,
@@ -27890,7 +28293,17 @@ const $f4eb51170e743c4a$var$shadui = {
     Calendar: $b2b761c5973ada37$export$e1aef45b828286de,
     Popover: $75b0489591a4f076$export$5b6b19405a83ff9d,
     PopoverTrigger: $75b0489591a4f076$export$7dacb05d26466c3,
-    PopoverContent: $75b0489591a4f076$export$d7e1f420b25549ff
+    PopoverContent: $75b0489591a4f076$export$d7e1f420b25549ff,
+    Dialog: $346e2ec8fd7bd695$export$3ddf2d174ce01153,
+    DialogPortal: $346e2ec8fd7bd695$export$dad7c95542bacce0,
+    DialogOverlay: $346e2ec8fd7bd695$export$bd1d06c79be19e17,
+    DialogClose: $346e2ec8fd7bd695$export$fba2fb7cd781b7ac,
+    DialogTrigger: $346e2ec8fd7bd695$export$2e1e1122cf0cba88,
+    DialogContent: $346e2ec8fd7bd695$export$b6d9565de1e068cf,
+    DialogHeader: $346e2ec8fd7bd695$export$742513523b177e3b,
+    DialogFooter: $346e2ec8fd7bd695$export$7bbfb2d443473050,
+    DialogTitle: $346e2ec8fd7bd695$export$16f7638e4a34b909,
+    DialogDescription: $346e2ec8fd7bd695$export$94e94c2ec2c954d5
 };
 function $f4eb51170e743c4a$export$40e78c93e005ce8f() {
     console.debug("[ui] setup logseq ui globals");

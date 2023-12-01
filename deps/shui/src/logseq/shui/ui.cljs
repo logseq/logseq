@@ -3,6 +3,7 @@
             [logseq.shui.icon.v2 :as icon-v2]
             [logseq.shui.toaster.core :as toaster-core]
             [logseq.shui.select.core :as select-core]
+            [logseq.shui.dialog.core :as dialog-core]
             [logseq.shui.form.core :as form-core]))
 
 (def button (util/lsui-wrap "Button" {:static? false}))
@@ -82,6 +83,17 @@
 (def context-menu-sub-content (util/lsui-wrap "ContextMenuSubContent"))
 (def context-menu-sub-trigger (util/lsui-wrap "ContextMenuSubTrigger"))
 (def context-menu-radio-group (util/lsui-wrap "ContextMenuRadioGroup"))
+
+(def dialog dialog-core/dialog)
+(def dialog-portal dialog-core/dialog-portal)
+(def dialog-overlay dialog-core/dialog-overlay)
+(def dialog-close dialog-core/dialog-close)
+(def dialog-trigger dialog-core/dialog-trigger)
+(def dialog-content dialog-core/dialog-content)
+(def dialog-header dialog-core/dialog-header)
+(def dialog-footer dialog-core/dialog-footer)
+(def dialog-title dialog-core/dialog-title)
+(def dialog-description dialog-core/dialog-description)
 
 (def toast! toaster-core/toast!)
 (def toast-dismiss! toaster-core/dismiss!)

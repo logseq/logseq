@@ -149,4 +149,10 @@
       }
     }
   }
+
+  .ui__dialog {
+    &-overlay {
+      @apply top-0 left-0 right-0 bottom-0 grid place-items-center overflow-y-auto;
+    }
+  }
 }

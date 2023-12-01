@@ -188,13 +188,31 @@
       (ui/popover-content
         {:on-open-auto-focus #(.preventDefault %)
          :side-offset        8
-         :class "p-0"}
+         :class              "p-0"}
         (ui/calendar
           {:selected date
            :on-day-click
            (fn [^js d]
              (set-date! d)
              (set-open! false))})))))
+
+(rum/defc sample-dialog-basic
+  []
+  (ui/dialog
+    (ui/dialog-trigger
+      (ui/button {:variant :outline}
+        "Open a dialog locally"))
+    (ui/dialog-content
+      (ui/dialog-header
+        (ui/dialog-title "Header")
+        (ui/dialog-description
+          "Description"))
+      [:div.max-h-96.overflow-y-auto
+       {:class "-mx-6"}
+       [:section.px-6
+        (repeat 10 [:p "Main content"])]]
+      (ui/dialog-footer
+        "Footer"))))
 
 (rum/defc page []
   [:div.p-10
@@ -298,6 +316,11 @@
     [:div.col-span-2
      (section-item "Context Menu"
        (sample-context-menu-content))]]
+
+   ;; Dialog
+   (section-item "Dialog"
+     [:div.flex.flex-row.space-x-2
+      (sample-dialog-basic)])
 
    ;; Alert
    (section-item "Alert"
