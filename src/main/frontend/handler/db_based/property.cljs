@@ -723,6 +723,7 @@
              :tx-data tx-data}))))))
 
 (defn add-existing-values-to-closed-values!
+  "Adds existing values as closed values and returns their new block uuids"
   [property values]
   (when (seq values)
     (let [property-id (:block/uuid property)
@@ -758,7 +759,8 @@
                                :block/properties (assoc properties property-id (get value->block-id value))})))
                         block-values))]
       (db/transact! (state/get-current-repo) tx-data
-        {:outliner-op :insert-blocks}))))
+                    {:outliner-op :insert-blocks})
+      new-value-ids)))
 
 (defn delete-closed-value
   [property item]
