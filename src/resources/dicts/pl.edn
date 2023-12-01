@@ -130,6 +130,9 @@
 
  :keymap/total "Wszystkie skróty klawiaturowe"
 
+ :whiteboard/zoom-out "Oddal"
+ :whiteboard/zoom-in "Przybli"
+
  :yes "Tak"
  :submit "Wyślij"
  :cancel "Anuluj"
