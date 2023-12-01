@@ -35,6 +35,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.shui.toaster.core :as shui-toaster]
+            [logseq.shui.dialog.core :as shui-dialog]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.components.window-controls :as window-controls]
@@ -888,6 +889,7 @@
       (ui/modal)
       (ui/sub-modal)
       (shui-toaster/install-toaster)
+      (shui-dialog/install-modals)
       (select/select-modal)
       (custom-context-menu)
       (plugins/custom-js-installer {:t t
