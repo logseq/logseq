@@ -1431,7 +1431,8 @@
   "Make asset URL for UI element, to fill img.src"
   [path] ;; path start with "/assets"(editor) or compatible for "../assets"(whiteboards)
   (if config/publishing?
-    path
+    ;; Relative path needed since assets are not under '/' if published graph is not under '/'
+    (string/replace-first path #"^/" "")
     (let [repo      (state/get-current-repo)
           repo-dir  (config/get-repo-dir repo)
           ;; Hack for path calculation
