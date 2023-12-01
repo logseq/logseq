@@ -67,6 +67,15 @@ import {
 } from '@/components/ui/select'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent, DialogDescription, DialogFooter,
+  DialogHeader,
+  DialogOverlay,
+  DialogPortal, DialogTitle,
+  DialogTrigger
+} from '@/components/ui/dialog'
 
 declare global {
   var LSUI: any
@@ -129,10 +138,20 @@ const shadui = {
   SelectScrollDownButton,
   Calendar,
   Popover, PopoverTrigger,
-  PopoverContent
+  PopoverContent,
+  Dialog,
+  DialogPortal,
+  DialogOverlay,
+  DialogClose,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
 }
 
-function setupGlobals () {
+function setupGlobals() {
   console.debug('[ui] setup logseq ui globals')
 
   window.LSUI = shadui
