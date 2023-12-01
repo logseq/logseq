@@ -280,6 +280,11 @@
   margin-right: -.25rem;
 }
 
+.-mx-6 {
+  margin-left: -1.5rem;
+  margin-right: -1.5rem;
+}
+
 .my-1 {
   margin-top: .25rem;
   margin-bottom: .25rem;
@@ -555,8 +560,8 @@
   min-width: var(--radix-select-trigger-width);
 }
 
-.max-w-lg {
-  max-width: 32rem;
+.max-w-xl {
+  max-width: 36rem;
 }
 
 .flex-1 {

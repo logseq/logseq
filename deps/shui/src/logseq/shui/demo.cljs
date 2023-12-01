@@ -198,21 +198,26 @@
 
 (rum/defc sample-dialog-basic
   []
-  (ui/dialog
-    (ui/dialog-trigger
-      (ui/button {:variant :outline}
-        "Open a dialog locally"))
-    (ui/dialog-content
-      (ui/dialog-header
-        (ui/dialog-title "Header")
-        (ui/dialog-description
-          "Description"))
-      [:div.max-h-96.overflow-y-auto
-       {:class "-mx-6"}
-       [:section.px-6
-        (repeat 10 [:p "Main content"])]]
-      (ui/dialog-footer
-        "Footer"))))
+  (let [[open? set-open!] (rum/use-state false)]
+    (ui/dialog
+      {:open           open?
+       :on-open-change #(set-open! %)}
+      (ui/dialog-trigger
+        (ui/button {:variant :outline}
+          (ui/tabler-icon "notification") "Open as modal locally"))
+      (ui/dialog-content
+        (ui/dialog-header
+          (ui/dialog-title "Header")
+          (ui/dialog-description
+            "Description"))
+        [:div.max-h-96.overflow-y-auto
+         {:class "-mx-6"}
+         [:section.px-6
+          (repeat 8 [:p "Your custom content"])]]
+        (ui/dialog-footer
+          (ui/button
+            {:on-click #(set-open! false)
+             :size     :md} "🍄 * Footer"))))))
 
 (rum/defc page []
   [:div.p-10

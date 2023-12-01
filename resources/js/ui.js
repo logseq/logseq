@@ -28169,7 +28169,7 @@ const $346e2ec8fd7bd695$export$b6d9565de1e068cf = /*#__PURE__*/ $LI8jA.forwardRe
         children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsx)($346e2ec8fd7bd695$export$bd1d06c79be19e17, {
             children: /*#__PURE__*/ (0, $59024eba873adb50$exports.jsxs)($3731a91f04245377$export$7c6e2c02157bb7d2, {
                 ref: ref,
-                className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__dialog-content", "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg", className),
+                className: (0, $66adb88ac93a30d5$export$1343a74baacb0543)("ui__dialog-content", "fixed left-[50%] top-[50%] z-50 grid w-full max-w-xl translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg", className),
                 ...props,
                 children: [
                     children,
