@@ -2,8 +2,9 @@
   (:require [cljs-bean.core :as bean]
             ["d3-force"
              :refer [forceCenter forceCollide forceLink forceManyBody forceSimulation forceX forceY]
-             :as    force]
+             :as force]
             [goog.object :as gobj]
+            [frontend.colors :as colors]
             ["graphology" :as graphology]
             ["pixi-graph-fork" :as Pixi-Graph]))
 
@@ -43,13 +44,13 @@
                    :color (if dark? "rgba(255, 255, 255, 0.8)" "rgba(0, 0, 0, 0.8)")
                    :padding  4}}
    :edge {:width 1
-          :color (if dark? "#094b5a" "#cccccc")}})
+          :color (if dark? (or (colors/get-accent-color) "#094b5a") "#cccccc")}})
 
 (defn default-hover-style
   [_dark?]
-  {:node {:color  "#6366F1"
-          :label  {:backgroundColor "rgba(238, 238, 238, 1)"
-                   :color           "#333333"}}
+  {:node {:color (or (colors/get-accent-color) "#6366F1")
+          :label {:backgroundColor "rgba(238, 238, 238, 1)"
+                  :color           "#333333"}}
    :edge {:color "#A5B4FC"}})
 
 (defn layout!

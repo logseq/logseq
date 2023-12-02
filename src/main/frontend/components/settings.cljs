@@ -325,6 +325,7 @@
                           :let [active? (= color color-accent)]]
                       [:div.flex.items-center {:style {:height 28}}
                        [:div {:class "w-5 h-5 rounded-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"
+                              :title color
                               :style {:background-color (colors/variable color :09)
                                       :outline-color (colors/variable color (if active? :07 :06))
                                       :outline-width (if active? "4px" "1px")
@@ -1123,7 +1124,7 @@
 
     [:div#settings.cp__settings-main
      (settings-effect @*active)
-     [:div.cp__settings-inner
+     [:div.cp__settings-inner {:class "min-h-[65dvh] max-h-[65dvh]"}
       [:aside.md:w-64 {:style {:min-width "10rem"}}
        [:header.cp__settings-header
         [:h1.cp__settings-modal-title (t :settings)]]

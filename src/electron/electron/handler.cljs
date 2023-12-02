@@ -83,8 +83,14 @@
 
 (defmethod handle :openFileBackupDir [_window [_ repo path]]
   (when (string? path)
-    (let [dir (backup-file/get-backup-dir repo path)]
-      (.openPath shell dir))))
+    (let [dir (backup-file/get-backup-dir repo path)
+          full-path (utils/to-native-win-path! dir)]
+      (.openPath shell full-path))))
+
+(defmethod handle :openFileInFolder [_window [_ full-path]]
+  (when-let [full-path (utils/to-native-win-path! full-path)]
+    (logger/info ::open-file-in-folder full-path)
+    (.showItemInFolder shell full-path)))
 
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))

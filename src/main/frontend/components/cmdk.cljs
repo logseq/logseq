@@ -95,17 +95,24 @@
                             (take 5 items))))
         page-exists? (when-not (string/blank? input)
                        (db/entity [:block/name (string/trim input)]))
-        filter-mode? (or (string/includes? input " /")
-                         (string/starts-with? input "/"))
+        include-slash? (or (string/includes? input "/")
+                           (string/starts-with? input "/"))
         order* (cond
                  (= search-mode :graph)
                  [["Pages"          :pages          (visible-items :pages)]]
 
-                 filter-mode?
-                 [["Filters"        :filters        (visible-items :filters)]
-                  ["Pages"          :pages          (visible-items :pages)]
+                 include-slash?
+                 [(if page-exists?
+                    ["Pages"          :pages          (visible-items :pages)]
+                    ["Filters"        :filters        (visible-items :filters)])
+                  (if page-exists?
+                    ["Filters"        :filters        (visible-items :filters)]
+                    ["Pages"          :pages          (visible-items :pages)])
                   (when-not page-exists?
-                    ["Create"         :create         (create-items input)])]
+                    ["Create"         :create         (create-items input)])
+                  ["Current page"   :current-page   (visible-items :current-page)]
+                  ["Blocks"         :blocks         (visible-items :blocks)]
+                  ["Files"          :files          (visible-items :files)]]
 
                  filter-group
                  [(when (= filter-group :blocks)
@@ -201,18 +208,26 @@
 ;; The pages search action uses an existing handler
 (defmethod load-results :pages [group state]
   (let [!input (::input state)
-        !results (::results state)]
+        !results (::results state)
+        repo (state/get-current-repo)]
     (swap! !results assoc-in [group :status] :loading)
     (p/let [pages (search/page-search @!input)
-            items (map
-                   (fn [page]
-                     (let [entity (db/entity [:block/name (util/page-name-sanity-lc page)])
-                           whiteboard? (= (:block/type entity) "whiteboard")]
-                       (hash-map :icon (if whiteboard? "whiteboard" "page")
-                                 :icon-theme :gray
-                                 :text page
-                                 :source-page page)))
-                   pages)]
+            items (->> pages
+                       (remove nil?)
+                       (map
+                        (fn [page]
+                          (let [entity (db/entity [:block/name (util/page-name-sanity-lc page)])
+                                whiteboard? (= (:block/type entity) "whiteboard")
+                                source-page (model/get-alias-source-page repo page)]
+                            (hash-map :icon (if whiteboard? "whiteboard" "page")
+                                      :icon-theme :gray
+                                      :text (if source-page
+                                              [:div.flex.flex-row.items-center.gap-2
+                                               page
+                                               [:div.opacity-50.font-normal "alias of"]
+                                               (:block/original-name source-page)]
+                                              page)
+                                      :source-page page)))))]
       (swap! !results update group        merge {:status :success :items items}))))
 
 ;; The blocks search action uses an existing handler
@@ -259,7 +274,10 @@
   (let [!input (::input state)
         !results (::results state)
         recent-searches (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
-        recent-pages (mapv (fn [page] {:type :page :data page}) (db/get-key-value :recent/pages))]
+        recent-pages (->> (keep (fn [page]
+                                  (when-let [page-entity (db/entity [:block/name (util/page-name-sanity-lc page)])]
+                                    {:type :page :data (:block/original-name page-entity)})) (db/get-key-value :recent/pages))
+                          vec)]
     (swap! !results assoc-in [group :status] :loading)
     (let [items (->> (concat recent-searches recent-pages)
                      (filter #(string/includes? (lower-case-str (:data %)) (lower-case-str @!input)))
@@ -275,7 +293,7 @@
   [input]
   (or (when (string/starts-with? input "/")
         (subs input 1))
-      (last (gp-util/split-last " /" input))))
+      (last (gp-util/split-last "/" input))))
 
 (defmethod load-results :filters [group state]
   (let [!results (::results state)
@@ -300,24 +318,22 @@
       (load-results :files state)
       (load-results :recents state))))
 
-(defn close-unless-alt! [state]
-  (when-not (some-> state ::alt? deref)
-    (state/close-modal!)))
-
 (defn- copy-block-ref [state]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid uuid)]
     (editor-handler/copy-block-ref! block-uuid block-ref/->block-ref)
-    (close-unless-alt! state)))
+    (state/close-modal!)))
 
 (defmulti handle-action (fn [action _state _event] action))
 
 (defmethod handle-action :open-page [_ state _event]
   (when-let [page-name (some-> state state->highlighted-item :source-page)]
-    (let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
+    (let [redirect-page-name (model/get-redirect-page-name page-name)
+          page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])
+          original-name (:block/original-name page)]
       (if (= (:block/type page) "whiteboard")
-        (route-handler/redirect-to-whiteboard! page-name)
-        (route-handler/redirect-to-page! page-name)))
-    (close-unless-alt! state)))
+        (route-handler/redirect-to-whiteboard! original-name)
+        (route-handler/redirect-to-page! original-name)))
+    (state/close-modal!)))
 
 (defmethod handle-action :open-block [_ state _event]
   (let [block-id (some-> state state->highlighted-item :source-block :block/uuid uuid)
@@ -327,18 +343,20 @@
         (if (= (:block/type page) "whiteboard")
           (route-handler/redirect-to-whiteboard! page-name {:block-id block-id})
           (route-handler/redirect-to-page! page-name {:anchor (str "ls-block-" block-id)})))
-      (close-unless-alt! state))))
+      (state/close-modal!))))
 
 (defmethod handle-action :open-page-right [_ state _event]
   (when-let [page-name (some-> state state->highlighted-item :source-page)]
-    (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
-      (editor-handler/open-block-in-sidebar! (:block/uuid page)))
-    (close-unless-alt! state)))
+    (let [redirect-page-name (model/get-redirect-page-name page-name)
+          page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
+      (when page
+        (editor-handler/open-block-in-sidebar! (:block/uuid page))))
+    (state/close-modal!)))
 
 (defmethod handle-action :open-block-right [_ state _event]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid uuid)]
     (editor-handler/open-block-in-sidebar! block-uuid)
-    (close-unless-alt! state)))
+    (state/close-modal!)))
 
 (defmethod handle-action :open [_ state event]
   (when-let [item (some-> state state->highlighted-item)]
@@ -371,26 +389,23 @@
     (when-let [action (:action command)]
       (action)
       (when-not (contains? #{:graph/open :graph/remove :ui/toggle-settings :go/flashcards} (:id command))
-        (close-unless-alt! state)))))
+        (state/close-modal!)))))
 
 (defmethod handle-action :create [_ state _event]
   (let [item (state->highlighted-item state)
         create-whiteboard? (= :whiteboard (:source-create item))
         create-page? (= :page (:source-create item))
-        alt? (some-> state ::alt deref)
         !input (::input state)]
     (cond
-      (and create-whiteboard? alt?) (whiteboard-handler/create-new-whiteboard-page! @!input)
-      (and create-whiteboard? (not alt?)) (whiteboard-handler/create-new-whiteboard-and-redirect! @!input)
-      (and create-page? alt?) (page-handler/create! @!input {:redirect? false})
-      (and create-page? (not alt?)) (page-handler/create! @!input {:redirect? true}))
-    (close-unless-alt! state)))
+      create-whiteboard? (whiteboard-handler/create-new-whiteboard-and-redirect! @!input)
+      create-page? (page-handler/create! @!input {:redirect? true}))
+    (state/close-modal!)))
 
 (defn- get-filter-user-input
   [input]
   (cond
-    (string/includes? input " /")
-    (first (gp-util/split-last " /" input))
+    (string/includes? input "/")
+    (first (gp-util/split-last "/" input))
     (string/starts-with? input "/")
     ""
     :else
@@ -449,7 +464,12 @@
      [:div {:class         "border-b border-gray-06 pb-1 last:border-b-0"
             :on-mouse-move #(reset! *mouse-active? true)}
       [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02"}
-       [:div {:class "font-bold text-gray-11 pl-0.5"} title]
+       [:div {:class "font-bold text-gray-11 pl-0.5 cursor-pointer select-none"
+              :on-click (fn [_e]
+                          ;; change :less to :more or :more to :less
+                          (swap! (::results state) update-in [group :show] {:more :less
+                                                                            :less :more}))}
+        title]
        (when (not= group :create)
          [:div {:class "pl-1.5 text-gray-12 rounded-full"
                 :style {:font-size "0.7rem"}}
@@ -482,7 +502,6 @@
                                       :rounded false
                                       :hoverable @*mouse-active?
                                       :highlighted highlighted?
-                                      :display-shortcut-on-highlight? true
                                       ;; for some reason, the highlight effect does not always trigger on a
                                       ;; boolean value change so manually pass in the dep
                                       :on-highlight-dep highlighted-item
@@ -523,6 +542,8 @@
      ;; update the input value in the UI
      (reset! !input input)
 
+     (reset! (::input-changed? state) true)
+
        ;; ensure that there is a throttled version of the load-results function
      (when-not @!load-results-throttled
        (reset! !load-results-throttled (gfun/throttle load-results 50)))
@@ -535,12 +556,12 @@
 (defn- keydown-handler
   [state e]
   (let [shift? (.-shiftKey e)
-        meta? (.-metaKey e)
-        alt? (.-altKey e)
+        meta? (util/meta-key? e)
         ctrl? (.-ctrlKey e)
         keyname (.-key e)
         enter? (= keyname "Enter")
         esc? (= keyname "Escape")
+        composing? (util/event-is-composing? e)
         highlighted-group @(::highlighted-group state)
         show-less (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :less))
         show-more (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :more))
@@ -549,14 +570,11 @@
         as-keyup? (or (= keyname "ArrowUp") (and ctrl? (= keyname "p")))]
     (reset! (::shift? state) shift?)
     (reset! (::meta? state) meta?)
-    (reset! (::alt? state) alt?)
     (when (or as-keydown? as-keyup?)
       (.preventDefault e))
-    (when-not esc? (util/stop-propagation e))
 
     (cond
-      (and meta? enter?
-           (not (string/blank? input)))
+      (and meta? enter?)
       (let [repo (state/get-current-repo)]
         (state/close-modal!)
         (state/sidebar-add-block! repo input :search))
@@ -567,22 +585,25 @@
       as-keyup? (if meta?
                   (show-less)
                   (move-highlight state -1))
-      enter? (handle-action :default state e)
+      (and enter? (not composing?)) (do
+                                      (handle-action :default state e)
+                                      (util/stop-propagation e))
       esc? (let [filter @(::filter state)]
-             (when (or filter (not (string/blank? input)))
+             (when (or (and filter @(::input-changed? state))
+                       (not (string/blank? input)))
                (util/stop e)
                (reset! (::filter state) nil)
                (when-not filter (handle-input-change state nil ""))))
-      (= keyname "c") (copy-block-ref state)
+      (and meta? (= keyname "c")) (do
+                                    (copy-block-ref state)
+                                    (util/stop-propagation e))
       :else nil)))
 
-(defn keyup-handler
+(defn- keyup-handler
   [state e]
   (let [shift? (.-shiftKey e)
-        meta? (.-metaKey e)
-        alt? (.-altKey e)]
+        meta? (util/meta-key? e)]
     (reset! (::shift? state) shift?)
-    (reset! (::alt? state) alt?)
     (reset! (::meta? state) meta?)))
 
 (defn- input-placeholder
@@ -616,20 +637,22 @@
        :placeholder (input-placeholder false)
        :ref #(when-not @input-ref (reset! input-ref %))
        :on-change (fn [e]
-                    (handle-input-change state e)
-                    (when-let [on-change (:on-input-change opts)]
-                      (on-change (.-value (.-target e)))))
+                    (let [new-value (.-value (.-target e))]
+                      (handle-input-change state e)
+                      (when-let [on-change (:on-input-change opts)]
+                        (on-change new-value))))
        :on-blur (fn [_e]
                   (when-let [on-blur (:on-input-blur opts)]
                     (on-blur input)))
        :on-composition-end (fn [e] (handle-input-change state e))
        :on-key-down (fn [e]
                       (let [value (.-value @input-ref)
-                            last-char (last value)]
+                            last-char (last value)
+                            backspace? (= (util/ekey e) "Backspace")]
                         (when (and (some? @(::filter state))
                                    (or (= (util/ekey e) "/")
-                                       (and (= (util/ekey e) "Backspace")
-                                            (= last-char "/"))))
+                                       (and backspace? (= last-char "/"))
+                                       (and backspace? (= input ""))))
                           (reset! (::filter state) nil))))
        :value input}]]))
 
@@ -752,18 +775,17 @@
        (mixins/on-key-down state {}
                            {:target ref
                             :all-handler (fn [e _key] (keydown-handler state e))})
-       (mixins/on-key-up state {}
-                         {:target ref
-                          :all-handler (fn [e _key] (keyup-handler state e))}))))
+       (mixins/on-key-up state {} (fn [e _key]
+                                    (keyup-handler state e))))))
   (rum/local false ::shift?)
   (rum/local false ::meta?)
-  (rum/local false ::alt?)
   (rum/local nil ::highlighted-group)
   (rum/local nil ::highlighted-item)
   (rum/local default-results ::results)
   (rum/local nil ::load-results-throttled)
   (rum/local nil ::scroll-container-ref)
   (rum/local nil ::input-ref)
+  (rum/local false ::input-changed?)
   [state {:keys [sidebar?] :as opts}]
   (let [*input (::input state)
         _input (rum/react *input)
@@ -780,10 +802,11 @@
                      (not sidebar?) (str " pb-14"))
             :ref #(let [*ref (::scroll-container-ref state)]
                     (when-not @*ref (reset! *ref %)))
-            :style {:background "var(--lx-gray-02)"}}
+            :style {:background "var(--lx-gray-02)"
+                    :scroll-padding-block 32}}
 
       (when group-filter
-        [:div.flex.flex-col.p-3.opacity-50.text-sm
+        [:div.flex.flex-col.px-3.py-1.opacity-70.text-sm
          (search-only state (name group-filter))])
 
       (let [items (filter

@@ -80,7 +80,7 @@
 }
 
 .dark .left-sidebar-inner {
-  background-color: or(--ls-left-sidebar-background-color, --lx-gray-01, --ls-primary-background);
+  background-color: or(--ls-left-sidebar-background-color, --lx-gray-01, --ls-primary-background-color);
 }
 
 .left-sidebar-inner {
@@ -164,6 +164,17 @@
       margin-right: 8px;
       opacity: .7;
       position: relative;
+    }
+
+    .graph-icon .ui__icon {
+        padding: 0;
+        width: unset;
+        margin-right: 0px;
+    }
+
+    .graph-icon {
+        margin-left: 3px;
+        margin-right: 11px;
     }
 
     &:hover {
@@ -672,7 +683,7 @@
   }
 
   .references {
-    margin-left: 12px;
+    @apply mx-[28px];
   }
 
   .sidebar-drop-indicator {
@@ -745,6 +756,10 @@
         }
       }
     }
+  }
+
+  .page-hierarchy {
+    @apply pl-[28px];
   }
 }
 

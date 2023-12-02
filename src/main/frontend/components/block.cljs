@@ -78,7 +78,8 @@
             [rum.core :as rum]
             [shadow.loader :as loader]
             [datascript.impl.entity :as e]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [electron.ipc :as ipc]))
 
 
 
@@ -316,7 +317,7 @@
                  :on-click      (fn [e]
                                   (util/stop e)
                                   (if local?
-                                    (js/window.apis.showItemInFolder image-src)
+                                    (ipc/ipc "openFileInFolder" image-src)
                                     (js/window.apis.openExternal image-src)))}
                 image-src])
              [:.flex
@@ -2079,7 +2080,7 @@
                                                   :page-id (:db/id (:block/page block))})]
     (cond
       (seq ordered-properties)
-      [:div.block-properties
+      [:div.block-properties.rounded
        {:class (when pre-block? "page-properties")
         :title (if pre-block?
                  "Click to edit this page's properties"
@@ -3510,7 +3511,7 @@
                  {:debug-id page})])))))]
 
      (and (:ref? config) (:group-by-page? config))
-     [:div.flex.flex-col
+     [:div.flex.flex-col.references-blocks-wrap
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page page-blocks] blocks]
           (ui/lazy-visible
@@ -3519,7 +3520,7 @@
                    page (db/entity (:db/id page))
                    ;; FIXME: parents need to be sorted
                    parent-blocks (group-by :block/parent page-blocks)]
-               [:div.my-2 {:key (str "page-" (:db/id page))}
+               [:div.my-2.references-blocks-item {:key (str "page-" (:db/id page))}
                 (ui/foldable
                  [:div
                   (page-cp config page)

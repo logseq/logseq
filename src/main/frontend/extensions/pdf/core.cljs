@@ -17,7 +17,8 @@
             [frontend.util :as util]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.ui :as ui]))
 
 (declare pdf-container system-embed-playground)
 
@@ -844,14 +845,12 @@
        :on-change (fn [e]
                     (reset! password (util/evalue e)))}]
 
-     [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
-      [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
-       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-        {:type "button"
-         :on-click (fn []
+     [:div.mt-5.sm:mt-4.flex
+      (ui/button
+        "Submit"
+        {:on-click (fn []
                      (let [password @password]
-                       (confirm-fn password)))}
-        "Submit"]]]]))
+                       (confirm-fn password)))})]]))
 
 (rum/defc ^:large-vars/data-var pdf-loader
   [{:keys [url hls-file identity filename] :as pdf-current}]

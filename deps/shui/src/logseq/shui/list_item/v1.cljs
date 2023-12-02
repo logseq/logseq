@@ -77,12 +77,12 @@
 
 (rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value
                         title highlighted on-highlight on-highlight-dep header on-click
-                        hoverable compact rounded on-mouse-enter component-opts
-                        display-shortcut-on-highlight?] :as _props
+                        hoverable compact rounded on-mouse-enter component-opts] :as _props
                  :or {hoverable true rounded true}}
                 {:keys [app-config] :as context}]
   (let [ref (rum/create-ref)
-        highlight-query (partial highlight-query* app-config query)]
+        highlight-query (partial highlight-query* app-config query)
+        [hover? set-hover?] (rum/use-state false)]
     (rum/use-effect!
      (fn []
        (when (and highlighted on-highlight)
@@ -99,6 +99,8 @@
                      (not highlighted) (str " "))
             :ref ref
             :on-click (when on-click on-click)
+            :on-mouse-over #(set-hover? true)
+            :on-mouse-out #(set-hover? false)
             :on-mouse-enter (when on-mouse-enter on-mouse-enter)}
            component-opts)
      ;; header
@@ -133,10 +135,7 @@
            [:span.text-gray-11 (str (to-string value-label))])
          (when value
            [:span.text-gray-11 (to-string value)])])
-      (when (and shortcut
-                 (or (and display-shortcut-on-highlight? highlighted)
-                     (not display-shortcut-on-highlight?)))
-        [:div {:class (str "flex gap-1"
-                           (when display-shortcut-on-highlight? " fade-in"))
-               :style {:opacity (if highlighted 1 0.5)}}
+      (when shortcut
+        [:div {:class "flex gap-1"
+               :style {:opacity (if (or highlighted hover?) 1 0.5)}}
          (shortcut/root shortcut context)])]]))
