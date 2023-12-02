@@ -25,7 +25,7 @@
  :handbook/home "ホーム"
  :handbook/settings "設定"
  :handbook/close "閉じる"
-  :on-boarding/tour-whiteboard-btn-next "進む"
+ :on-boarding/tour-whiteboard-btn-next "進む"
  :on-boarding/tour-whiteboard-btn-back "戻る"
  :on-boarding/tour-whiteboard-btn-finish "完了"
  :on-boarding/quick-tour-btn-next "進む"
