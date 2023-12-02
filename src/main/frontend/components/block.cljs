@@ -1942,7 +1942,7 @@
         priority (priority-cp t)
         tags (block-tags-cp t)
         bg-color (:background-color properties)
-        tx-color (:text-color properties)
+        tx-color (:logseq.text-color properties)
         ;; `heading-level` is for backward compatibility, will remove it in later releases
         heading-level (:block/heading-level t)
         heading (or

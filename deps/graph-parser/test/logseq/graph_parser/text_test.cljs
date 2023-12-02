@@ -112,7 +112,7 @@
       :collapsed "false" false
       :created-at "1609233702047" 1609233702047
       :background-color "#533e7d" "#533e7d"
-      :text-color "#fabada" "#fabada")))
+      :logseq.text-color "#fabada" "#fabada")))
 
 
 #_(cljs.test/test-ns 'logseq.graph-parser.text-test)

@@ -46,7 +46,7 @@
   (are [x y] (= (:properties (extract-properties x {})) y)
        ;; Built-in properties
        [["background-color" "#000000"]] {:background-color "#000000"}
-       [["text-color" "pink"]] {:text-color "pink"}
+       [["logseq.text-color" "pink"]] {:logseq.text-color "pink"}
        [["alias" "[[name/with space]]"]] {:alias #{"name/with space"}}
        [["tags" "[[foo]], [[bar]]"]] {:tags #{"foo" "bar"}}
        [["tags" "[[foo]] [[bar]]"]] {:tags #{"foo" "bar"}}
