@@ -2,6 +2,7 @@
   (:require [rum.core :as rum]
             [logseq.shui.ui :as ui]
             [logseq.shui.form.core :refer [yup yup-resolver] :as form-core]
+            [logseq.shui.dialog.core :as dialog-core]
             [cljs-bean.core :as bean]))
 
 (rum/defc section-item
@@ -325,7 +326,19 @@
    ;; Dialog
    (section-item "Dialog"
      [:div.flex.flex-row.space-x-2
-      (sample-dialog-basic)])
+      (sample-dialog-basic)
+      (ui/button
+        {:on-click #(dialog-core/open! "a modal dialog from `open!`" {:title "Title"})}
+        "Imperative API: open!")
+
+      (ui/button
+        {:class    "primary-yellow"
+         :on-click #(dialog-core/alert!
+                      "a alert dialog from `alert!`"
+                      {:title [:div.flex.flex-row.space-x-2.items-center
+                               (ui/tabler-icon "alert-triangle" {:size 18})
+                               [:span "Alert"]]})}
+        "Imperative API: alert!")])
 
    ;; Alert
    (section-item "Alert"

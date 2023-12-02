@@ -560,6 +560,10 @@
   min-width: var(--radix-select-trigger-width);
 }
 
+.max-w-lg {
+  max-width: 32rem;
+}
+
 .max-w-xl {
   max-width: 36rem;
 }
@@ -1969,6 +1973,10 @@
 
   .sm\:right-0 {
     right: 0;
+  }
+
+  .sm\:mt-0 {
+    margin-top: 0;
   }
 
   .sm\:flex-row {
