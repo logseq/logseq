@@ -137,10 +137,12 @@
           (do
             (prn :debug :refresh-token-failed
                  :status (:status resp)
+                 :user-id (user-uuid)
                  :refresh-token refresh-token
                  :resp resp)
             (state/pub-event! [:instrument {:type :refresh-token-failed
                                             :payload {:status (:status resp)
+                                                      :user-id (user-uuid)
                                                       :refresh-token refresh-token
                                                       :resp resp}}])
             (clear-tokens))
