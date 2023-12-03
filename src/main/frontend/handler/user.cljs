@@ -145,7 +145,9 @@
                                                       :user-id (user-uuid)
                                                       :refresh-token refresh-token
                                                       :resp resp}}])
-            (clear-tokens))
+            (when (and (= 400 (:status resp))
+                       (= (:error (:body resp)) "invalid_grant"))
+              (clear-tokens)))
 
           ;; e.g. api return 500, server internal error
           ;; we shouldn't clear tokens if they aren't expired yet
