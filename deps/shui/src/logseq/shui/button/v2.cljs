@@ -3,7 +3,8 @@
     [clojure.string :as str]
     [rum.core :as rum]
     [logseq.shui.icon.v2 :as icon]
-    [clojure.string :as string]))
+    [clojure.string :as string]
+    [goog.userAgent]))
 
 (rum/defcs root < rum/reactive
   (rum/local nil ::hover-theme)
@@ -46,7 +47,7 @@
        (for [key shortcut]
          [:div.ui__button-shortcut-key
           (case key
-            "cmd" [:div "⌘"]
+            "cmd" [:div (if goog.userAgent/MAC "⌘" "Ctrl")]
             "shift" [:div "⇧"]
             "return" [:div "⏎"]
             "esc" [:div.tracking-tightest {:style {:transform "scaleX(0.8) scaleY(1.2) "
