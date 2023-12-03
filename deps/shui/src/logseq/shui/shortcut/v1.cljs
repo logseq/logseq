@@ -6,38 +6,41 @@
 
 (def mac? goog.userAgent/MAC)
 (defn print-shortcut-key [key]
-  (if (coll? key)
-    (string/join "+" key)
-    (case (if (string? key)
-            (string/lower-case key)
-            key)
-      ("cmd" "command" "mod" "⌘") (if mac? "⌘" "Ctrl")
-      ("meta") (if mac? "⌘" "⊞")
-      ("return" "enter" "⏎") "⏎"
-      ("shift" "⇧") "⇧"
-      ("alt" "option" "opt" "⌥") (if mac? "Opt" "Alt")
-      ("ctrl" "control" "⌃") "Ctrl"
-      ("space" " ") "Space"
-      ("up" "↑") "↑"
-      ("down" "↓") "↓"
-      ("left" "←") "←"
-      ("right" "→") "→"
-      ("tab") "⇥"
-      ("open-square-bracket") "["
-      ("close-square-bracket") "]"
-      ("dash") "-"
-      ("semicolon") ";"
-      ("equals") "="
-      ("single-quote") "'"
-      ("backslash") "\\"
-      ("comma") ","
-      ("period") "."
-      ("slash") "/"
-      ("grave-accent") "`"
-      ("page-up") ""
-      ("page-down") ""
-      (nil) ""
-      (name key))))
+  (let [result (if (coll? key)
+                 (string/join "+" key)
+                 (case (if (string? key)
+                         (string/lower-case key)
+                         key)
+                   ("cmd" "command" "mod" "⌘") (if mac? "⌘" "Ctrl")
+                   ("meta") (if mac? "⌘" "⊞")
+                   ("return" "enter" "⏎") "⏎"
+                   ("shift" "⇧") "⇧"
+                   ("alt" "option" "opt" "⌥") (if mac? "Opt" "Alt")
+                   ("ctrl" "control" "⌃") "Ctrl"
+                   ("space" " ") "Space"
+                   ("up" "↑") "↑"
+                   ("down" "↓") "↓"
+                   ("left" "←") "←"
+                   ("right" "→") "→"
+                   ("tab") "Tab"
+                   ("open-square-bracket") "["
+                   ("close-square-bracket") "]"
+                   ("dash") "-"
+                   ("semicolon") ";"
+                   ("equals") "="
+                   ("single-quote") "'"
+                   ("backslash") "\\"
+                   ("comma") ","
+                   ("period") "."
+                   ("slash") "/"
+                   ("grave-accent") "`"
+                   ("page-up") ""
+                   ("page-down") ""
+                   (nil) ""
+                   (name key)))]
+    (if (= (count result) 1)
+      result
+      (string/capitalize result))))
 
 (defn to-string [input]
   (cond

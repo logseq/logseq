@@ -459,7 +459,7 @@
 
                       (cond
                         (or unset? user-binding (false? user-binding))
-                        [:code.dark:bg-green-800.bg-green-300
+                        [:code
                          (if unset?
                            (t :keymap/unset)
                            (str (t :keymap/custom) ": "

@@ -38,6 +38,7 @@
 
 .ui__button__tile-separator {
   @apply w-px h-full bg-gray-08-alpha;
+  min-height: 14px;
 }
 
 .ui__button-theme-text {
