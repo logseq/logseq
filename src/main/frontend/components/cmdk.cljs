@@ -665,8 +665,8 @@
      (shui/shortcut "/" context)
      [:div "to filter search results"]]
     [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
-     (shui/shortcut "mod enter" context)
-     [:div "to open search in the sidebar"]]]))
+     (shui/shortcut ["mod" "enter"] context)
+     [:div "to open search in the sidebar"]]])  )
 
 (rum/defcs tip <
   {:init (fn [state]
