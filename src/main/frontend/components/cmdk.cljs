@@ -308,7 +308,6 @@
 
 ;; The default load-results function triggers all the other load-results function
 (defmethod load-results :default [_ state]
-  (js/console.log "load-results/default" @(::input state))
   (if-not (some-> state ::input deref seq)
     (load-results :initial state)
     (do
@@ -338,13 +337,19 @@
 
 (defmethod handle-action :open-block [_ state _event]
   (let [block-id (some-> state state->highlighted-item :source-block :block/uuid uuid)
-        get-block-page (partial model/get-block-page (state/get-current-repo))]
-    (when-let [page (some-> block-id get-block-page)]
-      (let [page-name (:block/name page)]
-        (if (= (:block/type page) "whiteboard")
-          (route-handler/redirect-to-whiteboard! page-name {:block-id block-id})
-          (route-handler/redirect-to-page! page-name {:anchor (str "ls-block-" block-id)})))
-      (state/close-modal!))))
+        get-block-page (partial model/get-block-page (state/get-current-repo))
+        block (db/entity [:block/uuid block-id])]
+    (when block
+      (when-let [page (some-> block-id get-block-page)]
+        (let [page-name (:block/name page)]
+          (cond
+            (= (:block/type page) "whiteboard")
+            (route-handler/redirect-to-whiteboard! page-name {:block-id block-id})
+            (model/parents-collapsed? (state/get-current-repo) block-id)
+            (route-handler/redirect-to-page! (:block/uuid block))
+            :else
+            (route-handler/redirect-to-page! page-name {:anchor (str "ls-block-" block-id)})))
+        (state/close-modal!)))))
 
 (defmethod handle-action :open-page-right [_ state _event]
   (when-let [page-name (some-> state state->highlighted-item :source-page)]
