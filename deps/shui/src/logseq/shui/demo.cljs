@@ -56,6 +56,7 @@
       ;; trigger
       (ui/context-menu-trigger
         [:div.border.px-6.py-12.border-dashed.rounded.text-center.select-none
+         {:key "ctx-menu-click"}
          [:span.opacity-50 "Right click here"]])
       ;; content
       (ui/context-menu-content
@@ -98,7 +99,10 @@
   []
   [:div.border.p-6.rounded.bg-gray-01
    (let [form-ctx (form-core/use-form
-                    {:defaultValues {:username "" :agreement true :notification "all"}
+                    {:defaultValues {:username     ""
+                                     :agreement    true
+                                     :notification "all"
+                                     :bio          ""}
                      :yupSchema     (-> (.object yup)
                                       (.shape #js {:username (-> (.string yup) (.required))})
                                       (.required))})
@@ -140,7 +144,7 @@
               (ui/form-label "Notify me about...")
               (ui/form-control
                 (ui/radio-group
-                  {:default-value   (:value field)
+                  {:value           (:value field)
                    :on-value-change (:onChange field)
                    :class           "flex flex-col space-y-3"}
                   (ui/form-item
@@ -168,7 +172,7 @@
               (ui/form-label {:class "font-normal cursor-pointer"} "Agreement terms"))))
 
         ;; actions
-        [:p.relative.px-2
+        [:div.relative.px-2
          (ui/button {:type "submit" :class "!absolute right-0 top-[-40px]"} "Submit")]]))])
 
 (rum/defc sample-date-picker
@@ -183,9 +187,9 @@
         {:as-child true
          :class    "w-2/3"}
         (ui/input
-          {:type        :text
-           :placeholder "pick a date"
-           :value       (.toDateString date)}))
+          {:type          :text
+           :placeholder   "pick a date"
+           :default-value (.toDateString date)}))
       ;; content
       (ui/popover-content
         {:on-open-auto-focus #(.preventDefault %)
@@ -205,6 +209,7 @@
       {:open           open?
        :on-open-change #(set-open! %)}
       (ui/dialog-trigger
+        {:as-child true}
         (ui/button {:variant :outline}
           (ui/tabler-icon "notification") "Open as modal locally"))
       (ui/dialog-content
@@ -250,7 +255,8 @@
          :size    :sm}
         [:a.flex.items-center.text-blue-rx-10.hover:text-blue-rx-10-alpha
          {:href "https://x.com/logseq" :target "_blank"}
-         (ui/tabler-icon "brand-twitter" {:size 15})])])
+         (ui/tabler-icon "brand-twitter" {:size 15})]
+        )])
 
    ;; Toast
    (section-item "Toast"
@@ -273,7 +279,7 @@
                      (ui/toast!
                        (fn [{:keys [id dismiss! update!]}]
                          [:b.text-red-700
-                          [:p.flex.items-center.gap-2
+                          [:div.flex.items-center.gap-2
                            (ui/tabler-icon "info-circle")
                            (str "#(" id ") ")
                            (.toLocaleString (js/Date.))]
@@ -313,12 +319,13 @@
    [:div.grid.grid-cols-3.gap-8
     ;; Dropdown
     (section-item "Dropdown"
-      [:<>
-       (ui/dropdown-menu
-         (ui/dropdown-menu-trigger
-           (ui/button {:variant :outline}
-             (ui/tabler-icon "list") "Open dropdown menu"))
-         (sample-dropdown-menu-content))])
+      (ui/dropdown-menu
+        (ui/dropdown-menu-trigger
+          {:as-child true}
+          (ui/button {:variant :outline}
+            (ui/tabler-icon "list") "Open dropdown menu"))
+        (sample-dropdown-menu-content)))
+
     ;; Context menu
     [:div.col-span-2
      (section-item "Context Menu"

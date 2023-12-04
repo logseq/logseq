@@ -54,6 +54,7 @@ const lx = override => ({
 })
 
 const accent = {
+  'DEFAULT': 'hsl(var(--accent))',
   'base': 'hsl(var(--accent))',
   'foreground': 'hsl(var(--accent-foreground))',
   '01': 'var(--lx-accent-01)',
@@ -110,8 +111,8 @@ const gray = {
   '12-alpha': 'var(--lx-gray-12-alpha)',
 }
 
-function exposeColorsToCssVars({ addBase, theme }) {
-  function extractColorVars(colorObj, colorGroup = '') {
+function exposeColorsToCssVars ({ addBase, theme }) {
+  function extractColorVars (colorObj, colorGroup = '') {
     return Object.keys(colorObj).reduce((vars, colorKey) => {
       const value = colorObj[colorKey]
 
@@ -150,7 +151,7 @@ const withOverride = plugin(function ({ matchUtilities }) {
   })
 })
 
-function mapRadixColorToTailwind(color) {
+function mapRadixColorToTailwind (color) {
   const radixColor = radix[color]
   if (!radixColor) throw new Error(`[radix color] not exist for ${color}`)
   const twSteps = [10, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]
@@ -177,7 +178,8 @@ module.exports = {
     './src/**/*.js',
     './src/**/*.cljs',
     './resources/**/*.html',
-    './deps/shui/src/**/*.cljs'
+    './deps/shui/src/**/*.cljs',
+    './packages/ui/@/components/**/*.{ts,tsx}'
   ],
   safelist: [
     'bg-black', 'bg-white', 'capitalize-first',
@@ -191,6 +193,7 @@ module.exports = {
     require('@tailwindcss/aspect-ratio'),
     require('@tailwindcss/line-clamp'),
     require('tailwind-capitalize-first-letter'),
+    require('tailwindcss-animate'),
     exposeColorsToCssVars,
     withOverride,
   ],
@@ -206,6 +209,8 @@ module.exports = {
       },
       animation: {
         'spin-reverse': 'spin 2s linear infinite reverse',
+        'accordion-down': 'accordion-down 0.2s ease-out',
+        'accordion-up': 'accordion-up 0.2s ease-out',
       },
       spacing: {
         '128': '32rem',
@@ -231,12 +236,53 @@ module.exports = {
       borderColor: {
         ...lx('--lx-border-override'),
       },
+      borderRadius: {
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        sm: 'calc(var(--radius) - 4px)',
+      },
+      keyframes: {
+        'accordion-down': {
+          from: { height: 0 },
+          to: { height: 'var(--radix-accordion-content-height)' },
+        },
+        'accordion-up': {
+          from: { height: 'var(--radix-accordion-content-height)' },
+          to: { height: 0 },
+        },
+      },
     },
     colors: {
       // Theme basic
       border: 'hsl(var(--border))',
       input: 'hsl(var(--input))',
       ring: 'hsl(var(--ring))',
+      background: 'hsl(var(--background))',
+      foreground: 'hsl(var(--foreground))',
+      primary: {
+        DEFAULT: 'hsl(var(--primary))',
+        foreground: 'hsl(var(--primary-foreground))',
+      },
+      secondary: {
+        DEFAULT: 'hsl(var(--secondary))',
+        foreground: 'hsl(var(--secondary-foreground))',
+      },
+      destructive: {
+        DEFAULT: 'hsl(var(--destructive))',
+        foreground: 'hsl(var(--destructive-foreground))',
+      },
+      muted: {
+        DEFAULT: 'hsl(var(--muted))',
+        foreground: 'hsl(var(--muted-foreground))',
+      },
+      popover: {
+        DEFAULT: 'hsl(var(--popover))',
+        foreground: 'hsl(var(--popover-foreground))',
+      },
+      card: {
+        DEFAULT: 'hsl(var(--card))',
+        foreground: 'hsl(var(--card-foreground))',
+      },
 
       // Tailwind colors
       gray: gray,

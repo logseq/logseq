@@ -121,7 +121,7 @@
         (alert-dialog-footer
           (if footer
             footer
-            [:<> (alert-dialog-action {:on-click #(p/resolve! deferred true)} "OK")]))))))
+            [:<> (alert-dialog-action {:key "ok" :on-click #(p/resolve! deferred true)} "OK")]))))))
 
 (rum/defc confirm-inner
   [config]
@@ -129,8 +129,8 @@
     (alert-inner
       (assoc config :footer
              [:<>
-              (alert-dialog-cancel {:on-click #(p/reject! deferred false)} "Cancel")
-              (alert-dialog-action {:on-click #(p/resolve! deferred true)} "OK")]))))
+              (alert-dialog-cancel {:key "cancel" :on-click #(p/reject! deferred false)} "Cancel")
+              (alert-dialog-action {:key "ok" :on-click #(p/resolve! deferred true)} "OK")]))))
 
 (rum/defc install-modals
   < rum/static

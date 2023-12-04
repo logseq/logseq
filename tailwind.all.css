@@ -5,7 +5,7 @@
 
 @import "resources/css/radix.css";
 @import "resources/css/radix-hsl.css";
-@import "resources/css/ui.css";
+@import "packages/ui/src/index.css";
 @import "resources/css/shui.css";
 @import "inter-ui/inter.css";
 @import "reveal.js/dist/reveal.css";
