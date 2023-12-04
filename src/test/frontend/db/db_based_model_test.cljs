@@ -117,5 +117,6 @@
                           :block/namespace (:db/id class1)}
                          {:db/id (:db/id class3)
                           :block/namespace (:db/id class2)}])]
-    (= (model/get-namespace-children repo (:db/id (db/entity [:block/name "class1"])))
-       [(:db/id class2) (:db/id class3)])))
+    (is
+     (= (model/get-namespace-children repo (:db/id (db/entity [:block/name "class1"])))
+        [(:db/id class2) (:db/id class3)]))))
