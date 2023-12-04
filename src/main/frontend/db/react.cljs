@@ -12,7 +12,9 @@
             [frontend.util :as util :refer [react]]
             [cljs.spec.alpha :as s]
             [clojure.core.async :as async]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [logseq.db.sqlite.util :as sqlite-util]
+            [clojure.string :as string]))
 
 ;;; keywords specs for reactive query, used by `react/q` calls
 ;; ::block
@@ -70,8 +72,10 @@
   (set-new-result! [repo-url :kv key] nil))
 
 (defn clear-query-state!
+  "It should only be triggered for file based graphs."
   []
-  (reset! query-state {}))
+  (when-not (string/starts-with? (state/get-current-repo) sqlite-util/db-version-prefix)
+    (reset! query-state {})))
 
 (defn add-q!
   [k query time inputs result-atom transform-fn query-fn inputs-fn]
