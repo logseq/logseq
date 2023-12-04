@@ -282,7 +282,17 @@
   (let [!input (::input state)
         !results (::results state)]
     (swap! !results assoc-in [group :status] :loading)
-    (p/let [files (search/file-search @!input 99)
+    (p/let [files* (search/file-search @!input 99)
+            files (remove
+                   (fn [f]
+                     (and
+                      f
+                      (string/ends-with? f ".edn")
+                      (or (string/starts-with? f "whiteboards/")
+                          (string/starts-with? f "assets/")
+                          (string/starts-with? f "logseq/version-files")
+                          (contains? #{"logseq/metadata.edn" "logseq/pages-metadata.edn" "logseq/graphs-txid.edn"} f))))
+                   files*)
             items (map
                    (fn [file]
                      (hash-map :icon "file"
