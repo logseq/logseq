@@ -7,7 +7,6 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.restore :as db-restore]
-            [logseq.db.frontend.schema :as db-schema]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.file :as file-handler]
@@ -36,7 +35,6 @@
             [medley.core :as medley]
             [logseq.common.path :as path]
             [logseq.common.config :as common-config]
-            [frontend.db.react :as react]
             [frontend.db.listener :as db-listener]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]))
 
