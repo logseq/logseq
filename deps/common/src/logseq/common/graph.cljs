@@ -57,7 +57,7 @@
            (re-find #"^\.[^.]+" relpath))))))
 
 (def ^:private allowed-formats
-  #{:org :markdown :md :edn :json :js :css :excalidraw :tldr :pdf})
+  #{:org :markdown :md :edn :json :js :css :excalidraw :tldr})
 
 (defn- get-ext
   [p]
