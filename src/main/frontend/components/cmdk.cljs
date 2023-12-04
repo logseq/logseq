@@ -627,7 +627,7 @@
     (reset! (::shift? state) shift?)
     (reset! (::meta? state) meta?)
     (when (or as-keydown? as-keyup?)
-      (.preventDefault e))
+      (util/stop e))
 
     (cond
       (and meta? enter?)
