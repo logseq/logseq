@@ -40,6 +40,8 @@
 (def search-actions
   [{:text "Search only pages"        :info "Add filter to search" :icon-theme :gray :icon "page" :filter {:mode "search"
                                                                                                           :group :pages}}
+   {:text "Search only whiteboards"     :info "Add filter to search" :icon-theme :gray :icon "whiteboard" :filter {:mode "search"
+                                                                                                                   :group :whiteboards}}
    {:text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page" :filter {:mode "search"
                                                                                                           :group :current-page}}
    {:text "Search only blocks"       :info "Add filter to search" :icon-theme :gray :icon "block" :filter {:mode "search"
@@ -230,6 +232,24 @@
                                       :source-page page)))))]
       (swap! !results update group        merge {:status :success :items items}))))
 
+(defmethod load-results :whiteboards [group state]
+  (let [!input (::input state)
+        !results (::results state)]
+    (swap! !results assoc-in [group :status] :loading)
+    (p/let [pages (search/page-search @!input)
+            items (->> pages
+                       (remove nil?)
+                       (keep
+                        (fn [page]
+                          (let [entity (db/entity [:block/name (util/page-name-sanity-lc page)])
+                                whiteboard? (= (:block/type entity) "whiteboard")]
+                            (when whiteboard?
+                              (hash-map :icon "whiteboard"
+                                        :icon-theme :gray
+                                        :text page
+                                        :source-page page))))))]
+      (swap! !results update group        merge {:status :success :items items}))))
+
 ;; The blocks search action uses an existing handler
 (defmethod load-results :blocks [group state]
   (let [!input (::input state)
@@ -316,7 +336,8 @@
       (load-results :pages state)
       (load-results :filters state)
       (load-results :files state)
-      (load-results :recents state))))
+      (load-results :recents state)
+      (load-results :whiteboards state))))
 
 (defn- copy-block-ref [state]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid uuid)]
