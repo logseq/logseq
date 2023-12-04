@@ -332,14 +332,17 @@
 (defmethod load-results :default [_ state]
   (if-not (some-> state ::input deref seq)
     (load-results :initial state)
-    (do
-      (load-results :commands state)
-      (load-results :blocks state)
-      (load-results :pages state)
-      (load-results :filters state)
-      (load-results :files state)
-      (load-results :recents state)
-      (load-results :whiteboards state))))
+    (let [filter-group (:group @(::filter state))]
+      (if filter-group
+        (load-results filter-group state)
+        (do
+          (load-results :commands state)
+          (load-results :blocks state)
+          (load-results :pages state)
+          (load-results :filters state)
+          (load-results :files state)
+          (load-results :recents state)
+          (load-results :whiteboards state))))))
 
 (defn- copy-block-ref [state]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid uuid)]
