@@ -61,7 +61,7 @@
         tx-data))))
 
 (defn- based-merge-pages!
-  [from-page-name to-page-name persist-op?]
+  [from-page-name to-page-name persist-op? redirect?]
   (when (and (db/page-exists? from-page-name)
              (db/page-exists? to-page-name)
              (not= from-page-name to-page-name))
@@ -97,12 +97,12 @@
                                                     (util/get-page-original-name from-page)
                                                     (util/get-page-original-name to-page)))
 
-
     (page-common-handler/delete! from-page-name nil :redirect-to-home? false :persist-op? persist-op?)
 
-    (route-handler/redirect! {:to          :page
-                              :push        false
-                              :path-params {:name to-page-name}})))
+    (when redirect?
+      (route-handler/redirect! {:to          :page
+                                :push        false
+                                :path-params {:name to-page-name}}))))
 
 (defn rename!
   ([old-name new-name]
@@ -140,7 +140,7 @@
 
           (and (not= old-page-name new-page-name)
                (db/entity [:block/name new-page-name])) ; merge page
-          (based-merge-pages! old-page-name new-page-name persist-op?)
+          (based-merge-pages! old-page-name new-page-name persist-op? redirect?)
 
           :else                          ; rename
           (page-common-handler/create! new-name
