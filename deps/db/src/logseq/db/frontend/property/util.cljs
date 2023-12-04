@@ -45,3 +45,38 @@
     (-> (build-new-page page-name)
         (assoc :block/type #{"hidden"}
                :block/format :markdown))))
+
+(defn new-property-tx
+  "Provide attributes for a new built-in property given name, schema and uuid.
+   TODO: Merge this with sqlite-util/build-new-property once gp-util/page-name-sanity-lc
+   is available to deps/db"
+  [prop-name prop-schema prop-uuid]
+  {:block/uuid prop-uuid
+   :block/schema (merge {:type :default} prop-schema)
+   :block/original-name (name prop-name)
+   :block/name (sqlite-util/sanitize-page-name (name prop-name))})
+
+(defn build-closed-values
+  "Builds all the tx needed for property with closed values including
+   the hidden page and closed value blocks as needed"
+  [prop-name property {:keys [icon-id translate-closed-page-value-fn property-attributes]
+                       :or {translate-closed-page-value-fn identity}}]
+  (let [page-tx (build-property-hidden-page property)
+        page-id [:block/uuid (:block/uuid page-tx)]
+        closed-value-page-uuids? (contains? #{:page :date} (get-in property [:block/schema :type]))
+        closed-value-blocks-tx
+        (if closed-value-page-uuids?
+          (map translate-closed-page-value-fn (:closed-values property))
+          (map (fn [{:keys [value icon description uuid]}]
+                 (build-closed-value-block
+                  uuid value page-id property {:icon-id icon-id
+                                               :icon icon
+                                               :description description}))
+               (:closed-values property)))
+        property-schema (assoc (:block/schema property)
+                               :values (mapv :block/uuid closed-value-blocks-tx))
+        property-tx (merge (sqlite-util/build-new-property
+                            (new-property-tx prop-name property-schema (:block/uuid property)))
+                           property-attributes)]
+    (into [property-tx page-tx]
+          (when-not closed-value-page-uuids? closed-value-blocks-tx))))

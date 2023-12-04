@@ -63,7 +63,7 @@
 
 
 (defn linear-gradient [color-name color-stop gradient-level]
-  (let [color-index (.indexOf color-list color-name)
+  (let [color-index (.indexOf color-list (keyword color-name))
         step (fn [dist]
                (str "var(--rx-"
                  (name (nth color-list (mod (+ color-index dist) (count color-list))))

@@ -4,9 +4,7 @@
             [cljs-time.core :as t]
             [clojure.string :as string]
             [cognitect.transit :as transit]
-            [datascript.core :as d]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.schema :as db-schema]))
 
 (defn- type-of-block
   "
@@ -97,28 +95,3 @@
            :block/journal? false
            :block/format :markdown}
           block)))
-
-(defn build-db-initial-data
-  [config-content]
-  (let [initial-files [{:block/uuid (d/squuid)
-                        :file/path (str "logseq/" "config.edn")
-                        :file/content config-content
-                        :file/last-modified-at (js/Date.)}
-                       {:block/uuid (d/squuid)
-                        :file/path (str "logseq/" "custom.css")
-                        :file/content ""
-                        :file/last-modified-at (js/Date.)}
-                       {:block/uuid (d/squuid)
-                        :file/path (str "logseq/" "custom.js")
-                        :file/content ""
-                        :file/last-modified-at (js/Date.)}]
-        default-properties (map
-                            (fn [[k-keyword {:keys [schema original-name]}]]
-                              (let [k-name (name k-keyword)]
-                                (build-new-property
-                                 {:block/schema schema
-                                  :block/original-name (or original-name k-name)
-                                  :block/name (sanitize-page-name k-name)
-                                  :block/uuid (d/squuid)})))
-                            db-property/built-in-properties)]
-    (concat initial-files default-properties)))
