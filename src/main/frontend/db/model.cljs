@@ -1683,6 +1683,7 @@ independent of format as format specific heading characters are stripped"
   [repo]
   (d/q
     '[:find [(pull ?page [:block/name
+                          :block/original-name
                           :block/created-at
                           :block/updated-at]) ...]
       :where
