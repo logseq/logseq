@@ -40,14 +40,14 @@
 (def search-actions
   [{:text "Search only pages"        :info "Add filter to search" :icon-theme :gray :icon "page" :filter {:mode "search"
                                                                                                           :group :pages}}
-   {:text "Search only whiteboards"     :info "Add filter to search" :icon-theme :gray :icon "whiteboard" :filter {:mode "search"
-                                                                                                                   :group :whiteboards}}
    {:text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page" :filter {:mode "search"
                                                                                                           :group :current-page}}
    {:text "Search only blocks"       :info "Add filter to search" :icon-theme :gray :icon "block" :filter {:mode "search"
                                                                                                            :group :blocks}}
    {:text "Search only commands"     :info "Add filter to search" :icon-theme :gray :icon "command" :filter {:mode "search"
                                                                                                              :group :commands}}
+   {:text "Search only whiteboards"  :info "Add filter to search" :icon-theme :gray :icon "whiteboard" :filter {:mode "search"
+                                                                                                                :group :whiteboards}}
    {:text "Search only files"        :info "Add filter to search" :icon-theme :gray :icon "file" :filter {:mode "search"
                                                                                                           :group :files}}])
 
@@ -236,7 +236,9 @@
   (let [!input (::input state)
         !results (::results state)]
     (swap! !results assoc-in [group :status] :loading)
-    (p/let [pages (search/page-search @!input)
+    (p/let [whiteboards (->> (model/get-all-whiteboards (state/get-current-repo))
+                             (map :block/original-name))
+            pages (search/fuzzy-search whiteboards @!input {:limit 100})
             items (->> pages
                        (remove nil?)
                        (keep
@@ -834,7 +836,7 @@
 
       (when group-filter
         [:div.flex.flex-col.px-3.py-1.opacity-70.text-sm
-         (search-only state (name group-filter))])
+         (search-only state (string/capitalize (name group-filter)))])
 
       (let [items (filter
                    (fn [[_group-name group-key group-count _group-items]]
@@ -848,7 +850,7 @@
                    results-ordered)]
         (if (seq items)
           (for [[group-name group-key _group-count group-items] items]
-            (let [title group-name]
+            (let [title (string/capitalize group-name)]
               (result-group state title group-key group-items first-item sidebar?)))
           [:div.flex.flex-col.p-4.opacity-50
            (when-not (string/blank? (rum/react *input))
