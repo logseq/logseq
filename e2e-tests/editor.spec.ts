@@ -14,6 +14,12 @@ import { dispatch_kb_events } from './util/keyboard-events'
 import * as kb_events from './util/keyboard-events'
 
 test('hashtag and quare brackets in same line #4178', async ({ page }) => {
+  try {
+    await page.waitForSelector('.notification-clear', { timeout: 10 })
+    page.click('.notification-clear')
+  } catch (error) {
+  }
+
   await createRandomPage(page)
 
   await page.type('textarea >> nth=0', '#foo bar')

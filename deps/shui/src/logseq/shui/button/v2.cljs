@@ -3,11 +3,12 @@
     [clojure.string :as str]
     [rum.core :as rum]
     [logseq.shui.icon.v2 :as icon]
-    [clojure.string :as string]))
+    [clojure.string :as string]
+    [goog.userAgent]))
 
 (rum/defcs root < rum/reactive
   (rum/local nil ::hover-theme)
-  [state {:keys [theme hover-theme color text depth size icon interactive shortcut tiled on-click muted disabled? class href button-props icon-props]
+  [state {:keys [theme hover-theme color text depth size icon interactive shortcut tiled tiles on-click muted disabled? class href button-props icon-props]
           :or {theme :color depth 1 size :md interactive true muted false class ""}} context]
   (let [*hover-theme (::hover-theme state)
         color-string (or (some-> color name) (some-> context :state rum/react :ui/radix-color name) "custom")
@@ -31,12 +32,14 @@
         :on-mouse-out #(reset! *hover-theme nil)}
         on-click
         (assoc :on-click on-click)))
-     (if-not tiled text
-             (for [[index tile] (map-indexed vector (rest (string/split text #"")))]
-               [:<>
-                (when (< 0 index)
-                  [:div.ui__button__tile-separator])
-                [:div.ui__button__tile tile]]))
+     (if (and tiled (or text tiles))
+       (for [[index tile] (map-indexed vector
+                                       (or tiles (and text (rest (string/split text #"")))))]
+         [:<>
+          (when (< 0 index)
+            [:div.ui__button__tile-separator])
+          [:div.ui__button__tile tile]])
+       text)
 
      (when icon
        (icon/root icon icon-props))
@@ -44,9 +47,9 @@
        (for [key shortcut]
          [:div.ui__button-shortcut-key
           (case key
-            "cmd" [:div "⌘"]
+            "cmd" [:div (if goog.userAgent/MAC "⌘" "Ctrl")]
             "shift" [:div "⇧"]
-            "return" [:div "↵"]
+            "return" [:div "⏎"]
             "esc" [:div.tracking-tightest {:style {:transform "scaleX(0.8) scaleY(1.2) "
                                                    :font-size "0.5rem"
                                                    :font-weight "500"}} "ESC"]
