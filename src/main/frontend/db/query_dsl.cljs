@@ -476,7 +476,7 @@ Some bindings in this fn:
               (string/replace tag-placeholder "#")))))
 
 (defn- add-bindings!
-  [form q]
+  [q]
   (let [forms (set (flatten q))
         syms ['?b '?p 'not]
         [b? p? not?] (-> (set/intersection (set syms) forms)
@@ -539,8 +539,7 @@ Some bindings in this fn:
                                 ;; [(not (page-ref ?b "page 2"))]
                                 (keyword (ffirst result))
                                 (keyword (first result)))]
-                      (add-bindings! form
-                                     (if (= key :and) (rest result) result))))]
+                      (add-bindings! (if (= key :and) (rest result) result))))]
       {:query result'
        :rules (mapv rules/query-dsl-rules rules)
        :sort-by @sort-by
