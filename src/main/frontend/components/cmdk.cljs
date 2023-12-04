@@ -645,11 +645,12 @@
                                       (handle-action :default state e)
                                       (util/stop-propagation e))
       esc? (let [filter @(::filter state)]
-             (when (or (and filter @(::input-changed? state))
-                       (not (string/blank? input)))
+             (when-not (string/blank? input)
                (util/stop e)
-               (reset! (::filter state) nil)
-               (when-not filter (handle-input-change state nil ""))))
+               (handle-input-change state nil ""))
+             (when (and filter (string/blank? input))
+               (util/stop e)
+               (reset! (::filter state) nil)))
       (and meta? (= keyname "c")) (do
                                     (copy-block-ref state)
                                     (util/stop-propagation e))
@@ -704,9 +705,13 @@
        :on-key-down (fn [e]
                       (let [value (.-value @input-ref)
                             last-char (last value)
-                            backspace? (= (util/ekey e) "Backspace")]
-                        (when (and (some? @(::filter state))
-                                   (or (= (util/ekey e) "/")
+                            backspace? (= (util/ekey e) "Backspace")
+                            filter-group (:group @(::filter state))
+                            slash? (= (util/ekey e) "/")
+                            namespace-page-matched? (when (and slash? (contains? #{:pages :whiteboards} filter-group))
+                                                      (some #(string/includes? % "/") (search/page-search (str value "/"))))]
+                        (when (and filter-group
+                                   (or (and slash? (not namespace-page-matched?))
                                        (and backspace? (= last-char "/"))
                                        (and backspace? (= input ""))))
                           (reset! (::filter state) nil))))
