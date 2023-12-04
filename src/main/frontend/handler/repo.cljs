@@ -27,7 +27,7 @@
             [frontend.db.persist :as db-persist]
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.config :as gp-config]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [electron.ipc :as ipc]
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
@@ -545,7 +545,7 @@
           _ (start-repo-db-if-not-exists! full-graph-name)
           _ (state/add-repo! {:url full-graph-name})
           _ (route-handler/redirect-to-home!)
-          initial-data (sqlite-util/build-db-initial-data config/config-default-content)
+          initial-data (sqlite-create-graph/build-db-initial-data config/config-default-content)
           _ (db/transact! full-graph-name initial-data)
           _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
           ;; TODO: handle global graph

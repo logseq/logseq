@@ -2,7 +2,6 @@
   "Fns for DB restore(from text or sqlite)"
   (:require [datascript.core :as d]
             [frontend.config :as config]
-            [frontend.db :as db]
             [frontend.db.conn :as db-conn]
             [frontend.db.file-based.migrate :as db-migrate]
             [frontend.db.persist :as db-persist]
@@ -17,7 +16,8 @@
             [promesa.core :as p]
             [frontend.util :as util]
             [cljs-time.core :as t]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.util :as db-property-util]))
 
 (defn- old-schema?
   "Requires migration if the schema version is older than db-schema/version"
@@ -66,26 +66,34 @@
 
 (defn- update-built-in-properties!
   [conn]
-  (let [txs (keep
-             (fn [[k-keyword {:keys [schema original-name]}]]
+  (let [txs (mapcat
+             (fn [[k-keyword {:keys [schema original-name] :as property-config}]]
                (let [k-name (name k-keyword)
                      property (d/entity @conn [:block/name k-name])]
-                 (when-not (= {:schema schema
+                 (when (and
+                        (not= {:schema schema
                                :original-name (or original-name k-name)}
                               {:schema (:block/schema property)
                                :original-name (:block/original-name property)})
+                         ;; Updating closed values disabled until it's worth the effort
+                         ;; to diff closed values
+                        (not (:closed-values property-config)))
                    (if property
-                     {:block/schema schema
-                      :block/original-name (or original-name k-name)
-                      :block/name (util/page-name-sanity-lc k-name)
-                      :block/uuid (:block/uuid property)
-                      :block/type "property"}
-                     (sqlite-util/block-with-timestamps
-                      {:block/schema schema
+                     [{:block/schema schema
                        :block/original-name (or original-name k-name)
                        :block/name (util/page-name-sanity-lc k-name)
-                       :block/uuid (db/new-block-id)
-                       :block/type "property"})))))
+                       :block/uuid (:block/uuid property)
+                       :block/type "property"}]
+                     (if (:closed-values property-config)
+                       (db-property-util/build-closed-values
+                        (or original-name k-name)
+                        (assoc property-config :block/uuid (d/squuid))
+                        {})
+                       [(sqlite-util/build-new-property
+                         {:block/schema schema
+                          :block/original-name (or original-name k-name)
+                          :block/name (util/page-name-sanity-lc k-name)
+                          :block/uuid (d/squuid)})])))))
              db-property/built-in-properties)]
     (when (seq txs)
       (d/transact! conn txs))))

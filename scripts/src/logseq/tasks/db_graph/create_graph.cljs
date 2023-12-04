@@ -5,6 +5,7 @@
   graph and current limitations"
   (:require [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.outliner.cli.persist-graph :as persist-graph]
             [logseq.db :as ldb]
@@ -28,7 +29,7 @@
   (let [config-content (or (some-> (find-on-classpath "templates/config.edn") fs/readFileSync str)
                            (do (println "Setting graph's config to empty since no templates/config.edn was found.")
                                "{}"))]
-    (d/transact! conn (sqlite-util/build-db-initial-data config-content))))
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data config-content))))
 
 (defn init-conn
   "Create sqlite DB, initialize datascript connection and sync listener and then
@@ -121,35 +122,6 @@
            {:block/properties (->block-properties-tx (:properties m) uuid-maps)
             :block/refs (build-property-refs (:properties m) property-db-ids)})))
 
-(defn- ->property-tx
-  [prop-name prop-schema prop-uuid property-db-ids]
-  {:db/id (or (property-db-ids (name prop-name))
-              (throw (ex-info "No :db/id for property" {:property prop-name})))
-   :block/uuid prop-uuid
-   :block/schema (merge {:type :default} prop-schema)
-   :block/original-name (name prop-name)
-   :block/name (sqlite-util/sanitize-page-name (name prop-name))})
-
-(defn- build-closed-values-tx [prop-name {:block/keys [uuid] :as property} property-db-ids uuid-maps icon-id]
-  (let [page-tx (db-property-util/build-property-hidden-page property)
-        page-id [:block/uuid (:block/uuid page-tx)]
-        closed-value-page-uuids? (contains? #{:page :date} (get-in property [:block/schema :type]))
-        closed-value-blocks-tx
-        (if closed-value-page-uuids?
-          (map #(hash-map :block/uuid (translate-property-value (:value %) uuid-maps))
-               (:closed-values property))
-          (map (fn [{:keys [value icon description uuid]}]
-                 (db-property-util/build-closed-value-block
-                  uuid value page-id property {:icon-id icon-id
-                                               :icon icon
-                                               :description description}))
-               (:closed-values property)))
-        property-schema (assoc (:block/schema property)
-                               :values (mapv :block/uuid closed-value-blocks-tx))
-        property-tx (sqlite-util/build-new-property (->property-tx prop-name property-schema uuid property-db-ids))]
-    (into [property-tx page-tx]
-          (when-not closed-value-page-uuids? closed-value-blocks-tx))))
-
 (defn create-blocks-tx
   "Given an EDN map for defining pages, blocks and properties, this creates a
   vector of transactable data for use with d/transact!. The blocks that can be created
@@ -169,7 +141,7 @@
        :block/content is required and :properties can be passed to define block properties
    * :properties - This is a map to configure properties where the keys are property names
      and the values are maps of datascript attributes e.g. `{:block/schema {:type :checkbox}}`.
-     Within `:block/schema`, closed values can be defined with :closed-values. The key takes
+     An additional key `:closed-values` is available to define closed values. The key takes
      a vec of maps containing keys :uuid, :value and :icon.
 
    The :properties for :pages-and-blocks is a map of property names to property
@@ -196,14 +168,20 @@
                            (mapcat
                             (fn [[prop-name uuid]]
                               (if (get-in properties [prop-name :closed-values])
-                                (build-closed-values-tx prop-name
-                                                        (assoc (get properties prop-name)
-                                                               :block/uuid uuid)
-                                                        property-db-ids
-                                                        uuid-maps
-                                                        (get-in options [:property-uuids :icon]))
+                                (db-property-util/build-closed-values
+                                 prop-name
+                                 (assoc (get properties prop-name) :block/uuid uuid)
+                                 {:icon-id
+                                  (get-in options [:property-uuids :icon])
+                                  :translate-closed-page-value-fn
+                                  #(hash-map :block/uuid (translate-property-value (:value %) uuid-maps))
+                                  :property-attributes
+                                  {:db/id (or (property-db-ids (name prop-name))
+                                              (throw (ex-info "No :db/id for property" {:property prop-name})))}})
                                 [(sqlite-util/build-new-property
-                                  (merge (->property-tx prop-name (get-in properties [prop-name :block/schema]) uuid property-db-ids)
+                                  (merge (db-property-util/new-property-tx prop-name (get-in properties [prop-name :block/schema]) uuid)
+                                         {:db/id (or (property-db-ids (name prop-name))
+                                                     (throw (ex-info "No :db/id for property" {:property prop-name})))}
                                          (when-let [props (not-empty (get-in properties [prop-name :properties]))]
                                            {:block/properties (->block-properties-tx props uuid-maps)
                                             :block/refs (build-property-refs props property-db-ids)})))]))
