@@ -5,10 +5,10 @@
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
             [frontend.handler.property.util :as pu]
-            [frontend.state]
-            [frontend.config]
+            [frontend.state :as state]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.editor :as editor-handler]))
+            [frontend.handler.editor :as editor-handler]
+            [frontend.components.property.value :as component-pv]))
 
 (def repo test-helper/test-db-name-db-version)
 
@@ -281,9 +281,21 @@
             (is (nil? (db/entity [:block/uuid block-id])))
             (is (= 2 (count (:values (:block/schema (db/entity [:block/name k]))))))))))))
 
-;; others
-;; get-property-block-created-block
 ;; property-create-new-block
+;; get-property-block-created-block
+(deftest text-block-test
+  (testing "Add property and create a block value"
+    (let [repo (state/get-current-repo)
+          fb (db/entity [:block/uuid fbid])
+          k "property-1"]
+      ;; add property
+      (db-property-handler/upsert-property! repo k {:type :default} {})
+      (let [property (db/entity [:block/name k])
+            last-block-id (component-pv/create-new-block! fb property "Block content")
+            {:keys [from-block-id from-property-id]} (db-property-handler/get-property-block-created-block [:block/uuid last-block-id])]
+        (is (= from-block-id (:db/id fb)))
+        (is (= from-property-id (:db/id property)))))))
+
 ;; convert-property-input-string
 ;; replace-key-with-id
 ;; collapse-expand-property! TODO
