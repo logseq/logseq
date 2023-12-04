@@ -39,7 +39,7 @@
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
                   :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.54"}
                                 org.clojure/tools.namespace      {:mvn/version "0.2.11"}
-                                cider/cider-nrepl                {:mvn/version "0.30.0"}
+                                cider/cider-nrepl                {:mvn/version "0.44.0"}
                                 org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}
                                 tortue/spy                       {:mvn/version "2.14.0"}}
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
@@ -50,7 +50,7 @@
                                 pjstadig/humane-test-output      {:mvn/version "0.11.0"}
                                 org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}
                                 tortue/spy                       {:mvn/version "2.14.0"}
-                                cider/cider-nrepl                {:mvn/version "0.30.0"}}
+                                cider/cider-nrepl                {:mvn/version "0.44.0"}}
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
 
            :bench {:extra-paths ["src/bench/"]

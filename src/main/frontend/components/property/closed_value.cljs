@@ -133,7 +133,7 @@
         (assoc opts
                :delete-choice
                (fn []
-                 (db-property-handler/delete-closed-value property block)
+                 (db-property-handler/delete-closed-value! property block)
                  (swap! *property-schema update :values (fn [vs] (vec (remove #(= uuid %) vs)))))
                :update-icon
                (fn [icon]
