@@ -312,6 +312,7 @@
                                                                        editor-handler/wrap-parse-block
 
                                                                        {})]
+    (exit-edit-property)
     (editor-handler/edit-block! (db/entity [:block/uuid last-block-id]) :max last-block-id)))
 
 (defn create-new-block-from-template!
