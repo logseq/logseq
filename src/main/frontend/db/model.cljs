@@ -1191,7 +1191,7 @@ independent of format as format specific heading characters are stripped"
 (defn get-all-properties
   "Returns a seq of property name strings"
   []
-  (if (react/db-graph?)
+  (if (config/db-based-graph? (state/get-current-repo))
     (db-based-get-all-properties)
     (map name (file-based-get-all-properties))))
 
@@ -1552,7 +1552,7 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-whiteboard-id-nonces
   [repo page-name]
-  (let [key (if (react/db-graph?)
+  (let [key (if (config/db-based-graph? repo)
               (:block/uuid (db-utils/entity [:block/name "logseq.tldraw.shape"]))
               :logseq.tldraw.shape)
         page (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])]

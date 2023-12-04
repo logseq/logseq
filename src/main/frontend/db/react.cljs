@@ -380,7 +380,8 @@
       (recur))
     chan))
 
-(defn db-graph?
-  "Whether the current graph is db-only"
-  []
-  (= "db" (:db/type (db-utils/entity :db/type))))
+(comment
+  (defn db-graph?
+    "Whether the current graph is db-only"
+    []
+    (= "db" (:db/type (db-utils/entity :db/type)))))
