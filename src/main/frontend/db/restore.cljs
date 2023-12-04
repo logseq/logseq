@@ -133,10 +133,6 @@
     ;; TODO: Store schema in sqlite
     ;; (db-migrate/migrate attached-db)
 
-    (d/transact! conn [(react/kv :db/type "db")
-                       {:schema/version db-schema/version}]
-                 {:skip-persist? true})
-
     (js/setTimeout
      (fn []
        (p/let [other-data (persist-db/<fetch-blocks-excluding repo (map :uuid journal-blocks))

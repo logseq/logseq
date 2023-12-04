@@ -62,11 +62,7 @@
   (when-let [result-atom (get-in @query-state [k :result])]
     (reset! result-atom new-result)))
 
-(defn kv
-  [key value]
-  {:db/id -1
-   :db/ident key
-   key value})
+(def kv conn/kv)
 
 (defn remove-key!
   [repo-url key]
@@ -383,4 +379,4 @@
 (defn db-graph?
   "Whether the current graph is db-only"
   []
-  (= "db" (sub-key-value :db/type)))
+  (= "db" (:db/type (db-utils/entity :db/type))))
