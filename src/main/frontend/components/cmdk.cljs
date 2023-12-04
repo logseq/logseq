@@ -274,9 +274,10 @@
   (let [!input (::input state)
         !results (::results state)
         recent-searches (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
-        recent-pages (->> (keep (fn [page]
+        recent-pages (->> (filter string? (db/get-key-value :recent/pages))
+                          (keep (fn [page]
                                   (when-let [page-entity (db/entity [:block/name (util/page-name-sanity-lc page)])]
-                                    {:type :page :data (:block/original-name page-entity)})) (db/get-key-value :recent/pages))
+                                    {:type :page :data (:block/original-name page-entity)})))
                           vec)]
     (swap! !results assoc-in [group :status] :loading)
     (let [items (->> (concat recent-searches recent-pages)
@@ -664,8 +665,8 @@
      (shui/shortcut "/" context)
      [:div "to filter search results"]]
     [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
-     (shui/shortcut "mod enter" context)
-     [:div "to open search in the sidebar"]]]))
+     (shui/shortcut ["mod" "enter"] context)
+     [:div "to open search in the sidebar"]]])  )
 
 (rum/defcs tip <
   {:init (fn [state]
