@@ -296,9 +296,51 @@
         (is (= from-property-id (:db/id property)))))))
 
 ;; convert-property-input-string
-;; replace-key-with-id
-;; collapse-expand-property! TODO
+(deftest convert-property-input-string
+  (testing "Convert property input string according to its schema type"
+    (let [test-uuid (random-uuid)]
+      (are [x y]
+          (= (let [[schema-type value] x]
+               (db-property-handler/convert-property-input-string schema-type value)) y)
+        [:number "1"] 1
+        [:number "1.2"] 1.2
+        [:page (str test-uuid)] test-uuid
+        [:url test-uuid] test-uuid
+        [:date test-uuid] test-uuid
+        [:any test-uuid] test-uuid
+        [nil test-uuid] test-uuid))))
 
+;; replace-key-with-id
+(deftest replace-key-with-id-test
+  (db-property-handler/upsert-property! repo "property 1" {:type :default} {})
+  (db-property-handler/upsert-property! repo "property 2" {:type :default} {})
+  (testing "Replace property key with its uuid"
+    (let [result (db-property-handler/replace-key-with-id {"property 1" "value 1"
+                                                           "property 2" "value 2"})]
+      (is (every? uuid? (keys result))))
+    )
+  (testing "Throw an error if a property doesn't exists"
+    (is (thrown? js/Error (db-property-handler/replace-key-with-id {"property not exists yet" "value 1"})))))
+
+;; collapse-expand-property!
+(deftest collapse-expand-property-test
+  (testing "Collapse and expand property"
+    (let [repo (state/get-current-repo)
+          fb (db/entity [:block/uuid fbid])
+          k "property-1"]
+      ;; add property
+      (db-property-handler/upsert-property! repo k {:type :default} {})
+      (let [property (db/entity [:block/name k])]
+        (db-property-handler/create-property-text-block! fb property "Block content" editor-handler/wrap-parse-block {})
+        ;; collapse property-1
+        (db-property-handler/collapse-expand-property! repo fb property true)
+        (is (=
+             [(:db/id property)]
+             (map :db/id (:block/collapsed-properties (db/entity [:block/uuid fbid])))))
+
+        ;; expand property-1
+        (db-property-handler/collapse-expand-property! repo fb property false)
+        (is (nil? (:block/collapsed-properties (db/entity [:block/uuid fbid]))))))))
 
 ;; template (TBD, template implementation not settle down yet)
 ;; property-create-new-block-from-template
