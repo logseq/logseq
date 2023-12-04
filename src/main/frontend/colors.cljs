@@ -85,5 +85,6 @@
                        (str/replace "hsl(" "")
                        (str/replace ")" "")
                        (str/split ","))]
-    (let [hsl-color (map js/parseFloat hsl-color)]
+    (when-let [hsl-color (and (not (str/blank? (first hsl-color)))
+                           (map js/parseFloat hsl-color))]
       (apply util/hsl2hex hsl-color))))

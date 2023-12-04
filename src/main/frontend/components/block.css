@@ -479,6 +479,7 @@
 
 .color-level {
   background-color: or(--ls-right-sidebar-content-background, --lx-gray-02, --color-level-1);
+
   .dark & {
     background-color: or(--ls-right-sidebar-content-background, --lx-gray-01, --color-level-1);
   }
@@ -738,5 +739,21 @@ html.is-mac {
     .block-content {
       cursor: pointer;
     }
+  }
+}
+
+.references-blocks {
+  &-wrap {
+    .foldable-title {
+      @apply ml-3;
+
+      .block-control {
+        @apply relative right-[-5px] top-[1px];
+      }
+    }
+  }
+
+  &-item {
+    @apply bg-gray-03 rounded p-4;
   }
 }
