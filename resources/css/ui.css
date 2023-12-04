@@ -340,10 +340,6 @@
   margin-left: auto;
 }
 
-.mr-1 {
-  margin-right: .25rem;
-}
-
 .mr-2 {
   margin-right: .5rem;
 }
@@ -924,6 +920,10 @@
 
 .bg-background\/80 {
   background-color: hsl(var(--background) / .8);
+}
+
+.bg-background\/90 {
+  background-color: hsl(var(--background) / .9);
 }
 
 .bg-border {

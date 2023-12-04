@@ -3,6 +3,7 @@
             [daiquiri.interpreter :refer [interpret]]
             [medley.core :as medley]
             [logseq.shui.util :as util]
+            [promesa.core :as p]
             [clojure.string :as string]))
 
 ;; provider
@@ -98,8 +99,8 @@
 
 (rum/defc alert-inner
   [config]
-  (let [{:keys [id title description content footer open?]} config
-        props (dissoc config :id :title :description :content :footer :open? :alert?)]
+  (let [{:keys [id title description content footer deferred open?]} config
+        props (dissoc config :id :title :description :content :footer :deferred :open? :alert?)]
 
     (rum/use-effect!
       (fn []
@@ -120,9 +121,16 @@
         (alert-dialog-footer
           (if footer
             footer
-            [:<>
-             (alert-dialog-cancel "Cancel")
-             (alert-dialog-action "OK")]))))))
+            [:<> (alert-dialog-action {:on-click #(p/resolve! deferred true)} "OK")]))))))
+
+(rum/defc confirm-inner
+  [config]
+  (let [{:keys [deferred]} config]
+    (alert-inner
+      (assoc config :footer
+             [:<>
+              (alert-dialog-cancel {:on-click #(p/reject! deferred false)} "Cancel")
+              (alert-dialog-action {:on-click #(p/resolve! deferred true)} "OK")]))))
 
 (rum/defc install-modals
   < rum/static
@@ -135,8 +143,12 @@
             config (interpret-vals config
                      [:title :description :content :footer]
                      {:id id})]
-        (if alert?
+        (case alert?
+          :default
           (alert-inner config)
+          :confirm
+          (confirm-inner config)
+          ;; modal
           (modal-inner config))))))
 
 ;; apis
@@ -151,8 +163,14 @@
 
 (defn alert!
   [content-or-config & config']
-  (open! content-or-config
-    (assoc (first config') :alert? true)))
+  (let [deferred (p/deferred)]
+    (open! content-or-config
+      (merge {:alert? :default :deferred deferred} (first config')))
+    (p/promise deferred)))
+
+(defn confirm!
+  [content-or-config & config']
+  (alert! content-or-config (assoc (first config') :alert? :confirm)))
 
 (defn close! [id]
   (update-modal! id :open? false))

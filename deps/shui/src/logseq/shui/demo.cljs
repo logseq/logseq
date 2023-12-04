@@ -2,6 +2,7 @@
   (:require [rum.core :as rum]
             [logseq.shui.ui :as ui]
             [logseq.shui.form.core :refer [yup yup-resolver] :as form-core]
+            [promesa.core :as p]
             [logseq.shui.dialog.core :as dialog-core]
             [cljs-bean.core :as bean]))
 
@@ -333,12 +334,26 @@
 
       (ui/button
         {:class    "primary-yellow"
-         :on-click #(dialog-core/alert!
-                      "a alert dialog from `alert!`"
-                      {:title [:div.flex.flex-row.space-x-2.items-center
-                               (ui/tabler-icon "alert-triangle" {:size 18})
-                               [:span "Alert"]]})}
-        "Imperative API: alert!")])
+         :on-click (fn []
+                     (-> (dialog-core/alert!
+                           "a alert dialog from `alert!`"
+                           {:title [:div.flex.flex-row.space-x-2.items-center
+                                    (ui/tabler-icon "alert-triangle" {:size 18})
+                                    [:span "Alert"]]})
+                       (p/then #(js/console.log "=> alert (promise): " %))))}
+        "Imperative API: alert!")
+
+      (ui/button
+        {:class    "primary-green"
+         :on-click (fn []
+                     (-> (dialog-core/confirm!
+                           "a alert dialog from `confirm!`"
+                           {:title [:div.flex.flex-row.space-x-2.items-center
+                                    (ui/tabler-icon "alert-triangle" {:size 18})
+                                    [:span "Confirm"]]})
+                       (p/then #(js/console.log "=> confirm (promise): " %))
+                       (p/catch #(js/console.log "=> confirm (promise): " %))))}
+        "Imperative API: confirm!")])
 
    ;; Alert
    (section-item "Alert"
