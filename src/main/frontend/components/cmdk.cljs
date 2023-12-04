@@ -26,7 +26,10 @@
     [logseq.graph-parser.util.block-ref :as block-ref]
     [logseq.graph-parser.util :as gp-util]
     [logseq.shui.button.v2 :as button]
-    [frontend.modules.shortcut.utils :as shortcut-utils]))
+    [frontend.modules.shortcut.utils :as shortcut-utils]
+    [frontend.config :as config]
+    [logseq.common.path :as path]
+    [electron.ipc :as ipc]))
 
 (defn translate [t {:keys [id desc]}]
   (when id
@@ -400,6 +403,18 @@
     (editor-handler/open-block-in-sidebar! block-uuid)
     (state/close-modal!)))
 
+(defn- open-file
+  [file-path]
+  (if (or (string/ends-with? file-path ".edn")
+          (string/ends-with? file-path ".js")
+          (string/ends-with? file-path ".css"))
+    (route-handler/redirect! {:to :file
+                              :path-params {:path file-path}})
+    ;; open this file in directory
+    (when (util/electron?)
+      (let [file-fpath (path/path-join (config/get-repo-dir (state/get-current-repo)) file-path)]
+        (ipc/ipc "openFileInFolder" file-fpath)))))
+
 (defmethod handle-action :open [_ state event]
   (when-let [item (some-> state state->highlighted-item)]
     (let [page? (boolean (:source-page item))
@@ -410,8 +425,7 @@
           graph-view? (= search-mode :graph)]
       (cond
         (:file-path item) (do
-                            (route-handler/redirect! {:to :file
-                                                      :path-params {:path (:file-path item)}})
+                            (open-file (:file-path item))
                             (state/close-modal!))
         (and graph-view? page? (not shift?)) (do
                                                (state/add-graph-search-filter! @(::input state))
