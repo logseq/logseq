@@ -642,11 +642,13 @@
 
 (defn upsert-closed-value
   "id should be a block UUID or nil"
-  [property {:keys [id value icon description]}]
+  [property {:keys [id value icon description]
+             :or {description ""}}]
   (assert (or (nil? id) (uuid? id)))
   (let [property-type (get-in property [:block/schema :type] :default)]
     (when (contains? db-property-type/closed-value-property-types property-type)
-      (let [value (if (string? value) (string/trim value) value)
+      (let [property (db/entity (:db/id property))
+            value (if (string? value) (string/trim value) value)
             property-schema (:block/schema property)
             closed-values (:values property-schema)
             block-values (map (fn [id] (db/entity [:block/uuid id])) closed-values)
@@ -662,9 +664,6 @@
                               (get (built-in-validation-schemas property {:new-closed-value? true}) property-type)
                               resolved-value)]
         (cond
-          (nil? resolved-value)
-          nil
-
           (some (fn [b] (and (= resolved-value (or (db-pu/property-value-when-closed b)
                                                    (:block/uuid b)))
                              (not= id (:block/uuid b)))) block-values)
@@ -676,6 +675,9 @@
           (do
             (notification/show! validate-message :warning)
             :value-invalid)
+
+          (nil? resolved-value)
+          nil
 
           (:block/name value-block)             ; page
           (let [new-values (vec (conj closed-values value))]
@@ -762,16 +764,17 @@
                     {:outliner-op :insert-blocks})
       new-value-ids)))
 
-(defn delete-closed-value
-  [property item]
-  (if (seq (:block/_refs item))
+(defn delete-closed-value!
+  [property value-block]
+  (if (seq (:block/_refs value-block))
     (notification/show! "The choice can't be deleted because it's still used." :warning)
-    (let [schema (:block/schema property)
-          tx-data [[:db/retractEntity (:db/id item)]
+    (let [property (db/entity (:db/id property))
+          schema (:block/schema property)
+          tx-data [[:db/retractEntity (:db/id value-block)]
                    {:db/id (:db/id property)
                     :block/schema (update schema :values
                                           (fn [values]
-                                            (vec (remove #{(:block/uuid item)} values))))}]]
+                                            (vec (remove #{(:block/uuid value-block)} values))))}]]
       (db/transact! tx-data))))
 
 (defn get-property-block-created-block
