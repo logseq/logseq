@@ -480,8 +480,7 @@ Some bindings in this fn:
   (let [forms (set (flatten q))
         syms ['?b '?p 'not]
         [b? p? not?] (-> (set/intersection (set syms) forms)
-                         (map syms))
-        or? (contains? (set (flatten form)) 'or)]
+                         (map syms))]
     (cond
       not?
       (cond
@@ -493,16 +492,6 @@ Some bindings in this fn:
 
         p?
         (concat [['?p :block/name]] q)
-
-        :else
-        q)
-
-      or?
-      (cond
-        (->> (flatten form)
-             (remove (every-pred string? page-ref/page-ref?))
-             (some string?))            ; block full-text search
-        (concat [['?b :block/content '?content]] [q])
 
         :else
         q)
