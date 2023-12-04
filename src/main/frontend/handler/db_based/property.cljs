@@ -12,6 +12,7 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.frontend.property.util :as db-property-util]
             [malli.util :as mu]
             [malli.error :as me]
             [logseq.graph-parser.util.page-ref :as page-ref]
@@ -636,24 +637,11 @@
     {:page page-tx
      :blocks [new-block]}))
 
-(defn- closed-value-new-block
-  [page-id block-id value property]
-  {:block/type #{"closed value"}
-   :block/format :markdown
-   :block/uuid block-id
-   :block/page page-id
-   :block/metadata {:created-from-property (:block/uuid property)}
-   :block/schema {:value value}
-   :block/parent page-id})
-
 (defn- get-property-hidden-page
   [property]
-  (let [page-name (str "$$$" (:block/uuid property))
-        page-entity (db/entity [:block/name page-name])]
-    (or page-entity
-        (-> (block/page-name->map page-name true)
-            (assoc :block/type #{"hidden"}
-                   :block/format :markdown)))))
+  (let [page-name (str db-property-util/hidden-page-name-prefix (:block/uuid property))]
+    (or (db/entity [:block/name page-name])
+        (db-property-util/build-property-hidden-page property))))
 
 (defn upsert-closed-value
   "id should be a block UUID or nil"
@@ -720,16 +708,10 @@
                           (let [page (get-property-hidden-page property)
                                 page-tx (when-not (e/entity? page) page)
                                 page-id [:block/uuid (:block/uuid page)]
-                                new-block (cond->
-                                           (closed-value-new-block page-id block-id resolved-value property)
-                                            icon
-                                            (assoc :block/properties {icon-id icon})
-
-                                            description
-                                            (update :block/schema assoc :description description)
-
-                                            true
-                                            sqlite-util/block-with-timestamps)
+                                new-block (db-property-util/build-closed-value-block
+                                           block-id resolved-value page-id property {:icon-id icon-id
+                                                                                     :icon icon
+                                                                                     :description description})
                                 new-values (vec (conj closed-values block-id))]
                             (->> (cons page-tx [new-block
                                                 {:db/id (:db/id property)
@@ -749,11 +731,12 @@
           page-tx (when-not (e/entity? page) page)
           page-id (:block/uuid page)
           closed-value-blocks (map (fn [value]
-                                     (sqlite-util/block-with-timestamps
-                                      (closed-value-new-block [:block/uuid page-id]
-                                                              (db/new-block-id)
-                                                              value
-                                                              property)))
+                                     (db-property-util/build-closed-value-block
+                                      (db/new-block-id)
+                                      value
+                                      [:block/uuid page-id]
+                                      property
+                                      {}))
                                    (remove string/blank? values))
           value->block-id (zipmap
                            (map #(get-in % [:block/schema :value]) closed-value-blocks)
