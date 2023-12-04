@@ -7,8 +7,7 @@
             [frontend.handler.property.util :as pu]
             [frontend.state :as state]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.components.property.value :as component-pv]))
+            [frontend.handler.editor :as editor-handler]))
 
 (def repo test-helper/test-db-name-db-version)
 
@@ -291,7 +290,7 @@
       ;; add property
       (db-property-handler/upsert-property! repo k {:type :default} {})
       (let [property (db/entity [:block/name k])
-            last-block-id (component-pv/create-new-block! fb property "Block content")
+            last-block-id (db-property-handler/create-property-text-block! fb property "Block content" editor-handler/wrap-parse-block {})
             {:keys [from-block-id from-property-id]} (db-property-handler/get-property-block-created-block [:block/uuid last-block-id])]
         (is (= from-block-id (:db/id fb)))
         (is (= from-property-id (:db/id property)))))))

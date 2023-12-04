@@ -308,13 +308,11 @@
 
 (defn create-new-block!
   [block property value]
-  (let [repo (state/get-current-repo)
-        {:keys [page blocks]} (db-property-handler/property-create-new-block block property value editor-handler/wrap-parse-block)
-        last-block-id (:block/uuid (last blocks))]
-    (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})
-    (add-property! block (:block/original-name property) (:block/uuid (first blocks)))
-    (editor-handler/edit-block! (db/entity [:block/uuid last-block-id]) :max last-block-id)
-    last-block-id))
+  (let [last-block-id (db-property-handler/create-property-text-block! block property value
+                                                                       editor-handler/wrap-parse-block
+
+                                                                       {})]
+    (editor-handler/edit-block! (db/entity [:block/uuid last-block-id]) :max last-block-id)))
 
 (defn create-new-block-from-template!
   "`template`: tag block"

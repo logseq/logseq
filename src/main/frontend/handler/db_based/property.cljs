@@ -592,6 +592,21 @@
     {:page page-tx
      :blocks [parent child-1]}))
 
+(defn create-property-text-block!
+  [block property value parse-block {:keys [class-schema?]}]
+  (let [repo (state/get-current-repo)
+        {:keys [page blocks]} (property-create-new-block block property value parse-block)
+        first-block (first blocks)
+        last-block-id (:block/uuid (last blocks))
+        class? (contains? (:block/type block) "class")
+        property-key (:block/original-name property)]
+    (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})
+    (when property-key
+      (if (and class? class-schema?)
+        (class-add-property! repo (:block/uuid block) property-key)
+        (set-block-property! repo (:block/uuid block) property-key (:block/uuid first-block) {})))
+    last-block-id))
+
 (defn property-create-new-block-from-template
   [block property template]
   (let [current-page-id (:block/uuid (or (:block/page block) block))
