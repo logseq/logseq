@@ -117,7 +117,7 @@
    TODO: Add other options"
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid rename? persist-op?]
+  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid rename? persist-op? whiteboard? class?]
            :or   {redirect?           true
                   create-first-block? true
                   rename?             false
@@ -172,7 +172,7 @@
          (when (seq txs)
            (db/transact! repo txs {:persist-op? persist-op?})))
 
-       (when create-first-block?
+       (when (and create-first-block? (not (or whiteboard? class?)))
          (when (or
                 (db/page-empty? repo (:db/id (db/entity [:block/name page-name])))
                 (create-title-property? repo journal? page-name))

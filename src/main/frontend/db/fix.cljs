@@ -136,12 +136,14 @@
        (concat tx right-tx)))
    conflicts))
 
+(defn get-conflicts
+  [db page-id]
+  (let [parent-left->es (build-parent-left->es db page-id)]
+    (filter #(> (count (second %)) 1) parent-left->es)))
+
 (defn loop-fix-conflicts
   [repo db page-id transact-opts]
-  (let [get-conflicts (fn [db]
-                        (let [parent-left->es (build-parent-left->es db page-id)]
-                          (filter #(> (count (second %)) 1) parent-left->es)))
-        conflicts (get-conflicts db)
+  (let [conflicts (get-conflicts db page-id)
         fix-conflicts-tx (when (seq conflicts)
                            (fix-parent-left-conflicts conflicts))]
     (when (seq fix-conflicts-tx)
@@ -149,7 +151,7 @@
       (util/pprint fix-conflicts-tx)
       (db/transact! repo fix-conflicts-tx transact-opts)
       (let [db (db/get-db repo)]
-        (when (seq (get-conflicts db))
+        (when (seq (get-conflicts db page-id))
           (loop-fix-conflicts repo db page-id transact-opts))))))
 
 (defn fix-page-if-broken!

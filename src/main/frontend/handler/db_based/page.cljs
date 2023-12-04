@@ -60,7 +60,7 @@
                      refs)]
         tx-data))))
 
-(defn based-merge-pages!
+(defn- based-merge-pages!
   [from-page-name to-page-name persist-op?]
   (when (and (db/page-exists? from-page-name)
              (db/page-exists? to-page-name)
@@ -114,30 +114,39 @@
          old-page-name (util/page-name-sanity-lc old-name)
          page-e (db/entity [:block/name old-page-name])
          new-page-name (util/page-name-sanity-lc new-name)
+         new-page-e (db/entity [:block/name new-page-name])
          name-changed? (not= old-name new-name)]
-     (if (and old-name
-              new-name
-              (not (string/blank? new-name))
-              name-changed?)
-       (cond
-         (= old-page-name new-page-name) ; case changed
-         (db/transact! repo
-                       [{:db/id (:db/id page-e)
-                         :block/original-name new-name}]
-                       {:persist-op? persist-op?})
+     (cond
+       (string/blank? new-name)
+       (do
+         (notification/show! "Please use a valid name, empty name is not allowed!" :error)
+         :invalid-empty-name)
 
-         (and (not= old-page-name new-page-name)
-              (db/entity [:block/name new-page-name])) ; merge page
-         (based-merge-pages! old-page-name new-page-name persist-op?)
+       (and page-e new-page-e
+            (or (contains? (:block/type page-e) "whiteboard")
+                (contains? (:block/type new-page-e) "whiteboard")))
+       (do
+         (notification/show! "Can't merge whiteboard pages" :error)
+         :merge-whiteboard-pages)
 
-         :else                          ; rename
-         (page-common-handler/create! new-name
-                                      {:rename? true
-                                       :uuid (:block/uuid page-e)
-                                       :redirect? redirect?
-                                       :create-first-block? false
-                                       :persist-op? persist-op?}))
+       (and old-name new-name name-changed?)
+       (do
+         (cond
+          (= old-page-name new-page-name) ; case changed
+          (db/transact! repo
+                        [{:db/id (:db/id page-e)
+                          :block/original-name new-name}]
+                        {:persist-op? persist-op?})
 
-       (when (string/blank? new-name)
-         (notification/show! "Please use a valid name, empty name is not allowed!" :error)))
-     (ui-handler/re-render-root!))))
+          (and (not= old-page-name new-page-name)
+               (db/entity [:block/name new-page-name])) ; merge page
+          (based-merge-pages! old-page-name new-page-name persist-op?)
+
+          :else                          ; rename
+          (page-common-handler/create! new-name
+                                       {:rename? true
+                                        :uuid (:block/uuid page-e)
+                                        :redirect? redirect?
+                                        :create-first-block? false
+                                        :persist-op? persist-op?}))
+         (ui-handler/re-render-root!))))))
