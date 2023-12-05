@@ -12,9 +12,7 @@
             [frontend.util :as util :refer [react]]
             [cljs.spec.alpha :as s]
             [clojure.core.async :as async]
-            [clojure.set :as set]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [clojure.string :as string]))
+            [clojure.set :as set]))
 
 ;;; keywords specs for reactive query, used by `react/q` calls
 ;; ::block
