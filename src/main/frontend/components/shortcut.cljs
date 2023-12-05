@@ -152,9 +152,13 @@
 
 (rum/defc shortcut-desc-label
   [id binding-map]
-  (when-let [id' (and id binding-map (some-> (str id) (string/replace "plugin." "")))]
-    [:span {:title (str id' "#" (some-> (:handler-id binding-map) (name)))}
-     [:span.pl-1 (dh/get-shortcut-desc (assoc binding-map :id id))]]))
+  (when-let [id' (and id binding-map (str id))]
+    (let [plugin? (string/starts-with? id' ":plugin.")
+          id' (if plugin? (some-> id' (string/replace "plugin." "")) id')
+          plugin-id (when plugin? (namespace id))]
+      [:span {:title (str id' "#" (some-> (:handler-id binding-map) (name)))}
+       [:span.px-1 (dh/get-shortcut-desc (assoc binding-map :id id))]
+       (when plugin? [:code plugin-id])])))
 
 (defn- open-customize-shortcut-dialog!
   [id]
@@ -473,5 +477,4 @@
                         (not unset?)
                         [:code.flex.items-center.bg-transparent
                          (shui/shortcut-v1 (string/join " | " (map #(dh/binding-for-display id %) binding))
-                                           (make-shui-context)
-                                           {:size :md})])]]))))])])]]))
+                           nil {:size :md})])]]))))])])]]))
