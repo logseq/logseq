@@ -10,6 +10,7 @@
             [frontend.components.property.util :as pu-component]
             [frontend.handler.property :as property-handler]
             [frontend.handler.db-based.property :as db-property-handler]
+            [frontend.config :as config]
             [frontend.components.property.value :as property-value]
             [frontend.db :as db]
             [frontend.state :as state]
@@ -31,12 +32,14 @@
       (if icon
         (icon-component/icon icon)
         [:span.bullet-container.cursor [:span.bullet]])])
-   (fn [{:keys [toggle-fn]}]
-     [:div.p-4
-      (icon-component/icon-search
-       {:on-chosen (fn [e icon]
-                     (on-chosen e icon)
-                     (toggle-fn))})])
+   (if config/publishing?
+     (constantly [])
+     (fn [{:keys [toggle-fn]}]
+       [:div.p-4
+        (icon-component/icon-search
+         {:on-chosen (fn [e icon]
+                       (on-chosen e icon)
+                       (toggle-fn))})]))
    {:modal-class (util/hiccup->class
                   "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}))
 
@@ -138,16 +141,18 @@
                :update-icon
                (fn [icon]
                  (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :icon icon)))))
-     (fn [opts]
-       (item-config
-        property
-        block
-        (assoc opts :on-save
-               (fn [value icon description]
-                 (upsert-closed-value! property {:id uuid
-                                                 :value value
-                                                 :description description
-                                                 :icon icon})))))
+     (if config/publishing?
+       (constantly [])
+       (fn [opts]
+         (item-config
+          property
+          block
+          (assoc opts :on-save
+                 (fn [value icon description]
+                   (upsert-closed-value! property {:id uuid
+                                                   :value value
+                                                   :description description
+                                                   :icon icon}))))))
      dropdown-opts)))
 
 (rum/defc add-existing-values
@@ -186,10 +191,12 @@
                                     (swap! *property-schema assoc :values new-values)
                                     (pu-component/update-property! property @*property-name @*property-schema)))}))
      (ui/dropdown
-      (fn [{:keys [toggle-fn]}]
-        [:a.fade-link.flex.flex-row.items-center.gap-1.leading-8 {:on-click toggle-fn}
-         (ui/icon "plus" {:size 16})
-         "Add choice"])
+      (if config/publishing?
+        (constantly [])
+        (fn [{:keys [toggle-fn]}]
+          [:a.fade-link.flex.flex-row.items-center.gap-1.leading-8 {:on-click toggle-fn}
+           (ui/icon "plus" {:size 16})
+           "Add choice"]))
       (fn [opts]
         (if (= :page property-type)
           (property-value/select-page property
@@ -204,6 +211,7 @@
                             (remove uuid?)
                             (remove string/blank?)
                             distinct)]
+
             (if (seq values)
               (add-existing-values property *property-schema values opts)
               (item-config

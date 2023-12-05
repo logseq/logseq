@@ -695,9 +695,9 @@
                    (empty? class->properties)
                    (not new-property?)
                    (not (:page-configure? opts)))
-      [:div.ls-properties-area (cond-> {}
+      [:div.ls-properties-area (cond-> {:class [(if class-schema? "class-properties" "page-properties")]}
                                  (:selected? opts)
-                                 (assoc :class "select-none"))
+                                 (update :class conj "select-none"))
        (properties-section block (if class-schema? properties own-properties) opts)
 
        (when (and (seq full-hidden-properties) (not class-schema?) (not config/publishing?))
