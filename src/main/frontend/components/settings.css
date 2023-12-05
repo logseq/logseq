@@ -481,7 +481,7 @@ svg.cmd {
 body[data-settings-tab=keymap] {
   .cp__settings-inner {
     > article {
-      @apply p-0;
+      @apply p-0 lg:w-[680px];
 
       > header {
         @apply p-4 pb-2 h-auto;

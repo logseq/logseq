@@ -1124,7 +1124,7 @@
 
     [:div#settings.cp__settings-main
      (settings-effect @*active)
-     [:div.cp__settings-inner {:class "min-h-[65dvh] max-h-[65dvh]"}
+     [:div.cp__settings-inner {:class "min-h-[65dvh] max-h-[70dvh]"}
       [:aside.md:w-64 {:style {:min-width "10rem"}}
        [:header.cp__settings-header
         [:h1.cp__settings-modal-title (t :settings)]]
