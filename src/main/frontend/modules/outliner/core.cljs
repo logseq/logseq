@@ -150,8 +150,8 @@
                                         (:block/macros block-entity)))))))
 
 (defn- create-linked-page-when-save
-  [txs-state block-entity m structured-tags?]
-  (if structured-tags?
+  [txs-state block-entity m tags-has-class?]
+  (if tags-has-class?
     (let [content (state/get-edit-content)
           linked-page (some-> content mldoc/extract-plain)
           sanity-linked-page (some-> linked-page util/page-name-sanity-lc)
@@ -304,7 +304,10 @@
           eid (or (:db/id (:data this))
                   (when-let [block-uuid (:block/uuid (:data this))] [:block/uuid block-uuid]))
           block-entity (db/entity eid)
-          structured-tags? (and db-based? (seq (:block/tags m)))]
+          tags-has-class? (and db-based?
+                               (some (fn [tag]
+                                       (contains? (:block/type (db/entity [:block/uuid (:block/uuid tag)])) "class"))
+                                     (:block/tags m)))]
       (when eid
         ;; Retract attributes to prepare for tx which rewrites block attributes
         (let [retract-attributes (when db-based?
@@ -332,7 +335,7 @@
         (swap! txs-state conj
                (dissoc m :db/other-tx)))
 
-      (create-linked-page-when-save txs-state block-entity m structured-tags?)
+      (create-linked-page-when-save txs-state block-entity m tags-has-class?)
 
       (rebuild-refs repo txs-state block-entity m)
 

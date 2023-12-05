@@ -35,7 +35,8 @@
             [promesa.core :as p]
             [logseq.common.path :as path]
             [frontend.handler.property.util :as pu]
-            [electron.ipc :as ipc]))
+            [electron.ipc :as ipc]
+            [frontend.context.i18n :refer [t]]))
 
 (def create! page-common-handler/create!)
 (def delete! page-common-handler/delete!)
@@ -209,7 +210,11 @@
       (fn [chosen e]
         (util/stop e)
         (state/clear-editor-action!)
-        (let [wrapped? (= page-ref/left-brackets (gp-util/safe-subs edit-content (- pos 2) pos))
+        (let [class? (string/starts-with? chosen (t :new-class))
+              chosen (-> chosen
+                         (string/replace-first (str (t :new-class) " ") "")
+                         (string/replace-first (str (t :new-page) " ") ""))
+              wrapped? (= page-ref/left-brackets (gp-util/safe-subs edit-content (- pos 2) pos))
               wrapped-tag (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
                             (page-ref/->page-ref chosen)
                             chosen)
@@ -228,10 +233,13 @@
                   (when-not tag-entity
                     (create! tag {:redirect? false
                                   :create-first-block? false
-                                  :class? true}))
-                  (let [tag-entity (or tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)]))]
-                    (db/transact! [[:db/add [:block/uuid (:block/uuid edit-block)] :block/tags (:db/id tag-entity)]
-                                   [:db/add [:block/uuid (:block/uuid edit-block)] :block/refs (:db/id tag-entity)]]))))))
+                                  :class? class?}))
+                  (when class?
+                    (let [repo (state/get-current-repo)
+                          tag-entity (or tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)]))
+                          tx-data [[:db/add [:block/uuid (:block/uuid edit-block)] :block/tags (:db/id tag-entity)]
+                                   [:db/add [:block/uuid (:block/uuid edit-block)] :block/refs (:db/id tag-entity)]]]
+                      (db/transact! repo tx-data {:outliner-op :save-block})))))))
 
           (editor-handler/insert-command! id
                                           (str "#" wrapped-tag)

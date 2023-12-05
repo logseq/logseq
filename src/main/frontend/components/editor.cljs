@@ -2,7 +2,6 @@
   (:require [clojure.string :as string]
             [frontend.commands :as commands
              :refer [*first-command-group *matched-block-commands *matched-commands]]
-            [frontend.components.block :as block]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.svg :as svg]
             [frontend.components.search :as search]
@@ -101,9 +100,6 @@
                                                       :command :block-commands}))
         :class     "black"}))))
 
-(defn- in-sidebar? [el]
-  (not (.contains (.getElementById js/document "left-container") el)))
-
 (defn- page-on-chosen-handler
   [embed? input id q pos format]
   (if embed?
@@ -143,7 +139,6 @@
         (when input
           (let [current-pos (cursor/pos input)
                 edit-content (state/sub-edit-content)
-                sidebar? (in-sidebar? input)
                 q (or
                    (editor-handler/get-selected-text)
                    (when (= action :page-search-hashtag)
@@ -151,11 +146,9 @@
                    (when (> (count edit-content) current-pos)
                      (gp-util/safe-subs edit-content pos current-pos))
                    "")
-                matched-pages (if db-tag?
-                                (editor-handler/get-matched-classes q)
-                                ;; FIXME: display refed pages recentedly or frequencyly used
-                                (when-not (string/blank? q)
-                                  (editor-handler/get-matched-pages q)))
+                ;; FIXME: display refed pages recentedly or frequencyly used
+                matched-pages (when-not (string/blank? q)
+                                (editor-handler/get-matched-pages q))
                 matched-pages (cond
                                 (contains? (set (map util/page-name-sanity-lc matched-pages))
                                            (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched
@@ -163,16 +156,18 @@
                                            [(count m) m])
                                          matched-pages)
 
-                                (and (string/blank? q) (not db-tag?))
+                                (string/blank? q)
                                 nil
 
-                                (and (string/blank? q) db-tag?)
-                                matched-pages
-
                                 (empty? matched-pages)
-                                (cons q matched-pages)
+                                (when-not (db/page-exists? q)
+                                  (if db-tag?
+                                    (concat [(str (t :new-page) " " q)
+                                             (str (t :new-class) " " q)]
+                                            matched-pages)
+                                    (cons (str (t :new-page) " " q) matched-pages)))
 
-                               ;; reorder, shortest and starts-with first.
+                                ;; reorder, shortest and starts-with first.
                                 :else
                                 (let [matched-pages (remove nil? matched-pages)
                                       matched-pages (sort-by
@@ -196,27 +191,14 @@
              (ui/auto-complete
               matched-pages
               {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
-               :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
-               :item-render (fn [page-name chosen?]
-                              [:div.preview-trigger-wrapper
-                               (block/page-preview-trigger
-                                {:children
-                                 [:div.flex
-                                  (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
-                                  [:div.flex.space-x-1
-                                   [:div (when-not (db/page-exists? page-name)
-                                           (if db-tag?
-                                             (t :new-class)
-                                             (t :new-page)))]
-                                   (search-handler/highlight-exact-query page-name q)]]
-                                 :open?           chosen?
-                                 :manual?         true
-                                 :fixed-position? true
-                                 :tippy-distance  24
-                                 :tippy-position  (if sidebar? "left" "right")}
-                                page-name)])
+               :on-enter    (fn []
+                              (page-handler/page-not-exists-handler input id q current-pos))
+               :item-render (fn [page-name _chosen?]
+                              [:div.flex
+                               (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
+                               (search-handler/highlight-exact-query page-name q)])
                :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
-                                                                          "Search for a class"
+                                                                          "Search for a page or a class"
                                                                           "Search for a page")]
                :class       "black"})]))))))
 
