@@ -15,8 +15,7 @@
             [frontend.util :as util]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.modules.shortcut.config :as shortcut-config]
-            [logseq.shui.core :as shui]
-            [frontend.shui :refer [make-shui-context]])
+            [logseq.shui.core :as shui])
   (:import [goog.events KeyHandler]))
 
 (defonce categories
