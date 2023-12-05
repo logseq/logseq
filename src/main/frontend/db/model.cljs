@@ -247,6 +247,27 @@
       db)
      (flatten))))
 
+(defn get-files-in
+  "Get all files in a directory, recursively
+
+   - dir will be normalized to end with '/'"
+  ([rpath]
+   (get-files-in (state/get-current-repo) rpath))
+  ([repo rpath]
+   (when-let [db (conn/get-db repo)]
+     (->>
+      (d/q
+       '[:find ?path
+         :in $ ?dir
+         :where
+         [?file :file/path ?path]
+         [(clojure.string/starts-with? ?path ?dir)]]
+       db
+       (if (string/ends-with? rpath "/")
+         rpath
+         (str rpath "/")))
+      (map first)))))
+
 (defn get-file
   ([path]
    (get-file (state/get-current-repo) path))

@@ -40,7 +40,7 @@
     (if-not (or (nil? pos) (zero? pos))
       [(subs fname 0 pos)
        (string/lower-case (subs fname (+ pos 1)))]
-      [fname ""])))
+      [fname nil])))
 
 (defn file-stem
   "File name without extension"
@@ -48,7 +48,7 @@
   (first (split-ext path)))
 
 (defn file-ext
-  "File extension, lowercased"
+  "File extension, lowercased, without dot"
   [path]
   (second (split-ext path)))
 

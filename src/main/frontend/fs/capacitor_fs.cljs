@@ -408,7 +408,7 @@
     (open-dir dir))
   (get-files [_this dir]
     (get-files dir))
-  (watch-dir! [_this dir _options]
+  (watch-dir! [_this dir]
     (p/do!
      (.unwatch mobile-util/fs-watcher)
      (.watch mobile-util/fs-watcher (clj->js {:path dir}))))

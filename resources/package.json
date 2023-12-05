@@ -21,7 +21,6 @@
   },
   "dependencies": {
     "better-sqlite3": "8.0.1",
-    "chokidar": "^3.5.1",
     "dugite": "2.5.0",
     "electron-dl": "3.3.0",
     "electron-log": "4.3.1",
@@ -37,6 +36,7 @@
     "https-proxy-agent": "7.0.2",
     "socks-proxy-agent": "8.0.2",
     "@sentry/electron": "2.5.1",
+    "@parcel/watcher": "^2.3.0",
     "posthog-js": "1.10.2",
     "@logseq/rsapi": "0.0.76",
     "electron-deeplink": "1.0.10",

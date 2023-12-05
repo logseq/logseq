@@ -90,7 +90,7 @@
        (restore-global-config!)
        (create-global-config-file-if-not-exists repo)
        ;; FIXME: should use a file watcher instead of dir watcher
-       (fs/watch-dir! (global-config-dir) {:global-dir true}))
+       (fs/watch-file! (path/path-join (global-config-dir) "config.edn")))
       (p/timeout 6000)
       (p/catch (fn [e]
                  (js/console.error "cannot start global-config" e)))))
