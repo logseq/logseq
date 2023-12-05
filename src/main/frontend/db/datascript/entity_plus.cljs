@@ -16,10 +16,11 @@
 
      (and (= k :block/content) (config/db-based-graph? (state/get-current-repo)))
      (let [result (lookup-entity e k default-value)
-           refs (:block/refs e)]
+           refs (:block/refs e)
+           tags (:block/tags e)]
        (or
         (when (string? result)
-          (db-utils/special-id->page result refs))
+          (db-utils/special-id->page result (distinct (concat refs tags))))
         default-value))
 
      :else

@@ -79,7 +79,7 @@
 
 (defn get-tag-blocks
   [repo tag-name]
-  (d/q '[:find ?b
+  (d/q '[:find [?b ...]
          :in $ ?tag
          :where
          [?e :block/name ?tag]
@@ -228,11 +228,10 @@
   "Refresh file timestamps to DB"
   [repo path last-modified-at]
   (when (and repo path last-modified-at)
-    (when-let [conn (conn/get-db repo false)]
-      (db-utils/transact! conn
-                   [{:file/path path
-                     :file/last-modified-at last-modified-at}]
-                   {:skip-refresh? true}))))
+    (db-utils/transact! repo
+                        [{:file/path path
+                          :file/last-modified-at last-modified-at}]
+                        {:skip-refresh? true})))
 
 (defn get-file-last-modified-at
   [repo path]
@@ -311,12 +310,13 @@ independent of format as format specific heading characters are stripped"
                 page-name
                 route-name
                 (fn content-matches? [block-content external-content block-id]
-                  (= (as-> (:block/refs (db-utils/entity repo block-id)) block-refs
-                       (-> block-content
-                           (db-utils/special-id->page block-refs)
-                           (db-utils/special-id-ref->page block-refs)
-                           heading-content->route-name))
-                     (string/lower-case external-content))))
+                  (let [block (db-utils/entity repo block-id)
+                        ref-tags (distinct (concat (:block/tags block) (:block/refs block)))]
+                    (= (-> block-content
+                           (db-utils/special-id->page ref-tags)
+                           (db-utils/special-id-ref->page ref-tags)
+                           heading-content->route-name)
+                       (string/lower-case external-content)))))
            ffirst)
 
       (->> (d/q '[:find (pull ?b [:block/uuid])
@@ -1192,7 +1192,7 @@ independent of format as format specific heading characters are stripped"
 (defn get-all-properties
   "Returns a seq of property name strings"
   []
-  (if (react/db-graph?)
+  (if (config/db-based-graph? (state/get-current-repo))
     (db-based-get-all-properties)
     (map name (file-based-get-all-properties))))
 
@@ -1238,38 +1238,38 @@ independent of format as format specific heading characters are stripped"
   "Returns all property values of a given property for use in a simple query.
    Property values that are references are displayed as page references"
   [repo property]
-  (->> (d/q
-        '[:find ?prop-type ?v
-          :in $ ?prop-name
-          :where
-          [?b :block/properties ?bp]
-          [?prop-b :block/name ?prop-name]
-          [?prop-b :block/uuid ?prop-uuid]
-          [?prop-b :block/schema ?prop-schema]
-          [(get ?prop-schema :type) ?prop-type]
-          [(get ?bp ?prop-uuid) ?v]]
-        (conn/get-db repo)
-        (name property))
-       (map (fn [[prop-type v]] [prop-type (if (coll? v) v [v])]))
-       (mapcat (fn [[prop-type vals]]
-                 (case prop-type
-                   :enum
-                   (map #(:block/content (db-utils/entity repo [:block/uuid %])) vals)
-                   :default
+  (let [property-name (if (keyword? property)
+                        (name property)
+                        (util/page-name-sanity-lc property))]
+    (->> (d/q
+         '[:find ?prop-type ?v
+           :in $ ?prop-name
+           :where
+           [?b :block/properties ?bp]
+           [?prop-b :block/name ?prop-name]
+           [?prop-b :block/uuid ?prop-uuid]
+           [?prop-b :block/schema ?prop-schema]
+           [(get ?prop-schema :type) ?prop-type]
+           [(get ?bp ?prop-uuid) ?v]]
+         (conn/get-db repo)
+         property-name)
+        (map (fn [[prop-type v]] [prop-type (if (coll? v) v [v])]))
+        (mapcat (fn [[prop-type vals]]
+                  (case prop-type
+                    :default
                    ;; Remove multi-block properties as there isn't a supported approach to query them yet
-                   (map str (remove uuid? vals))
-                   (:page :date)
-                   (map #(page-ref/->page-ref (:block/original-name (db-utils/entity repo [:block/uuid %])))
-                        vals)
-                   :number
-                   vals
+                    (map str (remove uuid? vals))
+                    (:page :date)
+                    (map #(page-ref/->page-ref (:block/original-name (db-utils/entity repo [:block/uuid %])))
+                         vals)
+                    :number
+                    vals
                    ;; Checkboxes returned as strings as builder doesn't display boolean values correctly
-                   (map str vals))))
+                    (map str vals))))
        ;; Remove blanks as they match on everything
-       (remove string/blank?)
-       (distinct)
-       (sort)))
-
+        (remove string/blank?)
+        (distinct)
+        (sort))))
 
 (defn get-block-property-values
   "Get blocks which have this property."
@@ -1288,15 +1288,15 @@ independent of format as format specific heading characters are stripped"
   "Get classes which have given property as a class property"
   [property-uuid]
   (d/q
-    '[:find ?b
-      :in $ ?property-uuid
-      :where
-      [?b :block/schema ?schema]
-      [(get ?schema :properties) ?schema-properties*]
-      [(set ?schema-properties*) ?schema-properties]
-      [(contains? ?schema-properties ?property-uuid)]]
-    (conn/get-db)
-    property-uuid))
+   '[:find [?b ...]
+     :in $ ?property-uuid
+     :where
+     [?b :block/schema ?schema]
+     [(get ?schema :properties) ?schema-properties*]
+     [(set ?schema-properties*) ?schema-properties]
+     [(contains? ?schema-properties ?property-uuid)]]
+   (conn/get-db)
+   property-uuid))
 
 (defn get-template-by-name
   [name]
@@ -1534,7 +1534,7 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-whiteboard-id-nonces
   [repo page-name]
-  (let [key (if (react/db-graph?)
+  (let [key (if (config/db-based-graph? repo)
               (:block/uuid (db-utils/entity [:block/name "logseq.tldraw.shape"]))
               :logseq.tldraw.shape)
         page (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])]
@@ -1556,17 +1556,16 @@ independent of format as format specific heading characters are stripped"
     (conn/get-db repo)))
 
 (defn get-namespace-children
-  [repo-url eid]
+  [repo eid]
   (->>
-   (d/q '[:find ?children
+   (d/q '[:find [?children ...]
           :in $ ?parent %
           :where
           (namespace ?parent ?children)]
-        (conn/get-db repo-url)
+        (conn/get-db repo)
         eid
         (:namespace rules/rules))
-   db-utils/seq-flatten
-   (set)))
+   distinct))
 
 (defn get-class-objects
   [repo class-id]

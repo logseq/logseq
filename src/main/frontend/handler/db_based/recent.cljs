@@ -23,6 +23,5 @@
        (distinct)
        (map (fn [id]
               (let [e (db/entity [:block/uuid id])]
-                (or (:block/original-name e)
-                    (:block/uuid e)))))
+                (:block/original-name e))))
        (remove string/blank?)))

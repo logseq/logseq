@@ -26,7 +26,7 @@
         conn (read-graph graph-name)
         query (into (edn/read-string query*) [:in '$ '%]) ;; assumes no :in are in queries
         results (mapv first (d/q query @conn (rules/extract-rules rules/db-query-dsl-rules)))]
-    (println "DB contains" (count (d/datoms @conn :eavt)) "datoms")
+    #_(println "DB contains" (count (d/datoms @conn :eavt)) "datoms")
     (prn results)))
 
 (when (= nbb/*file* (:file (meta #'-main)))

@@ -8,7 +8,6 @@
             [cognitect.transit :as transit]
             [datascript.core :as d]
             [frontend.async-util :include-macros true :refer [<? go-try]]
-            [frontend.db :as db]
             [frontend.db.conn :as conn]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.db.rtc.ws :refer [<send!]]
@@ -121,7 +120,7 @@
          conn (d/create-conn db-schema/schema-for-db-based-graph)
          blocks* (replace-db-id-with-temp-id blocks)
          blocks-with-page-id (fill-block-fields blocks*)]
-     (db/transact! conn blocks-with-page-id)
+     (d/transact! conn blocks-with-page-id)
      (let [db (d/db conn)
            blocks*
            (d/pull-many db '[*] (keep (fn [b] (when-let [uuid (:block/uuid b)] [:block/uuid uuid])) blocks))

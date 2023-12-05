@@ -41,9 +41,3 @@
    (p/let [ret (protocol/<fetch-initital-data (get-impl) repo opts)]
      (js/console.log "fetch-initital" ret)
      ret)))
-
-(defn <fetch-blocks-excluding
-  ([repo exclude-uuids]
-   (<fetch-blocks-excluding repo exclude-uuids {}))
-  ([repo exclude-uuids opts]
-   (protocol/<fetch-blocks-excluding (get-impl) repo exclude-uuids opts)))

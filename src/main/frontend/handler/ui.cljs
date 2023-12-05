@@ -15,7 +15,8 @@
             [rum.core :as rum]
             [electron.ipc :as ipc]
             [promesa.core :as p]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [frontend.db.react :as react]))
 
 ;; sidebars
 (def *right-sidebar-resized-at (atom (js/Date.now)))
@@ -80,6 +81,8 @@
    (re-render-root! {}))
   ([_opts]
    {:post [(nil? %)]}
+   (doseq [component (keys @react/query-components)]
+     (rum/request-render component))
    (when-let [component (state/get-root-component)]
      (rum/request-render component))
    nil))

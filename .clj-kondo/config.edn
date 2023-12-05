@@ -49,6 +49,7 @@
              frontend.components.query query
              frontend.components.query.result query-result
              frontend.components.class class-component
+             frontend.components.property property-component
              frontend.config config
              frontend.date date
              frontend.db db
@@ -123,6 +124,7 @@
              logseq.common.config common-config
              logseq.db.frontend.property db-property
              logseq.db.frontend.property.type db-property-type
+             logseq.db.frontend.property.util db-property-util
              logseq.db.frontend.rules rules
              logseq.db.frontend.schema db-schema
              logseq.db.sqlite.db sqlite-db

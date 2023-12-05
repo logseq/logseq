@@ -83,7 +83,8 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [shadow.loader :as loader]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [electron.ipc :as ipc]))
 
 ;; local state
 (defonce *dragging?
@@ -316,7 +317,7 @@
                  :on-click      (fn [e]
                                   (util/stop e)
                                   (if local?
-                                    (js/window.apis.showItemInFolder image-src)
+                                    (ipc/ipc "openFileInFolder" image-src)
                                     (js/window.apis.openExternal image-src)))}
                 image-src])
              [:.flex
@@ -2319,7 +2320,7 @@
       [:div.closed-values-properties.flex.flex-row.items-center.gap-1.select-none.h-full
        (for [pid closed-values-properties]
          (when-let [property (db/entity [:block/uuid pid])]
-           (pv/property-value block property (get (:block/properties block) pid) {:icon? true})))])))
+           (pv/property-value block property (get (:block/properties block) pid) {:icon? true :page-cp page-cp})))])))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
   [config {:block/keys [uuid content properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide? selected? *ref]
@@ -3603,10 +3604,8 @@
                          (:db/id parent)))))
                  {:debug-id page})])))))]
 
-     (and (:ref? config)
-          (:group-by-page? config)
-          (vector? (first blocks)))
-     [:div.flex.flex-col
+     (and (:ref? config) (:group-by-page? config) (vector? (first blocks)))
+     [:div.flex.flex-col.references-blocks-wrap
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page page-blocks] blocks]
           (ui/lazy-visible
@@ -3616,7 +3615,7 @@
                    page (db/entity (:db/id page))
                    ;; FIXME: parents need to be sorted
                    parent-blocks (group-by :block/parent page-blocks)]
-               [:div.my-2 {:key (str "page-" (:db/id page))}
+               [:div.my-2.references-blocks-item {:key (str "page-" (:db/id page))}
                 (ui/foldable
                  [:div
                   (page-cp config page)

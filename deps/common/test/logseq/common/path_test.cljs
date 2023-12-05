@@ -35,7 +35,15 @@
         "global dir")
     (is (= "/foo/bar/baz/asdf" (path/path-join "/foo/bar//baz/asdf/quux/..")))
     (is (= "assets:///foo.bar/baz" (path/path-join "assets:///foo.bar" "baz")))
-    (is (= "assets:///foo.bar/baz" (path/path-join "assets:///foo.bar/" "baz")))))
+    (is (= "assets:///foo.bar/baz" (path/path-join "assets:///foo.bar/" "baz")))
+    (is (= "//NAS/MyGraph/logseq/config.edn" (path/path-join "//NAS/MyGraph" "logseq/config.edn")))))
+
+(deftest prepend-protocol
+  (testing "prepend-protocol"
+    (is (= "file:///home/logseq/graph" (path/prepend-protocol "file:" "/home/logseq/graph")))
+    (is (= "file:///C%3A/Graph/pages" (path/prepend-protocol "file:" "C:/Graph/pages")))
+    (is (= "file://NAS/MyGraph" (path/prepend-protocol "file:" "//NAS/MyGraph"))
+        "Windows UNC URL")))
 
 (deftest path-absolute
   (testing "absolute"

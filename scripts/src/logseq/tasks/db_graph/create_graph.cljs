@@ -5,6 +5,8 @@
   graph and current limitations"
   (:require [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.db.frontend.property.util :as db-property-util]
             [logseq.outliner.cli.persist-graph :as persist-graph]
             [logseq.db :as ldb]
             [clojure.string :as string]
@@ -27,7 +29,7 @@
   (let [config-content (or (some-> (find-on-classpath "templates/config.edn") fs/readFileSync str)
                            (do (println "Setting graph's config to empty since no templates/config.edn was found.")
                                "{}"))]
-    (d/transact! conn (sqlite-util/build-db-initial-data config-content))))
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data config-content))))
 
 (defn init-conn
   "Create sqlite DB, initialize datascript connection and sync listener and then
@@ -138,15 +140,20 @@
      * :blocks - This is a vec of datascript attribute maps e.g. `{:block/content \"bar\"}`.
        :block/content is required and :properties can be passed to define block properties
    * :properties - This is a map to configure properties where the keys are property names
-     and the values are maps of datascript attributes e.g. `{:block/schema {:type :checkbox}}`
+     and the values are maps of datascript attributes e.g. `{:block/schema {:type :checkbox}}`.
+     An additional key `:closed-values` is available to define closed values. The key takes
+     a vec of maps containing keys :uuid, :value and :icon.
 
    The :properties for :pages-and-blocks is a map of property names to property
    values.  Multiple property values for a many cardinality property are defined
    as a set. The following property types are supported: :default, :url,
-   :checkbox, :number and :page. :checkbox and :number values are written
+   :checkbox, :number, :page and :date. :checkbox and :number values are written
    as booleans and integers. :page and :block are references that are written as
-   vectors e.g. `[:page \"PAGE NAME\"]` and `[:block \"block content\"]`"
-  [{:keys [pages-and-blocks properties]}]
+   vectors e.g. `[:page \"PAGE NAME\"]` and `[:block \"block content\"]`
+   
+   This fn also takes an optional map arg which supports these keys:
+   * :property-uuids - A map of property keyword names to uuids to provide ids for built-in properties"
+  [{:keys [pages-and-blocks properties]} & {:as options}]
   (let [;; add uuids before tx for refs in :properties
         pages-and-blocks' (mapv (fn [{:keys [page blocks]}]
                                   (cond-> {:page (merge {:block/uuid (random-uuid)} page)}
@@ -157,19 +164,28 @@
         property-db-ids (->> property-uuids
                              (map #(vector (name (first %)) (new-db-id)))
                              (into {}))
-        new-properties-tx (mapv (fn [[prop-name uuid]]
-                                  (sqlite-util/build-new-property
-                                   (merge {:db/id (or (property-db-ids (name prop-name))
-                                                      (throw (ex-info "No :db/id for property" {:property prop-name})))
-                                           :block/uuid uuid
-                                           :block/schema (merge {:type :default}
-                                                                (get-in properties [prop-name :block/schema]))
-                                           :block/original-name (name prop-name)
-                                           :block/name (sqlite-util/sanitize-page-name (name prop-name))}
-                                          (when-let [props (not-empty (get-in properties [prop-name :properties]))]
-                                            {:block/properties (->block-properties-tx props uuid-maps)
-                                             :block/refs (build-property-refs props property-db-ids)}))))
-                                property-uuids)
+        new-properties-tx (vec
+                           (mapcat
+                            (fn [[prop-name uuid]]
+                              (if (get-in properties [prop-name :closed-values])
+                                (db-property-util/build-closed-values
+                                 prop-name
+                                 (assoc (get properties prop-name) :block/uuid uuid)
+                                 {:icon-id
+                                  (get-in options [:property-uuids :icon])
+                                  :translate-closed-page-value-fn
+                                  #(hash-map :block/uuid (translate-property-value (:value %) uuid-maps))
+                                  :property-attributes
+                                  {:db/id (or (property-db-ids (name prop-name))
+                                              (throw (ex-info "No :db/id for property" {:property prop-name})))}})
+                                [(sqlite-util/build-new-property
+                                  (merge (db-property-util/new-property-tx prop-name (get-in properties [prop-name :block/schema]) uuid)
+                                         {:db/id (or (property-db-ids (name prop-name))
+                                                     (throw (ex-info "No :db/id for property" {:property prop-name})))}
+                                         (when-let [props (not-empty (get-in properties [prop-name :properties]))]
+                                           {:block/properties (->block-properties-tx props uuid-maps)
+                                            :block/refs (build-property-refs props property-db-ids)})))]))
+                            property-uuids))
         pages-and-blocks-tx
         (vec
          (mapcat

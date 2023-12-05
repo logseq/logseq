@@ -11,8 +11,7 @@
             [frontend.util :as util]
             [goog.events :as events]
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
-            [lambdaisland.glogi :as log]
-            [goog.functions :refer [debounce]])
+            [lambdaisland.glogi :as log])
   (:import [goog.events KeyCodes KeyNames]
            [goog.ui KeyboardShortcutHandler]))
 

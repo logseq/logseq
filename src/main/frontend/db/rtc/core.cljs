@@ -7,18 +7,20 @@
             [cljs.core.async :as async :refer [<! >! chan go go-loop]]
             [clojure.set :as set]
             [cognitect.transit :as transit]
+            [frontend.async-util :include-macros true :refer [<?]]
             [frontend.db :as db]
             [frontend.db.react :as react]
             [frontend.db.rtc.const :as rtc-const]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.db.rtc.ws :as ws]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.property.util :as pu]
             [frontend.handler.user :as user]
+            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.async-util :include-macros true :refer [<?]]
             [malli.core :as m]
             [malli.util :as mu]))
 
@@ -100,6 +102,15 @@
    {:persist-op? false}
    (apply outliner-core/save-block! args)))
 
+(defmethod transact-db! :delete-whiteboard-blocks [_ repo block-uuids]
+  (db/transact! repo
+                (mapv (fn [block-uuid] [:db/retractEntity [:block/uuid block-uuid]]) block-uuids)
+                {:persist-op? false}))
+
+(defmethod transact-db! :upsert-whiteboard-block [_ repo blocks]
+  (db/transact! repo blocks {:persist-op? false}))
+
+
 (defmethod transact-db! :raw [_ & args]
   (apply db/transact! args))
 
@@ -107,13 +118,25 @@
   [block]
   (contains? (set (:block/type block)) "whiteboard"))
 
+(defn- group-remote-remove-ops-by-whiteboard-block
+  "return {true [<whiteboard-block-ops>], false [<other-ops>]}"
+  [repo remote-remove-ops]
+  (group-by (fn [{:keys [block-uuid]}]
+              (boolean
+               (when-let [block (db/pull repo [{:block/parent [:block/type]}] [:block/uuid block-uuid])]
+                 (whiteboard-page-block? (:block/parent block)))))
+            remote-remove-ops))
+
 (defn apply-remote-remove-ops
   [repo remove-ops]
   (prn :remove-ops remove-ops)
-  (doseq [op remove-ops]
-    (when-let [block (db/pull repo '[*] [:block/uuid (:block-uuid op)])]
-      (transact-db! :delete-blocks [block] {:children? false})
-      (prn :apply-remote-remove-ops (:block-uuid op)))))
+  (let [{whiteboard-block-ops true other-ops false} (group-remote-remove-ops-by-whiteboard-block repo remove-ops)]
+    (transact-db! :delete-whiteboard-blocks (map :block-uuid whiteboard-block-ops))
+
+    (doseq [op other-ops]
+      (when-let [block (db/pull repo '[*] [:block/uuid (:block-uuid op)])]
+        (transact-db! :delete-blocks [block] {:children? false})
+        (prn :apply-remote-remove-ops (:block-uuid op))))))
 
 (defn- insert-or-move-block
   [repo block-uuid remote-parents remote-left-uuid move?]
@@ -126,8 +149,8 @@
           b {:block/uuid block-uuid}
           ;; b-ent (db/entity repo [:block/uuid (uuid block-uuid-str)])
           ]
-      (case [(some? local-parent) (some? local-left)]
-        [false true]
+      (case [whiteboard-page-block? (some? local-parent) (some? local-left)]
+        [false false true]
         (if move?
           (transact-db! :move-blocks [b] local-left true)
           (transact-db! :insert-blocks
@@ -136,7 +159,7 @@
                           :block/format :markdown}]
                         local-left {:sibling? true :keep-uuid? true}))
 
-        [true true]
+        [false true true]
         (let [sibling? (not= (:block/uuid local-parent) (:block/uuid local-left))]
           (if move?
             (transact-db! :move-blocks [b] local-left sibling?)
@@ -145,13 +168,19 @@
                             :block/format :markdown}]
                           local-left {:sibling? sibling? :keep-uuid? true})))
 
-        [true false]
+        [false true false]
         (if move?
           (transact-db! :move-blocks [b] local-parent false)
           (transact-db! :insert-blocks
                         [{:block/uuid block-uuid :block/content ""
                           :block/format :markdown}]
                         local-parent {:sibling? false :keep-uuid? true}))
+
+        ([true true false] [true true true])
+        ;; Don't need to insert-whiteboard-block here,
+        ;; will do :upsert-whiteboard-block in `update-block-attrs`
+        nil
+
         (throw (ex-info "Don't know where to insert" {:block-uuid block-uuid :remote-parents remote-parents
                                                       :remote-left remote-left-uuid}))))))
 
@@ -201,44 +230,61 @@
       :wrong-pos
       :else nil)))
 
-
+(defn- upsert-whiteboard-block
+  [repo {:keys [parents properties] :as _op-value}]
+  (let [first-remote-parent (first parents)]
+    (when-let [local-parent (db/pull repo '[*] [:block/uuid first-remote-parent])]
+      (let [page-name (:block/name local-parent)
+            properties* (transit/read transit-r properties)
+            shape-property-id (pu/get-pid :logseq.tldraw.shape)
+            shape (and (map? properties*)
+                       (get properties* shape-property-id))]
+        (assert (some? page-name) local-parent)
+        (assert (some? shape) properties*)
+        (transact-db! :upsert-whiteboard-block repo [(whiteboard-handler/shape->block shape page-name)])))))
 
 (defn- update-block-attrs
-  [repo block-uuid op-value]
+  [repo block-uuid {:keys [parents] :as op-value}]
   (let [key-set (set/intersection
                  (conj rtc-const/general-attr-set :content)
                  (set (keys op-value)))]
     (when (seq key-set)
-      (let [b-ent (db/pull repo '[*] [:block/uuid block-uuid])
-            new-block
-            (cond-> (db/pull repo '[*] (:db/id b-ent))
-              (and (contains? key-set :content)
-                   (not= (:content op-value)
-                         (:block/content b-ent))) (assoc :block/content (:content op-value))
-              (contains? key-set :updated-at)     (assoc :block/updated-at (:updated-at op-value))
-              (contains? key-set :created-at)     (assoc :block/created-at (:created-at op-value))
-              (contains? key-set :alias)          (assoc :block/alias (some->> (seq (:alias op-value))
-                                                                               (map (partial vector :block/uuid))
-                                                                               (db/pull-many repo [:db/id])
-                                                                               (keep :db/id)))
-              (contains? key-set :type)           (assoc :block/type (:type op-value))
-              (contains? key-set :schema)         (assoc :block/schema (transit/read transit-r (:schema op-value)))
-              (contains? key-set :tags)           (assoc :block/tags (some->> (seq (:tags op-value))
-                                                                              (map (partial vector :block/uuid))
-                                                                              (db/pull-many repo [:db/id])
-                                                                              (keep :db/id)))
-              ;; FIXME: it looks save-block won't save :block/properties??
-              ;;        so I need to transact properties myself
-              ;; (contains? key-set :properties)     (assoc :block/properties
-              ;;                                            (transit/read transit-r (:properties op-value)))
-              )]
-        (transact-db! :save-block new-block)
-        (let [properties (transit/read transit-r (:properties op-value))]
-          (transact-db! :raw
-                        repo
-                        [{:block/uuid block-uuid
-                          :block/properties properties}]
-                        {:outliner-op :save-block}))))))
+      (let [first-remote-parent (first parents)
+            local-parent (db/pull repo '[*] [:block/uuid first-remote-parent])
+            whiteboard-page-block? (whiteboard-page-block? local-parent)]
+        (if whiteboard-page-block?
+          (upsert-whiteboard-block repo op-value)
+
+          (let [b-ent (db/pull repo '[*] [:block/uuid block-uuid])
+                new-block
+                (cond-> (db/pull repo '[*] (:db/id b-ent))
+                  (and (contains? key-set :content)
+                       (not= (:content op-value)
+                             (:block/content b-ent))) (assoc :block/content (:content op-value))
+                  (contains? key-set :updated-at)     (assoc :block/updated-at (:updated-at op-value))
+                  (contains? key-set :created-at)     (assoc :block/created-at (:created-at op-value))
+                  (contains? key-set :alias)          (assoc :block/alias (some->> (seq (:alias op-value))
+                                                                                   (map (partial vector :block/uuid))
+                                                                                   (db/pull-many repo [:db/id])
+                                                                                   (keep :db/id)))
+                  (contains? key-set :type)           (assoc :block/type (:type op-value))
+                  (contains? key-set :schema)         (assoc :block/schema (transit/read transit-r (:schema op-value)))
+                  (contains? key-set :tags)           (assoc :block/tags (some->> (seq (:tags op-value))
+                                                                                  (map (partial vector :block/uuid))
+                                                                                  (db/pull-many repo [:db/id])
+                                                                                  (keep :db/id)))
+                  ;; FIXME: it looks save-block won't save :block/properties??
+                  ;;        so I need to transact properties myself
+                  ;; (contains? key-set :properties)     (assoc :block/properties
+                  ;;                                            (transit/read transit-r (:properties op-value)))
+                  )]
+            (transact-db! :save-block new-block)
+            (let [properties (transit/read transit-r (:properties op-value))]
+              (transact-db! :raw
+                            repo
+                            [{:block/uuid block-uuid
+                              :block/properties properties}]
+                            {:outliner-op :save-block}))))))))
 
 (defn apply-remote-move-ops
   [repo sorted-move-ops]

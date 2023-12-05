@@ -5,7 +5,8 @@ necessary db filtering"
             [goog.string :as gstring]
             [goog.string.format]
             [datascript.transit :as dt]
-            [logseq.publishing.db :as db]))
+            [logseq.publishing.db :as db]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 ;; Copied from hiccup but tweaked for publish usage
 ;; Any changes here should also be made in frontend.publishing/unescape-html
@@ -142,7 +143,7 @@ generated index.html string and assets used by the html"
         asset-filenames (remove nil? asset-filenames')
 
         db-str (dt/write-transit-str db)
-        repo-name (if db-graph? "logseq_db_local" "local")
+        repo-name (if db-graph? (str sqlite-util/db-version-prefix "local") "local")
         ;; The repo-name is used by the client and thus determines whether
         ;; it's a db graph or not
         state (assoc app-state

@@ -11,10 +11,12 @@
 (defn lookup
   "Get the value of coll's (a map) `key`. For file and db graphs"
   [coll key]
-  (let [repo (state/get-current-repo)]
-    (if (and (config/db-based-graph? repo)
-             (keyword? key))
-      (when-let [property (db/entity repo [:block/name (gp-util/page-name-sanity-lc (name key))])]
+  (let [repo (state/get-current-repo)
+        property-name (if (keyword? key)
+                        (name key)
+                        key)]
+    (if (config/db-based-graph? repo)
+      (when-let [property (db/entity repo [:block/name (gp-util/page-name-sanity-lc property-name)])]
         (get coll (:block/uuid property)))
       (get coll key))))
 

@@ -3,8 +3,6 @@
 
    This interface uses clj data format as input."
   (:require ["comlink" :as Comlink]
-            [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]
             [cljs.core.async.interop :refer [p->c]]
             [frontend.persist-db.protocol :as protocol]
             [frontend.config :as config]
@@ -51,47 +49,6 @@
                                       (js/clearInterval timer)
                                       (reject nil)) ;; cannot init
                                     20000))))))
-
-(defn- type-of-block
-  "
-  TODO: use :block/type
-  | value | meaning                                        |
-  |-------+------------------------------------------------|
-  |     1 | normal block                                   |
-  |     2 | page block                                     |
-  |     3 | init data, (config.edn, custom.js, custom.css) |
-  |     4 | db schema                                      |
-  |     5 | unknown type                                   |
-  |     6 | property block                                 |
-  "
-  [block]
-  (cond
-    (:block/page block) 1
-    (:file/content block) 3
-    (contains? (:block/type block) "property") 6
-    (:block/name block) 2
-    :else 5))
-
-(defn time-ms
-  "Copy of util/time-ms. Too basic to couple this to main app"
-  []
-  (tc/to-long (t/now)))
-
-(defn- ds->sqlite-block
-  "Convert a datascript block to a sqlite map in preparation for a sqlite-db fn.
-
-   @uuid, @type, @page_uuid, @page_journal_day, @name, @content, @datoms, @created_at, @updated_at
-   "
-  [b]
-  {:uuid (str (:block/uuid b))
-   :type (type-of-block b)
-   :page_uuid (str (:page_uuid b))
-   :page_journal_day (:block/journal-day b)
-   :name (or (:file/path b) (:block/name b))
-   :content (or (:file/content b) (:block/content b))
-   :datoms (:datoms b)
-   :created_at (or (:block/created-at b) (time-ms))
-   :updated_at (or (:block/updated-at b) (time-ms))})
 
 (comment
   (defn dev-stop!

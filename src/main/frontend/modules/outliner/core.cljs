@@ -77,25 +77,26 @@
 
 (defn- remove-orphaned-page-refs!
   [db-id txs-state old-refs new-refs]
-  (when (not= old-refs new-refs)
-    (let [new-refs (set (map (fn [ref]
-                               (or (:block/name ref)
-                                   (and (:db/id ref)
-                                        (:block/name (db/entity (:db/id ref)))))) new-refs))
-          old-pages (->> (map :db/id old-refs)
-                         (db-model/get-entities-by-ids)
-                         (remove (fn [e] (contains? new-refs (:block/name e))))
-                         (map :block/name)
-                         (remove nil?))
-          orphaned-pages (when (seq old-pages)
-                           (db-model/get-orphaned-pages {:pages old-pages
-                                                         :empty-ref-f (fn [page]
-                                                                        (let [refs (:block/_refs page)]
-                                                                          (or (zero? (count refs))
-                                                                              (= #{db-id} (set (map :db/id refs))))))}))]
-      (when (seq orphaned-pages)
-        (let [tx (mapv (fn [page] [:db/retractEntity (:db/id page)]) orphaned-pages)]
-          (swap! txs-state (fn [state] (vec (concat state tx)))))))))
+  (let [old-refs (remove #(some #{"class" "property"} (:block/type %)) old-refs)]
+    (when (not= old-refs new-refs)
+      (let [new-refs (set (map (fn [ref]
+                                 (or (:block/name ref)
+                                     (and (:db/id ref)
+                                          (:block/name (db/entity (:db/id ref)))))) new-refs))
+            old-pages (->> (map :db/id old-refs)
+                           (db-model/get-entities-by-ids)
+                           (remove (fn [e] (contains? new-refs (:block/name e))))
+                           (map :block/name)
+                           (remove nil?))
+            orphaned-pages (when (seq old-pages)
+                             (db-model/get-orphaned-pages {:pages old-pages
+                                                           :empty-ref-f (fn [page]
+                                                                          (let [refs (:block/_refs page)]
+                                                                            (or (zero? (count refs))
+                                                                                (= #{db-id} (set (map :db/id refs))))))}))]
+        (when (seq orphaned-pages)
+          (let [tx (mapv (fn [page] [:db/retractEntity (:db/id page)]) orphaned-pages)]
+            (swap! txs-state (fn [state] (vec (concat state tx))))))))))
 
 (defn- update-page-when-save-block
   [txs-state block-entity m]
@@ -150,8 +151,8 @@
                                         (:block/macros block-entity)))))))
 
 (defn- create-linked-page-when-save
-  [txs-state block-entity m structured-tags?]
-  (if structured-tags?
+  [txs-state block-entity m tags-has-class?]
+  (if tags-has-class?
     (let [content (state/get-edit-content)
           linked-page (some-> content mldoc/extract-plain)
           sanity-linked-page (some-> linked-page util/page-name-sanity-lc)
@@ -222,7 +223,8 @@
   (when (config/db-based-graph? repo)
     (let [refs (->> (rebuild-block-refs repo block (:block/properties block)
                                         :skip-content-parsing? true)
-                    (concat (:block/refs m)))]
+                    (concat (:block/refs m))
+                    (concat (:block/tags m)))]
       (swap! txs-state (fn [txs] (concat txs [{:db/id (:db/id block)
                                                :block/refs refs}]))))))
 
@@ -297,29 +299,34 @@
                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom?
                         :block/title :block/body :block/level)
                 gp-util/remove-nils
-                block-with-timestamps
+                block-with-updated-at
                 fix-tag-ids)
           repo (state/get-current-repo)
           db-based? (config/db-based-graph? repo)
-          id (:db/id (:data this))
-          block-entity (db/entity id)
-          structured-tags? (and db-based? (seq (:block/tags m)))]
-      (when id
+          eid (or (:db/id (:data this))
+                  (when-let [block-uuid (:block/uuid (:data this))] [:block/uuid block-uuid]))
+          block-entity (db/entity eid)
+          tags-has-class? (and db-based?
+                               (some (fn [tag]
+                                       (contains? (:block/type (db/entity [:block/uuid (:block/uuid tag)])) "class"))
+                                     (:block/tags m)))]
+      (when eid
         ;; Retract attributes to prepare for tx which rewrites block attributes
-        (let [retract-attributes (when db-based?
-                                   (remove #{:block/properties} db-schema/retract-attributes))]
-          (swap! txs-state (fn [txs]
-                             (vec
-                              (concat txs
-                                      (map (fn [attribute]
-                                             [:db/retract id attribute])
-                                           retract-attributes))))))
+        (when (:block/content m)
+          (let [retract-attributes (if db-based?
+                                     db-schema/db-version-retract-attributes
+                                     db-schema/retract-attributes)]
+            (swap! txs-state (fn [txs]
+                               (vec
+                                (concat txs
+                                        (map (fn [attribute]
+                                               [:db/retract eid attribute])
+                                             retract-attributes)))))))
 
         ;; Update block's page attributes
         (update-page-when-save-block txs-state block-entity m)
         ;; Remove macros as they are replaced by new ones
         (remove-macros-when-save repo txs-state block-entity)
-
         ;; Remove orphaned refs from block
         (remove-orphaned-refs-when-save txs-state block-entity m))
 
@@ -331,7 +338,7 @@
         (swap! txs-state conj
                (dissoc m :db/other-tx)))
 
-      (create-linked-page-when-save txs-state block-entity m structured-tags?)
+      (create-linked-page-when-save txs-state block-entity m tags-has-class?)
 
       (rebuild-refs repo txs-state block-entity m)
 

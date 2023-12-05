@@ -126,7 +126,6 @@
            :block/properties-order)
    {:file/last-modified-at {}}))
 
-;; TODO: some attributes shouldn't be retracted for the db version
 (def retract-attributes
   #{
     :block/refs
@@ -146,6 +145,18 @@
     :block/warning
     }
   )
+
+;; If only block/content changes
+(def db-version-retract-attributes
+  #{:block/tags
+    :block/refs
+    :block/marker
+    :block/priority
+    :block/scheduled
+    :block/deadline
+    :block/repeated?
+    :block/macros
+    :block/warning})
 
 
 ;;; use `(map [:db.fn/retractAttribute <id> <attr>] retract-page-attributes)`
