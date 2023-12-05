@@ -86,8 +86,14 @@
 
 (defmethod handle :openFileBackupDir [_window [_ repo path]]
   (when (string? path)
-    (let [dir (backup-file/get-backup-dir repo path)]
-      (.openPath shell dir))))
+    (let [dir (backup-file/get-backup-dir repo path)
+          full-path (utils/to-native-win-path! dir)]
+      (.openPath shell full-path))))
+
+(defmethod handle :openFileInFolder [_window [_ full-path]]
+  (when-let [full-path (utils/to-native-win-path! full-path)]
+    (logger/info ::open-file-in-folder full-path)
+    (.showItemInFolder shell full-path)))
 
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))
@@ -246,7 +252,7 @@
     (->> (common-graph/read-directories dir)
          (remove (fn [s] (= s db/unlinked-graphs-dir)))
          (map graph-name->path)
-         (map (fn [s] (str "logseq_db_" s))))))
+         (map (fn [s] (str sqlite-util/db-version-prefix s))))))
 
 (defn- get-graphs
   []
@@ -256,13 +262,15 @@
 
 ;; TODO support alias mechanism
 (defn get-graph-name
-  "Given a graph's name of string, returns the graph's fullname.
-   E.g., given `cat`, returns `logseq_local_<path_to_directory>/cat`
-   Returns `nil` if no such graph exists."
+  "Given a graph's name of string, returns the graph's fullname. For example, given
+  `cat`, returns `logseq_local_<path_to_directory>/cat` for a file graph and
+  `logseq_db_cat` for a db graph.  Returns `nil` if no such graph exists."
   [graph-identifier]
   (->> (get-graphs)
-       (some #(when (string/ends-with? (utils/normalize-lc %)
-                                       (str "/" (utils/normalize-lc graph-identifier)))
+       (some #(when (or
+                     (= (utils/normalize-lc %) (utils/normalize-lc (str sqlite-util/db-version-prefix graph-identifier)))
+                     (string/ends-with? (utils/normalize-lc %)
+                                        (str "/" (utils/normalize-lc graph-identifier))))
                 %))))
 
 (defmethod handle :getGraphs [_window [_]]
@@ -385,7 +393,7 @@
   (db/open-db! repo)
   (dt/write-transit-str (sqlite-db/get-initial-data repo)))
 
-(defmethod handle :get-other-data [_window [_ repo journal-block-uuids _opts]]
+(defmethod handle :get-other-data [_window [_ _repo _journal-block-uuids _opts]]
   nil)
 
 ;; DB related IPCs End

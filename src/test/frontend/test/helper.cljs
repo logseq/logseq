@@ -13,21 +13,26 @@
 
 (def node? (exists? js/process))
 
-(defonce test-db
-  (if (and node? (some? js/process.env.DB_GRAPH)) "logseq_db_test-db" "test-db"))
+(def test-db-name "test-db")
+(def test-db-name-db-version "logseq_db_test-db")
+(def test-db
+  (if (and node? (some? js/process.env.DB_GRAPH)) test-db-name-db-version test-db-name))
 
 (defn start-test-db!
-  []
-  (conn/start! test-db))
+  [& {:as opts}]
+  (let [test-db (if (or (:db-graph? opts) (some? js/process.env.DB_GRAPH))
+                  test-db-name-db-version
+                  test-db-name)]
+    (conn/start! test-db opts)))
 
 (defn destroy-test-db!
   []
   (conn/destroy-all!))
 
 (defn reset-test-db!
-  []
+  [& {:as opts}]
   (destroy-test-db!)
-  (start-test-db!))
+  (start-test-db! opts))
 
 (defn- parse-property-value [value]
   (if-let [refs (seq (map #(or (second %) (get % 2))
@@ -194,17 +199,54 @@ This can be called in synchronous contexts as no async fns should be invoked"
    ;; Set :refresh? to avoid creating default files in after-parse
      {:re-render? false :verbose false :refresh? true})))
 
+(defn initial-test-page-and-blocks
+  []
+  (let [page-uuid (random-uuid)
+        first-block-uuid (random-uuid)
+        second-block-uuid (random-uuid)
+        page-id [:block/uuid page-uuid]]
+    (->>
+     [;; page
+      {:block/uuid page-uuid
+       :block/name "test"
+       :block/original-name "test"}
+      ;; first block
+      {:block/uuid first-block-uuid
+       :block/page page-id
+       :block/parent page-id
+       :block/left page-id
+       :block/content "block 1"
+       :block/format :markdown}
+      ;; second block
+      {:block/uuid second-block-uuid
+       :block/page page-id
+       :block/parent page-id
+       :block/left [:block/uuid first-block-uuid]
+       :block/content "block 2"
+       :block/format :markdown}]
+     (map sqlite-util/block-with-timestamps))))
+
 (defn start-and-destroy-db
   "Sets up a db connection and current repo like fixtures/reset-datascript. It
   also seeds the db with the same default data that the app does and destroys a db
   connection when done with it."
-  [f]
+  [f & {:as start-opts}]
   ;; Set current-repo explicitly since it's not the default
-  (state/set-current-repo! test-db)
-  (start-test-db!)
+  (state/set-current-repo!
+   (if (or (:db-graph? start-opts) (some? js/process.env.DB_GRAPH))
+     test-db-name-db-version
+     test-db-name))
+  (start-test-db! start-opts)
+  (when-let [init-f (:init-data start-opts)]
+    (assert (fn? f) "init-data should be a fn")
+    (init-f (db/get-db test-db-name-db-version false)))
   (f)
   (state/set-current-repo! nil)
   (destroy-test-db!))
+
+(defn db-based-start-and-destroy-db
+  [f & {:as start-opts}]
+  (start-and-destroy-db f (assoc start-opts :db-graph? true)))
 
 (def start-and-destroy-db-map-fixture
   "To avoid 'Fixtures may not be of mixed types' error

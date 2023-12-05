@@ -12,6 +12,7 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.frontend.property.util :as db-property-util]
             [malli.util :as mu]
             [malli.error :as me]
             [logseq.graph-parser.util.page-ref :as page-ref]
@@ -20,15 +21,15 @@
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
 
-(defn builtin-schema-types
-  "A frontend version of builtin-schema-types that adds the current database to
+(defn built-in-validation-schemas
+  "A frontend version of built-in-validation-schemas that adds the current database to
    schema fns"
   [property & {:keys [new-closed-value?]
                :or {new-closed-value? false}}]
   (into {}
         (map (fn [[property-type property-val-schema]]
                (cond
-                 (db-property-type/closed-values-schema-types property-type)
+                 (db-property-type/closed-value-property-types property-type)
                  (let [[_ schema-opts schema-fn] property-val-schema
                        schema-fn' (if (db-property-type/property-types-with-db property-type) #(schema-fn (db/get-db) %) schema-fn)]
                    [property-type [:fn
@@ -39,7 +40,7 @@
                    [property-type [:fn schema-opts #(schema-fn (db/get-db) %)]])
                  :else
                  [property-type property-val-schema]))
-             db-property-type/builtin-schema-types)))
+             db-property-type/built-in-validation-schemas)))
 
 (defn- fail-parse-long
   [v-str]
@@ -122,7 +123,7 @@
     (when (and multiple-values? (seq values))
       (let [infer-schema (when-not type (infer-schema-from-input-string (first values)))
             property-type (or type infer-schema :default)
-            schema (get (builtin-schema-types property) property-type)
+            schema (get (built-in-validation-schemas property) property-type)
             properties (:block/properties block)
             values' (try
                       (set (map #(convert-property-input-string property-type %) values))
@@ -162,7 +163,7 @@
                                   :block/refs refs}]
                                 {:outliner-op :save-block}))))))))))
 
-(defn resolve-tag
+(defn- resolve-tag
   "Change `v` to a tag's UUID if v is a string tag, e.g. `#book`"
   [v]
   (when (and (string? v)
@@ -199,7 +200,7 @@
         (when (some? v)
           (let [infer-schema (when-not type (infer-schema-from-input-string v))
                 property-type (or type infer-schema :default)
-                schema (get (builtin-schema-types property) property-type)
+                schema (get (built-in-validation-schemas property) property-type)
                 properties (:block/properties block)
                 value (get properties property-uuid)
                 v* (try
@@ -477,7 +478,7 @@
                                      {})
                 (remove-block-property! repo (:block/uuid block) property-id)))))))))
 
-(defn replace-key-with-id!
+(defn replace-key-with-id
   "Notice: properties need to be created first"
   [m]
   (zipmap
@@ -592,6 +593,21 @@
     {:page page-tx
      :blocks [parent child-1]}))
 
+(defn create-property-text-block!
+  [block property value parse-block {:keys [class-schema?]}]
+  (let [repo (state/get-current-repo)
+        {:keys [page blocks]} (property-create-new-block block property value parse-block)
+        first-block (first blocks)
+        last-block-id (:block/uuid (last blocks))
+        class? (contains? (:block/type block) "class")
+        property-key (:block/original-name property)]
+    (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})
+    (when property-key
+      (if (and class? class-schema?)
+        (class-add-property! repo (:block/uuid block) property-key)
+        (set-block-property! repo (:block/uuid block) property-key (:block/uuid first-block) {})))
+    last-block-id))
+
 (defn property-create-new-block-from-template
   [block property template]
   (let [current-page-id (:block/uuid (or (:block/page block) block))
@@ -621,32 +637,21 @@
     {:page page-tx
      :blocks [new-block]}))
 
-(defn- closed-value-new-block
-  [page-id block-id value property]
-  {:block/type #{"closed value"}
-   :block/format :markdown
-   :block/uuid block-id
-   :block/page page-id
-   :block/metadata {:created-from-property (:block/uuid property)}
-   :block/schema {:value value}
-   :block/parent page-id})
-
 (defn- get-property-hidden-page
   [property]
-  (let [page-name (str "$$$" (:block/uuid property))
-        page-entity (db/entity [:block/name page-name])]
-    (or page-entity
-        (-> (block/page-name->map page-name true)
-            (assoc :block/type #{"hidden"}
-                   :block/format :markdown)))))
+  (let [page-name (str db-property-util/hidden-page-name-prefix (:block/uuid property))]
+    (or (db/entity [:block/name page-name])
+        (db-property-util/build-property-hidden-page property))))
 
 (defn upsert-closed-value
   "id should be a block UUID or nil"
-  [property {:keys [id value icon description]}]
+  [property {:keys [id value icon description]
+             :or {description ""}}]
   (assert (or (nil? id) (uuid? id)))
   (let [property-type (get-in property [:block/schema :type] :default)]
-    (when (contains? db-property-type/closed-values-schema-types property-type)
-      (let [value (if (string? value) (string/trim value) value)
+    (when (contains? db-property-type/closed-value-property-types property-type)
+      (let [property (db/entity (:db/id property))
+            value (if (string? value) (string/trim value) value)
             property-schema (:block/schema property)
             closed-values (:values property-schema)
             block-values (map (fn [id] (db/entity [:block/uuid id])) closed-values)
@@ -659,12 +664,9 @@
             block (when id (db/entity [:block/uuid id]))
             value-block (when (uuid? value) (db/entity [:block/uuid value]))
             validate-message (validate-property-value
-                              (get (builtin-schema-types property {:new-closed-value? true}) property-type)
+                              (get (built-in-validation-schemas property {:new-closed-value? true}) property-type)
                               resolved-value)]
         (cond
-          (nil? resolved-value)
-          nil
-
           (some (fn [b] (and (= resolved-value (or (db-pu/property-value-when-closed b)
                                                    (:block/uuid b)))
                              (not= id (:block/uuid b)))) block-values)
@@ -676,6 +678,9 @@
           (do
             (notification/show! validate-message :warning)
             :value-invalid)
+
+          (nil? resolved-value)
+          nil
 
           (:block/name value-block)             ; page
           (let [new-values (vec (conj closed-values value))]
@@ -703,16 +708,10 @@
                           (let [page (get-property-hidden-page property)
                                 page-tx (when-not (e/entity? page) page)
                                 page-id [:block/uuid (:block/uuid page)]
-                                new-block (cond->
-                                           (closed-value-new-block page-id block-id value property)
-                                            icon
-                                            (assoc :block/properties {icon-id icon})
-
-                                            description
-                                            (update :block/schema assoc :description description)
-
-                                            true
-                                            sqlite-util/block-with-timestamps)
+                                new-block (db-property-util/build-closed-value-block
+                                           block-id resolved-value page-id property {:icon-id icon-id
+                                                                                     :icon icon
+                                                                                     :description description})
                                 new-values (vec (conj closed-values block-id))]
                             (->> (cons page-tx [new-block
                                                 {:db/id (:db/id property)
@@ -723,6 +722,7 @@
              :tx-data tx-data}))))))
 
 (defn add-existing-values-to-closed-values!
+  "Adds existing values as closed values and returns their new block uuids"
   [property values]
   (when (seq values)
     (let [property-id (:block/uuid property)
@@ -731,11 +731,12 @@
           page-tx (when-not (e/entity? page) page)
           page-id (:block/uuid page)
           closed-value-blocks (map (fn [value]
-                                     (sqlite-util/block-with-timestamps
-                                      (closed-value-new-block [:block/uuid page-id]
-                                                              (db/new-block-id)
-                                                              value
-                                                              property)))
+                                     (db-property-util/build-closed-value-block
+                                      (db/new-block-id)
+                                      value
+                                      [:block/uuid page-id]
+                                      property
+                                      {}))
                                    (remove string/blank? values))
           value->block-id (zipmap
                            (map #(get-in % [:block/schema :value]) closed-value-blocks)
@@ -758,18 +759,20 @@
                                :block/properties (assoc properties property-id (get value->block-id value))})))
                         block-values))]
       (db/transact! (state/get-current-repo) tx-data
-        {:outliner-op :insert-blocks}))))
+                    {:outliner-op :insert-blocks})
+      new-value-ids)))
 
-(defn delete-closed-value
-  [property item]
-  (if (seq (:block/_refs item))
+(defn delete-closed-value!
+  [property value-block]
+  (if (seq (:block/_refs value-block))
     (notification/show! "The choice can't be deleted because it's still used." :warning)
-    (let [schema (:block/schema property)
-          tx-data [[:db/retractEntity (:db/id item)]
+    (let [property (db/entity (:db/id property))
+          schema (:block/schema property)
+          tx-data [[:db/retractEntity (:db/id value-block)]
                    {:db/id (:db/id property)
                     :block/schema (update schema :values
                                           (fn [values]
-                                            (vec (remove #{(:block/uuid item)} values))))}]]
+                                            (vec (remove #{(:block/uuid value-block)} values))))}]]
       (db/transact! tx-data))))
 
 (defn get-property-block-created-block

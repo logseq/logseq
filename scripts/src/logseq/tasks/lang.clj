@@ -165,7 +165,8 @@
          :settings-of-plugins :search-item/whiteboard :shortcut.category/navigating
          :settings-page/enable-tooltip :settings-page/enable-whiteboards :settings-page/plugin-system}
    :es #{:settings-page/tab-general :settings-page/tab-editor :whiteboard/color :right-side-bar/history-global}
-   :it #{:plugins}
+   :it #{:home :handbook/home :host :help/awesome-logseq :on-boarding/section-computer
+         :settings-page/tab-account :settings-page/tab-editor :whiteboard/link}
    :nl #{:plugins :type :left-side-bar/nav-recent-pages :plugin/update}
    :pl #{:port}
    :pt-BR #{:plugins :right-side-bar/flashcards :settings-page/enable-flashcards :page/backlinks

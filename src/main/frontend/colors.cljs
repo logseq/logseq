@@ -63,7 +63,7 @@
 
 
 (defn linear-gradient [color-name color-stop gradient-level]
-  (let [color-index (.indexOf color-list color-name)
+  (let [color-index (.indexOf color-list (keyword color-name))
         step (fn [dist]
                (str "var(--rx-"
                  (name (nth color-list (mod (+ color-index dist) (count color-list))))
@@ -85,5 +85,6 @@
                        (str/replace "hsl(" "")
                        (str/replace ")" "")
                        (str/split ","))]
-    (let [hsl-color (map js/parseFloat hsl-color)]
+    (when-let [hsl-color (and (not (str/blank? (first hsl-color)))
+                           (map js/parseFloat hsl-color))]
       (apply util/hsl2hex hsl-color))))

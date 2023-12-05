@@ -65,7 +65,7 @@
                                          [:block/schema :type]))}]
    (map (fn [[prop-type value-schema]]
           ^:property-value [prop-type (if (vector? value-schema) (last value-schema) value-schema)])
-        db-property-type/builtin-schema-types)))
+        db-property-type/built-in-validation-schemas)))
 
 (def block-properties
   "Validates a slightly modified version of :block/properties. Properties are
@@ -118,10 +118,9 @@
     page-attrs
     page-or-block-attrs)))
 
-(def property-schema-attrs
-  [[:hide? {:optional true} :boolean]
-   [:description {:optional true} :string]
-   ;; For any types except for :checkbox :default :template
+(def property-type-schema-attrs
+  "Property :schema attributes that vary by :type"
+  [;; For any types except for :checkbox :default :template
    [:cardinality {:optional true} [:enum :one :many]]
    ;; For closed values
    [:values {:optional true}  [:vector :uuid]]
@@ -130,28 +129,47 @@
    ;; For :page and :template
    [:classes {:optional true} [:set [:or :uuid :keyword]]]])
 
+(def property-common-schema-attrs
+  "Property :schema attributes common to all properties"
+  [[:hide? {:optional true} :boolean]
+   [:description {:optional true} :string]])
+
 (def internal-property
   (vec
    (concat
     [:map
      [:block/schema
-      (into [:map
-             [:type (apply vector :enum (into db-property-type/internal-builtin-schema-types
-                                              db-property-type/user-builtin-schema-types))]]
-            property-schema-attrs)]]
+      (vec
+       (concat
+        [:map
+         [:type (apply vector :enum (into db-property-type/internal-built-in-property-types
+                                          db-property-type/user-built-in-property-types))]]
+        property-common-schema-attrs
+        property-type-schema-attrs))]]
     page-attrs
     page-or-block-attrs)))
+
+(def user-property-schema
+  (into
+   [:multi {:dispatch :type}]
+   (map
+    (fn [prop-type]
+      [prop-type
+       (vec
+        (concat
+         [:map
+          ;; Once a schema is defined it must have :type as this is an irreversible decision
+          [:type :keyword]]
+         property-common-schema-attrs
+         (remove #(not (db-property-type/property-type-allows-schema-attribute? prop-type (first %)))
+                 property-type-schema-attrs)))])
+    db-property-type/user-built-in-property-types)))
 
 (def user-property
   (vec
    (concat
     [:map
-     [:block/schema
-      {:optional true}
-      (into [:map
-             ;; Once a schema is defined it must have :type as this is an irreversible decision
-             [:type (apply vector :enum db-property-type/user-builtin-schema-types)]]
-            property-schema-attrs)]]
+     [:block/schema {:optional true} user-property-schema]]
     page-attrs
     page-or-block-attrs)))
 

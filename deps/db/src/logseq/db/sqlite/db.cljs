@@ -3,17 +3,13 @@
   (:require ["path" :as node-path]
             ["better-sqlite3" :as sqlite3]
             [clojure.string :as string]
-            [cljs-bean.core :as bean]
+            [logseq.db.sqlite.util :as sqlite-util]
             [datascript.storage :refer [IStorage]]
-            [cognitect.transit :as t]
             [cljs.cache :as cache]
             [datascript.core :as d]
             [goog.object :as gobj]
             [logseq.db.frontend.schema :as db-schema]
-            [datascript.transit :as dt]
             [clojure.edn :as edn]))
-
-;; Notice: this works only on Node.js environment, it doesn't support browser yet.
 
 ;; use built-in blocks to represent db schema, config, custom css, custom js, etc.
 
@@ -35,7 +31,7 @@
 (defn sanitize-db-name
   [db-name]
   (-> db-name
-      (string/replace "logseq_db_" "")
+      (string/replace sqlite-util/db-version-prefix "")
       (string/replace "/" "_")
       (string/replace "\\" "_")
       (string/replace ":" "_"))) ;; windows

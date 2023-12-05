@@ -37,12 +37,6 @@
         additional-props (gp-whiteboard/with-whiteboard-block-props block page-name)]
     (merge block additional-props)))
 
-(defn- get-whiteboard-clj [page-name]
-  (when (model/page-exists? page-name)
-    (let [page-block (model/get-page page-name)
-          blocks (:block/_page page-block)]
-      [page-block blocks])))
-
 (defn- build-shapes
   [page-block blocks]
   (let [page-metadata (pu/get-property page-block :logseq.tldraw.page)

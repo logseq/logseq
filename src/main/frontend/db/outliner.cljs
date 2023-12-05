@@ -1,8 +1,7 @@
 (ns frontend.db.outliner
   "Db related fns for the outliner module"
-  (:require [datascript.core :as d]
-            [frontend.db.utils :as db-utils]))
-0
+  (:require [datascript.core :as d]))
+
 (defn get-by-id
   [conn id]
   (try
@@ -16,7 +15,3 @@
     :in $ ?id
     :where
     [?a :block/parent ?id]])
-
-(defn del-block
-  [conn id-or-look-ref]
-  (db-utils/transact! conn [[:db.fn/retractEntity id-or-look-ref]]))

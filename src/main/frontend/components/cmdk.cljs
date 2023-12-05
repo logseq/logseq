@@ -202,18 +202,26 @@
 ;; The pages search action uses an existing handler
 (defmethod load-results :pages [group state]
   (let [!input (::input state)
-        !results (::results state)]
+        !results (::results state)
+        repo (state/get-current-repo)]
     (swap! !results assoc-in [group :status] :loading)
     (p/let [pages (search/page-search @!input)
-            items (map
-                   (fn [page]
-                     (let [entity (db/entity [:block/name (util/page-name-sanity-lc page)])
-                           whiteboard? (= (:block/type entity) "whiteboard")]
-                       (hash-map :icon (if whiteboard? "whiteboard" "page")
-                                 :icon-theme :gray
-                                 :text page
-                                 :source-page page)))
-                   pages)]
+            items (->> pages
+                       (remove nil?)
+                       (map
+                        (fn [page]
+                          (let [entity (db/entity [:block/name (util/page-name-sanity-lc page)])
+                                whiteboard? (= (:block/type entity) "whiteboard")
+                                source-page (model/get-alias-source-page repo page)]
+                            (hash-map :icon (if whiteboard? "whiteboard" "page")
+                                      :icon-theme :gray
+                                      :text (if source-page
+                                              [:div.flex.flex-row.items-center.gap-2
+                                               page
+                                               [:div.opacity-50.font-normal "alias of"]
+                                               (:block/original-name source-page)]
+                                              page)
+                                      :source-page page)))))]
       (swap! !results update group        merge {:status :success :items items}))))
 
 ;; The blocks search action uses an existing handler
@@ -256,6 +264,27 @@
                    files)]
       (swap! !results update group        merge {:status :success :items items}))))
 
+;; FIXME: recent search
+;; (defmethod load-results :recents [group state]
+;;   (let [!input (::input state)
+;;         !results (::results state)
+;;         recent-searches (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
+;;         recent-pages (->> (filter string? (db/get-key-value :recent/pages))
+;;                           (keep (fn [page]
+;;                                   (when-let [page-entity (db/entity [:block/name (util/page-name-sanity-lc page)])]
+;;                                     {:type :page :data (:block/original-name page-entity)})))
+;;                           vec)]
+;;     (swap! !results assoc-in [group :status] :loading)
+;;     (let [items (->> (concat recent-searches recent-pages)
+;;                      (filter #(string/includes? (lower-case-str (:data %)) (lower-case-str @!input)))
+;;                      (map #(hash-map :icon (if (= :page (:type %)) "page" "history")
+;;                                      :icon-theme :gray
+;;                                      :text (:data %)
+;;                                      :source-recent %
+;;                                      :source-page (when (= :page (:type %)) (:data %))
+;;                                      :source-search (when (= :search (:type %)) (:data %)))))]
+;;       (swap! !results update group merge {:status :success :items items}))))
+
 (defn- get-filter-q
   [input]
   (or (when (string/starts-with? input "/")
@@ -284,24 +313,22 @@
       (load-results :filters state)
       (load-results :files state))))
 
-(defn close-unless-alt! [state]
-  (when-not (some-> state ::alt? deref)
-    (state/close-modal!)))
-
 (defn- copy-block-ref [state]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid uuid)]
     (editor-handler/copy-block-ref! block-uuid block-ref/->block-ref)
-    (close-unless-alt! state)))
+    (state/close-modal!)))
 
 (defmulti handle-action (fn [action _state _event] action))
 
 (defmethod handle-action :open-page [_ state _event]
   (when-let [page-name (some-> state state->highlighted-item :source-page)]
-    (let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
+    (let [redirect-page-name (model/get-redirect-page-name page-name)
+          page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])
+          original-name (:block/original-name page)]
       (if (= (:block/type page) "whiteboard")
-        (route-handler/redirect-to-whiteboard! page-name)
-        (route-handler/redirect-to-page! page-name)))
-    (close-unless-alt! state)))
+        (route-handler/redirect-to-whiteboard! original-name)
+        (route-handler/redirect-to-page! original-name)))
+    (state/close-modal!)))
 
 (defmethod handle-action :open-block [_ state _event]
   (let [block-id (some-> state state->highlighted-item :source-block :block/uuid uuid)
@@ -311,18 +338,20 @@
         (if (= (:block/type page) "whiteboard")
           (route-handler/redirect-to-whiteboard! page-name {:block-id block-id})
           (route-handler/redirect-to-page! page-name {:anchor (str "ls-block-" block-id)})))
-      (close-unless-alt! state))))
+      (state/close-modal!))))
 
 (defmethod handle-action :open-page-right [_ state _event]
   (when-let [page-name (some-> state state->highlighted-item :source-page)]
-    (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
-      (editor-handler/open-block-in-sidebar! (:block/uuid page)))
-    (close-unless-alt! state)))
+    (let [redirect-page-name (model/get-redirect-page-name page-name)
+          page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
+      (when page
+        (editor-handler/open-block-in-sidebar! (:block/uuid page))))
+    (state/close-modal!)))
 
 (defmethod handle-action :open-block-right [_ state _event]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid uuid)]
     (editor-handler/open-block-in-sidebar! block-uuid)
-    (close-unless-alt! state)))
+    (state/close-modal!)))
 
 (defmethod handle-action :open [_ state event]
   (when-let [item (some-> state state->highlighted-item)]
@@ -355,7 +384,7 @@
     (when-let [action (:action command)]
       (action)
       (when-not (contains? #{:graph/open :graph/remove :ui/toggle-settings :go/flashcards} (:id command))
-        (close-unless-alt! state)))))
+        (state/close-modal!)))))
 
 (defmethod handle-action :create [_ state _event]
   (let [item (state->highlighted-item state)
@@ -363,20 +392,17 @@
         create-class? (string/starts-with? @!input "#")
         create-whiteboard? (= :whiteboard (:source-create item))
         create-page? (= :page (:source-create item))
-        alt? (some-> state ::alt deref)
         class (when create-class? (get-class-from-input @!input))]
     (cond
       create-class? (page-handler/create! class
                                           {:redirect? false
                                            :create-first-block? false
                                            :class? true})
-      (and create-whiteboard? alt?) (whiteboard-handler/create-new-whiteboard-page! @!input)
-      (and create-whiteboard? (not alt?)) (whiteboard-handler/create-new-whiteboard-and-redirect! @!input)
-      (and create-page? alt?) (page-handler/create! @!input {:redirect? false})
-      (and create-page? (not alt?)) (page-handler/create! @!input {:redirect? true}))
+      create-whiteboard? (whiteboard-handler/create-new-whiteboard-and-redirect! @!input)
+      create-page? (page-handler/create! @!input {:redirect? true}))
     (if create-class?
       (state/pub-event! [:class/configure (db/entity [:block/name (util/page-name-sanity-lc class)])])
-      (close-unless-alt! state))))
+      (state/close-modal!))))
 
 (defn- get-filter-user-input
   [input]
@@ -441,7 +467,12 @@
      [:div {:class         "border-b border-gray-06 pb-1 last:border-b-0"
             :on-mouse-move #(reset! *mouse-active? true)}
       [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02"}
-       [:div {:class "font-bold text-gray-11 pl-0.5"} title]
+       [:div {:class "font-bold text-gray-11 pl-0.5 cursor-pointer select-none"
+              :on-click (fn [_e]
+                          ;; change :less to :more or :more to :less
+                          (swap! (::results state) update-in [group :show] {:more :less
+                                                                            :less :more}))}
+        title]
        (when (not= group :create)
          [:div {:class "pl-1.5 text-gray-12 rounded-full"
                 :style {:font-size "0.7rem"}}
@@ -474,7 +505,6 @@
                                       :rounded false
                                       :hoverable @*mouse-active?
                                       :highlighted highlighted?
-                                      :display-shortcut-on-highlight? true
                                       ;; for some reason, the highlight effect does not always trigger on a
                                       ;; boolean value change so manually pass in the dep
                                       :on-highlight-dep highlighted-item
@@ -529,12 +559,12 @@
 (defn- keydown-handler
   [state e]
   (let [shift? (.-shiftKey e)
-        meta? (.-metaKey e)
-        alt? (.-altKey e)
+        meta? (util/meta-key? e)
         ctrl? (.-ctrlKey e)
         keyname (.-key e)
         enter? (= keyname "Enter")
         esc? (= keyname "Escape")
+        composing? (util/event-is-composing? e)
         highlighted-group @(::highlighted-group state)
         show-less (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :less))
         show-more (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :more))
@@ -543,7 +573,6 @@
         as-keyup? (or (= keyname "ArrowUp") (and ctrl? (= keyname "p")))]
     (reset! (::shift? state) shift?)
     (reset! (::meta? state) meta?)
-    (reset! (::alt? state) alt?)
     (when (or as-keydown? as-keyup?)
       (.preventDefault e))
 
@@ -559,9 +588,9 @@
       as-keyup? (if meta?
                   (show-less)
                   (move-highlight state -1))
-      enter? (do
-               (handle-action :default state e)
-               (util/stop-propagation e))
+      (and enter? (not composing?)) (do
+                                      (handle-action :default state e)
+                                      (util/stop-propagation e))
       esc? (let [filter @(::filter state)]
              (when (or (and filter @(::input-changed? state))
                        (not (string/blank? input)))
@@ -573,13 +602,11 @@
                                     (util/stop-propagation e))
       :else nil)))
 
-(defn keyup-handler
+(defn- keyup-handler
   [state e]
   (let [shift? (.-shiftKey e)
-        meta? (.-metaKey e)
-        alt? (.-altKey e)]
+        meta? (util/meta-key? e)]
     (reset! (::shift? state) shift?)
-    (reset! (::alt? state) alt?)
     (reset! (::meta? state) meta?)))
 
 (defn- input-placeholder
@@ -640,8 +667,8 @@
      (shui/shortcut "/" context)
      [:div "to filter search results"]]
     [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
-     (shui/shortcut "mod enter" context)
-     [:div "to open search in the sidebar"]]]))
+     (shui/shortcut ["mod" "enter"] context)
+     [:div "to open search in the sidebar"]]])  )
 
 (rum/defcs tip <
   {:init (fn [state]
@@ -751,12 +778,10 @@
        (mixins/on-key-down state {}
                            {:target ref
                             :all-handler (fn [e _key] (keydown-handler state e))})
-       (mixins/on-key-up state {}
-                         {:target ref
-                          :all-handler (fn [e _key] (keyup-handler state e))}))))
+       (mixins/on-key-up state {} (fn [e _key]
+                                    (keyup-handler state e))))))
   (rum/local false ::shift?)
   (rum/local false ::meta?)
-  (rum/local false ::alt?)
   (rum/local nil ::highlighted-group)
   (rum/local nil ::highlighted-item)
   (rum/local default-results ::results)

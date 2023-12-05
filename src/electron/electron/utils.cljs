@@ -6,7 +6,9 @@
             [clojure.string :as string]
             [electron.configs :as cfgs]
             [electron.logger :as logger]
+            [logseq.db.sqlite.util :as sqlite-util]
             [cljs-bean.core :as bean]
+            [electron.db :as db]
             [promesa.core :as p]))
 
 (defonce *win (atom nil)) ;; The main window
@@ -41,6 +43,14 @@
   (when (not-empty path)
     (if win32?
       (string/replace path "\\" "/")
+      path)))
+
+(defn to-native-win-path!
+  "Convert path to native win path"
+  [path]
+  (when (not-empty path)
+    (if win32?
+      (string/replace path "/" "\\")
       path)))
 
 (defn get-ls-dotdir-root
@@ -250,13 +260,17 @@
 (defn get-graph-dir
   "required by all internal state in the electron section"
   [graph-name]
-  (when (string/includes? graph-name "logseq_local_")
-    (string/replace-first graph-name "logseq_local_" "")))
+  (cond (string/starts-with? graph-name sqlite-util/db-version-prefix)
+        (node-path/join (db/get-graphs-dir) (string/replace-first graph-name sqlite-util/db-version-prefix ""))
+        (string/includes? graph-name "logseq_local_")
+        (string/replace-first graph-name "logseq_local_" "")))
 
 (defn get-graph-name
-  "reversing `get-graph-dir`"
+  "Reverse `get-graph-dir`"
   [graph-dir]
-  (str "logseq_local_" graph-dir))
+  (if (= (db/get-graphs-dir) (node-path/dirname graph-dir))
+    (str sqlite-util/db-version-prefix (node-path/basename graph-dir))
+    (str "logseq_local_" graph-dir)))
 
 (defn decode-protected-assets-schema-path
   [schema-path]
