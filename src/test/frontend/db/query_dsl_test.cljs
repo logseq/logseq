@@ -198,6 +198,10 @@ prop-d:: nada"}])
           (dsl-query "(or (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))")))
       "Page property queries ORed")
 
+  (is (= ["page1" "page3"]
+         (map :block/name
+              (dsl-query "(and (page-property parent [[child page 1]]) (or (page-property interesting true) (page-property parent [[child page 2]])))"))))
+
   (is (= ["page4"]
          (map
           :block/name
@@ -230,31 +234,36 @@ prop-d:: nada"}])
 - NOW b1
 - TODO b2
 - LATER b3
-- LATER [#A] b4"}])
+- LATER [#A] b4
+- LATER [#B] b5"}])
 
   (testing "Lowercase query"
     (is (= ["NOW b1"]
            (map :block/content (dsl-query "(task now)"))))
 
-    (is (= ["LATER b3" "LATER [#A] b4"]
+    (is (= ["LATER b3" "LATER [#A] b4" "LATER [#B] b5"]
            (map :block/content (dsl-query "(task later)")))))
 
-  (is (= ["LATER b3" "LATER [#A] b4"]
+  (is (= ["LATER b3" "LATER [#A] b4" "LATER [#B] b5"]
          (map :block/content (dsl-query "(task LATER)")))
       "Uppercase query")
 
   (testing "Multiple specified tasks results in ORed results"
-    (is (= ["NOW b1" "LATER b3" "LATER [#A] b4"]
+    (is (= ["NOW b1" "LATER b3" "LATER [#A] b4" "LATER [#B] b5"]
            (map :block/content (dsl-query "(task now later)"))))
 
-    (is (= ["NOW b1" "LATER b3" "LATER [#A] b4"]
+    (is (= ["NOW b1" "LATER b3" "LATER [#A] b4" "LATER [#B] b5"]
            (map :block/content (dsl-query "(task [now later])")))
         "Multiple arguments specified with vector notation"))
 
   (is (= ["NOW b1" "LATER [#A] b4"]
          (map :block/content
               (dsl-query "(or (todo now) (and (todo later) (priority a)))")))
-      "Multiple boolean operators with todo and priority operators"))
+      "Multiple boolean operators with todo and priority operators")
+
+  (is (= ["LATER [#A] b4" "LATER [#B] b5"]
+         (map :block/content
+              (dsl-query "(and (todo later) (or (priority a) (priority b)))")))))
 
 (deftest sample-queries
   (load-test-files [{:file/path "pages/page1.md"
@@ -328,6 +337,12 @@ prop-d:: nada"}])
          (->> (dsl-query "(not (and (todo now later) (or [[page 1]] [[page 2]])))")
               (keep :block/content)
               set)))
+
+  (is (= #{"DONE b2 [[page 1]]" "LATER b4 [[page 2]]"}
+         (->> (dsl-query "(and \"b\" (or \"2\" \"4\"))")
+              (keep :block/content)
+              set))
+      "AND-OR with full text search")
 
   ;; FIXME: not working
   ;; Requires or-join and not-join which aren't supported yet

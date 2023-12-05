@@ -46,6 +46,8 @@
                                                                                                            :group :blocks}}
    {:text "Search only commands"     :info "Add filter to search" :icon-theme :gray :icon "command" :filter {:mode "search"
                                                                                                              :group :commands}}
+   {:text "Search only whiteboards"  :info "Add filter to search" :icon-theme :gray :icon "whiteboard" :filter {:mode "search"
+                                                                                                                :group :whiteboards}}
    {:text "Search only files"        :info "Add filter to search" :icon-theme :gray :icon "file" :filter {:mode "search"
                                                                                                           :group :files}}])
 
@@ -230,6 +232,26 @@
                                       :source-page page)))))]
       (swap! !results update group        merge {:status :success :items items}))))
 
+(defmethod load-results :whiteboards [group state]
+  (let [!input (::input state)
+        !results (::results state)]
+    (swap! !results assoc-in [group :status] :loading)
+    (p/let [whiteboards (->> (model/get-all-whiteboards (state/get-current-repo))
+                             (map :block/original-name))
+            pages (search/fuzzy-search whiteboards @!input {:limit 100})
+            items (->> pages
+                       (remove nil?)
+                       (keep
+                        (fn [page]
+                          (let [entity (db/entity [:block/name (util/page-name-sanity-lc page)])
+                                whiteboard? (= (:block/type entity) "whiteboard")]
+                            (when whiteboard?
+                              (hash-map :icon "whiteboard"
+                                        :icon-theme :gray
+                                        :text page
+                                        :source-page page))))))]
+      (swap! !results update group        merge {:status :success :items items}))))
+
 ;; The blocks search action uses an existing handler
 (defmethod load-results :blocks [group state]
   (let [!input (::input state)
@@ -308,16 +330,19 @@
 
 ;; The default load-results function triggers all the other load-results function
 (defmethod load-results :default [_ state]
-  (js/console.log "load-results/default" @(::input state))
   (if-not (some-> state ::input deref seq)
     (load-results :initial state)
-    (do
-      (load-results :commands state)
-      (load-results :blocks state)
-      (load-results :pages state)
-      (load-results :filters state)
-      (load-results :files state)
-      (load-results :recents state))))
+    (let [filter-group (:group @(::filter state))]
+      (if filter-group
+        (load-results filter-group state)
+        (do
+          (load-results :commands state)
+          (load-results :blocks state)
+          (load-results :pages state)
+          (load-results :filters state)
+          (load-results :files state)
+          (load-results :recents state)
+          (load-results :whiteboards state))))))
 
 (defn- copy-block-ref [state]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid uuid)]
@@ -338,13 +363,19 @@
 
 (defmethod handle-action :open-block [_ state _event]
   (let [block-id (some-> state state->highlighted-item :source-block :block/uuid uuid)
-        get-block-page (partial model/get-block-page (state/get-current-repo))]
-    (when-let [page (some-> block-id get-block-page)]
-      (let [page-name (:block/name page)]
-        (if (= (:block/type page) "whiteboard")
-          (route-handler/redirect-to-whiteboard! page-name {:block-id block-id})
-          (route-handler/redirect-to-page! page-name {:anchor (str "ls-block-" block-id)})))
-      (state/close-modal!))))
+        get-block-page (partial model/get-block-page (state/get-current-repo))
+        block (db/entity [:block/uuid block-id])]
+    (when block
+      (when-let [page (some-> block-id get-block-page)]
+        (let [page-name (:block/name page)]
+          (cond
+            (= (:block/type page) "whiteboard")
+            (route-handler/redirect-to-whiteboard! page-name {:block-id block-id})
+            (model/parents-collapsed? (state/get-current-repo) block-id)
+            (route-handler/redirect-to-page! (:block/uuid block))
+            :else
+            (route-handler/redirect-to-page! page-name {:anchor (str "ls-block-" block-id)})))
+        (state/close-modal!)))))
 
 (defmethod handle-action :open-page-right [_ state _event]
   (when-let [page-name (some-> state state->highlighted-item :source-page)]
@@ -808,7 +839,7 @@
 
       (when group-filter
         [:div.flex.flex-col.px-3.py-1.opacity-70.text-sm
-         (search-only state (name group-filter))])
+         (search-only state (string/capitalize (name group-filter)))])
 
       (let [items (filter
                    (fn [[_group-name group-key group-count _group-items]]
@@ -822,7 +853,7 @@
                    results-ordered)]
         (if (seq items)
           (for [[group-name group-key _group-count group-items] items]
-            (let [title group-name]
+            (let [title (string/capitalize group-name)]
               (result-group state title group-key group-items first-item sidebar?)))
           [:div.flex.flex-col.p-4.opacity-50
            (when-not (string/blank? (rum/react *input))
