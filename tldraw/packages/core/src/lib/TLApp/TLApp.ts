@@ -837,6 +837,20 @@ export class TLApp<
     )
   }
 
+  @computed get showCloneHandles() {
+    const { selectedShapesArray } = this
+    return (
+      this.isInAny(
+        'select.idle',
+        'select.hoveringSelectionHandle',
+        'select.pointingShape',
+        'select.pointingSelectedShape',
+      ) &&
+      selectedShapesArray.length === 1 &&
+      !this.readOnly
+    )
+  }
+
   /* ------------------ Shape Classes ----------------- */
 
   Shapes = new Map<string, TLShapeConstructor<S>>()

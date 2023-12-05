@@ -81,7 +81,7 @@ const tlcss = css`
   .tl-container {
     --tl-zoom: 1;
     --tl-scale: calc(1 / var(--tl-zoom));
-    --tl-padding: 64px;
+    --tl-padding: calc(64px / var(--tl-zoom));;
     --tl-shadow-color: 0deg 0% 0%;
     --tl-binding-distance: ${BINDING_DISTANCE}px;
     --tl-shadow-elevation-low: 0px 0.4px 0.5px hsl(var(--tl-shadow-color) / 0.04),
@@ -221,6 +221,12 @@ const tlcss = css`
   }
 
   .tl-rotate-handle {
+    stroke: var(--tl-selectStroke);
+    fill: var(--tl-background);
+    stroke-width: calc(1.5px * var(--tl-scale));
+  }
+
+  .tl-clone-handle {
     stroke: var(--tl-selectStroke);
     fill: var(--tl-background);
     stroke-width: calc(1.5px * var(--tl-scale));

@@ -1,5 +1,5 @@
 import Vec from '@tldraw/vec'
-import type { TLAsset, TLBinding, TLEventMap } from '../../types'
+import type { TLAsset, TLBinding, TLEventMap, TLCloneDirection } from '../../types'
 import { BoundsUtils, isNonNullable, uniqueId } from '../../utils'
 import type { TLShape, TLShapeModel } from '../shapes'
 import type { TLApp } from '../TLApp'
@@ -230,6 +230,10 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     return this.app.createNewLineBinding(source, target)
   }
 
+  clone = (direction: TLCloneDirection) => {
+    // TODO: Clone to direction, clear label, create binding, select shape
+  }
+  
   /** Clone shapes with given context */
   cloneShapes = ({
     shapes,
