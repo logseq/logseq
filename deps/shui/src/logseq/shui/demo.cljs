@@ -227,13 +227,13 @@
              :size     :md} "🍄 * Footer"))))))
 
 (rum/defc page []
-  [:div.p-10
+  [:div.sm:p-10
    [:h1.text-3xl.font-bold "Logseq UI"]
    [:hr]
 
    ;; Button
    (section-item "Button"
-     [:div.flex.flex-row.space-x-2
+     [:div.flex.flex-row.flex-wrap.gap-2
       (let [[loading? set-loading!] (rum/use-state false)]
         (ui/button
           {:size     :sm
@@ -260,7 +260,7 @@
 
    ;; Toast
    (section-item "Toast"
-     [:div.flex.flex-row.space-x-2
+     [:div.flex.flex-row.flex-wrap.gap-2
       (ui/button
         {:size     :md
          :variant  :outline
@@ -309,14 +309,14 @@
 
    ;; Badge
    (section-item "Badge"
-     [:div.flex.flex-row.space-x-2
+     [:div.flex.flex-row.flex-wrap.gap-2
       (ui/badge "Default")
       (ui/badge {:variant :outline} "Outline")
       (ui/badge {:variant :secondary} "Secondary")
       (ui/badge {:variant :destructive} "Destructive")
       (ui/badge {:class "primary-yellow"} "Custom (.primary-yellow)")])
 
-   [:div.grid.grid-cols-3.gap-8
+   [:div.grid.sm:grid-cols-3.sm:gap-8
     ;; Dropdown
     (section-item "Dropdown"
       (ui/dropdown-menu
@@ -333,7 +333,7 @@
 
    ;; Dialog
    (section-item "Dialog"
-     [:div.flex.flex-row.space-x-2
+     [:div.flex.flex-row.flex-wrap.gap-2
       (sample-dialog-basic)
       (ui/button
         {:on-click #(dialog-core/open! "a modal dialog from `open!`" {:title "Title"})}
@@ -378,7 +378,7 @@
           "content: radix colors for Logseq"))])
 
    ;; Slider
-   [:div.grid.grid-cols-8.gap-4
+   [:div.grid.sm:grid-cols-8.gap-4
     [:div.col-span-4.mr-6
      (section-item "Slider" (ui/slider))]
     [:div.col-span-1
@@ -407,7 +407,7 @@
       (sample-form-basic)])
 
    ;; Card
-   [:div.grid.grid-cols-2.gap-8
+   [:div.grid.sm:grid-cols-2.sm:gap-8
     (section-item "Card"
       (ui/card
         (ui/card-header
@@ -432,7 +432,7 @@
           (ui/skeleton {:class "h-4 w-full mb-2"}))))]
 
    ;; Calendar
-   [:div.grid.grid-cols-2.gap-8
+   [:div.grid.sm:grid-cols-2.sm:gap-8
     (section-item "Calendar"
       (ui/card
         {:class "inline-flex"}
@@ -440,4 +440,4 @@
     (section-item "Date Picker"
       (sample-date-picker))]
 
-   [:hr.mb-60]])
+   [:hr.mb-80]])
