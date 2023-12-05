@@ -72,10 +72,8 @@
   (set-new-result! [repo-url :kv key] nil))
 
 (defn clear-query-state!
-  "It should only be triggered for file based graphs."
   []
-  (when-not (string/starts-with? (state/get-current-repo) sqlite-util/db-version-prefix)
-    (reset! query-state {})))
+  (reset! query-state {}))
 
 (defn add-q!
   [k query time inputs result-atom transform-fn query-fn inputs-fn]
