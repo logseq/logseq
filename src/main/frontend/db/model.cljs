@@ -310,12 +310,13 @@ independent of format as format specific heading characters are stripped"
                 page-name
                 route-name
                 (fn content-matches? [block-content external-content block-id]
-                  (= (as-> (:block/refs (db-utils/entity repo block-id)) block-refs
-                       (-> block-content
-                           (db-utils/special-id->page block-refs)
-                           (db-utils/special-id-ref->page block-refs)
-                           heading-content->route-name))
-                     (string/lower-case external-content))))
+                  (let [block (db-utils/entity repo block-id)
+                        ref-tags (distinct (concat (:block/tags block) (:block/refs block)))]
+                    (= (-> block-content
+                           (db-utils/special-id->page ref-tags)
+                           (db-utils/special-id-ref->page ref-tags)
+                           heading-content->route-name)
+                       (string/lower-case external-content)))))
            ffirst)
 
       (->> (d/q '[:find (pull ?b [:block/uuid])

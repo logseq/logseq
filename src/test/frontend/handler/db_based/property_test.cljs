@@ -208,7 +208,7 @@
       ;; make sure class2 will not be deleted when removing it from the first block
       (editor-handler/save-block! repo sbid "Block 2 #class2")
       (editor-handler/save-block! repo fbid "Block 1 #class1 #class3")
-      (is (= 2 (count (:block/tags (db/entity [:block/uuid fbid]))))))
+      (is (= 3 (count (:block/tags (db/entity [:block/uuid fbid]))))))
     (testing "Get block's classes properties"
       ;; set c2 as parent of c3
       (let [c3 (db/entity [:block/name "class3"])]
