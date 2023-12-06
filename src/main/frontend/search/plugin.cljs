@@ -23,8 +23,6 @@
   (query [_this q opts]
     (call-service! service "search:query" (merge {:q q} opts) true))
 
-  (query-page [_this q opts]
-    (call-service! service "search:queryPage" (merge {:q q} opts) true))
 
   (rebuild-blocks-indice! [_this]
    ;; Not pushing all data for performance temporarily
@@ -36,12 +34,6 @@
       (call-service! service "search:transactBlocks"
                      {:data {:added   blocks-to-add
                              :removed blocks-to-remove-set}})))
-
-  (transact-pages! [_this data]
-    (let [{:keys [pages-to-remove-set pages-to-add]} data]
-      (call-service! service "search:transactpages"
-                     {:data {:added   pages-to-add
-                             :removed pages-to-remove-set}})))
 
   (truncate-blocks! [_this]
     (call-service! service "search:truncateBlocks" {}))

@@ -31,13 +31,6 @@
         (protocol/query e q opts))
       (protocol/query e1 q opts)))
 
-  (query-page [_this q opts]
-    (println "D:Search > Query-page contents:" repo q opts)
-    (let [[e1 e2] (get-registered-engines repo)]
-      (doseq [e e2]
-        (protocol/query-page e q opts))
-      (protocol/query-page e1 q opts)))
-
   (rebuild-blocks-indice! [_this]
     (println "D:Search > Initial blocks indice!:" repo)
     (let [[e1 e2] (get-registered-engines repo)]
@@ -48,10 +41,6 @@
   (transact-blocks! [_this data]
     (doseq [e (get-flatten-registered-engines repo)]
       (protocol/transact-blocks! e data)))
-
-  (transact-pages! [_this data]
-    (doseq [e (get-flatten-registered-engines repo)]
-      (protocol/transact-pages! e data)))
 
   (truncate-blocks! [_this]
     (println "D:Search > Truncate blocks!" repo)
