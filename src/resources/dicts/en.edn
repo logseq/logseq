@@ -225,14 +225,18 @@
  :linked-references/filter-heading "Filter"
  :linked-references/filter-includes "Includes: "
  :linked-references/filter-excludes "Excludes: "
- :linked-references/x-of-1-reference "{0} of 1 Reference"
- :linked-references/x-of-y-references "{0} of {1} References"
- :linked-references/zero-references "0 Linked References"
- :linked-references/one-reference "1 Linked Reference"
- :linked-references/many-references "{0} Linked References"
- :unlinked-references/zero-references "0 Unlinked References"
- :unlinked-references/one-reference "1 Unlinked Reference"
- :unlinked-references/many-references "{0} Unlinked References"
+ :linked-references/reference-count (fn [filters? filter-n total]
+                                      (str
+                                       (when filters?
+                                         (str filter-n " of "))
+                                       total
+                                       " Linked Reference"
+                                       (when (!= total 1) "s")))
+ :unlinked-references/reference-count (fn [n-ref]
+                                        (if n-ref
+                                          (str n-ref " Unlinked Reference"
+                                               (when (!= n-ref 1) "s"))
+                                          "Unlinked References"))
  :editor/block-search "Search for a block"
  :text/image "Image"
  :asset/show-in-folder "Show image in folder"
@@ -472,6 +476,7 @@
  :whiteboard/toggle-grid "Toggle grid"
  :whiteboard/snap-to-grid "Snap to grid"
  :whiteboard/toggle-pen-mode "Toggle pen mode"
+ :whiteboard/reference-count (fn [refs-count] (if (= refs-count 1) "Reference" "References"))
  :flashcards/modal-welcome-title "Time to create a card!"
  :flashcards/modal-welcome-desc-1 "You can add \"#card\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."
  :flashcards/modal-welcome-desc-2 "You can "

@@ -133,11 +133,7 @@
         *collapsed? (atom nil)]
     (ui/foldable
      [:div.flex.flex-row.flex-1.justify-between.items-center
-      [:h2.font-medium (if (> total 0)
-                         (if (= 1 total)
-                           (t :linked-references/x-of-1-reference filter-n)
-                           (t :linked-references/x-of-y-references filter-n total))
-                         (t :linked-references/zero-references))]
+      [:h2.font-medium :linked-references/reference-count filter-n total]
       [:a.filter.fade-link
        {:title (t :linked-references/filter-heading)
         :on-mouse-over (fn [_e]
@@ -290,11 +286,7 @@
         [:div.references.page-unlinked.mt-6.flex-1.flex-row
          [:div.content.flex-1
           (ui/foldable
-           [:h2.font-medium
-            (case @n-ref
-              0 (t :unlinked-references/zero-references @n-ref)
-              1 (t :unlinked-references/one-reference @n-ref)
-              (t:unlinked-references/many-references @n-ref))]
+           [:h2.font-medium (t :unlinked-references/num-references @n-ref)]
            (fn [] (unlinked-references-aux page-name n-ref))
            {:default-collapsed? true
             :title-trigger? true})]]))))
