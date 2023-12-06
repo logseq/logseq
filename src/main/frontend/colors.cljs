@@ -30,7 +30,7 @@
      (string/replace "," ""))))
 
 (defn set-radix [color]
-  (if-not color
+  (if color
     (prn "==> FIXME: skip set accent color #" color)
     (let [style-tag (or (js/document.querySelector "style#color-variables")
                       (js/document.createElement "style"))
@@ -81,7 +81,8 @@
 
 (defn unset-radix []
   (when-let [style-tag (js/document.querySelector "style#color-variables")]
-    (js/document.head.removeChild style-tag)))
+    (js/document.head.removeChild style-tag))
+  (prn "==> FIXME: skip unset accent color"))
 
 (defn linear-gradient [color-name color-stop gradient-level]
   (let [color-index (.indexOf color-list color-name)
