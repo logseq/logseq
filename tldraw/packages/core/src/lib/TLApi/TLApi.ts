@@ -235,25 +235,25 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     const shape = this.app.allSelectedShapesArray[0]
     const ShapeClass = this.app.getShapeClass(shape.type)
 
-    const bounds = shape.bounds
+    const {minX, minY, maxX, maxY, width, height} = shape.bounds
     const spacing = 100
     let point = [0, 0]
 
     switch(direction) {
       case TLCloneDirection.Bottom: {
-        point = [bounds.minX, bounds.maxY + spacing]
+        point = [minX, maxY + spacing]
         break
       }
       case TLCloneDirection.Top: {
-        point = [bounds.minX, bounds.minY - spacing  - bounds.height]
+        point = [minX, minY - spacing  - height]
         break
       }
       case TLCloneDirection.Left: {
-        point = [bounds.minX - spacing - bounds.width, bounds.minY]
+        point = [minX - spacing - width, minY]
         break
       }
       case TLCloneDirection.Right: {
-        point = [bounds.maxX + spacing, bounds.minY]
+        point = [maxX + spacing, minY]
         break
       }
     }
