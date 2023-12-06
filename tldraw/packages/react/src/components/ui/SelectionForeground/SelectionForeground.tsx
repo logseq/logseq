@@ -21,6 +21,7 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
   const size = 8 / zoom
   const targetSize = 6 / zoom
   const clonePadding = 30 / zoom
+  const cloneHandleSize = size * 2
 
   const canResize = shapes.length === 1 ? shapes[0].canResize : [true, true]
 
@@ -112,29 +113,22 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
           <CloneHandle
             cx={- clonePadding}
             cy={height / 2}
-            size={size}
+            size={cloneHandleSize}
             direction={TLCloneDirection.Left}
             isHidden={!showCloneHandles}
           />
           <CloneHandle
             cx={width + clonePadding}
             cy={height / 2}
-            size={size}
+            size={cloneHandleSize}
             direction={TLCloneDirection.Right}
             isHidden={!showCloneHandles}
           />
           <CloneHandle
             cx={width / 2}
             cy={height + clonePadding}
-            size={size}
+            size={cloneHandleSize}
             direction={TLCloneDirection.Bottom}
-            isHidden={!showCloneHandles}
-          />
-          <CloneHandle
-            cx={width / 2}
-            cy={- clonePadding}
-            size={size}
-            direction={TLCloneDirection.Top}
             isHidden={!showCloneHandles}
           />
           {canResize?.every(r => r) && (

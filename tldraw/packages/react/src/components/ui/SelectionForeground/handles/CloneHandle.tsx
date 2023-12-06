@@ -1,7 +1,6 @@
 import { observer } from 'mobx-react-lite'
-import type { TLCloneDirection } from '@tldraw/core'
+import type { TLCloneDirection, } from '@tldraw/core'
 import { useApp } from '../../../../hooks'
-
 interface CloneHandleProps {
     cx: number
     cy: number
@@ -20,15 +19,27 @@ export const CloneHandle = observer(function CloneHandle({
     const app = useApp()
 
     return (
-        <circle
-            pointerEvents="all"
-            onPointerDown={() => app.api.clone(direction)}
-            opacity={isHidden ? 0 : 1}
-            className="tl-clone-handle"
-            aria-label={`${direction} handle`}
-            cx={cx}
-            cy={cy}
-            r={size}
-        />
+        <g className="tl-clone-handle" opacity={isHidden ? 0 : 1}>
+            <circle
+                aria-label={`${direction} handle`}
+                pointerEvents="all"
+                onPointerDown={(e) => app.api.cloneTo(direction)}
+                cx={cx}
+                cy={cy}
+                r={size}
+            />
+            <line 
+                x1={cx - size / 2}
+                y1={cy}
+                x2={cx + size / 2}
+                y2={cy} 
+            />
+            <line 
+                x1={cx}
+                y1={cy - size / 2}
+                x2={cx}
+                y2={cy + size / 2} 
+            />
+        </g>
     )
 })

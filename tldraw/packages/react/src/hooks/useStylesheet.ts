@@ -232,6 +232,15 @@ const tlcss = css`
     stroke-width: calc(1.5px * var(--tl-scale));
   }
 
+  .tl-clone-handle:hover {
+    fill: var(--tl-selectStroke);
+    cursor: pointer; 
+  }
+
+  .tl-clone-handle:hover line {
+    stroke: var(--tl-background);
+  }
+
   .tl-user {
     left: -4px;
     top: -4px;
