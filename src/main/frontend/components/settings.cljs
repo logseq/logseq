@@ -64,19 +64,19 @@
                (mobile-util/native-android?)
                (ui/button
                 (t :settings-page/check-for-updates)
-                :class "text-sm p-1 mr-1"
+                :class "text-sm mr-1"
                 :href "https://github.com/logseq/logseq/releases")
 
                (mobile-util/native-ios?)
                (ui/button
                 (t :settings-page/check-for-updates)
-                :class "text-sm p-1 mr-1"
+                :class "text-sm mr-1"
                 :href "https://apps.apple.com/app/logseq/id1601013908")
 
                (util/electron?)
                (ui/button
                 (if update-pending? (t :settings-page/checking) (t :settings-page/check-for-updates))
-                :class "text-sm p-1 mr-1"
+                :class "text-sm mr-1"
                 :disabled update-pending?
                 :on-click #(js/window.apis.checkForUpdates false))
 
@@ -523,7 +523,7 @@
     [:div
      (ui/button
        (t :settings)
-       :class "text-sm p-1"
+       :class "text-sm"
        :style {:margin-top "0px"}
        :on-click
        (fn []
@@ -612,7 +612,7 @@
                  "direct" "Direct"
                  (and protocol host port (str protocol "://" host ":" port)))]
               (ui/icon "edit")]
-             :class "text-sm p-1"
+             :class "text-sm"
              :on-click #(state/set-sub-modal!
                          (fn [_] (plugins/user-proxy-settings-panel agent-opts))
                          {:id :https-proxy-panel :center? true})))
