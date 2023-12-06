@@ -10,7 +10,8 @@
             [logseq.db.frontend.schema :as db-schema]
             [shadow.cljs.modern :refer [defclass]]
             [datascript.transit :as dt]
-            [clojure.edn :as edn]))
+            [clojure.edn :as edn]
+            [clojure.string :as string]))
 
 (def *wasm-loaded (atom false))
 
@@ -51,6 +52,11 @@
         (let [content (restore-data-from-addr repo addr)]
           (edn/read-string content))))))
 
+(defn split-last [pattern s]
+  (when-let [last-index (string/last-index-of s pattern)]
+    [(subs s 0 last-index)
+     (subs s (+ last-index (count pattern)) (count s))]))
+
 #_:clj-kondo/ignore
 (defclass SQLiteDB
   (extends js/Object)
@@ -62,12 +68,14 @@
   Object
   (init
    [_this]
-   (p/let [wasm-url (js/URL. "/static/js/logseq_sqlite_bg.wasm" (.. js/location -href))
-           _ (wasm-bindgen-init wasm-url)]
-     (prn ::init-ok
-          :has-opfs-support (.has_opfs_support sqlite-db)
-          :sqlite-version (.get_version sqlite-db))
-     (reset! *wasm-loaded true)))
+   (let [[_ sqlite-wasm-url] (split-last "url=" (.. js/location -href))]
+     (assert (some? sqlite-wasm-url) "sqlite-wasm-url is empty")
+     (p/let [wasm-url (js/URL. sqlite-wasm-url (.. js/location -href))
+            _ (wasm-bindgen-init wasm-url)]
+      (prn ::init-ok
+           :has-opfs-support (.has_opfs_support sqlite-db)
+           :sqlite-version (.get_version sqlite-db))
+      (reset! *wasm-loaded true))))
 
   (inited
    [_this]

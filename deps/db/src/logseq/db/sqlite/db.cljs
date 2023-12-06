@@ -107,17 +107,7 @@
           (upsert-addr-content! repo data)))
       (-restore [_ addr]
         (let [content (restore-data-from-addr repo addr)]
-          (edn/read-string content))
-        ;; disable cache for now
-        ;; (when-let [content (if (cache/has? cache addr)
-        ;;                      (do
-        ;;                        (cache/hit cache addr)
-        ;;                        (cache/lookup cache addr))
-        ;;                      (when-let [result (restore-data-from-addr repo addr)]
-        ;;                        (cache/miss cache addr result)
-        ;;                        result))]
-        ;;   (edn/read-string content))
-        ))))
+          (edn/read-string content))))))
 
 (defn open-db!
   [graphs-dir db-name]
