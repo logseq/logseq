@@ -231,11 +231,11 @@
                                          (str filter-n " of "))
                                        total
                                        " Linked Reference"
-                                       (when (!= total 1) "s")))
+                                       (when (not= total 1) "s")))
  :unlinked-references/reference-count (fn [n-ref]
                                         (if n-ref
                                           (str n-ref " Unlinked Reference"
-                                               (when (!= n-ref 1) "s"))
+                                               (when (not= n-ref 1) "s"))
                                           "Unlinked References"))
  :editor/block-search "Search for a block"
  :text/image "Image"
