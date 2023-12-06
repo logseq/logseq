@@ -128,7 +128,7 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
             cx={width / 2}
             cy={height + clonePadding}
             size={cloneHandleSize}
-            direction={TLCloneDirection.Bottom}
+            direction={TLCloneDirection.Down}
             isHidden={!showCloneHandles}
           />
           {canResize?.every(r => r) && (

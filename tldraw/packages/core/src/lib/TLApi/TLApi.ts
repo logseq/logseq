@@ -231,7 +231,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     return this.app.createNewLineBinding(source, target)
   }
 
-  cloneTo = (direction: TLCloneDirection) => {
+  clone = (direction: TLCloneDirection) => {
     const shape = this.app.allSelectedShapesArray[0]
     const ShapeClass = this.app.getShapeClass(shape.type)
 
@@ -240,11 +240,11 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     let point = [0, 0]
 
     switch(direction) {
-      case TLCloneDirection.Bottom: {
+      case TLCloneDirection.Down: {
         point = [minX, maxY + spacing]
         break
       }
-      case TLCloneDirection.Top: {
+      case TLCloneDirection.Up: {
         point = [minX, minY - spacing  - height]
         break
       }

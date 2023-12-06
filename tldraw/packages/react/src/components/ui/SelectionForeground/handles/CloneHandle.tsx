@@ -23,7 +23,7 @@ export const CloneHandle = observer(function CloneHandle({
             <circle
                 aria-label={`${direction} handle`}
                 pointerEvents="all"
-                onPointerDown={(e) => app.api.cloneTo(direction)}
+                onPointerDown={(e) => app.api.clone(direction)}
                 cx={cx}
                 cy={cy}
                 r={size}
