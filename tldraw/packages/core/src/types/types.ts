@@ -42,9 +42,9 @@ export enum TLResizeEdge {
 }
 
 export enum TLCloneDirection {
-  Top = 'top',
+  Up = 'up',
   Right = 'right',
-  Bottom = 'bottom',
+  Down = 'down',
   Left = 'left',
 }
 
