@@ -261,7 +261,8 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     const clone = new ShapeClass({
       ...shape.serialized,
       id: uniqueId(),
-      type: shape.type,
+      nonce: Date.now(),
+      refs: [],
       label: '',
       point: point,
     })
