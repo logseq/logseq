@@ -36,8 +36,10 @@ html[data-theme=dark] {
   --foreground: 0 0% 95%;
   --card: 0 0% 11%;
   --card-foreground: 0 0% 95%;
+  --secondary: 0 0% 20%;
+  --secondary-foreground: 0 0% 98%;
   --border: 0 0% 16%;
-  --muted: 200 10% 11%;
+  --muted: 0 0% 15%;
   --popover: 0 0% 7%;
   --popover-foreground: 0 0 95%;
   --input: 0 0% 25%;
