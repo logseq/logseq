@@ -11,7 +11,8 @@
             [shadow.cljs.modern :refer [defclass]]
             [datascript.transit :as dt]
             [clojure.edn :as edn]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            ["@logseq/sqlite-wasm" :as sqlite-wasm]))
 
 (def *wasm-loaded (atom false))
 

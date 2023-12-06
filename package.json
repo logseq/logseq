@@ -105,6 +105,7 @@
         "@radix-ui/colors": "^0.1.8",
         "@sentry/react": "^6.18.2",
         "@sentry/tracing": "^6.18.2",
+        "@logseq/sqlite-wasm": "=0.0.3",
         "@tabler/icons": "^1.96.0",
         "@tippyjs/react": "4.2.5",
         "bignumber.js": "^9.0.2",
