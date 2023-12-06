@@ -339,15 +339,10 @@
 (defmethod handle :search-blocks [_window [_ repo q opts]]
   (search/search-blocks repo q opts))
 
-(defmethod handle :search-pages [_window [_ repo q opts]]
-  (search/search-pages repo q opts))
-
-(defmethod handle :rebuild-indice [_window [_ repo block-data page-data]]
+(defmethod handle :rebuild-indice [_window [_ repo block-data]]
   (search/truncate-blocks-table! repo)
   ;; unneeded serialization
   (search/upsert-blocks! repo (bean/->js block-data))
-  (search/truncate-pages-table! repo)
-  (search/upsert-pages! repo (bean/->js page-data))
   [])
 
 (defmethod handle :transact-blocks [_window [_ repo data]]
@@ -359,18 +354,8 @@
       ;; unneeded serialization
       (search/upsert-blocks! repo (bean/->js blocks-to-add)))))
 
-(defmethod handle :transact-pages [_window [_ repo data]]
-  (let [{:keys [pages-to-remove-set pages-to-add]} data]
-    ;; Order matters! Same id will delete then upsert sometimes.
-    (when (seq pages-to-remove-set)
-      (search/delete-pages! repo pages-to-remove-set))
-    (when (seq pages-to-add)
-      ;; unneeded serialization
-      (search/upsert-pages! repo (bean/->js pages-to-add)))))
-
 (defmethod handle :truncate-indice [_window [_ repo]]
-  (search/truncate-blocks-table! repo)
-  (search/truncate-pages-table! repo))
+  (search/truncate-blocks-table! repo))
 
 (defmethod handle :remove-db [_window [_ repo]]
   (search/delete-db! repo))
