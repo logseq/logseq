@@ -62,18 +62,18 @@
       [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
        (ui/icon "filter" {:size 20})]
       [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left.pb-2
-       [:h3#modal-headline.text-lg.leading-6.font-medium "Filter"]
+       [:h3#modal-headline.text-lg.leading-6.font-medium (t :linked-references/filter-heading)]
        [:span.text-xs
-        "Click to include and shift-click to exclude. Click again to remove."]]]
+        (t :linked-references/filter-directions)]]]
      (when (seq filters)
        [:div.cp__filters.mb-4.ml-2
         (when (seq includes)
           [:div.flex.flex-row.flex-wrap.center-items
-           [:div.mr-1.font-medium.py-1 "Includes: "]
+           [:div.mr-1.font-medium.py-1 (t :linked-references/filter-includes)]
            (filtered-refs page-name filters filters-atom includes)])
         (when (seq excludes)
           [:div.flex.flex-row.flex-wrap
-           [:div.mr-1.font-medium.py-1 "Excludes: " ]
+           [:div.mr-1.font-medium.py-1 (t :linked-references/filter-excludes)]
            (filtered-refs page-name filters filters-atom excludes)])])
      [:div.cp__filters-input-panel.flex
       (ui/icon "search")
@@ -133,14 +133,13 @@
         *collapsed? (atom nil)]
     (ui/foldable
      [:div.flex.flex-row.flex-1.justify-between.items-center
-      [:h2.font-medium (str
-                        (when (seq filters)
-                          (str filter-n " of "))
-                        total
-                        " Linked Reference"
-                        (when (> total 1) "s"))]
+      [:h2.font-medium (if (> total 0)
+                         (if (= 1 total)
+                           (t :linked-references/x-of-1-reference filter-n)
+                           (t :linked-references/x-of-y-references filter-n total))
+                         (t :linked-references/zero-references))]
       [:a.filter.fade-link
-       {:title "Filter"
+       {:title (t :linked-references/filter-heading)
         :on-mouse-over (fn [_e]
                          (when @*collapsed? ; collapsed
                            ;; expand
@@ -252,7 +251,7 @@
 (rum/defc references
   [page-name]
   (ui/catch-error
-   (ui/component-error "Linked References: Unexpected error. Please re-index your graph first.")
+   (ui/component-error (t :linked-references/unexpected-error))
    (ui/lazy-visible
     (fn []
       (references* page-name))
@@ -292,10 +291,10 @@
          [:div.content.flex-1
           (ui/foldable
            [:h2.font-medium
-            (if @n-ref
-              (str @n-ref " Unlinked Reference" (when (> @n-ref 1)
-                                                  "s"))
-              "Unlinked References")]
+            (case @n-ref
+              0 (t :unlinked-references/zero-references @n-ref)
+              1 (t :unlinked-references/one-reference @n-ref)
+              (t:unlinked-references/many-references @n-ref))]
            (fn [] (unlinked-references-aux page-name n-ref))
            {:default-collapsed? true
             :title-trigger? true})]]))))
