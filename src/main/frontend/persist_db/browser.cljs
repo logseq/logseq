@@ -14,10 +14,16 @@
 (defonce *sqlite (atom nil))
 (defonce *inited (atom false))
 
-(when-not (or (util/electron?) config/publishing? util/node-test?)
+(when-not (or config/publishing? util/node-test?)
   (defonce _do_not_reload_worker
-    (let [worker (try
-                   (js/Worker. "/static/js/db-worker.js")
+    (let [worker-url (if (util/electron?)
+                       "js/db-worker.js"
+                       "/static/js/db-worker.js")
+          sqlite-url (if (util/electron?)
+                       "logseq_sqlite_bg.wasm"
+                       "/static/js/logseq_sqlite_bg.wasm")
+          worker (try
+                   (js/Worker. (str worker-url "?url=" sqlite-url))
                    (catch js/Error e
                      (js/console.error "worker error", e)
                      nil))
@@ -74,9 +80,12 @@
                    nil))))
 
   (<list-db [_this]
+    (prn :debug :ensure-sqlite-init (js/Date.))
     (-> (p/let [^js sqlite (ensure-sqlite-init)]
+          (prn :debug :list-db (js/Date.))
           (.listDB sqlite))
         (p/catch (fn [error]
+                   (prn :debug :list-db-error (js/Date.))
                    (notification/show! [:div (str "SQLiteDB error: " error)] :error)
                    []))))
 
