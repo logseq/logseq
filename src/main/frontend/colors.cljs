@@ -48,6 +48,7 @@
                           "--ls-quaternary-background-color: var(--rx-" (name gray) "-04); "
                           "--ls-link-text-color: var(--rx-" (name color) "-11); "
                           "--ls-link-text-hover-color: var(--rx-" (name color) "-12); "
+                          "--ls-block-ref-link-text-color: var(--rx-" (name color) "-09);"
                           "--ls-secondary-text-color: var(--rx-" (name gray) "-12); "
                           "--ls-primary-text-color: var(--rx-" (name gray) "-11); "
                           "--ls-border-color: var(--rx-" (name gray) "-05); "
