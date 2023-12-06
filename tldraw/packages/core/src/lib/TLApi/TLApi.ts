@@ -1,6 +1,6 @@
 import Vec from '@tldraw/vec'
 import type { TLAsset, TLBinding, TLEventMap } from '../../types'
-import { TLCloneDirection, TLTargetType } from '../../types'
+import { TLCloneDirection, Geometry } from '../../types'
 import { BoundsUtils, isNonNullable, uniqueId } from '../../utils'
 import type { TLShape, TLShapeModel } from '../shapes'
 import type { TLApp } from '../TLApp'
@@ -232,6 +232,12 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
   }
 
   clone = (direction: TLCloneDirection) => {
+    if (
+      this.app.readOnly ||
+      this.app.selectedShapesArray.length !== 1 ||
+      !Object.values(Geometry).some((geometry: string) => geometry === this.app.selectedShapesArray[0].type)
+    ) return;
+
     const shape = this.app.allSelectedShapesArray[0]
     const ShapeClass = this.app.getShapeClass(shape.type)
 
