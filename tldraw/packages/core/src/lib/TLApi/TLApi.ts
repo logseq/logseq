@@ -1,5 +1,6 @@
 import Vec from '@tldraw/vec'
-import type { TLAsset, TLBinding, TLEventMap, TLCloneDirection } from '../../types'
+import type { TLAsset, TLBinding, TLEventMap } from '../../types'
+import { TLCloneDirection, TLTargetType } from '../../types'
 import { BoundsUtils, isNonNullable, uniqueId } from '../../utils'
 import type { TLShape, TLShapeModel } from '../shapes'
 import type { TLApp } from '../TLApp'
@@ -230,8 +231,47 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     return this.app.createNewLineBinding(source, target)
   }
 
-  clone = (direction: TLCloneDirection) => {
-    // TODO: Clone to direction, clear label, create binding, select shape
+  cloneTo = (direction: TLCloneDirection) => {
+    const shape = this.app.allSelectedShapesArray[0]
+    const ShapeClass = this.app.getShapeClass(shape.type)
+
+    const bounds = shape.bounds
+    const spacing = 100
+    let point = [0, 0]
+
+    switch(direction) {
+      case TLCloneDirection.Bottom: {
+        point = [bounds.minX, bounds.maxY + spacing]
+        break
+      }
+      case TLCloneDirection.Top: {
+        point = [bounds.minX, bounds.minY - spacing  - bounds.height]
+        break
+      }
+      case TLCloneDirection.Left: {
+        point = [bounds.minX - spacing - bounds.width, bounds.minY]
+        break
+      }
+      case TLCloneDirection.Right: {
+        point = [bounds.maxX + spacing, bounds.minY]
+        break
+      }
+    }
+
+    const clone = new ShapeClass({
+      ...shape.serialized,
+      id: uniqueId(),
+      type: shape.type,
+      label: '',
+      point: point,
+    })
+
+    this.app.history.pause()
+    this.app.currentPage.addShapes(clone)
+    this.app.createNewLineBinding(shape, clone)
+    this.app.history.resume()
+    this.app.persist();
+    setTimeout(() => this.editShape(clone)) 
   }
   
   /** Clone shapes with given context */
