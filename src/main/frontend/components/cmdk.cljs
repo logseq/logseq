@@ -26,7 +26,10 @@
     [logseq.graph-parser.util.block-ref :as block-ref]
     [logseq.graph-parser.util :as gp-util]
     [logseq.shui.button.v2 :as button]
-    [frontend.modules.shortcut.utils :as shortcut-utils]))
+    [frontend.modules.shortcut.utils :as shortcut-utils]
+    [frontend.config :as config]
+    [logseq.common.path :as path]
+    [electron.ipc :as ipc]))
 
 (defn translate [t {:keys [id desc]}]
   (when id
@@ -282,7 +285,17 @@
   (let [!input (::input state)
         !results (::results state)]
     (swap! !results assoc-in [group :status] :loading)
-    (p/let [files (search/file-search @!input 99)
+    (p/let [files* (search/file-search @!input 99)
+            files (remove
+                   (fn [f]
+                     (and
+                      f
+                      (string/ends-with? f ".edn")
+                      (or (string/starts-with? f "whiteboards/")
+                          (string/starts-with? f "assets/")
+                          (string/starts-with? f "logseq/version-files")
+                          (contains? #{"logseq/metadata.edn" "logseq/pages-metadata.edn" "logseq/graphs-txid.edn"} f))))
+                   files*)
             items (map
                    (fn [file]
                      (hash-map :icon "file"
@@ -390,6 +403,18 @@
     (editor-handler/open-block-in-sidebar! block-uuid)
     (state/close-modal!)))
 
+(defn- open-file
+  [file-path]
+  (if (or (string/ends-with? file-path ".edn")
+          (string/ends-with? file-path ".js")
+          (string/ends-with? file-path ".css"))
+    (route-handler/redirect! {:to :file
+                              :path-params {:path file-path}})
+    ;; open this file in directory
+    (when (util/electron?)
+      (let [file-fpath (path/path-join (config/get-repo-dir (state/get-current-repo)) file-path)]
+        (ipc/ipc "openFileInFolder" file-fpath)))))
+
 (defmethod handle-action :open [_ state event]
   (when-let [item (some-> state state->highlighted-item)]
     (let [page? (boolean (:source-page item))
@@ -400,8 +425,7 @@
           graph-view? (= search-mode :graph)]
       (cond
         (:file-path item) (do
-                            (route-handler/redirect! {:to :file
-                                                      :path-params {:path (:file-path item)}})
+                            (open-file (:file-path item))
                             (state/close-modal!))
         (and graph-view? page? (not shift?)) (do
                                                (state/add-graph-search-filter! @(::input state))
@@ -603,7 +627,7 @@
     (reset! (::shift? state) shift?)
     (reset! (::meta? state) meta?)
     (when (or as-keydown? as-keyup?)
-      (.preventDefault e))
+      (util/stop e))
 
     (cond
       (and meta? enter?)
@@ -621,11 +645,12 @@
                                       (handle-action :default state e)
                                       (util/stop-propagation e))
       esc? (let [filter @(::filter state)]
-             (when (or (and filter @(::input-changed? state))
-                       (not (string/blank? input)))
+             (when-not (string/blank? input)
                (util/stop e)
-               (reset! (::filter state) nil)
-               (when-not filter (handle-input-change state nil ""))))
+               (handle-input-change state nil ""))
+             (when (and filter (string/blank? input))
+               (util/stop e)
+               (reset! (::filter state) nil)))
       (and meta? (= keyname "c")) (do
                                     (copy-block-ref state)
                                     (util/stop-propagation e))
@@ -680,9 +705,13 @@
        :on-key-down (fn [e]
                       (let [value (.-value @input-ref)
                             last-char (last value)
-                            backspace? (= (util/ekey e) "Backspace")]
-                        (when (and (some? @(::filter state))
-                                   (or (= (util/ekey e) "/")
+                            backspace? (= (util/ekey e) "Backspace")
+                            filter-group (:group @(::filter state))
+                            slash? (= (util/ekey e) "/")
+                            namespace-page-matched? (when (and slash? (contains? #{:pages :whiteboards} filter-group))
+                                                      (some #(string/includes? % "/") (search/page-search (str value "/"))))]
+                        (when (and filter-group
+                                   (or (and slash? (not namespace-page-matched?))
                                        (and backspace? (= last-char "/"))
                                        (and backspace? (= input ""))))
                           (reset! (::filter state) nil))))
