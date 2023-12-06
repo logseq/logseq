@@ -3504,7 +3504,7 @@
                  {:debug-id page})])))))]
 
      (and (:ref? config) (:group-by-page? config))
-     [:div.flex.flex-col
+     [:div.flex.flex-col.references-blocks-wrap
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page page-blocks] blocks]
           (ui/lazy-visible
@@ -3513,7 +3513,7 @@
                    page (db/entity (:db/id page))
                    ;; FIXME: parents need to be sorted
                    parent-blocks (group-by :block/parent page-blocks)]
-               [:div.my-2 {:key (str "page-" (:db/id page))}
+               [:div.my-2.references-blocks-item {:key (str "page-" (:db/id page))}
                 (ui/foldable
                  [:div
                   (page-cp config page)
