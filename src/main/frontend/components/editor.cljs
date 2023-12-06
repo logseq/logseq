@@ -165,7 +165,7 @@
                                     (concat [(str (t :new-page) " " q)
                                              (str (t :new-class) " " q)]
                                             matched-pages)
-                                    (cons (str (t :new-page) " " q) matched-pages)))
+                                    (cons q matched-pages)))
 
                                 ;; reorder, shortest and starts-with first.
                                 :else
