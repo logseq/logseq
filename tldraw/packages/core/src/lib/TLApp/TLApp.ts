@@ -15,7 +15,7 @@ import type {
   TLSubscriptionEventInfo,
   TLSubscriptionEventName,
 } from '../../types'
-import { AlignType, DistributeType } from '../../types'
+import { AlignType, DistributeType, Geometry } from '../../types'
 import { BoundsUtils, createNewLineBinding, dedupe, isNonNullable, uniqueId } from '../../utils'
 import type { TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
 import { TLApi } from '../TLApi'
@@ -847,6 +847,7 @@ export class TLApp<
         'select.pointingSelectedShape',
       ) &&
       selectedShapesArray.length === 1 &&
+      Object.values(Geometry).some((geometry: string) => geometry === this.selectedShapesArray[0].type) &&
       !this.readOnly
     )
   }
