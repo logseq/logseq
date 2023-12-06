@@ -1,34 +1,36 @@
 (ns frontend.components.cmdk
-  (:require [clojure.string :as string]
-            [frontend.components.block :as block]
-            [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
-            [frontend.db.model :as model]
-            [frontend.handler.command-palette :as cp-handler]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.handler.page :as page-handler]
-            [frontend.handler.route :as route-handler]
-            [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.modules.shortcut.core :as shortcut]
-            [frontend.search :as search]
-            [frontend.shui :refer [make-shui-context]]
-            [frontend.state :as state]
-            [frontend.ui :as ui]
-            [frontend.util :as util]
-            [frontend.util.page :as page-util]
-            [goog.functions :as gfun]
-            [goog.object :as gobj]
-            [logseq.shui.core :as shui]
-            [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.mixins :as mixins]
-            [logseq.graph-parser.util.block-ref :as block-ref]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.shui.button.v2 :as button]
-            [frontend.modules.shortcut.utils :as shortcut-utils]
-            [frontend.config :as config]
-            [logseq.common.path :as path]
-            [electron.ipc :as ipc]))
+  (:require
+   [clojure.string :as string]
+   [frontend.components.block :as block]
+   [frontend.context.i18n :refer [t]]
+   [frontend.db :as db]
+   [frontend.db.model :as model]
+   [frontend.handler.command-palette :as cp-handler]
+   [frontend.handler.editor :as editor-handler]
+   [frontend.handler.page :as page-handler]
+   [frontend.handler.route :as route-handler]
+   [frontend.handler.whiteboard :as whiteboard-handler]
+   [frontend.modules.shortcut.core :as shortcut]
+   [frontend.search :as search]
+   [frontend.shui :refer [make-shui-context]]
+   [frontend.state :as state]
+   [frontend.ui :as ui]
+   [frontend.util :as util]
+   [frontend.util.page :as page-util]
+   [goog.functions :as gfun]
+   [goog.object :as gobj]
+   [logseq.shui.core :as shui]
+   [promesa.core :as p]
+   [rum.core :as rum]
+   [frontend.mixins :as mixins]
+   [logseq.graph-parser.util.block-ref :as block-ref]
+   [logseq.graph-parser.util :as gp-util]
+   [logseq.shui.button.v2 :as button]
+   [frontend.modules.shortcut.utils :as shortcut-utils]
+   [frontend.config :as config]
+   [logseq.common.path :as path]
+   [electron.ipc :as ipc]
+   [frontend.util.text :as text-util]))
 
 (defn translate [t {:keys [id desc]}]
   (when id
@@ -254,6 +256,23 @@
                                         :source-page page))))))]
       (swap! !results update group        merge {:status :success :items items}))))
 
+(defn highlight-page-content-query
+  "Return hiccup of highlighted page content FTS result"
+  [content q]
+  (when-not (or (string/blank? content) (string/blank? q))
+    [:div (loop [content content ;; why recur? because there might be multiple matches
+                 result  []]
+            (let [[b-cut hl-cut e-cut] (text-util/cut-by content "$pfts_2lqh>$" "$<pfts_2lqh$")
+                  hiccups-add [(when-not (string/blank? b-cut)
+                                 [:span b-cut])
+                               (when-not (string/blank? hl-cut)
+                                 [:mark.p-0.rounded-none hl-cut])]
+                  hiccups-add (remove nil? hiccups-add)
+                  new-result (concat result hiccups-add)]
+              (if-not (string/blank? e-cut)
+                (recur e-cut new-result)
+                new-result)))]))
+
 ;; The blocks search action uses an existing handler
 (defmethod load-results :blocks [group state]
   (let [!input (::input state)
@@ -265,16 +284,25 @@
     (swap! !results assoc-in [:current-page :status] :loading)
     (p/let [blocks (search/block-search repo @!input opts)
             blocks (remove nil? blocks)
-            items (map (fn [block]
-                         (let [id (if (uuid? (:block/uuid block))
-                                    (:block/uuid block)
-                                    (uuid (:block/uuid block)))]
-                           {:icon "block"
-                            :icon-theme :gray
-                            :text (:block/content block)
-                            :header (block/breadcrumb {:search? true} repo id {})
-                            :current-page? (some-> block :block/page #{current-page})
-                            :source-block block})) blocks)
+            blocks (if (empty? blocks)
+                     (search/page-content-search repo @!input opts)
+                     blocks)
+            items (->>
+                   (map (fn [item]
+                          (let [id (if (uuid? (:block/uuid item))
+                                     (:block/uuid item)
+                                     (uuid (:block/uuid item)))
+                                block (db/entity [:block/uuid id])
+                                snippet (some-> (:block/snippet item)
+                                                (highlight-page-content-query @!input))]
+                            (when block
+                              {:icon "block"
+                               :icon-theme :gray
+                               :text (or snippet (:block/content block))
+                               :header (block/breadcrumb {:search? true} repo id {})
+                               :current-page? (some-> block :block/page #{current-page})
+                               :source-block block}))) blocks)
+                   (remove nil?))
             items-on-other-pages (remove :current-page? items)
             items-on-current-page (filter :current-page? items)]
       (swap! !results update group         merge {:status :success :items items-on-other-pages})
