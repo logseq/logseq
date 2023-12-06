@@ -223,6 +223,7 @@
  :linked-references/filter-search "Search in linked pages"
  :linked-references/unexpected-error "Linked References: Unexpected error. Please re-index your graph first."
  :linked-references/filter-heading "Filter"
+ :linked-references/filter-directions "Click to include and shift-click to exclude. Click again to remove."
  :linked-references/filter-includes "Includes: "
  :linked-references/filter-excludes "Excludes: "
  :linked-references/reference-count (fn [filters? filter-n total]
