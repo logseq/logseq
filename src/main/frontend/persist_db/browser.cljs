@@ -26,12 +26,14 @@
   protocol/PersistentDB
   (<new [_this repo]
     (prn :debug ::new-repo repo)
-    (-> (p/let [^js sqlite @*sqlite]
-          (.newDB sqlite repo))
-        (p/catch (fn [error]
-                   (js/console.error error)
-                   (notification/show! [:div (str "SQLiteDB creation error: " error)] :error)
-                   nil))))
+    (let [^js sqlite @*sqlite]
+      (-> (.newDB sqlite repo)
+          (p/then (fn [result]
+                    (prn "SQLite db created successfully: " repo)))
+          (p/catch (fn [error]
+                     (js/console.error error)
+                     (notification/show! [:div (str "SQLiteDB creation error: " error)] :error)
+                     nil)))))
 
   (<list-db [_this]
     (when-let [^js sqlite @*sqlite]
@@ -42,16 +44,17 @@
                      [])))))
 
   (<unsafe-delete [_this repo]
-    (p/let [^js sqlite @*sqlite]
-      ;; (.unsafeUnlinkDB sqlite repo)
-      ))
+    ;; (p/let [^js sqlite @*sqlite]
+    ;;   ;; (.unsafeUnlinkDB sqlite repo)
+    ;;   )
+    )
 
   (<transact-data [_this repo tx-data tx-meta]
     (prn :debug ::transact-data repo (count tx-data) (count tx-meta))
-    (p->c
-     (p/let [^js sqlite @*sqlite
-             _ (.transact sqlite repo (pr-str tx-data) (pr-str tx-meta))]
-       nil)))
+    (let [^js sqlite @*sqlite]
+      (p->c
+       (p/let [_ (.transact sqlite repo (pr-str tx-data) (pr-str tx-meta))]
+         nil))))
 
   (<fetch-initital-data [_this repo _opts]
     (prn ::fetch-initital-data repo @*sqlite)
