@@ -153,8 +153,8 @@ html[data-theme='light'] {
   --ls-page-checkbox-color: #9dbbd8;
   --ls-page-checkbox-border-color: var(--ls-page-checkbox-color);
   --ls-page-blockquote-color: var(--ls-primary-text-color);
-  --ls-page-blockquote-bg-color: #fbfaf8;
-  --ls-page-blockquote-border-color: #799bbc;
+  --ls-page-blockquote-bg-color: var(--lx-gray-03, #fbfaf8);
+  --ls-page-blockquote-border-color: var(--lx-gray-08, #799bbc);
   --ls-page-mark-color: #262626;
   --ls-page-mark-bg-color: #fef3ac;
   --ls-page-inline-code-bg-color: var(--ls-secondary-background-color);
