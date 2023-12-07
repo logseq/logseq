@@ -15,17 +15,14 @@
 (defn start-db-worker!
   []
   (when-not (or config/publishing? util/node-test?)
-    (p/let [worker-url (if (util/electron?)
-                         "js/db-worker.js"
-                         "/static/js/db-worker.js")
-            worker (js/Worker. worker-url)
-            _ (prn :debug :worker worker)
-            ^js sqlite (Comlink/wrap worker)
-            ;; _ (.init sqlite)
-            ]
-      (prn :debug :sqlite)
-      (js/console.dir sqlite)
-      (reset! *sqlite sqlite))))
+    (let [worker-url (if (util/electron?)
+                       "js/db-worker.js"
+                       "/static/js/db-worker.js")
+          worker (js/Worker. worker-url)
+          ^js sqlite (Comlink/wrap worker)]
+      (reset! *sqlite sqlite)
+      ;; (.init sqlite)
+      )))
 
 (defrecord InBrowser []
   protocol/PersistentDB
@@ -60,11 +57,12 @@
 
   (<fetch-initital-data [_this repo _opts]
     (prn ::fetch-initital-data repo @*sqlite)
-    (-> (p/let [^js sqlite @*sqlite
+    (-> (let [^js sqlite @*sqlite
                 ;; <fetch-initital-data is called when init/re-loading graph
                 ;; the underlying DB should be opened
-                _ (.newDB sqlite repo)]
-          (.getInitialData sqlite repo))
+              ]
+          (p/let [_ (.newDB sqlite repo)]
+            (.getInitialData sqlite repo)))
         (p/catch (fn [error]
                    (prn :debug :fetch-initial-data-error)
                    (js/console.error error)

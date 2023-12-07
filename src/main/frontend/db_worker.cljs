@@ -18,12 +18,13 @@
 (defn- init-sqlite-module!
   []
   (when-not @*sqlite
-    (p/let [base-url (str js/self.location.protocol "//" js/self.location.host)
-            sqlite-wasm-url (str base-url "/js/")
-            sqlite (sqlite3InitModule (clj->js {:url sqlite-wasm-url
-                                                :print js/console.log
-                                                :printErr js/console.error}))]
-      (reset! *sqlite sqlite))))
+    (let [base-url (str js/self.location.protocol "//" js/self.location.host)
+          sqlite-wasm-url (str base-url "/js/")]
+      (sqlite3InitModule (clj->js {:url sqlite-wasm-url
+                                   :print js/console.log
+                                   :printErr js/console.error})
+                         (fn [sqlite]
+                           (reset! *sqlite sqlite))))))
 
 (defn- close-all-dbs!
   []
