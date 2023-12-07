@@ -214,6 +214,7 @@
   [render]
   (test/setup-test!)
   (get-system-info)
+  (db-browser/start-db-worker!)
   (set-global-error-notification!)
 
   (set! js/window.onhashchange #(state/hide-custom-context-menu!)) ;; close context menu when page navs
@@ -243,8 +244,7 @@
   (p/do!
    (when (mobile-util/native-platform?)
      (mobile/mobile-preinit))
-   (-> (p/let [_ (db-browser/start-db-worker!)
-               repos (get-repos)
+   (-> (p/let [repos (get-repos)
                _ (state/set-repos! repos)
                _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
                _ (restore-and-setup! repos)]
