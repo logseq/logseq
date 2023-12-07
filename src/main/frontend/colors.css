@@ -1,4 +1,19 @@
 html {
+  &[data-color=logseq] {
+    --lx-accent-01: var(--rx-logseq-01);
+    --lx-accent-02: var(--rx-logseq-02);
+    --lx-accent-03: var(--rx-logseq-03);
+    --lx-accent-04: var(--rx-logseq-04);
+    --lx-accent-05: var(--rx-logseq-05);
+    --lx-accent-06: var(--rx-logseq-06);
+    --lx-accent-07: var(--rx-logseq-07);
+    --lx-accent-08: var(--rx-logseq-08);
+    --lx-accent-09: var(--rx-logseq-09);
+    --lx-accent-10: var(--rx-logseq-10);
+    --lx-accent-11: var(--rx-logseq-11);
+    --lx-accent-12: var(--rx-logseq-12);
+  }
+  
   &[data-color=tomato] {
     body, .dark-theme, .light-theme {
       --accent: 10 78.0% 54.0%;
@@ -31,6 +46,7 @@ html {
       --lx-accent-10-alpha: var(--rx-tomato-10-alpha);
       --lx-accent-11-alpha: var(--rx-tomato-11-alpha);
       --lx-accent-12-alpha: var(--rx-tomato-12-alpha);
+
       --lx-gray-01: var(--rx-mauve-01);
       --lx-gray-02: var(--rx-mauve-02);
       --lx-gray-03: var(--rx-mauve-03);
@@ -55,6 +71,7 @@ html {
       --lx-gray-10-alpha: var(--rx-mauve-10-alpha);
       --lx-gray-11-alpha: var(--rx-mauve-11-alpha);
       --lx-gray-12-alpha: var(--rx-mauve-12-alpha);
+      
       --ls-primary-background-color: var(--rx-mauve-01);
       --ls-secondary-background-color: var(--rx-mauve-02);
       --ls-tertiary-background-color: var(--rx-mauve-03);
@@ -720,6 +737,7 @@ html {
       --lx-gray-10: var(--rx-slate-10);
       --lx-gray-11: var(--rx-slate-11);
       --lx-gray-12: var(--rx-slate-12);
+
       --lx-gray-01-alpha: var(--rx-slate-01-alpha);
       --lx-gray-02-alpha: var(--rx-slate-02-alpha);
       --lx-gray-03-alpha: var(--rx-slate-03-alpha);
@@ -732,6 +750,7 @@ html {
       --lx-gray-10-alpha: var(--rx-slate-10-alpha);
       --lx-gray-11-alpha: var(--rx-slate-11-alpha);
       --lx-gray-12-alpha: var(--rx-slate-12-alpha);
+
       --ls-primary-background-color: var(--rx-slate-01);
       --ls-secondary-background-color: var(--rx-slate-02);
       --ls-tertiary-background-color: var(--rx-slate-03);

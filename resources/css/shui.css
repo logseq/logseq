@@ -12,6 +12,12 @@ html {
     }
   }
 
+  &[data-color=logseq] {
+    .references-blocks-item {
+      --lx-bg-override: var(--rx-gray-03-alpha);
+    }
+  }
+
   .ui__calendar {
     --accent: var(--rx-gray-04-hsl);
     --accent-foreground: var(--rx-gray-12-hsl);
@@ -27,6 +33,10 @@ html[data-theme=light] {
     --primary: 200 97% 37%;
     --primary-foreground: 255 92% 100%;
     --ring: 200 97% 37%;
+
+    .references-blocks-item {
+      --lx-bg-override: var(--rx-gray-03-alpha);
+    }
   }
 }
 

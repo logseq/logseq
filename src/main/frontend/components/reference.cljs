@@ -37,7 +37,7 @@
                                               (dissoc % lc-reference)))
                        (page-handler/save-filter! page-name @filters-atom))
            :small? true
-           :intent "border-link"
+           :variant :outline
            :key ref-name))))])
 
 (rum/defcs filter-dialog-inner < rum/reactive (rum/local "" ::filterSearch)

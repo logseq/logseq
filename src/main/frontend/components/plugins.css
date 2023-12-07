@@ -60,8 +60,11 @@
         }
 
         &.active {
-          background: var(--ls-secondary-background-color);
-          color: var(--ls-link-text-color);
+          @apply !text-primary;
+        }
+
+        &:hover {
+          @apply text-accent-10;
         }
       }
     }
@@ -71,10 +74,6 @@
 
       &.scrolled {
         box-shadow: 0 4px 6px -6px #ccc;
-      }
-
-      .ti, .tie {
-        margin-right: 4px;
       }
 
       .ui__dropdown-trigger {
@@ -120,7 +119,7 @@
       }
 
       &.sort-or-filter-by, &.more-do {
-        padding: 0 4px;
+        padding: 0 6px;
       }
 
       &.picked {

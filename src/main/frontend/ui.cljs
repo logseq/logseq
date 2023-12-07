@@ -286,7 +286,7 @@
                                              :margin-right -18}}
             (button
               {:button-props {:aria-label "Close"}
-               :intent "link"
+               :variant :ghost
                :on-click (fn []
                            (notification/clear! uid))
                :icon "x"})]]]]]])))
@@ -1020,7 +1020,7 @@
                                  (= theme :gray) :ghost
                                  (= background "gray") :secondary
                                  (= background "red") :destructive
-                                 (contains? #{"link" "border-link"} intent) :outline
+                                 (= intent "link") :ghost
                                  :else (or variant :default))
                       :href    href
                       :size    (if small? :xs (or size :sm))
