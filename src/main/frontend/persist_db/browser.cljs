@@ -8,7 +8,8 @@
             [frontend.config :as config]
             [promesa.core :as p]
             [frontend.util :as util]
-            [frontend.handler.notification :as notification]))
+            [frontend.handler.notification :as notification]
+            [cljs-bean.core :as bean]))
 
 (defonce *sqlite (atom nil))
 
@@ -20,16 +21,16 @@
                        "/static/js/db-worker.js")
           worker (js/Worker. worker-url)
           sqlite (Comlink/wrap worker)]
-      (reset! *sqlite sqlite))))
+      (reset! *sqlite sqlite)
+      (.init sqlite))))
 
 (defrecord InBrowser []
   protocol/PersistentDB
   (<new [_this repo]
-    (prn :debug ::new-repo repo)
     (let [^js sqlite @*sqlite]
-      (-> (.newDB sqlite repo)
-          (p/then (fn [result]
-                    (prn "SQLite db created successfully: " repo)))
+      (-> (.createOrOpenDB sqlite repo)
+          (p/then (fn [_result]
+                    (prn "SQLite db created or opened successfully: " repo)))
           (p/catch (fn [error]
                      (js/console.error error)
                      (notification/show! [:div (str "SQLiteDB creation error: " error)] :error)
@@ -38,6 +39,8 @@
   (<list-db [_this]
     (when-let [^js sqlite @*sqlite]
       (-> (.listDB sqlite)
+          (p/then (fn [result]
+                    (bean/->clj result)))
           (p/catch (fn [error]
                      (prn :debug :list-db-error (js/Date.))
                      (notification/show! [:div (str "SQLiteDB error: " error)] :error)
@@ -50,21 +53,16 @@
     )
 
   (<transact-data [_this repo tx-data tx-meta]
-    (prn :debug ::transact-data repo (count tx-data) (count tx-meta))
-    (let [^js sqlite @*sqlite]
+    (when-let [^js sqlite @*sqlite]
       (p->c
        (p/let [_ (.transact sqlite repo (pr-str tx-data) (pr-str tx-meta))]
          nil))))
 
-  (<fetch-initital-data [_this repo _opts]
-    (prn ::fetch-initital-data repo @*sqlite)
-    (-> (let [^js sqlite @*sqlite
-                ;; <fetch-initital-data is called when init/re-loading graph
-                ;; the underlying DB should be opened
-              ]
-          (p/let [_ (.newDB sqlite repo)]
-            (.getInitialData sqlite repo)))
-        (p/catch (fn [error]
-                   (prn :debug :fetch-initial-data-error)
-                   (js/console.error error)
-                   (notification/show! [:div (str "SQLiteDB fetch error: " error)] :error) {})))))
+  (<fetch-initial-data [_this repo _opts]
+    (when-let [^js sqlite @*sqlite]
+      (-> (p/let [_ (.createOrOpenDB sqlite repo)]
+            (.getInitialData sqlite repo))
+          (p/catch (fn [error]
+                     (prn :debug :fetch-initial-data-error)
+                     (js/console.error error)
+                     (notification/show! [:div (str "SQLiteDB fetch error: " error)] :error) {}))))))

@@ -29,6 +29,6 @@
   ([repo]
    (<fetch-init-data repo {}))
   ([repo opts]
-   (p/let [ret (protocol/<fetch-initital-data (get-impl) repo opts)]
-     (js/console.log "fetch-initital" ret)
+   (p/let [ret (protocol/<fetch-initial-data (get-impl) repo opts)]
+     (js/console.log "fetch-initial-data" ret)
      ret)))

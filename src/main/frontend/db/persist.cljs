@@ -14,7 +14,7 @@
   (p/let [repos (idb/get-nfs-dbs)
           db-repos (persist-db/<list-db)
           electron-disk-graphs (when (util/electron?) (ipc/ipc "getGraphs"))]
-    (distinct (concat repos db-repos (bean/->clj electron-disk-graphs)))))
+    (distinct (concat repos db-repos (some-> electron-disk-graphs bean/->clj)))))
 
 (defn get-serialized-graph
   [graph-name]

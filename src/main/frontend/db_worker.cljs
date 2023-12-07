@@ -14,6 +14,16 @@
 (defonce *sqlite (atom nil))
 (defonce *sqlite-db (atom nil))
 (defonce *datascript-conn (atom nil))
+(defonce *opfs-pool (atom nil))
+
+(defn- get-opfs-pool
+  []
+  (or @*opfs-pool
+      (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name "logseq-db"
+                                                         :initialCapacity 100})]
+        ;; (.removeVfs pool)
+        (reset! *opfs-pool pool)
+        pool)))
 
 (defn- init-sqlite-module!
   []
@@ -23,11 +33,25 @@
             sqlite (sqlite3InitModule (clj->js {:url sqlite-wasm-url
                                                 :print js/console.log
                                                 :printErr js/console.error}))]
-      (reset! *sqlite sqlite))))
+      (reset! *sqlite sqlite)
+      nil)))
 
-(defn- close-all-dbs!
+(defn- remove-pfs!
+  "!! use it only for development"
   []
-  )
+  (when-let [^js pool (get-opfs-pool)]
+    (.removeVfs ^js pool)))
+
+(defn- get-file-names
+  []
+  (when-let [^js pool (get-opfs-pool)]
+    (.getFileNames pool)))
+
+(defn- export-db-file
+  [file-path]
+  ;; TODO: get file name by repo
+  (when-let [^js pool (get-opfs-pool)]
+    (.exportFile ^js pool file-path)))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
@@ -62,8 +86,21 @@
           (upsert-addr-content! data)))
 
       (-restore [_ addr]
-        (let [content (restore-data-from-addr addr)]
-          (edn/read-string content))))))
+        (restore-data-from-addr addr)))))
+
+(defn- create-or-open-db!
+  [repo]
+  (p/let [pool (get-opfs-pool)
+          db (new (.-OpfsSAHPoolDb pool) (str "/" repo ".sqlite"))
+          storage (new-sqlite-storage repo {})]
+    (js/console.dir db)
+    (reset! *sqlite-db db)
+    (.exec db "PRAGMA locking_mode=exclusive")
+    (.exec db "create table if not exists kvs (addr INTEGER primary key, content TEXT)")
+    (let [conn (or (d/restore-conn storage)
+                   (d/create-conn db-schema/schema-for-db-based-graph {:storage storage}))]
+      (reset! *datascript-conn conn)
+      nil)))
 
 #_:clj-kondo/ignore
 (defclass SQLiteDB
@@ -90,8 +127,7 @@
 
   (init
    [_this]
-   (init-sqlite-module!)
-   nil)
+   (init-sqlite-module!))
 
   (inited
    [_this]
@@ -99,24 +135,14 @@
 
   (listDB
    [_this]
-   ;; (.list_db sqlite-db)
-   #js [])
+   ;; TODO:
+   (prn (get-file-names))
+   nil)
 
-  (newDB
+  (createOrOpenDB
    [_this repo]
    ;; TODO: close all the other db connections
-   (p/let [sqlite @*sqlite
-           db-name repo
-           pool (.installOpfsSAHPoolVfs sqlite #js {:name db-name})
-           db (new (.-OpfsSAHPoolDb pool) "/logseq")
-           storage (new-sqlite-storage db-name {})]
-     (reset! *sqlite-db db)
-     (.exec db "PRAGMA locking_mode=exclusive")
-     (.exec db "create table if not exists kvs (addr INTEGER primary key, content TEXT)")
-     (let [conn (or (d/restore-conn storage)
-                    (d/create-conn db-schema/schema-for-db-based-graph {:storage storage}))]
-       (reset! *datascript-conn conn)
-       nil)))
+   (create-or-open-db! repo))
 
   (transact
    [_this repo tx-data tx-meta]
@@ -142,5 +168,4 @@
   "web worker entry"
   []
   (let [^js obj (SQLiteDB.)]
-    (p/let [_ (init-sqlite-module!)]
-      (Comlink/expose obj))))
+    (Comlink/expose obj)))
