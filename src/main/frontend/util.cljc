@@ -213,9 +213,7 @@
            ;; convert rgb(r,g,b) to #rrggbb
            rgb2hex (fn [rgb]
                      (->> rgb
-                          (map string/trim)
-                          (map parse-long)
-                          (map #(.toString % 16))
+                          (map (comp #(.toString % 16) parse-long string/trim))
                           (map #(if (< (count %) 2)
                                   (str "0" %)
                                   %))
@@ -234,7 +232,9 @@
    (defn set-android-theme
      []
      (when (mobile-util/native-android?)
-       (when-let [bg-color (get-computed-bg-color)]
+       (when-let [bg-color (try (get-computed-bg-color)
+                                (catch :default _
+                                  nil))]
          (.setNavigationBarColor NavigationBar (clj->js {:color bg-color}))
          (.setBackgroundColor StatusBar (clj->js {:color bg-color}))))))
 
