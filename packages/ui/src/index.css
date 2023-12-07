@@ -70,20 +70,24 @@
   /* force override primary color for specific component*/
   .primary {
     &-green {
-      --primary: 142.1 70.6% 45.3%;
+      --primary: var(--rx-green-10-hsl);
     }
 
     &-orange {
-      --primary: 24.6 95% 53.1%;
+      --primary: var(--rx-orange-10-hsl);
     }
 
     &-red {
-      --primary: 358 75.0% 59.0%;
+      --primary: var(--rx-red-10-hsl);
     }
 
     &-yellow {
-      --primary: 50 100% 50%;
+      --primary: var(--rx-yellow-10-hsl);
       --primary-foreground: 0 0% 10%;
+    }
+
+    &-purple {
+      --primary: var(--rx-purple-10-hsl);
     }
   }
 }
