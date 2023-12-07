@@ -75,58 +75,52 @@
     (f)
     (js/setInterval f 5000)))
 
-(defn- instrument!
-  []
-  (let [total (srs/get-srs-cards-total)]
-    (state/set-state! :srs/cards-due-count total)))
-
 (defn restore-and-setup!
-  [repos]
-  (when-let [repo (or (state/get-current-repo) (:url (first repos)))]
-    (-> (p/do!
-         (db-restore/restore-graph! repo)
-         (repo-config-handler/start {:repo repo})
-         (op-mem-layer/<init-load-from-indexeddb! repo))
-        (p/then
-         (fn []
-           (db-listener/listen-and-persist! repo)
+  [repo repos]
+  (-> (p/do!
+       (db-restore/restore-graph! repo)
+       (repo-config-handler/start {:repo repo})
+       (op-mem-layer/<init-load-from-indexeddb! repo))
+      (p/then
+       (fn []
+         (db-listener/listen-and-persist! repo)
            ;; try to load custom css only for current repo
-           (ui-handler/add-style-if-exists!)
+         (ui-handler/add-style-if-exists!)
 
-           (->
-            (p/do!
-             (when (config/global-config-enabled?)
-               (global-config-handler/start {:repo repo}))
-             (when (config/plugin-config-enabled?)
-               (plugin-config-handler/start)))
-            (p/finally
-              (fn []
+         (->
+          (p/do!
+           (when (config/global-config-enabled?)
+             (global-config-handler/start {:repo repo}))
+           (when (config/plugin-config-enabled?)
+             (plugin-config-handler/start)))
+          (p/finally
+            (fn []
                 ;; install after config is restored
-                (shortcut/refresh!)
+              (shortcut/refresh!)
 
-                (cond
-                  (and (not (seq (db/get-files config/local-repo)))
+              (cond
+                (and (not (seq (db/get-files config/local-repo)))
                        ;; Not native local directory
-                       (not (some config/local-file-based-graph? (map :url repos)))
-                       (not (mobile-util/native-platform?)))
+                     (not (some config/local-file-based-graph? (map :url repos)))
+                     (not (mobile-util/native-platform?)))
                   ;; will execute `(state/set-db-restoring! false)` inside
-                  (repo-handler/setup-local-repo-if-not-exists!)
+                (repo-handler/setup-local-repo-if-not-exists!)
 
-                  :else
-                  (state/set-db-restoring! false)))))))
-        (p/then
-         (fn []
-           (js/console.log "db restored, setting up repo hooks")
+                :else
+                (state/set-db-restoring! false)))))))
+      (p/then
+       (fn []
+         (js/console.log "db restored, setting up repo hooks")
 
-           (state/pub-event! [:modal/nfs-ask-permission])
+         (state/pub-event! [:modal/nfs-ask-permission])
 
-           (page-handler/init-commands!)
+         (page-handler/init-commands!)
 
-           (watch-for-date!)
-           (file-handler/watch-for-current-graph-dir!)
-           (state/pub-event! [:graph/restored (state/get-current-repo)])))
-        (p/catch (fn [error]
-                   (log/error :exception error))))))
+         (watch-for-date!)
+         (file-handler/watch-for-current-graph-dir!)
+         (state/pub-event! [:graph/restored (state/get-current-repo)])))
+      (p/catch (fn [error]
+                 (log/error :exception error)))))
 
 (defn- handle-connection-change
   [e]
@@ -169,27 +163,30 @@
 ;; FIXME: Another get-repos implementation at src\main\frontend\handler\repo.cljs
 (defn- get-repos
   []
-  (p/let [nfs-dbs (db-persist/get-all-graphs)]
-    ;; TODO: Better IndexDB migration handling
-    (cond
-      (and (mobile-util/native-platform?)
-           (some #(or (string/includes? % " ")
-                      (string/includes? % "logseq_local_/")) nfs-dbs))
-      (do (notification/show! ["DB version is not compatible, please clear cache then re-add your graph back."
-                               (ui/button
-                                (t :settings-page/clear-cache)
-                                :class    "ui__modal-enter"
-                                :class    "text-sm p-1"
-                                :on-click clear-cache!)] :error false)
-          {:url config/local-repo
-           :example? true})
+  (->
+   (p/let [nfs-dbs (db-persist/get-all-graphs)]
+     ;; TODO: Better IndexDB migration handling
+     (cond
+       (and (mobile-util/native-platform?)
+            (some #(or (string/includes? % " ")
+                       (string/includes? % "logseq_local_/")) nfs-dbs))
+       (do (notification/show! ["DB version is not compatible, please clear cache then re-add your graph back."
+                                (ui/button
+                                 (t :settings-page/clear-cache)
+                                 :class    "ui__modal-enter"
+                                 :class    "text-sm p-1"
+                                 :on-click clear-cache!)] :error false)
+           {:url config/local-repo
+            :example? true})
 
-      (seq nfs-dbs)
-      (map (fn [db] {:url db :nfs? true}) nfs-dbs)
+       (seq nfs-dbs)
+       (map (fn [db] {:url db :nfs? true}) nfs-dbs)
 
-      :else
-      [{:url config/local-repo
-        :example? true}])))
+       :else
+       [{:url config/local-repo
+         :example? true}]))
+   (p/catch (fn [error]
+              (js/console.error)))))
 
 (defn- register-components-fns!
   []
@@ -214,7 +211,6 @@
   [render]
   (test/setup-test!)
   (get-system-info)
-  (db-browser/start-db-worker!)
   (set-global-error-notification!)
 
   (set! js/window.onhashchange #(state/hide-custom-context-menu!)) ;; close context menu when page navs
@@ -244,10 +240,12 @@
   (p/do!
    (when (mobile-util/native-platform?)
      (mobile/mobile-preinit))
-   (-> (p/let [repos (get-repos)
+   (-> (p/let [_ (db-browser/start-db-worker!)
+               repos (get-repos)
                _ (state/set-repos! repos)
                _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
-               _ (restore-and-setup! repos)]
+               repo (or (state/get-current-repo) (:url (first repos)))
+               _ (restore-and-setup! repo repos)]
          (when (mobile-util/native-platform?)
            (state/restore-mobile-theme!)))
        (p/catch (fn [e]
@@ -260,8 +258,7 @@
 
    (when config/dev?
      (enable-datalog-console))
-   (persist-var/load-vars)
-   (js/setTimeout instrument! (* 60 1000))))
+   (persist-var/load-vars)))
 
 (defn stop! []
   (prn "stop!"))
