@@ -49,7 +49,8 @@
             [frontend.db.listener :as db-listener]
             [cljs-bean.core :as bean]
             [frontend.handler.test :as test]
-            [frontend.db.rtc.op-mem-layer :as op-mem-layer]))
+            [frontend.db.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.persist-db.browser :as db-browser]))
 
 (defn- set-global-error-notification!
   []
@@ -242,7 +243,8 @@
   (p/do!
    (when (mobile-util/native-platform?)
      (mobile/mobile-preinit))
-   (-> (p/let [repos (get-repos)
+   (-> (p/let [_ (db-browser/start-db-worker!)
+               repos (get-repos)
                _ (state/set-repos! repos)
                _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
                _ (restore-and-setup! repos)]
