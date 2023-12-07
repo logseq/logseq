@@ -610,11 +610,15 @@
           @apply list-none p-0 m-0;
 
           img.icon {
-            @apply w-[24px] h-[24px];
+            @apply w-[20px] h-[20px];
           }
 
           li {
             @apply p-1.5 rounded;
+
+            a {
+              @apply mb-0 text-gray-11;
+            }
 
             strong {
               @apply overflow-hidden text-ellipsis whitespace-nowrap;
