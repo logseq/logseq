@@ -591,7 +591,7 @@
 (defn handle-input-change
   ([state e] (handle-input-change state e (.. e -target -value)))
   ([state e input]
-   (let [composing? (util/onchange-event-is-composing? e)
+   (let [composing? (util/native-event-is-composing? e)
          e-type (gobj/getValueByKeys e "type")
          !input (::input state)
          !load-results-throttled (::load-results-throttled state)]
@@ -617,7 +617,7 @@
         keyname (.-key e)
         enter? (= keyname "Enter")
         esc? (= keyname "Escape")
-        composing? (util/event-is-composing? e)
+        composing? (util/goog-event-is-composing? e)
         highlighted-group @(::highlighted-group state)
         show-less (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :less))
         show-more (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :more))
@@ -634,7 +634,6 @@
       (let [repo (state/get-current-repo)]
         (state/close-modal!)
         (state/sidebar-add-block! repo input :search))
-
       as-keydown? (if meta?
                     (show-more)
                     (move-highlight state 1))
