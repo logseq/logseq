@@ -19,10 +19,8 @@
                        "js/db-worker.js"
                        "/static/js/db-worker.js")
           worker (js/Worker. worker-url)
-          ^js sqlite (Comlink/wrap worker)]
-      (reset! *sqlite sqlite)
-      ;; (.init sqlite)
-      )))
+          sqlite (Comlink/wrap worker)]
+      (reset! *sqlite sqlite))))
 
 (defrecord InBrowser []
   protocol/PersistentDB
