@@ -296,12 +296,16 @@
                                 snippet (some-> (:block/snippet item)
                                                 (highlight-page-content-query @!input))]
                             (when block
-                              {:icon "block"
-                               :icon-theme :gray
-                               :text (or snippet (:block/content block))
-                               :header (block/breadcrumb {:search? true} repo id {})
-                               :current-page? (some-> block :block/page #{current-page})
-                               :source-block block}))) blocks)
+                              (cond->
+                               {:icon "block"
+                                :icon-theme :gray
+                                :text (or snippet (:block/content block))
+                                :header (block/breadcrumb {:search? true} repo id {})
+                                :current-page? (some-> block :block/page #{current-page})
+                                :source-block {:block/uuid (str (:block/uuid block))}}
+                                (:block/name block)
+                                (assoc :source-page (:block/name block)
+                                       :cross-blocks? true))))) blocks)
                    (remove nil?))
             items-on-other-pages (remove :current-page? items)
             items-on-current-page (filter :current-page? items)]
@@ -426,6 +430,7 @@
 
 (defmethod handle-action :open-block [_ state _event]
   (let [block-id (some-> state state->highlighted-item :source-block :block/uuid uuid)
+        _ (prn :debug :block-id block-id)
         get-block-page (partial model/get-block-page (state/get-current-repo))
         block (db/entity [:block/uuid block-id])]
     (when block
@@ -468,7 +473,9 @@
 (defmethod handle-action :open [_ state event]
   (when-let [item (some-> state state->highlighted-item)]
     (let [page? (boolean (:source-page item))
-          block? (boolean (:source-block item))
+          cross-blocks? (:cross-blocks? item)
+          block? (and (boolean (:source-block item))
+                      (not cross-blocks?))
           shift?  @(::shift? state)
           shift-or-sidebar? (or shift? (boolean (:open-sidebar? (:opts state))))
           search-mode (:search/mode @state/state)
