@@ -226,18 +226,20 @@
  :linked-references/filter-directions "Click to include and shift-click to exclude. Click again to remove."
  :linked-references/filter-includes "Includes: "
  :linked-references/filter-excludes "Excludes: "
- :linked-references/reference-count (fn [filters? filter-n total]
+ :linked-references/reference-count (fn [filtered-count total-count]
+                                      ;; 1 Linked Reference
+                                      ;; 1 of 1 Linked Reference
+                                      ;; 2 of 5 Linked References
                                       (str
-                                       (when filters?
+                                       (when (filtered-count)
                                          (str filter-n " of "))
                                        total
-                                       " Linked Reference"
-                                       (when (not= total 1) "s")))
- :unlinked-references/reference-count (fn [n-ref]
-                                        (if n-ref
-                                          (str n-ref " Unlinked Reference"
-                                               (when (not= n-ref 1) "s"))
-                                          "Unlinked References"))
+                                       (if (= total 1) " Linked Reference" " Linked References")))
+ :unlinked-references/reference-count (fn [total]
+                                        ;; 1 Unlinked Reference
+                                        ;; 5 Unlinked References
+                                        (str total
+                                         (if (= total 1) " Unlinked Reference" " Unlinked References")))
  :editor/block-search "Search for a block"
  :text/image "Image"
  :asset/show-in-folder "Show image in folder"

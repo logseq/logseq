@@ -133,7 +133,7 @@
         *collapsed? (atom nil)]
     (ui/foldable
      [:div.flex.flex-row.flex-1.justify-between.items-center
-      [:h2.font-medium (t :linked-references/reference-count (seq filters) filter-n total)]
+      [:h2.font-medium (t :linked-references/reference-count (if (seq filters) filter-n nil) total)]
       [:a.filter.fade-link
        {:title (t :linked-references/filter-heading)
         :on-mouse-over (fn [_e]
