@@ -3,8 +3,8 @@
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
 
-@import "resources/css/radix.css";
-@import "resources/css/radix-hsl.css";
+@import "packages/ui/src/radix.css";
+@import "packages/ui/src/radix-hsl.css";
 @import "packages/ui/src/colors.css";
 @import "packages/ui/src/index.css";
 @import "resources/css/shui.css";
