@@ -181,6 +181,7 @@
         outline: none;
         border: none;
         position: absolute;
+        padding-left: 8px;
       }
 
       .form-input {
@@ -192,8 +193,8 @@
       .cancel {
         opacity: .3;
         position: absolute;
-        right: 5px;
-        top: 2px;
+        right: 6px;
+        top: 6px;
 
         &:hover {
           opacity: .6;
