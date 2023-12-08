@@ -389,6 +389,10 @@ li p:last-child,
 .external-link {
   text-decoration: none;
   border-bottom: 1px solid;
+
+  &:hover {
+    cursor: alias;
+  }
 }
 
 .noscroll {
@@ -680,15 +684,13 @@ a.tag {
   cursor: pointer;
   padding: 0 2px;
   border-radius: 4px;
-  background: or(--ls-tag-background, --lx-accent-05, transparent);
   color: or(--ls-tag-text, --lx-accent-11, --ls-tag-text-color, #045591);
-  opacity: var(--ls-tag-text-opacity, 0.8);
+  opacity: var(--ls-tag-text-opacity, 0.7);
 }
 
 a.tag:hover {
   opacity: var(--ls-tag-text-hover-opacity, 1);
-  background: or(--ls-tag-background-hover, --lx-accent-06, transparent);
-  color: or(--ls-tag-text-hvoer, --lx-accent-12, --ls-tag-text-hover-color, #045591);
+  text-decoration: underline;
 }
 
 svg.note {

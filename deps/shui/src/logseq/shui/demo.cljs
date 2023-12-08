@@ -231,6 +231,20 @@
    [:h1.text-3xl.font-bold "Logseq UI"]
    [:hr]
 
+   (ui/card
+     {:class "p-6 w-1/2 bg-primary/10 border-primary/40 flex items-center gap-2"}
+     (ui/tabler-icon
+       "brand-github"
+       {:size 28 :class "text-primary"})
+     [:<>
+      (ui/button
+        {:variant  :outline
+         :on-click #(dialog-core/open! [:h1.text-9xl.text-center.scale-110 "🍄"])} "点击获取?")
+      [:span.text-2xl.text-primary.uppercase
+       "logseq theme color"]])
+
+   [:hr]
+
    ;; Button
    (section-item "Button"
      [:div.flex.flex-row.flex-wrap.gap-2

@@ -16,6 +16,10 @@ html {
     .references-blocks-item {
       --lx-bg-override: var(--rx-gray-03-alpha);
     }
+
+    .block-children-left-border:hover {
+      --ls-block-left-color: var(--rx-logseq-11);
+    }
   }
 
   .ui__calendar {
