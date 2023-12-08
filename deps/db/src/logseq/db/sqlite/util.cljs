@@ -2,9 +2,7 @@
   "Utils fns for backend sqlite db"
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
-            [clojure.string :as string]
-            [cognitect.transit :as transit]
-            [logseq.db.frontend.schema :as db-schema]))
+            [clojure.string :as string]))
 
 (defn- type-of-block
   "
@@ -48,27 +46,6 @@
    :datoms (:datoms b)
    :created_at (or (:block/created-at b) (time-ms))
    :updated_at (or (:block/updated-at b) (time-ms))})
-
-(defn block-map->datoms-str
-  "Given a block map and all existing blocks, return the block as transit data
-   to be stored in the `datoms` column. This is currently only used in testing"
-  [blocks m]
-  (let [t-writer (transit/writer :json)]
-    (->> (dissoc m :db/id)
-         ;; This fn should match pipeline/datom->av-vector
-         (map (fn m->av-vector [[a v]]
-                [a v]
-                (cond
-                  (contains? db-schema/card-one-ref-type-attributes a)
-                  [a [:block/uuid (str (some #(when (= (:db/id %) (:db/id v)) (:block/uuid %)) blocks))]]
-
-                  (contains? db-schema/card-many-ref-type-attributes a)
-                  [a (seq
-                      (map (fn [{db-id :db/id}]
-                             [:block/uuid (some #(when (= db-id (:db/id %)) (:block/uuid %)) blocks)])
-                           v))]
-                  :else [a v])))
-         (transit/write t-writer))))
 
 (defn block-with-timestamps
   "Adds updated-at timestamp and created-at if it doesn't exist"
