@@ -18,7 +18,7 @@ html {
     body, .dark-theme, .light-theme {
       --accent: 10 78.0% 54.0%;
       --primary: 10 78.0% 54.0%;
-      --primary-accent-foreground: 190 43% 97%;
+      --primary-foreground: 190 43% 97%;
       --ring: 10 71.6% 71.0%;
       --accent-foreground: 190 43% 97%;
 
@@ -189,7 +189,7 @@ html {
       --primary: 206 100% 50.0%;
       --ring: 206 81.9% 65.3%;
       --accent-foreground: 190 43% 97%;
-      --primary-accent-foreground: 190 43% 97%;
+      --primary-foreground: 190 43% 97%;
 
       --lx-accent-01: var(--rx-blue-01);
       --lx-accent-02: var(--rx-blue-02);
@@ -278,7 +278,7 @@ html {
       --primary: 322 65.0% 54.5%;
       --ring: 323 60.3% 72.4%;
       --accent-foreground: 190 43% 97%;
-      --primary-accent-foreground: 190 43% 97%;
+      --primary-foreground: 190 43% 97%;
 
       --lx-accent-01: var(--rx-pink-01);
       --lx-accent-02: var(--rx-pink-02);
@@ -362,7 +362,7 @@ html {
       --primary: 292 45.0% 51.0%;
       --ring: 292 47.7% 70.8%;
       --accent-foreground: 190 43% 97%;
-      --primary-accent-foreground: 190 43% 97%;
+      --primary-foreground: 190 43% 97%;
 
       --lx-accent-01: var(--rx-plum-01);
       --lx-accent-02: var(--rx-plum-02);
@@ -446,7 +446,7 @@ html {
       --primary: 272 51.0% 54.0%;
       --ring: 272 60.0% 73.5%;
       --accent-foreground: 190 43% 97%;
-      --primary-accent-foreground: 190 43% 97%;
+      --primary-foreground: 190 43% 97%;
 
       --lx-accent-01: var(--rx-purple-01);
       --lx-accent-02: var(--rx-purple-02);
@@ -530,7 +530,7 @@ html {
       --primary: 252 56.0% 57.5%;
       --ring: 252 68.6% 76.3%;
       --accent-foreground: 190 43% 97%;
-      --primary-accent-foreground: 190 43% 97%;
+      --primary-foreground: 190 43% 97%;
 
       --lx-accent-01: var(--rx-violet-01);
       --lx-accent-02: var(--rx-violet-02);
@@ -614,7 +614,7 @@ html {
       --primary: 226 70.0% 55.5%;
       --ring: 226 75.4% 74.5%;
       --accent-foreground: 190 43% 97%;
-      --primary-accent-foreground: 190 43% 97%;
+      --primary-foreground: 190 43% 97%;
 
       --lx-accent-01: var(--rx-indigo-01);
       --lx-accent-02: var(--rx-indigo-02);
@@ -698,7 +698,7 @@ html {
       --primary: 190 95.0% 39.0%;
       --ring: 189 60.3% 52.5%;
       --accent-foreground: 190 43% 97%;
-      --primary-accent-foreground: 190 43% 97%;
+      --primary-foreground: 190 43% 97%;
 
       --lx-accent-01: var(--rx-cyan-01);
       --lx-accent-02: var(--rx-cyan-02);
@@ -784,7 +784,7 @@ html {
       --primary: 173 80.0% 36.0%;
       --ring: 172 42.1% 52.5%;
       --accent-foreground: 190 43% 97%;
-      --primary-accent-foreground: 190 43% 97%;
+      --primary-foreground: 190 43% 97%;
 
       --lx-accent-01: var(--rx-teal-01);
       --lx-accent-02: var(--rx-teal-02);
@@ -868,7 +868,7 @@ html {
       --primary: 151 55.0% 41.5%;
       --ring: 151 40.2% 54.1%;
       --accent-foreground: 190 43% 97%;
-      --primary-accent-foreground: 190 43% 97%;
+      --primary-foreground: 190 43% 97%;
 
       --lx-accent-01: var(--rx-green-01);
       --lx-accent-02: var(--rx-green-02);
@@ -952,7 +952,7 @@ html {
       --primary: 131 41.0% 46.5%;
       --ring: 131 38.1% 56.3%;
       --accent-foreground: 190 43% 97%;
-      --primary-accent-foreground: 190 43% 97%;
+      --primary-foreground: 190 43% 97%;
 
       --lx-accent-01: var(--rx-grass-01);
       --lx-accent-02: var(--rx-grass-02);
@@ -1036,7 +1036,7 @@ html {
       --primary: 24 94.0% 50.0%;
       --ring: 24 94.5% 64.3%;
       --accent-foreground: 190 43% 97%;
-      --primary-accent-foreground: 190 43% 97%;
+      --primary-foreground: 190 43% 97%;
 
       --lx-accent-01: var(--rx-orange-01);
       --lx-accent-02: var(--rx-orange-02);
@@ -1120,7 +1120,7 @@ html {
       --primary: 28 34.0% 51.0%;
       --ring: 28 50.0% 63.1%;
       --accent-foreground: 190 43% 97%;
-      --primary-accent-foreground: 190 43% 97%;
+      --primary-foreground: 190 43% 97%;
 
       --lx-accent-01: var(--rx-brown-01);
       --lx-accent-02: var(--rx-brown-02);
