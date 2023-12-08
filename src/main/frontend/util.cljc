@@ -1354,25 +1354,40 @@
        [] (breakpoint? 640))))
 
 #?(:cljs
-   (defn event-is-composing?
-     "Check if keydown event is a composing (IME) event.
-      Ignore the IME process by default."
-     ([e]
-      (event-is-composing? e false))
-     ([e include-process?]
-      (let [event-composing? (gobj/getValueByKeys e "event_" "isComposing")]
-        (if include-process?
-          (or event-composing?
-              (= (gobj/get e "keyCode") 229)
-              (= (gobj/get e "key") "Process"))
-          event-composing?)))))
+   (do
+     (defn goog-event?
+       [^js e]
+       (and e (fn? (gobj/get e "getBrowserEvent"))))
+
+     (defn goog-event-is-composing?
+       "Check if keydown event is a composing (IME) event.
+        Ignore the IME process by default."
+       ([^js e]
+        (goog-event-is-composing? e false))
+       ([^js e include-process?]
+        (when (goog-event? e)
+          (let [event-composing? (some-> (.getBrowserEvent e) (.-isComposing))]
+            (if include-process?
+              (or event-composing?
+                (= (gobj/get e "keyCode") 229)
+                (= (gobj/get e "key") "Process"))
+              event-composing?)))))))
 
 #?(:cljs
-   (defn onchange-event-is-composing?
+   (defn native-event-is-composing?
      "Check if onchange event of Input is a composing (IME) event.
        Always ignore the IME process."
-     [e]
-     (gobj/getValueByKeys e "nativeEvent" "isComposing"))) ;; No keycode available
+     [^js e]
+     (when-let [^js native-event
+                (and e (cond
+                         (goog-event? e)
+                         (.getBrowserEvent e)
+
+                         (js-in "_reactName" e)
+                         (.-nativeEvent e)
+
+                         :else e))]
+       (.-isComposing native-event))))
 
 #?(:cljs
    (defn open-url
