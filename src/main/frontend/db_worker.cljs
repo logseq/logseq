@@ -6,7 +6,6 @@
             [clojure.edn :as edn]
             [datascript.core :as d]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.util :as sqlite-util]
             [shadow.cljs.modern :refer [defclass]]
             [datascript.transit :as dt]
             ["@logseq/sqlite-wasm" :default sqlite3InitModule]
@@ -15,9 +14,13 @@
             [cljs-bean.core :as bean]))
 
 (defonce *sqlite (atom nil))
-(defonce *sqlite-db (atom nil))
+(defonce *sqlite-conns (atom nil))
 (defonce *datascript-conn (atom nil))
 (defonce *opfs-pool (atom nil))
+
+(defn- get-sqlite-conn
+  [repo]
+  (get @*sqlite-conns repo))
 
 (defn- get-opfs-pool
   []
@@ -61,26 +64,27 @@
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
-  [data]
-  (assert (some? @*sqlite-db) "sqlite db not exists")
-  (let [^Object db @*sqlite-db]
+  [repo data]
+  (let [^Object db (get-sqlite-conn repo)]
+    (assert (some? db) "sqlite db not exists")
     (.transaction db (fn [tx]
                        (doseq [item data]
                          (.exec tx #js {:sql "INSERT INTO kvs (addr, content) values ($addr, $content) on conflict(addr) do update set content = $content"
                                         :bind item}))))))
 
 (defn restore-data-from-addr
-  [addr]
-  (assert (some? @*sqlite-db) "sqlite db not exists")
-  (when-let [content (-> (.exec @*sqlite-db #js {:sql "select content from kvs where addr = ?"
-                                                 :bind #js [addr]
-                                                 :rowMode "array"})
-                         ffirst)]
-    (edn/read-string content)))
+  [repo addr]
+  (let [^Object db (get-sqlite-conn repo)]
+    (assert (some? db) "sqlite db not exists")
+    (when-let [content (-> (.exec db #js {:sql "select content from kvs where addr = ?"
+                                          :bind #js [addr]
+                                          :rowMode "array"})
+                           ffirst)]
+      (edn/read-string content))))
 
 (defn new-sqlite-storage
-  [_repo {:keys [threshold]
-          :or {threshold 4096}}]
+  [repo {:keys [threshold]
+         :or {threshold 4096}}]
   (let [_cache (cache/lru-cache-factory {} :threshold threshold)]
     (reify IStorage
       (-store [_ addr+data-seq]
@@ -89,24 +93,31 @@
                       #js {:$addr addr
                            :$content (pr-str data)})
                     addr+data-seq)]
-          (upsert-addr-content! data)))
+          (upsert-addr-content! repo data)))
 
       (-restore [_ addr]
-        (restore-data-from-addr addr)))))
+        (restore-data-from-addr repo addr)))))
+
+(defn- close-other-dbs!
+  [repo]
+  (doseq [[r db] @*sqlite-conns]
+    (when-not (= repo r)
+      (.close ^Object db))))
 
 (defn- create-or-open-db!
   [repo]
-  (p/let [pool (get-opfs-pool)
-          db (new (.-OpfsSAHPoolDb pool) (str "/" repo ".sqlite"))
-          storage (new-sqlite-storage repo {})]
-    (js/console.dir db)
-    (reset! *sqlite-db db)
-    (.exec db "PRAGMA locking_mode=exclusive")
-    (.exec db "create table if not exists kvs (addr INTEGER primary key, content TEXT)")
-    (let [conn (or (d/restore-conn storage)
-                   (d/create-conn db-schema/schema-for-db-based-graph {:storage storage}))]
-      (reset! *datascript-conn conn)
-      nil)))
+  (when-not (get-sqlite-conn repo)
+    (p/let [pool (get-opfs-pool)
+            db (new (.-OpfsSAHPoolDb pool) (str "/" repo ".sqlite"))
+            storage (new-sqlite-storage repo {})]
+      (js/console.dir db)
+      (swap! *sqlite-conns assoc repo db)
+      (.exec db "PRAGMA locking_mode=exclusive")
+      (.exec db "create table if not exists kvs (addr INTEGER primary key, content TEXT)")
+      (let [conn (or (d/restore-conn storage)
+                     (d/create-conn db-schema/schema-for-db-based-graph {:storage storage}))]
+        (reset! *datascript-conn conn)
+        nil))))
 
 #_:clj-kondo/ignore
 (defclass SQLiteDB
@@ -150,7 +161,7 @@
 
   (createOrOpenDB
    [_this repo]
-   ;; TODO: close all the other db connections
+   (close-other-dbs! repo)
    (create-or-open-db! repo))
 
   (transact
