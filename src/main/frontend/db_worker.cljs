@@ -6,10 +6,13 @@
             [clojure.edn :as edn]
             [datascript.core :as d]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.util :as sqlite-util]
             [shadow.cljs.modern :refer [defclass]]
             [datascript.transit :as dt]
             ["@logseq/sqlite-wasm" :default sqlite3InitModule]
-            ["comlink" :as Comlink]))
+            ["comlink" :as Comlink]
+            [clojure.string :as string]
+            [cljs-bean.core :as bean]))
 
 (defonce *sqlite (atom nil))
 (defonce *sqlite-db (atom nil))
@@ -20,7 +23,7 @@
   []
   (or @*opfs-pool
       (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name "logseq-db"
-                                                         :initialCapacity 100})]
+                                                             :initialCapacity 100})]
         ;; (.removeVfs pool)
         (reset! *opfs-pool pool)
         pool)))
@@ -39,19 +42,22 @@
 (defn- remove-pfs!
   "!! use it only for development"
   []
-  (when-let [^js pool (get-opfs-pool)]
-    (.removeVfs ^js pool)))
+  (p/let [^js pool (get-opfs-pool)]
+    (when pool
+      (.removeVfs ^js pool))))
 
 (defn- get-file-names
   []
-  (when-let [^js pool (get-opfs-pool)]
-    (.getFileNames pool)))
+  (p/let [^js pool (get-opfs-pool)]
+    (when pool
+      (.getFileNames pool))))
 
 (defn- export-db-file
   [file-path]
   ;; TODO: get file name by repo
-  (when-let [^js pool (get-opfs-pool)]
-    (.exportFile ^js pool file-path)))
+  (p/let [^js pool (get-opfs-pool)]
+    (when pool
+      (.exportFile ^js pool file-path))))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
@@ -135,9 +141,12 @@
 
   (listDB
    [_this]
-   ;; TODO:
-   ;; (prn (get-file-names))
-   nil)
+   (p/let [file-names (get-file-names)]
+     (->> file-names
+          (filter (fn [file] (string/ends-with? file ".sqlite")))
+          (map (fn [file]
+                 (subs file 1 (- (count file) 7))))
+          (bean/->js))))
 
   (createOrOpenDB
    [_this repo]
