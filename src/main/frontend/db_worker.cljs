@@ -23,10 +23,11 @@
   (get @*sqlite-conns repo))
 
 (defn- <get-opfs-pool
-  []
+  [graph]
   (or @*opfs-pool
-      (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name "logseq-db"
-                                                             :initialCapacity 100})]
+      (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (str "logseq-pool-" graph)
+                                                             :initialCapacity 10})]
+        ;; (.removeVfs ^js pool)
         (reset! *opfs-pool pool)
         (js/console.dir pool)
         pool)))
@@ -50,15 +51,15 @@
   (str "/" repo ".sqlite"))
 
 (defn- get-file-names
-  []
-  (p/let [^js pool (<get-opfs-pool)]
+  [graph]
+  (p/let [^js pool (<get-opfs-pool graph)]
     (when pool
       (.getFileNames pool))))
 
 (defn- export-db-file
   [repo]
   ;; TODO: get file name by repo
-  (p/let [^js pool (<get-opfs-pool)
+  (p/let [^js pool (<get-opfs-pool repo)
           path (get-repo-path repo)]
     (when pool
       (.exportFile ^js pool path))))
@@ -113,7 +114,7 @@
 (defn- create-or-open-db!
   [repo]
   (when-not (get-sqlite-conn repo)
-    (p/let [pool (<get-opfs-pool)
+    (p/let [pool (<get-opfs-pool repo)
             db (new (.-OpfsSAHPoolDb pool) (get-repo-path repo))
             storage (new-sqlite-storage repo {})]
       (swap! *sqlite-conns assoc repo db)
@@ -123,6 +124,33 @@
                      (d/create-conn db-schema/schema-for-db-based-graph {:storage storage}))]
         (reset! *datascript-conn conn)
         nil))))
+
+(defn iter->vec [iter]
+  (when iter
+    (p/loop [acc []]
+      (p/let [elem (.next iter)]
+        (if (.-done elem)
+          acc
+          (p/recur (conj acc (.-value elem))))))))
+
+(defn- <list-all-files
+  []
+  (let [dir? #(= (.-kind %) "directory")]
+    (p/let [^js root (.getDirectory js/navigator.storage)]
+      (p/loop [result []
+               dirs [root]]
+        (if (empty? dirs)
+          result
+          (p/let [dir (first dirs)
+                  result (conj result dir)
+                  values-iter (when (dir? dir) (.values dir))
+                  values (when values-iter (iter->vec values-iter))
+                  current-dir-dirs (filter dir? values)
+                  result (concat result values)
+                  dirs (concat
+                        current-dir-dirs
+                        (rest dirs))]
+            (p/recur result dirs)))))))
 
 #_:clj-kondo/ignore
 (defclass SQLiteDB
@@ -139,6 +167,7 @@
    (when-let [sqlite @*sqlite]
      (.-version sqlite)))
 
+  ;; FIXME:
   (supportOPFS
    [_this]
    (some? (.-createSyncAccessHandle (.-prototype js/FileSystemFileHandle))))
@@ -153,12 +182,20 @@
 
   (listDB
    [_this]
-   (p/let [file-names (get-file-names)]
-     (->> file-names
-          (filter (fn [file] (string/ends-with? file ".sqlite")))
-          (map (fn [file]
-                 (subs file 1 (- (count file) 7))))
-          (bean/->js))))
+   (p/let [all-files (<list-all-files)
+           dbs (->>
+                (keep (fn [file]
+                        (when (and
+                               (= (.-kind file) "directory")
+                               (string/starts-with? (.-name file) ".logseq-pool-"))
+                          (string/replace-first (.-name file) ".logseq-pool-" "")))
+                      all-files)
+                distinct)]
+     (prn :debug :all-files-count (count (filter
+                                          #(= (.-kind %) "file")
+                                          all-files)))
+     (prn :dbs dbs)
+     (bean/->js dbs)))
 
   (createOrOpenDB
    [_this repo]
@@ -188,7 +225,7 @@
   (unsafeUnlinkDB
    [_this repo]
    (p/let [_ (close-db! repo)
-           pool (<get-opfs-pool)
+           pool (<get-opfs-pool repo)
            path (get-repo-path repo)]
      (when pool
        (.unlink pool path)))))
