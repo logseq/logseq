@@ -34,8 +34,11 @@
 (defn- init-sqlite-module!
   []
   (when-not @*sqlite
-    (p/let [base-url (str js/self.location.protocol "//" js/self.location.host)
-            sqlite-wasm-url (str base-url "/js/")
+    (p/let [electron? (string/includes? (.. js/location -href) "electron=true")
+            base-url (str js/self.location.protocol "//" js/self.location.host)
+            sqlite-wasm-url (if electron?
+                              (js/URL. "sqlite3.wasm" (.. js/location -href))
+                              (str base-url "/js/"))
             sqlite (sqlite3InitModule (clj->js {:url sqlite-wasm-url
                                                 :print js/console.log
                                                 :printErr js/console.error}))]
