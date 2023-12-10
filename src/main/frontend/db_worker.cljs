@@ -22,12 +22,11 @@
   [repo]
   (get @*sqlite-conns repo))
 
-(defn- get-opfs-pool
+(defn- <get-opfs-pool
   []
   (or @*opfs-pool
       (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name "logseq-db"
                                                              :initialCapacity 100})]
-        ;; (.removeVfs pool)
         (reset! *opfs-pool pool)
         pool)))
 
@@ -45,20 +44,20 @@
 (defn- remove-pfs!
   "!! use it only for development"
   []
-  (p/let [^js pool (get-opfs-pool)]
+  (p/let [^js pool (<get-opfs-pool)]
     (when pool
       (.removeVfs ^js pool))))
 
 (defn- get-file-names
   []
-  (p/let [^js pool (get-opfs-pool)]
+  (p/let [^js pool (<get-opfs-pool)]
     (when pool
       (.getFileNames pool))))
 
 (defn- export-db-file
   [file-path]
   ;; TODO: get file name by repo
-  (p/let [^js pool (get-opfs-pool)]
+  (p/let [^js pool (<get-opfs-pool)]
     (when pool
       (.exportFile ^js pool file-path))))
 
@@ -107,10 +106,9 @@
 (defn- create-or-open-db!
   [repo]
   (when-not (get-sqlite-conn repo)
-    (p/let [pool (get-opfs-pool)
+    (p/let [pool (<get-opfs-pool)
             db (new (.-OpfsSAHPoolDb pool) (str "/" repo ".sqlite"))
             storage (new-sqlite-storage repo {})]
-      (js/console.dir db)
       (swap! *sqlite-conns assoc repo db)
       (.exec db "PRAGMA locking_mode=exclusive")
       (.exec db "create table if not exists kvs (addr INTEGER primary key, content TEXT)")
@@ -129,18 +127,14 @@
 
   Object
 
-  ;; ;; dev-only, close all db connections and db files
-  ;; (unsafeDevCloseAll
-  ;;  [_this]
-  ;;  (.dev_close sqlite-db))
+  (getVersion
+   [_this]
+   (when-let [sqlite @*sqlite]
+     (.-version sqlite)))
 
-  ;; (getVersion
-  ;;  [_this]
-  ;;  (.get_version sqlite-db))
-
-  ;; (supportOPFS
-  ;;  [_this]
-  ;;  (.has_opfs_support sqlite-db))
+  (supportOPFS
+   [_this]
+   (some? (.-createSyncAccessHandle (.-prototype js/FileSystemFileHandle))))
 
   (init
    [_this]
