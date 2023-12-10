@@ -20,7 +20,7 @@
     (let [worker-url (if (util/electron?)
                        "js/db-worker.js"
                        "/static/js/db-worker.js")
-          worker (js/Worker. worker-url)
+          worker (js/Worker. (str worker-url "?electron=" (util/electron?)))
           sqlite (Comlink/wrap worker)]
       (reset! *sqlite sqlite)
       (p/let [opfs-supported? (.supportOPFS sqlite)]
