@@ -1,35 +1,34 @@
 (ns frontend.components.cmdk
-  (:require
-    [clojure.string :as string]
-    [frontend.components.block :as block]
-    [frontend.context.i18n :refer [t]]
-    [frontend.db :as db]
-    [frontend.db.model :as model]
-    [frontend.handler.command-palette :as cp-handler]
-    [frontend.handler.editor :as editor-handler]
-    [frontend.handler.page :as page-handler]
-    [frontend.handler.route :as route-handler]
-    [frontend.handler.whiteboard :as whiteboard-handler]
-    [frontend.modules.shortcut.core :as shortcut]
-    [frontend.search :as search]
-    [frontend.shui :refer [make-shui-context]]
-    [frontend.state :as state]
-    [frontend.ui :as ui]
-    [frontend.util :as util]
-    [frontend.util.page :as page-util]
-    [goog.functions :as gfun]
-    [goog.object :as gobj]
-    [logseq.shui.core :as shui]
-    [promesa.core :as p]
-    [rum.core :as rum]
-    [frontend.mixins :as mixins]
-    [logseq.graph-parser.util.block-ref :as block-ref]
-    [logseq.graph-parser.util :as gp-util]
-    [logseq.shui.button.v2 :as button]
-    [frontend.modules.shortcut.utils :as shortcut-utils]
-    [frontend.config :as config]
-    [logseq.common.path :as path]
-    [electron.ipc :as ipc]))
+  (:require [clojure.string :as string]
+            [frontend.components.block :as block]
+            [frontend.context.i18n :refer [t]]
+            [frontend.db :as db]
+            [frontend.db.model :as model]
+            [frontend.handler.command-palette :as cp-handler]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.page :as page-handler]
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.search :as search]
+            [frontend.shui :refer [make-shui-context]]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [frontend.util.page :as page-util]
+            [goog.functions :as gfun]
+            [goog.object :as gobj]
+            [logseq.shui.core :as shui]
+            [promesa.core :as p]
+            [rum.core :as rum]
+            [frontend.mixins :as mixins]
+            [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.shui.button.v2 :as button]
+            [frontend.modules.shortcut.utils :as shortcut-utils]
+            [frontend.config :as config]
+            [logseq.common.path :as path]
+            [electron.ipc :as ipc]))
 
 (defn translate [t {:keys [id desc]}]
   (when id
@@ -341,6 +340,29 @@
                         (search/fuzzy-search filters q {:extract-fn :text}))]
     (swap! !results update group merge {:status :success :items matched-items})))
 
+(defmethod load-results :current-page [group state]
+  (if-let [current-page (page-util/get-current-page-id)]
+    (let [!results (::results state)
+          !input (::input state)
+          repo (state/get-current-repo)
+          opts {:limit 100 :page current-page}]
+      (swap! !results assoc-in [group :status] :loading)
+      (swap! !results assoc-in [:current-page :status] :loading)
+      (p/let [blocks (search/block-search repo @!input opts)
+              blocks (remove nil? blocks)
+              items (map (fn [block]
+                           (let [id (if (uuid? (:block/uuid block))
+                                      (:block/uuid block)
+                                      (uuid (:block/uuid block)))]
+                             {:icon "block"
+                              :icon-theme :gray
+                              :text (:block/content block)
+                              :header (block/breadcrumb {:search? true} repo id {})
+                              :current-page? true
+                              :source-block block})) blocks)]
+        (swap! !results update :current-page merge {:status :success :items items})))
+    (reset! (::filter state) nil)))
+
 ;; The default load-results function triggers all the other load-results function
 (defmethod load-results :default [_ state]
   (if-not (some-> state ::input deref seq)
@@ -497,8 +519,8 @@
 (rum/defc mouse-active-effect!
   [*mouse-active? deps]
   (rum/use-effect!
-    #(reset! *mouse-active? false)
-    deps)
+   #(reset! *mouse-active? false)
+   deps)
   nil)
 
 (rum/defcs result-group
@@ -536,9 +558,9 @@
        [:div {:class "flex-1"}]
 
        (when (and (= group highlighted-group)
-               (or can-show-more? can-show-less?)
-               (empty? filter)
-               (not sidebar?))
+                  (or can-show-more? can-show-less?)
+                  (empty? filter)
+                  (not sidebar?))
          [:a.text-link.select-node.opacity-50.hover:opacity-90
           {:on-click (if (= show :more) show-less show-more)}
           (if (= show :more)
@@ -553,28 +575,28 @@
        (for [item visible-items
              :let [highlighted? (= item highlighted-item)]]
          (let [item (shui/list-item (assoc item
-                                      :query (when-not (= group :create) @(::input state))
-                                      :compact true
-                                      :rounded false
-                                      :hoverable @*mouse-active?
-                                      :highlighted highlighted?
+                                           :query (when-not (= group :create) @(::input state))
+                                           :compact true
+                                           :rounded false
+                                           :hoverable @*mouse-active?
+                                           :highlighted highlighted?
                                       ;; for some reason, the highlight effect does not always trigger on a
                                       ;; boolean value change so manually pass in the dep
-                                      :on-highlight-dep highlighted-item
-                                      :on-click (fn [e]
-                                                  (reset! (::highlighted-item state) item)
-                                                  (handle-action :default state item)
-                                                  (when-let [on-click (:on-click item)]
-                                                    (on-click e)))
+                                           :on-highlight-dep highlighted-item
+                                           :on-click (fn [e]
+                                                       (reset! (::highlighted-item state) item)
+                                                       (handle-action :default state item)
+                                                       (when-let [on-click (:on-click item)]
+                                                         (on-click e)))
                                       ;; :on-mouse-enter (fn [e]
                                       ;;                   (when (not highlighted?)
                                       ;;                     (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
-                                      :on-highlight (fn [ref]
-                                                      (reset! (::highlighted-group state) group)
-                                                      (when (and ref (.-current ref)
-                                                              (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
-                                                        (scroll-into-view-when-invisible state (.-current ref)))))
-                      context)]
+                                           :on-highlight (fn [ref]
+                                                           (reset! (::highlighted-group state) group)
+                                                           (when (and ref (.-current ref)
+                                                                      (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
+                                                             (scroll-into-view-when-invisible state (.-current ref)))))
+                                    context)]
            (if (= group :blocks)
              (ui/lazy-visible (fn [] item) {:trigger-once? true})
              item)))]]]))
@@ -591,7 +613,7 @@
 (defn handle-input-change
   ([state e] (handle-input-change state e (.. e -target -value)))
   ([state e input]
-   (let [composing? (util/onchange-event-is-composing? e)
+   (let [composing? (util/native-event-is-composing? e)
          e-type (gobj/getValueByKeys e "type")
          !input (::input state)
          !load-results-throttled (::load-results-throttled state)]
@@ -617,7 +639,7 @@
         keyname (.-key e)
         enter? (= keyname "Enter")
         esc? (= keyname "Escape")
-        composing? (util/event-is-composing? e)
+        composing? (util/goog-event-is-composing? e)
         highlighted-group @(::highlighted-group state)
         show-less (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :less))
         show-more (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :more))
@@ -634,7 +656,6 @@
       (let [repo (state/get-current-repo)]
         (state/close-modal!)
         (state/sidebar-add-block! repo input :search))
-
       as-keydown? (if meta?
                     (show-more)
                     (move-highlight state 1))
@@ -726,7 +747,7 @@
      [:div "to filter search results"]]
     [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
      (shui/shortcut ["mod" "enter"] context)
-     [:div "to open search in the sidebar"]]])  )
+     [:div "to open search in the sidebar"]]]))
 
 (rum/defcs tip <
   {:init (fn [state]
@@ -754,7 +775,7 @@
                                   :on-click #(handle-action action (assoc state :opts opts) %)
                                   :shortcut shortcut
                                   :muted true}
-                      context))]
+                                 context))]
     (when action
       [:div {:class "flex w-full px-3 py-2 gap-2 justify-between"
              :style {:background "var(--lx-gray-03)"
