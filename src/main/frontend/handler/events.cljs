@@ -949,6 +949,14 @@
 (defmethod handle :editor/edit-block [[_ block pos id opts]]
   (editor-handler/edit-block! block pos id opts))
 
+(defmethod handle :db/multiple-tabs-opfs-failed [_]
+  ;; close current tab or window
+  (notification/show!
+   (let [word (if (util/electron?) "window" "tab")]
+     (util/format "Logseq doesn't support multiple %ss access to the same graph yet, please close this %s."
+                  word word))
+   :warning false))
+
 (defn run!
   []
   (let [chan (state/get-events-chan)]
