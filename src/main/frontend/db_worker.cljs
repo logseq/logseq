@@ -28,6 +28,7 @@
       (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name "logseq-db"
                                                              :initialCapacity 100})]
         (reset! *opfs-pool pool)
+        (js/console.dir pool)
         pool)))
 
 (defn- init-sqlite-module!
@@ -41,12 +42,9 @@
       (reset! *sqlite sqlite)
       nil)))
 
-(defn- remove-pfs!
-  "!! use it only for development"
-  []
-  (p/let [^js pool (<get-opfs-pool)]
-    (when pool
-      (.removeVfs ^js pool))))
+(defn- get-repo-path
+  [repo]
+  (str "/" repo ".sqlite"))
 
 (defn- get-file-names
   []
@@ -55,11 +53,12 @@
       (.getFileNames pool))))
 
 (defn- export-db-file
-  [file-path]
+  [repo]
   ;; TODO: get file name by repo
-  (p/let [^js pool (<get-opfs-pool)]
+  (p/let [^js pool (<get-opfs-pool)
+          path (get-repo-path repo)]
     (when pool
-      (.exportFile ^js pool file-path))))
+      (.exportFile ^js pool path))))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
@@ -103,11 +102,16 @@
     (when-not (= repo r)
       (.close ^Object db))))
 
+(defn- close-db!
+  [repo]
+  (when-let [db (@*sqlite-conns repo)]
+    (.close ^Object db)))
+
 (defn- create-or-open-db!
   [repo]
   (when-not (get-sqlite-conn repo)
     (p/let [pool (<get-opfs-pool)
-            db (new (.-OpfsSAHPoolDb pool) (str "/" repo ".sqlite"))
+            db (new (.-OpfsSAHPoolDb pool) (get-repo-path repo))
             storage (new-sqlite-storage repo {})]
       (swap! *sqlite-conns assoc repo db)
       (.exec db "PRAGMA locking_mode=exclusive")
@@ -176,10 +180,26 @@
      (let [db @conn]
        (->> (d/datoms db :eavt)
             vec
-            dt/write-transit-str)))))
+            dt/write-transit-str))))
+
+  (unsafeUnlinkDB
+   [_this repo]
+   (p/let [_ (close-db! repo)
+           pool (<get-opfs-pool)
+           path (get-repo-path repo)]
+     (when pool
+       (.unlink pool path)))))
 
 (defn init
   "web worker entry"
   []
   (let [^js obj (SQLiteDB.)]
     (Comlink/expose obj)))
+
+(comment
+  (defn- remove-pfs!
+   "!! use it only for development"
+   []
+   (p/let [^js pool (<get-opfs-pool)]
+     (when pool
+       (.removeVfs ^js pool)))))
