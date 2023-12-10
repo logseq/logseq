@@ -557,11 +557,6 @@
   resolved "https://registry.yarnpkg.com/@logseq/sqlite-wasm/-/sqlite-wasm-0.0.4.tgz#7d9d9fb6034149d503fa66237b1a5f5206107f15"
   integrity sha512-aV1nhgUPIrv36E9J7GRKLAFuqPKJbSFxuhrzbxNAhHS8Wn0XO/0++UcikwCOK9aKnbgqfoRgX+VSxiFhwfno2g==
 
-"@logseq/sqlite@=0.1.7":
-  version "0.1.7"
-  resolved "https://registry.yarnpkg.com/@logseq/sqlite/-/sqlite-0.1.7.tgz#15e9334878393ab396149d337569010a3fd6a254"
-  integrity sha512-ikJbshAJrRA2c5M7jKPn/k2oLhHriRYdPGra/sKMOLHV54QJkJtBoP75dhzv5RIIhpWxudTn/vdG3U5tJnJSvQ==
-
 "@mapbox/node-pre-gyp@^1.0.0":
   version "1.0.11"
   resolved "https://registry.yarnpkg.com/@mapbox/node-pre-gyp/-/node-pre-gyp-1.0.11.tgz#417db42b7f5323d79e93b34a6d7a2a12c0df43fa"
