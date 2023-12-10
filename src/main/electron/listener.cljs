@@ -164,7 +164,7 @@
                  ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage
                  ;; No db cache persisting ensured. Should be handled by the caller
                  (fn [repo]
-                   (ui-handler/open-new-window! repo)))
+                   (ui-handler/open-new-window-or-tab! nil repo)))
 
   (safe-api-call "invokeLogseqAPI"
                  (fn [^js data]

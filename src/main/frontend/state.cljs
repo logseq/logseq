@@ -29,7 +29,8 @@
 ;; Stores main application state
 (defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
-        current-graph  (let [graph (storage/get :git/current-repo)]
+        current-graph  (let [url-graph (:graph (util/parse-params))
+                             graph (or url-graph (storage/get :git/current-repo))]
                          (when graph (ipc/ipc "setCurrentGraph" graph))
                          graph)]
     (atom
