@@ -9,7 +9,8 @@
             [promesa.core :as p]
             [frontend.util :as util]
             [frontend.handler.notification :as notification]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.state :as state]))
 
 (defonce *sqlite (atom nil))
 
@@ -46,7 +47,9 @@
                     (bean/->clj result)))
           (p/catch (fn [error]
                      (prn :debug :list-db-error (js/Date.))
-                     (notification/show! [:div (str "SQLiteDB error: " error)] :error)
+                     (if (= "NoModificationAllowedError"  (.-name error))
+                       (state/pub-event! [:db/multiple-tabs-opfs-failed])
+                       (notification/show! [:div (str "SQLiteDB error: " error)] :error))
                      [])))))
 
   (<unsafe-delete [_this repo]
