@@ -22,7 +22,10 @@
           worker (js/Worker. worker-url)
           sqlite (Comlink/wrap worker)]
       (reset! *sqlite sqlite)
-      (.init sqlite))))
+      (p/let [opfs-supported? (.supportOPFS sqlite)]
+        (if opfs-supported?
+          (.init sqlite)
+          (notification/show! "It seems that OPFS is not supported on this browser, please upgrade it to the latest version or use another browser." :error))))))
 
 (defrecord InBrowser []
   protocol/PersistentDB
