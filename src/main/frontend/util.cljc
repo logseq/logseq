@@ -1550,3 +1550,15 @@ Arg *stop: atom, reset to true to stop the loop"
            (not (string/includes? s " "))
            (string/starts-with? s "#[[")
            (string/ends-with? s "]]")))))
+#?(:cljs
+   (defn parse-params
+     "Parse URL parameters into a hashmap"
+     []
+     (->> js/window
+          (.-location)
+          (.-search)
+          (new js/URLSearchParams)
+          (seq)
+          (js->clj)
+          (into {})
+          (walk/keywordize-keys))))

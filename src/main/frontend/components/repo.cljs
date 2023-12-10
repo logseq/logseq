@@ -188,14 +188,9 @@
         reindex-link {:title        (t :re-index)
                       :hover-detail (t :re-index-detail)
                       :options (cond->
-                                 {:on-click
-                                  (fn []
-                                    (state/pub-event! [:graph/ask-for-re-index *multiple-windows? nil]))})}
-        new-window-link (when (and (util/electron?)
-                                   ;; New Window button in menu bar of macOS is available.
-                                   (not util/mac?))
-                          {:title        (t :open-new-window)
-                           :options {:on-click #(state/pub-event! [:graph/open-new-window nil])}})]
+                                {:on-click
+                                 (fn []
+                                   (state/pub-event! [:graph/ask-for-re-index *multiple-windows? nil]))})}]
     (->>
      (concat repo-links
              [(when (seq repo-links) {:hr true})
@@ -204,12 +199,11 @@
                 {:title (t :new-graph) :options {:href (rfe/href :repos)}}) ;; Brings to the repos page for showing fallback message
               (when config/db-graph-enabled?
                 {:title (str (t :new-graph) " - DB version")
-                :options {:on-click #(state/pub-event! [:graph/new-db-graph])}})
+                 :options {:on-click #(state/pub-event! [:graph/new-db-graph])}})
               {:title (t :all-graphs) :options {:href (rfe/href :repos)}}
               refresh-link
               (when-not (config/db-based-graph? current-repo)
-                reindex-link)
-              new-window-link])
+                reindex-link)])
      (remove nil?))))
 
 (rum/defcs repos-dropdown < rum/reactive
