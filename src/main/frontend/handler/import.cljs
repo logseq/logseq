@@ -227,7 +227,7 @@
           (persist-db/<import-db graph buffer)
           (repo-handler/new-db! bare-graph-name))
         (p/then
-         (fn [result]
+         (fn [_result]
            (finished-ok-handler)))
         (p/catch
          (fn [e]
