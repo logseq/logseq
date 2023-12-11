@@ -119,12 +119,9 @@
                      (not (:update-tx-ids? tx-meta)))
             (db/transact! repo update-tx-ids {:replace? true
                                               :update-tx-ids? true}))
-          (when (config/db-based-graph? repo)
-            (when-not config/publishing?
-              (go
-                (if (util/electron?)
-                  (<! (persist-db/<transact-data repo (:tx-data tx-report) (:tx-meta tx-report)))
-                  (<! (persist-db/<transact-data repo upsert-blocks deleted-block-uuids)))))))
+          (when (and (config/db-based-graph? repo) (not config/publishing?))
+            (go
+              (<! (persist-db/<transact-data repo (:tx-data tx-report) (:tx-meta tx-report))))))
 
         (when-not importing?
           (react/refresh! repo tx-report'))
