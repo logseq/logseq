@@ -37,14 +37,16 @@
   "backup CONTENT under DIR :backup-dir or :version-file-dir
   :backup-dir = `backup-dir`
   :version-file-dir = `version-file-dir`"
-  [repo dir relative-path ext content]
+  [repo dir relative-path ext content & {:keys [add-desktop?]
+                                         :or {add-desktop? true}}]
   {:pre [(contains? #{:backup-dir :version-file-dir} dir)]}
   (let [dir* (case dir
                :backup-dir (get-backup-dir repo relative-path)
                :version-file-dir (get-version-file-dir repo relative-path))
         new-path (node-path/join dir*
                                  (str (string/replace (.toISOString (js/Date.)) ":" "_")
-                                      ".Desktop" ext))]
+                                      (when add-desktop? ".Desktop")
+                                      ext))]
     (fs-extra/ensureDirSync dir*)
     (fs/writeFileSync new-path content)
     (fs/statSync new-path)

@@ -48,14 +48,18 @@
   [repo]
   (str "/" repo ".sqlite"))
 
-(comment
-  (defn- export-db-file
-    [repo]
-  ;; TODO: get file name by repo
-    (p/let [^js pool (<get-opfs-pool repo)
-            path (get-repo-path repo)]
-      (when pool
-        (.exportFile ^js pool path)))))
+(defn- <export-db-file
+  [repo]
+  (p/let [^js pool (<get-opfs-pool repo)
+          path (get-repo-path repo)]
+    (when pool
+      (.exportFile ^js pool path))))
+
+(defn- <import-db
+  [repo data]
+  (p/let [^js pool (<get-opfs-pool repo)]
+    (when pool
+      (.importDB ^js pool (get-repo-path repo) data))))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
@@ -244,7 +248,19 @@
    [_this repo]
    (p/let [_ (close-db! repo)]
      (remove-vfs! repo)
-     nil)))
+     nil))
+
+  (exportDB
+   [_this repo]
+   (<export-db-file repo))
+
+  (importDB
+   [this repo data]
+   ;; FIXME: repo not exists yet
+   (when-not (string/blank? repo)
+     (p/let [_ (.createOrOpenDB this repo)
+             data (<import-db repo data)]
+       nil))))
 
 (defn init
   "web worker entry"
