@@ -77,50 +77,52 @@
 
 (defn restore-and-setup!
   [repo repos]
-  (-> (p/do!
-       (db-restore/restore-graph! repo)
-       (repo-config-handler/start {:repo repo})
-       (op-mem-layer/<init-load-from-indexeddb! repo))
-      (p/then
-       (fn []
-         (db-listener/listen-and-persist! repo)
+  (when repo
+    (-> (p/do!
+         (db-restore/restore-graph! repo)
+         (repo-config-handler/start {:repo repo})
+         (op-mem-layer/<init-load-from-indexeddb! repo))
+        (p/then
+         (fn []
+           (db-listener/listen-and-persist! repo)
            ;; try to load custom css only for current repo
-         (ui-handler/add-style-if-exists!)
+           (ui-handler/add-style-if-exists!)
 
-         (->
-          (p/do!
-           (when (config/global-config-enabled?)
-             (global-config-handler/start {:repo repo}))
-           (when (config/plugin-config-enabled?)
-             (plugin-config-handler/start)))
-          (p/finally
-            (fn []
+           (->
+            (p/do!
+             (when (config/global-config-enabled?)
+               (global-config-handler/start {:repo repo}))
+             (when (config/plugin-config-enabled?)
+               (plugin-config-handler/start)))
+            (p/finally
+              (fn []
                 ;; install after config is restored
-              (shortcut/refresh!)
+                (shortcut/refresh!)
 
-              (cond
-                (and (not (seq (db/get-files config/local-repo)))
+                (cond
+                  (and (not (seq (db/get-files config/local-repo)))
                        ;; Not native local directory
-                     (not (some config/local-file-based-graph? (map :url repos)))
-                     (not (mobile-util/native-platform?)))
+                       (not (some config/local-file-based-graph? (map :url repos)))
+                       (not (mobile-util/native-platform?))
+                       (not (config/db-based-graph? repo)))
                   ;; will execute `(state/set-db-restoring! false)` inside
-                (repo-handler/setup-local-repo-if-not-exists!)
+                  (repo-handler/setup-local-repo-if-not-exists!)
 
-                :else
-                (state/set-db-restoring! false)))))))
-      (p/then
-       (fn []
-         (js/console.log "db restored, setting up repo hooks")
+                  :else
+                  (state/set-db-restoring! false)))))))
+        (p/then
+         (fn []
+           (js/console.log "db restored, setting up repo hooks")
 
-         (state/pub-event! [:modal/nfs-ask-permission])
+           (state/pub-event! [:modal/nfs-ask-permission])
 
-         (page-handler/init-commands!)
+           (page-handler/init-commands!)
 
-         (watch-for-date!)
-         (file-handler/watch-for-current-graph-dir!)
-         (state/pub-event! [:graph/restored (state/get-current-repo)])))
-      (p/catch (fn [error]
-                 (log/error :exception error)))))
+           (watch-for-date!)
+           (when (util/electron?) (file-handler/watch-for-current-graph-dir!))
+           (state/pub-event! [:graph/restored (state/get-current-repo)])))
+        (p/catch (fn [error]
+                   (log/error :exception error))))))
 
 (defn- handle-connection-change
   [e]
