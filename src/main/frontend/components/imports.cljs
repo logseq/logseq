@@ -11,7 +11,8 @@
             [frontend.handler.import :as import-handler]
             [clojure.string :as string]
             [goog.object :as gobj]
-            [frontend.components.onboarding.setups :as setups]))
+            [frontend.components.onboarding.setups :as setups]
+            [frontend.util.text :as text-util]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
@@ -45,13 +46,40 @@
                           :error))))
 
 (defn- lsq-import-handler
-  [e]
+  [e & {:keys [sqlite?]}]
   (let [file      (first (array-seq (.-files (.-target e))))
         file-name (some-> (gobj/get file "name")
                           (string/lower-case))
         edn? (string/ends-with? file-name ".edn")
         json? (string/ends-with? file-name ".json")]
-    (if (or edn? json?)
+    (cond
+      sqlite?
+      (let [graph-name (-> (js/prompt "Please specify a name for the new graph:")
+                           str
+                           string/trim)
+            all-graphs (->> (state/get-repos)
+                            (map #(text-util/get-graph-name-from-path (:url %)))
+                            set)]
+        (cond
+          (string/blank? graph-name)
+          (notification/show! "Empty graph name." :error)
+
+          (contains? all-graphs graph-name)
+          (notification/show! "Please specify another name as another graph with this name already exists!" :error)
+
+          :else
+          (let [reader (js/FileReader.)]
+            (set! (.-onload reader)
+                  (fn []
+                    (let [buffer (.-result ^js reader)]
+                      (import-handler/import-from-sqlite-db! buffer graph-name finished-cb))))
+            (set! (.-onerror reader) (fn [e] (js/console.error e)))
+            (set! (.-onabort reader) (fn [e]
+                                       (prn :debug :aborted)
+                                       (js/console.error e)))
+            (.readAsArrayBuffer reader file))))
+
+      (or edn? json?)
       (do
         (state/set-state! :graph/importing :logseq)
         (let [reader (js/FileReader.)
@@ -67,6 +95,8 @@
                         (state/set-state! :graph/importing nil)
                         (finished-cb))))))
           (.readAsText reader file)))
+
+      :else
       (notification/show! "Please choose an EDN or a JSON file."
                           :error))))
 
@@ -110,16 +140,17 @@
       [:section.c.text-center
        [:h1 (t :on-boarding/importing-title)]
        [:h2 (t :on-boarding/importing-desc)]]
-      [:section.d.md:flex
+      [:section.d.md:flex.flex-col
        [:label.action-input.flex.items-center.mx-2.my-2
-        [:span.as-flex-center [:i (svg/roam-research 28)]]
-        [:div.flex.flex-col
-         [[:strong "RoamResearch"]
-          [:small (t :on-boarding/importing-roam-desc)]]]
+        [:span.as-flex-center [:i (svg/logo 28)]]
+        [:span.flex.flex-col
+         [[:strong "SQLite"]
+          [:small (t :on-boarding/importing-sqlite-desc)]]]
         [:input.absolute.hidden
-         {:id        "import-roam"
+         {:id        "import-sqlite-db"
           :type      "file"
-          :on-change roam-import-handler}]]
+          :on-change (fn [e]
+                       (lsq-import-handler e {:sqlite? true}))}]]
 
        [:label.action-input.flex.items-center.mx-2.my-2
         [:span.as-flex-center [:i (svg/logo 28)]]
@@ -132,7 +163,17 @@
           :on-change lsq-import-handler}]]
 
        [:label.action-input.flex.items-center.mx-2.my-2
-        [:span.as-flex-center (ui/icon "sitemap" {:style {:fontSize "26px"}})]
+        [:span.as-flex-center [:i (svg/roam-research 28)]]
+        [:div.flex.flex-col
+         [[:strong "RoamResearch"]
+          [:small (t :on-boarding/importing-roam-desc)]]]
+        [:input.absolute.hidden
+         {:id        "import-roam"
+          :type      "file"
+          :on-change roam-import-handler}]]
+
+       [:label.action-input.flex.items-center.mx-2.my-2
+        [:span.as-flex-center.ml-1 (ui/icon "sitemap" {:size 26})]
         [:span.flex.flex-col
          [[:strong "OPML"]
           [:small (t :on-boarding/importing-opml-desc)]]]

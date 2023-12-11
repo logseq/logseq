@@ -59,7 +59,7 @@
   [repo data]
   (p/let [^js pool (<get-opfs-pool repo)]
     (when pool
-      (.importDB ^js pool (get-repo-path repo) data))))
+      (.importDb ^js pool (get-repo-path repo) data))))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
@@ -254,11 +254,10 @@
    [_this repo]
    (<export-db-file repo))
 
-  (importDB
+  (importDb
    [this repo data]
-   ;; FIXME: repo not exists yet
    (when-not (string/blank? repo)
-     (p/let [_ (.createOrOpenDB this repo)
+     (p/let [pool (<get-opfs-pool repo)
              data (<import-db repo data)]
        nil))))
 

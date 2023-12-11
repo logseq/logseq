@@ -402,7 +402,7 @@
   [repo]
   (p/let [data (persist-db/<export-db repo {:return-data? true})
           filename (file-name repo "sqlite")
-          url (js/URL.createObjectURL (js/Blob. data))]
+          url (js/URL.createObjectURL (js/Blob. #js [data]))]
     (when-not (mobile-util/native-platform?)
       (when-let [anchor (gdom/getElement "download-as-sqlite-db")]
         (.setAttribute anchor "href" url)

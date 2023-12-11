@@ -147,12 +147,14 @@
    On iOS, repo-url might be nil"
   [repo-url]
   (when (not-empty repo-url)
-    (let [path (config/get-local-dir repo-url)
-          path (if (path/is-file-url? path)
-                 (path/url-to-path path)
-                 path)
-          parts (->> (string/split path #"/")
-                     (take-last 2))]
-      (if (not= (first parts) "0")
-        (util/string-join-path parts)
-        (last parts)))))
+    (if (config/db-based-graph? repo-url)
+      (string/replace-first repo-url config/db-version-prefix "")
+      (let [path (config/get-local-dir repo-url)
+            path (if (path/is-file-url? path)
+                   (path/url-to-path path)
+                   path)
+            parts (->> (string/split path #"/")
+                       (take-last 2))]
+        (if (not= (first parts) "0")
+          (util/string-join-path parts)
+          (last parts))))))

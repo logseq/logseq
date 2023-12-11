@@ -106,7 +106,7 @@
 
   (<import-db [_this repo data]
     (when-let [^js sqlite @*sqlite]
-      (-> (.importDB sqlite repo data)
+      (-> (.importDb sqlite repo data)
           (p/catch (fn [error]
                      (prn :debug :import-db-error repo)
                      (js/console.error error)
