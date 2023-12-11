@@ -205,22 +205,52 @@
 
 ;; Keep the following colors in sync with common.css
 #?(:cljs
+   (defn- get-computed-bg-color
+     []
+     ;; window.getComputedStyle(document.body, null).getPropertyValue('background-color');
+     (let [styles (js/window.getComputedStyle (js/document.querySelector "#app-container"))
+           bg-color (gobj/get styles "background-color")
+           ;; convert rgb(r,g,b) to #rrggbb
+           rgb2hex (fn [rgb]
+                     (->> rgb
+                          (map (comp #(.toString % 16) parse-long string/trim))
+                          (map #(if (< (count %) 2)
+                                  (str "0" %)
+                                  %))
+                          (string/join)
+                          (str "#")))]
+       (when (string/starts-with? bg-color "rgb(")
+         (let [rgb (-> bg-color
+                       (string/replace #"^rgb\(" "")
+                       (string/replace #"\)$" "")
+                       (string/split #","))
+               rgb (take 3 rgb)]
+           (rgb2hex rgb)))))
+)
+
+#?(:cljs
+   (defn set-android-theme
+     []
+     (when (mobile-util/native-android?)
+       (when-let [bg-color (try (get-computed-bg-color)
+                                (catch :default _
+                                  nil))]
+         (.setNavigationBarColor NavigationBar (clj->js {:color bg-color}))
+         (.setBackgroundColor StatusBar (clj->js {:color bg-color}))))))
+
+#?(:cljs
    (defn set-theme-light
      []
      (p/do!
       (.setStyle StatusBar (clj->js {:style (.-Light Style)}))
-      (when (mobile-util/native-android?)
-        (.setNavigationBarColor NavigationBar (clj->js {:color "#ffffff"}))
-        (.setBackgroundColor StatusBar (clj->js {:color "#ffffff"}))))))
+      (set-android-theme))))
 
 #?(:cljs
    (defn set-theme-dark
      []
      (p/do!
       (.setStyle StatusBar (clj->js {:style (.-Dark Style)}))
-      (when (mobile-util/native-android?)
-        (.setNavigationBarColor NavigationBar (clj->js {:color "#002b36"}))
-        (.setBackgroundColor StatusBar (clj->js {:color "#002b36"}))))))
+      (set-android-theme))))
 
 (defn find-first
   [pred coll]
@@ -1032,7 +1062,8 @@
                      (d/set-attr! :type "text/css")
                      (d/set-attr! :href style)
                      (d/set-attr! :media "all"))]
-           (d/append! parent-node link))))))
+           (d/append! parent-node link))
+         (set-android-theme)))))
 
 (defn remove-common-preceding
   [col1 col2]
