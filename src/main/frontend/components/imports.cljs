@@ -60,6 +60,7 @@
             all-graphs (->> (state/get-repos)
                             (map #(text-util/get-graph-name-from-path (:url %)))
                             set)]
+        (state/set-state! :graph/importing :logseq)
         (cond
           (string/blank? graph-name)
           (notification/show! "Empty graph name." :error)
@@ -72,7 +73,10 @@
             (set! (.-onload reader)
                   (fn []
                     (let [buffer (.-result ^js reader)]
-                      (import-handler/import-from-sqlite-db! buffer graph-name finished-cb))))
+                      (import-handler/import-from-sqlite-db! buffer graph-name
+                                                             (fn []
+                                                               (state/set-state! :graph/importing nil)
+                                                               (finished-cb))))))
             (set! (.-onerror reader) (fn [e] (js/console.error e)))
             (set! (.-onabort reader) (fn [e]
                                        (prn :debug :aborted)
