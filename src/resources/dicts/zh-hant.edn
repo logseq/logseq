@@ -200,7 +200,6 @@
  :re-index-detail "重新建立索引"
  :re-index-multiple-windows-warning "你需要關閉其他分頁以重新索引"
  :re-index-discard-unsaved-changes-warning "重新索引會捨棄當前的圖表，然後根據目前在磁碟上存儲的所有文件進行重新處理。您將失去未保存的更改，並且這可能需要一些時間。是否繼續？"
- :open-new-window "新分頁"
  :sync-from-local-files "重新整理"
  :sync-from-local-files-detail "從本地文件導入更改"
  :sync-from-local-changes-detected "檢查檔案並更新與目前 Logseq 頁面內容不同的已修改文件。是否繼續？"

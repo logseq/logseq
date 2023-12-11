@@ -97,7 +97,6 @@
     :logout "Déconnexion"
     :new-graph "Ajouter un nouveau graphe"
     :open-a-directory "Ouvrir un dossier local"
-    :open-new-window "Nouvelle fenêtre"
     :plugins "Extensions"
     :port "Port"
     :re-index-detail "Reconstruire le graphe"

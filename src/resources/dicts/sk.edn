@@ -191,7 +191,6 @@
  :re-index-detail                                  "Obnovte graf"
  :re-index-multiple-windows-warning                "Pred preindexovaním grafu musíte zavrieť ostatné okná."
  :re-index-discard-unsaved-changes-warning         "Preindexovanie vymaže aktuálny graf a potom znova spracuje všetky súbory tak, ako sú aktuálne uložené na disku. Prídete o neuložené zmeny a môže to chvíľu trvať. Chcete pokračovať?"
- :open-new-window                                  "Nové okno"
  :sync-from-local-files                            "Obnoviť"
  :sync-from-local-files-detail                     "Importovať zmeny z lokálnych súborov"
  :sync-from-local-changes-detected                 "Obnovenie detekuje a spracuje upravené súbory na vašom disku, ktoré sa líšia od aktuálneho obsahu Logseq stránky. Chcete pokračovať?"

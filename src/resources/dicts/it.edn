@@ -120,7 +120,6 @@
  :re-index-detail "Ricostruisci il grafo"
  :re-index-multiple-windows-warning "È necessario chiudere le altre finestre prima di re-indicizzare questo grafo."
  :re-index-discard-unsaved-changes-warning "La re-indicizzazione elimina il grafo corrente, quindi elabora nuovamente tutti i file poiché sono attualmente archiviati su disco. Perderai le modifiche non salvate e potrebbe volerci del tempo. Continuare?"
- :open-new-window "Nuova finestra"
  :sync-from-local-files "Ricarica"
  :sync-from-local-files-detail "Importa cambiamenti da un file locale"
  :sync-from-local-changes-detected "Il ricaricamento rileva ed elabora i file modificati sul disco e divergenti dal contenuto effettivo della pagina Logseq. Continuare?"

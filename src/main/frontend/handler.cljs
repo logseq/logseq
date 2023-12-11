@@ -19,7 +19,6 @@
             [frontend.db.persist :as db-persist]
             [frontend.db.react :as react]
             [frontend.error :as error]
-            [frontend.extensions.srs :as srs]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.events :as events]
             [frontend.handler.file-based.events]
@@ -188,7 +187,7 @@
        [{:url config/local-repo
          :example? true}]))
    (p/catch (fn [error]
-              (js/console.error)))))
+              (js/console.error error)))))
 
 (defn- register-components-fns!
   []

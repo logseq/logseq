@@ -24,9 +24,10 @@
    (create-main-window! MAIN_WINDOW_ENTRY nil))
   ([url]
    (create-main-window! url nil))
-  ([url opts]
+  ([url {:keys [graph] :as opts}]
    (let [win-state (windowStateKeeper (clj->js {:defaultWidth 980 :defaultHeight 700}))
          native-titlebar? (cfgs/get-item :window/native-titlebar?)
+         url (if graph (str url "?graph=" graph) url)
          win-opts  (cond->
                      {:backgroundColor      "#fff" ; SEE https://www.electronjs.org/docs/latest/faq#the-font-looks-blurry-what-is-this-and-what-can-i-do
                       :width                (.-width win-state)

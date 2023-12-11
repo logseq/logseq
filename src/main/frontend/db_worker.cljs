@@ -50,19 +50,21 @@
   [repo]
   (str "/" repo ".sqlite"))
 
-(defn- get-file-names
-  [graph]
-  (p/let [^js pool (<get-opfs-pool graph)]
-    (when pool
-      (.getFileNames pool))))
+(comment
+  (defn- get-file-names
+   [graph]
+   (p/let [^js pool (<get-opfs-pool graph)]
+     (when pool
+       (.getFileNames pool)))))
 
-(defn- export-db-file
-  [repo]
+(comment
+  (defn- export-db-file
+    [repo]
   ;; TODO: get file name by repo
-  (p/let [^js pool (<get-opfs-pool repo)
-          path (get-repo-path repo)]
-    (when pool
-      (.exportFile ^js pool path))))
+    (p/let [^js pool (<get-opfs-pool repo)
+            path (get-repo-path repo)]
+      (when pool
+        (.exportFile ^js pool path)))))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq"

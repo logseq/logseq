@@ -187,8 +187,7 @@
        (when (util/electron?)
          (p/do!
           (when (config/local-file-based-graph? current-repo)
-            (repo-handler/persist-db! current-repo persist-db-noti-m)
-            (repo-handler/broadcast-persist-db! graph)))))
+            (repo-handler/persist-db! current-repo persist-db-noti-m)))))
      (repo-handler/restore-and-setup-repo! graph)
      (graph-switch graph)
      state/set-state! :sync-graph/init? false)))

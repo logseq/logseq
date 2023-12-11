@@ -106,8 +106,7 @@
                    (not compute-path-refs?))
           (delete-property-parent-block-if-empty! repo tx-report deleted-block-uuids))
 
-        (let [upsert-blocks (outliner-pipeline/build-upsert-blocks blocks deleted-block-uuids (:db-after tx-report'))
-              updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids)  (:block/uuid b))) blocks)
+        (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids)  (:block/uuid b))) blocks)
               tx-id (get-in tx-report' [:tempids :db/current-tx])
               update-tx-ids (->>
                              (map (fn [b]
