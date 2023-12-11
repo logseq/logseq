@@ -380,7 +380,7 @@
   [s]
   (boolean
    (and (string? s)
-        (string/starts-with? s db-version-prefix))))
+                (string/starts-with? s db-version-prefix))))
 
 (defn get-local-asset-absolute-path
   [s]
