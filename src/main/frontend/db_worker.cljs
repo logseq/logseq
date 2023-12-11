@@ -15,19 +15,27 @@
 
 (defonce *sqlite (atom nil))
 (defonce *sqlite-conns (atom nil))
-(defonce *datascript-conn (atom nil))
-(defonce *opfs-pool (atom nil))
+(defonce *datascript-conns (atom nil))
+(defonce *opfs-pools (atom nil))
 
 (defn- get-sqlite-conn
   [repo]
   (get @*sqlite-conns repo))
 
+(defn get-datascript-conn
+  [repo]
+  (get @*datascript-conns repo))
+
+(defn get-opfs-pool
+  [repo]
+  (get @*opfs-pools repo))
+
 (defn- <get-opfs-pool
   [graph]
-  (or @*opfs-pool
+  (or (get-opfs-pool graph)
       (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (str "logseq-pool-" graph)
                                                              :initialCapacity 10})]
-        (reset! *opfs-pool pool)
+        (swap! *opfs-pools assoc graph pool)
         pool)))
 
 (defn- init-sqlite-module!
@@ -101,7 +109,9 @@
   [repo]
   (doseq [[r db] @*sqlite-conns]
     (when-not (= repo r)
+      (swap! *datascript-conns dissoc r)
       (swap! *sqlite-conns dissoc r)
+      (swap! *opfs-pools dissoc r)
       (.close ^Object db))))
 
 (defn- close-db!
@@ -121,7 +131,7 @@
       (.exec db "create table if not exists kvs (addr INTEGER primary key, content TEXT)")
       (let [conn (or (d/restore-conn storage)
                      (d/create-conn db-schema/schema-for-db-based-graph {:storage storage}))]
-        (reset! *datascript-conn conn)
+        (swap! *datascript-conns assoc repo conn)
         nil))))
 
 (defn iter->vec [iter]
@@ -226,7 +236,7 @@
 
   (transact
    [_this repo tx-data tx-meta]
-   (when-let [conn @*datascript-conn]
+   (when-let [conn (get-datascript-conn repo)]
      (try
        (let [tx-data (edn/read-string tx-data)
              tx-meta (edn/read-string tx-meta)]
@@ -238,7 +248,7 @@
 
   (getInitialData
    [_this repo]
-   (when-let [conn @*datascript-conn]
+   (when-let [conn (get-datascript-conn repo)]
      (let [db @conn]
        (->> (d/datoms db :eavt)
             vec
