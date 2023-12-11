@@ -352,7 +352,6 @@
  :re-index-detail "Membangun ulang grafik"
  :re-index-multiple-windows-warning "Anda perlu menutup jendela lain sebelum me-re-indeks grafik ini."
  :re-index-discard-unsaved-changes-warning "Re-indeks akan membuang grafik saat ini, dan kemudian memproses semua berkas lagi sesuai dengan yang saat ini tersimpan di disk. Anda akan kehilangan perubahan yang belum disimpan dan ini mungkin memakan waktu. Lanjutkan?"
- :open-new-window "Jendela baru"
  :sync-from-local-files "Segarkan"
  :sync-from-local-files-detail "Impor perubahan dari berkas lokal"
  :sync-from-local-changes-detected "Segarkan mendeteksi dan memproses berkas yang diubah di disk Anda yang telah berbeda dari konten halaman Logseq saat ini. Lanjutkan?"

@@ -246,7 +246,6 @@
  :re-index-detail "重新建立索引"
  :re-index-multiple-windows-warning "在重建当前图谱索引前，你需要先关闭其它窗口"
  :re-index-discard-unsaved-changes-warning "重建索引将丢弃当前图谱，之后重新导入保存在磁盘上的所有文件。此操作将丢弃未保存的更改，同时可能需要一段时间。是否继续？"
- :open-new-window "打开新窗口"
  :sync-from-local-files "刷新（读取本地最新文件）"
  :sync-from-local-files-detail "读取本地最新文件"
  :sync-from-local-changes-detected "执行刷新操作将会导入磁盘上修改过的、或是与实际Logseq页面内容不同的文件。是否继续？"

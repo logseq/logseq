@@ -29,7 +29,6 @@
  :logout "Uitloggen"
  :new-graph "Nieuwe grafiek toevoegen"
  :open-a-directory "Open een lokale map"
- :open-new-window "Nieuwe venster"
  :parsing-files "Bestanden analyseren"
  :plugins "Plugins"
  :port "Poort"

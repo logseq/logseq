@@ -4,7 +4,6 @@
   (:require [cljs-bean.core :as bean]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
-            [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as watcher-handler]
@@ -121,28 +120,6 @@
                        (if-let [db-page-name (db-model/get-file-page file false)]
                          (route-handler/redirect-to-page! db-page-name)
                          (notification/show! (str "Open link failed. File `" file "` doesn't exist in the graph.") :error false))))))
-
-  (safe-api-call "dbsync"
-                 (fn [data]
-                   (let [{:keys [graph tx-data]} (bean/->clj data)
-                         tx-data (db/string->db (:data tx-data))]
-                     (db/transact! graph tx-data {:dbsync? true})
-                     (ui-handler/re-render-root!))))
-
-  (safe-api-call "persistGraph"
-                 ;; electron is requesting window for persisting a graph in it's db
-                 ;; fire back "broadcastPersistGraphDone" on done
-                 (fn [data]
-                   (let [repo (bean/->clj data)
-                         before-f #(ui/notify-graph-persist!)
-                         after-f #(ipc/ipc "broadcastPersistGraphDone")
-                         error-f (fn []
-                                   (after-f)
-                                   (ui/notify-graph-persist-error!))
-                         handlers {:before     before-f
-                                   :on-success after-f
-                                   :on-error   error-f}]
-                     (repo-handler/persist-db! repo handlers))))
 
   (safe-api-call "foundInPage"
                  (fn [data]

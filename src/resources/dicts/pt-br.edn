@@ -356,7 +356,6 @@
  :re-index-detail "Reconstruir o grafo"
  :re-index-multiple-windows-warning "Você precisa fechar as outras janelas antes de reindexar este grafo."
  :re-index-discard-unsaved-changes-warning "A reindexação descartará o grafo atual e processará todos os arquivos novamente, como estão atualmente armazenados no disco. Você perderá alterações não salvas e isso pode levar algum tempo. Continuar?"
- :open-new-window "Nova janela"
  :sync-from-local-files "Atualizar"
  :sync-from-local-files-detail "Importar alterações de arquivos locais"
  :sync-from-local-changes-detected "Atualizar detecta e processa arquivos modificados no seu disco que divergiram do conteúdo atual das páginas do Logseq. Continuar?"
