@@ -14,6 +14,13 @@
 
 (defonce *sqlite (atom nil))
 
+(defn- ask-persist-permission!
+  []
+  (p/let [persistent? (.persist js/navigator.storage)]
+    (if persistent?
+      (js/console.log "Storage will not be cleared unless from explicit user action")
+      (js/console.warn "OPFS storage may be cleared by the browser under storage pressure."))))
+
 (defn start-db-worker!
   []
   (when-not (or config/publishing? util/node-test?)
@@ -25,7 +32,9 @@
       (reset! *sqlite sqlite)
       (p/let [opfs-supported? (.supportOPFS sqlite)]
         (if opfs-supported?
-          (.init sqlite)
+          (p/do!
+            (.init sqlite)
+            (ask-persist-permission!))
           (notification/show! "It seems that OPFS is not supported on this browser, please upgrade it to the latest version or use another browser." :error))))))
 
 (defrecord InBrowser []
