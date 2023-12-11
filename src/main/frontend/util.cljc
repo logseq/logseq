@@ -1554,11 +1554,13 @@ Arg *stop: atom, reset to true to stop the loop"
    (defn parse-params
      "Parse URL parameters into a hashmap"
      []
-     (->> js/window
-          (.-location)
-          (.-search)
-          (new js/URLSearchParams)
-          (seq)
-          (js->clj)
-          (into {})
-          (walk/keywordize-keys))))
+     (if node-test?
+       {}
+       (->> js/window
+           (.-location)
+           (.-search)
+           (new js/URLSearchParams)
+           (seq)
+           (js->clj)
+           (into {})
+           (walk/keywordize-keys)))))
