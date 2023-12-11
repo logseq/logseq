@@ -24,8 +24,8 @@
 
       [:h1.text-xl
        (if picker?
-         [:span [:strong (ui/icon "heart")] (t :on-boarding/main-title)]
-         [:span [:strong (ui/icon "file-import")] (t :on-boarding/importing-main-title)])]
+         [:span (t :on-boarding/main-title)]
+         [:span (t :on-boarding/importing-main-title)])]
 
       [:h2
        (if picker?
