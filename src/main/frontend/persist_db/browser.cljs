@@ -10,7 +10,8 @@
             [frontend.util :as util]
             [frontend.handler.notification :as notification]
             [cljs-bean.core :as bean]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [electron.ipc :as ipc]))
 
 (defonce *sqlite (atom nil))
 
@@ -36,6 +37,15 @@
             (.init sqlite)
             (ask-persist-permission!))
           (notification/show! "It seems that OPFS is not supported on this browser, please upgrade it to the latest version or use another browser." :error))))))
+
+(defn <export-db!
+  [repo data]
+  (cond
+    (util/electron?)
+    (ipc/ipc :db-export repo data)
+
+    :else
+    nil))
 
 (defrecord InBrowser []
   protocol/PersistentDB
@@ -76,6 +86,23 @@
       (-> (p/let [_ (.createOrOpenDB sqlite repo)]
             (.getInitialData sqlite repo))
           (p/catch (fn [error]
-                     (prn :debug :fetch-initial-data-error)
+                     (prn :debug :fetch-initial-data-error repo)
                      (js/console.error error)
-                     (notification/show! [:div (str "SQLiteDB fetch error: " error)] :error) {}))))))
+                     (notification/show! [:div (str "SQLiteDB fetch error: " error)] :error) {})))))
+
+  (<export-db [_this repo]
+    (when-let [^js sqlite @*sqlite]
+      (-> (p/let [data (.exportDB sqlite repo)]
+            (<export-db! repo data))
+          (p/catch (fn [error]
+                     (prn :debug :save-db-error repo)
+                     (js/console.error error)
+                     (notification/show! [:div (str "SQLiteDB save error: " error)] :error) {})))))
+
+  (<import-db [_this repo data]
+    (when-let [^js sqlite @*sqlite]
+      (-> (.importDB sqlite repo data)
+          (p/catch (fn [error]
+                     (prn :debug :import-db-error repo)
+                     (js/console.error error)
+                     (notification/show! [:div (str "SQLiteDB import error: " error)] :error) {}))))))
