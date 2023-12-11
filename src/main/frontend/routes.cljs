@@ -12,7 +12,7 @@
             [frontend.extensions.zotero :as zotero]
             [frontend.components.bug-report :as bug-report]
             [frontend.components.user.login :as login]
-            [frontend.components.import :as import]))
+            [frontend.components.imports :as imports]))
 
 ;; http://localhost:3000/#?anchor=fn.1
 (def routes
@@ -70,7 +70,7 @@
 
    ["/import"
     {:name :import
-     :view import/importer}]
+     :view imports/importer}]
 
    ["/bug-report"
     {:name :bug-report

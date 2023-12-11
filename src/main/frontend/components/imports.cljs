@@ -1,4 +1,5 @@
-(ns frontend.components.import
+(ns frontend.components.imports
+  "Import data into Logseq."
   (:require [frontend.state :as state]
             [rum.core :as rum]
             [frontend.ui :as ui]
@@ -11,6 +12,9 @@
             [clojure.string :as string]
             [goog.object :as gobj]
             [frontend.components.onboarding.setups :as setups]))
+
+;; Can't name this component as `frontend.components.import` since shadow-cljs
+;; will complain about it.
 
 (defonce *opml-imported-pages (atom nil))
 
