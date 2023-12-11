@@ -23,7 +23,6 @@
             [electron.git :as git]
             [electron.logger :as logger]
             [electron.plugin :as plugin]
-            [electron.search :as search]
             [electron.db :as db]
             [electron.server :as server]
             [electron.shell :as shell]
@@ -333,33 +332,6 @@
   (async/put! state/persistent-dbs-chan true)
   true)
 
-;; Search related IPCs
-(defmethod handle :search-blocks [_window [_ repo q opts]]
-  (search/search-blocks repo q opts))
-
-(defmethod handle :rebuild-indice [_window [_ repo block-data]]
-  (search/truncate-blocks-table! repo)
-  ;; unneeded serialization
-  (search/upsert-blocks! repo (bean/->js block-data))
-  [])
-
-(defmethod handle :transact-blocks [_window [_ repo data]]
-  (let [{:keys [blocks-to-remove-set blocks-to-add]} data]
-    ;; Order matters! Same id will delete then upsert sometimes.
-    (when (seq blocks-to-remove-set)
-      (search/delete-blocks! repo blocks-to-remove-set))
-    (when (seq blocks-to-add)
-      ;; unneeded serialization
-      (search/upsert-blocks! repo (bean/->js blocks-to-add)))))
-
-(defmethod handle :truncate-indice [_window [_ repo]]
-  (search/truncate-blocks-table! repo))
-
-(defmethod handle :remove-db [_window [_ repo]]
-  (search/delete-db! repo))
-;; ^^^^
-;; Search related IPCs End
-
 ;; DB related IPCs start
 
 (defmethod handle :db-export [_window [_ repo data]]
@@ -384,9 +356,7 @@
 
 (defmethod handle :clearCache [window _]
   (logger/info ::clear-cache)
-  (search/close!)
-  (clear-cache! window)
-  (search/ensure-search-dir!))
+  (clear-cache! window))
 
 (defmethod handle :openDialog [^js _window _messages]
   (open-dir-dialog))

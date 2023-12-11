@@ -81,28 +81,6 @@
                                   (get-db-properties-str properties)))))]
           m')))))
 
-(defn build-blocks-indice
-  ;; TODO: Remove repo effects fns further up the call stack. db fns need standardization on taking connection
-  #_:clj-kondo/ignore
-  [repo]
-  (->> (db/get-all-block-contents)
-       (map block->index)
-       (remove nil?)
-       (bean/->js)))
-
-(defn make-blocks-indice!
-  ([repo] (make-blocks-indice! repo (build-blocks-indice repo)))
-  ([repo blocks]
-   (let [indice (fuse. blocks
-                       (clj->js {:keys ["uuid" "content" "page"]
-                                 :shouldSort true
-                                 :tokenize true
-                                 :minMatchCharLength 1
-                                 :distance 1000
-                                 :threshold 0.35}))]
-     (swap! indices assoc-in [repo :blocks] indice)
-     indice)))
-
 (defn original-page-name->index
   [p]
   (when p

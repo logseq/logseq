@@ -11,16 +11,23 @@
             ["@logseq/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [clojure.string :as string]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.worker.search :as search]))
 
 (defonce *sqlite (atom nil))
+;; repo -> {:db conn :search conn}
 (defonce *sqlite-conns (atom nil))
+;; repo -> conn
 (defonce *datascript-conns (atom nil))
+;; repo -> pool
 (defonce *opfs-pools (atom nil))
 
 (defn- get-sqlite-conn
-  [repo]
-  (get @*sqlite-conns repo))
+  [repo & {:keys [search?]
+           :or {search? false}
+           :as _opts}]
+  (let [k (if search? :search :db)]
+    (get-in @*sqlite-conns [repo k])))
 
 (defn get-datascript-conn
   [repo]
@@ -34,7 +41,7 @@
   [graph]
   (or (get-opfs-pool graph)
       (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (str "logseq-pool-" graph)
-                                                             :initialCapacity 10})]
+                                                             :initialCapacity 20})]
         (swap! *opfs-pools assoc graph pool)
         pool)))
 
@@ -105,31 +112,39 @@
       (-restore [_ addr]
         (restore-data-from-addr repo addr)))))
 
+(defn- clean-db!
+  [repo db search]
+  (when (or db search)
+    (swap! *sqlite-conns dissoc repo)
+    (swap! *datascript-conns dissoc repo)
+    (.close ^Object db)
+    (.close ^Object search)))
+
 (defn- close-other-dbs!
   [repo]
-  (doseq [[r db] @*sqlite-conns]
+  (doseq [[r {:keys [db search]}] @*sqlite-conns]
     (when-not (= repo r)
-      (swap! *datascript-conns dissoc r)
-      (swap! *sqlite-conns dissoc r)
       (swap! *opfs-pools dissoc r)
-      (.close ^Object db))))
+      (clean-db! r db search))))
 
 (defn- close-db!
   [repo]
-  (when-let [db (@*sqlite-conns repo)]
-    (swap! *sqlite-conns dissoc repo)
-    (swap! *datascript-conns dissoc repo)
-    (.close ^Object db)))
+  (let [{:keys [db search]} (@*sqlite-conns repo)]
+    (clean-db! repo db search)))
 
 (defn- create-or-open-db!
   [repo]
   (when-not (get-sqlite-conn repo)
     (p/let [pool (<get-opfs-pool repo)
-            db (new (.-OpfsSAHPoolDb pool) (get-repo-path repo))
+            path (get-repo-path repo)
+            db (new (.-OpfsSAHPoolDb pool) path)
+            search-db (new (.-OpfsSAHPoolDb pool) (str "search-" path))
             storage (new-sqlite-storage repo {})]
-      (swap! *sqlite-conns assoc repo db)
+      (swap! *sqlite-conns assoc repo {:db db
+                                       :search search-db})
       (.exec db "PRAGMA locking_mode=exclusive")
       (.exec db "create table if not exists kvs (addr INTEGER primary key, content TEXT)")
+      (search/create-tables-and-triggers! search-db)
       (let [conn (or (d/restore-conn storage)
                      (d/create-conn db-schema/schema-for-db-based-graph {:storage storage}))]
         (swap! *datascript-conns assoc repo conn)
@@ -184,6 +199,10 @@
               _ (p/all (map (fn [file] (.unlink pool file)) files))
               _ (.wipeFiles pool)]
         (.removeVfs ^js pool)))))
+
+(defn- get-search-db
+  [repo]
+  (get-sqlite-conn repo {:search? true}))
 
 #_:clj-kondo/ignore
 (defclass SQLiteDB
@@ -261,7 +280,32 @@
    [this repo data]
    (when-not (string/blank? repo)
      (p/let [pool (<get-opfs-pool repo)]
-       (<import-db repo data)))))
+       (<import-db repo data))))
+
+  ;; Search
+  (search-blocks
+   [this repo q option]
+   (p/let [db (get-search-db repo)
+           result (search/search-blocks db q (bean/->clj option))]
+     (bean/->js result)))
+
+  (search-upsert-blocks
+   [this repo blocks]
+   (p/let [db (get-search-db repo)]
+     (search/upsert-blocks! db blocks)
+     nil))
+
+  (search-delete-blocks
+   [this repo ids]
+   (p/let [db (get-search-db repo)]
+     (search/delete-blocks! db ids)
+     nil))
+
+  (search-truncate-tables
+   [this repo]
+   (p/let [db (get-search-db repo)]
+     (search/truncate-table! db)
+     nil)))
 
 (defn init
   "web worker entry"
