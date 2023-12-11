@@ -13,7 +13,7 @@ html {
     --lx-accent-11: var(--rx-logseq-11);
     --lx-accent-12: var(--rx-logseq-12);
   }
-  
+
   &[data-color=tomato] {
     body, .dark-theme, .light-theme {
       --accent: 10 78.0% 54.0%;
@@ -71,7 +71,7 @@ html {
       --lx-gray-10-alpha: var(--rx-mauve-10-alpha);
       --lx-gray-11-alpha: var(--rx-mauve-11-alpha);
       --lx-gray-12-alpha: var(--rx-mauve-12-alpha);
-      
+
       --ls-primary-background-color: var(--rx-mauve-01);
       --ls-secondary-background-color: var(--rx-mauve-02);
       --ls-tertiary-background-color: var(--rx-mauve-03);
@@ -101,10 +101,11 @@ html {
 
   &[data-color=red] {
     body, .dark-theme, .light-theme {
-      --accent: 10 78.0% 54.0%;
-      --primary: 10 78.0% 54.0%;
-      --ring: 10 71.6% 71.0%;
+      --accent: 358 75.0% 59.0%;
+      --primary: 358 75.0% 59.0%;
+      --ring: 359 69.5% 74.3%;
       --accent-foreground: 190 43% 97%;
+      --primary-accent-foreground: 190 43% 97%;
 
       --lx-accent-01: var(--rx-red-01);
       --lx-accent-02: var(--rx-red-02);
@@ -269,7 +270,88 @@ html {
   }
 
   &[data-color=crimson] {
+    body, .dark-theme, .light-theme {
+      --accent: 336 80.0% 57.8%;
+      --primary: 336 80.0% 57.8%;
+      --ring: 336 62.3% 72.9%;
+      --accent-foreground: 190 43% 97%;
+      --primary-accent-foreground: 190 43% 97%;
 
+      --lx-accent-01: var(--rx-crimson-01);
+      --lx-accent-02: var(--rx-crimson-02);
+      --lx-accent-03: var(--rx-crimson-03);
+      --lx-accent-04: var(--rx-crimson-04);
+      --lx-accent-05: var(--rx-crimson-05);
+      --lx-accent-06: var(--rx-crimson-06);
+      --lx-accent-07: var(--rx-crimson-07);
+      --lx-accent-08: var(--rx-crimson-08);
+      --lx-accent-09: var(--rx-crimson-09);
+      --lx-accent-10: var(--rx-crimson-10);
+      --lx-accent-11: var(--rx-crimson-11);
+      --lx-accent-12: var(--rx-crimson-12);
+      --lx-accent-01-alpha: var(--rx-crimson-01-alpha);
+      --lx-accent-02-alpha: var(--rx-crimson-02-alpha);
+      --lx-accent-03-alpha: var(--rx-crimson-03-alpha);
+      --lx-accent-04-alpha: var(--rx-crimson-04-alpha);
+      --lx-accent-05-alpha: var(--rx-crimson-05-alpha);
+      --lx-accent-06-alpha: var(--rx-crimson-06-alpha);
+      --lx-accent-07-alpha: var(--rx-crimson-07-alpha);
+      --lx-accent-08-alpha: var(--rx-crimson-08-alpha);
+      --lx-accent-09-alpha: var(--rx-crimson-09-alpha);
+      --lx-accent-10-alpha: var(--rx-crimson-10-alpha);
+      --lx-accent-11-alpha: var(--rx-crimson-11-alpha);
+      --lx-accent-12-alpha: var(--rx-crimson-12-alpha);
+
+      --lx-gray-01: var(--rx-mauve-01);
+      --lx-gray-02: var(--rx-mauve-02);
+      --lx-gray-03: var(--rx-mauve-03);
+      --lx-gray-04: var(--rx-mauve-04);
+      --lx-gray-05: var(--rx-mauve-05);
+      --lx-gray-06: var(--rx-mauve-06);
+      --lx-gray-07: var(--rx-mauve-07);
+      --lx-gray-08: var(--rx-mauve-08);
+      --lx-gray-09: var(--rx-mauve-09);
+      --lx-gray-10: var(--rx-mauve-10);
+      --lx-gray-11: var(--rx-mauve-11);
+      --lx-gray-12: var(--rx-mauve-12);
+      --lx-gray-01-alpha: var(--rx-mauve-01-alpha);
+      --lx-gray-02-alpha: var(--rx-mauve-02-alpha);
+      --lx-gray-03-alpha: var(--rx-mauve-03-alpha);
+      --lx-gray-04-alpha: var(--rx-mauve-04-alpha);
+      --lx-gray-05-alpha: var(--rx-mauve-05-alpha);
+      --lx-gray-06-alpha: var(--rx-mauve-06-alpha);
+      --lx-gray-07-alpha: var(--rx-mauve-07-alpha);
+      --lx-gray-08-alpha: var(--rx-mauve-08-alpha);
+      --lx-gray-09-alpha: var(--rx-mauve-09-alpha);
+      --lx-gray-10-alpha: var(--rx-mauve-10-alpha);
+      --lx-gray-11-alpha: var(--rx-mauve-11-alpha);
+      --lx-gray-12-alpha: var(--rx-mauve-12-alpha);
+
+      --ls-primary-background-color: var(--rx-mauve-01);
+      --ls-secondary-background-color: var(--rx-mauve-02);
+      --ls-tertiary-background-color: var(--rx-mauve-03);
+      --ls-quaternary-background-color: var(--rx-mauve-04);
+      --ls-link-text-color: var(--rx-crimson-11);
+      --ls-link-text-hover-color: var(--rx-crimson-12);
+      --ls-block-ref-link-text-color: var(--rx-crimson-09);
+      --ls-secondary-text-color: var(--rx-mauve-12);
+      --ls-primary-text-color: var(--rx-mauve-11);
+      --ls-border-color: var(--rx-mauve-05);
+      --ls-secondary-border-color: var(--rx-crimson-05);
+      --ls-page-checkbox-color: var(--rx-mauve-07);
+      --ls-selection-background-color: var(--rx-mauve-04-alpha);
+      --ls-block-highlight-color: var(--rx-mauve-04);
+      --ls-focus-ring-color: var(--rx-crimson-09);
+      --ls-table-tr-even-background-color: var(--rx-mauve-04);
+      --ls-page-properties-background-color: var(--rx-mauve-04);
+      --ls-block-properties-background-color: var(--rx-mauve-03);
+      --ls-page-inline-code-bg-color: var(--rx-mauve-03);
+      --ls-cloze-text-color: var(--rx-crimson-08);
+      --ls-wb-stroke-color-default: var(--rx-crimson-07);
+      --ls-wb-background-color-default: var(--rx-crimson-04);
+      --ls-wb-text-color-default: var(--rx-mauve-12);
+      --ls-a-chosen-bg: var(--rx-mauve-01);
+    }
   }
 
   &[data-color=pink] {

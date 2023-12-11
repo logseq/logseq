@@ -1,8 +1,7 @@
 (ns frontend.components.settings
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
-            [logseq.shui.core :as shui]
-            [frontend.shui :refer [make-shui-context]]
+            [logseq.shui.ui :as shui-ui]
             [frontend.colors :as colors]
             [frontend.components.assets :as assets]
             [frontend.components.conversion :as conversion-component]
@@ -167,10 +166,11 @@
    [:div.mt-1.sm:mt-0.sm:col-span-2.flex.items-center
     {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
     [:div {:style (when stretch {:width "100%"})}
-     (if action action (shui/button {:text button-label
-                                     :href href
-                                     :on-click on-click}
-                         (make-shui-context)))]
+     (if action action (shui-ui/button
+                         {:href     href
+                          :size     :sm
+                          :on-click on-click}
+                         button-label))]
     (when-not (or (util/mobile?)
                   (mobile-util/native-platform?))
       [:div.text-sm.flex desc])]])
@@ -337,10 +337,11 @@
                                        :opacity (if active? 1 0)}}]]])
                     (when color-accent
                       [:div.col-span-5
-                       (shui/button {:text "Back to default color"
-                                     :theme :gray
-                                     :on-click (fn [_e] (state/unset-color-accent!))}
-                                    (make-shui-context nil nil))])]]
+                       (shui-ui/button
+                         {:variant  :secondary
+                          :size :xs
+                          :on-click (fn [_e] (state/unset-color-accent!))}
+                         "Back to default color")])]]
 
     [:<>
      (row-with-button-action {:left-label "Accent color"

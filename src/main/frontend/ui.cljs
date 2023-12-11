@@ -35,8 +35,7 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [logseq.shui.core :as shui]
-            [logseq.shui.ui :as shui-ui]
-            [frontend.shui :refer [make-shui-context]]))
+            [logseq.shui.ui :as shui-ui]))
 
 (declare icon)
 
@@ -178,7 +177,7 @@
                        (string/split #" "))
                    sequence)]
     [:span.keyboard-shortcut
-     (shui/shortcut-v1 sequence (make-shui-context) opts)]))
+     (shui/shortcut-v1 sequence opts)]))
 
 (rum/defc menu-link
   [{:keys [only-child? no-padding? class shortcut] :as options} child]
@@ -1034,14 +1033,7 @@
         icon (when icon (shui-ui/tabler-icon icon icon-props))
         children [icon text]]
 
-    (shui-ui/button props children)
-
-    ;(shui/button
-    ;  (cond-> (assoc opts :text text)
-    ;    background
-    ;    (assoc :color background))
-    ;  (make-shui-context))
-    ))
+    (shui-ui/button props children)))
 
 (defn button
   [text & {:keys []
