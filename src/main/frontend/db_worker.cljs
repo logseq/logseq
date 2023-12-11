@@ -118,6 +118,7 @@
   [repo]
   (when-let [db (@*sqlite-conns repo)]
     (swap! *sqlite-conns dissoc repo)
+    (swap! *datascript-conns dissoc repo)
     (.close ^Object db)))
 
 (defn- create-or-open-db!
@@ -247,8 +248,9 @@
 
   (unsafeUnlinkDB
    [_this repo]
-   (p/let [_ (close-db! repo)]
-     (remove-vfs! repo)
+   (p/let [_ (close-db! repo)
+           _ (remove-vfs! repo)]
+     (swap! *opfs-pools dissoc repo)
      nil))
 
   (exportDB

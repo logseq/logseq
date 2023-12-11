@@ -76,7 +76,7 @@
                      [])))))
 
   (<unsafe-delete [_this repo]
-    (p/let [^js sqlite @*sqlite]
+    (when-let [^js sqlite @*sqlite]
       (.unsafeUnlinkDB sqlite repo)))
 
   (<transact-data [_this repo tx-data tx-meta]
