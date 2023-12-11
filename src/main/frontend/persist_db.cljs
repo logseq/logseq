@@ -3,7 +3,8 @@
    (:require [frontend.persist-db.browser :as browser]
              [frontend.persist-db.protocol :as protocol]
              [promesa.core :as p]
-             [frontend.state :as state]))
+             [frontend.state :as state]
+             [frontend.util :as util]))
 
 (defonce opfs-db (browser/->InBrowser))
 
@@ -30,8 +31,8 @@
      ret)))
 
 (defn <export-db
-  [repo]
-  (protocol/<export-db (get-impl) repo))
+  [repo opts]
+  (protocol/<export-db (get-impl) repo opts))
 
 (defn <import-db
   [repo data]
@@ -42,8 +43,8 @@
 (defn <new [repo]
   {:pre [(<= (count repo) 56)]}
   (p/do!
-    (let [current-repo (state/get-current-repo)]
-     (when-not (= repo current-repo)
-      ;; switch graph
-       (<export-db current-repo))
+   (let [current-repo (state/get-current-repo)]
+     (when (and (util/electron?) (not= repo current-repo))
+       ;; switch graph
+       (<export-db current-repo {}))
      (protocol/<new (get-impl) repo))))

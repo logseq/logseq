@@ -40,7 +40,7 @@
       (if (config/db-based-graph? repo)
         (->
          (p/do!
-           (persistent-db/<export-db repo)
+           (persistent-db/<export-db repo {})
            (ipc/ipc "persistent-dbs-saved"))
          (p/catch error-handler))
         ;; TODO: Move all file based graphs to use the above persist approach
