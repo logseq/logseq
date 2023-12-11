@@ -226,8 +226,7 @@
   (let [graph (str config/db-version-prefix bare-graph-name)]
     (-> (do
           (persist-db/<import-db graph buffer)
-          (repo-handler/new-db! bare-graph-name {:restore-db? true})
-          (search-handler/rebuild-indices!))
+          (repo-handler/restore-and-setup-repo! graph))
         (p/then
          (fn [_result]
            (finished-ok-handler)))
