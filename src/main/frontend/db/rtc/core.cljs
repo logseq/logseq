@@ -69,9 +69,12 @@
    [:toggle-auto-push-client-ops-chan :any]
    [:*auto-push-client-ops? :any]
    [:force-push-client-ops-chan :any]])
-(def state-validator (fn [data] (if ((m/validator state-schema) data)
-                                  true
-                                  (prn (mu/explain-data state-schema data)))))
+(def state-validator
+  (let [validator (m/validator state-schema)]
+    (fn [data]
+      (if (validator data)
+        true
+        (prn (mu/explain-data state-schema data))))))
 
 (def rtc-state-schema
   [:enum :open :closed])
@@ -272,7 +275,7 @@
                   (contains? key-set :tags)           (assoc :block/tags (some->> (seq (:tags op-value))
                                                                                   (map (partial vector :block/uuid))
                                                                                   (db/pull-many repo [:db/id])
-                                                                                  (keep :db/id)))
+                                                                                  (filter :db/id)))
                   ;; FIXME: it looks save-block won't save :block/properties??
                   ;;        so I need to transact properties myself
                   ;; (contains? key-set :properties)     (assoc :block/properties
