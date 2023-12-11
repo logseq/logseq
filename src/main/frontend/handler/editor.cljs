@@ -2017,6 +2017,7 @@
                   keep-uuid?
                   revert-cut-txs]
            :or {exclude-properties []}}]
+  (state/set-editor-op! :paste-blocks)
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (some-> (db/pull [:block/uuid (:block/uuid editing-block)])
                                 (assoc :block/content (state/get-edit-content))))
@@ -2068,7 +2069,8 @@
                                                                           :replace-empty-target? replace-empty-target?
                                                                           :keep-uuid? keep-uuid?})]
           (state/set-block-op-type! nil)
-          (edit-last-block-after-inserted! result))))))
+          (edit-last-block-after-inserted! result)))))
+  (state/set-editor-op! nil))
 
 (defn- block-tree->blocks
   "keep-uuid? - maintain the existing :uuid in tree vec"
