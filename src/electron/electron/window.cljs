@@ -95,12 +95,8 @@
     (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents))
     (.send web-contents "persistent-dbs"))
   (async/go
-    (let [_ (async/<! state/persistent-dbs-chan)]
+    (let [result (async/<! state/persistent-dbs-chan)]
       (destroy-window! win)
-      ;; (if @*quitting?
-      ;;   (doseq [win (get-all-windows)]
-      ;;     (destroy-window! win))
-      ;;   (destroy-window! win))
       (when @*quitting?
         (async/put! state/persistent-dbs-chan true)))))
 
