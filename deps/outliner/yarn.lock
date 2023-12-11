@@ -9,6 +9,12 @@
   dependencies:
     import-meta-resolve "^2.1.0"
 
+"@logseq/nbb-logseq@logseq/nbb-logseq#feat-db-v1":
+  version "1.2.173"
+  resolved "https://codeload.github.com/logseq/nbb-logseq/tar.gz/43a5831523afc228f5d91b93f02b75c9cc76ec1d"
+  dependencies:
+    import-meta-resolve "^2.1.0"
+
 base64-js@^1.3.1:
   version "1.5.1"
   resolved "https://registry.yarnpkg.com/base64-js/-/base64-js-1.5.1.tgz#1b1b440160a5bf7ad40b650f095963481903930a"
