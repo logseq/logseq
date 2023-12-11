@@ -44,6 +44,9 @@
     (util/electron?)
     (ipc/ipc :db-export repo data)
 
+    ;; nfs-supported? auto backup
+
+    ;;
     :else
     nil))
 
@@ -90,10 +93,12 @@
                      (js/console.error error)
                      (notification/show! [:div (str "SQLiteDB fetch error: " error)] :error) {})))))
 
-  (<export-db [_this repo]
+  (<export-db [_this repo opts]
     (when-let [^js sqlite @*sqlite]
       (-> (p/let [data (.exportDB sqlite repo)]
-            (<export-db! repo data))
+            (if (:return-data? opts)
+              data
+              (<export-db! repo data)))
           (p/catch (fn [error]
                      (prn :debug :save-db-error repo)
                      (js/console.error error)

@@ -31,11 +31,9 @@
             [electron.utils :as utils]
             [electron.window :as win]
             [electron.handler-interface :refer [handle]]
-            [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.graph :as common-graph]
-            [promesa.core :as p]
-            [datascript.transit :as dt]))
+            [promesa.core :as p]))
 
 (defmethod handle :mkdir [_window [_ dir]]
   (fs/mkdirSync dir))

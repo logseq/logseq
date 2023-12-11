@@ -7,5 +7,5 @@
   (<unsafe-delete [this repo] "Delete graph and its vfs")
   (<transact-data [this repo tx-data tx-meta] "Transact data to db")
   (<fetch-initial-data [this repo opts] "Fetch Initial data")
-  (<export-db [this repo] "Save SQLite db")
+  (<export-db [this repo opts] "Save or get SQLite db")
   (<import-db [this repo data] "Import SQLite db"))
