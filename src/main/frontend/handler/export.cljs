@@ -401,7 +401,7 @@
 (defn export-repo-as-sqlite-db!
   [repo]
   (p/let [data (persist-db/<export-db repo {:return-data? true})
-          filename (str repo ".sqlite")
+          filename (file-name repo "sqlite")
           url (js/URL.createObjectURL (js/Blob. data))]
     (when-not (mobile-util/native-platform?)
       (when-let [anchor (gdom/getElement "download-as-sqlite-db")]
