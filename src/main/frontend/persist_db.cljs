@@ -18,6 +18,7 @@
    (protocol/<unsafe-delete (get-impl) repo))
 
 ;; FIXME: limit repo name's length
+;; @shuyu Do we still need this?
 (defn <new [repo]
   {:pre [(<= (count repo) 56)]}
   (protocol/<new (get-impl) repo))

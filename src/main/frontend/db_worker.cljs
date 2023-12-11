@@ -27,9 +27,7 @@
   (or @*opfs-pool
       (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (str "logseq-pool-" graph)
                                                              :initialCapacity 10})]
-        ;; (.removeVfs ^js pool)
         (reset! *opfs-pool pool)
-        (js/console.dir pool)
         pool)))
 
 (defn- init-sqlite-module!
@@ -49,13 +47,6 @@
 (defn- get-repo-path
   [repo]
   (str "/" repo ".sqlite"))
-
-(comment
-  (defn- get-file-names
-   [graph]
-   (p/let [^js pool (<get-opfs-pool graph)]
-     (when pool
-       (.getFileNames pool)))))
 
 (comment
   (defn- export-db-file
@@ -106,11 +97,13 @@
   [repo]
   (doseq [[r db] @*sqlite-conns]
     (when-not (= repo r)
+      (swap! *sqlite-conns dissoc r)
       (.close ^Object db))))
 
 (defn- close-db!
   [repo]
   (when-let [db (@*sqlite-conns repo)]
+    (swap! *sqlite-conns dissoc repo)
     (.close ^Object db)))
 
 (defn- create-or-open-db!
@@ -153,6 +146,29 @@
                         current-dir-dirs
                         (rest dirs))]
             (p/recur result dirs)))))))
+
+(comment
+  (defn <remove-all-files!
+    "!! Dangerous: use it only for development."
+    []
+    (p/let [all-files (<list-all-files)
+            files (filter #(= (.-kind %) "file") all-files)
+            dirs (filter #(= (.-kind %) "directory") all-files)
+            _ (p/all (map (fn [file] (.remove file)) files))]
+      (p/all (map (fn [dir] (.remove dir)) dirs)))))
+
+(defn- <get-pool-files
+  [^js pool]
+  (.getFileNames pool))
+
+(defn- remove-vfs!
+  [repo]
+  (p/let [^js pool (<get-opfs-pool repo)]
+    (when pool
+      (p/let [files (<get-pool-files pool)
+              _ (p/all (map (fn [file] (.unlink pool file)) files))
+              _ (.wipeFiles pool)]
+        (.removeVfs ^js pool)))))
 
 #_:clj-kondo/ignore
 (defclass SQLiteDB
@@ -226,22 +242,12 @@
 
   (unsafeUnlinkDB
    [_this repo]
-   (p/let [_ (close-db! repo)
-           pool (<get-opfs-pool repo)
-           path (get-repo-path repo)]
-     (when pool
-       (.unlink pool path)))))
+   (p/let [_ (close-db! repo)]
+     (remove-vfs! repo)
+     nil)))
 
 (defn init
   "web worker entry"
   []
   (let [^js obj (SQLiteDB.)]
     (Comlink/expose obj)))
-
-(comment
-  (defn- remove-pfs!
-   "!! use it only for development"
-   []
-   (p/let [^js pool (<get-opfs-pool)]
-     (when pool
-       (.removeVfs ^js pool)))))
