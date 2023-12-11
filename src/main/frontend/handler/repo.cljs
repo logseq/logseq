@@ -361,10 +361,12 @@
           (p/finally delete-db-f)))))
 
 (defn start-repo-db-if-not-exists!
-  [repo]
+  [repo & {:as opts}]
   (state/set-current-repo! repo)
-  (db/start-db-conn! repo {:listen-handler db-listener/listen-and-persist!
-                           :db-graph? (config/db-based-graph? repo)}))
+  (db/start-db-conn! repo (merge
+                           opts
+                           {:listen-handler db-listener/listen-and-persist!
+                            :db-graph? (config/db-based-graph? repo)})))
 
 (defn- setup-local-repo-if-not-exists-impl!
   []
@@ -529,23 +531,24 @@
   (when (util/electron?)
     (ipc/ipc "graphReady" graph)))
 
-(defn- create-db [full-graph-name {:keys [restore-db?]}]
+(defn- create-db [full-graph-name {:keys [restore-db?] :as opts}]
   (p/let [_ (persist-db/<new full-graph-name)
           _ (op-mem-layer/<init-load-from-indexeddb! full-graph-name)
-          _ (start-repo-db-if-not-exists! full-graph-name)
+          opts (if restore-db? (assoc opts :transact-initial-data? false) opts)
+          _ (start-repo-db-if-not-exists! full-graph-name opts)
           _ (state/add-repo! {:url full-graph-name})
           _ (route-handler/redirect-to-home!)
           _ (when restore-db?
               (restore-and-setup-repo! full-graph-name))
           _ (when-not restore-db?
               (db/transact! full-graph-name [(react/kv :db/type "db")
-                                            (react/kv :schema/version db-schema/version {:id -2})])
+                                             (react/kv :schema/version db-schema/version {:id -2})])
               (let [initial-data (sqlite-create-graph/build-db-initial-data config/config-default-content)]
                 (db/transact! full-graph-name initial-data)
-                (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)))
+                (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
+                (state/pub-event! [:page/create (date/today) {:redirect? false}])))
           ;; TODO: handle global graph
-          _ (state/pub-event! [:init/commands])
-          _ (state/pub-event! [:page/create (date/today) {:redirect? false}])]
+          _ (state/pub-event! [:init/commands])]
     (js/setTimeout ui-handler/re-render-root! 100)
     (prn "New db created: " full-graph-name)))
 
