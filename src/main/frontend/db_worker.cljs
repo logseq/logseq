@@ -199,18 +199,9 @@
    (when-let [sqlite @*sqlite]
      (.-version sqlite)))
 
-  ;; FIXME:
-  (supportOPFS
-   [_this]
-   (some? (.-createSyncAccessHandle (.-prototype js/FileSystemFileHandle))))
-
   (init
    [_this]
    (init-sqlite-module!))
-
-  (inited
-   [_this]
-   (some? @*sqlite))
 
   (listDB
    [_this]
