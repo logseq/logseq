@@ -83,8 +83,8 @@
   (swap! conns dissoc (datascript-db repo)))
 
 (defn kv
-  [key value]
-  {:db/id -1
+  [key value & {:keys [id]}]
+  {:db/id (or id -1)
    :db/ident key
    key value})
 
