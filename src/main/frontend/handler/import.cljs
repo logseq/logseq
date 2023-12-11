@@ -226,6 +226,7 @@
   (let [graph (str config/db-version-prefix bare-graph-name)]
     (-> (do
           (persist-db/<import-db graph buffer)
+          (state/set-current-repo! graph)
           (repo-handler/restore-and-setup-repo! graph))
         (p/then
          (fn [_result]
