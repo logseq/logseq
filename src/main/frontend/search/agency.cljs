@@ -2,16 +2,12 @@
   "Agent entry for search engine impls"
   (:require [frontend.search.protocol :as protocol]
             [frontend.search.browser :as search-browser]
-            [frontend.search.node :as search-node]
             [frontend.search.plugin :as search-plugin]
-            [frontend.state :as state]
-            [frontend.util :as util]))
+            [frontend.state :as state]))
 
 (defn get-registered-engines
   [repo]
-  [(if (util/electron?)
-     (search-node/->Node repo)
-     (search-browser/->Browser repo))
+  [(search-browser/->Browser repo)
    (when state/lsp-enabled?
      (for [s (state/get-all-plugin-services-with-type :search)]
        (search-plugin/->Plugin s repo)))])
