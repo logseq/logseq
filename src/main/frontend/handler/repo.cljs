@@ -462,7 +462,7 @@
                                   {:error error
                                    :payload {:type :db/persist-failed}}])
                (when on-error
-                 (on-error)))))))
+                 (on-error error)))))))
 
 (defn get-repos
   []

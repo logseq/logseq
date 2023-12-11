@@ -16,11 +16,13 @@
             [frontend.handler.user :as user]
             [frontend.handler.search :as search-handler]
             [frontend.state :as state]
+            [frontend.config :as config]
             [frontend.ui :as ui]
             [logseq.common.path :as path]
             [logseq.graph-parser.util :as gp-util]
             [promesa.core :as p]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [frontend.persist-db :as persistent-db]))
 
 (defn- safe-api-call
   "Force the callback result to be nil, otherwise, ipc calls could lead to
@@ -30,17 +32,26 @@
 
 (defn persist-dbs!
   []
-  ;; only persist current db!
-  ;; TODO rename the function and event to persist-db
-  (repo-handler/persist-db! {:before     #(ui/notify-graph-persist!)
-                             :on-success #(ipc/ipc "persistent-dbs-saved")
-                             :on-error   #(ipc/ipc "persistent-dbs-error")}))
+  (when-let [repo (state/get-current-repo)]
+    (let [error-handler (fn [error]
+                          (prn :debug :persist-db-failed :repo repo)
+                          (js/console.error error)
+                          (notification/show! error :error))]
+      (if (config/db-based-graph? repo)
+        (->
+         (p/do!
+           (persistent-db/<export-db repo)
+           (ipc/ipc "persistent-dbs-saved"))
+         (p/catch error-handler))
+        ;; TODO: Move all file based graphs to use the above persist approach
+        (repo-handler/persist-db! {:before     ui/notify-graph-persist!
+                                   :on-success #(ipc/ipc "persistent-dbs-saved")
+                                   :on-error   error-handler})))))
 
 
 (defn listen-persistent-dbs!
   []
   (safe-api-call "persistent-dbs" (fn [_data] (persist-dbs!))))
-
 
 (defn ^:large-vars/cleanup-todo listen-to-electron!
   []

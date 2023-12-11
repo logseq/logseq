@@ -24,6 +24,7 @@
   [repo relative-path]
   (get-backup-dir* repo relative-path version-file-dir))
 
+;; TODO: add interval support like days
 (defn- truncate-old-versioned-files!
   "reserve the latest 6 version files"
   [dir]
