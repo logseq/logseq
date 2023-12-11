@@ -31,12 +31,13 @@
           worker (js/Worker. (str worker-url "?electron=" (util/electron?)))
           sqlite (Comlink/wrap worker)]
       (reset! *sqlite sqlite)
-      (p/let [opfs-supported? (.supportOPFS sqlite)]
-        (if opfs-supported?
-          (p/do!
-            (.init sqlite)
-            (ask-persist-permission!))
-          (notification/show! "It seems that OPFS is not supported on this browser, please upgrade it to the latest version or use another browser." :error))))))
+      (-> (p/do!
+           (.init sqlite)
+           (ask-persist-permission!))
+          (p/catch (fn [error]
+                     (prn :debug "Can't init SQLite wasm")
+                     (js/console.error error)
+                     (notification/show! "It seems that OPFS is not supported on this browser, please upgrade it to the latest version or use another browser." :error)))))))
 
 (defn <export-db!
   [repo data]
