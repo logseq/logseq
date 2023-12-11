@@ -43,7 +43,7 @@
           _ (sqlite-db/transact! "test-db" frontend-blocks {})
           conn (-> (sqlite-db/get-initial-data "test-db")
                    sqlite-restore/restore-initial-data)]
-      (is (= (map #(dissoc % :page_uuid) frontend-blocks)
+      (is (= frontend-blocks
              (->> (d/q '[:find (pull ?b [*])
                          :where [?b :block/created-at]]
                        @conn)
