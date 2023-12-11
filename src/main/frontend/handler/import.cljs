@@ -5,6 +5,7 @@
             [frontend.external :as external]
             [frontend.handler.file :as file-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.search :as search-handler]
             [frontend.state :as state]
             [frontend.date :as date]
             [frontend.config :as config]
@@ -225,7 +226,8 @@
   (let [graph (str config/db-version-prefix bare-graph-name)]
     (-> (do
           (persist-db/<import-db graph buffer)
-          (repo-handler/new-db! bare-graph-name))
+          (repo-handler/new-db! bare-graph-name {:restore-db? true})
+          (search-handler/rebuild-indices!))
         (p/then
          (fn [_result]
            (finished-ok-handler)))

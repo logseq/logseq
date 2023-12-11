@@ -258,9 +258,8 @@
   (importDb
    [this repo data]
    (when-not (string/blank? repo)
-     (p/let [pool (<get-opfs-pool repo)
-             data (<import-db repo data)]
-       nil))))
+     (p/let [pool (<get-opfs-pool repo)]
+       (<import-db repo data)))))
 
 (defn init
   "web worker entry"

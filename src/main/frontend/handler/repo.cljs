@@ -529,17 +529,20 @@
   (when (util/electron?)
     (ipc/ipc "graphReady" graph)))
 
-(defn- create-db [full-graph-name]
+(defn- create-db [full-graph-name {:keys [restore-db?]}]
   (p/let [_ (persist-db/<new full-graph-name)
           _ (op-mem-layer/<init-load-from-indexeddb! full-graph-name)
           _ (start-repo-db-if-not-exists! full-graph-name)
           _ (state/add-repo! {:url full-graph-name})
           _ (route-handler/redirect-to-home!)
-          _ (db/transact! full-graph-name [(react/kv :db/type "db")
-                                           (react/kv :schema/version db-schema/version {:id -2})])
-          initial-data (sqlite-create-graph/build-db-initial-data config/config-default-content)
-          _ (db/transact! full-graph-name initial-data)
-          _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
+          _ (when restore-db?
+              (restore-and-setup-repo! full-graph-name))
+          _ (when-not restore-db?
+              (db/transact! full-graph-name [(react/kv :db/type "db")
+                                            (react/kv :schema/version db-schema/version {:id -2})])
+              (let [initial-data (sqlite-create-graph/build-db-initial-data config/config-default-content)]
+                (db/transact! full-graph-name initial-data)
+                (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)))
           ;; TODO: handle global graph
           _ (state/pub-event! [:init/commands])
           _ (state/pub-event! [:page/create (date/today) {:redirect? false}])]
@@ -548,11 +551,11 @@
 
 (defn new-db!
   "Handler for creating a new database graph"
-  [graph]
+  [graph & opts]
   (let [full-graph-name (str config/db-version-prefix graph)
         graph-already-exists? (some #(= (:url %) full-graph-name) (state/get-repos))]
     (if graph-already-exists?
       (state/pub-event! [:notification/show
                          {:content (str "The graph '" graph "' already exists. Please try again with another name.")
                           :status :error}])
-      (create-db full-graph-name))))
+      (create-db full-graph-name opts))))
