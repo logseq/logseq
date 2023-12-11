@@ -130,7 +130,7 @@
             (let [repo-dir (config/get-repo-dir repo)
                   file-fpath (path/path-join repo-dir file-rpath)]
               [{:title   (t :page/open-in-finder)
-                :options {:on-click #(js/window.apis.showItemInFolder file-fpath)}}
+                :options {:on-click #(ipc/ipc "openFileInFolder" file-fpath)}}
                {:title   (t :page/open-with-default-app)
                 :options {:on-click #(js/window.apis.openPath file-fpath)}}]))
 

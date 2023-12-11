@@ -1470,7 +1470,7 @@
         (assets-handler/resolve-asset-real-path-url (state/get-current-repo) path)
 
         (util/electron?)
-        (path/path-join "assets://" full-path)
+        (path/prepend-protocol "assets:" full-path)
 
         (mobile-util/native-platform?)
         (mobile-util/convert-file-src full-path)
@@ -1643,7 +1643,7 @@
         editing-page (and block
                           (when-let [page-id (:db/id (:block/page block))]
                             (:block/name (db/entity page-id))))
-        pages (search/page-search q 100)]
+        pages (search/page-search q)]
     (if editing-page
       ;; To prevent self references
       (remove (fn [p] (= (util/page-name-sanity-lc p) editing-page)) pages)
@@ -2847,7 +2847,7 @@
              (contains? #{:property-search :property-value-search} (state/get-editor-action)))
         (state/clear-editor-action!)
 
-        (and (util/event-is-composing? e true) ;; #3218
+        (and (util/goog-event-is-composing? e true) ;; #3218
              (not hashtag?) ;; #3283 @Rime
              (not (state/get-editor-show-page-search-hashtag?))) ;; #3283 @MacOS pinyin
         nil
@@ -3004,7 +3004,7 @@
 (defn keyup-handler
   [_state input input-id]
   (fn [e key-code]
-    (when-not (util/event-is-composing? e)
+    (when-not (util/goog-event-is-composing? e)
       (let [current-pos (cursor/pos input)
             value (gobj/get input "value")
             c (util/nth-safe value (dec current-pos))
@@ -3031,7 +3031,7 @@
                  (gobj/get e "key")
                  (gobj/getValueByKeys e "event_" "code"))
                 ;; #3440
-               (util/event-is-composing? e true)])]
+               (util/goog-event-is-composing? e true)])]
         (cond
           ;; When you type something after /
           (and (= :commands (state/get-editor-action)) (not= k commands/command-trigger))
