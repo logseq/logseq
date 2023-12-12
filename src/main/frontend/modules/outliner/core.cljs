@@ -406,13 +406,19 @@
 (defn- assign-temp-id
   [blocks replace-empty-target? target-block]
   (->> (map-indexed (fn [idx block]
-                  (let [replacing-block? (and replace-empty-target? (zero? idx))]
-                    (if replacing-block?
-                      [[:db/retractEntity (:db/id target-block)] ; retract target-block first
-                       (assoc block
-                              :db/id (or (:db/id block) (dec (- idx)))
-                              :block/left (:db/id (:block/left target-block)))]
-                      [(assoc block :db/id (dec (- idx)))]))) blocks)
+                      (let [replacing-block? (and replace-empty-target? (zero? idx))]
+                        (if replacing-block?
+                          (let [db-id (or (:db/id block) (dec (- idx)))]
+                            (if (seq (:block/_parent target-block)) ; target-block has children
+                              ;; update block properties
+                              [(assoc block
+                                      :db/id (:db/id target-block)
+                                      :block/uuid (:block/uuid target-block))]
+                              [[:db/retractEntity (:db/id target-block)] ; retract target-block first
+                               (assoc block
+                                      :db/id db-id
+                                      :block/left (:db/id (:block/left target-block)))]))
+                          [(assoc block :db/id (dec (- idx)))]))) blocks)
        (apply concat)))
 
 (defn- find-outdented-block-prev-hop
