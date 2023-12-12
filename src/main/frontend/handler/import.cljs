@@ -229,6 +229,7 @@
         (p/then
          (fn [_result]
            (state/set-current-repo! graph)
+           (persist-db/<export-db graph {})
            (finished-ok-handler)))
         (p/catch
          (fn [e]
