@@ -104,9 +104,6 @@
   dev:gen-malli-kondo-config
   logseq.tasks.dev/gen-malli-kondo-config
 
-  dev:validate-sqlite-data
-  logseq.tasks.validate-sqlite-data/-main
-
   lint:large-vars
   logseq.bb-tasks.lint.large-vars/-main
 
