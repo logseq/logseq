@@ -1,19 +1,15 @@
-(ns logseq.db.sqlite.db
-  "Main entry point for using sqlite with db graphs"
+(ns ^:node-only logseq.db.sqlite.db
+  "Sqlite fns for db graphs"
   (:require ["path" :as node-path]
             ["better-sqlite3" :as sqlite3]
             [clojure.string :as string]
+            [logseq.db.sqlite.common-db :as sqlite-common-db]
             [logseq.db.sqlite.util :as sqlite-util]
             ;; FIXME: datascript.core has to come before datascript.storage or else nbb fails
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
-            ;; Disable until used as it effects nbb
-            ;; [cljs.cache :as cache]
             [goog.object :as gobj]
-            [logseq.db.frontend.schema :as db-schema]
             [clojure.edn :as edn]))
-
-;; use built-in blocks to represent db schema, config, custom css, custom js, etc.
 
 ;; sqlite databases
 (defonce databases (atom nil))
@@ -38,28 +34,9 @@
       (string/replace "\\" "_")
       (string/replace ":" "_"))) ;; windows
 
-(defn get-db
-  [repo]
-  (get @databases (sanitize-db-name repo)))
-
 (defn get-conn
   [repo]
   (get @conns (sanitize-db-name repo)))
-
-(defn prepare
-  [^object db sql db-name]
-  (when db
-    (try
-      (.prepare db sql)
-      (catch :default e
-        (js/console.error (str "SQLite prepare failed: " e ": " db-name))
-        (throw e)))))
-
-(defn create-kvs-table!
-  [db db-name]
-  (let [stmt (prepare db "create table if not exists kvs (addr INTEGER primary key, content TEXT)"
-                      db-name)]
-    (.run ^object stmt)))
 
 (defn get-db-full-path
   [graphs-dir db-name]
@@ -68,60 +45,55 @@
     [db-name' (node-path/join graph-dir "db.sqlite")]))
 
 (defn query
-  [repo db sql]
-  (let [stmt (prepare db sql repo)]
+  [db sql]
+  (let [stmt (.prepare db sql)]
     (.all ^object stmt)))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
-  [repo data]
-  (when-let [db (get-db repo)]
-    (let [insert (prepare db "INSERT INTO kvs (addr, content) values (@addr, @content) on conflict(addr) do update set content = @content"
-                          repo)
-          insert-many (.transaction ^object db
-                                    (fn [data]
-                                      (doseq [item data]
-                                        (.run ^object insert item))))]
-      (insert-many data))))
+  [db data]
+  (let [insert (.prepare db "INSERT INTO kvs (addr, content) values (@addr, @content) on conflict(addr) do update set content = @content")
+        insert-many (.transaction ^object db
+                                  (fn [data]
+                                    (doseq [item data]
+                                      (.run ^object insert item))))]
+    (insert-many data)))
 
 (defn restore-data-from-addr
-  [repo addr]
-  (when addr
-    (when-let [db (get-db repo)]
-      (-> (query repo db
-                 (str "select content from kvs where addr = " addr))
-          first
-          (gobj/get "content")))))
+  [db addr]
+  (-> (query db (str "select content from kvs where addr = " addr))
+      first
+      (gobj/get "content")))
 
-(defn sqlite-storage
-  [repo _ #_{:keys [threshold] :or {threshold 4096}}]
-  (let [_cache nil #_(cache/lru-cache-factory {} :threshold threshold)]
-    (reify IStorage
-      (-store [_ addr+data-seq]
-        (let [data (->>
-                    (map
-                     (fn [[addr data]]
-                       #js {:addr addr
-                            :content (pr-str data)})
-                     addr+data-seq)
-                    (to-array))]
-          (upsert-addr-content! repo data)))
-      (-restore [_ addr]
-        (let [content (restore-data-from-addr repo addr)]
-          (edn/read-string content))))))
+(defn new-sqlite-storage
+  "Creates a datascript storage for sqlite. Should be functionally equivalent to db-worker/new-sqlite-storage"
+  [db]
+  (reify IStorage
+    (-store [_ addr+data-seq]
+      (let [data (->>
+                  (map
+                   (fn [[addr data]]
+                     #js {:addr addr
+                          :content (pr-str data)})
+                   addr+data-seq)
+                  (to-array))]
+        (upsert-addr-content! db data)))
+    (-restore [_ addr]
+      (let [content (restore-data-from-addr db addr)]
+        (edn/read-string content)))))
 
 (defn open-db!
   [graphs-dir db-name]
   (let [[db-sanitized-name db-full-path] (get-db-full-path graphs-dir db-name)
         db (new sqlite db-full-path nil)]
-    (create-kvs-table! db db-name)
+    (sqlite-common-db/create-kvs-table! db)
     (swap! databases assoc db-sanitized-name db)
-    (let [storage (sqlite-storage db-name {})
-          conn (or (d/restore-conn storage)
-                   (d/create-conn db-schema/schema-for-db-based-graph {:storage storage}))]
+    (let [storage (new-sqlite-storage db)
+          conn (sqlite-common-db/get-storage-conn storage)]
       (swap! conns assoc db-sanitized-name conn)))
   nil)
 
+;; TODO: Remove as it looks unused
 (defn transact!
   [repo tx-data tx-meta]
   (when-let [conn (get-conn repo)]
@@ -132,10 +104,7 @@
         (js/console.error e)))))
 
 (defn get-initial-data
-  "Get all datoms remove :block/content"
+  "Returns initial data as vec of datoms"
   [repo]
   (when-let [conn (get-conn repo)]
-    (let [db @conn]
-      (->> (d/datoms db :eavt)
-           ;; (remove (fn [e] (= :block/content (:a e))))
-           vec))))
+    (sqlite-common-db/get-initial-data @conn)))

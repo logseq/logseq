@@ -6,6 +6,7 @@
             [clojure.edn :as edn]
             [datascript.core :as d]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.common-db :as sqlite-common-db]
             [shadow.cljs.modern :refer [defclass]]
             [datascript.transit :as dt]
             ["@logseq/sqlite-wasm" :default sqlite3InitModule]
@@ -151,9 +152,8 @@
             storage (new-sqlite-storage repo {})]
       (swap! *sqlite-conns assoc repo db)
       (.exec db "PRAGMA locking_mode=exclusive")
-      (.exec db "create table if not exists kvs (addr INTEGER primary key, content TEXT)")
-      (let [conn (or (d/restore-conn storage)
-                     (d/create-conn db-schema/schema-for-db-based-graph {:storage storage}))]
+      (sqlite-common-db/create-kvs-table! db)
+      (let [conn (sqlite-common-db/get-storage-conn storage)]
         (swap! *datascript-conns assoc repo conn)
         nil))))
 
@@ -229,10 +229,8 @@
   (getInitialData
    [_this repo]
    (when-let [conn (get-datascript-conn repo)]
-     (let [db @conn]
-       (->> (d/datoms db :eavt)
-            vec
-            dt/write-transit-str))))
+     (->> (sqlite-common-db/get-initial-data @conn)
+          dt/write-transit-str)))
 
   (unsafeUnlinkDB
    [_this repo]
