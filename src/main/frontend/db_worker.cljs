@@ -237,8 +237,8 @@
   (unsafeUnlinkDB
    [_this repo]
    (p/let [db (get-sqlite-conn repo)
-           pool (get-opfs-pool repo)
-           _ (close-db! repo db)
+           pool (<get-opfs-pool repo)
+           _ (when db (close-db! repo db))
            result (remove-vfs! pool)]
      nil))
 
