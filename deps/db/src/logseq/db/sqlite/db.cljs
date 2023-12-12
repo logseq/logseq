@@ -102,9 +102,3 @@
       (catch :default e
         (prn :debug :error)
         (js/console.error e)))))
-
-(defn get-initial-data
-  "Returns initial data as vec of datoms"
-  [repo]
-  (when-let [conn (get-conn repo)]
-    (sqlite-common-db/get-initial-data @conn)))

@@ -3,8 +3,8 @@
             ["fs" :as fs]
             ["path" :as node-path]
             [datascript.core :as d]
-            [logseq.db.sqlite.db :as sqlite-db]
-            [logseq.db.sqlite.restore :as sqlite-restore]))
+            [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [logseq.db.sqlite.db :as sqlite-db]))
 
 (use-fixtures
   :each
@@ -28,11 +28,44 @@
     (let [blocks [{:block/uuid (random-uuid)
                    :file/path "logseq/config.edn"
                    :file/content "{:foo :bar}"}]
-          _ (sqlite-db/transact! "test-db" blocks {})]
+          conn* (sqlite-db/get-conn "test-db")
+          _ (d/transact! conn* blocks)
+          ;; Simulate getting data from sqlite and restoring it for frontend
+          conn (-> (sqlite-common-db/get-initial-data @conn*)
+                   sqlite-common-db/restore-initial-data)]
       (is (= blocks
-             (->> (sqlite-db/get-initial-data "test-db")
-                  sqlite-restore/restore-initial-data
-                  deref
+             (->> @conn
                   (d/q '[:find (pull ?b [:block/uuid :file/path :file/content]) :where [?b :file/content]])
                   (map first)))
           "Correct file with content is found"))))
+
+(deftest restore-initial-data
+  (testing "Restore a journal page with its block"
+    (create-graph-dir "tmp/graphs" "test-db")
+    (sqlite-db/open-db! "tmp/graphs" "test-db")
+    (let [page-uuid (random-uuid)
+          block-uuid (random-uuid)
+          created-at (js/Date.now)
+          blocks [{:db/id 100001
+                   :block/uuid page-uuid
+                   :block/journal-day 20230629
+                   :block/name "jun 29th, 2023"
+                   :block/created-at created-at
+                   :block/updated-at created-at}
+                  {:db/id 100002
+                   :block/content "test"
+                   :block/uuid block-uuid
+                   :block/page {:db/id 100001}
+                   :block/created-at created-at
+                   :block/updated-at created-at}]
+          conn* (sqlite-db/get-conn "test-db")
+          _ (d/transact! conn* blocks)
+          ;; Simulate getting data from sqlite and restoring it for frontend
+          conn (-> (sqlite-common-db/get-initial-data @conn*)
+                   sqlite-common-db/restore-initial-data)]
+      (is (= blocks
+             (->> (d/q '[:find (pull ?b [*])
+                         :where [?b :block/created-at]]
+                       @conn)
+                  (map first)))
+          "Datascript db matches data inserted into sqlite"))))
