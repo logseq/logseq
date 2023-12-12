@@ -262,6 +262,7 @@
 
       (ui/button {:variant :outline :size :sm} "Outline")
       (ui/button {:variant :secondary :size :sm} "Secondary")
+      (ui/button {:disabled true :size :sm} "Disabled")
       (ui/button {:variant :destructive :size :sm} "Destructive")
       (ui/button {:class "primary-green" :size :sm} "Custom (.primary-green)")
       (ui/button
