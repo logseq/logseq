@@ -237,8 +237,9 @@
 
   (unsafeUnlinkDB
    [_this repo]
-   (p/let [result (remove-vfs! repo)]
-     (close-db! repo)))
+   (p/let [result (remove-vfs! repo)
+           _ (close-db! repo)]
+     nil))
 
   (exportDB
    [_this repo]
