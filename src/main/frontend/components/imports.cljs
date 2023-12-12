@@ -12,7 +12,8 @@
             [clojure.string :as string]
             [goog.object :as gobj]
             [frontend.components.onboarding.setups :as setups]
-            [frontend.util.text :as text-util]))
+            [frontend.util.text :as text-util]
+            [frontend.util :as util]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
@@ -46,7 +47,7 @@
                           :error))))
 
 (defn- lsq-import-handler
-  [e & {:keys [sqlite?]}]
+  [e & {:keys [sqlite? graph-name]}]
   (let [file      (first (array-seq (.-files (.-target e))))
         file-name (some-> (gobj/get file "name")
                           (string/lower-case))
@@ -54,9 +55,7 @@
         json? (string/ends-with? file-name ".json")]
     (cond
       sqlite?
-      (let [graph-name (-> (js/prompt "Please specify a name for the new graph:")
-                           str
-                           string/trim)
+      (let [graph-name (string/trim graph-name)
             all-graphs (->> (state/get-repos)
                             (map #(text-util/get-graph-name-from-path (:url %)))
                             set)]
@@ -72,7 +71,8 @@
             (set! (.-onload reader)
                   (fn []
                     (let [buffer (.-result ^js reader)]
-                      (import-handler/import-from-sqlite-db! buffer graph-name finished-cb))))
+                      (import-handler/import-from-sqlite-db! buffer graph-name finished-cb)
+                      (state/close-modal!))))
             (set! (.-onerror reader) (fn [e] (js/console.error e)))
             (set! (.-onabort reader) (fn [e]
                                        (prn :debug :aborted)
@@ -120,6 +120,30 @@
       (notification/show! "Please choose a OPML file."
                           :error))))
 
+(rum/defcs set-graph-name-dialog
+  < rum/reactive
+  (rum/local "" ::input)
+  [state sqlite-input-e opts]
+  (let [*input (::input state)
+        on-submit #(lsq-import-handler sqlite-input-e (assoc opts :graph-name @*input))]
+    [:div.container
+     [:div.sm:flex.sm:items-start
+      [:div.mt-3.text-center.sm:mt-0.sm:text-left
+       [:h3#modal-headline.leading-6.font-medium
+        "New graph name:"]]]
+
+     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
+      {:auto-focus true
+       :on-change (fn [e]
+                    (reset! *input (util/evalue e)))
+       :on-key-press (fn [e]
+                        (when (= "Enter" (util/ekey e))
+                          (on-submit)))}]
+
+     [:div.mt-5.sm:mt-4.flex
+      (ui/button "Submit"
+        {:on-click on-submit})]]))
+
 (rum/defc importer < rum/reactive
   [{:keys [query-params]}]
   (if (state/sub :graph/importing)
@@ -150,7 +174,8 @@
          {:id        "import-sqlite-db"
           :type      "file"
           :on-change (fn [e]
-                       (lsq-import-handler e {:sqlite? true}))}]]
+                       (state/set-modal!
+                        #(set-graph-name-dialog e {:sqlite? true})))}]]
 
        [:label.action-input.flex.items-center.mx-2.my-2
         [:span.as-flex-center [:i (svg/logo 28)]]
