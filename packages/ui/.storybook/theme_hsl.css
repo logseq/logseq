@@ -12,8 +12,8 @@ html {
     --accent: hsl(210 40% 96.1%);
     --accent-foreground: hsl(222.2 47.4% 11.2%);
 
-    --primary: hsl(200 95% 40%);
-    --primary-foreground: hsl(210 40% 98%);
+    --primary: hsl(200 97% 37%);
+    --primary-foreground: hsl(255 92% 100%);
 
     --ring: hsl(200 97% 37%);
   }
@@ -109,6 +109,5 @@ html[data-color-scheme=dark] {
     --border: hsl(240 3.7% 15.9%);
     --input: hsl(240 3.7% 15.9%);
     --ring: hsl(142.4 71.8% 29.2%);
-
   }
 }
