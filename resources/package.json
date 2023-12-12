@@ -52,6 +52,7 @@
     "@electron-forge/maker-rpm": "^6.0.4",
     "@electron-forge/maker-squirrel": "^6.0.4",
     "@electron-forge/maker-zip": "^6.0.4",
+    "@electron-forge/plugin-auto-unpack-natives": "^6.0.4",
     "@electron/rebuild": "3.2.10",
     "electron": "25.9.3",
     "electron-builder": "^22.11.7",
