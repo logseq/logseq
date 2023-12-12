@@ -104,17 +104,17 @@
         (restore-data-from-addr repo addr)))))
 
 (defn- close-db!
-  [repo]
+  [repo ^js db]
   (swap! *sqlite-conns dissoc repo)
   (swap! *datascript-conns dissoc repo)
-  (swap! *opfs-pools dissoc repo))
+  (swap! *opfs-pools dissoc repo)
+  (when db (.close db)))
 
 (defn- close-other-dbs!
   [repo]
   (doseq [[r db] @*sqlite-conns]
     (when-not (= repo r)
-      (close-db! r)
-      (.close ^Object db))))
+      (close-db! r db))))
 
 (defn- create-or-open-db!
   [repo]
@@ -168,10 +168,9 @@
       (p/all (map (fn [dir] (.remove dir)) dirs)))))
 
 (defn- remove-vfs!
-  [repo]
-  (p/let [^js pool (<get-opfs-pool repo)]
-    (when pool
-      (.removeVfs ^js pool))))
+  [^js pool]
+  (when pool
+    (.removeVfs ^js pool)))
 
 #_:clj-kondo/ignore
 (defclass SQLiteDB
@@ -237,8 +236,10 @@
 
   (unsafeUnlinkDB
    [_this repo]
-   (p/let [result (remove-vfs! repo)
-           _ (close-db! repo)]
+   (p/let [db (get-sqlite-conn repo)
+           pool (get-opfs-pool repo)
+           _ (close-db! repo db)
+           result (remove-vfs! pool)]
      nil))
 
   (exportDB
