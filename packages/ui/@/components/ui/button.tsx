@@ -6,23 +6,23 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm gap-1' +
-  ' font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2' +
-  ' focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none' +
-  ' disabled:opacity-50 select-none',
+  'inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 ' +
+  'font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 ' +
+  'focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none ' +
+  'disabled:opacity-50 select-none',
   {
     variants: {
       variant: {
         default:
-          'bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/100 as-classic',
+          'bg-primary/90 hover:bg-primary/95 active:bg-primary/100 text-primary-foreground as-classic',
         solid:
-          'bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/100 as-solid',
+          'bg-primary/90 hover:bg-primary/95 active:bg-primary/100 text-primary-foreground as-solid',
         destructive:
-          'bg-destructive text-destructive-foreground hover:bg-destructive/90 active:bg-destructive/100 as-destructive',
+          'bg-destructive/90 hover:bg-destructive/95 active:bg-destructive/100 text-destructive-foreground as-destructive',
         outline:
-          'border bg-background hover:bg-accent hover:text-accent-foreground active:opacity-85 as-outline',
+          'border bg-background hover:bg-accent hover:text-accent-foreground active:opacity-80 as-outline',
         secondary:
-          'bg-secondary text-secondary-foreground hover:bg-secondary/80 active:opacity-85 as-secondary',
+          'bg-secondary/70 text-secondary-foreground hover:bg-secondary/100 active:opacity-80 as-secondary',
         ghost:
           'hover:bg-accent hover:text-accent-foreground active:opacity-80 as-ghost',
         link:

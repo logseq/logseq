@@ -1015,8 +1015,8 @@
                                       [idx (boolean (get @*checks idx))])))
            (reset! *results pages)))
 
-       [:div
-        [:div.actions
+       [:div.cp__all_pages-content
+        [:div.actions.pt-4
          {:class (util/classnames [{:has-selected (or (nil? @*indeterminate)
                                                       (not= 0 @*indeterminate))}])}
          [:div.l.flex.items-center

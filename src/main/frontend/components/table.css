@@ -1,4 +1,4 @@
-.cp__shortcut-page, .block-content {
+.cp__shortcut-page, .cp__all_pages-content, .block-content {
   div.table-wrapper {
     overflow: auto;
   }
@@ -61,7 +61,7 @@
 }
 
 .dark-theme {
-  .cp__shortcut-page, .block-content {
+  .cp__shortcut-page, .cp__all_pages-content, .block-content {
     th {
       color: var(--ls-primary-text-color);
       border-bottom: 2px solid var(--ls-border-color);

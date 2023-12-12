@@ -1,5 +1,5 @@
-import './radix.css'
-import './radix-hsl.css'
+import '../src/radix.css'
+import '../src/radix-hsl.css'
 import './theme.css'
 import '../src/index.css'
 import { useEffect } from 'react'
@@ -22,7 +22,7 @@ function ThemeObserver(
 
   useEffect(() => {
     const html = document.documentElement
-    html.dataset.theme = theme
+    html.dataset.color = theme
     return () => (delete html.dataset.theme)
   }, [theme])
 

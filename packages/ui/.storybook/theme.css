@@ -14,7 +14,7 @@ body {
 
 /* light */
 html {
-  &[data-theme=default] {
+  &[data-color=default] {
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
 
@@ -24,7 +24,7 @@ html {
     --ring: 200 97% 37%;
   }
 
-  &[data-theme=blue] {
+  &[data-color=blue] {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
@@ -47,7 +47,7 @@ html {
     --radius: 0.5rem;
   }
 
-  &[data-theme=green] {
+  &[data-color=green] {
     --background: 0 0% 100%;
     --foreground: 240 10% 3.9%;
     --card: 0 0% 100%;
@@ -70,7 +70,7 @@ html {
     --radius: 0.5rem;
   }
 
-  &[data-theme=orange] {
+  &[data-color=orange] {
     --background: 0 0% 100%;
     --foreground: 20 14.3% 4.1%;
     --card: 0 0% 100%;
@@ -95,7 +95,7 @@ html {
 }
 
 html[data-color-scheme=dark] {
-  &[data-theme=green] {
+  &[data-color=green] {
     --background: 20 14.3% 4.1%;
     --foreground: 0 0% 95%;
     --card: 24 9.8% 10%;
@@ -115,6 +115,5 @@ html[data-color-scheme=dark] {
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
     --ring: 142.4 71.8% 29.2%;
-
   }
 }
