@@ -4,9 +4,11 @@
             ["better-sqlite3" :as sqlite3]
             [clojure.string :as string]
             [logseq.db.sqlite.util :as sqlite-util]
-            [datascript.storage :refer [IStorage]]
-            [cljs.cache :as cache]
+            ;; FIXME: datascript.core has to come before datascript.storage or else nbb fails
             [datascript.core :as d]
+            [datascript.storage :refer [IStorage]]
+            ;; Disable until used as it effects nbb
+            ;; [cljs.cache :as cache]
             [goog.object :as gobj]
             [logseq.db.frontend.schema :as db-schema]
             [clojure.edn :as edn]))
@@ -92,9 +94,8 @@
           (gobj/get "content")))))
 
 (defn sqlite-storage
-  [repo {:keys [threshold]
-         :or {threshold 4096}}]
-  (let [_cache (cache/lru-cache-factory {} :threshold threshold)]
+  [repo _ #_{:keys [threshold] :or {threshold 4096}}]
+  (let [_cache nil #_(cache/lru-cache-factory {} :threshold threshold)]
     (reify IStorage
       (-store [_ addr+data-seq]
         (let [data (->>

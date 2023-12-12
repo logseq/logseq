@@ -5,7 +5,6 @@
             [frontend.external :as external]
             [frontend.handler.file :as file-handler]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.search :as search-handler]
             [frontend.state :as state]
             [frontend.date :as date]
             [frontend.config :as config]
@@ -224,12 +223,11 @@
 (defn import-from-sqlite-db!
   [buffer bare-graph-name finished-ok-handler]
   (let [graph (str config/db-version-prefix bare-graph-name)]
-    (-> (do
-          (persist-db/<import-db graph buffer)
-          (state/set-current-repo! graph)
+    (-> (p/let [_ (persist-db/<import-db graph buffer)]
           (repo-handler/restore-and-setup-repo! graph))
         (p/then
          (fn [_result]
+           (state/set-current-repo! graph)
            (finished-ok-handler)))
         (p/catch
          (fn [e]

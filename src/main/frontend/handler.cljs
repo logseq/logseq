@@ -77,10 +77,9 @@
 (defn restore-and-setup!
   [repo repos]
   (when repo
-    (-> (p/do!
-         (db-restore/restore-graph! repo)
-         (repo-config-handler/start {:repo repo})
-         (op-mem-layer/<init-load-from-indexeddb! repo))
+    (-> (p/let [_ (db-restore/restore-graph! repo)
+                _ (repo-config-handler/start {:repo repo})]
+          (op-mem-layer/<init-load-from-indexeddb! repo))
         (p/then
          (fn []
            (db-listener/listen-and-persist! repo)
