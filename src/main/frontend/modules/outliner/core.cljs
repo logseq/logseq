@@ -405,13 +405,21 @@
 
 (defn- assign-temp-id
   [blocks replace-empty-target? target-block]
-  (map-indexed (fn [idx block]
-                 ;; TODO: block uuid changed, this could be a problem for rtc
-                 (let [replacing-block? (and replace-empty-target? (zero? idx))
-                       db-id (if replacing-block?
-                               (:db/id target-block)
-                               (dec (- idx)))]
-                   (assoc block :db/id db-id))) blocks))
+  (->> (map-indexed (fn [idx block]
+                      (let [replacing-block? (and replace-empty-target? (zero? idx))]
+                        (if replacing-block?
+                          (let [db-id (or (:db/id block) (dec (- idx)))]
+                            (if (seq (:block/_parent target-block)) ; target-block has children
+                              ;; update block properties
+                              [(assoc block
+                                      :db/id (:db/id target-block)
+                                      :block/uuid (:block/uuid target-block))]
+                              [[:db/retractEntity (:db/id target-block)] ; retract target-block first
+                               (assoc block
+                                      :db/id db-id
+                                      :block/left (:db/id (:block/left target-block)))]))
+                          [(assoc block :db/id (dec (- idx)))]))) blocks)
+       (apply concat)))
 
 (defn- find-outdented-block-prev-hop
   [outdented-block blocks]
