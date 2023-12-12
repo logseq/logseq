@@ -64,10 +64,8 @@
       (.exportFile ^js pool path))))
 
 (defn- <import-db
-  [repo data]
-  (p/let [^js pool (<get-opfs-pool repo)]
-    (when pool
-      (.importDb ^js pool (get-repo-path repo) data))))
+  [^js pool repo data]
+  (.importDb ^js pool (get-repo-path repo) data))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
@@ -105,21 +103,18 @@
       (-restore [_ addr]
         (restore-data-from-addr repo addr)))))
 
+(defn- close-db!
+  [repo]
+  (swap! *sqlite-conns dissoc repo)
+  (swap! *datascript-conns dissoc repo)
+  (swap! *opfs-pools dissoc repo))
+
 (defn- close-other-dbs!
   [repo]
   (doseq [[r db] @*sqlite-conns]
     (when-not (= repo r)
-      (swap! *datascript-conns dissoc r)
-      (swap! *sqlite-conns dissoc r)
-      (swap! *opfs-pools dissoc r)
+      (close-db! r)
       (.close ^Object db))))
-
-(defn- close-db!
-  [repo]
-  (when-let [db (@*sqlite-conns repo)]
-    (swap! *sqlite-conns dissoc repo)
-    (swap! *datascript-conns dissoc repo)
-    (.close ^Object db)))
 
 (defn- create-or-open-db!
   [repo]
@@ -172,18 +167,11 @@
             _ (p/all (map (fn [file] (.remove file)) files))]
       (p/all (map (fn [dir] (.remove dir)) dirs)))))
 
-(defn- <get-pool-files
-  [^js pool]
-  (.getFileNames pool))
-
 (defn- remove-vfs!
   [repo]
   (p/let [^js pool (<get-opfs-pool repo)]
     (when pool
-      (p/let [files (<get-pool-files pool)
-              _ (p/all (map (fn [file] (.unlink pool file)) files))
-              _ (.wipeFiles pool)]
-        (.removeVfs ^js pool)))))
+      (.removeVfs ^js pool))))
 
 #_:clj-kondo/ignore
 (defclass SQLiteDB
@@ -215,6 +203,7 @@
                           (string/replace-first (.-name file) ".logseq-pool-" "")))
                       all-files)
                 distinct)]
+     (prn :debug :all-files (map #(.-name %) all-files))
      (prn :debug :all-files-count (count (filter
                                           #(= (.-kind %) "file")
                                           all-files)))
@@ -248,10 +237,8 @@
 
   (unsafeUnlinkDB
    [_this repo]
-   (p/let [_ (close-db! repo)
-           _ (remove-vfs! repo)]
-     (swap! *opfs-pools dissoc repo)
-     nil))
+   (p/let [result (remove-vfs! repo)]
+     (close-db! repo)))
 
   (exportDB
    [_this repo]
@@ -261,7 +248,7 @@
    [this repo data]
    (when-not (string/blank? repo)
      (p/let [pool (<get-opfs-pool repo)]
-       (<import-db repo data)))))
+       (<import-db pool repo data)))))
 
 (defn init
   "web worker entry"
