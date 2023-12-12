@@ -537,8 +537,6 @@
            _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name})
            _ (route-handler/redirect-to-home!)
-           _ (db/transact! full-graph-name [(react/kv :db/type "db")
-                                            (react/kv :schema/version db-schema/version {:id -2})])
            initial-data (sqlite-create-graph/build-db-initial-data config/config-default-content)
            _ (db/transact! full-graph-name initial-data)
            _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)

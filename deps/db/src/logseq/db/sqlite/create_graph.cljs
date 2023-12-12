@@ -1,13 +1,16 @@
 (ns logseq.db.sqlite.create-graph
   "Helper fns for creating a DB graph"
   (:require [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.util :as db-property-util]
             [datascript.core :as d]))
 
 (defn build-db-initial-data
   [config-content]
-  (let [initial-files [{:block/uuid (d/squuid)
+  (let [initial-data [{:db/ident :db/type :db/type "db"}
+                      {:db/ident :schema/version :schema/version db-schema/version}]
+        initial-files [{:block/uuid (d/squuid)
                         :file/path (str "logseq/" "config.edn")
                         :file/content config-content
                         :file/last-modified-at (js/Date.)}
@@ -33,4 +36,4 @@
                                      :block/name (sqlite-util/sanitize-page-name k-name)
                                      :block/uuid (d/squuid)})])))
                             db-property/built-in-properties)]
-    (concat initial-files default-properties)))
+    (concat initial-data initial-files default-properties)))
