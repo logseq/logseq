@@ -224,6 +224,7 @@
   [buffer bare-graph-name finished-ok-handler]
   (let [graph (str config/db-version-prefix bare-graph-name)]
     (-> (p/let [_ (persist-db/<import-db graph buffer)]
+          (state/add-repo! {:url graph})
           (repo-handler/restore-and-setup-repo! graph))
         (p/then
          (fn [_result]
