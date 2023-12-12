@@ -2,8 +2,6 @@
   "Primary ns to interact with DB graphs with node.js based CLIs"
   (:require [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.sqlite.restore :as sqlite-restore]
-            [cljs-bean.core :as bean]
-            [datascript.core :as d]
             ["fs" :as fs]
             ["path" :as node-path]))
 
@@ -16,10 +14,4 @@
   "Reads a given sqlite db and returns a datascript connection of its contents.
    The sqlite db is assumed to have already been opened by sqlite-db/open-db!"
   [db-name]
-  (let [{:keys [uuid->db-id-map conn]}
-        (sqlite-restore/restore-initial-data (bean/->js (sqlite-db/get-initial-data db-name)))
-        db (sqlite-restore/restore-other-data
-                conn
-                (sqlite-db/get-other-data db-name [])
-                uuid->db-id-map)]
-    (d/conn-from-db db)))
+  (sqlite-restore/restore-initial-data (sqlite-db/get-initial-data db-name)))

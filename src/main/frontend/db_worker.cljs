@@ -71,10 +71,8 @@
       (.exportFile ^js pool path))))
 
 (defn- <import-db
-  [repo data]
-  (p/let [^js pool (<get-opfs-pool repo)]
-    (when pool
-      (.importDb ^js pool (get-repo-path repo) data))))
+  [^js pool repo data]
+  (.importDb ^js pool (get-repo-path repo) data))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
@@ -112,25 +110,24 @@
       (-restore [_ addr]
         (restore-data-from-addr repo addr)))))
 
-(defn- clean-db!
-  [repo db search]
-  (when (or db search)
-    (swap! *sqlite-conns dissoc repo)
-    (swap! *datascript-conns dissoc repo)
-    (.close ^Object db)
-    (.close ^Object search)))
+(defn- close-db-aux!
+  [repo ^Object db ^Object search]
+  (swap! *sqlite-conns dissoc repo)
+  (swap! *datascript-conns dissoc repo)
+  (swap! *opfs-pools dissoc repo)
+  (when db (.close db))
+  (when search (.close search)))
 
 (defn- close-other-dbs!
   [repo]
   (doseq [[r {:keys [db search]}] @*sqlite-conns]
     (when-not (= repo r)
-      (swap! *opfs-pools dissoc r)
-      (clean-db! r db search))))
+      (close-db-aux! r db search))))
 
 (defn- close-db!
   [repo]
   (let [{:keys [db search]} (@*sqlite-conns repo)]
-    (clean-db! repo db search)))
+    (close-db-aux! repo db search)))
 
 (defn- create-or-open-db!
   [repo]
@@ -187,18 +184,10 @@
             _ (p/all (map (fn [file] (.remove file)) files))]
       (p/all (map (fn [dir] (.remove dir)) dirs)))))
 
-(defn- <get-pool-files
-  [^js pool]
-  (.getFileNames pool))
-
 (defn- remove-vfs!
-  [repo]
-  (p/let [^js pool (<get-opfs-pool repo)]
-    (when pool
-      (p/let [files (<get-pool-files pool)
-              _ (p/all (map (fn [file] (.unlink pool file)) files))
-              _ (.wipeFiles pool)]
-        (.removeVfs ^js pool)))))
+  [^js pool]
+  (when pool
+    (.removeVfs ^js pool)))
 
 (defn- get-search-db
   [repo]
@@ -234,6 +223,7 @@
                           (string/replace-first (.-name file) ".logseq-pool-" "")))
                       all-files)
                 distinct)]
+     (prn :debug :all-files (map #(.-name %) all-files))
      (prn :debug :all-files-count (count (filter
                                           #(= (.-kind %) "file")
                                           all-files)))
@@ -267,9 +257,9 @@
 
   (unsafeUnlinkDB
    [_this repo]
-   (p/let [_ (close-db! repo)
-           _ (remove-vfs! repo)]
-     (swap! *opfs-pools dissoc repo)
+   (p/let [pool (get-opfs-pool repo)
+           _ (close-db! repo)
+           result (remove-vfs! pool)]
      nil))
 
   (exportDB
@@ -280,7 +270,7 @@
    [this repo data]
    (when-not (string/blank? repo)
      (p/let [pool (<get-opfs-pool repo)]
-       (<import-db repo data))))
+       (<import-db pool repo data))))
 
   ;; Search
   (search-blocks

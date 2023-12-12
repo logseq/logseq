@@ -179,9 +179,8 @@
                   (str (config/get-repo-dir repo) "/" %))
                [old-path new-path])
           new-dir (path/dirname new-path)]
-      (p/do!
-       (mkdir-if-not-exists new-dir)
-       (protocol/copy! (get-fs old-path) repo old-path new-path)))))
+      (p/let [_ (mkdir-if-not-exists new-dir)]
+        (protocol/copy! (get-fs old-path) repo old-path new-path)))))
 
 
 

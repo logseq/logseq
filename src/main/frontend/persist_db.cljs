@@ -4,7 +4,8 @@
              [frontend.persist-db.protocol :as protocol]
              [promesa.core :as p]
              [frontend.state :as state]
-             [frontend.util :as util]))
+             [frontend.util :as util]
+             [frontend.config :as config]))
 
 (defonce opfs-db (browser/->InBrowser))
 
@@ -44,7 +45,9 @@
   {:pre [(<= (count repo) 56)]}
   (p/do!
    (let [current-repo (state/get-current-repo)]
-     (when (and (util/electron?) (not= repo current-repo))
+     (when (and (util/electron?)
+                (not= repo current-repo)
+                (config/db-based-graph? current-repo))
        ;; switch graph
        (<export-db current-repo {}))
      (protocol/<new (get-impl) repo))))
