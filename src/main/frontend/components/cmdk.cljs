@@ -801,7 +801,7 @@
 (rum/defc hint-button
   [text shortcut opts]
   (shui-ui/button
-    (merge {:class "hint-button [&>span:first-child]:hover:opacity-100"
+    (merge {:class "hint-button [&>span:first-child]:hover:opacity-100 opacity-40 hover:opacity-80"
             :variant :ghost
             :size  :sm}
       opts)
