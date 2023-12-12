@@ -1,4 +1,4 @@
-(ns logseq.shui.button.button-story
+(ns logseq.shui.stories.button-story
   (:require [logseq.shui.ui :as ui]
             [cljs-bean.core :as bean]
             [rum.core :as rum])

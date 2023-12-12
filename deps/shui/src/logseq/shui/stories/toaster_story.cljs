@@ -1,4 +1,4 @@
-(ns logseq.shui.toaster.toaster-story
+(ns logseq.shui.stories.toaster-story
   (:require [logseq.shui.ui :as ui]
             [logseq.shui.toaster.core :as toaster]
             [rum.core :as rum])
