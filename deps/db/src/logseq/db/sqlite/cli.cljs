@@ -1,7 +1,7 @@
 (ns ^:node-only logseq.db.sqlite.cli
   "Primary ns to interact with DB graphs with node.js based CLIs"
   (:require [logseq.db.sqlite.db :as sqlite-db]
-            [logseq.db.sqlite.restore :as sqlite-restore]
+            [logseq.db.sqlite.common-db :as sqlite-common-db]
             ["fs" :as fs]
             ["path" :as node-path]))
 
@@ -14,4 +14,7 @@
   "Reads a given sqlite db and returns a datascript connection of its contents.
    The sqlite db is assumed to have already been opened by sqlite-db/open-db!"
   [db-name]
-  (sqlite-restore/restore-initial-data (sqlite-db/get-initial-data db-name)))
+  (-> (sqlite-db/get-conn db-name)
+      deref
+      sqlite-common-db/get-initial-data
+      sqlite-common-db/restore-initial-data))
