@@ -409,8 +409,7 @@
   (get-files [_this dir]
     (get-files dir))
   (watch-dir! [_this dir _options]
-    (p/do!
-     (.unwatch mobile-util/fs-watcher)
-     (.watch mobile-util/fs-watcher (clj->js {:path dir}))))
+    (p/let [_ (.unwatch mobile-util/fs-watcher)]
+      (.watch mobile-util/fs-watcher (clj->js {:path dir}))))
   (unwatch-dir! [_this _dir]
     (.unwatch mobile-util/fs-watcher)))

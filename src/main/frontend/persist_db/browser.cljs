@@ -31,9 +31,8 @@
           worker (js/Worker. (str worker-url "?electron=" (util/electron?)))
           sqlite (Comlink/wrap worker)]
       (reset! *sqlite sqlite)
-      (-> (p/do!
-           (.init sqlite)
-           (ask-persist-permission!))
+      (-> (p/let [_ (.init sqlite)]
+            (ask-persist-permission!))
           (p/catch (fn [error]
                      (prn :debug "Can't init SQLite wasm")
                      (js/console.error error)

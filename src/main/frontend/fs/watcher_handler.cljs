@@ -173,20 +173,19 @@
                 db-content (if-not db-empty?
                              (db/get-file repo file-rpath)
                              "")]
-          (p/do!
-           (cond
-             (and file-exists?
-                  db-empty?)
-             (handle-add-and-change! repo file-rpath file-content db-content file-mtime false)
+          (p/let [_ (cond
+                      (and file-exists?
+                           db-empty?)
+                      (handle-add-and-change! repo file-rpath file-content db-content file-mtime false)
 
-             (and file-exists?
-                  (not db-empty?)
-                  (not= file-content db-content))
-             (handle-add-and-change! repo file-rpath file-content db-content file-mtime true))
+                      (and file-exists?
+                           (not db-empty?)
+                           (not= file-content db-content))
+                      (handle-add-and-change! repo file-rpath file-content db-content file-mtime true))]
 
-           (ui-handler/re-render-root!)
+            (ui-handler/re-render-root!)
 
-           [file-rpath]))))))
+            [file-rpath]))))))
 
 (defn load-graph-files!
   "This fn replaces the former initial fs watcher"
