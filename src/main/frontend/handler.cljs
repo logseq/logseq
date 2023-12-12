@@ -49,7 +49,8 @@
             [cljs-bean.core :as bean]
             [frontend.handler.test :as test]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
-            [frontend.persist-db.browser :as db-browser]))
+            [frontend.persist-db.browser :as db-browser]
+            [frontend.persist-db :as persist-db]))
 
 (defn- set-global-error-notification!
   []
@@ -246,6 +247,7 @@
                _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
                repo (or (state/get-current-repo) (:url (first repos)))
                _ (restore-and-setup! repo repos)]
+         (persist-db/run-periodically-export!)
          (when (mobile-util/native-platform?)
            (state/restore-mobile-theme!)))
        (p/catch (fn [e]

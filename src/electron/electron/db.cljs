@@ -34,7 +34,9 @@
                              ""
                              ".sqlite"
                              data
-                             {:add-desktop? false})))
+                             {:add-desktop? false
+                              :skip-backup-fn (fn [latest-backup-size]
+                                                (= latest-backup-size (.-length data)))})))
 
 (def unlinked-graphs-dir "Unlinked graphs")
 

@@ -2,7 +2,10 @@
    "Backend of DB based graph"
    (:require [frontend.persist-db.browser :as browser]
              [frontend.persist-db.protocol :as protocol]
-             [promesa.core :as p]))
+             [promesa.core :as p]
+             [frontend.config :as config]
+             [frontend.state :as state]
+             [frontend.util :as util]))
 
 (defonce opfs-db (browser/->InBrowser))
 
@@ -42,3 +45,14 @@
   {:pre [(<= (count repo) 56)]}
   (p/let [_ (protocol/<new (get-impl) repo)]
     (<export-db repo {})))
+
+(defn run-periodically-export!
+  []
+  (js/setInterval
+   (fn []
+     (when-let [repo (state/get-current-repo)]
+       (when (and (util/electron?) (config/db-based-graph? repo))
+         (println :debug :save-db-to-disk repo)
+         (<export-db repo {}))))
+   ;; every 10 minutes
+   (* 10 60 1000)))

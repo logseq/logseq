@@ -1,6 +1,5 @@
 (ns frontend.modules.outliner.pipeline
-  (:require [clojure.core.async :as async :refer [<! go]]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [datascript.core :as d]
             [frontend.config :as config]
             [frontend.db :as db]
