@@ -73,7 +73,8 @@
             [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.db.listener :as db-listener]))
+            [frontend.db.listener :as db-listener]
+            [frontend.persist-db :as persist-db]))
 
 ;; TODO: should we move all events here?
 
@@ -186,8 +187,15 @@
      (when persist?
        (when (util/electron?)
          (p/do!
-          (when (config/local-file-based-graph? current-repo)
-            (repo-handler/persist-db! current-repo persist-db-noti-m)))))
+          (cond
+            (config/db-based-graph? current-repo)
+            (persist-db/<export-db current-repo {})
+
+            (config/local-file-based-graph? current-repo)
+            (repo-handler/persist-db! current-repo persist-db-noti-m)
+
+            :else
+            nil))))
      (repo-handler/restore-and-setup-repo! graph)
      (graph-switch graph)
      state/set-state! :sync-graph/init? false)))
