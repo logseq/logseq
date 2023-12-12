@@ -181,7 +181,8 @@
   "Logic for keeping db sync when switching graphs
    Only works for electron
    graph: the target graph to switch to"
-  [graph {:keys [persist?]}]
+  [graph {:keys [persist?]
+          :or {persist? true}}]
   (let [current-repo (state/get-current-repo)]
     (p/do!
      (when persist?
@@ -201,13 +202,12 @@
      state/set-state! :sync-graph/init? false)))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (let [opts (if (false? (:persist? opts)) opts (assoc opts :persist? true))]
-    (if (or (not (false? (get @outliner-file/*writes-finished? graph)))
-            (:sync-graph/init? @state/state))
-      (graph-switch-on-persisted graph opts)
-      (notification/show!
-       "Please wait seconds until all changes are saved for the current graph."
-       :warning))))
+  (if (or (not (false? (get @outliner-file/*writes-finished? graph)))
+          (:sync-graph/init? @state/state))
+    (graph-switch-on-persisted graph opts)
+    (notification/show!
+     "Please wait seconds until all changes are saved for the current graph."
+     :warning)))
 
 (defmethod handle :graph/pull-down-remote-graph [[_ graph dir-name]]
   (if (mobile-util/native-ios?)

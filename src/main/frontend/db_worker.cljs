@@ -116,21 +116,7 @@
     (when-not (= repo r)
       (close-db! r db))))
 
-(defn- create-or-open-db!
-  [repo]
-  (when-not (get-sqlite-conn repo)
-    (p/let [pool (<get-opfs-pool repo)
-            db (new (.-OpfsSAHPoolDb pool) (get-repo-path repo))
-            storage (new-sqlite-storage repo {})]
-      (swap! *sqlite-conns assoc repo db)
-      (.exec db "PRAGMA locking_mode=exclusive")
-      (.exec db "create table if not exists kvs (addr INTEGER primary key, content TEXT)")
-      (let [conn (or (d/restore-conn storage)
-                     (d/create-conn db-schema/schema-for-db-based-graph {:storage storage}))]
-        (swap! *datascript-conns assoc repo conn)
-        nil))))
-
-(defn iter->vec [iter]
+(defn- iter->vec [iter]
   (when iter
     (p/loop [acc []]
       (p/let [elem (.next iter)]
@@ -156,6 +142,20 @@
                         current-dir-dirs
                         (rest dirs))]
             (p/recur result dirs)))))))
+
+(defn- create-or-open-db!
+  [repo]
+  (when-not (get-sqlite-conn repo)
+    (p/let [^js pool (<get-opfs-pool repo)
+            db (new (.-OpfsSAHPoolDb pool) (get-repo-path repo))
+            storage (new-sqlite-storage repo {})]
+      (swap! *sqlite-conns assoc repo db)
+      (.exec db "PRAGMA locking_mode=exclusive")
+      (.exec db "create table if not exists kvs (addr INTEGER primary key, content TEXT)")
+      (let [conn (or (d/restore-conn storage)
+                     (d/create-conn db-schema/schema-for-db-based-graph {:storage storage}))]
+        (swap! *datascript-conns assoc repo conn)
+        nil))))
 
 (comment
   (defn <remove-all-files!
@@ -211,8 +211,8 @@
 
   (createOrOpenDB
    [_this repo]
-   (close-other-dbs! repo)
-   (create-or-open-db! repo))
+   (p/let [_ (close-other-dbs! repo)]
+     (create-or-open-db! repo)))
 
   (transact
    [_this repo tx-data tx-meta]

@@ -3,7 +3,6 @@
 
    This interface uses clj data format as input."
   (:require ["comlink" :as Comlink]
-            [cljs.core.async.interop :refer [p->c]]
             [frontend.persist-db.protocol :as protocol]
             [frontend.config :as config]
             [promesa.core :as p]
@@ -53,14 +52,8 @@
 (defrecord InBrowser []
   protocol/PersistentDB
   (<new [_this repo]
-    (let [^js sqlite @*sqlite]
-      (-> (.createOrOpenDB sqlite repo)
-          (p/then (fn [_result]
-                    (prn "SQLite db created or opened successfully: " repo)))
-          (p/catch (fn [error]
-                     (js/console.error error)
-                     (notification/show! [:div (str "SQLiteDB creation error: " error)] :error)
-                     nil)))))
+    (when-let [^js sqlite @*sqlite]
+      (.createOrOpenDB sqlite repo)))
 
   (<list-db [_this]
     (when-let [^js sqlite @*sqlite]
@@ -79,10 +72,9 @@
       (.unsafeUnlinkDB sqlite repo)))
 
   (<transact-data [_this repo tx-data tx-meta]
-    (when-let [^js sqlite @*sqlite]
-      (p->c
-       (p/let [_ (.transact sqlite repo (pr-str tx-data) (pr-str tx-meta))]
-         nil))))
+    (let [^js sqlite @*sqlite]
+      (p/let [_ (when sqlite (.transact sqlite repo (pr-str tx-data) (pr-str tx-meta)))]
+        nil)))
 
   (<fetch-initial-data [_this repo _opts]
     (when-let [^js sqlite @*sqlite]
@@ -96,9 +88,10 @@
   (<export-db [_this repo opts]
     (when-let [^js sqlite @*sqlite]
       (-> (p/let [data (.exportDB sqlite repo)]
-            (if (:return-data? opts)
-              data
-              (<export-db! repo data)))
+            (when data
+              (if (:return-data? opts)
+                data
+                (<export-db! repo data))))
           (p/catch (fn [error]
                      (prn :debug :save-db-error repo)
                      (js/console.error error)
