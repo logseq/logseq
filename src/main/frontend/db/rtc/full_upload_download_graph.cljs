@@ -127,7 +127,7 @@
            blocks** (outliner-pipeline/build-upsert-blocks blocks* nil db)]
        (<? (p->c (persist-db/<new repo)))
        ;; FIXME: pass tx-data tx-meta instead
-       (<? (persist-db/<transact-data repo blocks** nil))
+       (<? (p->c (persist-db/<transact-data repo blocks** nil)))
        (op-mem-layer/update-local-tx! repo t)))))
 
 
