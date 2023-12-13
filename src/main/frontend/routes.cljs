@@ -11,8 +11,7 @@
             [frontend.components.whiteboard :as whiteboard]
             [frontend.extensions.zotero :as zotero]
             [frontend.components.bug-report :as bug-report]
-            [frontend.components.user.login :as login]
-            [logseq.shui.demo :as demo-ui]))
+            [frontend.components.user.login :as login]))
 
 ;; http://localhost:3000/#?anchor=fn.1
 (def routes
@@ -90,8 +89,4 @@
 
    ["/login"
     {:name :user-login
-     :view login/page}]
-
-   ["/ui"
-    {:name :demo-ui
-     :view demo-ui/page}]])
+     :view login/page}]])
