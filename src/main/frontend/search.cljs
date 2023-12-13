@@ -6,7 +6,6 @@
             [logseq.graph-parser.config :as gp-config]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
-            [frontend.regex :as regex]
             [frontend.search.agency :as search-agency]
             [frontend.search.db :as search-db :refer [indices]]
             [frontend.search.protocol :as protocol]
@@ -42,8 +41,6 @@
 (defn clean-str
   [s]
   (string/replace (string/lower-case s) #"[\[ \\/_\]\(\)]+" ""))
-
-(def escape-str regex/escape)
 
 (defn char-array
   [s]

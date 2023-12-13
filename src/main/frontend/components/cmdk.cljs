@@ -26,7 +26,8 @@
     [logseq.graph-parser.util.block-ref :as block-ref]
     [logseq.graph-parser.util :as gp-util]
     [logseq.shui.button.v2 :as button]
-    [frontend.modules.shortcut.utils :as shortcut-utils]))
+    [frontend.modules.shortcut.utils :as shortcut-utils]
+    [frontend.util.text :as text-util]))
 
 (defn translate [t {:keys [id desc]}]
   (when id
@@ -224,6 +225,23 @@
                                       :source-page page)))))]
       (swap! !results update group        merge {:status :success :items items}))))
 
+(defn highlight-content-query
+  "Return hiccup of highlighted content FTS result"
+  [content q]
+  (when-not (or (string/blank? content) (string/blank? q))
+    [:div (loop [content content ;; why recur? because there might be multiple matches
+                 result  []]
+            (let [[b-cut hl-cut e-cut] (text-util/cut-by content "$pfts_2lqh>$" "$<pfts_2lqh$")
+                  hiccups-add [(when-not (string/blank? b-cut)
+                                 [:span b-cut])
+                               (when-not (string/blank? hl-cut)
+                                 [:mark.p-0.rounded-none hl-cut])]
+                  hiccups-add (remove nil? hiccups-add)
+                  new-result (concat result hiccups-add)]
+              (if-not (string/blank? e-cut)
+                (recur e-cut new-result)
+                new-result)))]))
+
 ;; The blocks search action uses an existing handler
 (defmethod load-results :blocks [group state]
   (let [!input (::input state)
@@ -240,7 +258,7 @@
                          (let [id (:block/uuid block)]
                            {:icon "block"
                             :icon-theme :gray
-                            :text (:block/content block)
+                            :text (highlight-content-query (:block/content block) @!input)
                             :header (block/breadcrumb {:search? true} repo id {})
                             :current-page? (when-let [page-id (:block/page block)]
                                              (= page-id (:block/uuid current-page)))

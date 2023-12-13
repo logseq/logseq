@@ -81,6 +81,21 @@
   (let [sql (str "DELETE from blocks WHERE id IN " (clj-list->sql ids))]
     (.exec db sql)))
 
+(defonce max-snippet-length 250)
+
+(defn- snippet-by
+  [content length]
+  (str (subs content 0 length) (when (> (count content) max-snippet-length) "...")))
+
+(defn- get-snippet-result
+  [snippet]
+  (let [;; Cut snippet to limited size chars for non-matched results
+        flag-highlight "$pfts_2lqh>$ "
+        snippet (if (string/includes? snippet flag-highlight)
+                  snippet
+                  (snippet-by snippet max-snippet-length))]
+    snippet))
+
 (defn- search-blocks-aux
   [db sql input page limit]
   (try
@@ -90,13 +105,15 @@
                                     :rowMode "array"})
                      (.exec db #js {:sql sql
                                     :bind #js [input limit]
-                                    :rowMode "array"}))]
-      (bean/->clj result))
+                                    :rowMode "array"}))
+            blocks (bean/->clj result)]
+      (map (fn [block]
+             (update block 3 get-snippet-result)) blocks))
     (catch :default e
       (prn :debug "Search blocks failed: ")
       (js/console.error e))))
 
-(defn- get-match-inputs
+(defn- get-match-input
   [q]
   (let [match-input (-> q
                         (string/replace " and " " AND ")
@@ -105,9 +122,8 @@
                         (string/replace " | " " OR ")
                         (string/replace " not " " NOT "))]
     (if (not= q match-input)
-      [(string/replace match-input "," "")]
-      [q
-       (str "\"" match-input "\"")])))
+      (string/replace match-input "," "")
+      (str "\"" match-input "\""))))
 
 (defn distinct-by
   [f col]
@@ -117,10 +133,15 @@
   ":page - the page to specifically search on"
   [db q {:keys [limit page]}]
   (when-not (string/blank? q)
-    (p/let [match-inputs (get-match-inputs q)
+    (p/let [match-input (get-match-input q)
             non-match-input (str "%" (string/replace q #"\s+" "%") "%")
             limit  (or limit 20)
-            select "select id, content, page from blocks_fts where "
+            ;; https://www.sqlite.org/fts5.html#the_highlight_function
+            ;; the 2nd column in blocks_fts (content)
+            ;; pfts_2lqh is a key for retrieval
+            ;; highlight and snippet only works for some matching with high rank
+            snippet-aux "snippet(blocks_fts, 1, ' $pfts_2lqh>$ ', ' $<pfts_2lqh$ ', '...', 32)"
+            select (str "select id, page, content, " snippet-aux " from blocks_fts where ")
             pg-sql (if page "page = ? and" "")
             match-sql (str select
                            pg-sql
@@ -128,16 +149,12 @@
             non-match-sql (str select
                                pg-sql
                                " content like ? limit ?")
-            results (p/all (map
-                            (fn [match-input]
-                              (search-blocks-aux db match-sql match-input page limit))
-                            match-inputs))
-            matched-result (apply concat results)
+            matched-result (search-blocks-aux db match-sql match-input page limit)
             non-match-result (search-blocks-aux db non-match-sql non-match-input page limit)
             all-result (->> (concat matched-result non-match-result)
-                            (map (fn [[id content page]]
+                            (map (fn [[id _content page snippet]]
                                    {:uuid id
-                                    :content content
+                                    :content snippet
                                     :page page})))]
       (->>
        all-result
