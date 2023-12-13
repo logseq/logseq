@@ -1,7 +1,10 @@
 (ns logseq.db.sqlite.common-db
   "Common sqlite db fns for browser and node"
   (:require [datascript.core :as d]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.frontend.schema :as db-schema]
+            ["path" :as node-path]
+            [clojure.string :as string]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn get-initial-data
   "Returns initial data as vec of datoms"
@@ -24,3 +27,17 @@
   [storage]
   (or (d/restore-conn storage)
       (d/create-conn db-schema/schema-for-db-based-graph {:storage storage})))
+
+(defn sanitize-db-name
+  [db-name]
+  (-> db-name
+      (string/replace sqlite-util/db-version-prefix "")
+      (string/replace "/" "_")
+      (string/replace "\\" "_")
+      (string/replace ":" "_")))  ;; windows
+
+(defn get-db-full-path
+  [graphs-dir db-name]
+  (let [db-name' (sanitize-db-name db-name)
+        graph-dir (node-path/join graphs-dir db-name')]
+    [db-name' (node-path/join graph-dir "db.sqlite")]))
