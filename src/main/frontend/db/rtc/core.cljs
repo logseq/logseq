@@ -247,7 +247,7 @@
         (transact-db! :upsert-whiteboard-block repo [(whiteboard-handler/shape->block shape page-name)])))))
 
 (defn- update-block-attrs
-  [repo block-uuid {:keys [parents] :as op-value}]
+  [repo block-uuid {:keys [parents properties] :as op-value}]
   (let [key-set (set/intersection
                  (conj rtc-const/general-attr-set :content)
                  (set (keys op-value)))]
@@ -255,9 +255,14 @@
       (let [first-remote-parent (first parents)
             local-parent (db/pull repo '[*] [:block/uuid first-remote-parent])
             whiteboard-page-block? (whiteboard-page-block? local-parent)]
-        (if whiteboard-page-block?
+        (cond
+          (and whiteboard-page-block? properties)
           (upsert-whiteboard-block repo op-value)
 
+          whiteboard-page-block?
+          nil
+
+          :else
           (let [b-ent (db/pull repo '[*] [:block/uuid block-uuid])
                 new-block
                 (cond-> (db/pull repo '[*] (:db/id b-ent))
