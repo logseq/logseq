@@ -80,12 +80,16 @@
 
 (defn get-accent-color
   []
-  (when-let [hsl-color (some-> js/document.documentElement
-                       (js/getComputedStyle)
-                       (.getPropertyValue "--lx-accent-09")
-                       (str/replace "hsl(" "")
-                       (str/replace ")" "")
-                       (str/split ","))]
-    (when-let [hsl-color (and (not (str/blank? (first hsl-color)))
-                           (map js/parseFloat hsl-color))]
-      (apply util/hsl2hex hsl-color))))
+  (when-let [color (some-> js/document.documentElement
+                     (js/getComputedStyle)
+                     (.getPropertyValue "--lx-accent-09"))]
+    (when-not (str/blank? color)
+      (if (str/starts-with? color "#")
+        color
+        (let [hsl-color (some-> color
+                          (str/replace "hsl(" "")
+                          (str/replace ")" "")
+                          (str/split ","))]
+          (when-let [hsl-color (and (not (str/blank? (first hsl-color)))
+                                 (map js/parseFloat hsl-color))]
+            (apply util/hsl2hex hsl-color)))))))

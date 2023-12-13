@@ -58,8 +58,7 @@
 
      [:div.ctls.flex.items-center
 
-      [:div.mt-1.sm:mt-0.sm:col-span-2
-       {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
+      [:div.mt-1.sm:mt-0.sm:col-span-2.flex.gap-4.items-center.flex-wrap
        [:div (cond
                (mobile-util/native-android?)
                (ui/button
