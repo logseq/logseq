@@ -6,25 +6,14 @@
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [logseq.db.sqlite.util :as sqlite-util]
             ;; FIXME: datascript.core has to come before datascript.storage or else nbb fails
+            #_:clj-kondo/ignore
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
             [goog.object :as gobj]
             [clojure.edn :as edn]))
 
-;; sqlite databases
-(defonce databases (atom nil))
-;; datascript conns
-(defonce conns (atom nil))
-
 ;; Reference same sqlite default class in cljs + nbb without needing .cljc
 (def sqlite (if (find-ns 'nbb.core) (aget sqlite3 "default") sqlite3))
-
-(defn close!
-  []
-  (when @databases
-    (doseq [[_ database] @databases]
-      (.close database))
-    (reset! databases nil)))
 
 (defn sanitize-db-name
   [db-name]
@@ -33,10 +22,6 @@
       (string/replace "/" "_")
       (string/replace "\\" "_")
       (string/replace ":" "_"))) ;; windows
-
-(defn get-conn
-  [repo]
-  (get @conns (sanitize-db-name repo)))
 
 (defn get-db-full-path
   [graphs-dir db-name]
@@ -83,22 +68,13 @@
         (edn/read-string content)))))
 
 (defn open-db!
+  "For a given database name, opens a sqlite db connection for it, creates
+  needed sqlite tables if not created and returns a datascript connection that's
+  connected to the sqlite db"
   [graphs-dir db-name]
-  (let [[db-sanitized-name db-full-path] (get-db-full-path graphs-dir db-name)
+  (let [[_db-sanitized-name db-full-path] (get-db-full-path graphs-dir db-name)
         db (new sqlite db-full-path nil)]
     (sqlite-common-db/create-kvs-table! db)
-    (swap! databases assoc db-sanitized-name db)
     (let [storage (new-sqlite-storage db)
           conn (sqlite-common-db/get-storage-conn storage)]
-      (swap! conns assoc db-sanitized-name conn)))
-  nil)
-
-;; TODO: Remove as it looks unused
-(defn transact!
-  [repo tx-data tx-meta]
-  (when-let [conn (get-conn repo)]
-    (try
-      (d/transact! conn tx-data tx-meta)
-      (catch :default e
-        (prn :debug :error)
-        (js/console.error e)))))
+      conn)))

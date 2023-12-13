@@ -7,8 +7,6 @@
             [logseq.db.sqlite.db :as sqlite-db]
             [electron.backup-file :as backup-file]))
 
-(def close! sqlite-db/close!)
-
 (defn get-graphs-dir
   []
   (let [path (.getPath ^object app "home")]

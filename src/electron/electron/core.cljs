@@ -308,7 +308,6 @@
 (defn main []
   (if-not (.requestSingleInstanceLock app)
     (do
-      (db/close!)
       (search/close!)
       (.quit app))
     (let [privileges {:standard        true
@@ -338,7 +337,6 @@
                                      (logger/debug "window-all-closed" "Quitting...")
                                      (try
                                        (fs-watcher/close-watcher!)
-                                       (db/close!)
                                        (search/close!)
                                        (catch :default e
                                          (logger/error "window-all-closed" e)))

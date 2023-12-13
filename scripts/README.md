@@ -45,7 +45,5 @@ Created graph schema!
 
 #### Update graph scripts
 
-For database graphs, it is possible to update graphs with the
-`logseq.outliner.cli.persist-graph`.
-ns. This ns makes it easy to write scripts that update graphs using datascript
-and logseq's schema. TODO
+For database graphs, it is recommended to use
+`logseq.outliner.cli.pipeline/add-listener!` when updating graphs.  TODO
