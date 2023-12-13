@@ -373,7 +373,7 @@
                         (some-> (js/document.querySelector ".cp__plugins-page") (.focus))
                         (reset! *search-key nil))))
      :on-change   #(let [^js target (.-target %)]
-                     (reset! *search-key (util/trim-safe (.-value target))))
+                     (reset! *search-key (some-> (.-value target) (string/triml))))
      :value       (or search-key "")}]])
 
 (rum/defc panel-tab-developer
