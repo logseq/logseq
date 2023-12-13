@@ -8,7 +8,6 @@
             [frontend.config :as config]
             [frontend.util :as util]
             ["fuse.js" :as fuse]
-            [datascript.impl.entity :as e]
             [frontend.handler.file-based.property.util :as property-util]))
 
 ;; Notice: When breaking changes happen, bump version in src/electron/electron/search.cljs
@@ -60,8 +59,7 @@
 (defn block->index
   "Convert a block to the index for searching"
   [{:block/keys [uuid page content properties format]
-    :or {format :markdown}
-    :as block}]
+    :or {format :markdown}}]
   (let [repo (state/get-current-repo)]
     (when-not (> (count content) (max-len))
       (when-not (and (string/blank? content)
@@ -69,9 +67,8 @@
         (let [db-based? (config/db-based-graph? repo)
               content (if db-based? content
                           (property-util/remove-built-in-properties format content))
-              m {:id (:db/id block)
-                 :uuid (str uuid)
-                 :page (if (or (map? page) (e/entity? page)) (:db/id page) page)
+              m {:id (str uuid)
+                 :page (str (:block/uuid page))
                  :content (sanitize content)}
               m' (cond-> m
                    (and db-based? (seq properties))
@@ -105,3 +102,10 @@
                                   :minMatchCharLength 1}))]
       (swap! indices assoc-in [repo :pages] indice)
       indice)))
+
+(defn build-blocks-indice
+  []
+  (->> (db/get-all-block-contents)
+       (map block->index)
+       (remove nil?)
+       (bean/->js)))

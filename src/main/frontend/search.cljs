@@ -220,10 +220,12 @@
                                blocks-to-add-set)]
       {:blocks-to-remove     (->>
                               (map #(d/entity db-before %) blocks-to-remove-set)
-                              (remove nil?))
+                              (remove nil?)
+                              (remove db-model/hidden-page?))
        :blocks-to-add        (->>
                               (map #(d/entity db-after %) blocks-to-add-set')
-                              (remove nil?))})))
+                              (remove nil?)
+                              (remove db-model/hidden-page?))})))
 
 (defn- get-direct-blocks-and-pages
   [tx-report]
@@ -234,40 +236,38 @@
                   (contains? #{:block/uuid :block/name :block/original-name :block/content :block/properties :block/schema} (:a datom)))
                 data)]
     (when (seq datoms)
-      (let [{:keys [blocks-to-remove blocks-to-add]} (get-blocks-from-datoms-impl tx-report datoms)]
-        {:pages-to-remove  (filter :block/name blocks-to-remove)
-         :pages-to-add     (filter :block/name blocks-to-add)
-         :blocks-to-remove (remove :block/name blocks-to-remove)
-         :blocks-to-add    (remove :block/name blocks-to-add)}))))
+      (get-blocks-from-datoms-impl tx-report datoms))))
 
 ;; TODO merge with logic in `invoke-hooks` when feature and test is sufficient
 (defn sync-search-indice!
   [repo tx-report]
-  (let [{:keys [pages-to-add pages-to-remove
-                blocks-to-add blocks-to-remove]} (get-direct-blocks-and-pages tx-report) ;; directly modified block & pages
-        pages-to-add' (remove (comp db-model/hidden-page? :name) pages-to-add)]
+  (let [{:keys [blocks-to-add blocks-to-remove]} (get-direct-blocks-and-pages tx-report)]
+    ;; TODO: remove this once we have fuzzy search support on SQLite
     ;; update page title indice
-    (when (or (seq pages-to-add') (seq pages-to-remove))
-      (swap! search-db/indices update-in [repo :pages]
-             (fn [indice]
-               (when indice
-                 (doseq [page-entity pages-to-remove]
-                   (.remove indice
-                            (fn [page]
-                              (= (:block/name page-entity)
-                                 (util/safe-page-name-sanity-lc (gobj/get page "original-name"))))))
-                 (when (seq pages-to-add')
-                   (doseq [page pages-to-add']
+    (let [pages-to-add (filter :block/name blocks-to-add)
+          pages-to-remove (filter :block/name blocks-to-remove)]
+      (when (or (seq pages-to-add) (seq pages-to-remove))
+        (swap! search-db/indices update-in [repo :pages]
+               (fn [indice]
+                 (when indice
+                   (doseq [page-entity pages-to-remove]
+                     (.remove indice
+                              (fn [page]
+                                (= (:block/name page-entity)
+                                   (util/safe-page-name-sanity-lc (gobj/get page "original-name"))))))
+                   (doseq [page pages-to-add]
                      (.add indice (bean/->js (search-db/original-page-name->index
                                               (or (:block/original-name page)
-                                                  (:block/name page))))))))
-               indice)))
+                                                  (:block/name page))))))
+                   indice)))))
 
     ;; update block indice
     (when (or (seq blocks-to-add) (seq blocks-to-remove))
-      (transact-blocks! repo
-                        {:blocks-to-remove-set (set (map :db/id blocks-to-remove))
-                         :blocks-to-add        (remove nil? (map search-db/block->index blocks-to-add))}))))
+      (let [blocks-to-add (remove nil? (map search-db/block->index blocks-to-add))
+            blocks-to-remove (set (map (comp str :block/uuid) blocks-to-remove))]
+        (transact-blocks! repo
+                          {:blocks-to-remove-set blocks-to-remove
+                           :blocks-to-add        blocks-to-add})))))
 
 (defn rebuild-indices!
   ([]
@@ -276,9 +276,9 @@
    (when repo
      (when-let [engine (get-engine repo)]
        (let [page-titles (search-db/make-pages-title-indice!)]
-         (p/let [blocks (protocol/rebuild-blocks-indice! engine)]
+         (p/let [_ (protocol/rebuild-blocks-indice! engine)]
            (let [result {:pages         page-titles ;; TODO: rename key to :page-titles
-                         :blocks        blocks}]
+                         }]
              (swap! indices assoc repo result)
              indices)))))))
 
