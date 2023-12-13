@@ -5,7 +5,7 @@
             [cljs.cache :as cache]
             [clojure.edn :as edn]
             [datascript.core :as d]
-            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.common-db :as sqlite-common-db]
             [shadow.cljs.modern :refer [defclass]]
             [datascript.transit :as dt]
             ["@logseq/sqlite-wasm" :default sqlite3InitModule]
@@ -140,14 +140,13 @@
       (swap! *sqlite-conns assoc repo {:db db
                                        :search search-db})
       (.exec db "PRAGMA locking_mode=exclusive")
-      (.exec db "create table if not exists kvs (addr INTEGER primary key, content TEXT)")
+      (sqlite-common-db/create-kvs-table! db)
       (search/create-tables-and-triggers! search-db)
-      (let [conn (or (d/restore-conn storage)
-                     (d/create-conn db-schema/schema-for-db-based-graph {:storage storage}))]
+      (let [conn (sqlite-common-db/get-storage-conn storage)]
         (swap! *datascript-conns assoc repo conn)
         nil))))
 
-(defn iter->vec [iter]
+(defn- iter->vec [iter]
   (when iter
     (p/loop [acc []]
       (p/let [elem (.next iter)]
@@ -232,8 +231,8 @@
 
   (createOrOpenDB
    [_this repo]
-   (close-other-dbs! repo)
-   (create-or-open-db! repo))
+   (p/let [_ (close-other-dbs! repo)]
+     (create-or-open-db! repo)))
 
   (transact
    [_this repo tx-data tx-meta]
@@ -250,16 +249,14 @@
   (getInitialData
    [_this repo]
    (when-let [conn (get-datascript-conn repo)]
-     (let [db @conn]
-       (->> (d/datoms db :eavt)
-            vec
-            dt/write-transit-str))))
+     (->> (sqlite-common-db/get-initial-data @conn)
+          dt/write-transit-str)))
 
   (unsafeUnlinkDB
    [_this repo]
    (p/let [pool (get-opfs-pool repo)
            _ (close-db! repo)
-           result (remove-vfs! pool)]
+           _result (remove-vfs! pool)]
      nil))
 
   (exportDB

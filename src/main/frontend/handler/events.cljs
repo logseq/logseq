@@ -73,7 +73,8 @@
             [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.db.listener :as db-listener]))
+            [frontend.db.listener :as db-listener]
+            [frontend.persist-db :as persist-db]))
 
 ;; TODO: should we move all events here?
 
@@ -180,26 +181,33 @@
   "Logic for keeping db sync when switching graphs
    Only works for electron
    graph: the target graph to switch to"
-  [graph {:keys [persist?]}]
+  [graph {:keys [persist?]
+          :or {persist? true}}]
   (let [current-repo (state/get-current-repo)]
     (p/do!
      (when persist?
        (when (util/electron?)
          (p/do!
-          (when (config/local-file-based-graph? current-repo)
-            (repo-handler/persist-db! current-repo persist-db-noti-m)))))
+          (cond
+            (config/db-based-graph? current-repo)
+            (persist-db/<export-db current-repo {})
+
+            (config/local-file-based-graph? current-repo)
+            (repo-handler/persist-db! current-repo persist-db-noti-m)
+
+            :else
+            nil))))
      (repo-handler/restore-and-setup-repo! graph)
      (graph-switch graph)
      state/set-state! :sync-graph/init? false)))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (let [opts (if (false? (:persist? opts)) opts (assoc opts :persist? true))]
-    (if (or (not (false? (get @outliner-file/*writes-finished? graph)))
-            (:sync-graph/init? @state/state))
-      (graph-switch-on-persisted graph opts)
-      (notification/show!
-       "Please wait seconds until all changes are saved for the current graph."
-       :warning))))
+  (if (or (not (false? (get @outliner-file/*writes-finished? graph)))
+          (:sync-graph/init? @state/state))
+    (graph-switch-on-persisted graph opts)
+    (notification/show!
+     "Please wait seconds until all changes are saved for the current graph."
+     :warning)))
 
 (defmethod handle :graph/pull-down-remote-graph [[_ graph dir-name]]
   (if (mobile-util/native-ios?)

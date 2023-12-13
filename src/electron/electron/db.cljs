@@ -34,7 +34,9 @@
                              ""
                              ".sqlite"
                              data
-                             {:add-desktop? false})))
+                             {:add-desktop? false
+                              :skip-backup-fn (fn [latest-backup-size]
+                                                (= latest-backup-size (.-length data)))})))
 
 (def unlinked-graphs-dir "Unlinked graphs")
 
@@ -51,19 +53,3 @@
     (when (fs/existsSync path)
       (fs/ensureDirSync unlinked)
       (fs/moveSync path new-path'))))
-
-(comment
-  (defn open-db!
-    [db-name]
-    (let [graphs-dir (get-graphs-dir)]
-      (try (sqlite-db/open-db! graphs-dir db-name)
-           (catch :default e
-             (js/console.error e)
-             (logger/error (str e ": " db-name))
-             ;; (fs/unlinkSync db-full-path)
-             ))))
-
-  (defn new-db!
-    [db-name]
-    (ensure-graph-dir! db-name)
-    (open-db! db-name)))

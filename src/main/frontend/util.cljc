@@ -1552,15 +1552,18 @@ Arg *stop: atom, reset to true to stop the loop"
            (string/ends-with? s "]]")))))
 #?(:cljs
    (defn parse-params
-     "Parse URL parameters into a hashmap"
+     "Parse URL parameters in hash(fragment) into a hashmap"
      []
      (if node-test?
        {}
-       (->> js/window
-           (.-location)
-           (.-search)
-           (new js/URLSearchParams)
-           (seq)
-           (js->clj)
-           (into {})
-           (walk/keywordize-keys)))))
+       (when-let [fragment (-> js/window
+                               (.-location)
+                               (.-hash)
+                               not-empty)]
+         (when (string/starts-with? fragment "#/?")
+           (->> (subs fragment 2)
+                (new js/URLSearchParams)
+                (seq)
+                (js->clj)
+                (into {})
+                (walk/keywordize-keys)))))))

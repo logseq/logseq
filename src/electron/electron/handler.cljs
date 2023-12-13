@@ -549,10 +549,6 @@
   (logger/info ::quick-and-install)
   (.quitAndInstall autoUpdater))
 
-(defmethod handle :graphUnlinked [^js _win [_ repo]]
-  (doseq [window (win/get-all-windows)]
-    (utils/send-to-renderer window "graphUnlinked" (bean/->clj repo))))
-
 (defmethod handle :graphHasOtherWindow [^js win [_ graph]]
   (let [dir (utils/get-graph-dir graph)]
     (win/graph-has-other-windows? win dir)))
