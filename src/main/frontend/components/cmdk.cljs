@@ -786,7 +786,7 @@
 (rum/defcs tip <
   {:init (fn [state]
            (assoc state ::rand-tip (rand-tip)))}
-  [inner-state state context]
+  [inner-state state]
   (let [filter @(::filter state)]
     (cond
       filter
@@ -833,7 +833,7 @@
        [:div.text-sm.leading-6
         [:div.flex.flex-row.gap-1.items-center
          [:div.font-medium.text-gray-12 "Tip:"]
-         (tip state nil)]]
+         (tip state)]]
 
        [:div.gap-2.hidden.md:flex {:style {:margin-right -6}}
         (case action
