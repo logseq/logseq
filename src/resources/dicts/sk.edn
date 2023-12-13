@@ -197,11 +197,6 @@
 
  :new-graph                                        "Pridať nový graf"
  :graph                                            "Graf"
- :graph/persist                                    "Logseq synchronizuje interný stav, počkajte prosím niekoľko sekúnd."
- :graph/persist-error                              "Synchronizácia interného stavu zlyhala."
- :graph/save                                       "Ukladá sa..."
- :graph/save-success                               "Úspešne uložené"
- :graph/save-error                                 "Uloženie zlyhalo"
  :graph/all-graphs                                 "Všetky grafy"
  :export-graph                                     "Exportovať graf"
  :export-page                                      "Exportovať stránku"

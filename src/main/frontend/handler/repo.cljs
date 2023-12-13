@@ -442,27 +442,6 @@
           (route-handler/redirect-to-home!)
           500))))))
 
-(defn persist-db!
-  ([]
-   (persist-db! {}))
-  ([handlers]
-   (persist-db! (state/get-current-repo) handlers))
-  ([repo {:keys [before on-success on-error]}]
-   (->
-    (p/do!
-     (when before
-       (before))
-     (db-listener/persist! repo)
-     (when on-success
-       (on-success)))
-    (p/catch (fn [error]
-               (js/console.error error)
-               (state/pub-event! [:capture-error
-                                  {:error error
-                                   :payload {:type :db/persist-failed}}])
-               (when on-error
-                 (on-error error)))))))
-
 (defn get-repos
   []
   (p/let [nfs-dbs (db-persist/get-all-graphs)

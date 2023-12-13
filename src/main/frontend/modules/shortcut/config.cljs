@@ -427,9 +427,6 @@
                                              :inactive (not config/db-graph-enabled?)
                                              :binding false}
 
-   :graph/save                              {:fn      #(state/pub-event! [:graph/save])
-                                             :file-graph? true
-                                             :binding []}
 
    :graph/re-index                          {:fn      (fn []
                                                         (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
@@ -674,7 +671,6 @@
           :graph/remove
           :graph/add
           :graph/db-add
-          :graph/save
           :graph/re-index
           :editor/cycle-todo
           :editor/up
@@ -919,7 +915,6 @@
      :graph/open
      :graph/remove
      :graph/add
-     :graph/save
      :graph/re-index
      :sidebar/close-top
      :sidebar/clear

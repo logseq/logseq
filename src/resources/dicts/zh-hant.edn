@@ -206,11 +206,6 @@
 
  :new-graph "新圖表"
  :graph "圖表"
- :graph/persist "Logseq 正在同步網路資料，請稍候。"
- :graph/persist-error "網路同步狀態異常。"
- :graph/save "正在儲存..."
- :graph/save-success "儲存成功。"
- :graph/save-error "儲存失敗。"
  :graph/all-graphs "所有圖表"
  :export "匯出"
  :export-graph "匯出圖表"

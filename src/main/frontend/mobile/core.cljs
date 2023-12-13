@@ -12,8 +12,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [cljs-bean.core :as bean]
-            [frontend.config :as config]
-            [frontend.handler.repo :as repo-handler]))
+            [frontend.config :as config]))
 
 (def *init-url (atom nil))
 ;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
@@ -113,8 +112,7 @@
   (when (state/get-current-repo)
     (let [is-active? (.-isActive state)]
       (when-not is-active?
-        (editor-handler/save-current-block!)
-        (repo-handler/persist-db!))
+        (editor-handler/save-current-block!))
       (state/set-mobile-app-state-change is-active?))))
 
 (defn- general-init
