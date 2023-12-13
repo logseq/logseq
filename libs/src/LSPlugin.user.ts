@@ -4,7 +4,7 @@ import {
   mergeSettingsWithSchema,
   PluginLogger,
   safeSnakeCase,
-  safetyPathJoin,
+  safetyPathJoin, normalizeKeyStr,
 } from './helpers'
 import { LSPluginCaller } from './LSPlugin.caller'
 import * as callableAPIs from './callable.apis'
@@ -77,12 +77,21 @@ function registerSimpleCommand (
   },
   action: SimpleCommandCallback
 ) {
+  const { key, label, desc, palette, keybinding, extras } = opts
+
   if (typeof action !== 'function') {
+    this.logger.error(`${key || label}: command action should be function.`)
     return false
   }
 
-  const { key, label, desc, palette, keybinding, extras } = opts
-  const eventKey = `SimpleCommandHook${key}${++registeredCmdUid}`
+  const normalizedKey = normalizeKeyStr(key)
+
+  if (!normalizedKey) {
+    this.logger.error(`${label}: command key is required.`)
+    return false
+  }
+
+  const eventKey = `SimpleCommandHook${normalizedKey}${++registeredCmdUid}`
 
   this.Editor['on' + eventKey](action)
 
@@ -92,7 +101,7 @@ function registerSimpleCommand (
       this.baseInfo.id,
       // [cmd, action]
       [
-        { key, label, type, desc, keybinding, extras },
+        { key: normalizedKey, label, type, desc, keybinding, extras },
         ['editor/hook', eventKey],
       ],
       palette,
@@ -171,7 +180,7 @@ const app: Partial<IAppProxy> = {
 
     const { binding } = keybinding
     const group = '$shortcut$'
-    const key = group + safeSnakeCase(binding)
+    const key = opts.key || (group + safeSnakeCase(binding?.toString()))
 
     return registerSimpleCommand.call(
       this,
