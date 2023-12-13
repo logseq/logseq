@@ -258,17 +258,12 @@
     (profile
      "Save block: "
      (let [original-block (db/entity (:db/id block))
-           original-uuid (:block/uuid original-block)
            original-props (:block/properties original-block)
-           uuid-changed? (not= (:block/uuid block) original-uuid)
            block' (-> (wrap-parse-block block)
                       ;; :block/uuid might be changed when backspace/delete
                       ;; a block that has been refed
                       (assoc :block/uuid (:block/uuid block)))
-           opts' (merge opts (cond-> {:outliner-op :save-block}
-                               uuid-changed?
-                               (assoc :uuid-changed {:from (:block/uuid block)
-                                                     :to original-uuid})))]
+           opts' (assoc opts :outliner-op :save-block)]
 
        (let [{:keys [tx-data]}
              (outliner-tx/transact!
@@ -809,7 +804,6 @@
                          (delete-block-fn prev-block)
                          (save-block! repo block new-content {:editor/op :delete})
                          (outliner-core/save-block! {:db/id (:db/id block)
-                                                     :block/uuid (:block/uuid block)
                                                      :block/parent (:db/id (:block/parent prev-block))
                                                      :block/left (or (:db/id (:block/left prev-block))
                                                                      (:db/id (:block/parent prev-block)))})
@@ -2694,22 +2688,24 @@
                                     (drawer/remove-logbook)))
                           (str value "" (:block/content next-block)))
             repo (state/get-current-repo)
-            edit-block' (if next-block-has-refs?
-                          (assoc edit-block
-                                 :block/uuid (:block/uuid next-block))
-                          edit-block)
-            new-properties (merge
-                            (:block/properties (db/entity (:db/id next-block)))
-                            (:block/properties (db/entity (:db/id edit-block))))]
+            delete-block (if next-block-has-refs? edit-block next-block)
+            keep-block (if next-block-has-refs? next-block edit-block)]
         (outliner-tx/transact!
          {:outliner-op :delete-blocks
           :concat-data {:last-edit-block (:block/uuid edit-block)
                         :end? true}}
-         (delete-block-aux! next-block false)
-         (save-block! repo edit-block' new-content {:editor/op :delete})
+         (delete-block-aux! delete-block false)
+         (save-block! repo keep-block new-content {:editor/op :delete})
+         (when next-block-has-refs?
+           (outliner-core/save-block! {:db/id (:db/id keep-block)
+                                       :block/left (:db/id (:block/left delete-block))}))
          (when db-based?
-           (outliner-core/save-block! {:db/id (:db/id edit-block)
-                                       :block/properties new-properties})))
+           (let [new-properties (merge
+                                 (:block/properties (db/entity (:db/id edit-block)))
+                                 (:block/properties (db/entity (:db/id next-block))))]
+             (when-not (= new-properties (:block/properties keep-block))
+               (outliner-core/save-block! {:db/id (:db/id keep-block)
+                                           :block/properties new-properties})))))
         (let [block (if next-block-has-refs? next-block edit-block)]
           (edit-block! block current-pos nil))))))
 

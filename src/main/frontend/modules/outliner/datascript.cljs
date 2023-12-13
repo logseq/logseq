@@ -80,39 +80,10 @@
   [tx-report]
   (get-in tx-report [:tempids :db/current-tx]))
 
-(defn update-block-refs
-  [txs opts]
-  (if-let [changed (:uuid-changed opts)]
-    (let [{:keys [from to]} changed
-          from-e (db/entity [:block/uuid from])
-          to-e (db/entity [:block/uuid to])
-          from-id (:db/id from-e)
-          to-id (:db/id to-e)
-          from-refs (:block/_refs from-e)
-          from-path-refs (:block/_path-refs from-e)
-          to-refs (:block/_refs to-e)
-          from-refs-txs (mapcat (fn [ref]
-                                  (let [id (:db/id ref)]
-                                    [[:db/retract id :block/refs from-id]
-                                     [:db/add id :block/refs to-id]])) from-refs)
-          from-path-refs-txs (mapcat (fn [ref]
-                                       (let [id (:db/id ref)]
-                                         [[:db/retract id :block/path-refs from-id]
-                                          [:db/add id :block/path-refs to-id]])) from-path-refs)
-          to-refs-txs (mapcat (fn [ref]
-                                (let [id (:db/id ref)
-                                      new-content (string/replace (:block/content ref)
-                                                                  (block-ref/->block-ref to)
-                                                                  (block-ref/->block-ref from))]
-                                  [[:db/add id :block/content new-content]])) to-refs)]
-      (concat txs from-refs-txs from-path-refs-txs to-refs-txs))
-    txs))
-
 (defn update-refs-and-macros
   "When a block is deleted, refs are updated and macros associated with the block are deleted"
   [txs repo opts]
-  (if (and (= :delete-blocks (:outliner-op opts))
-           (empty? (:uuid-changed opts)))
+  (if (= :delete-blocks (:outliner-op opts))
     (let [retracted-block-ids (->> (keep (fn [tx]
                                            (when (and (vector? tx)
                                                       (= :db.fn/retractEntity (first tx)))
@@ -146,9 +117,9 @@
           macros-tx (mapcat (fn [b]
                               ;; Only delete if last reference
                               (keep #(when (<= (count (:block/_macros (db/entity repo (:db/id %))))
-                                                   1)
-                                           (vector :db.fn/retractEntity (:db/id %)))
-                                        (:block/macros b)))
+                                               1)
+                                       (vector :db.fn/retractEntity (:db/id %)))
+                                    (:block/macros b)))
                             retracted-blocks)]
       (when (seq retracted-tx')
         (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)]
@@ -179,16 +150,12 @@
         txs (map (fn [m]
                    (if (map? m)
                      (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                               :block/title :block/body :block/level :block/container :db/other-tx
-                               :block/unordered)
+                             :block/title :block/body :block/level :block/container :db/other-tx
+                             :block/unordered)
                      m)) txs)
         txs (remove-nil-from-transaction txs)
         txs (cond-> txs
-              (:uuid-changed opts)
-              (update-block-refs opts)
-
-              (and (= :delete-blocks (:outliner-op opts))
-                   (empty? (:uuid-changed opts)))
+              (= :delete-blocks (:outliner-op opts))
               (update-refs-and-macros repo opts)
 
               true
