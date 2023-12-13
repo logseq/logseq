@@ -4,7 +4,8 @@
             [frontend.search.protocol :as protocol]
             [promesa.core :as p]
             [frontend.persist-db.browser :as browser]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.search.db :as search-db]))
 
 (defonce *sqlite browser/*sqlite)
 
@@ -15,13 +16,18 @@
       (p/let [result (.search-blocks sqlite (state/get-current-repo) q (bean/->js option))
               result (bean/->clj result)]
         (keep (fn [{:keys [content uuid page]}]
-              (when-not (> (count content) (state/block-content-max-length repo))
-                {:block/uuid uuid
-                 :block/content content
-                 :block/page page})) result))
+                (when-not (> (count content) (state/block-content-max-length repo))
+                  {:block/uuid uuid
+                   :block/content content
+                   :block/page page})) result))
       (p/resolved nil)))
-  (rebuild-blocks-indice! [_this]
-    (p/resolved nil))
+  (rebuild-blocks-indice! [this]
+    (if-let [^js sqlite @*sqlite]
+      (p/let [_ (protocol/truncate-blocks! this)
+              blocks (search-db/build-blocks-indice)
+              _ (when (seq blocks)
+                  (.search-upsert-blocks sqlite repo blocks))])
+      (p/resolved nil)))
   (transact-blocks! [_this {:keys [blocks-to-remove-set
                                    blocks-to-add]}]
     (if-let [^js sqlite @*sqlite]
@@ -36,4 +42,5 @@
       (.search-truncate-tables sqlite (state/get-current-repo))
       (p/resolved nil)))
   (remove-db! [_this]
+    ;; Already removed in OPFS
     (p/resolved nil)))

@@ -5,42 +5,41 @@
             [medley.core :as medley]
             [cljs-bean.core :as bean]))
 
-;; TODO: remove id as :db/id can change
 (defn- add-blocks-fts-triggers!
   "Table bindings of blocks tables and the blocks FTS virtual tables"
   [db]
   (let [triggers [;; add
                   "CREATE TRIGGER IF NOT EXISTS blocks_ad AFTER DELETE ON blocks
                   BEGIN
-                      DELETE from blocks_fts where rowid = old.id;
+                      DELETE from blocks_fts where id = old.id;
                   END;"
                   ;; insert
                   "CREATE TRIGGER IF NOT EXISTS blocks_ai AFTER INSERT ON blocks
                   BEGIN
-                      INSERT INTO blocks_fts (rowid, uuid, content, page)
-                      VALUES (new.id, new.uuid, new.content, new.page);
+                      INSERT INTO blocks_fts (id, content, page)
+                      VALUES (new.id, new.content, new.page);
                   END;"
                   ;; update
                   "CREATE TRIGGER IF NOT EXISTS blocks_au AFTER UPDATE ON blocks
                   BEGIN
-                      DELETE from blocks_fts where rowid = old.id;
-                      INSERT INTO blocks_fts (rowid, uuid, content, page)
-                      VALUES (new.id, new.uuid, new.content, new.page);
+                      DELETE from blocks_fts where id = old.id;
+                      INSERT INTO blocks_fts (id, content, page)
+                      VALUES (new.id, new.content, new.page);
                   END;"]]
     (doseq [trigger triggers]
       (.exec db trigger))))
 
 (defn- create-blocks-table!
   [db]
+  ;; id -> block uuid, page -> page uuid
   (.exec db "CREATE TABLE IF NOT EXISTS blocks (
-                        id INTEGER PRIMARY KEY,
-                        uuid TEXT NOT NULL,
+                        id TEXT NOT NULL PRIMARY KEY,
                         content TEXT NOT NULL,
-                        page INTEGER)"))
+                        page TEXT)"))
 
 (defn- create-blocks-fts-table!
   [db]
-  (.exec db "CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(uuid, content, page)"))
+  (.exec db "CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(id, content, page)"))
 
 (defn create-tables-and-triggers!
   "Open a SQLite db for search index"
@@ -72,9 +71,8 @@
   [^Object db blocks]
   (.transaction db (fn [tx]
                      (doseq [item blocks]
-                       (.exec tx #js {:sql "INSERT INTO blocks (id, uuid, content, page) VALUES ($id, $uuid, $content, $page) ON CONFLICT (id) DO UPDATE SET (uuid, content, page) = ($uuid, $content, $page)"
+                       (.exec tx #js {:sql "INSERT INTO blocks (id, content, page) VALUES ($id, $content, $page) ON CONFLICT (id) DO UPDATE SET (content, page) = ($content, $page)"
                                       :bind #js {:$id (.-id item)
-                                                 :$uuid (.-uuid item)
                                                  :$content (.-content item)
                                                  :$page (.-page item)}})))))
 
@@ -122,7 +120,7 @@
     (p/let [match-inputs (get-match-inputs q)
             non-match-input (str "%" (string/replace q #"\s+" "%") "%")
             limit  (or limit 20)
-            select "select rowid, uuid, content, page from blocks_fts where "
+            select "select id, content, page from blocks_fts where "
             pg-sql (if page "page = ? and" "")
             match-sql (str select
                            pg-sql
@@ -137,9 +135,8 @@
             matched-result (apply concat results)
             non-match-result (search-blocks-aux db non-match-sql non-match-input page limit)
             all-result (->> (concat matched-result non-match-result)
-                            (map (fn [[id uuid content page]]
-                                   {:id id
-                                    :uuid uuid
+                            (map (fn [[id content page]]
+                                   {:uuid id
                                     :content content
                                     :page page})))]
       (->>
