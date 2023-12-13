@@ -718,21 +718,6 @@
 (defmethod handle :system/info [^js _win _]
   {:home-dir (.homedir os)})
 
-(comment
-  ;; Needs to be called first for a new graph
-  (defmethod handle :db-new [_window [_ repo]]
-    (db/new-db! repo))
-
-  ;; Needs to be called first for an existing graph
-  (defmethod handle :get-initial-data [_window [_ repo _opts]]
-    (db/open-db! repo)
-    (dt/write-transit-str (sqlite-db/get-initial-data repo)))
-
-  (defmethod handle :db-transact-data [_window [_ repo data-str]]
-    (let [{:keys [tx-data tx-meta]} (reader/read-string data-str)]
-      (sqlite-db/transact! repo tx-data tx-meta)
-      nil)))
-
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]
     (.handle ipcMain main-channel

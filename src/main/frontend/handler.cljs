@@ -247,7 +247,7 @@
                _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
                repo (or (state/get-current-repo) (:url (first repos)))
                _ (restore-and-setup! repo repos)]
-         (persist-db/run-periodically-export!)
+         (persist-db/run-export-periodically!)
          (when (mobile-util/native-platform?)
            (state/restore-mobile-theme!)))
        (p/catch (fn [e]
