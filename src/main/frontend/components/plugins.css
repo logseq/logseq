@@ -143,7 +143,7 @@
       position: relative;
 
       small.s1 {
-        left: 6px;
+        left: 8px;
         top: 6px;
       }
 
@@ -157,7 +157,7 @@
 
       .form-input {
         background-color: var(--ls-primary-background-color);
-        padding: 5px 7px 5px 22px;
+        padding: 6px 7px 5px 29px;
         opacity: .5;
 
         &:focus {
