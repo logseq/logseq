@@ -26,15 +26,6 @@
       result)
     (idb/get-item graph-name)))
 
-(defn save-graph!
-  [key value]
-  (if (util/electron?)
-    (do
-      (ipc/ipc "saveGraph" key value)
-      ;; remove cache before 0.5.5
-      (idb/remove-item! key))
-    (idb/set-batch! [{:key key :value value}])))
-
 (defn delete-graph!
   [graph]
   (let [key (db-conn/datascript-db graph)

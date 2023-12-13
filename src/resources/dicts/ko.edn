@@ -131,11 +131,6 @@
 
  :new-graph "새 그래프"
  :graph "그래프"
- :graph/persist "Logseq가 내부 상태를 동기화 중입니다. 잠시만 기다려주십시오."
- :graph/persist-error "내부 상태 동기화에 실패했습니다."
- :graph/save "저장 중..."
- :graph/save-success "저장 완료"
- :graph/save-error "저장 실패"
  :export "내보내기"
  :export-graph "그래프 내보내기"
  :export-page "페이지 내보내기"
