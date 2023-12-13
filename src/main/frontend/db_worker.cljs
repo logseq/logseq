@@ -5,7 +5,6 @@
             [cljs.cache :as cache]
             [clojure.edn :as edn]
             [datascript.core :as d]
-            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [shadow.cljs.modern :refer [defclass]]
             [datascript.transit :as dt]

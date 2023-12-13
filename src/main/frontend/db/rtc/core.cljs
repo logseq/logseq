@@ -259,7 +259,7 @@
         (transact-db! :upsert-whiteboard-block repo [(whiteboard-handler/shape->block shape page-name)])))))
 
 (defn- update-block-attrs
-  [repo block-uuid {:keys [parents properties content] :as op-value}]
+  [repo block-uuid {:keys [parents properties _content] :as op-value}]
   (let [key-set (set/intersection
                  (conj rtc-const/general-attr-set :content)
                  (set (keys op-value)))]
