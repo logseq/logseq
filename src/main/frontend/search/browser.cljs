@@ -15,11 +15,10 @@
     (if-let [^js sqlite @*sqlite]
       (p/let [result (.search-blocks sqlite (state/get-current-repo) q (bean/->js option))
               result (bean/->clj result)]
-        (keep (fn [{:keys [content uuid page]}]
-                (when-not (> (count content) (state/block-content-max-length repo))
-                  {:block/uuid uuid
-                   :block/content content
-                   :block/page page})) result))
+        (keep (fn [{:keys [content page] :as block}]
+                {:block/uuid (uuid (:uuid block))
+                 :block/content content
+                 :block/page (uuid page)}) result))
       (p/resolved nil)))
   (rebuild-blocks-indice! [this]
     (if-let [^js sqlite @*sqlite]

@@ -93,8 +93,7 @@
 (defn block-search
   [repo q option]
   (when-let [engine (get-engine repo)]
-    (let [q (util/search-normalize q (state/enable-search-remove-accents?))
-          q (if (util/electron?) q (escape-str q))]
+    (let [q (util/search-normalize q (state/enable-search-remove-accents?))]
       (when-not (string/blank? q)
         (protocol/query engine q option)))))
 
