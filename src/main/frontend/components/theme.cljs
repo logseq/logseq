@@ -15,7 +15,7 @@
             [rum.core :as rum]
             [frontend.context.i18n :refer [t]]))
 
-(rum/defc container
+(rum/defc ^:large-vars/cleanup-todo container
   [{:keys [route theme accent-color on-click current-repo nfs-granted? db-restoring?
            settings-open? sidebar-open? system-theme? sidebar-blocks-len onboarding-state preferred-language]} child]
   (let [mounted-fn (use-mounted)
