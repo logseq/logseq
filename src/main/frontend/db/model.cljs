@@ -598,10 +598,15 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-next
   "Get next block, either right sibling, or loop to find its next block."
-  [db db-id]
-  (or (get-right-sibling db db-id)
-      (let [parent-id (:db/id (:block/parent (db-utils/entity db db-id)))]
-        (get-next db parent-id))))
+  [db db-id & {:keys [skip-collapsed? init?]
+               :or {skip-collapsed? true
+                    init? true}
+               :as opts}]
+  (when-let [entity (db-utils/entity db db-id)]
+    (or (when-not (and (:block/collapsed? entity) skip-collapsed? init?)
+          (get-right-sibling db db-id))
+        (let [parent-id (:db/id (:block/parent (db-utils/entity db db-id)))]
+          (get-next db parent-id (assoc opts :init? false))))))
 
 
 (defn last-child-block?
