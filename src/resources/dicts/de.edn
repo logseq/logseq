@@ -42,7 +42,6 @@
  :new-graph "Neuen Graphen hinzufügen"
  :new-page "Neue Seite:"
  :open-a-directory "Öffne ein lokales Verzeichnis"
- :open-new-window "Neues Fenster"
  :parsing-files "Dateien analysieren"
  :port "Port"
  :re-index "Neu indizieren"

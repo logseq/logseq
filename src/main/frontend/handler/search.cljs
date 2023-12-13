@@ -32,14 +32,12 @@
                         (:db/id (db/entity repo [:block/name (util/page-name-sanity-lc page-db-id)]))
                         page-db-id)
            opts (if page-db-id (assoc opts :page (str page-db-id)) opts)]
-       (p/let [blocks (search/block-search repo q opts)
-               pages-content (search/page-content-search repo q opts)]
+       (p/let [blocks (search/block-search repo q opts)]
          (let [result (merge
                        {:blocks blocks
                         :has-more? (= limit (count blocks))}
                        (when-not page-db-id
-                         {:pages-content pages-content
-                          :pages (search/page-search q)
+                         {:pages (search/page-search q)
                           :files (search/file-search q)}))
                search-key (if more? :search/more-result :search/result)]
            (swap! state/state assoc search-key result)

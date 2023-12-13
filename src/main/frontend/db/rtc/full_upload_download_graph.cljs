@@ -119,17 +119,11 @@
   [all-blocks repo]
   (go-try
    (let [{:keys [t blocks]} all-blocks
-         conn (d/create-conn db-schema/schema-for-db-based-graph)
          blocks* (replace-db-id-with-temp-id blocks)
          blocks-with-page-id (fill-block-fields blocks*)]
-     (d/transact! conn blocks-with-page-id)
-     (let [db (d/db conn)
-           blocks*
-           (d/pull-many db '[*] (keep (fn [b] (when-let [uuid (:block/uuid b)] [:block/uuid uuid])) blocks))
-           blocks** (outliner-pipeline/build-upsert-blocks blocks* nil db)]
-       (<? (p->c (persist-db/<new repo)))
-       (<? (persist-db/<transact-data repo blocks** nil))
-       (op-mem-layer/update-local-tx! repo t)))))
+     (<? (p->c (persist-db/<new repo)))
+     (<? (p->c (persist-db/<transact-data repo blocks-with-page-id nil)))
+     (op-mem-layer/update-local-tx! repo t))))
 
 
 (defn <download-graph

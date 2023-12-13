@@ -4,7 +4,6 @@
   (:require [cljs-bean.core :as bean]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
-            [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as watcher-handler]
@@ -17,11 +16,13 @@
             [frontend.handler.user :as user]
             [frontend.handler.search :as search-handler]
             [frontend.state :as state]
+            [frontend.config :as config]
             [frontend.ui :as ui]
             [logseq.common.path :as path]
             [logseq.graph-parser.util :as gp-util]
             [promesa.core :as p]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [frontend.persist-db :as persistent-db]))
 
 (defn- safe-api-call
   "Force the callback result to be nil, otherwise, ipc calls could lead to
@@ -31,17 +32,25 @@
 
 (defn persist-dbs!
   []
-  ;; only persist current db!
-  ;; TODO rename the function and event to persist-db
-  (repo-handler/persist-db! {:before     #(ui/notify-graph-persist!)
-                             :on-success #(ipc/ipc "persistent-dbs-saved")
-                             :on-error   #(ipc/ipc "persistent-dbs-error")}))
+  (when-let [repo (state/get-current-repo)]
+    (let [error-handler (fn [error]
+                          (prn :debug :persist-db-failed :repo repo)
+                          (js/console.error error)
+                          (notification/show! error :error))]
+      (if (config/db-based-graph? repo)
+        (->
+         (p/let [_ (persistent-db/<export-db repo {})]
+           (ipc/ipc "persistent-dbs-saved"))
+         (p/catch error-handler))
+        ;; TODO: Move all file based graphs to use the above persist approach
+        (repo-handler/persist-db! {:before     ui/notify-graph-persist!
+                                   :on-success #(ipc/ipc "persistent-dbs-saved")
+                                   :on-error   error-handler})))))
 
 
 (defn listen-persistent-dbs!
   []
   (safe-api-call "persistent-dbs" (fn [_data] (persist-dbs!))))
-
 
 (defn ^:large-vars/cleanup-todo listen-to-electron!
   []
@@ -67,11 +76,6 @@
                          type (keyword type)
                          comp [:div (str payload)]]
                      (notification/show! comp type false))))
-
-  (safe-api-call "graphUnlinked"
-                 (fn [data]
-                   (let [repo (bean/->clj data)]
-                     (repo-handler/remove-repo! repo))))
 
   (safe-api-call "rebuildSearchIndice"
                  (fn [_data]
@@ -122,28 +126,6 @@
                          (route-handler/redirect-to-page! db-page-name)
                          (notification/show! (str "Open link failed. File `" file "` doesn't exist in the graph.") :error false))))))
 
-  (safe-api-call "dbsync"
-                 (fn [data]
-                   (let [{:keys [graph tx-data]} (bean/->clj data)
-                         tx-data (db/string->db (:data tx-data))]
-                     (db/transact! graph tx-data {:dbsync? true})
-                     (ui-handler/re-render-root!))))
-
-  (safe-api-call "persistGraph"
-                 ;; electron is requesting window for persisting a graph in it's db
-                 ;; fire back "broadcastPersistGraphDone" on done
-                 (fn [data]
-                   (let [repo (bean/->clj data)
-                         before-f #(ui/notify-graph-persist!)
-                         after-f #(ipc/ipc "broadcastPersistGraphDone")
-                         error-f (fn []
-                                   (after-f)
-                                   (ui/notify-graph-persist-error!))
-                         handlers {:before     before-f
-                                   :on-success after-f
-                                   :on-error   error-f}]
-                     (repo-handler/persist-db! repo handlers))))
-
   (safe-api-call "foundInPage"
                  (fn [data]
                    (let [data' (bean/->clj data)]
@@ -164,7 +146,7 @@
                  ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage
                  ;; No db cache persisting ensured. Should be handled by the caller
                  (fn [repo]
-                   (ui-handler/open-new-window! repo)))
+                   (ui-handler/open-new-window-or-tab! nil repo)))
 
   (safe-api-call "invokeLogseqAPI"
                  (fn [^js data]

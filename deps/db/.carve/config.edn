@@ -1,6 +1,5 @@
 {:paths ["src"]
  :api-namespaces [logseq.db.sqlite.db
-                  logseq.db.sqlite.restore
                   logseq.db.sqlite.rtc
                   logseq.db.sqlite.util
                   logseq.db.sqlite.cli

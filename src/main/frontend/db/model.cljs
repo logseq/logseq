@@ -141,7 +141,8 @@
 (defn get-all-page-original-names
   [repo]
   (let [db (conn/get-db repo)]
-    (->> (d/datoms db :avet :block/original-name)
+    (->>
+     (d/datoms db :avet :block/original-name)
          (map :v)
          (remove hidden-page?))))
 
@@ -227,11 +228,10 @@
   "Refresh file timestamps to DB"
   [repo path last-modified-at]
   (when (and repo path last-modified-at)
-    (when-let [conn (conn/get-db repo false)]
-      (d/transact! conn
-                   [{:file/path path
-                     :file/last-modified-at last-modified-at}]
-                   {:skip-refresh? true}))))
+    (db-utils/transact! repo
+                        [{:file/path path
+                          :file/last-modified-at last-modified-at}]
+                        {:skip-refresh? true})))
 
 (defn get-file-last-modified-at
   [repo path]
@@ -1351,19 +1351,6 @@ independent of format as format specific heading characters are stripped"
          (sort-by :block/name)
          (first))))
 
-(defonce blocks-count-cache (atom nil))
-
-(defn blocks-count
-  ([]
-   (blocks-count true))
-  ([cache?]
-   (if (and cache? @blocks-count-cache)
-     @blocks-count-cache
-     (when-let [db (conn/get-db)]
-       (let [n (count (d/datoms db :avet :block/uuid))]
-         (reset! blocks-count-cache n)
-         n)))))
-
 (defn get-all-referenced-blocks-uuid
   "Get all uuids of blocks with any back link exists."
   []
@@ -1394,12 +1381,6 @@ independent of format as format specific heading characters are stripped"
          (map get-single-block-contents)
          (remove nil?))))
 
-(defn get-all-block-avets
-  []
-  (when-let [db (conn/get-db)]
-    (->> (d/datoms db :avet :block/uuid))))
-
-;; Deprecated?
 (defn delete-blocks
   [repo-url files _delete-page?]
   (when (seq files)

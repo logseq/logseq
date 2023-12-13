@@ -293,14 +293,11 @@
     (state/close-modal!)
     (state/pub-event! [:modal/show-cards])))
 
-(defn open-new-window!
-  "Open a new Electron window.
-   No db cache persisting ensured. Should be handled by the caller."
-  ([]
-   (open-new-window! nil))
-  ([repo]
-   ;; TODO: find out a better way to open a new window with a different repo path. Using local storage for now
-   ;; TODO: also write local storage with the current repo state, to make behavior consistent
-   ;; then we can remove the `openNewWindowOfGraph` ipcMain call
-   (when (string? repo) (storage/set :git/current-repo repo))
-   (ipc/ipc "openNewWindow")))
+(defn open-new-window-or-tab!
+  "Open a new Electron window."
+  [repo target-repo]
+  (when-not (= repo target-repo)        ; TODO: remove this once we support multi-tabs OPFS access
+    (when target-repo
+      (if (util/electron?)
+       (ipc/ipc "openNewWindow" target-repo)
+       (js/window.open (str config/app-website "#/?graph=" target-repo) "_blank")))))

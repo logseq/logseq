@@ -81,34 +81,12 @@
                                   (get-db-properties-str properties)))))]
           m')))))
 
-(defn page->index
-  "Convert a page name to the index for searching (page content level)
-   Generate index based on the DB content AT THE POINT OF TIME"
-  [{:block/keys [uuid original-name] :as page}]
-  (when-let [content (some-> (:block/file page)
-                             (:file/content))]
-    (when-not (or (string/blank? original-name)
-                  (model/hidden-page? original-name))
-      (when-not (> (count content) (* (max-len) 10))
-        {:id   (:db/id page)
-         :uuid (str uuid)
-         ;; Add page name to the index
-         :content (sanitize (str "$pfts_f6ld>$ " original-name " $<pfts_f6ld$ " content))}))))
-
 (defn build-blocks-indice
   ;; TODO: Remove repo effects fns further up the call stack. db fns need standardization on taking connection
   #_:clj-kondo/ignore
   [repo]
   (->> (db/get-all-block-contents)
        (map block->index)
-       (remove nil?)
-       (bean/->js)))
-
-(defn build-pages-indice
-  [repo]
-  (->> (db/get-all-pages repo)
-       (map #(db/entity (:db/id %))) ;; get full file-content
-       (map page->index)
        (remove nil?)
        (bean/->js)))
 

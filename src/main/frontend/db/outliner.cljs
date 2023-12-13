@@ -15,7 +15,3 @@
     :in $ ?id
     :where
     [?a :block/parent ?id]])
-
-(defn del-block
-  [conn id-or-look-ref]
-  (d/transact! conn [[:db.fn/retractEntity id-or-look-ref]]))

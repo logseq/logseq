@@ -31,8 +31,8 @@
   (db-property-handler/set-block-property! repo fbid "property-1" "value 1" {})
   (db-property-handler/set-block-property! repo sbid "property-1" "value 2" {})
   (let [property (db/entity [:block/name "property-1"])]
-    (is (= (model/get-block-property-values (:block/uuid property))
-           #{[21 "value 1"] [22 "value 2"]}))))
+    (is (= (map second (model/get-block-property-values (:block/uuid property)))
+           ["value 1" "value 2"]))))
 
 (deftest get-db-property-values-test
   (db-property-handler/set-block-property! repo fbid "property-1" "1" {})

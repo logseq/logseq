@@ -9,15 +9,15 @@
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.persist-db :as persist-db]
-            [goog.object :as gobj]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.restore :as sqlite-restore]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]
             [frontend.util :as util]
             [cljs-time.core :as t]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.util :as db-property-util]))
+            [logseq.db.frontend.property.util :as db-property-util]
+            [datascript.transit :as dt]
+            [logseq.db.sqlite.common-db :as sqlite-common-db]))
 
 (defn- old-schema?
   "Requires migration if the schema version is older than db-schema/version"
@@ -55,15 +55,6 @@
                 (db-conn/reset-conn! db-conn db)))]
     (d/transact! db-conn [{:schema/version db-schema/version}])))
 
-(defn- set-unloaded-block-ids!
-  [repo data]
-  (util/profile
-   "Set unloaded-block-ids"
-   (let [unloaded-block-ids (transient #{})]
-     (doseq [b data]
-       (conj! unloaded-block-ids (gobj/get b "uuid") (gobj/get b "page_uuid")))
-     (state/set-state! [repo :restore/unloaded-blocks] (persistent! unloaded-block-ids)))))
-
 (defn- update-built-in-properties!
   [conn]
   (let [txs (mapcat
@@ -98,22 +89,28 @@
     (when (seq txs)
       (d/transact! conn txs))))
 
-(defn- restore-other-data-from-sqlite!
-  [repo data uuid->db-id-map]
-  (let [start (util/time-ms)
-        conn (db-conn/get-db repo false)
-        profiled-init-db (fn profiled-init-db [all-datoms schema]
-                           (util/profile
-                            (str "DB init! " (count all-datoms) " datoms")
-                            (d/init-db all-datoms schema)))
-        new-db (sqlite-restore/restore-other-data conn data uuid->db-id-map {:init-db-fn profiled-init-db})]
+(defn- restore-graph-from-sqlite!
+  "Load initial data from SQLite"
+  [repo]
+  (state/set-state! :graph/loading? true)
+  (p/let [start-time (t/now)
+          data (persist-db/<fetch-init-data repo)
+          _ (assert (some? data) "No data found when reloading db")
+          datoms (dt/read-transit-str data)
+          datoms-count (count datoms)
+          conn (sqlite-common-db/restore-initial-data datoms)
+          db-name (db-conn/datascript-db repo)
+          _ (swap! db-conn/conns assoc db-name conn)
+          end-time (t/now)]
 
-    (reset! conn new-db)
-
+    ;; FIXME: why not do this when creating the db?
     (update-built-in-properties! conn)
 
-    (let [end (util/time-ms)]
-      (println "[debug] load others from SQLite: " (int (- end start)) " ms."))
+    (println :restore-graph-from-sqlite!-prepare (t/in-millis (t/interval start-time end-time)) "ms"
+             " Datoms in total: " datoms-count)
+
+    ;; FIXME:
+    ;; (db-migrate/migrate attached-db)
 
     (p/let [_ (p/delay 150)]          ; More time for UI refresh
       (state/set-state! [repo :restore/unloaded-blocks] nil)
@@ -121,33 +118,6 @@
       (state/set-state! :graph/loading? false)
       (react/clear-query-state!)
       (state/pub-event! [:ui/re-render-root]))))
-
-(defn- restore-graph-from-sqlite!
-  "Load initial data from SQLite"
-  [repo]
-  (state/set-state! :graph/loading? true)
-  (p/let [start-time (t/now)
-          data (persist-db/<fetch-init-data repo)
-          {:keys [conn uuid->db-id-map journal-blocks datoms-count]}
-          (sqlite-restore/restore-initial-data data {:conn-from-datoms-fn
-                                                     (fn profiled-d-conn [& args]
-                                                       (util/profile :restore-graph-from-sqlite!-init-db (apply d/conn-from-datoms args)))})
-          db-name (db-conn/datascript-db repo)
-          _ (swap! db-conn/conns assoc db-name conn)
-          end-time (t/now)]
-    (println :restore-graph-from-sqlite!-prepare (t/in-millis (t/interval start-time end-time)) "ms"
-             " Datoms in total: " datoms-count)
-
-    ;; TODO: Store schema in sqlite
-    ;; (db-migrate/migrate attached-db)
-
-    (js/setTimeout
-     (fn []
-       (p/let [other-data (persist-db/<fetch-blocks-excluding repo (map :uuid journal-blocks))
-               _ (set-unloaded-block-ids! repo other-data)
-               _ (p/delay 10)]
-         (restore-other-data-from-sqlite! repo other-data uuid->db-id-map)))
-     100)))
 
 (defn restore-graph!
   "Restore db from serialized db cache"

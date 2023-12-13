@@ -265,12 +265,13 @@
         (string/includes? graph-name "logseq_local_")
         (string/replace-first graph-name "logseq_local_" "")))
 
-(defn get-graph-name
-  "Reverse `get-graph-dir`"
-  [graph-dir]
-  (if (= (db/get-graphs-dir) (node-path/dirname graph-dir))
-    (str sqlite-util/db-version-prefix (node-path/basename graph-dir))
-    (str "logseq_local_" graph-dir)))
+(comment
+  (defn get-graph-name
+    "Reverse `get-graph-dir`"
+    [graph-dir]
+    (if (= (db/get-graphs-dir) (node-path/dirname graph-dir))
+      (str sqlite-util/db-version-prefix (node-path/basename graph-dir))
+      (str "logseq_local_" graph-dir))))
 
 (defn decode-protected-assets-schema-path
   [schema-path]

@@ -120,7 +120,6 @@
  :delete "Slett"
  :re-index "Indekser på nytt"
  :re-index-detail "Bygg grafen på nytt"
- :open-new-window "Nytt vindu"
  :sync-from-local-files "Oppfrisk"
  :sync-from-local-files-detail "Importer endringer fra lokale filer"
  :new-graph "Legg til ny graf"
