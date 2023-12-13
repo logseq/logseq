@@ -596,6 +596,14 @@ independent of format as format specific heading characters are stripped"
                           (:db/id (:block/parent block))
                           db-id)))
 
+(defn get-next
+  "Get next block, either right sibling, or loop to find its next block."
+  [db db-id]
+  (or (get-right-sibling db db-id)
+      (let [parent-id (:db/id (:block/parent (db-utils/entity db db-id)))]
+        (get-next db parent-id))))
+
+
 (defn last-child-block?
   "The child block could be collapsed."
   [db parent-id child-id]
