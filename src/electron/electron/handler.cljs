@@ -202,13 +202,6 @@
     (bean/->js {:path path
                 :files files})))
 
-(defn- sanitize-graph-name
-  [graph-name]
-  (when graph-name
-    (-> graph-name
-        (string/replace "/" "++")
-        (string/replace ":" "+3A+"))))
-
 (defn- graph-name->path
   [graph-name]
   (when graph-name
@@ -297,36 +290,9 @@
 (defmethod handle :readGraphTxIdInfo [_win [_ root]]
   (read-txid-info! root))
 
-(defn- get-graph-path
-  [graph-name]
+(defmethod handle :deleteGraph [_window [_ graph graph-name _db-based?]]
   (when graph-name
-    (let [graph-name (sanitize-graph-name graph-name)
-          dir (get-graphs-dir)]
-      (.join node-path dir (str graph-name ".transit")))))
-
-(defn- get-serialized-graph
-  [graph-name]
-  (when graph-name
-    (when-let [file-path (get-graph-path graph-name)]
-      (when (fs/existsSync file-path)
-        (utils/read-file file-path)))))
-
-(defmethod handle :getSerializedGraph [_window [_ graph-name]]
-  (get-serialized-graph graph-name))
-
-(defmethod handle :saveGraph [_window [_ graph-name value-str]]
-  ;; NOTE: graph-name is a plain "local" for demo graph.
-  (when (and graph-name value-str (not (= "local" graph-name)))
-    (when-let [file-path (get-graph-path graph-name)]
-      (fs/writeFileSync file-path value-str))))
-
-(defmethod handle :deleteGraph [_window [_ graph graph-name db-based?]]
-  (when graph-name
-    (if (and db-based? graph)
-      (db/unlink-graph! graph)
-      (when-let [file-path (get-graph-path graph-name)]
-       (when (fs/existsSync file-path)
-         (fs-extra/removeSync file-path))))))
+    (db/unlink-graph! graph)))
 
 (defmethod handle :persistent-dbs-saved [_window _]
   (async/put! state/persistent-dbs-chan true)

@@ -388,7 +388,6 @@
  :command.graph/open                                       "Vybrať graf na otvorenie"
  :command.graph/remove                                     "Odstrániť graf"
  :command.graph/add                                        "Pridať graf"
- :command.graph/save                                       "Uložiť aktuálny graf na disk"
  :command.graph/re-index                                   "Preindexovať aktuálny graf"
  :command.command/run                                      "Spustiť príkaz GIT"
  :command.go/home                                          "Prejsť na hlavnú stránku"

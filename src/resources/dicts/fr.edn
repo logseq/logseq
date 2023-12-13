@@ -384,7 +384,6 @@
     :command.graph/open  "Sélectionner un graphe à ouvrir"
     :command.graph/re-index  "Réindexer le graphe actuel"
     :command.graph/remove  "Retirer un graphe"
-    :command.graph/save  "Enregistrer le graphe sur le disque"
     :command.pdf/close  "PDF : fermer le document PDF"
     :command.pdf/find  "PDF : rechercher du texte dans le document"
     :command.pdf/next-page  "PDF : page suivante du document en cours"

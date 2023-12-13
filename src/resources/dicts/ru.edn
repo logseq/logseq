@@ -598,7 +598,6 @@
  :command.graph/open                                   "Выберите граф для открытия"
  :command.graph/remove                                 "Удалить граф"
  :command.graph/add                                    "Добавить граф"
- :command.graph/save                                   "Сохранить текущий граф на диск"
  :command.graph/re-index                               "Переиндексировать текущий граф"
  :command.command/run                                  "Выполнить команду git"
  :command.go/home                                      "Домой"

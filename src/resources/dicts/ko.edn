@@ -384,7 +384,6 @@
  :command.graph/open                              "그래프 열기"
  :command.graph/remove                            "그래프 제거"
  :command.graph/add                               "그래프 추가"
- :command.graph/save                              "그래프 저장"
  :command.sidebar/clear                           "사이드바 클리어"
  :command.sidebar/open-today-page                 "오늘의 일지를 사이드바에서 열기"
  :command.editor/insert-youtube-timestamp         "YouTube 타임스탬프 삽입"

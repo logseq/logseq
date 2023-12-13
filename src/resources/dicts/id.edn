@@ -742,7 +742,6 @@
  :command.graph/open "Pilih grafik untuk dibuka"
  :command.graph/re-index "Reindeks grafik saat ini"
  :command.graph/remove "Hapus grafik"
- :command.graph/save "Simpan grafik saat ini ke disk"
  :command.misc/copy "Salin"
  :command.pdf/close "Pdf: Tutup dokumen pdf saat ini"
  :command.pdf/find "Pdf: Cari teks dokumen pdf saat ini"

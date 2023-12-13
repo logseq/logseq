@@ -296,7 +296,6 @@
  :command.graph/open                     "Selecteer grafiek om te openen"
  :command.graph/re-index                 "Huidige grafiek opnieuw indexeren"
  :command.graph/remove                   "Verwijder een grafiek"
- :command.graph/save                     "Huidige grafiek opslaan op schijf"
  :command.misc/copy                      "Kopieer"
  :command.pdf/close                      "Huidige pdf-viewer sluiten"
  :command.pdf/next-page                  "Volgende pagina van huidige pdf doc"

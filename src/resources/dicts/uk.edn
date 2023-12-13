@@ -458,7 +458,6 @@
  :command.graph/open                                       "Виберіть графік, яку потрібно відкрити"
  :command.graph/remove                                     "Видалити графік"
  :command.graph/add                                        "Додати графік"
- :command.graph/save                                       "Зберегти поточний графік на диск"
  :command.graph/re-index                                   "Переіндексувати поточний графік"
  :command.command/run                                      "Виконати команду GIT"
  :command.go/home                                          "Перейти на головну сторінку"

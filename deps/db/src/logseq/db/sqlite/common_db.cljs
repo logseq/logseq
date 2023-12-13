@@ -1,7 +1,6 @@
 (ns logseq.db.sqlite.common-db
   "Common sqlite db fns for browser and node"
   (:require [datascript.core :as d]
-            [logseq.db.frontend.schema :as db-schema]
             ["path" :as node-path]
             [clojure.string :as string]
             [logseq.db.sqlite.util :as sqlite-util]))
@@ -14,8 +13,8 @@
 
 (defn restore-initial-data
   "Given initial sqlite data, returns a datascript connection"
-  [datoms]
-  (d/conn-from-datoms datoms db-schema/schema-for-db-based-graph))
+  [datoms schema]
+  (d/conn-from-datoms datoms schema))
 
 (defn create-kvs-table!
   "Creates a sqlite table for use with datascript.storage if one doesn't exist"
@@ -24,9 +23,9 @@
 
 (defn get-storage-conn
   "Given a datascript storage, returns a datascript connection for it"
-  [storage]
+  [storage schema]
   (or (d/restore-conn storage)
-      (d/create-conn db-schema/schema-for-db-based-graph {:storage storage})))
+      (d/create-conn schema {:storage storage})))
 
 (defn sanitize-db-name
   [db-name]
