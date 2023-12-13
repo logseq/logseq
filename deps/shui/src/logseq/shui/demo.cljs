@@ -232,14 +232,21 @@
    [:hr]
 
    (ui/card
-     {:class "p-6 w-1/2 bg-primary/10 border-primary/40 flex items-center gap-2"}
+     {:class "p-6 w-1/2 bg-primary/10 border-primary/90 flex items-center gap-2"}
      (ui/tabler-icon
        "brand-github"
        {:size 28 :class "text-primary"})
      [:<>
-      (ui/button
-        {:variant  :outline
-         :on-click #(dialog-core/open! [:h1.text-9xl.text-center.scale-110 "🍄"])} "点击获取?")
+      (ui/tooltip-provider
+        (ui/tooltip
+          (ui/tooltip-trigger
+            (ui/button
+              {:variant  :outline
+               :on-click #(dialog-core/open! [:h1.text-9xl.text-center.scale-110 "🍄"])}
+              "点击获取?"))
+          (ui/tooltip-content
+            {:class "w-42 px-8 py-4 text-xl border-yellow-rx-08 bg-yellow-rx-07-alpha"}
+            "🍄")))
       [:span.text-2xl.text-primary.uppercase
        "logseq theme color"]])
 

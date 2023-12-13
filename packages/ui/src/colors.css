@@ -1001,6 +1001,7 @@ html {
       --lx-gray-10-alpha: var(--rx-sage-10-alpha);
       --lx-gray-11-alpha: var(--rx-sage-11-alpha);
       --lx-gray-12-alpha: var(--rx-sage-12-alpha);
+
       --ls-primary-background-color: var(--rx-sage-01);
       --ls-secondary-background-color: var(--rx-sage-02);
       --ls-tertiary-background-color: var(--rx-sage-03);

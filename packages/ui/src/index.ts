@@ -82,6 +82,8 @@ import {
   AlertDialogPortal, AlertDialogTitle,
   AlertDialogTrigger
 } from '@/components/ui/alert-dialog'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { TooltipArrow } from '@radix-ui/react-tooltip'
 
 declare global {
   var LSUI: any
@@ -166,6 +168,8 @@ const shadui = {
   AlertDialogDescription,
   AlertDialogAction,
   AlertDialogCancel,
+  Tooltip, TooltipTrigger, TooltipArrow,
+  TooltipContent, TooltipProvider
 }
 
 function setupGlobals() {

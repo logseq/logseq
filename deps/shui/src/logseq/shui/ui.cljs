@@ -26,6 +26,11 @@
 (def popover-trigger (util/lsui-wrap "PopoverTrigger"))
 (def popover-content (util/lsui-wrap "PopoverContent"))
 
+(def tooltip (util/lsui-wrap "Tooltip"))
+(def tooltip-trigger (util/lsui-wrap "TooltipTrigger"))
+(def tooltip-content (util/lsui-wrap "TooltipContent"))
+(def tooltip-provider (util/lsui-wrap "TooltipProvider"))
+
 (def card (util/lsui-wrap "Card"))
 (def card-header (util/lsui-wrap "CardHeader"))
 (def card-title (util/lsui-wrap "CardTitle"))
