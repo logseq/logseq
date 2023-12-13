@@ -24,7 +24,8 @@
    [logseq.graph-parser.property :as gp-property]
    [logseq.graph-parser.util.block-ref :as block-ref]
    [logseq.graph-parser.util.page-ref :as page-ref]
-   [promesa.core :as p])
+   [promesa.core :as p]
+   [frontend.persist-db :as persist-db])
   (:import
    [goog.string StringBuffer]))
 
@@ -396,6 +397,17 @@
           (.setAttribute anchor "href" data-str)
           (.setAttribute anchor "download" filename)
           (.click anchor))))))
+
+(defn export-repo-as-sqlite-db!
+  [repo]
+  (p/let [data (persist-db/<export-db repo {:return-data? true})
+          filename (file-name repo "sqlite")
+          url (js/URL.createObjectURL (js/Blob. #js [data]))]
+    (when-not (mobile-util/native-platform?)
+      (when-let [anchor (gdom/getElement "download-as-sqlite-db")]
+        (.setAttribute anchor "href" url)
+        (.setAttribute anchor "download" filename)
+        (.click anchor)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Export to roam json ;;

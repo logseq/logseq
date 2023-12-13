@@ -552,10 +552,10 @@
   resolved "https://registry.yarnpkg.com/@logseq/react-tweet-embed/-/react-tweet-embed-1.3.1-1.tgz#119d22be8234de006fc35c3fa2a36f85634c5be6"
   integrity sha512-9O0oHs5depCvh6ZQvwtl1xb7B80YG5rUfY10uSUat5itOlcE3IWaYYpe6p/tcHErqHWnWgkXHitAB9M29FMbQg==
 
-"@logseq/sqlite@=0.1.5":
-  version "0.1.5"
-  resolved "https://registry.yarnpkg.com/@logseq/sqlite/-/sqlite-0.1.5.tgz#c61eda74dd4493adfb22ee1099643311bdc5693a"
-  integrity sha512-MFZjXVEKxmTHnLJVYIxAloFUoGP6at2h1sUKDZfitsbtqgPnNIg1it4Rly74edSjismyif+AO8zn/AXjl3buDA==
+"@logseq/sqlite-wasm@=0.0.7":
+  version "0.0.7"
+  resolved "https://registry.yarnpkg.com/@logseq/sqlite-wasm/-/sqlite-wasm-0.0.7.tgz#c887e2e39dcf2b08b1fa4b2730bf4a9c3d8ae0ac"
+  integrity sha512-8bbAx4FW5p8JNNPjjwAMW9ZGfI8OzEmamBD6ZMupmVzHjYdHXvwG52Upinkd28p2pzmw5tpMBip9/3zVKgH6Pg==
 
 "@mapbox/node-pre-gyp@^1.0.0":
   version "1.0.11"

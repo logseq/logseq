@@ -4,7 +4,7 @@
             [electron.db :as db]
             [electron.updater :refer [init-updater] :as updater]
             [electron.utils :refer [*win mac? linux? dev? get-win-from-sender
-                                    decode-protected-assets-schema-path get-graph-name send-to-renderer]
+                                    decode-protected-assets-schema-path send-to-renderer]
              :as utils]
             [electron.url :refer [logseq-url-handler]]
             [electron.logger :as logger]
@@ -17,7 +17,6 @@
             ["os" :as os]
             ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell] :as electron]
             ["electron-deeplink" :refer [Deeplink]]
-            [electron.state :as state]
             [electron.git :as git]
             [electron.window :as win]
             [electron.exceptions :as exceptions]
@@ -187,9 +186,11 @@
                        {:role "fileMenu"
                         :submenu [{:label "New Window"
                                    :click (fn []
-                                            (p/let [graph-name (get-graph-name (state/get-graph-path))
-                                                    _ (handler/broadcast-persist-graph! graph-name)]
-                                              (handler/open-new-window!)))
+                                            ;; FIXME: Open a different graph for now
+                                            ;; (p/let [graph-name (get-graph-name (state/get-graph-path))
+                                            ;;         _ (handler/broadcast-persist-graph! graph-name)]
+                                            ;;   (handler/open-new-window!))
+                                            )
                                    :accelerator (if mac?
                                                   "CommandOrControl+N"
                                                   ;; Avoid conflict with `Control+N` shortcut to move down in the text editor on Windows/Linux

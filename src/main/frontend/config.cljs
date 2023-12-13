@@ -100,6 +100,12 @@
     "http://localhost:3000"
     (util/format "https://%s.com" app-name)))
 
+;; FIXME:
+(def app-website
+  (if dev?
+    "http://localhost:3001"
+    (util/format "https://%s.com" app-name)))
+
 (def asset-domain (util/format "https://asset.%s.com"
                                app-name))
 
@@ -374,7 +380,7 @@
   [s]
   (boolean
    (and (string? s)
-        (string/starts-with? s db-version-prefix))))
+                (string/starts-with? s db-version-prefix))))
 
 (defn get-local-asset-absolute-path
   [s]

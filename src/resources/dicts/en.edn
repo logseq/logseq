@@ -51,6 +51,7 @@
  :on-boarding/importing-desc "If they are in a JSON, EDN or Markdown format Logseq can work with them."
  :on-boarding/importing-roam-desc "Import a JSON Export of your Roam graph"
  :on-boarding/importing-lsq-desc "Import an EDN or a JSON Export of your Logseq graph"
+ :on-boarding/importing-sqlite-desc "Import an SQLite DB Export of your Logseq graph, this will create a new graph with your input name"
  :on-boarding/importing-opml-desc " Import OPML files"
  :on-boarding/main-title (fn [] ["Welcome to " [:strong "Logseq!"]])
  :on-boarding/main-desc "First you need to choose a folder where Logseq will store your thoughts, ideas, notes."
@@ -364,7 +365,6 @@
  :re-index-detail "Rebuild the graph"
  :re-index-multiple-windows-warning "You need to close the other windows before re-index this graph."
  :re-index-discard-unsaved-changes-warning "Re-index will discard the current graph, and then processes all the files again as they are currently stored on disk. You will lose unsaved changes and it might take a while. Continue?"
- :open-new-window "New window"
  :sync-from-local-files "Refresh"
  :sync-from-local-files-detail "Import changes from local files"
  :sync-from-local-changes-detected "Refresh detects and processes files modified on your disk that have diverged from the current Logseq page content. Continue?"
@@ -504,6 +504,7 @@
  :export-opml "Export as OPML"
  :export-public-pages "Export public pages"
  :export-json "Export as JSON"
+ :export-sqlite-db "Export as SQLite DB"
  :export-roam-json "Export as Roam JSON"
  :export-edn "Export as EDN"
  :export-transparent-background "Transparent background"

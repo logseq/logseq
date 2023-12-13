@@ -1,5 +1,5 @@
 (ns electron.search
-  "Provides both page level and block level index"
+  "Provides block level index"
   (:require ["path" :as node-path]
             ["fs-extra" :as fs]
             ["better-sqlite3" :as sqlite3]
@@ -68,31 +68,6 @@
       (let [stmt (prepare db trigger db-name)]
         (.run ^object stmt)))))
 
-(defn add-pages-fts-triggers!
-  "Table bindings of pages tables and the pages FTS virtual tables"
-  [db db-name]
-  (let [triggers [;; add
-                  "CREATE TRIGGER IF NOT EXISTS pages_ad AFTER DELETE ON pages
-                  BEGIN
-                      DELETE from pages_fts where rowid = old.id;
-                  END;"
-                  ;; insert
-                  "CREATE TRIGGER IF NOT EXISTS pages_ai AFTER INSERT ON pages
-                  BEGIN
-                      INSERT INTO pages_fts (rowid, uuid, content)
-                      VALUES (new.id, new.uuid, new.content);
-                  END;"
-                  ;; update
-                  "CREATE TRIGGER IF NOT EXISTS pages_au AFTER UPDATE ON pages
-                  BEGIN
-                      DELETE from pages_fts where rowid = old.id;
-                      INSERT INTO pages_fts (rowid, uuid, content)
-                      VALUES (new.id, new.uuid, new.content);
-                  END;"]]
-    (doseq [trigger triggers]
-      (let [stmt (prepare db trigger db-name)]
-        (.run ^object stmt)))))
-
 (defn create-blocks-table!
   [db db-name]
   (let [stmt (prepare db "CREATE TABLE IF NOT EXISTS blocks (
@@ -106,20 +81,6 @@
 (defn create-blocks-fts-table!
   [db db-name]
   (let [stmt (prepare db "CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(uuid, content, page)" db-name)]
-    (.run ^object stmt)))
-
-(defn create-pages-table!
-  [db db-name]
-  (let [stmt (prepare db "CREATE TABLE IF NOT EXISTS pages (
-                        id INTEGER PRIMARY KEY,
-                        uuid TEXT NOT NULL,
-                        content TEXT NOT NULL)"
-                      db-name)]
-    (.run ^object stmt)))
-
-(defn create-pages-fts-table!
-  [db db-name]
-  (let [stmt (prepare db "CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(uuid, content)" db-name)]
     (.run ^object stmt)))
 
 (defn get-search-dir
@@ -151,10 +112,7 @@
     (try (let [db (sqlite3 db-full-path nil)]
            (create-blocks-table! db db-name)
            (create-blocks-fts-table! db db-name)
-           (create-pages-table! db db-name)
-           (create-pages-fts-table! db db-name)
            (add-blocks-fts-triggers! db db-name)
-           (add-pages-fts-triggers! db db-name)
            (swap! databases assoc db-sanitized-name db))
          (catch :default e
            (logger/error (str e ": " db-name))
@@ -189,25 +147,6 @@
       (do
         (open-db! repo)
         (get-db repo))))
-
-(defn upsert-pages!
-  [repo pages]
-  (when-let [db (get-or-open-db repo)]
-    ;; TODO: what if a CONFLICT on uuid
-    ;; Should update all values on id conflict
-    (let [insert (prepare db "INSERT INTO pages (id, uuid, content) VALUES (@id, @uuid, @content) ON CONFLICT (id) DO UPDATE SET (uuid, content) = (@uuid, @content)" repo)
-          insert-many (.transaction ^object db
-                                    (fn [pages]
-                                      (doseq [page pages]
-                                        (.run ^object insert page))))]
-      (insert-many pages))))
-
-(defn delete-pages!
-  [repo ids]
-  (when-let [db (get-db repo)]
-    (let [sql (str "DELETE from pages WHERE id IN " (clj-list->sql ids))
-          stmt (prepare db sql repo)]
-      (.run ^object stmt))))
 
 (defn upsert-blocks!
   [repo blocks]
@@ -286,85 +225,12 @@
          (take limit)
          (vec))))))
 
-(defn- snippet-by
-  [content length]
-  (str (subs content 0 length) (when (> (count content) 250) "...")))
-
-(defn- search-pages-res-unpack
-  [arr]
-  (let [[rowid uuid content snippet] arr]
-    {:id      rowid
-     :uuid    uuid
-     :content content
-     ;; post processing
-     :snippet (let [;; Remove title from snippet
-                    flag-title " $<pfts_f6ld$ "
-                    flag-title-pos (string/index-of snippet flag-title)
-                    snippet (if flag-title-pos
-                              (subs snippet (+ flag-title-pos (count flag-title)))
-                              snippet)
-                    ;; Cut snippet to 250 chars for non-matched results
-                    flag-highlight "$pfts_2lqh>$ "
-                    snippet (if (string/includes? snippet flag-highlight)
-                              snippet
-                              (snippet-by snippet 250))]
-                snippet)}))
-
-(defn- search-pages-aux
-  [repo database sql input limit]
-  (let [stmt (prepare database sql repo)]
-    (try
-      (doall
-       (map search-pages-res-unpack (-> (.raw ^object stmt)
-                                        (.all input limit)
-                                        (js->clj))))
-      (catch :default e
-        (logger/error "Search page failed: " (str e))))))
-
-(defn search-pages
-  [repo q {:keys [limit]}]
-  (when-let [database (get-db repo)]
-    (when-not (string/blank? q)
-      (let [match-inputs (get-match-inputs q)
-            non-match-input (str "%" (string/replace q #"\s+" "%") "%")
-            limit  (or limit 20)
-            ;; https://www.sqlite.org/fts5.html#the_highlight_function
-            ;; the 2nd column in pages_fts (content)
-            ;; pfts_2lqh is a key for retrieval
-            ;; highlight and snippet only works for some matching with high rank
-            snippet-aux "snippet(pages_fts, 1, ' $pfts_2lqh>$ ', ' $<pfts_2lqh$ ', '...', 32)"
-            select (str "select rowid, uuid, content, " snippet-aux " from pages_fts where ")
-            match-sql (str select
-                           " content match ? order by rank limit ?")
-            non-match-sql (str select
-                               " content like ? limit ?")
-            matched-result (->>
-                            (map
-                             (fn [match-input]
-                               (search-pages-aux repo database match-sql match-input limit))
-                             match-inputs)
-                            (apply concat))]
-        (->>
-         (concat matched-result
-                 (search-pages-aux repo database non-match-sql non-match-input limit))
-         (distinct-by :id)
-         (take limit)
-         (vec))))))
-
 (defn truncate-blocks-table!
   [repo]
   (when-let [database (get-db repo)]
     (let [stmt (prepare database "delete from blocks;" repo)
           _ (.run ^object stmt)
           stmt (prepare database "delete from blocks_fts;" repo)]
-      (.run ^object stmt))))
-
-(defn truncate-pages-table!
-  [repo]
-  (when-let [database (get-db repo)]
-    (let [stmt (prepare database "delete from pages;" repo)
-          _ (.run ^object stmt)
-          stmt (prepare database "delete from pages_fts;" repo)]
       (.run ^object stmt))))
 
 (defn query

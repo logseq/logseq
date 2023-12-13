@@ -24,8 +24,6 @@
 (defn- setup-init-data
   "Setup initial data same as frontend.handler.repo/create-db"
   [conn]
-  ;; App doesn't persist :db/type but it does load it each time
-  (d/transact! conn [{:db/id -1 :db/ident :db/type :db/type "db"}])
   (let [config-content (or (some-> (find-on-classpath "templates/config.edn") fs/readFileSync str)
                            (do (println "Setting graph's config to empty since no templates/config.edn was found.")
                                "{}"))]

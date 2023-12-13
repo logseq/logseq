@@ -99,9 +99,8 @@
 (defn await-get-nfs-file-handle
   "for accessing File handle outside, ensuring user granted."
   [repo handle-path]
-  (p/do!
-   (await-permission-granted repo)
-   (get-nfs-file-handle handle-path)))
+  (p/let [_ (await-permission-granted repo)]
+    (get-nfs-file-handle handle-path)))
 
 (defn- readdir-and-reload-all-handles
   "Return list of filenames"

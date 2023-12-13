@@ -282,12 +282,15 @@
 
 (def schema-version
   [:map
-   [:schema/version :int]])
+   [:db/ident :keyword]
+   [:schema/version :int]
+   [:block/tx-id {:optional true} :int]])
 
 (def db-ident
   [:map
    [:db/ident :keyword]
-   [:db/type {:optional true} :string]])
+   [:db/type {:optional true} :string]
+   [:block/tx-id {:optional true} :int]])
 
 (def macro
   [:map

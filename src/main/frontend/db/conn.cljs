@@ -16,11 +16,8 @@
 
 (defn get-repo-path
   [url]
-  (when url
-    (if (util/starts-with? url "http")
-      (->> (take-last 2 (string/split url #"/"))
-           util/string-join-path)
-      url)))
+  (assert (string? url) (str "url is not a string: " (type url)))
+  url)
 
 (defn get-repo-name
   [repo-url]
@@ -86,8 +83,8 @@
   (swap! conns dissoc (datascript-db repo)))
 
 (defn kv
-  [key value]
-  {:db/id -1
+  [key value & {:keys [id]}]
+  {:db/id (or id -1)
    :db/ident key
    key value})
 
@@ -98,11 +95,11 @@
    (let [db-name (datascript-db repo)
          db-conn (ldb/start-conn :schema (get-schema repo) :create-default-pages? false)]
      (swap! conns assoc db-name db-conn)
+     (when listen-handler
+       (listen-handler repo))
      (when db-graph?
        (d/transact! db-conn [(kv :db/type "db")])
        (d/transact! db-conn [(kv :schema/version db-schema/version)]))
-     (when listen-handler
-       (listen-handler repo))
      (ldb/create-default-pages! db-conn {:db-graph? db-graph?}))))
 
 (defn destroy-all!

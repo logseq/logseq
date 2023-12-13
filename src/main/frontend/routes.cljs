@@ -11,7 +11,8 @@
             [frontend.components.whiteboard :as whiteboard]
             [frontend.extensions.zotero :as zotero]
             [frontend.components.bug-report :as bug-report]
-            [frontend.components.user.login :as login]))
+            [frontend.components.user.login :as login]
+            [frontend.components.imports :as imports]))
 
 ;; http://localhost:3000/#?anchor=fn.1
 (def routes
@@ -69,7 +70,7 @@
 
    ["/import"
     {:name :import
-     :view setups/importer}]
+     :view imports/importer}]
 
    ["/bug-report"
     {:name :bug-report

@@ -362,7 +362,6 @@
  :re-index-detail "Grafı yeniden oluştur"
  :re-index-multiple-windows-warning "Bu graf için yeniden dizin oluşturmadan önce diğer pencereleri kapatmanız gerekiyor."
  :re-index-discard-unsaved-changes-warning "Yeniden dizin oluşturmak mevcut grafı siler ve ardından tüm dosyaları o anda diskte depolandıkları şekilde yeniden işler. Kaydedilmemiş değişiklikleri kaybedeceksiniz ve bu biraz zaman alabilir. Devam edilsin mi?"
- :open-new-window "Yeni pencere"
  :sync-from-local-files "Yenile"
  :sync-from-local-files-detail "Yerel dosyalardan değişiklikleri içeri aktarın"
  :sync-from-local-changes-detected "Yenile, diskinizde değiştirilen ve gerçek Logseq sayfa içeriğinden ayrılan dosyaları algılar ve işler. Devam edilsin mi?"

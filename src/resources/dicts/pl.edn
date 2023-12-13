@@ -127,7 +127,6 @@
  :re-index-detail "Przebuduj graf od nowa"
  :re-index-multiple-windows-warning "Musisz zamknąć inne okna, zanim rozpoczniesz proces ponownej indeksacji"
  :re-index-discard-unsaved-changes-warning "Ponowna indeksacja odrzuci zmiany w obecnym grafie, a następnie przejdzie po wszystkich plikach zapisanych na dysku. Utracisz wszystkie niezapisane zmiany, a sam proces może trochę potrwać. Kontynuować?"
- :open-new-window "Nowe okno"
  :sync-from-local-files "Odśwież"
  :sync-from-local-files-detail "Importuj zmiany z lokalnych plików"
  :sync-from-local-changes-detected "Funkcja Odśwież wykrywa i procesuje pliki zmienione na dysku. Wszystkie pliki różniące się od tych w Logseq zostaną ponownie wczytane. Kontynuować?"

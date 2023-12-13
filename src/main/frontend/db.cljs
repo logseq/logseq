@@ -29,8 +29,8 @@
   entity pull pull-many transact! get-key-value]
 
  [frontend.db.model
-  blocks-count blocks-count-cache delete-blocks get-pre-block
-  delete-files delete-pages-by-files get-all-block-contents get-all-block-avets get-all-tagged-pages get-single-block-contents
+  delete-blocks get-pre-block
+  delete-files delete-pages-by-files get-all-block-contents get-all-tagged-pages get-single-block-contents
   get-all-templates get-block-and-children get-block-by-uuid get-block-children sort-by-left
   get-block-parent get-block-parents parents-collapsed? get-block-referenced-blocks get-all-referenced-blocks-uuid
   get-block-immediate-children get-block-page

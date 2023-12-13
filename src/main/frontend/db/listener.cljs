@@ -1,7 +1,6 @@
 (ns frontend.db.listener
   "DB listeners"
   (:require [datascript.core :as d]
-            [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.db.conn :as conn]
             [frontend.db.persist :as db-persist]
@@ -55,15 +54,9 @@
   (d/listen! conn :persistence
              (fn [tx-report]
                (when (not (:new-graph? (:tx-meta tx-report))) ; skip initial txs
-                 (if (util/electron?)
-                   (when-not (:dbsync? (:tx-meta tx-report))
-                     ;; sync with other windows if needed
-                     (p/let [graph-has-other-window? (ipc/ipc "graphHasOtherWindow" repo)]
-                       (when graph-has-other-window?
-                         (ipc/ipc "dbsync" repo {:data (db-utils/db->string (:tx-data tx-report))}))))
-                   (do
-                     (state/set-last-transact-time! repo (util/time-ms))
-                     (persist-if-idle! repo)))
+                 (when-not (util/electron?)
+                   (state/set-last-transact-time! repo (util/time-ms))
+                   (persist-if-idle! repo))
 
                  (when-let [db-listener @*db-listener]
                    (db-listener repo tx-report))))))

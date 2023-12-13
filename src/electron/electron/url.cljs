@@ -39,9 +39,7 @@
         graph-name (when graph-identifier (handler/get-graph-name graph-identifier))]
     (if graph-name
       (p/let [window-on-graph (first (win/get-graph-all-windows (utils/get-graph-dir graph-name)))
-              open-new-window? (or force-new-window? (not window-on-graph))
-              _ (when (and force-new-window? window-on-graph)
-                  (handler/broadcast-persist-graph! graph-name))]
+              open-new-window? (or force-new-window? (not window-on-graph))]
           ;; TODO: call open new window on new graph without renderer (remove the reliance on local storage)
           ;; TODO: allow open new window on specific page, without waiting for `graph ready` ipc then redirect to that page
         (when (or page-name block-id file)

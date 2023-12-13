@@ -363,7 +363,6 @@
  :re-index-detail "グラフ再構築"
  :re-index-multiple-windows-warning "このグラフのインデックスを再構築する前に、Logseq で開いている他のウィンドウを閉じる必要があります。"
  :re-index-discard-unsaved-changes-warning "インデックスの再構築は現在のグラフをいったん破棄し、現在ディスク上にある全てのファイルから再構築します。未保存の内容は失われます。また、少し時間がかかります。実行してもよいですか？"
- :open-new-window "新規ウィンドウ"
  :sync-from-local-files "再表示"
  :sync-from-local-files-detail "ローカルファイルの変更点をインポート"
  :sync-from-local-changes-detected " 再表示は、ディスク上で変更されて Logseq 上のページと内容が変わってしまったファイルを検出し、読み込みます。実行してもよいですか？"

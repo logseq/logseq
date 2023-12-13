@@ -6,19 +6,15 @@
             [electron.ipc :as ipc]
             [frontend.db.conn :as db-conn]
             [promesa.core :as p]
-            [frontend.persist-db :as persist-db]))
+            [frontend.persist-db :as persist-db]
+            [cljs-bean.core :as bean]))
 
 (defn get-all-graphs
   []
-  (if (util/electron?)
-    (p/let [result (ipc/ipc "getGraphs")
-            result (vec result)
-            ;; backward compatibility (release <= 0.5.4)
-            result (if (seq result) result (idb/get-nfs-dbs))]
-      (distinct result))
-    (p/let [repos (idb/get-nfs-dbs)
-            db-repos (persist-db/<list-db)]
-      (concat repos db-repos))))
+  (p/let [repos (idb/get-nfs-dbs)
+          db-repos (persist-db/<list-db)
+          electron-disk-graphs (when (util/electron?) (ipc/ipc "getGraphs"))]
+    (distinct (concat repos db-repos (some-> electron-disk-graphs bean/->clj)))))
 
 (defn get-serialized-graph
   [graph-name]
@@ -43,10 +39,11 @@
   [graph]
   (let [key (db-conn/datascript-db graph)
         db-based? (config/db-based-graph? graph)]
-    (persist-db/<unsafe-delete graph)
-    (if (util/electron?)
-      (ipc/ipc "deleteGraph" graph key db-based?)
-     (idb/remove-item! key))))
+    (p/let [_ (persist-db/<export-db graph {})
+            _ (persist-db/<unsafe-delete graph)]
+      (if (util/electron?)
+        (ipc/ipc "deleteGraph" graph key db-based?)
+        (idb/remove-item! key)))))
 
 (defn rename-graph!
   [old-repo new-repo]
@@ -57,4 +54,3 @@
         (js/console.error "rename-graph! is not supported in electron")
         (idb/rename-item! old-key new-key))
       (idb/rename-item! old-key new-key))))
-

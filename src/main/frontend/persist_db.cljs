@@ -1,25 +1,18 @@
 (ns frontend.persist-db
    "Backend of DB based graph"
    (:require [frontend.persist-db.browser :as browser]
-             [frontend.persist-db.node :as node]
              [frontend.persist-db.protocol :as protocol]
-             [frontend.util :as util]
-             [promesa.core :as p]))
+             [promesa.core :as p]
+             [frontend.config :as config]
+             [frontend.state :as state]
+             [frontend.util :as util]))
 
-
- (defonce electron-ipc-sqlite-db (node/->ElectronIPC))
-
- (defonce opfs-db (browser/->InBrowser))
+(defonce opfs-db (browser/->InBrowser))
 
  (defn- get-impl
-   "Get the actual implementation of PersistentDB"
-   []
-   (cond
-     (util/electron?)
-     electron-ipc-sqlite-db
-
-     :else
-     opfs-db))
+  "Get the actual implementation of PersistentDB"
+  []
+  opfs-db)
 
  (defn <list-db []
    (protocol/<list-db (get-impl)))
@@ -27,23 +20,39 @@
  (defn <unsafe-delete [repo]
    (protocol/<unsafe-delete (get-impl) repo))
 
-(defn <new [repo]
-  {:pre [(<= (count repo) 56)]}
-  (protocol/<new (get-impl) repo))
+(defn <transact-data [repo tx-data tx-meta]
+  (protocol/<transact-data (get-impl) repo tx-data tx-meta))
 
-(defn <transact-data [repo added-blocks deleted-block-uuids]
-  (protocol/<transact-data (get-impl) repo added-blocks deleted-block-uuids))
+(defn <export-db
+  [repo opts]
+  (protocol/<export-db (get-impl) repo opts))
+
+(defn <import-db
+  [repo data]
+  (protocol/<import-db (get-impl) repo data))
 
 (defn <fetch-init-data
   ([repo]
    (<fetch-init-data repo {}))
   ([repo opts]
-   (p/let [ret (protocol/<fetch-initital-data (get-impl) repo opts)]
-     (js/console.log "fetch-initital" ret)
+   (p/let [ret (protocol/<fetch-initial-data (get-impl) repo opts)]
+     (js/console.log "fetch-initial-data" ret)
      ret)))
 
-(defn <fetch-blocks-excluding
-  ([repo exclude-uuids]
-   (<fetch-blocks-excluding repo exclude-uuids {}))
-  ([repo exclude-uuids opts]
-   (protocol/<fetch-blocks-excluding (get-impl) repo exclude-uuids opts)))
+;; FIXME: limit repo name's length
+;; @shuyu Do we still need this?
+(defn <new [repo]
+  {:pre [(<= (count repo) 56)]}
+  (p/let [_ (protocol/<new (get-impl) repo)]
+    (<export-db repo {})))
+
+(defn run-periodically-export!
+  []
+  (js/setInterval
+   (fn []
+     (when-let [repo (state/get-current-repo)]
+       (when (and (util/electron?) (config/db-based-graph? repo))
+         (println :debug :save-db-to-disk repo)
+         (<export-db repo {}))))
+   ;; every 10 minutes
+   (* 10 60 1000)))
