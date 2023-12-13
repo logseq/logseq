@@ -416,7 +416,6 @@
  :command.sidebar/open-today-page         "Abrir a página de hoje na barra lateral direita"
  :command.ui/select-theme-color           "Selecionar as cores do tema disponível"
  :command.ui/toggle-left-sidebar          "Trocar barra lateral esquerda"
- :command.graph/save                      "Guardar grafo atual no computador"
  :command.misc/copy                       "Copiar (copiar seleção ou referência do bloco)"
  :command.ui/goto-plugins                 "Ir para o painel de plugins"
  :command.go/all-graphs                   "Ir a todos os grafos"

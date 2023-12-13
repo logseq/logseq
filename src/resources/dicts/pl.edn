@@ -297,7 +297,6 @@
  :command.graph/open                              "Wybierz graf do otwarcia"
  :command.graph/remove                            "Usuń graf"
  :command.graph/add                               "Dodaj graf"
- :command.graph/save                              "Zapisz obecny graf na dysk"
  :command.graph/re-index                          "Reindeksuj obecny graf"
  :command.command/run                             "Wykonaj polecenie GIT"
  :command.command/toggle-favorite                 "Dodaj / Usuń z ulubionych"

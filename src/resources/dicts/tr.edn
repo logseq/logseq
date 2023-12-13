@@ -763,7 +763,6 @@
  :command.graph/open                     "Açılacak grafı seçin"
  :command.graph/remove                   "Bir grafı kaldır"
  :command.graph/add                      "Graf ekle"
- :command.graph/save                     "Mevcut grafı diske kaydet"
  :command.graph/re-index                 "Mevcut grafı yeniden oluştur"
  :command.command/run                    "Git komutunu çalıştır"
  :command.go/home                        "Ana sayfaya git"

@@ -39,10 +39,11 @@
      (js/console.log "fetch-initial-data" ret)
      ret)))
 
-;; FIXME: limit repo name's length
+;; FIXME: limit repo name's length and sanity
+;; original size is 56
 ;; @shuyu Do we still need this?
 (defn <new [repo]
-  {:pre [(<= (count repo) 56)]}
+  {:pre [(<= (count repo) 128)]}
   (p/let [_ (protocol/<new (get-impl) repo)]
     (<export-db repo {})))
 

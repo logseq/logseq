@@ -12,7 +12,8 @@
             ["comlink" :as Comlink]
             [clojure.string :as string]
             [cljs-bean.core :as bean]
-            [frontend.worker.search :as search]))
+            [frontend.worker.search :as search]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defonce *sqlite (atom nil))
 ;; repo -> {:db conn :search conn}
@@ -142,7 +143,9 @@
       (.exec db "PRAGMA locking_mode=exclusive")
       (sqlite-common-db/create-kvs-table! db)
       (search/create-tables-and-triggers! search-db)
-      (let [conn (sqlite-common-db/get-storage-conn storage)]
+      (prn :debug :repo repo)
+      (let [schema (sqlite-util/get-schema repo)
+            conn (sqlite-common-db/get-storage-conn storage schema)]
         (swap! *datascript-conns assoc repo conn)
         nil))))
 

@@ -771,7 +771,6 @@
  :command.graph/open "グラフを選択して開く"
  :command.graph/remove "グラフを削除"
  :command.graph/add "グラフを追加"
- :command.graph/save "現在のグラフをディスクへ保存"
  :command.graph/re-index "現在のグラフを再構築"
  :command.command/run "Git コマンドを実行"
  :command.go/home "ホームへ移動"

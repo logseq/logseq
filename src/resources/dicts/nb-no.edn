@@ -430,7 +430,6 @@
  :command.graph/add "Legg til graf"
  :command.graph/open "Velg graf for å åpne"
  :command.graph/remove "Fjern en graf"
- :command.graph/save "Lagre nåværende graf til disk"
  :command.graph/re-index "Reindekser nåværende graf"
  :command.pdf/close "Lukk nåværende pdf leser"
  :command.pdf/next-page "Neste side i nåværende pdf dok"

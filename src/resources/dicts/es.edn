@@ -212,7 +212,6 @@
  :command.graph/open                                "Seleccionar grafo a abrir"
  :command.graph/re-index                            "Reindexar grafo actual"
  :command.graph/remove                              "Eliminar un grafo"
- :command.graph/save                                "Guardar grafo actual al disco"
  :command.misc/copy                                 "Copiar"
  :command.pdf/close                                 "Pdf: Cerrar documento pdf actual"
  :command.pdf/find                                  "Pdf: Buscar texto del documento pdf actual"

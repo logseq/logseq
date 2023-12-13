@@ -714,7 +714,6 @@
  :command.graph/open                     "Graph zum Öffnen auswählen"
  :command.graph/re-index                 "Aktuellen Graph neu indizieren"
  :command.graph/remove                   "Einen Graph entfernen"
- :command.graph/save                     "Aktuellen Graph auf Festplatte speichern"
  :command.misc/copy                      "Kopieren"
  :command.pdf/close                      "PDF: Aktuelles PDF-Dokument schließen"
  :command.pdf/find                       "PDF: Text des aktuellen PDF-Dokuments durchsuchen"
