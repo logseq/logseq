@@ -12,8 +12,7 @@
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.db.rtc.ws :refer [<send!]]
             [frontend.persist-db :as persist-db]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.outliner.pipeline :as outliner-pipeline]))
+            [logseq.db.frontend.schema :as db-schema]))
 
 (def transit-r (transit/reader :json))
 
