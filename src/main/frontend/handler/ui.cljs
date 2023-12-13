@@ -300,4 +300,4 @@
     (when target-repo
       (if (util/electron?)
        (ipc/ipc "openNewWindow" target-repo)
-       (js/window.open (str config/app-website "?graph=" target-repo) "_blank")))))
+       (js/window.open (str config/app-website "#/?graph=" target-repo) "_blank")))))

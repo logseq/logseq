@@ -16,7 +16,8 @@
             [cljs-time.core :as t]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.util :as db-property-util]
-            [datascript.transit :as dt]))
+            [datascript.transit :as dt]
+            [logseq.db.sqlite.common-db :as sqlite-common-db]))
 
 (defn- old-schema?
   "Requires migration if the schema version is older than db-schema/version"
@@ -97,7 +98,7 @@
           _ (assert (some? data) "No data found when reloading db")
           datoms (dt/read-transit-str data)
           datoms-count (count datoms)
-          conn (d/conn-from-datoms datoms db-schema/schema-for-db-based-graph)
+          conn (sqlite-common-db/restore-initial-data datoms)
           db-name (db-conn/datascript-db repo)
           _ (swap! db-conn/conns assoc db-name conn)
           end-time (t/now)]

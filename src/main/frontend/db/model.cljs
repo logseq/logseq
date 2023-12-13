@@ -568,10 +568,10 @@ independent of format as format specific heading characters are stripped"
           '[:db/id :block/collapsed? :block/properties {:block/parent ...}]
           [:block/uuid block-id]))
 
-(defn get-block-last-direct-child
+(defn get-block-last-direct-child-id
   "Notice: if `not-collapsed?` is true, will skip searching for any collapsed block."
   ([db db-id]
-   (get-block-last-direct-child db db-id false))
+   (get-block-last-direct-child-id db db-id false))
   ([db db-id not-collapsed?]
    (when-let [block (db-utils/entity db db-id)]
      (when (if not-collapsed?
@@ -581,6 +581,16 @@ independent of format as format specific heading characters are stripped"
              all-left (set (concat (map (comp :db/id :block/left) children) [db-id]))
              all-ids (set (map :db/id children))]
          (first (set/difference all-ids all-left)))))))
+
+(defn get-block-deep-last-open-child-id
+  [db db-id]
+  (loop [node (db-utils/entity db db-id)]
+    (if-let [last-child-id (get-block-last-direct-child-id db (:db/id node) true)]
+      (let [e (db-utils/entity db last-child-id)]
+        (if (or (:block/collapsed? e) (empty? (:block/_parent e)))
+          last-child-id
+          (recur e)))
+      nil)))
 
 (defn get-prev-sibling
   [db id]
@@ -595,6 +605,34 @@ independent of format as format specific heading characters are stripped"
     (get-by-parent-&-left db
                           (:db/id (:block/parent block))
                           db-id)))
+
+(defn get-next
+  "Get next block, either its right sibling, or loop to find its next block."
+  [db db-id & {:keys [skip-collapsed? init?]
+               :or {skip-collapsed? true
+                    init? true}
+               :as opts}]
+  (when-let [entity (db-utils/entity db db-id)]
+    (or (when-not (and (:block/collapsed? entity) skip-collapsed? init?)
+          (get-right-sibling db db-id))
+        (let [parent-id (:db/id (:block/parent (db-utils/entity db db-id)))]
+          (get-next db parent-id (assoc opts :init? false))))))
+
+(defn get-prev
+  "Get prev block, either its left sibling if the sibling is collapsed or no children,
+  or get sibling's last deep displayable child (collaspsed parent or non-collapsed child)."
+  [db db-id]
+  (when-let [entity (db-utils/entity db db-id)]
+    (or
+     (when-let [prev-sibling (get-prev-sibling db db-id)]
+       (if (or (:block/collapsed? prev-sibling)
+               (empty? (:block/_parent prev-sibling)))
+         prev-sibling
+         (some->> (get-block-deep-last-open-child-id db (:db/id prev-sibling))
+                  (db-utils/entity db))))
+     (let [parent (:block/parent entity)]
+       (when-not (:block/name parent)
+         parent)))))
 
 (defn last-child-block?
   "The child block could be collapsed."

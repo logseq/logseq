@@ -77,11 +77,6 @@
                          comp [:div (str payload)]]
                      (notification/show! comp type false))))
 
-  (safe-api-call "graphUnlinked"
-                 (fn [data]
-                   (let [repo (bean/->clj data)]
-                     (repo-handler/remove-repo! repo))))
-
   (safe-api-call "rebuildSearchIndice"
                  (fn [_data]
                    (prn "Rebuild search indices")
