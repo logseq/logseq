@@ -46,7 +46,7 @@
   (p/let [_ (protocol/<new (get-impl) repo)]
     (<export-db repo {})))
 
-(defn run-periodically-export!
+(defn run-export-periodically!
   []
   (js/setInterval
    (fn []
