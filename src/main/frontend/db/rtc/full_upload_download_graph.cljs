@@ -69,24 +69,26 @@
   [blocks]
   (mapv
    (fn [block]
-     (let [db-id (:db/id block)
-           block-parent (:db/id (:block/parent block))
-           block-left (:db/id (:block/left block))
-           block-alias (map :db/id (:block/alias block))
-           block-tags (map :db/id (:block/tags block))
-           block-type (keep (comp block-type-ident->str :db/ident) (:block/type block))
-           block-schema (some->> (:block/schema block)
-                                 (transit/read transit-r))
+     (let [db-id            (:db/id block)
+           block-parent     (:db/id (:block/parent block))
+           block-left       (:db/id (:block/left block))
+           block-alias      (map :db/id (:block/alias block))
+           block-tags       (map :db/id (:block/tags block))
+           block-type       (keep (comp block-type-ident->str :db/ident) (:block/type block))
+           block-schema     (some->> (:block/schema block)
+                                     (transit/read transit-r))
            block-properties (some->> (:block/properties block)
-                                     (transit/read transit-r))]
+                                     (transit/read transit-r))
+           block-link       (:db/id (:block/link block))]
        (cond-> (assoc block :db/id (str db-id))
-         block-parent (assoc :block/parent (str block-parent))
-         block-left (assoc :block/left (str block-left))
+         block-parent      (assoc :block/parent (str block-parent))
+         block-left        (assoc :block/left (str block-left))
          (seq block-alias) (assoc :block/alias (map str block-alias))
          (seq block-tags)  (assoc :block/tags (map str block-tags))
          (seq block-type)  (assoc :block/type block-type)
          block-schema      (assoc :block/schema block-schema)
-         block-properties  (assoc :block/properties block-properties))))
+         block-properties  (assoc :block/properties block-properties)
+         block-link        (assoc :block/link (str block-link)))))
    blocks))
 
 (def page-of-block
