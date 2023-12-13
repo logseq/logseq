@@ -303,13 +303,25 @@
                 fix-tag-ids)
           repo (state/get-current-repo)
           db-based? (config/db-based-graph? repo)
-          eid (or (:db/id (:data this))
-                  (when-let [block-uuid (:block/uuid (:data this))] [:block/uuid block-uuid]))
+          db-id (:db/id (:data this))
+          block-uuid (:block/uuid (:data this))
+          eid (or db-id (when block-uuid [:block/uuid block-uuid]))
           block-entity (db/entity eid)
           tags-has-class? (and db-based?
                                (some (fn [tag]
                                        (contains? (:block/type (db/entity [:block/uuid (:block/uuid tag)])) "class"))
                                      (:block/tags m)))]
+
+      ;; Ensure block UUID never changes
+      (when (and db-id block-uuid)
+        (let [uuid-not-changed? (= block-uuid (:block/uuid (db/entity db-id)))]
+          (when-not uuid-not-changed?
+            (when config/dev?
+              (state/pub-event! [:notification/show
+                                {:content "Block UUID shouldn't be changed"
+                                 :status :error}])))
+          (assert uuid-not-changed? "Block UUID changed")))
+
       (when eid
         ;; Retract attributes to prepare for tx which rewrites block attributes
         (when (:block/content m)
