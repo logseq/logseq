@@ -2,9 +2,7 @@
   "Sqlite fns for db graphs"
   (:require ["path" :as node-path]
             ["better-sqlite3" :as sqlite3]
-            [clojure.string :as string]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [logseq.db.sqlite.util :as sqlite-util]
             ;; FIXME: datascript.core has to come before datascript.storage or else nbb fails
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
@@ -26,13 +24,9 @@
       (.close database))
     (reset! databases nil)))
 
-(defn sanitize-db-name
-  [db-name]
-  (-> db-name
-      (string/replace sqlite-util/db-version-prefix "")
-      (string/replace "/" "_")
-      (string/replace "\\" "_")
-      (string/replace ":" "_"))) ;; windows
+(def sanitize-db-name sqlite-common-db/sanitize-db-name)
+
+(def get-db-full-path sqlite-common-db/get-db-full-path)
 
 (defn get-conn
   [repo]
