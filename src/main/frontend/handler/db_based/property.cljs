@@ -577,7 +577,7 @@
                     :block/content ""
                     :block/page page-id
                     :block/parent page-id
-                    :block/left (or (when page-entity (model/get-block-last-direct-child (db/get-db) (:db/id page-entity)))
+                    :block/left (or (when page-entity (model/get-block-last-direct-child-id (db/get-db) (:db/id page-entity)))
                                     page-id)
                     :block/metadata metadata}
                    sqlite-util/block-with-timestamps)
@@ -631,7 +631,7 @@
                        :block/page page-id
                        :block/metadata metadata
                        :block/parent page-id
-                       :block/left (or (when page-entity (model/get-block-last-direct-child (db/get-db) (:db/id page-entity)))
+                       :block/left (or (when page-entity (model/get-block-last-direct-child-id (db/get-db) (:db/id page-entity)))
                                        page-id)}
                       sqlite-util/block-with-timestamps)]
     {:page page-tx
