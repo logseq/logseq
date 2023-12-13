@@ -58,25 +58,30 @@
 
 (defn block->index
   "Convert a block to the index for searching"
-  [{:block/keys [uuid page content properties format]
-    :or {format :markdown}}]
-  (let [repo (state/get-current-repo)]
-    (when-not (> (count content) (max-len))
-      (when-not (and (string/blank? content)
-                     (empty? properties))
-        (let [db-based? (config/db-based-graph? repo)
-              content (if db-based? content
-                          (property-util/remove-built-in-properties format content))
-              m {:id (str uuid)
-                 :page (str (:block/uuid page))
-                 :content (sanitize content)}
-              m' (cond-> m
-                   (and db-based? (seq properties))
-                   (update :content
-                           (fn [content]
-                             (str content "\n"
-                                  (get-db-properties-str properties)))))]
-          m')))))
+  [{:block/keys [name uuid page content properties format]
+    :or {format :markdown}
+    :as block}]
+  (let [repo (state/get-current-repo)
+        page? (some? name)
+        block? (nil? name)
+        db-based? (config/db-based-graph? repo)]
+    (when-not (and block? (> (count content) (max-len)))
+      (when-not (and (empty? properties)
+                     (or (and block? (string/blank? content))
+                         (and db-based? page?)))        ; empty page or block
+        (let [content (if block?
+                        (if db-based? content (property-util/remove-built-in-properties format content))
+                        ;; File based page content
+                        (if db-based?
+                          ""            ; empty page content
+                          (some-> (:block/file (db/entity (:db/id block))) :file/content)))
+              content' (if (and db-based? (seq properties))
+                         (str content (when (not= content "") "\n") (get-db-properties-str properties))
+                         content)]
+          (when-not (string/blank? content')
+            {:id (str uuid)
+             :page (str (:block/uuid page))
+             :content (sanitize content')}))))))
 
 (defn original-page-name->index
   [p]
