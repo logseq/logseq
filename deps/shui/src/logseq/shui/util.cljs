@@ -9,6 +9,8 @@
    [cljs-bean.core :as bean]
    [goog.dom :as gdom]))
 
+(goog-define NODETEST false)
+(defonce node-test? NODETEST)
 
 ;;      /--------------- app ------------\
 ;;    /-------- left --------\             \
@@ -191,4 +193,6 @@
 
 (defn lsui-get
   [name]
-  (aget js/window.LSUI name))
+  (if node-test?
+    #js {}
+    (aget js/window.LSUI name)))
