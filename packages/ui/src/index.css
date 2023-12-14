@@ -114,6 +114,8 @@
 
   .ui__toaster {
     &-viewport {
+      @apply m-0;
+
       > li {
         border-color: hsl(var(--border));
 
