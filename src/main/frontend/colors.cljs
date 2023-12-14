@@ -30,6 +30,7 @@
                           "--ls-quaternary-background-color: var(--rx-" (name gray) "-04); "
                           "--ls-link-text-color: var(--rx-" (name color) "-11); "
                           "--ls-link-text-hover-color: var(--rx-" (name color) "-12); "
+                          "--ls-block-ref-link-text-color: var(--rx-" (name color) "-09);"
                           "--ls-secondary-text-color: var(--rx-" (name gray) "-12); "
                           "--ls-primary-text-color: var(--rx-" (name gray) "-11); "
                           "--ls-border-color: var(--rx-" (name gray) "-05); "
@@ -79,12 +80,16 @@
 
 (defn get-accent-color
   []
-  (when-let [hsl-color (some-> js/document.documentElement
-                       (js/getComputedStyle)
-                       (.getPropertyValue "--lx-accent-09")
-                       (str/replace "hsl(" "")
-                       (str/replace ")" "")
-                       (str/split ","))]
-    (when-let [hsl-color (and (not (str/blank? (first hsl-color)))
-                           (map js/parseFloat hsl-color))]
-      (apply util/hsl2hex hsl-color))))
+  (when-let [color (some-> js/document.documentElement
+                     (js/getComputedStyle)
+                     (.getPropertyValue "--lx-accent-09"))]
+    (when-not (str/blank? color)
+      (if (str/starts-with? color "#")
+        color
+        (let [hsl-color (some-> color
+                          (str/replace "hsl(" "")
+                          (str/replace ")" "")
+                          (str/split ","))]
+          (when-let [hsl-color (and (not (str/blank? (first hsl-color)))
+                                 (map js/parseFloat hsl-color))]
+            (apply util/hsl2hex hsl-color)))))))

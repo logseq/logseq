@@ -941,15 +941,17 @@
 (def *shortcut-cmds (atom {}))
 
 (defn add-shortcut!
-  [handler-id id shortcut-map]
-  (swap! *config assoc-in [handler-id id] shortcut-map)
-  (swap! *shortcut-cmds assoc id (:cmd shortcut-map))
-  (let [plugin? (str/starts-with? (str id) ":plugin.")
-        category (or (:category shortcut-map)
-                     (if plugin?
-                       :shortcut.category/plugins
-                       :shortcut.category/others))]
-    (swap! *category update category #(conj % id))))
+  ([handler-id id shortcut-map] (add-shortcut! handler-id id shortcut-map false))
+  ([handler-id id shortcut-map config-only?]
+   (swap! *config assoc-in [handler-id id] shortcut-map)
+   (when-not config-only?
+     (swap! *shortcut-cmds assoc id (:cmd shortcut-map))
+     (let [plugin? (str/starts-with? (str id) ":plugin.")
+           category (or (:category shortcut-map)
+                        (if plugin?
+                          :shortcut.category/plugins
+                          :shortcut.category/others))]
+       (swap! *category update category #(conj % id))))))
 
 (defn remove-shortcut!
   [handler-id id]
