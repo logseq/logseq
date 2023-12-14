@@ -272,6 +272,8 @@
       (ui/button {:disabled true :size :sm} "Disabled")
       (ui/button {:variant :destructive :size :sm} "Destructive")
       (ui/button {:class "primary-green" :size :sm} "Custom (.primary-green)")
+      (ui/button {:variant :ghost :size :sm} "Ghost")
+      (ui/button {:variant :link :size :sm} "Link")
       (ui/button
         {:variant :icon
          :size    :sm}
