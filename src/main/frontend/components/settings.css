@@ -484,7 +484,7 @@ body[data-settings-tab=keymap] {
       @apply p-0;
 
       > header {
-        @apply px-4 pt-5 pb-2 h-auto;
+        @apply px-4 pt-[22px] pb-2 h-auto;
       }
     }
   }
