@@ -74,7 +74,8 @@
 
   :test {:target :node-test
          :output-to "static/tests.js"
-         :closure-defines {frontend.util/NODETEST true}
+         :closure-defines {frontend.util/NODETEST true
+                           logseq.shui.util/NODETEST true}
          :devtools {:enabled false}
          ;; disable :static-fns to allow for with-redefs and repl development
          :compiler-options {:static-fns false}

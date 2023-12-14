@@ -10,7 +10,6 @@
    [goog.dom :as gdom]))
 
 (goog-define NODETEST false)
-(defonce node-test? NODETEST)
 
 ;;      /--------------- app ------------\
 ;;    /-------- left --------\             \
@@ -193,6 +192,6 @@
 
 (defn lsui-get
   [name]
-  (if node-test?
+  (if NODETEST
     #js {}
     (aget js/window.LSUI name)))
