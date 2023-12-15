@@ -8,7 +8,6 @@
             [promesa.core :as p]
             [frontend.util :as util]
             [frontend.handler.notification :as notification]
-            [frontend.handler.route :as route-handler]
             [cljs-bean.core :as bean]
             [frontend.state :as state]
             [electron.ipc :as ipc]))
@@ -53,9 +52,7 @@
 (defn- sqlite-error-handler
   [error]
   (if (= "NoModificationAllowedError"  (.-name error))
-    (do
-      (state/pub-event! [:db/multiple-tabs-opfs-failed])
-      (route-handler/redirect! {:to :bug-report}))
+    (state/pub-event! [:show/multiple-tabs-error-dialog])
     (notification/show! [:div (str "SQLiteDB error: " error)] :error)))
 
 (defrecord InBrowser []
