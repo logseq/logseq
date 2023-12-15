@@ -150,7 +150,7 @@
     (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
       (reset! (::electron-multiple-windows? state) multiple-windows?))))
 
-(defn- repos-dropdown-links [repos current-repo *multiple-windows?]
+(defn- repos-dropdown-links [repos current-repo *multiple-windows? & {:as opts}]
   (let [switch-repos (if-not (nil? current-repo)
                        (remove (fn [repo] (= current-repo (:url repo))) repos) repos) ; exclude current repo
         repo-links (mapv
@@ -171,6 +171,8 @@
                                                          (ui/icon "cloud" {:size 18})])]
                            :hover-detail repo-url ;; show full path on hover
                            :options      {:on-click (fn [e]
+                                                      (when-let [on-click (:on-click opts)]
+                                                        (on-click e))
                                                       (if (gobj/get e "shiftKey")
                                                         (state/pub-event! [:graph/open-new-window url])
                                                         (if (or local? db-only?)
@@ -208,7 +210,7 @@
 
 (rum/defcs repos-dropdown < rum/reactive
   (rum/local false ::electron-multiple-windows?)
-  [state]
+  [state & {:as opts}]
   (let [multiple-windows? (::electron-multiple-windows? state)
         current-repo (state/sub :git/current-repo)
         login? (boolean (state/sub :auth/id-token))
@@ -218,7 +220,7 @@
             remotes (state/sub [:file-sync/remote-graphs :graphs])
             repos (if (and (seq remotes) login?)
                     (repo-handler/combine-local-&-remote-graphs repos remotes) repos)
-            links (repos-dropdown-links repos current-repo multiple-windows?)
+            links (repos-dropdown-links repos current-repo multiple-windows? opts)
             render-content (fn [{:keys [toggle-fn]}]
                              (let [remote? (:remote? (first (filter #(= current-repo (:url %)) repos)))
                                    repo-name (db/get-repo-name current-repo)
@@ -227,7 +229,7 @@
                                                      "Select a Graph")]
                                [:a.item.group.flex.items-center.p-2.text-sm.font-medium.rounded-md
 
-                                {:on-click (fn []
+                                {:on-click (fn [_e]
                                              (check-multiple-windows? state)
                                              (toggle-fn))
                                  :title    repo-name}       ;; show full path on hover
