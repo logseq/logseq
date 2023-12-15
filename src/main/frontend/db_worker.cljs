@@ -107,8 +107,12 @@
   [repo ^js db]
   (swap! *sqlite-conns dissoc repo)
   (swap! *datascript-conns dissoc repo)
-  (swap! *opfs-pools dissoc repo)
-  (when db (.close db)))
+
+  (when db (.close db))
+  (when-let [^js pool (get-opfs-pool repo)]
+    (.releaseAccessHandles pool))
+
+  (swap! *opfs-pools dissoc repo))
 
 (defn- close-other-dbs!
   [repo]
@@ -238,6 +242,11 @@
            _ (when db (close-db! repo db))
            result (remove-vfs! pool)]
      nil))
+
+  (releaseAccessHandles
+   [_this repo]
+   (when-let [^js pool (get-opfs-pool repo)]
+    (.releaseAccessHandles pool)))
 
   (exportDB
    [_this repo]

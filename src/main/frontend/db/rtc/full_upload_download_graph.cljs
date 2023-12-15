@@ -12,7 +12,8 @@
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.db.rtc.ws :refer [<send!]]
             [frontend.persist-db :as persist-db]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.frontend.schema :as db-schema]
+            [frontend.state :as state]))
 
 (def transit-r (transit/reader :json))
 
@@ -122,8 +123,9 @@
          blocks-with-page-id (fill-block-fields blocks*)]
      (<? (p->c (persist-db/<new repo)))
      (<? (p->c (persist-db/<transact-data repo blocks-with-page-id nil)))
+     (<? (p->c (persist-db/<release-access-handles repo)))
+     (state/add-repo! {:url repo})
      (op-mem-layer/update-local-tx! repo t))))
-
 
 (defn <download-graph
   [state repo graph-uuid]
