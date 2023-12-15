@@ -40,11 +40,11 @@
 (defn <export-db!
   [repo data]
   (cond
-    (and (util/electron?) (config/db-based-graph? repo))
+    (util/electron?)
     (ipc/ipc :db-export repo data)
 
     ;; TODO: browser nfs-supported? auto backup
-
+    
     ;;
     :else
     nil))

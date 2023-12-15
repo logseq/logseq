@@ -15,7 +15,8 @@
         ["logseq.db.sqlite." "logseq.db.frontend.property" "logseq.db.frontend.malli-schema"
          "electron.db"
          "frontend.handler.db-based."
-         "frontend.components.property" "frontend.components.class" "frontend.components.db-based"]))
+         "frontend.components.property" "frontend.components.class" "frontend.components.db-based"
+         "frontend.persist-db"]))
 
 (def file-graph-ns
   "Namespaces or parent namespaces _only_ for file graphs"
@@ -34,6 +35,9 @@
    "src/main/frontend/components/property.cljs"
    "src/main/frontend/components/property"
    "src/main/frontend/components/db_based"
+   ;; TODO: Enable this when run-export-periodically is deleted or moved out of the ns
+   #_"src/main/frontend/persist_db.cljs"
+   "src/main/frontend/persist_db"
    "src/electron/electron/db.cljs"])
 
 (def file-graph-paths
