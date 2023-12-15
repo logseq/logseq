@@ -151,6 +151,9 @@
   [repo]
   (when-not (get-sqlite-conn repo)
     (p/let [^js pool (<get-opfs-pool repo)
+            capacity (.getCapacity pool)
+            _ (when (zero? capacity)   ; file handle already releases since pool will be initialized only once
+                (.acquireAccessHandles pool))
             db (new (.-OpfsSAHPoolDb pool) (get-repo-path repo))
             storage (new-sqlite-storage repo {})]
       (swap! *sqlite-conns assoc repo db)
