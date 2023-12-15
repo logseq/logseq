@@ -213,17 +213,18 @@
    (p/let [_ (close-other-dbs! repo)]
      (create-or-open-db! repo)))
 
+  (getMaxTx
+   [_this repo]
+   (when-let [conn (get-datascript-conn repo)]
+     (:max-tx @conn)))
+
   (transact
    [_this repo tx-data tx-meta]
    (when-let [conn (get-datascript-conn repo)]
-     (try
-       (let [tx-data (edn/read-string tx-data)
-             tx-meta (edn/read-string tx-meta)]
-         (d/transact! conn tx-data tx-meta)
-         nil)
-       (catch :default e
-         (prn :debug :error)
-         (js/console.error e)))))
+     (let [tx-data (edn/read-string tx-data)
+           tx-meta (edn/read-string tx-meta)]
+       (d/transact! conn tx-data tx-meta)
+       nil)))
 
   (getInitialData
    [_this repo]
