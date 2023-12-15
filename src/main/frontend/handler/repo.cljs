@@ -349,10 +349,15 @@
                         (when db-based? (db-persist/delete-graph! url))
                         (search/remove-db! url)
                         (state/delete-repo! repo)
-                        (notification/show! (str "Removed graph " (pr-str (text-util/get-graph-name-from-path url))) :success)
-                        (when (= current-repo url)
+                        (if (= current-repo url)
                           (when-let [graph (:url (first (state/get-repos)))]
-                            (state/pub-event! [:graph/switch graph {:persist? false}])))))]
+                            (notification/show! (str "Removed graph "
+                                                     (pr-str (text-util/get-graph-name-from-path url))
+                                                     ". Redirecting to graph "
+                                                     (pr-str (text-util/get-graph-name-from-path url)))
+                                                :success)
+                            (state/pub-event! [:graph/switch graph {:persist? false}]))
+                          (notification/show! (str "Removed graph " (pr-str (text-util/get-graph-name-from-path url))) :success))))]
     (when (or (config/local-file-based-graph? url)
               db-based?
               (config/demo-graph? url))
