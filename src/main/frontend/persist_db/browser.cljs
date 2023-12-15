@@ -8,6 +8,7 @@
             [promesa.core :as p]
             [frontend.util :as util]
             [frontend.handler.notification :as notification]
+            [frontend.handler.route :as route-handler]
             [cljs-bean.core :as bean]
             [frontend.state :as state]
             [electron.ipc :as ipc]))
@@ -49,6 +50,14 @@
     :else
     nil))
 
+(defn- sqlite-error-handler
+  [error]
+  (if (= "NoModificationAllowedError"  (.-name error))
+    (do
+      (state/pub-event! [:db/multiple-tabs-opfs-failed])
+      (route-handler/redirect! {:to :bug-report}))
+    (notification/show! [:div (str "SQLiteDB error: " error)] :error)))
+
 (defrecord InBrowser []
   protocol/PersistentDB
   (<new [_this repo]
@@ -60,12 +69,7 @@
       (-> (.listDB sqlite)
           (p/then (fn [result]
                     (bean/->clj result)))
-          (p/catch (fn [error]
-                     (prn :debug :list-db-error (js/Date.))
-                     (if (= "NoModificationAllowedError"  (.-name error))
-                       (state/pub-event! [:db/multiple-tabs-opfs-failed])
-                       (notification/show! [:div (str "SQLiteDB error: " error)] :error))
-                     [])))))
+          (p/catch sqlite-error-handler))))
 
   (<unsafe-delete [_this repo]
     (when-let [^js sqlite @*sqlite]
@@ -84,10 +88,7 @@
     (when-let [^js sqlite @*sqlite]
       (-> (p/let [_ (.createOrOpenDB sqlite repo)]
             (.getInitialData sqlite repo))
-          (p/catch (fn [error]
-                     (prn :debug :fetch-initial-data-error repo)
-                     (js/console.error error)
-                     (notification/show! [:div (str "SQLiteDB fetch error: " error)] :error) {})))))
+          (p/catch sqlite-error-handler))))
 
   (<export-db [_this repo opts]
     (when-let [^js sqlite @*sqlite]
