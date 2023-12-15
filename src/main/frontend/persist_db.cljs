@@ -46,6 +46,10 @@
   (p/let [_ (protocol/<new (get-impl) repo)]
     (<export-db repo {})))
 
+(defn <release-access-handles
+  [repo]
+  (protocol/<release-access-handles (get-impl) repo))
+
 (defn run-export-periodically!
   []
   (js/setInterval

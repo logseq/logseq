@@ -71,6 +71,10 @@
     (when-let [^js sqlite @*sqlite]
       (.unsafeUnlinkDB sqlite repo)))
 
+  (<release-access-handles [_this repo]
+    (when-let [^js sqlite @*sqlite]
+      (.releaseAccessHandles sqlite repo)))
+
   (<transact-data [_this repo tx-data tx-meta]
     (let [^js sqlite @*sqlite]
       (p/let [_ (when sqlite (.transact sqlite repo (pr-str tx-data) (pr-str tx-meta)))]
