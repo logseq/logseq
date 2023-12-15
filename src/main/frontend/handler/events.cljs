@@ -957,8 +957,9 @@
      [:span.warning.text-lg
       (util/format "Logseq doesn't support multiple %ss access to the same graph yet, please close this %s."
                    word word)]
-     (ui/button (str "Close this " word)
-                {:on-click (fn [] (.close js/window))})]))
+     ;; (ui/button (str "Close this " word)
+     ;;            {:on-click (fn [] (.close js/window))})
+     ]))
 
 (defmethod handle :show/multiple-tabs-error-dialog [_]
   (state/set-state! :error/multiple-tabs-access-opfs? true)
