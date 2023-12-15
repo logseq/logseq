@@ -36,6 +36,8 @@ html[data-theme=light] {
   &[data-color=logseq] {
     --primary: 200 97% 37%;
     --primary-foreground: 255 92% 100%;
+    --accent: 200 97% 37%;
+    --accent-foreground: 255 92% 100%;
     --ring: 200 97% 37%;
 
     .references-blocks-item {
@@ -89,6 +91,10 @@ html[data-theme=dark] {
 
     .ui__calendar {
       --accent: 196 100% 15%;
+    }
+
+    .rc-datepicker {
+      --accent: 200 97% 37%;
     }
   }
 }
