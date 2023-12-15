@@ -955,7 +955,7 @@
   (let [word (if (util/electron?) "window" "tab")]
     [:div.flex.p-4.flex-col.gap-4.h-64
      [:span.warning.text-lg
-      (util/format "Logseq doesn't support multiple %ss access to the same graph yet, please close this %s."
+      (util/format "Logseq doesn't support multiple %ss access to the same graph yet, please close this %s or switch to another graph."
                    word word)]
      [:div.text-lg
       [:p "Switch to another repo: "]
