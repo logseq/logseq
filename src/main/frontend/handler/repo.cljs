@@ -22,6 +22,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.fs :as util-fs]
+            [frontend.util.text :as text-util]
             [frontend.persist-db :as persist-db]
             [promesa.core :as p]
             [shadow.resource :as rc]
@@ -345,9 +346,10 @@
         delete-db-f (fn []
                       (let [current-repo (state/get-current-repo)]
                         (db/remove-conn! url)
-                        (db-persist/delete-graph! url)
+                        (when db-based? (db-persist/delete-graph! url))
                         (search/remove-db! url)
                         (state/delete-repo! repo)
+                        (notification/show! (str "Removed graph " (pr-str (text-util/get-graph-name-from-path url))) :success)
                         (when (= current-repo url)
                           (when-let [graph (:url (first (state/get-repos)))]
                             (state/pub-event! [:graph/switch graph {:persist? false}])))))]
