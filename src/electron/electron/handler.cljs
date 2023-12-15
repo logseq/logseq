@@ -32,8 +32,10 @@
             [electron.window :as win]
             [electron.handler-interface :refer [handle]]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.sqlite.db :as sqlite-db]
             [logseq.common.graph :as common-graph]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [clojure.edn :as edn]))
 
 (defmethod handle :mkdir [_window [_ dir]]
   (fs/mkdirSync dir))
@@ -365,6 +367,18 @@
 (defmethod handle :db-export [_window [_ repo data]]
   (db/ensure-graph-dir! repo)
   (db/save-db! repo data))
+
+(defmethod handle :db-open [_window [_ repo]]
+  (db/ensure-graph-dir! repo)
+  (db/open-db! repo)
+  nil)
+
+(defmethod handle :db-transact [_window [_ repo tx-data-str tx-meta-str]]
+  (when-let [conn (sqlite-db/get-conn repo)]
+    (let [tx-data (edn/read-string tx-data-str)
+          tx-meta (edn/read-string tx-meta-str)]
+      (sqlite-db/transact! repo tx-data tx-meta)
+      (:max-tx @conn))))
 
 ;; DB related IPCs End
 

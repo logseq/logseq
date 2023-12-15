@@ -53,7 +53,8 @@
   protocol/PersistentDB
   (<new [_this repo]
     (when-let [^js sqlite @*sqlite]
-      (.createOrOpenDB sqlite repo)))
+      (.createOrOpenDB sqlite repo)
+      (ipc/ipc :db-open repo)))
 
   (<list-db [_this]
     (when-let [^js sqlite @*sqlite]
@@ -72,13 +73,24 @@
       (.unsafeUnlinkDB sqlite repo)))
 
   (<transact-data [_this repo tx-data tx-meta]
-    (let [^js sqlite @*sqlite]
-      (p/let [_ (when sqlite (.transact sqlite repo (pr-str tx-data) (pr-str tx-meta)))]
-        nil)))
+    (let [^js sqlite @*sqlite
+          tx-data' (pr-str tx-data)
+          tx-meta' (pr-str tx-meta)]
+      (p/do!
+       (p/let [start (util/time-ms)
+               _ (ipc/ipc :db-transact repo tx-data' tx-meta')]
+         (prn :debug :disk-db-transact-time-ms (- (util/time-ms) start)))
+       (p/let [start (util/time-ms)
+               _ (when sqlite (.transact sqlite repo tx-data' tx-meta'))]
+         (prn :debug :opfs-db-transact-time-ms (- (util/time-ms) start)
+              {:tx-data tx-data
+               :tx-meta tx-meta}))
+       nil)))
 
   (<fetch-initial-data [_this repo _opts]
     (when-let [^js sqlite @*sqlite]
-      (-> (p/let [_ (.createOrOpenDB sqlite repo)]
+      (-> (p/let [_ (.createOrOpenDB sqlite repo)
+                  _ (ipc/ipc :db-open repo)]
             (.getInitialData sqlite repo))
           (p/catch (fn [error]
                      (prn :debug :fetch-initial-data-error repo)

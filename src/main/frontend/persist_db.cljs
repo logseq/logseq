@@ -43,16 +43,4 @@
 ;; @shuyu Do we still need this?
 (defn <new [repo]
   {:pre [(<= (count repo) 56)]}
-  (p/let [_ (protocol/<new (get-impl) repo)]
-    (<export-db repo {})))
-
-(defn run-export-periodically!
-  []
-  (js/setInterval
-   (fn []
-     (when-let [repo (state/get-current-repo)]
-       (when (and (util/electron?) (config/db-based-graph? repo))
-         (println :debug :save-db-to-disk repo)
-         (<export-db repo {}))))
-   ;; every 10 minutes
-   (* 10 60 1000)))
+  (protocol/<new (get-impl) repo))
