@@ -231,27 +231,6 @@
    [:h1.text-3xl.font-bold "Logseq UI"]
    [:hr]
 
-   (ui/card
-     {:class "p-6 w-1/2 bg-primary/10 border-primary/90 flex items-center gap-2"}
-     (ui/tabler-icon
-       "brand-github"
-       {:size 28 :class "text-primary"})
-     [:<>
-      (ui/tooltip-provider
-        (ui/tooltip
-          (ui/tooltip-trigger
-            (ui/button
-              {:variant  :outline
-               :on-click #(dialog-core/open! [:h1.text-9xl.text-center.scale-110 "🍄"])}
-              "点击获取?"))
-          (ui/tooltip-content
-            {:class "w-42 px-8 py-4 text-xl border-yellow-rx-08 bg-yellow-rx-07-alpha"}
-            "🍄")))
-      [:span.text-2xl.text-primary.uppercase
-       "logseq theme color"]])
-
-   [:hr]
-
    ;; Button
    (section-item "Button"
      [:div.flex.flex-row.flex-wrap.gap-2
@@ -330,6 +309,20 @@
          :class    "primary-orange"
          :size     :md}
         "Custom icon")])
+
+   ;; Tips
+   (section-item "Tips"
+     [:div.flex.flex-row.flex-wrap.gap-2
+      (ui/tooltip-provider
+        (ui/tooltip
+          (ui/tooltip-trigger
+            (ui/button
+              {:variant  :outline
+               :on-click #(dialog-core/open! [:h1.text-9xl.text-center.scale-110 "🍄"])}
+              "Tip for hint?"))
+          (ui/tooltip-content
+            {:class "w-42 px-8 py-4 text-xl border-green-rx-08 bg-green-rx-07-alpha"}
+            "🍄")))])
 
    ;; Badge
    (section-item "Badge"
