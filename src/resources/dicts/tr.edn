@@ -221,6 +221,25 @@
  :page/updated-at "Güncellenme Zamanı"
  :page/backlinks "Geri Bağlantılar"
  :linked-references/filter-search "Bağlantılı sayfalarda ara"
+ :linked-references/unexpected-error "Bağlantılı Referans: Beklenmeyen bir hata oluştu. Lütfen ilk olarak gafınız için yeniden dizin oluşturun"
+ :linked-references/filter-heading "Filtre"
+ :linked-references/filter-directions "Dahil etmek için tıklayın, hariç tutmak için Shift tuşunu basılı tutarak tıklayın. Kaldırmak için tekrar tıklayın."
+ :linked-references/filter-includes "Dahil et: "
+ :linked-references/filter-excludes "Hariç tut: "
+ :linked-references/reference-count (fn [filtered-count total]
+                                      ;; 1 Linked Reference
+                                      ;; 1 of 1 Linked Reference
+                                      ;; 2 of 5 Linked References
+                                      (str
+                                       (when filtered-count
+                                         (str filtered-count " / "))
+                                       total
+                                       (if (= total 1) " Bağlantılı Referans" " Bağlantılı Referans")))
+ :unlinked-references/reference-count (fn [total]
+                                        ;; 1 Unlinked Reference
+                                        ;; 5 Unlinked References
+                                        (str total
+                                         (if (= total 1) " Bağlantısız Referans" " Bağlantısız Referans")))
  :editor/block-search "Blok ara"
  :text/image "Resim"
  :asset/show-in-folder "Resmi klasörde göster"
@@ -460,6 +479,7 @@
  :whiteboard/toggle-grid "Kılavuzu aç/kapat"
  :whiteboard/snap-to-grid "Kılavuzlara daya"
  :whiteboard/toggle-pen-mode "Kalem modunu aç/kapat"
+ :whiteboard/reference-count (fn [refs-count] (if (= refs-count 1) "Referans" "Referans"))
  :flashcards/modal-welcome-title "Bir kart oluşturma zamanı!"
  :flashcards/modal-welcome-desc-1 "Herhangi bir bloğu karta dönüştürmek için \"#card\" etiketini ekleyebilir veya cümle tamamlama eklemek için \"/cloze\" komutunu kullanabilirsiniz."
  :flashcards/modal-welcome-desc-2 "Belgeleri kontrol etmek için "
@@ -755,6 +775,10 @@
  :command.whiteboard/group               "Seçimi gruplandır"
  :command.whiteboard/ungroup             "Seçimi gruptan çıkar"
  :command.whiteboard/toggle-grid         "Tuval ızgarasını değiştir"
+ :command.whiteboard/clone-right         "Sağa kopyala"
+ :command.whiteboard/clone-left          "Sola kopyala"
+ :command.whiteboard/clone-up            "Yukarı kopyala"
+ :command.whiteboard/clone-down          "Aşağı kopyala"
  :command.ui/toggle-brackets             "Köşeli ayraçların görüntülenip görüntülenmeyeceğini değiştir"
  :command.go/electron-find-in-page       "Sayfada bul"
  :command.go/electron-jump-to-the-next   "Aramanız için bir sonraki eşleşmeye atlayın"
