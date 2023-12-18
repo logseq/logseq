@@ -11,7 +11,8 @@
             ["@logseq/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [clojure.string :as string]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.util :as util]))
 
 (defonce *sqlite (atom nil))
 (defonce *sqlite-conns (atom nil))
@@ -69,13 +70,18 @@
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
-  [repo data]
+  [repo data delete-addrs]
+  ;; (prn :debug :delete-addrs delete-addrs :data data)
   (let [^Object db (get-sqlite-conn repo)]
     (assert (some? db) "sqlite db not exists")
     (.transaction db (fn [tx]
                        (doseq [item data]
                          (.exec tx #js {:sql "INSERT INTO kvs (addr, content) values ($addr, $content) on conflict(addr) do update set content = $content"
-                                        :bind item}))))))
+                                        :bind item}))
+
+                       (doseq [addr delete-addrs]
+                         (.exec db #js {:sql "Delete from kvs where addr = ?"
+                                        :bind #js [addr]}))))))
 
 (defn restore-data-from-addr
   [repo addr]
@@ -92,16 +98,20 @@
          :or {threshold 4096}}]
   (let [_cache (cache/lru-cache-factory {} :threshold threshold)]
     (reify IStorage
-      (-store [_ addr+data-seq]
-        (let [data (map
-                    (fn [[addr data]]
-                      #js {:$addr addr
-                           :$content (pr-str data)})
-                    addr+data-seq)]
-          (upsert-addr-content! repo data)))
+      (-store [_ addr+data-seq delete-addrs]
+        (util/profile
+         "SQLite store"
+         (let [data (map
+                     (fn [[addr data]]
+                       #js {:$addr addr
+                            :$content (pr-str data)})
+                     addr+data-seq)]
+           (upsert-addr-content! repo data delete-addrs))))
 
       (-restore [_ addr]
-        (restore-data-from-addr repo addr)))))
+        (util/profile
+         "SQLite restore"
+         (restore-data-from-addr repo addr))))))
 
 (defn- close-db!
   [repo ^js db]
@@ -223,14 +233,16 @@
   (transact
    [_this repo tx-data tx-meta]
    (when-let [conn (get-datascript-conn repo)]
-     (try
-       (let [tx-data (edn/read-string tx-data)
-             tx-meta (edn/read-string tx-meta)]
-         (d/transact! conn tx-data tx-meta)
-         nil)
-       (catch :default e
-         (prn :debug :error)
-         (js/console.error e)))))
+     (util/profile
+      "DB transact!"
+      (try
+        (let [tx-data (edn/read-string tx-data)
+              tx-meta (edn/read-string tx-meta)]
+          (d/transact! conn tx-data tx-meta)
+          nil)
+        (catch :default e
+          (prn :debug :error)
+          (js/console.error e))))))
 
   (getInitialData
    [_this repo]
@@ -249,7 +261,7 @@
   (releaseAccessHandles
    [_this repo]
    (when-let [^js pool (get-opfs-pool repo)]
-    (.releaseAccessHandles pool)))
+     (.releaseAccessHandles pool)))
 
   (exportDB
    [_this repo]
