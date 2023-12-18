@@ -39,7 +39,7 @@
     (when (and
            (not (contains? #{:insert :indent-outdent :auto-save :undo :redo :delete} (state/get-editor-op)))
            ;; Don't trigger auto-save if the latest op is undo or redo
-           (not (contains? #{:undo :redo} (state/get-editor-latest-op))))
+           (not (contains? #{:undo :redo :paste-blocks} (state/get-editor-latest-op))))
       (editor-handler/save-block! (get-state) value)))
   state)
 
