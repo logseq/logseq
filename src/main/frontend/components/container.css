@@ -80,17 +80,19 @@
 }
 
 .dark .left-sidebar-inner {
-  background-color: or(--ls-left-sidebar-background-color, --lx-gray-01, --ls-primary-background-color);
+  --left-sidebar-bg-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color);
 }
 
 .left-sidebar-inner {
+  --left-sidebar-bg-color: or(--ls-left-sidebar-background-color, --lx-gray-02, --ls-primary-background-color);
+
   position: relative;
   height: 100%;
   padding-top: 12px;
   width: var(--ls-left-sidebar-sm-width);
   overflow-y: auto;
   overflow-x: hidden;
-  background-color: or(--ls-left-sidebar-background-color, --lx-gray-02, --ls-primary-background-color);
+  background-color: var(--left-sidebar-bg-color);
   border-right: 1px solid or(--ls-left-sidebar-border-color, --lx-gray-03, --ls-tertiary-background-color);
   transition: transform .3s;
   transform: translate3d(-100%, 0, 0);
@@ -192,7 +194,7 @@
   }
 
   .nav-contents-container {
-    @apply h-full flex-grow-0 overflow-x-hidden overflow-y-auto;
+    @apply relative h-full flex-grow-0 overflow-x-hidden overflow-y-auto;
 
     &.is-scrolled {
       border-top: 1px solid var(--ls-tertiary-border-color);
@@ -200,8 +202,6 @@
   }
 
   .nav-content-item {
-    @apply overflow-hidden;
-
     &:not(:hover) {
       ::-webkit-scrollbar-thumb,
       ::-webkit-scrollbar,
@@ -211,16 +211,14 @@
     }
 
     .nav-content-item-inner {
-      @apply flex flex-col h-full overflow-hidden;
+      @apply flex flex-col;
     }
 
     .header {
-      @apply px-6 py-1;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      user-select: none;
-      cursor: pointer;
+      @apply px-6 py-1 flex justify-between items-center select-none sticky top-[-4px];
+      @apply cursor-pointer z-[2];
+
+      background-color: var(--left-sidebar-bg-color);
 
       .ui__icon {
         @apply flex justify-center;
@@ -361,12 +359,13 @@
   }
 
   @screen sm {
+    --left-sidebar-bg-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color);
+
     padding-top: 0;
     width: var(--ls-left-sidebar-width);
-    background-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color);
 
     .dark & {
-      background-color: or(--ls-left-sidebar-background, --lx-gray-01, --ls-secondary-background-color);
+      --left-sidebar-bg-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color);
     }
 
     > .wrap {
