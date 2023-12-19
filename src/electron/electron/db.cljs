@@ -5,6 +5,8 @@
             ["electron" :refer [app]]
             ;; [electron.logger :as logger]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [electron.logger :as logger]
+            [logseq.db.sqlite.db :as sqlite-db]
             [electron.backup-file :as backup-file]))
 
 (defn get-graphs-dir
@@ -22,6 +24,14 @@
   (let [graph-dir (node-path/join (get-graphs-dir) (sqlite-common-db/sanitize-db-name db-name))]
     (fs/ensureDirSync graph-dir)
     graph-dir))
+
+(defn open-db!
+  [db-name]
+  (let [graphs-dir (get-graphs-dir)]
+    (try (sqlite-db/open-db! graphs-dir db-name)
+         (catch :default e
+           (js/console.error e)
+           (logger/error (str e ": " db-name))))))
 
 (defn save-db!
   [db-name data]

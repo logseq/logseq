@@ -7,7 +7,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.frontend.property.util :as db-property-util]
-            [logseq.outliner.cli.persist-graph :as persist-graph]
+            [logseq.outliner.cli.pipeline :as cli-pipeline]
             [logseq.db :as ldb]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -34,10 +34,9 @@
   transacts initial data"
   [dir db-name]
   (fs/mkdirSync (node-path/join dir db-name) #js {:recursive true})
-  (sqlite-db/open-db! dir db-name)
   ;; Same order as frontend.db.conn/start!
-  (let [conn (ldb/start-conn :create-default-pages? false)]
-    (persist-graph/add-listener conn db-name)
+  (let [conn (sqlite-db/open-db! dir db-name)]
+    (cli-pipeline/add-listener conn)
     (ldb/create-default-pages! conn {:db-graph? true})
     (setup-init-data conn)
     conn))

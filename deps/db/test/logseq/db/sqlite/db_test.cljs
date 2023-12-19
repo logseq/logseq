@@ -24,11 +24,11 @@
 (deftest get-initial-data
   (testing "Fetches a defined block"
     (create-graph-dir "tmp/graphs" "test-db")
-    (sqlite-db/open-db! "tmp/graphs" "test-db")
-    (let [blocks [{:block/uuid (random-uuid)
+    
+    (let [conn* (sqlite-db/open-db! "tmp/graphs" "test-db")
+          blocks [{:block/uuid (random-uuid)
                    :file/path "logseq/config.edn"
                    :file/content "{:foo :bar}"}]
-          conn* (sqlite-db/get-conn "test-db")
           _ (d/transact! conn* blocks)
           ;; Simulate getting data from sqlite and restoring it for frontend
           conn (-> (sqlite-common-db/get-initial-data @conn*)
@@ -42,8 +42,8 @@
 (deftest restore-initial-data
   (testing "Restore a journal page with its block"
     (create-graph-dir "tmp/graphs" "test-db")
-    (sqlite-db/open-db! "tmp/graphs" "test-db")
-    (let [page-uuid (random-uuid)
+    (let [conn* (sqlite-db/open-db! "tmp/graphs" "test-db")
+          page-uuid (random-uuid)
           block-uuid (random-uuid)
           created-at (js/Date.now)
           blocks [{:db/id 100001
@@ -58,7 +58,6 @@
                    :block/page {:db/id 100001}
                    :block/created-at created-at
                    :block/updated-at created-at}]
-          conn* (sqlite-db/get-conn "test-db")
           _ (d/transact! conn* blocks)
           ;; Simulate getting data from sqlite and restoring it for frontend
           conn (-> (sqlite-common-db/get-initial-data @conn*)

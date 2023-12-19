@@ -2,7 +2,6 @@
   "Worker used for browser DB implementation"
   (:require [promesa.core :as p]
             [datascript.storage :refer [IStorage]]
-            [cljs.cache :as cache]
             [clojure.edn :as edn]
             [datascript.core :as d]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
@@ -13,6 +12,7 @@
             [clojure.string :as string]
             [cljs-bean.core :as bean]
             [frontend.worker.search :as search]
+            [frontend.util :as util]
             [logseq.db.sqlite.util :as sqlite-util]))
 
 (defonce *sqlite (atom nil))
@@ -22,6 +22,14 @@
 (defonce *datascript-conns (atom nil))
 ;; repo -> pool
 (defonce *opfs-pools (atom nil))
+
+(defn sanitize-db-name
+  [db-name]
+  (-> db-name
+      (string/replace " " "_")
+      (string/replace "/" "_")
+      (string/replace "\\" "_")
+      (string/replace ":" "_")))
 
 (defn- get-sqlite-conn
   [repo & {:keys [search?]
@@ -41,7 +49,7 @@
 (defn- <get-opfs-pool
   [graph]
   (or (get-opfs-pool graph)
-      (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (str "logseq-pool-" graph)
+      (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (str "logseq-pool-" (sanitize-db-name graph))
                                                              :initialCapacity 20})]
         (swap! *opfs-pools assoc graph pool)
         pool)))
@@ -62,7 +70,7 @@
 
 (defn- get-repo-path
   [repo]
-  (str "/" repo ".sqlite"))
+  (str "/" (sanitize-db-name repo) ".sqlite"))
 
 (defn- <export-db-file
   [repo]
@@ -77,13 +85,17 @@
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
-  [repo data]
+  [repo data delete-addrs]
   (let [^Object db (get-sqlite-conn repo)]
     (assert (some? db) "sqlite db not exists")
     (.transaction db (fn [tx]
                        (doseq [item data]
                          (.exec tx #js {:sql "INSERT INTO kvs (addr, content) values ($addr, $content) on conflict(addr) do update set content = $content"
-                                        :bind item}))))))
+                                        :bind item}))
+
+                       (doseq [addr delete-addrs]
+                         (.exec db #js {:sql "Delete from kvs where addr = ?"
+                                        :bind #js [addr]}))))))
 
 (defn restore-data-from-addr
   [repo addr]
@@ -96,28 +108,30 @@
       (edn/read-string content))))
 
 (defn new-sqlite-storage
-  [repo {:keys [threshold]
-         :or {threshold 4096}}]
-  (let [_cache (cache/lru-cache-factory {} :threshold threshold)]
-    (reify IStorage
-      (-store [_ addr+data-seq]
-        (let [data (map
-                    (fn [[addr data]]
-                      #js {:$addr addr
-                           :$content (pr-str data)})
-                    addr+data-seq)]
-          (upsert-addr-content! repo data)))
+  [repo _opts]
+  (reify IStorage
+    (-store [_ addr+data-seq delete-addrs]
+      (util/profile
+       (str "SQLite store addr+data count: " (count addr+data-seq))
+       (let [data (map
+                   (fn [[addr data]]
+                     #js {:$addr addr
+                          :$content (pr-str data)})
+                   addr+data-seq)]
+         (upsert-addr-content! repo data delete-addrs))))
 
-      (-restore [_ addr]
-        (restore-data-from-addr repo addr)))))
+    (-restore [_ addr]
+      (restore-data-from-addr repo addr))))
 
 (defn- close-db-aux!
   [repo ^Object db ^Object search]
   (swap! *sqlite-conns dissoc repo)
   (swap! *datascript-conns dissoc repo)
-  (swap! *opfs-pools dissoc repo)
   (when db (.close db))
-  (when search (.close search)))
+  (when search (.close search))
+  (when-let [^js pool (get-opfs-pool repo)]
+    (.releaseAccessHandles pool))
+  (swap! *opfs-pools dissoc repo))
 
 (defn- close-other-dbs!
   [repo]
@@ -133,7 +147,10 @@
 (defn- create-or-open-db!
   [repo]
   (when-not (get-sqlite-conn repo)
-    (p/let [pool (<get-opfs-pool repo)
+    (p/let [^js pool (<get-opfs-pool repo)
+            capacity (.getCapacity pool)
+            _ (when (zero? capacity)   ; file handle already releases since pool will be initialized only once
+                (.acquireAccessHandles pool))
             path (get-repo-path repo)
             db (new (.-OpfsSAHPoolDb pool) path)
             search-db (new (.-OpfsSAHPoolDb pool) (str "search-" path))
@@ -143,7 +160,6 @@
       (.exec db "PRAGMA locking_mode=exclusive")
       (sqlite-common-db/create-kvs-table! db)
       (search/create-tables-and-triggers! search-db)
-      (prn :debug :repo repo)
       (let [schema (sqlite-util/get-schema repo)
             conn (sqlite-common-db/get-storage-conn storage schema)]
         (swap! *datascript-conns assoc repo conn)
@@ -225,11 +241,11 @@
                           (string/replace-first (.-name file) ".logseq-pool-" "")))
                       all-files)
                 distinct)]
-     (prn :debug :all-files (map #(.-name %) all-files))
-     (prn :debug :all-files-count (count (filter
-                                          #(= (.-kind %) "file")
-                                          all-files)))
-     (prn :dbs dbs)
+     ;; (prn :debug :all-files (map #(.-name %) all-files))
+     ;; (prn :debug :all-files-count (count (filter
+     ;;                                      #(= (.-kind %) "file")
+     ;;                                      all-files)))
+     ;; (prn :dbs dbs)
      (bean/->js dbs)))
 
   (createOrOpenDB
@@ -237,17 +253,24 @@
    (p/let [_ (close-other-dbs! repo)]
      (create-or-open-db! repo)))
 
+  (getMaxTx
+   [_this repo]
+   (when-let [conn (get-datascript-conn repo)]
+     (:max-tx @conn)))
+
   (transact
    [_this repo tx-data tx-meta]
    (when-let [conn (get-datascript-conn repo)]
-     (try
-       (let [tx-data (edn/read-string tx-data)
-             tx-meta (edn/read-string tx-meta)]
-         (d/transact! conn tx-data tx-meta)
-         nil)
-       (catch :default e
-         (prn :debug :error)
-         (js/console.error e)))))
+     (util/profile
+      "DB transact!"
+      (try
+        (let [tx-data (edn/read-string tx-data)
+              tx-meta (edn/read-string tx-meta)]
+          (d/transact! conn tx-data tx-meta)
+          nil)
+        (catch :default e
+          (prn :debug :error)
+          (js/console.error e))))))
 
   (getInitialData
    [_this repo]
@@ -261,6 +284,11 @@
            _ (close-db! repo)
            _result (remove-vfs! pool)]
      nil))
+
+  (releaseAccessHandles
+   [_this repo]
+   (when-let [^js pool (get-opfs-pool repo)]
+     (.releaseAccessHandles pool)))
 
   (exportDB
    [_this repo]

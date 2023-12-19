@@ -3,8 +3,8 @@
  {org.clojure/clojure                   {:mvn/version "1.11.1"}
   rum/rum                               {:mvn/version "0.12.9"}
 
-  datascript/datascript        {:git/url "https://github.com/logseq/datascript" ;; fork
-                                :sha     "ec937bc2bc932f0e1fdbbc1f67413d55c18ddc4a"}
+  datascript/datascript                 {:git/url "https://github.com/logseq/datascript" ;; fork
+                                         :sha     "15234c650df20844ec089c1738d28c00eccacd6e"}
 
   datascript-transit/datascript-transit {:mvn/version "0.3.0"}
   borkdude/rewrite-edn                  {:mvn/version "0.4.7"}

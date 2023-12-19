@@ -1,8 +1,7 @@
 (ns validate-client-db
   "Script that validates the datascript db of a DB graph
    NOTE: This script is also used in CI to confirm our db's schema is up to date"
-  (:require [logseq.db.sqlite.cli :as sqlite-cli]
-            [logseq.db.sqlite.db :as sqlite-db]
+  (:require [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [datascript.core :as d]
             [clojure.string :as string]
@@ -93,11 +92,10 @@
                               (node-path/join (or js/process.env.ORIGINAL_PWD ".") graph-dir)]
                           ((juxt node-path/dirname node-path/basename) graph-dir'))
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
-        _ (try (sqlite-db/open-db! dir db-name)
-               (catch :default e
-                 (println "Error: For graph" (str (pr-str graph-dir) ":") (str e))
-                 (js/process.exit 1)))
-        conn (sqlite-cli/read-graph db-name)
+        conn (try (sqlite-db/open-db! dir db-name)
+                  (catch :default e
+                    (println "Error: For graph" (str (pr-str graph-dir) ":") (str e))
+                    (js/process.exit 1)))
         datoms (d/datoms @conn :eavt)
         ent-maps (db-malli-schema/datoms->entity-maps datoms)]
     (println "Read graph" (str db-name " with " (count datoms) " datoms, "

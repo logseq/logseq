@@ -1,11 +1,9 @@
 (ns frontend.persist-db
-   "Backend of DB based graph"
-   (:require [frontend.persist-db.browser :as browser]
-             [frontend.persist-db.protocol :as protocol]
-             [promesa.core :as p]
-             [frontend.config :as config]
-             [frontend.state :as state]
-             [frontend.util :as util]))
+  "Backend of DB based graph"
+  (:require [frontend.persist-db.browser :as browser]
+            [frontend.persist-db.protocol :as protocol]
+            [promesa.core :as p]
+            [electron.ipc :as ipc]))
 
 (defonce opfs-db (browser/->InBrowser))
 
@@ -35,25 +33,30 @@
   ([repo]
    (<fetch-init-data repo {}))
   ([repo opts]
-   (p/let [ret (protocol/<fetch-initial-data (get-impl) repo opts)]
-     (js/console.log "fetch-initial-data" ret)
-     ret)))
+   (p/do!
+    (ipc/ipc :db-open repo)
+    (protocol/<fetch-initial-data (get-impl) repo opts))))
 
 ;; FIXME: limit repo name's length and sanity
-;; original size is 56
 ;; @shuyu Do we still need this?
 (defn <new [repo]
-  {:pre [(<= (count repo) 128)]}
-  (p/let [_ (protocol/<new (get-impl) repo)]
-    (<export-db repo {})))
+  {:pre [(<= (count repo) 56)]}
+  (p/let [_ (protocol/<new (get-impl) repo)
+          _ (<export-db repo {})]
+    (ipc/ipc :db-open repo)))
 
-(defn run-periodically-export!
-  []
-  (js/setInterval
-   (fn []
-     (when-let [repo (state/get-current-repo)]
-       (when (and (util/electron?) (config/db-based-graph? repo))
-         (println :debug :save-db-to-disk repo)
-         (<export-db repo {}))))
+(defn <release-access-handles
+  [repo]
+  (protocol/<release-access-handles (get-impl) repo))
+
+(comment
+  (defn run-export-periodically!
+    []
+    (js/setInterval
+     (fn []
+       (when-let [repo (state/get-current-repo)]
+         (when (and (util/electron?) (config/db-based-graph? repo))
+           (println :debug :save-db-to-disk repo)
+           (<export-db repo {}))))
    ;; every 10 minutes
-   (* 10 60 1000)))
+     (* 10 60 1000))))
