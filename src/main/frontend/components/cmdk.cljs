@@ -338,8 +338,15 @@
 
 (defmulti handle-action (fn [action _state _event] action))
 
+(defn- get-highlighted-page-name
+  [state]
+  (let [highlighted-item (some-> state state->highlighted-item)]
+    (or (when-let [id (:block/uuid (:source-block highlighted-item))]
+          (:block/name (db/entity [:block/uuid id])))
+        (:source-page highlighted-item))))
+
 (defmethod handle-action :open-page [_ state _event]
-  (when-let [page-name (some-> state state->highlighted-item :source-page)]
+  (when-let [page-name (get-highlighted-page-name state)]
     (let [redirect-page-name (model/get-redirect-page-name page-name)
           page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])
           original-name (:block/original-name page)]
@@ -359,7 +366,7 @@
       (state/close-modal!))))
 
 (defmethod handle-action :open-page-right [_ state _event]
-  (when-let [page-name (some-> state state->highlighted-item :source-page)]
+  (when-let [page-name (get-highlighted-page-name state)]
     (let [redirect-page-name (model/get-redirect-page-name page-name)
           page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
       (when page
@@ -373,7 +380,9 @@
 
 (defmethod handle-action :open [_ state event]
   (when-let [item (some-> state state->highlighted-item)]
-    (let [page? (boolean (:source-page item))
+    (let [block-uuid (:block/uuid (:source-block item))
+          page? (or (boolean (:source-page item))
+                    (and block-uuid (:block/name (db/entity [:block/uuid block-uuid]))))
           block? (boolean (:source-block item))
           shift?  @(::shift? state)
           shift-or-sidebar? (or shift? (boolean (:open-sidebar? (:opts state))))
@@ -389,8 +398,8 @@
                                                (reset! (::input state) ""))
         (and shift-or-sidebar? block?) (handle-action :open-block-right state event)
         (and shift-or-sidebar? page?) (handle-action :open-page-right state event)
-        block? (handle-action :open-block state event)
-        page? (handle-action :open-page state event)))))
+        page? (handle-action :open-page state event)
+        block? (handle-action :open-block state event)))))
 
 (defmethod handle-action :search [_ state _event]
   (when-let [item (some-> state state->highlighted-item)]
