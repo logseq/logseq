@@ -377,6 +377,81 @@ These tasks are specific to database graphs. For these tasks there is a one time
   Updated 16 block(s) for graph test-db!
   ```
 
+* `dev:db-datoms` and `dev:diff-datoms` - Save a db's datoms to file and diff two datom files
+
+  ```sh
+  # Save a current datoms snapshot of a graph
+  $ bb dev:db-datoms woot w2.edn
+  # After some edits, save another datoms snapshot
+  $ bb dev:db-datoms woot w3.edn
+
+  # Diff the two datom snapshots
+  # This snapshot correctly shows an added block with content "b7" and a property using a closed :default value
+  $  bb dev:diff-datoms w2.edn w3.edn
+  [[]
+  [[162 :block/content "b7" 536871039 true]
+    [162 :block/created-at 1703004379103 536871037 true]
+    [162 :block/format :markdown 536871037 true]
+    [162 :block/page 149 536871037 true]
+    [162 :block/parent 149 536871037 true]
+    [162 :block/path-refs 108 536871044 true]
+    [162 :block/path-refs 149 536871044 true]
+    [162 :block/path-refs 160 536871044 true]
+    [162
+    :block/properties
+    {#uuid "21be4275-bba9-48b8-9351-c9ca27883159"
+      #uuid "6581b09e-8b9c-4dca-a938-c900aedc8275"}
+    536871043
+    true]
+    [162 :block/refs 108 536871043 true]
+    [162 :block/refs 160 536871043 true]
+    [162
+    :block/uuid
+    #uuid "6581c8db-a2a2-4e09-b30d-cdea6ad69512"
+    536871037
+    true]]]
+  
+  # By default this task ignores commonly changing datascript attributes.
+  # To see all changed attributes, tell the task to ignore a nonexistent attribute:
+  $ bb dev:diff-datoms w2.edn w3.edn -i a
+  [[[nil nil 536871029 536871030]
+    [nil nil 1702998192728 536871029]
+    [nil nil 536871035 536871036]
+    [nil nil 1703000139716 536871035]
+    [nil nil 149 536871033]
+    [nil nil 536871035 536871036]]
+  [[nil nil 536871041 536871042]
+    [nil nil 1703004384793 536871041]
+    [nil nil 536871039 536871040]
+    [nil nil 1703004380918 536871039]
+    [nil nil 162 536871037]
+    [nil nil 536871037 536871038]
+    [162 :block/content "b7" 536871039 true]
+    [162 :block/created-at 1703004379103 536871037 true]
+    [162 :block/format :markdown 536871037 true]
+    [162 :block/left 149 536871037 true]
+    [162 :block/page 149 536871037 true]
+    [162 :block/parent 149 536871037 true]
+    [162 :block/path-refs 108 536871044 true]
+    [162 :block/path-refs 149 536871044 true]
+    [162 :block/path-refs 160 536871044 true]
+    [162
+    :block/properties
+    {#uuid "21be4275-bba9-48b8-9351-c9ca27883159"
+      #uuid "6581b09e-8b9c-4dca-a938-c900aedc8275"}
+    536871043
+    true]
+    [162 :block/refs 108 536871043 true]
+    [162 :block/refs 160 536871043 true]
+    [162 :block/tx-id 536871043 536871044 true]
+    [162 :block/updated-at 1703004380918 536871039 true]
+    [162
+    :block/uuid
+    #uuid "6581c8db-a2a2-4e09-b30d-cdea6ad69512"
+    536871037
+    true]]]
+  ```
+
 ### Dev Commands
 
 In the app, you can enable Dev commands under `Settings > Advanced > Developer
