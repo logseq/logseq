@@ -18,6 +18,14 @@
 (defonce *datascript-conns (atom nil))
 (defonce *opfs-pools (atom nil))
 
+(defn sanitize-db-name
+  [db-name]
+  (-> db-name
+      (string/replace " " "_")
+      (string/replace "/" "_")
+      (string/replace "\\" "_")
+      (string/replace ":" "_")))
+
 (defn- get-sqlite-conn
   [repo]
   (get @*sqlite-conns repo))
@@ -33,7 +41,7 @@
 (defn- <get-opfs-pool
   [graph]
   (or (get-opfs-pool graph)
-      (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (str "logseq-pool-" graph)
+      (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (str "logseq-pool-" (sanitize-db-name graph))
                                                              :initialCapacity 10})]
         (swap! *opfs-pools assoc graph pool)
         pool)))
@@ -54,7 +62,7 @@
 
 (defn- get-repo-path
   [repo]
-  (str "/" repo ".sqlite"))
+  (str "/" (sanitize-db-name repo) ".sqlite"))
 
 (defn- <export-db-file
   [repo]
