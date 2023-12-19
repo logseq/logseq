@@ -44,7 +44,7 @@
     (ipc/ipc :db-export repo data)
 
     ;; TODO: browser nfs-supported? auto backup
-    
+
     ;;
     :else
     nil))
@@ -82,14 +82,8 @@
           tx-data' (pr-str tx-data)
           tx-meta' (pr-str tx-meta)]
       (p/do!
-       (p/let [start (util/time-ms)
-               _ (ipc/ipc :db-transact repo tx-data' tx-meta')]
-         (prn :debug :disk-db-transact-time-ms (- (util/time-ms) start)))
-       (p/let [start (util/time-ms)
-               _ (when sqlite (.transact sqlite repo tx-data' tx-meta'))]
-         (prn :debug :opfs-db-transact-time-ms (- (util/time-ms) start)
-              {:tx-data tx-data
-               :tx-meta tx-meta}))
+       (ipc/ipc :db-transact repo tx-data' tx-meta')
+       (when sqlite (.transact sqlite repo tx-data' tx-meta'))
        nil)))
 
   (<fetch-initial-data [_this repo _opts]
