@@ -1,8 +1,9 @@
 (ns frontend.persist-db
-   "Backend of DB based graph"
-   (:require [frontend.persist-db.browser :as browser]
-             [frontend.persist-db.protocol :as protocol]
-             [promesa.core :as p]))
+  "Backend of DB based graph"
+  (:require [frontend.persist-db.browser :as browser]
+            [frontend.persist-db.protocol :as protocol]
+            [promesa.core :as p]
+            [electron.ipc :as ipc]))
 
 (defonce opfs-db (browser/->InBrowser))
 
@@ -32,16 +33,17 @@
   ([repo]
    (<fetch-init-data repo {}))
   ([repo opts]
-   (p/let [ret (protocol/<fetch-initial-data (get-impl) repo opts)]
-     (js/console.log "fetch-initial-data" ret)
-     ret)))
+   (p/do!
+    (ipc/ipc :db-open repo)
+    (protocol/<fetch-initial-data (get-impl) repo opts))))
 
 ;; FIXME: limit repo name's length
 ;; @shuyu Do we still need this?
 (defn <new [repo]
   {:pre [(<= (count repo) 56)]}
-  (p/let [_ (protocol/<new (get-impl) repo)]
-    (<export-db repo {})))
+  (p/let [_ (protocol/<new (get-impl) repo)
+          _ (<export-db repo {})]
+    (ipc/ipc :db-open repo)))
 
 (defn <release-access-handles
   [repo]

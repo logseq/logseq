@@ -59,8 +59,7 @@
   protocol/PersistentDB
   (<new [_this repo]
     (when-let [^js sqlite @*sqlite]
-      (.createOrOpenDB sqlite repo)
-      (ipc/ipc :db-open repo)))
+      (.createOrOpenDB sqlite repo)))
 
   (<list-db [_this]
     (when-let [^js sqlite @*sqlite]
@@ -88,8 +87,7 @@
 
   (<fetch-initial-data [_this repo _opts]
     (when-let [^js sqlite @*sqlite]
-      (-> (p/let [_ (.createOrOpenDB sqlite repo)
-                  _ (ipc/ipc :db-open repo)]
+      (-> (p/let [_ (.createOrOpenDB sqlite repo)]
             (.getInitialData sqlite repo))
           (p/catch sqlite-error-handler))))
 
