@@ -227,14 +227,6 @@
     (fs-extra/ensureDirSync dir)
     dir))
 
-(defn- get-db-based-graphs-dir
-  []
-  (let [dir (if utils/ci?
-              (.resolve node-path js/__dirname "../tmp/graphs")
-              (.join node-path (.homedir os) "logseq" "graphs"))]
-    (fs-extra/ensureDirSync dir)
-    dir))
-
 ;; TODO: move file based graphs to "~/logseq/graphs" too
 (defn- get-file-based-graphs
   "Returns all graph names in the cache directory (starting with `logseq_local_`)"
@@ -245,20 +237,9 @@
          (map #(node-path/basename % ".transit"))
          (map graph-name->path))))
 
-(defn- get-db-based-graphs
-  "Returns all graph names in the cache directory"
-  []
-  (let [dir (get-db-based-graphs-dir)]
-    (->> (common-graph/read-directories dir)
-         (remove (fn [s] (= s db/unlinked-graphs-dir)))
-         (map graph-name->path)
-         (map (fn [s] (str sqlite-util/db-version-prefix s))))))
-
 (defn- get-graphs
   []
-  (concat
-   (get-file-based-graphs)
-   (get-db-based-graphs)))
+  (get-file-based-graphs))
 
 ;; TODO support alias mechanism
 (defn get-graph-name
