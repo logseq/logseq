@@ -216,7 +216,7 @@
 
     .header {
       @apply px-6 py-1 flex justify-between items-center select-none sticky top-[-4px];
-      @apply cursor-pointer z-[2];
+      @apply cursor-pointer z-[2] opacity-50 hover:opacity-70;
 
       background-color: var(--left-sidebar-bg-color);
 

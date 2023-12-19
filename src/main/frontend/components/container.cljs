@@ -34,6 +34,8 @@
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
+            [logseq.shui.core :as shui2]
             [logseq.shui.toaster.core :as shui-toaster]
             [logseq.shui.dialog.core :as shui-dialog]
             [frontend.util :as util]
@@ -51,7 +53,7 @@
   [name {:keys [class count]} child]
   (let [collapsed? (state/sub [:ui/navigation-item-collapsed? class])
         shrink? (not collapsed?)]
-    [:div.nav-content-item.mt-3
+    [:div.nav-content-item
      {:class (util/classnames [class {:is-expand (not collapsed?)
                                       :flex-shrink-0 (not shrink?)
                                       :flex-shrink shrink?}])}
@@ -78,26 +80,44 @@
   [name icon recent?]
   (let [original-name (db-model/get-page-original-name name)
         whiteboard-page? (db-model/whiteboard-page? name)
-        untitiled? (db-model/untitled-page? name)]
-    [:a.flex.items-center
-     {:on-click
-      (fn [e]
-        (let [name        (util/safe-page-name-sanity-lc name)
-              source-page (db-model/get-alias-source-page (state/get-current-repo) name)
-              name        (if (empty? source-page) name (:block/name source-page))]
-          (if (and (gobj/get e "shiftKey") (not whiteboard-page?))
-            (when-let [page-entity (if (empty? source-page) (db/entity [:block/name name]) source-page)]
-              (state/sidebar-add-block!
-               (state/get-current-repo)
-               (:db/id page-entity)
-               :page))
-            (if whiteboard-page?
-              (route-handler/redirect-to-whiteboard! name {:click-from-recent? recent?})
-              (route-handler/redirect-to-page! name {:click-from-recent? recent?})))))}
-     [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
-     [:span.page-title {:class (when untitiled? "opacity-50")}
-      (if untitiled? (t :untitled)
-          (pdf-utils/fix-local-asset-pagename original-name))]]))
+        untitled? (db-model/untitled-page? name)
+        name (util/safe-page-name-sanity-lc name)
+        source-page (db-model/get-alias-source-page (state/get-current-repo) name)
+        ctx-icon #(shui/tabler-icon %1 {:class "scale-90 pr-1 opacity-80"})
+        open-in-sidebar #(when-let [page-entity (and (not whiteboard-page?)
+                                                  (if (empty? source-page)
+                                                    (db/entity [:block/name name]) source-page))]
+                           (state/sidebar-add-block!
+                             (state/get-current-repo)
+                             (:db/id page-entity)
+                             :page))]
+    (shui/context-menu
+      (shui/context-menu-trigger
+        [:a.flex.items-center
+         {:on-click
+          (fn [e]
+            (let [name (if (empty? source-page) name (:block/name source-page))]
+              (if (gobj/get e "shiftKey")
+                (open-in-sidebar)
+                (if whiteboard-page?
+                  (route-handler/redirect-to-whiteboard! name {:click-from-recent? recent?})
+                  (route-handler/redirect-to-page! name {:click-from-recent? recent?})))))}
+         [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
+         [:span.page-title {:class (when untitled? "opacity-50")}
+          (if untitled? (t :untitled)
+                        (pdf-utils/fix-local-asset-pagename original-name))]]
+        (shui/context-menu-content
+          {:class "w-60"}
+          (shui/context-menu-item
+            {:on-click #(page-handler/unfavorite-page! original-name)}
+            (ctx-icon "star-off")
+            (t :page/unfavorite)
+            (shui/context-menu-shortcut (shui2/shortcut "mod+y")))
+          (shui/context-menu-item
+            {:on-click open-in-sidebar}
+            (ctx-icon "layout-sidebar-right")
+            (t :content/open-in-sidebar)
+            (shui/context-menu-shortcut (shui2/shortcut "shift+click"))))))))
 
 (defn get-page-icon [page-entity]
   (let [default-icon (ui/icon "page" {:extension? true})

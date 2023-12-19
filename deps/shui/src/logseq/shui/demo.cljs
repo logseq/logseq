@@ -60,7 +60,7 @@
          [:span.opacity-50 "Right click here"]])
       ;; content
       (ui/context-menu-content
-        {:class "w-60"}
+        {:class "w-60 max-h-[80vh] overflow-auto"}
         (ui/context-menu-item
           (icon "arrow-left")
           "Back"
