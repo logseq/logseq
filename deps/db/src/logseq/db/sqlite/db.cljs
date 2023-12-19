@@ -52,12 +52,16 @@
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
-  [db data]
+  [db data delete-addrs]
   (let [insert (.prepare db "INSERT INTO kvs (addr, content) values (@addr, @content) on conflict(addr) do update set content = @content")
+        delete (.prepare db "DELETE from kvs where addr = ?")
         insert-many (.transaction ^object db
                                   (fn [data]
                                     (doseq [item data]
-                                      (.run ^object insert item))))]
+                                      (.run ^object insert item))
+                                    (doseq [addr delete-addrs]
+                                      (when addr
+                                        (.run ^object delete addr)))))]
     (insert-many data)))
 
 (defn restore-data-from-addr
@@ -70,7 +74,7 @@
   "Creates a datascript storage for sqlite. Should be functionally equivalent to db-worker/new-sqlite-storage"
   [db]
   (reify IStorage
-    (-store [_ addr+data-seq]
+    (-store [_ addr+data-seq delete-addrs]
       (let [data (->>
                   (map
                    (fn [[addr data]]
@@ -78,7 +82,7 @@
                           :content (pr-str data)})
                    addr+data-seq)
                   (to-array))]
-        (upsert-addr-content! db data)))
+        (upsert-addr-content! db data delete-addrs)))
     (-restore [_ addr]
       (let [content (restore-data-from-addr db addr)]
         (edn/read-string content)))))
