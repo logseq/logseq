@@ -2,7 +2,6 @@
   "Worker used for browser DB implementation"
   (:require [promesa.core :as p]
             [datascript.storage :refer [IStorage]]
-            [cljs.cache :as cache]
             [clojure.edn :as edn]
             [datascript.core :as d]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
@@ -71,7 +70,6 @@
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
   [repo data delete-addrs]
-  ;; (prn :debug :delete-addrs delete-addrs :data data)
   (let [^Object db (get-sqlite-conn repo)]
     (assert (some? db) "sqlite db not exists")
     (.transaction db (fn [tx]
@@ -94,24 +92,20 @@
       (edn/read-string content))))
 
 (defn new-sqlite-storage
-  [repo {:keys [threshold]
-         :or {threshold 4096}}]
-  (let [_cache (cache/lru-cache-factory {} :threshold threshold)]
-    (reify IStorage
-      (-store [_ addr+data-seq delete-addrs]
-        (util/profile
-         "SQLite store"
-         (let [data (map
-                     (fn [[addr data]]
-                       #js {:$addr addr
-                            :$content (pr-str data)})
-                     addr+data-seq)]
-           (upsert-addr-content! repo data delete-addrs))))
+  [repo _opts]
+  (reify IStorage
+    (-store [_ addr+data-seq delete-addrs]
+      (util/profile
+       (str "SQLite store addr+data count: " (count addr+data-seq))
+       (let [data (map
+                   (fn [[addr data]]
+                     #js {:$addr addr
+                          :$content (pr-str data)})
+                   addr+data-seq)]
+         (upsert-addr-content! repo data delete-addrs))))
 
-      (-restore [_ addr]
-        (util/profile
-         "SQLite restore"
-         (restore-data-from-addr repo addr))))))
+    (-restore [_ addr]
+      (restore-data-from-addr repo addr))))
 
 (defn- close-db!
   [repo ^js db]
