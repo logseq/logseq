@@ -2,7 +2,6 @@
   "Worker used for browser DB implementation"
   (:require [promesa.core :as p]
             [datascript.storage :refer [IStorage]]
-            [cljs.cache :as cache]
             [clojure.edn :as edn]
             [datascript.core :as d]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
@@ -11,7 +10,8 @@
             ["@logseq/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [clojure.string :as string]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.util :as util]))
 
 (defonce *sqlite (atom nil))
 (defonce *sqlite-conns (atom nil))
@@ -69,13 +69,17 @@
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
-  [repo data]
+  [repo data delete-addrs]
   (let [^Object db (get-sqlite-conn repo)]
     (assert (some? db) "sqlite db not exists")
     (.transaction db (fn [tx]
                        (doseq [item data]
                          (.exec tx #js {:sql "INSERT INTO kvs (addr, content) values ($addr, $content) on conflict(addr) do update set content = $content"
-                                        :bind item}))))))
+                                        :bind item}))
+
+                       (doseq [addr delete-addrs]
+                         (.exec db #js {:sql "Delete from kvs where addr = ?"
+                                        :bind #js [addr]}))))))
 
 (defn restore-data-from-addr
   [repo addr]
@@ -88,27 +92,31 @@
       (edn/read-string content))))
 
 (defn new-sqlite-storage
-  [repo {:keys [threshold]
-         :or {threshold 4096}}]
-  (let [_cache (cache/lru-cache-factory {} :threshold threshold)]
-    (reify IStorage
-      (-store [_ addr+data-seq]
-        (let [data (map
-                    (fn [[addr data]]
-                      #js {:$addr addr
-                           :$content (pr-str data)})
-                    addr+data-seq)]
-          (upsert-addr-content! repo data)))
+  [repo _opts]
+  (reify IStorage
+    (-store [_ addr+data-seq delete-addrs]
+      (util/profile
+       (str "SQLite store addr+data count: " (count addr+data-seq))
+       (let [data (map
+                   (fn [[addr data]]
+                     #js {:$addr addr
+                          :$content (pr-str data)})
+                   addr+data-seq)]
+         (upsert-addr-content! repo data delete-addrs))))
 
-      (-restore [_ addr]
-        (restore-data-from-addr repo addr)))))
+    (-restore [_ addr]
+      (restore-data-from-addr repo addr))))
 
 (defn- close-db!
   [repo ^js db]
   (swap! *sqlite-conns dissoc repo)
   (swap! *datascript-conns dissoc repo)
-  (swap! *opfs-pools dissoc repo)
-  (when db (.close db)))
+
+  (when db (.close db))
+  (when-let [^js pool (get-opfs-pool repo)]
+    (.releaseAccessHandles pool))
+
+  (swap! *opfs-pools dissoc repo))
 
 (defn- close-other-dbs!
   [repo]
@@ -147,6 +155,9 @@
   [repo]
   (when-not (get-sqlite-conn repo)
     (p/let [^js pool (<get-opfs-pool repo)
+            capacity (.getCapacity pool)
+            _ (when (zero? capacity)   ; file handle already releases since pool will be initialized only once
+                (.acquireAccessHandles pool))
             db (new (.-OpfsSAHPoolDb pool) (get-repo-path repo))
             storage (new-sqlite-storage repo {})]
       (swap! *sqlite-conns assoc repo db)
@@ -221,10 +232,16 @@
   (transact
    [_this repo tx-data tx-meta]
    (when-let [conn (get-datascript-conn repo)]
-     (let [tx-data (edn/read-string tx-data)
-           tx-meta (edn/read-string tx-meta)]
-       (d/transact! conn tx-data tx-meta)
-       nil)))
+     (util/profile
+      "DB transact!"
+      (try
+        (let [tx-data (edn/read-string tx-data)
+              tx-meta (edn/read-string tx-meta)]
+          (d/transact! conn tx-data tx-meta)
+          nil)
+        (catch :default e
+          (prn :debug :error)
+          (js/console.error e))))))
 
   (getInitialData
    [_this repo]
@@ -239,6 +256,11 @@
            _ (when db (close-db! repo db))
            result (remove-vfs! pool)]
      nil))
+
+  (releaseAccessHandles
+   [_this repo]
+   (when-let [^js pool (get-opfs-pool repo)]
+     (.releaseAccessHandles pool)))
 
   (exportDB
    [_this repo]

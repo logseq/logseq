@@ -104,6 +104,7 @@
              frontend.modules.outliner.core outliner-core
              frontend.mobile.util mobile-util
              frontend.page page
+             frontend.persist-db persist-db
              frontend.schema.handler.common-config common-config-schema
              frontend.search search
              frontend.state state
