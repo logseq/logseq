@@ -109,8 +109,7 @@
                                   (remove nil?)))))]
 
         (when (and (not config/publishing?) (not pipeline-replace?))
-          (let [tx-report' (db/transact! repo replace-full-tx {:outliner/transact? true
-                                                               :replace? true
+          (let [tx-report' (db/transact! repo replace-full-tx {:replace? true
                                                                :pipeline-replace? true})
                 full-tx-data (concat (:tx-data tx-report) (:tx-data tx-report'))]
             (persist-db/<transact-data repo full-tx-data (:tx-meta tx-report))
