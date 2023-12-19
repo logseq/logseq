@@ -32,8 +32,10 @@
             [electron.window :as win]
             [electron.handler-interface :refer [handle]]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.sqlite.db :as sqlite-db]
             [logseq.common.graph :as common-graph]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [clojure.edn :as edn]))
 
 (defmethod handle :mkdir [_window [_ dir]]
   (fs/mkdirSync dir))
@@ -225,14 +227,6 @@
     (fs-extra/ensureDirSync dir)
     dir))
 
-(defn- get-db-based-graphs-dir
-  []
-  (let [dir (if utils/ci?
-              (.resolve node-path js/__dirname "../tmp/graphs")
-              (.join node-path (.homedir os) "logseq" "graphs"))]
-    (fs-extra/ensureDirSync dir)
-    dir))
-
 ;; TODO: move file based graphs to "~/logseq/graphs" too
 (defn- get-file-based-graphs
   "Returns all graph names in the cache directory (starting with `logseq_local_`)"
@@ -243,20 +237,9 @@
          (map #(node-path/basename % ".transit"))
          (map graph-name->path))))
 
-(defn- get-db-based-graphs
-  "Returns all graph names in the cache directory"
-  []
-  (let [dir (get-db-based-graphs-dir)]
-    (->> (common-graph/read-directories dir)
-         (remove (fn [s] (= s db/unlinked-graphs-dir)))
-         (map graph-name->path)
-         (map (fn [s] (str sqlite-util/db-version-prefix s))))))
-
 (defn- get-graphs
   []
-  (concat
-   (get-file-based-graphs)
-   (get-db-based-graphs)))
+  (get-file-based-graphs))
 
 ;; TODO support alias mechanism
 (defn get-graph-name
@@ -365,6 +348,18 @@
 (defmethod handle :db-export [_window [_ repo data]]
   (db/ensure-graph-dir! repo)
   (db/save-db! repo data))
+
+(defmethod handle :db-open [_window [_ repo]]
+  (db/ensure-graph-dir! repo)
+  (db/open-db! repo)
+  nil)
+
+(defmethod handle :db-transact [_window [_ repo tx-data-str tx-meta-str]]
+  (when-let [conn (sqlite-db/get-conn repo)]
+    (let [tx-data (edn/read-string tx-data-str)
+          tx-meta (edn/read-string tx-meta-str)]
+      (sqlite-db/transact! repo tx-data tx-meta)
+      (:max-tx @conn))))
 
 ;; DB related IPCs End
 

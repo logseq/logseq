@@ -44,7 +44,7 @@
     (ipc/ipc :db-export repo data)
 
     ;; TODO: browser nfs-supported? auto backup
-    
+
     ;;
     :else
     nil))
@@ -77,9 +77,13 @@
       (.releaseAccessHandles sqlite repo)))
 
   (<transact-data [_this repo tx-data tx-meta]
-    (let [^js sqlite @*sqlite]
-      (p/let [_ (when sqlite (.transact sqlite repo (pr-str tx-data) (pr-str tx-meta)))]
-        nil)))
+    (let [^js sqlite @*sqlite
+          tx-data' (pr-str tx-data)
+          tx-meta' (pr-str tx-meta)]
+      (p/do!
+       (ipc/ipc :db-transact repo tx-data' tx-meta')
+       (when sqlite (.transact sqlite repo tx-data' tx-meta'))
+       nil)))
 
   (<fetch-initial-data [_this repo _opts]
     (when-let [^js sqlite @*sqlite]

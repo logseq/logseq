@@ -15,13 +15,29 @@
 ;; Reference same sqlite default class in cljs + nbb without needing .cljc
 (def sqlite (if (find-ns 'nbb.core) (aget sqlite3 "default") sqlite3))
 
+;; sqlite databases
+(defonce databases (atom nil))
+;; datascript conns
+(defonce conns (atom nil))
+
+(defn close!
+  []
+  (when @databases
+    (doseq [[_ database] @databases]
+      (.close database))
+    (reset! databases nil)))
+
 (defn sanitize-db-name
   [db-name]
   (-> db-name
       (string/replace sqlite-util/db-version-prefix "")
       (string/replace "/" "_")
       (string/replace "\\" "_")
-      (string/replace ":" "_"))) ;; windows
+      (string/replace ":" "_")))
+
+(defn get-conn
+  [repo]
+  (get @conns (sanitize-db-name repo)))
 
 (defn get-db-full-path
   [graphs-dir db-name]
@@ -76,9 +92,16 @@
   needed sqlite tables if not created and returns a datascript connection that's
   connected to the sqlite db"
   [graphs-dir db-name]
-  (let [[_db-sanitized-name db-full-path] (get-db-full-path graphs-dir db-name)
+  (let [[db-sanitized-name db-full-path] (get-db-full-path graphs-dir db-name)
         db (new sqlite db-full-path nil)]
     (sqlite-common-db/create-kvs-table! db)
+    (swap! databases assoc db-sanitized-name db)
     (let [storage (new-sqlite-storage db)
           conn (sqlite-common-db/get-storage-conn storage)]
+      (swap! conns assoc db-sanitized-name conn)
       conn)))
+
+(defn transact!
+  [repo tx-data tx-meta]
+  (when-let [conn (get-conn repo)]
+    (d/transact! conn tx-data tx-meta)))

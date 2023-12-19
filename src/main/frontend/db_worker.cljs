@@ -18,6 +18,14 @@
 (defonce *datascript-conns (atom nil))
 (defonce *opfs-pools (atom nil))
 
+(defn sanitize-db-name
+  [db-name]
+  (-> db-name
+      (string/replace " " "_")
+      (string/replace "/" "_")
+      (string/replace "\\" "_")
+      (string/replace ":" "_")))
+
 (defn- get-sqlite-conn
   [repo]
   (get @*sqlite-conns repo))
@@ -33,7 +41,7 @@
 (defn- <get-opfs-pool
   [graph]
   (or (get-opfs-pool graph)
-      (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (str "logseq-pool-" graph)
+      (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (str "logseq-pool-" (sanitize-db-name graph))
                                                              :initialCapacity 10})]
         (swap! *opfs-pools assoc graph pool)
         pool)))
@@ -54,7 +62,7 @@
 
 (defn- get-repo-path
   [repo]
-  (str "/" repo ".sqlite"))
+  (str "/" (sanitize-db-name repo) ".sqlite"))
 
 (defn- <export-db-file
   [repo]
@@ -212,17 +220,22 @@
                           (string/replace-first (.-name file) ".logseq-pool-" "")))
                       all-files)
                 distinct)]
-     (prn :debug :all-files (map #(.-name %) all-files))
-     (prn :debug :all-files-count (count (filter
-                                          #(= (.-kind %) "file")
-                                          all-files)))
-     (prn :dbs dbs)
+     ;; (prn :debug :all-files (map #(.-name %) all-files))
+     ;; (prn :debug :all-files-count (count (filter
+     ;;                                      #(= (.-kind %) "file")
+     ;;                                      all-files)))
+     ;; (prn :dbs dbs)
      (bean/->js dbs)))
 
   (createOrOpenDB
    [_this repo]
    (p/let [_ (close-other-dbs! repo)]
      (create-or-open-db! repo)))
+
+  (getMaxTx
+   [_this repo]
+   (when-let [conn (get-datascript-conn repo)]
+     (:max-tx @conn)))
 
   (transact
    [_this repo tx-data tx-meta]
