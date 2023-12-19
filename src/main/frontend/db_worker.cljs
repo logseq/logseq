@@ -212,11 +212,11 @@
                           (string/replace-first (.-name file) ".logseq-pool-" "")))
                       all-files)
                 distinct)]
-     (prn :debug :all-files (map #(.-name %) all-files))
-     (prn :debug :all-files-count (count (filter
-                                          #(= (.-kind %) "file")
-                                          all-files)))
-     (prn :dbs dbs)
+     ;; (prn :debug :all-files (map #(.-name %) all-files))
+     ;; (prn :debug :all-files-count (count (filter
+     ;;                                      #(= (.-kind %) "file")
+     ;;                                      all-files)))
+     ;; (prn :dbs dbs)
      (bean/->js dbs)))
 
   (createOrOpenDB
