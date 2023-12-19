@@ -40,7 +40,7 @@
 (defn <export-db!
   [repo data]
   (cond
-    (and (util/electron?) (config/db-based-graph? repo))
+    (util/electron?)
     (ipc/ipc :db-export repo data)
 
     ;; TODO: browser nfs-supported? auto backup
@@ -48,6 +48,12 @@
     ;;
     :else
     nil))
+
+(defn- sqlite-error-handler
+  [error]
+  (if (= "NoModificationAllowedError"  (.-name error))
+    (state/pub-event! [:show/multiple-tabs-error-dialog])
+    (notification/show! [:div (str "SQLiteDB error: " error)] :error)))
 
 (defrecord InBrowser []
   protocol/PersistentDB
@@ -60,30 +66,30 @@
       (-> (.listDB sqlite)
           (p/then (fn [result]
                     (bean/->clj result)))
-          (p/catch (fn [error]
-                     (prn :debug :list-db-error (js/Date.))
-                     (if (= "NoModificationAllowedError"  (.-name error))
-                       (state/pub-event! [:db/multiple-tabs-opfs-failed])
-                       (notification/show! [:div (str "SQLiteDB error: " error)] :error))
-                     [])))))
+          (p/catch sqlite-error-handler))))
 
   (<unsafe-delete [_this repo]
     (when-let [^js sqlite @*sqlite]
       (.unsafeUnlinkDB sqlite repo)))
 
+  (<release-access-handles [_this repo]
+    (when-let [^js sqlite @*sqlite]
+      (.releaseAccessHandles sqlite repo)))
+
   (<transact-data [_this repo tx-data tx-meta]
-    (let [^js sqlite @*sqlite]
-      (p/let [_ (when sqlite (.transact sqlite repo (pr-str tx-data) (pr-str tx-meta)))]
-        nil)))
+    (let [^js sqlite @*sqlite
+          tx-data' (pr-str tx-data)
+          tx-meta' (pr-str tx-meta)]
+      (p/do!
+       (ipc/ipc :db-transact repo tx-data' tx-meta')
+       (when sqlite (.transact sqlite repo tx-data' tx-meta'))
+       nil)))
 
   (<fetch-initial-data [_this repo _opts]
     (when-let [^js sqlite @*sqlite]
       (-> (p/let [_ (.createOrOpenDB sqlite repo)]
             (.getInitialData sqlite repo))
-          (p/catch (fn [error]
-                     (prn :debug :fetch-initial-data-error repo)
-                     (js/console.error error)
-                     (notification/show! [:div (str "SQLiteDB fetch error: " error)] :error) {})))))
+          (p/catch sqlite-error-handler))))
 
   (<export-db [_this repo opts]
     (when-let [^js sqlite @*sqlite]

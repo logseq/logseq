@@ -1,7 +1,6 @@
 (ns transact
   "This script generically runs transactions against the queried blocks"
-  (:require [logseq.outliner.cli.persist-graph :as persist-graph]
-            [logseq.db.sqlite.cli :as sqlite-cli]
+  (:require [logseq.outliner.cli.pipeline :as cli-pipeline]
             [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.frontend.rules :as rules]
             [datascript.core :as d]
@@ -20,8 +19,7 @@
         [dir db-name] (if (string/includes? graph-dir "/")
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
-        _ (sqlite-db/open-db! dir db-name)
-        conn (sqlite-cli/read-graph db-name)
+        conn (sqlite-db/open-db! dir db-name)
         ;; find blocks to update
         query (into (edn/read-string query*) [:in '$ '%]) ;; assumes no :in are in queries
         transact-fn (edn/read-string transact-fn*)
@@ -35,7 +33,7 @@
           (println "With the following blocks updated:")
           (prn (map #(select-keys (d/entity @conn %) [:block/name :block/content]) blocks-to-update)))
       (do
-        (persist-graph/add-listener conn db-name)
+        (cli-pipeline/add-listener conn)
         (d/transact! conn update-tx)
         (println "Updated" (count update-tx) "block(s) for graph" (str db-name "!"))))))
 

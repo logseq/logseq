@@ -23,8 +23,7 @@
 
 (defn- publish-db-graph [static-dir graph-dir output-path]
   (let [db-name (node-path/basename graph-dir)
-        _ (sqlite-db/open-db! (node-path/dirname graph-dir) db-name)
-        conn (sqlite-cli/read-graph db-name)
+        conn (sqlite-db/open-db! (node-path/dirname graph-dir) db-name)
         repo-config (-> (d/q '[:find ?content
                                :where [?b :file/path "logseq/config.edn"] [?b :file/content ?content]]
                              @conn)

@@ -50,8 +50,8 @@
                   (state/set-edit-content! input content)
                   (when pos (cursor/move-cursor-to input pos)))))))))))
 
-(defn- delete-property-parent-block-if-empty!
-  [repo tx-report deleted-block-uuids]
+(defn- delete-property-parent-block-if-empty
+  [tx-report deleted-block-uuids]
   (let [empty-property-parents (->> (keep (fn [child-id]
                                             (let [e (d/entity (:db-before tx-report) [:block/uuid child-id])]
                                               (when (:created-from-property (:block/metadata (:block/parent e)))
@@ -60,23 +60,21 @@
                                                     parent-now))))) deleted-block-uuids)
                                     distinct)]
     (when (seq empty-property-parents)
-      (let [tx-data (->>
-                     (mapcat (fn [b]
-                               (let [{:keys [created-from-block created-from-property]} (:block/metadata b)
-                                     created-block (db/entity [:block/uuid created-from-block])
-                                     properties (assoc (:block/properties created-block) created-from-property "")]
-                                 (when (and created-block created-from-property)
-                                   [[:db/retractEntity (:db/id b)]
-                                    [:db/add (:db/id created-block) :block/properties properties]])))
-                             empty-property-parents)
-                     (remove nil?))]
-        (db/transact! repo tx-data {:outliner/transact? true
-                                    :replace? true})))))
+      (->>
+       (mapcat (fn [b]
+                 (let [{:keys [created-from-block created-from-property]} (:block/metadata b)
+                       created-block (db/entity [:block/uuid created-from-block])
+                       properties (assoc (:block/properties created-block) created-from-property "")]
+                   (when (and created-block created-from-property)
+                     [[:db/retractEntity (:db/id b)]
+                      [:db/add (:db/id created-block) :block/properties properties]])))
+               empty-property-parents)
+       (remove nil?)))))
 
 (defn invoke-hooks
   [tx-report]
   (let [tx-meta (:tx-meta tx-report)
-        {:keys [compute-path-refs? from-disk? new-graph? replace?]} tx-meta]
+        {:keys [from-disk? new-graph? pipeline-replace?]} tx-meta]
     (when (and (not from-disk?)
                (not new-graph?))
       (try
@@ -87,51 +85,46 @@
 
       (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
             repo (state/get-current-repo)
-            tx (when-not compute-path-refs?
-                 (util/profile
-                  "Compute path refs: "
-                  (set (compute-block-path-refs-tx tx-report blocks))))
-            tx-report' (if (seq tx)
-                         (let [refs-tx-data' (:tx-data (db/transact! repo tx {:outliner/transact? true
-                                                                              :replace? true
-                                                                              :compute-path-refs? true}))]
-                           ;; merge
-                           (assoc tx-report :tx-data (concat (:tx-data tx-report) refs-tx-data')))
-                         tx-report)
             importing? (:graph/importing @state/state)
-            deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))]
+            deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))
+            replace-full-tx (when-not pipeline-replace?
+                              (concat
+                                 ;; block path refs
+                               (util/profile
+                                "Compute path refs: "
+                                (set (compute-block-path-refs-tx tx-report blocks)))
 
-        (when (and (seq deleted-block-uuids) (not replace?)
-                   (not compute-path-refs?))
-          (delete-property-parent-block-if-empty! repo tx-report deleted-block-uuids))
+                                 ;; delete empty property parent block
+                               (when (seq deleted-block-uuids)
+                                 (delete-property-parent-block-if-empty tx-report deleted-block-uuids))
 
-        (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids)  (:block/uuid b))) blocks)
-              tx-id (get-in tx-report' [:tempids :db/current-tx])
-              update-tx-ids (->>
-                             (map (fn [b]
-                                    (when-let [db-id (:db/id b)]
-                                      {:db/id db-id
-                                       :block/tx-id tx-id})) updated-blocks)
-                             (remove nil?))]
-          (when (and (seq update-tx-ids)
-                     (not (:update-tx-ids? tx-meta)))
-            (db/transact! repo update-tx-ids {:replace? true
-                                              :update-tx-ids? true}))
-          (when (not config/publishing?)
-            (persist-db/<transact-data repo (:tx-data tx-report) (:tx-meta tx-report))))
+                                 ;; update block/tx-id
+                               (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids)  (:block/uuid b))) blocks)
+                                     tx-id (get-in tx-report [:tempids :db/current-tx])]
+                                 (->>
+                                  (map (fn [b]
+                                         (when-let [db-id (:db/id b)]
+                                           {:db/id db-id
+                                            :block/tx-id tx-id})) updated-blocks)
+                                  (remove nil?)))))]
 
-        (when-not importing?
-          (react/refresh! repo tx-report'))
+        (when (and (not config/publishing?) (not pipeline-replace?))
+          (let [tx-report' (db/transact! repo replace-full-tx {:replace? true
+                                                               :pipeline-replace? true})
+                full-tx-data (concat (:tx-data tx-report) (:tx-data tx-report'))]
+            (persist-db/<transact-data repo full-tx-data (:tx-meta tx-report))
+            (when-not importing?
+              (react/refresh! repo (assoc tx-report :tx-data full-tx-data)))))
 
         (when (and (not (:delete-files? tx-meta))
-                   (not replace?))
+                   (not pipeline-replace?))
           (doseq [p (seq pages)]
             (updated-page-hook tx-report p)))
 
         (when (and state/lsp-enabled?
                    (seq blocks)
                    (not importing?)
-                   (not replace?)
+                   (not pipeline-replace?)
                    (<= (count blocks) 1000))
           (state/pub-event! [:plugin/hook-db-tx
                              {:blocks  blocks

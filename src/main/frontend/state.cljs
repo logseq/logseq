@@ -1529,7 +1529,7 @@ Similar to re-frame subscriptions"
 
 (defn close-modal!
   []
-  (when-not (editing?)
+  (when-not (or (editing?) (:error/multiple-tabs-access-opfs? @state))
     (close-dropdowns!)
     (if (seq (get-sub-modals))
       (close-sub-modal!)

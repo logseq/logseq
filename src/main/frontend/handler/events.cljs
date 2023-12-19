@@ -939,13 +939,23 @@
 (defmethod handle :editor/edit-block [[_ block pos id opts]]
   (editor-handler/edit-block! block pos id opts))
 
-(defmethod handle :db/multiple-tabs-opfs-failed [_]
-  ;; close current tab or window
-  (notification/show!
-   (let [word (if (util/electron?) "window" "tab")]
-     (util/format "Logseq doesn't support multiple %ss access to the same graph yet, please close this %s."
-                  word word))
-   :warning false))
+(rum/defc multi-tabs-dialog
+  []
+  (let [word (if (util/electron?) "window" "tab")]
+    [:div.flex.p-4.flex-col.gap-4.h-64
+     [:span.warning.text-lg
+      (util/format "Logseq doesn't support multiple %ss access to the same graph yet, please close this %s or switch to another graph."
+                   word word)]
+     [:div.text-lg
+      [:p "Switch to another repo: "]
+      (repo/repos-dropdown {:on-click (fn [e]
+                                        (util/stop e)
+                                        (state/set-state! :error/multiple-tabs-access-opfs? false)
+                                        (state/close-modal!))})]]))
+
+(defmethod handle :show/multiple-tabs-error-dialog [_]
+  (state/set-state! :error/multiple-tabs-access-opfs? true)
+  (state/set-modal! multi-tabs-dialog {:container-overflow-visible? true}))
 
 (defn run!
   []

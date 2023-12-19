@@ -1,8 +1,6 @@
 (ns logseq.outliner.pipeline
   "Core fns for use with frontend.modules.outliner.pipeline"
-  (:require [logseq.db.frontend.schema :as db-schema]
-            [datascript.core :as d]
-            [cognitect.transit :as t]
+  (:require [datascript.core :as d]
             [clojure.set :as set]))
 
 (defn filter-deleted-blocks
@@ -12,23 +10,6 @@
      (when (and (= :block/uuid (:a d)) (false? (:added d)))
        (:v d)))
    datoms))
-
-(defn- datom->av-vector
-  [db datom]
-  (let [a (:a datom)
-        v (:v datom)
-        v' (cond
-             (contains? db-schema/ref-type-attributes a)
-             (when-some [block-uuid-datom (first (d/datoms db :eavt v :block/uuid))]
-               [:block/uuid (str (:v block-uuid-datom))])
-
-             (and (= :block/uuid a) (uuid? v))
-             (str v)
-
-             :else
-             v)]
-    (when (some? v')
-      [a v'])))
 
 ;; non recursive query
 (defn ^:api get-block-parents

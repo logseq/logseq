@@ -20,7 +20,7 @@
             [logseq.graph-parser.util :as gp-util]
             [promesa.core :as p]
             [frontend.handler.property.util :as pu]
-            [frontend.persist-db :as persistent-db]))
+            [frontend.persist-db :as persist-db]))
 
 (defn- safe-api-call
   "Force the callback result to be nil, otherwise, ipc calls could lead to
@@ -32,12 +32,13 @@
   []
   (when-let [repo (state/get-current-repo)]
     (->
-     (p/let [_ (persistent-db/<export-db repo {})]
+     (p/let [_ (persist-db/<export-db repo {})]
        (ipc/ipc "persistent-dbs-saved"))
      (p/catch (fn [error]
                 (prn :debug :persist-db-failed :repo repo)
                 (js/console.error error)
                 (notification/show! error :error))))))
+
 
 
 (defn listen-persistent-dbs!
