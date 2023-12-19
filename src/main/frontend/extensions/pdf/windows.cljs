@@ -1,6 +1,7 @@
 (ns frontend.extensions.pdf.windows
   (:require [frontend.state :as state]
             [rum.core :as rum]
+            [cljs-bean.core :as bean]
             [frontend.storage :as storage]))
 
 (def *active-win (atom nil))
@@ -103,7 +104,10 @@
                                                                  :y      (.-screenY win)})))
 
                 (reset! *active-win win)
-                (state/set-state! :pdf/system-win? true))))]
+                (state/set-state! :pdf/system-win? true)
+                ;; NOTE: must do ipc in new window
+                (some-> (.-apis win)
+                  (.doAction (bean/->js [:window/open-blank-callback :pdf]))))))]
 
       (js/setTimeout
        (fn []
