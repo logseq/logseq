@@ -57,6 +57,16 @@
   {:doc "Transact against a DB graph's datascript db"
    :task (apply shell {:dir "deps/outliner"} "yarn -s nbb-logseq script/transact.cljs" *command-line-args*)}
 
+  dev:db-datoms
+  {:doc "Write db's datoms to a file"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq script/dump_datoms.cljs"
+                *command-line-args*)}
+
+  dev:diff-datoms
+  logseq.tasks.dev/diff-datoms
+
   dev:npx-cap-run-ios
   logseq.tasks.dev.mobile/npx-cap-run-ios
 
