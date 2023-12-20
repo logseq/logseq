@@ -129,6 +129,8 @@ The template will ask you to include the following with each issue:
   - **Note:** Because the developers need to copy and paste the code snippet, including a code snippet as a media file (i.e. .gif)  is not sufficient.
 - Errors from the Dev Tools Console (open from the menu: View > Toggle Developer Tools or press CTRL + Shift + i)
 
+You can find a list of issue-labels [here](docs\issue-labels.md).
+
 
 ## Thank You
 
