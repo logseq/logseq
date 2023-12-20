@@ -73,8 +73,7 @@
             [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.db.listener :as db-listener]
-            [frontend.persist-db :as persist-db]))
+            [frontend.db.listener :as db-listener]))
 
 ;; TODO: should we move all events here?
 
@@ -176,20 +175,11 @@
 ;; Parameters for the `persist-db` function, to show the notification messages
 (defn- graph-switch-on-persisted
   "graph: the target graph to switch to"
-  [graph {:keys [persist?]
-          :or {persist? true}}]
-  (let [current-repo (state/get-current-repo)]
-    (p/do!
-     (when persist?
-       (when (util/electron?)
-         (p/do!
-          (when (or
-                 (config/db-based-graph? current-repo)
-                 (config/local-file-based-graph? current-repo))
-            (persist-db/<export-db current-repo {})))))
-     (repo-handler/restore-and-setup-repo! graph)
-     (graph-switch graph)
-     state/set-state! :sync-graph/init? false)))
+  [graph _opts]
+  (p/do!
+   (repo-handler/restore-and-setup-repo! graph)
+   (graph-switch graph)
+   state/set-state! :sync-graph/init? false))
 
 (defmethod handle :graph/switch [[_ graph opts]]
   (if (or (not (false? (get @outliner-file/*writes-finished? graph)))

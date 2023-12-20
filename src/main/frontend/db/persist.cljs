@@ -6,7 +6,8 @@
             [frontend.db.conn :as db-conn]
             [promesa.core :as p]
             [frontend.persist-db :as persist-db]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.config :as config]))
 
 (defn get-all-graphs
   []
@@ -17,10 +18,11 @@
 
 (defn delete-graph!
   [graph]
-  (let [key (db-conn/datascript-db graph)]
-    (p/let [_ (persist-db/<export-db graph {})
-            _ (persist-db/<unsafe-delete graph)]
-      (when-not (util/electron?)
+  (let [key (db-conn/datascript-db graph)
+        db-based? (config/db-based-graph? graph)]
+    (p/let [_ (persist-db/<unsafe-delete graph)]
+      (if (util/electron?)
+        (ipc/ipc "deleteGraph" graph key db-based?)
         (idb/remove-item! key)))))
 
 (defn rename-graph!

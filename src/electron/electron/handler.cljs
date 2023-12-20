@@ -311,6 +311,9 @@
   (db/open-db! repo)
   nil)
 
+(defmethod handle :db-get [_window [_ repo]]
+  (db/get-db repo))
+
 (defmethod handle :db-transact [_window [_ repo tx-data-str tx-meta-str]]
   (when-let [conn (sqlite-db/get-conn repo)]
     (let [tx-data (edn/read-string tx-data-str)

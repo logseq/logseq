@@ -265,6 +265,5 @@
 
 (defn quit-and-install-new-version!
   []
-  (p/let [_ (el/persist-dbs!)
-          _ (ipc/invoke "set-quit-dirty-state" false)]
+  (p/let [_ (ipc/invoke "set-quit-dirty-state" false)]
     (ipc/ipc :quitAndInstall)))
