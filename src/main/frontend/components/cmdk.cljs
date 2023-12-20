@@ -1,32 +1,36 @@
 (ns frontend.components.cmdk
   (:require
-    [clojure.string :as string]
-    [frontend.components.block :as block]
-    [frontend.context.i18n :refer [t]]
-    [frontend.db :as db]
-    [frontend.db.model :as model]
-    [frontend.handler.command-palette :as cp-handler]
-    [frontend.handler.editor :as editor-handler]
-    [frontend.handler.page :as page-handler]
-    [frontend.handler.route :as route-handler]
-    [frontend.handler.whiteboard :as whiteboard-handler]
-    [frontend.modules.shortcut.core :as shortcut]
-    [frontend.search :as search]
-    [frontend.shui :refer [make-shui-context]]
-    [frontend.state :as state]
-    [frontend.ui :as ui]
-    [frontend.util :as util]
-    [frontend.util.page :as page-util]
-    [goog.functions :as gfun]
-    [goog.object :as gobj]
-    [logseq.shui.core :as shui]
-    [promesa.core :as p]
-    [rum.core :as rum]
-    [frontend.mixins :as mixins]
-    [logseq.graph-parser.util.block-ref :as block-ref]
-    [logseq.graph-parser.util :as gp-util]
-    [logseq.shui.button.v2 :as button]
-    [frontend.modules.shortcut.utils :as shortcut-utils]))
+   [clojure.string :as string]
+   [frontend.components.block :as block]
+   [frontend.context.i18n :refer [t]]
+   [frontend.db :as db]
+   [frontend.db.model :as model]
+   [frontend.handler.command-palette :as cp-handler]
+   [frontend.handler.editor :as editor-handler]
+   [frontend.handler.page :as page-handler]
+   [frontend.handler.route :as route-handler]
+   [frontend.handler.whiteboard :as whiteboard-handler]
+   [frontend.modules.shortcut.core :as shortcut]
+   [frontend.search :as search]
+   [frontend.shui :refer [make-shui-context]]
+   [frontend.state :as state]
+   [frontend.ui :as ui]
+   [frontend.util :as util]
+   [frontend.util.page :as page-util]
+   [goog.functions :as gfun]
+   [goog.object :as gobj]
+   [logseq.shui.core :as shui]
+   [promesa.core :as p]
+   [rum.core :as rum]
+   [frontend.mixins :as mixins]
+   [logseq.graph-parser.util.block-ref :as block-ref]
+   [logseq.graph-parser.util :as gp-util]
+   [logseq.shui.button.v2 :as button]
+   [frontend.modules.shortcut.utils :as shortcut-utils]
+   [frontend.config :as config]
+   [logseq.common.path :as path]
+   [electron.ipc :as ipc]
+   [frontend.util.text :as text-util]))
 
 (defn translate [t {:keys [id desc]}]
   (when id
@@ -46,6 +50,8 @@
                                                                                                            :group :blocks}}
    {:text "Search only commands"     :info "Add filter to search" :icon-theme :gray :icon "command" :filter {:mode "search"
                                                                                                              :group :commands}}
+   {:text "Search only whiteboards"  :info "Add filter to search" :icon-theme :gray :icon "whiteboard" :filter {:mode "search"
+                                                                                                                :group :whiteboards}}
    {:text "Search only files"        :info "Add filter to search" :icon-theme :gray :icon "file" :filter {:mode "search"
                                                                                                           :group :files}}])
 
@@ -230,6 +236,43 @@
                                       :source-page page)))))]
       (swap! !results update group        merge {:status :success :items items}))))
 
+(defmethod load-results :whiteboards [group state]
+  (let [!input (::input state)
+        !results (::results state)]
+    (swap! !results assoc-in [group :status] :loading)
+    (p/let [whiteboards (->> (model/get-all-whiteboards (state/get-current-repo))
+                             (map :block/original-name))
+            pages (search/fuzzy-search whiteboards @!input {:limit 100})
+            items (->> pages
+                       (remove nil?)
+                       (keep
+                        (fn [page]
+                          (let [entity (db/entity [:block/name (util/page-name-sanity-lc page)])
+                                whiteboard? (= (:block/type entity) "whiteboard")]
+                            (when whiteboard?
+                              (hash-map :icon "whiteboard"
+                                        :icon-theme :gray
+                                        :text page
+                                        :source-page page))))))]
+      (swap! !results update group        merge {:status :success :items items}))))
+
+(defn highlight-page-content-query
+  "Return hiccup of highlighted page content FTS result"
+  [content q]
+  (when-not (or (string/blank? content) (string/blank? q))
+    [:div (loop [content content ;; why recur? because there might be multiple matches
+                 result  []]
+            (let [[b-cut hl-cut e-cut] (text-util/cut-by content "$pfts_2lqh>$" "$<pfts_2lqh$")
+                  hiccups-add [(when-not (string/blank? b-cut)
+                                 [:span b-cut])
+                               (when-not (string/blank? hl-cut)
+                                 [:mark.p-0.rounded-none hl-cut])]
+                  hiccups-add (remove nil? hiccups-add)
+                  new-result (concat result hiccups-add)]
+              (if-not (string/blank? e-cut)
+                (recur e-cut new-result)
+                new-result)))]))
+
 ;; The blocks search action uses an existing handler
 (defmethod load-results :blocks [group state]
   (let [!input (::input state)
@@ -241,16 +284,29 @@
     (swap! !results assoc-in [:current-page :status] :loading)
     (p/let [blocks (search/block-search repo @!input opts)
             blocks (remove nil? blocks)
-            items (map (fn [block]
-                         (let [id (if (uuid? (:block/uuid block))
-                                    (:block/uuid block)
-                                    (uuid (:block/uuid block)))]
-                           {:icon "block"
-                            :icon-theme :gray
-                            :text (:block/content block)
-                            :header (block/breadcrumb {:search? true} repo id {})
-                            :current-page? (some-> block :block/page #{current-page})
-                            :source-block block})) blocks)
+            blocks (if (empty? blocks)
+                     (search/page-content-search repo @!input opts)
+                     blocks)
+            items (->>
+                   (map (fn [item]
+                          (let [id (if (uuid? (:block/uuid item))
+                                     (:block/uuid item)
+                                     (uuid (:block/uuid item)))
+                                block (db/entity [:block/uuid id])
+                                snippet (some-> (:block/snippet item)
+                                                (highlight-page-content-query @!input))]
+                            (when block
+                              (cond->
+                               {:icon "block"
+                                :icon-theme :gray
+                                :text (or snippet (:block/content block))
+                                :header (block/breadcrumb {:search? true} repo id {})
+                                :current-page? (some-> block :block/page #{current-page})
+                                :source-block {:block/uuid (str (:block/uuid block))}}
+                                (:block/name block)
+                                (assoc :source-page (:block/name block)
+                                       :cross-blocks? true))))) blocks)
+                   (remove nil?))
             items-on-other-pages (remove :current-page? items)
             items-on-current-page (filter :current-page? items)]
       (swap! !results update group         merge {:status :success :items items-on-other-pages})
@@ -260,7 +316,17 @@
   (let [!input (::input state)
         !results (::results state)]
     (swap! !results assoc-in [group :status] :loading)
-    (p/let [files (search/file-search @!input 99)
+    (p/let [files* (search/file-search @!input 99)
+            files (remove
+                   (fn [f]
+                     (and
+                      f
+                      (string/ends-with? f ".edn")
+                      (or (string/starts-with? f "whiteboards/")
+                          (string/starts-with? f "assets/")
+                          (string/starts-with? f "logseq/version-files")
+                          (contains? #{"logseq/metadata.edn" "logseq/pages-metadata.edn" "logseq/graphs-txid.edn"} f))))
+                   files*)
             items (map
                    (fn [file]
                      (hash-map :icon "file"
@@ -274,9 +340,10 @@
   (let [!input (::input state)
         !results (::results state)
         recent-searches (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
-        recent-pages (->> (keep (fn [page]
+        recent-pages (->> (filter string? (db/get-key-value :recent/pages))
+                          (keep (fn [page]
                                   (when-let [page-entity (db/entity [:block/name (util/page-name-sanity-lc page)])]
-                                    {:type :page :data (:block/original-name page-entity)})) (db/get-key-value :recent/pages))
+                                    {:type :page :data (:block/original-name page-entity)})))
                           vec)]
     (swap! !results assoc-in [group :status] :loading)
     (let [items (->> (concat recent-searches recent-pages)
@@ -305,18 +372,44 @@
                         (search/fuzzy-search filters q {:extract-fn :text}))]
     (swap! !results update group merge {:status :success :items matched-items})))
 
+(defmethod load-results :current-page [group state]
+  (if-let [current-page (page-util/get-current-page-id)]
+    (let [!results (::results state)
+          !input (::input state)
+          repo (state/get-current-repo)
+          opts {:limit 100 :page current-page}]
+      (swap! !results assoc-in [group :status] :loading)
+      (swap! !results assoc-in [:current-page :status] :loading)
+      (p/let [blocks (search/block-search repo @!input opts)
+              blocks (remove nil? blocks)
+              items (map (fn [block]
+                           (let [id (if (uuid? (:block/uuid block))
+                                      (:block/uuid block)
+                                      (uuid (:block/uuid block)))]
+                             {:icon "block"
+                              :icon-theme :gray
+                              :text (:block/content block)
+                              :header (block/breadcrumb {:search? true} repo id {})
+                              :current-page? true
+                              :source-block block})) blocks)]
+        (swap! !results update :current-page merge {:status :success :items items})))
+    (reset! (::filter state) nil)))
+
 ;; The default load-results function triggers all the other load-results function
 (defmethod load-results :default [_ state]
-  (js/console.log "load-results/default" @(::input state))
   (if-not (some-> state ::input deref seq)
     (load-results :initial state)
-    (do
-      (load-results :commands state)
-      (load-results :blocks state)
-      (load-results :pages state)
-      (load-results :filters state)
-      (load-results :files state)
-      (load-results :recents state))))
+    (let [filter-group (:group @(::filter state))]
+      (if filter-group
+        (load-results filter-group state)
+        (do
+          (load-results :commands state)
+          (load-results :blocks state)
+          (load-results :pages state)
+          (load-results :filters state)
+          (load-results :files state)
+          (load-results :recents state)
+          (load-results :whiteboards state))))))
 
 (defn- copy-block-ref [state]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid uuid)]
@@ -337,13 +430,20 @@
 
 (defmethod handle-action :open-block [_ state _event]
   (let [block-id (some-> state state->highlighted-item :source-block :block/uuid uuid)
-        get-block-page (partial model/get-block-page (state/get-current-repo))]
-    (when-let [page (some-> block-id get-block-page)]
-      (let [page-name (:block/name page)]
-        (if (= (:block/type page) "whiteboard")
-          (route-handler/redirect-to-whiteboard! page-name {:block-id block-id})
-          (route-handler/redirect-to-page! page-name {:anchor (str "ls-block-" block-id)})))
-      (state/close-modal!))))
+        _ (prn :debug :block-id block-id)
+        get-block-page (partial model/get-block-page (state/get-current-repo))
+        block (db/entity [:block/uuid block-id])]
+    (when block
+      (when-let [page (some-> block-id get-block-page)]
+        (let [page-name (:block/name page)]
+          (cond
+            (= (:block/type page) "whiteboard")
+            (route-handler/redirect-to-whiteboard! page-name {:block-id block-id})
+            (model/parents-collapsed? (state/get-current-repo) block-id)
+            (route-handler/redirect-to-page! (:block/uuid block))
+            :else
+            (route-handler/redirect-to-page! page-name {:anchor (str "ls-block-" block-id)})))
+        (state/close-modal!)))))
 
 (defmethod handle-action :open-page-right [_ state _event]
   (when-let [page-name (some-> state state->highlighted-item :source-page)]
@@ -358,18 +458,31 @@
     (editor-handler/open-block-in-sidebar! block-uuid)
     (state/close-modal!)))
 
+(defn- open-file
+  [file-path]
+  (if (or (string/ends-with? file-path ".edn")
+          (string/ends-with? file-path ".js")
+          (string/ends-with? file-path ".css"))
+    (route-handler/redirect! {:to :file
+                              :path-params {:path file-path}})
+    ;; open this file in directory
+    (when (util/electron?)
+      (let [file-fpath (path/path-join (config/get-repo-dir (state/get-current-repo)) file-path)]
+        (ipc/ipc "openFileInFolder" file-fpath)))))
+
 (defmethod handle-action :open [_ state event]
   (when-let [item (some-> state state->highlighted-item)]
     (let [page? (boolean (:source-page item))
-          block? (boolean (:source-block item))
+          cross-blocks? (:cross-blocks? item)
+          block? (and (boolean (:source-block item))
+                      (not cross-blocks?))
           shift?  @(::shift? state)
           shift-or-sidebar? (or shift? (boolean (:open-sidebar? (:opts state))))
           search-mode (:search/mode @state/state)
           graph-view? (= search-mode :graph)]
       (cond
         (:file-path item) (do
-                            (route-handler/redirect! {:to :file
-                                                      :path-params {:path (:file-path item)}})
+                            (open-file (:file-path item))
                             (state/close-modal!))
         (and graph-view? page? (not shift?)) (do
                                                (state/add-graph-search-filter! @(::input state))
@@ -441,8 +554,8 @@
 (rum/defc mouse-active-effect!
   [*mouse-active? deps]
   (rum/use-effect!
-    #(reset! *mouse-active? false)
-    deps)
+   #(reset! *mouse-active? false)
+   deps)
   nil)
 
 (rum/defcs result-group
@@ -480,9 +593,9 @@
        [:div {:class "flex-1"}]
 
        (when (and (= group highlighted-group)
-               (or can-show-more? can-show-less?)
-               (empty? filter)
-               (not sidebar?))
+                  (or can-show-more? can-show-less?)
+                  (empty? filter)
+                  (not sidebar?))
          [:a.text-link.select-node.opacity-50.hover:opacity-90
           {:on-click (if (= show :more) show-less show-more)}
           (if (= show :more)
@@ -497,28 +610,28 @@
        (for [item visible-items
              :let [highlighted? (= item highlighted-item)]]
          (let [item (shui/list-item (assoc item
-                                      :query (when-not (= group :create) @(::input state))
-                                      :compact true
-                                      :rounded false
-                                      :hoverable @*mouse-active?
-                                      :highlighted highlighted?
+                                           :query (when-not (= group :create) @(::input state))
+                                           :compact true
+                                           :rounded false
+                                           :hoverable @*mouse-active?
+                                           :highlighted highlighted?
                                       ;; for some reason, the highlight effect does not always trigger on a
                                       ;; boolean value change so manually pass in the dep
-                                      :on-highlight-dep highlighted-item
-                                      :on-click (fn [e]
-                                                  (reset! (::highlighted-item state) item)
-                                                  (handle-action :default state item)
-                                                  (when-let [on-click (:on-click item)]
-                                                    (on-click e)))
+                                           :on-highlight-dep highlighted-item
+                                           :on-click (fn [e]
+                                                       (reset! (::highlighted-item state) item)
+                                                       (handle-action :default state item)
+                                                       (when-let [on-click (:on-click item)]
+                                                         (on-click e)))
                                       ;; :on-mouse-enter (fn [e]
                                       ;;                   (when (not highlighted?)
                                       ;;                     (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
-                                      :on-highlight (fn [ref]
-                                                      (reset! (::highlighted-group state) group)
-                                                      (when (and ref (.-current ref)
-                                                              (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
-                                                        (scroll-into-view-when-invisible state (.-current ref)))))
-                      context)]
+                                           :on-highlight (fn [ref]
+                                                           (reset! (::highlighted-group state) group)
+                                                           (when (and ref (.-current ref)
+                                                                      (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
+                                                             (scroll-into-view-when-invisible state (.-current ref)))))
+                                    context)]
            (if (= group :blocks)
              (ui/lazy-visible (fn [] item) {:trigger-once? true})
              item)))]]]))
@@ -535,7 +648,7 @@
 (defn handle-input-change
   ([state e] (handle-input-change state e (.. e -target -value)))
   ([state e input]
-   (let [composing? (util/onchange-event-is-composing? e)
+   (let [composing? (util/native-event-is-composing? e)
          e-type (gobj/getValueByKeys e "type")
          !input (::input state)
          !load-results-throttled (::load-results-throttled state)]
@@ -561,7 +674,7 @@
         keyname (.-key e)
         enter? (= keyname "Enter")
         esc? (= keyname "Escape")
-        composing? (util/event-is-composing? e)
+        composing? (util/goog-event-is-composing? e)
         highlighted-group @(::highlighted-group state)
         show-less (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :less))
         show-more (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :more))
@@ -571,14 +684,13 @@
     (reset! (::shift? state) shift?)
     (reset! (::meta? state) meta?)
     (when (or as-keydown? as-keyup?)
-      (.preventDefault e))
+      (util/stop e))
 
     (cond
       (and meta? enter?)
       (let [repo (state/get-current-repo)]
         (state/close-modal!)
         (state/sidebar-add-block! repo input :search))
-
       as-keydown? (if meta?
                     (show-more)
                     (move-highlight state 1))
@@ -589,11 +701,12 @@
                                       (handle-action :default state e)
                                       (util/stop-propagation e))
       esc? (let [filter @(::filter state)]
-             (when (or (and filter @(::input-changed? state))
-                       (not (string/blank? input)))
+             (when-not (string/blank? input)
                (util/stop e)
-               (reset! (::filter state) nil)
-               (when-not filter (handle-input-change state nil ""))))
+               (handle-input-change state nil ""))
+             (when (and filter (string/blank? input))
+               (util/stop e)
+               (reset! (::filter state) nil)))
       (and meta? (= keyname "c")) (do
                                     (copy-block-ref state)
                                     (util/stop-propagation e))
@@ -648,9 +761,13 @@
        :on-key-down (fn [e]
                       (let [value (.-value @input-ref)
                             last-char (last value)
-                            backspace? (= (util/ekey e) "Backspace")]
-                        (when (and (some? @(::filter state))
-                                   (or (= (util/ekey e) "/")
+                            backspace? (= (util/ekey e) "Backspace")
+                            filter-group (:group @(::filter state))
+                            slash? (= (util/ekey e) "/")
+                            namespace-page-matched? (when (and slash? (contains? #{:pages :whiteboards} filter-group))
+                                                      (some #(string/includes? % "/") (search/page-search (str value "/"))))]
+                        (when (and filter-group
+                                   (or (and slash? (not namespace-page-matched?))
                                        (and backspace? (= last-char "/"))
                                        (and backspace? (= input ""))))
                           (reset! (::filter state) nil))))
@@ -664,7 +781,7 @@
      (shui/shortcut "/" context)
      [:div "to filter search results"]]
     [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
-     (shui/shortcut "mod enter" context)
+     (shui/shortcut ["mod" "enter"] context)
      [:div "to open search in the sidebar"]]]))
 
 (rum/defcs tip <
@@ -693,7 +810,7 @@
                                   :on-click #(handle-action action (assoc state :opts opts) %)
                                   :shortcut shortcut
                                   :muted true}
-                      context))]
+                                 context))]
     (when action
       [:div {:class "flex w-full px-3 py-2 gap-2 justify-between"
              :style {:background "var(--lx-gray-03)"
@@ -807,7 +924,7 @@
 
       (when group-filter
         [:div.flex.flex-col.px-3.py-1.opacity-70.text-sm
-         (search-only state (name group-filter))])
+         (search-only state (string/capitalize (name group-filter)))])
 
       (let [items (filter
                    (fn [[_group-name group-key group-count _group-items]]
@@ -821,7 +938,7 @@
                    results-ordered)]
         (if (seq items)
           (for [[group-name group-key _group-count group-items] items]
-            (let [title group-name]
+            (let [title (string/capitalize group-name)]
               (result-group state title group-key group-items first-item sidebar?)))
           [:div.flex.flex-col.p-4.opacity-50
            (when-not (string/blank? (rum/react *input))

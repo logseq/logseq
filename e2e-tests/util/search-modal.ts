@@ -28,12 +28,13 @@ export async function createPage(page: Page, page_name: string) {// Click #searc
     await page.click('#search-button')
     // Fill [placeholder="What are you looking for?"]
     await page.fill('[placeholder="What are you looking for?"]', page_name)
+    await page.locator('text="Create page"').waitFor({ state: 'visible' })
     await page.keyboard.press('Enter', { delay: 100 })
     // wait for textarea of first block
     await page.waitForSelector('textarea >> nth=0', { state: 'visible' })
 
     return page_name;
-  }
+}
 
 export async function searchAndJumpToPage(page: Page, pageTitle: string) {
     await closeSearchBox(page)
@@ -52,7 +53,7 @@ export async function searchAndJumpToPage(page: Page, pageTitle: string) {
  * @param query the search query to type into the search box
  * @returns the HTML element for the search results ui
  */
-export async function searchPage(page: Page, query: string): Promise<ElementHandle<SVGElement | HTMLElement>[]>{
+export async function searchPage(page: Page, query: string): Promise<ElementHandle<SVGElement | HTMLElement>[]> {
     await closeSearchBox(page)
     await page.click('#search-button')
     await page.waitForSelector('[placeholder="What are you looking for?"]')

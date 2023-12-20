@@ -10,6 +10,7 @@ export type TLSelectionComponentProps<S extends TLReactShape = TLReactShape> = {
   bounds: TLBounds
   showResizeHandles?: boolean
   showRotateHandles?: boolean
+  showCloneHandles?: boolean
 }
 
 export type TLBoundsComponent<S extends TLReactShape = TLReactShape> = (

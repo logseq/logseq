@@ -2,7 +2,7 @@ import fsp from 'fs/promises';
 import path from 'path';
 import { expect } from '@playwright/test'
 import { test } from './fixtures';
-import { searchPage, captureConsoleWithPrefix, closeSearchBox, createPage, IsWindows } from './utils';
+import { searchPage, captureConsoleWithPrefix, closeSearchBox, createPage, IsWindows, randomString } from './utils';
 
 test('create file on disk then delete', async ({ page, block, graphDir }) => {
   // Since have to wait for file watchers
@@ -122,8 +122,10 @@ test('special page names', async ({ page, block, graphDir }) => {
 
   // Test putting files on disk
   for (const {pageTitle, fileName} of testCases) {
+    const prefix = randomString(10)
+    const fullTitle = `${prefix}${pageTitle}`
     // Create page in Logseq
-    await createPage(page, pageTitle)
+    await createPage(page, fullTitle)
     const text = `content for ${pageTitle}`
     await block.mustFill(text)
     await page.keyboard.press("Enter", { delay: 50 })
@@ -132,7 +134,7 @@ test('special page names', async ({ page, block, graphDir }) => {
     // Wait for the file to be created on disk
     await page.waitForTimeout(2500);
     // Validate that the file is created on disk with the content
-    const filePath = path.join(graphDir, "pages", `${fileName}.md`);
+    const filePath = path.join(graphDir, "pages", `${prefix}${fileName}.md`);
     const fileContent = await fsp.readFile(filePath, "utf8");
     expect(fileContent).toContain(text);
   }

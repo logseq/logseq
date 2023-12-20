@@ -23,19 +23,22 @@
 }
 
 .ui__button-tiled .ui__button__tile {
-  @apply flex items-center justify-center text-center;
+  @apply flex items-center justify-center text-center px-1;
 }
 
 .ui__button-tiled.ui__button-size-md .ui__button__tile {
-  @apply h-6 w-6;
+  @apply h-6;
+  min-width: 1.5rem;
 }
 
 .ui__button-tiled.ui__button-size-sm .ui__button__tile {
-    @apply h-4 w-4;
+  @apply h-4;
+  min-width: 1rem;
 }
 
 .ui__button__tile-separator {
   @apply w-px h-full bg-gray-08-alpha;
+  min-height: 14px;
 }
 
 .ui__button-theme-text {
