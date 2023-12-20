@@ -346,7 +346,7 @@
         delete-db-f (fn []
                       (let [current-repo (state/get-current-repo)]
                         (db/remove-conn! url)
-                        (when db-based? (db-persist/delete-graph! url))
+                        (db-persist/delete-graph! url)
                         (search/remove-db! url)
                         (state/delete-repo! repo)
                         (if (= current-repo url)

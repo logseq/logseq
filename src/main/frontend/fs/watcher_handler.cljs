@@ -70,7 +70,6 @@
           db-content (db/get-file repo path)
           exists-in-db? (not (nil? db-content))
           db-content (or db-content "")]
-
       (when (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
         (cond
           (and (= "unlinkDir" type) dir)

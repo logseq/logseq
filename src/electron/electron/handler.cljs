@@ -13,7 +13,6 @@
             ["path" :as node-path]
             [cljs-bean.core :as bean]
             [cljs.reader :as reader]
-            [clojure.core.async :as async]
             [clojure.string :as string]
             [electron.backup-file :as backup-file]
             [electron.configs :as cfgs]
@@ -294,10 +293,6 @@
 (defmethod handle :deleteGraph [_window [_ graph graph-name _db-based?]]
   (when graph-name
     (db/unlink-graph! graph)))
-
-(defmethod handle :persistent-dbs-saved [_window _]
-  (async/put! state/persistent-dbs-chan true)
-  true)
 
 ;; DB related IPCs start
 
