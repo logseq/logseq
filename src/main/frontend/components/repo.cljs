@@ -17,7 +17,9 @@
             [cljs.core.async :as async :refer [go <!]]
             [clojure.string :as string]
             [frontend.handler.file-sync :as file-sync]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [frontend.handler.notification :as notification]
+            [frontend.util.fs :as fs-util]))
 
 (rum/defc normalized-graph-label
   [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]
@@ -267,18 +269,35 @@
   (let [*graph-name (::graph-name state)
         new-db-f (fn []
                    (when-not (string/blank? @*graph-name)
-                     (repo-handler/new-db! @*graph-name)
-                     (state/close-modal!)))]
+                     (if (fs-util/include-reserved-chars? @*graph-name)
+                       (notification/show!
+                        [:div
+                         [:p "Graph name can't contain following reserved characters:"]
+                         [:ul
+                          [:li "< (less than)"]
+                          [:li "> (greater than)"]
+                          [:li ": (colon)"]
+                          [:li "\" (double quote)"]
+                          [:li "/ (forward slash)"]
+                          [:li "\\ (backslash)"]
+                          [:li "| (vertical bar or pipe)"]
+                          [:li "? (question mark)"]
+                          [:li "* (asterisk)"]
+                          [:li "# (hash)"]]]
+                        :warning false)
+                       (do
+                         (repo-handler/new-db! @*graph-name)
+                         (state/close-modal!)))))]
     [:div.new-graph.p-4
      [:h1.title "Create new graph: "]
      [:input.form-input.mb-4 {:value @*graph-name
                               :auto-focus true
                               :on-change #(reset! *graph-name (util/evalue %))
-                              :on-key-down   (fn [^js e]
-                                               (when (= (gobj/get e "key") "Enter")
-                                                 (new-db-f)))}]
+                              :on-key-down (fn [^js e]
+                                             (when (= (gobj/get e "key") "Enter")
+                                               (new-db-f)))}]
      (ui/button "Submit"
-       :on-click new-db-f
-       :on-key-down   (fn [^js e]
-                        (when (= (gobj/get e "key") "Enter")
-                          (new-db-f))))]))
+                :on-click new-db-f
+                :on-key-down   (fn [^js e]
+                                 (when (= (gobj/get e "key") "Enter")
+                                   (new-db-f))))]))

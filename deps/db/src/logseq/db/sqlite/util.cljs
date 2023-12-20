@@ -5,6 +5,7 @@
             [clojure.string :as string]))
 
 (defonce db-version-prefix "logseq_db_")
+(defonce file-version-prefix "logseq_local_")
 
 (defn time-ms
   "Copy of util/time-ms. Too basic to couple this to main app"

@@ -18,14 +18,6 @@
 (defonce *datascript-conns (atom nil))
 (defonce *opfs-pools (atom nil))
 
-(defn sanitize-db-name
-  [db-name]
-  (-> db-name
-      (string/replace " " "_")
-      (string/replace "/" "_")
-      (string/replace "\\" "_")
-      (string/replace ":" "_")))
-
 (defn- get-sqlite-conn
   [repo]
   (get @*sqlite-conns repo))
@@ -41,7 +33,7 @@
 (defn- <get-opfs-pool
   [graph]
   (or (get-opfs-pool graph)
-      (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (str "logseq-pool-" (sanitize-db-name graph))
+      (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (str "logseq-pool-" graph)
                                                              :initialCapacity 10})]
         (swap! *opfs-pools assoc graph pool)
         pool)))
@@ -60,20 +52,17 @@
       (reset! *sqlite sqlite)
       nil)))
 
-(defn- get-repo-path
-  [repo]
-  (str "/" (sanitize-db-name repo) ".sqlite"))
+(def repo-path "/db.sqlite")
 
 (defn- <export-db-file
   [repo]
-  (p/let [^js pool (<get-opfs-pool repo)
-          path (get-repo-path repo)]
+  (p/let [^js pool (<get-opfs-pool repo)]
     (when pool
-      (.exportFile ^js pool path))))
+      (.exportFile ^js pool repo-path))))
 
 (defn- <import-db
-  [^js pool repo data]
-  (.importDb ^js pool (get-repo-path repo) data))
+  [^js pool data]
+  (.importDb ^js pool repo-path data))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
@@ -166,7 +155,7 @@
             capacity (.getCapacity pool)
             _ (when (zero? capacity)   ; file handle already releases since pool will be initialized only once
                 (.acquireAccessHandles pool))
-            db (new (.-OpfsSAHPoolDb pool) (get-repo-path repo))
+            db (new (.-OpfsSAHPoolDb pool) repo-path)
             storage (new-sqlite-storage repo {})]
       (swap! *sqlite-conns assoc repo db)
       (.exec db "PRAGMA locking_mode=exclusive")
@@ -177,13 +166,13 @@
 
 (comment
   (defn <remove-all-files!
-    "!! Dangerous: use it only for development."
-    []
-    (p/let [all-files (<list-all-files)
-            files (filter #(= (.-kind %) "file") all-files)
-            dirs (filter #(= (.-kind %) "directory") all-files)
-            _ (p/all (map (fn [file] (.remove file)) files))]
-      (p/all (map (fn [dir] (.remove dir)) dirs)))))
+   "!! Dangerous: use it only for development."
+   []
+   (p/let [all-files (<list-all-files)
+           files (filter #(= (.-kind %) "file") all-files)
+           dirs (filter #(= (.-kind %) "directory") all-files)
+           _ (p/all (map (fn [file] (.remove file)) files))]
+     (p/all (map (fn [dir] (.remove dir)) dirs)))))
 
 (defn- remove-vfs!
   [^js pool]
@@ -278,7 +267,7 @@
    [this repo data]
    (when-not (string/blank? repo)
      (p/let [pool (<get-opfs-pool repo)]
-       (<import-db pool repo data)))))
+       (<import-db pool data)))))
 
 (defn init
   "web worker entry"
