@@ -88,6 +88,7 @@
   (<fetch-initial-data [_this repo _opts]
     (when-let [^js sqlite @*sqlite]
       (-> (p/let [db-exists? (.dbExists sqlite repo)
+                  _ (prn :debug :db-exists? db-exists?)
                   disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
                   _ (when disk-db-data
                       (.importDb sqlite repo disk-db-data))

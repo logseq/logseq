@@ -227,30 +227,29 @@
     (fs-extra/ensureDirSync dir)
     dir))
 
-;; TODO: move file based graphs to "~/logseq/graphs" too
-(defn- get-file-based-graphs
-  "Returns all graph names in the cache directory (starting with `logseq_local_`)"
-  []
-  (let [dir (get-graphs-dir)]
-    (->> (common-graph/readdir dir)
-         (remove #{dir})
-         (map #(node-path/basename % ".transit"))
-         (map graph-name->path))))
+;; TODO: migrate transit to the new db
+;; TODO: migrate indexeddb backed graphs too on mobile
+(comment
+  (defn- get-file-based-graphs
+   "Returns all graph names in the cache directory (starting with `logseq_local_`)"
+   []
+   (let [dir (get-graphs-dir)]
+     (->> (common-graph/readdir dir)
+          (remove #{dir})
+          (map #(node-path/basename % ".transit"))
+          (map graph-name->path)))))
 
-(defn- get-db-based-graphs
-  "Returns all graph names in the cache directory"
+(defn- get-graphs
+  "Returns all graph names"
   []
   (let [dir (get-db-based-graphs-dir)]
     (->> (common-graph/read-directories dir)
          (remove (fn [s] (= s db/unlinked-graphs-dir)))
          (map graph-name->path)
-         (map (fn [s] (str sqlite-util/db-version-prefix s))))))
-
-(defn- get-graphs
-  []
-  (concat
-   (get-file-based-graphs)
-   (get-db-based-graphs)))
+         (map (fn [s]
+                (if (string/starts-with? s sqlite-util/file-version-prefix)
+                  s
+                  (str sqlite-util/db-version-prefix s)))))))
 
 ;; TODO support alias mechanism
 (defn get-graph-name

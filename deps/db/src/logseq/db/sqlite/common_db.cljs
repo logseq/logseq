@@ -29,12 +29,15 @@
 
 (defn sanitize-db-name
   [db-name]
-  (-> db-name
-      (string/replace sqlite-util/db-version-prefix "")
-      (string/replace sqlite-util/file-version-prefix "")
-      (string/replace "/" "_")
-      (string/replace "\\" "_")
-      (string/replace ":" "_")));; windows
+  (if (string/starts-with? db-name sqlite-util/file-version-prefix)
+    (-> db-name
+        (string/replace ":" "+3A+")
+        (string/replace "/" "++"))
+    (-> db-name
+       (string/replace sqlite-util/db-version-prefix "")
+       (string/replace "/" "_")
+       (string/replace "\\" "_")
+       (string/replace ":" "_"))));; windows
 
 (defn get-db-full-path
   [graphs-dir db-name]
