@@ -1,14 +1,15 @@
 (ns logseq.graph-parser
   "Main ns used by logseq app to parse graph from source files and then save to
   the given database connection"
-  (:require [datascript.core :as d]
-            [logseq.graph-parser.extract :as extract]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.date-time-util :as date-time-util]
-            [logseq.graph-parser.config :as gp-config]
-            [logseq.db.frontend.schema :as db-schema]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
-            [clojure.set :as set]))
+            [datascript.core :as d]
+            [frontend.handler.property.util :as pu]
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.date-time-util :as date-time-util]
+            [logseq.graph-parser.extract :as extract]
+            [logseq.graph-parser.util :as gp-util]))
 
 (defn- retract-blocks-tx
   [blocks retain-uuids]
@@ -129,6 +130,85 @@ Options available:
                   (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?])))]
      {:tx result
       :ast ast})))
+
+(defn import-file-to-db-graph
+  "Parse file and save parsed data to the given db graph."
+  [conn file content {:keys [delete-blocks-fn extract-options skip-db-transact?]
+                      :or {delete-blocks-fn (constantly [])
+                           skip-db-transact? false}
+                      :as options}]
+  (let [format (gp-util/get-format file)
+        {:keys [tx ast]}
+        (let [extract-options' (merge {:block-pattern (gp-config/get-block-pattern format)
+                                       :date-formatter "MMM do, yyyy"
+                                       :uri-encoded? false
+                                       :db-graph-mode? true
+                                       :filename-format :legacy}
+                                      extract-options
+                                      {:db @conn})
+              {:keys [pages blocks ast refs]
+               :or   {pages []
+                      blocks []
+                      ast []}}
+              (cond (contains? gp-config/mldoc-support-formats format)
+                    (extract/extract file content extract-options')
+
+                    (gp-config/whiteboard? file)
+                    (extract/extract-whiteboard-edn file content extract-options')
+
+                    :else nil)
+              ;; remove file path relative
+              pages (map #(dissoc % :block/file :block/properties) pages)
+              block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
+              delete-blocks (delete-blocks-fn @conn (first pages) file block-ids)
+              block-refs-ids (->> (mapcat :block/refs blocks)
+                                  (filter (fn [ref] (and (vector? ref)
+                                                         (= :block/uuid (first ref)))))
+                                  (map (fn [ref] {:block/uuid (second ref)}))
+                                  (seq))
+                 ;; To prevent "unique constraint" on datascript
+              block-ids (set/union (set block-ids) (set block-refs-ids))
+              pages (extract/with-ref-pages pages blocks)
+
+              ;; post-handling
+              whiteboard-pages (->> pages
+                                    (filter #(= "whiteboard" (:block/type %)))
+                                    (map (fn [page-block]
+                                           (-> page-block
+                                               (assoc :block/journal? false
+                                                      :block/format :markdown
+                                                      ;; fixme: missing properties
+                                                      :block/properties {(pu/get-pid :ls-type) :whiteboard-page})))))
+              remove-keys (fn [m pred]
+                            (into {} (remove (comp pred key) m)))
+              blocks (map (fn [block]
+                            (prn ::block block)
+                            (cond
+                              (:block/pre-block? block)
+                              block
+
+                              :else
+                              (update-in block [:block/properties]
+                                         (fn [props]
+                                           (-> props
+                                               (update-keys (fn [k]
+                                                              (if-let [new-key (pu/get-pid k)]
+                                                                new-key
+                                                                k)))
+                                               (remove-keys keyword?))))))
+                          blocks)
+
+
+              pages-index (map #(select-keys % [:block/name]) pages)]
+
+          {:tx (concat refs whiteboard-pages pages-index delete-blocks pages block-ids blocks)
+           :ast ast})
+        tx' (gp-util/fast-remove-nils tx)
+        result (if skip-db-transact?
+                 tx'
+                 (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?])))]
+    {:tx result
+     :ast ast}))
 
 (defn filter-files
   "Filters files in preparation for parsing. Only includes files that are
