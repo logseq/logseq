@@ -543,3 +543,33 @@
                          {:content (str "The graph '" graph "' already exists. Please try again with another name.")
                           :status :error}])
       (create-db full-graph-name))))
+
+;; TODO: clean up and merge logic with new-db!
+(defn- create-empty-db
+  "No today page creation, no redirect to home"
+  [full-graph-name]
+  (->
+   (p/let [_ (persist-db/<new full-graph-name)
+           _ (op-mem-layer/<init-load-from-indexeddb! full-graph-name)
+           _ (start-repo-db-if-not-exists! full-graph-name)
+           _ (state/add-repo! {:url full-graph-name})
+           initial-data (sqlite-create-graph/build-db-initial-data config/config-default-content)
+           _ (db/transact! full-graph-name initial-data)
+           _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
+          ;; TODO: handle global graph
+           _ (state/pub-event! [:init/commands])]
+     (prn "New db created: " full-graph-name))
+   (p/catch (fn [error]
+              (notification/show! "Create graph failed." :error)
+              (js/console.error error)))))
+
+(defn new-empty-db!
+  "New database graph with empty content, for importing"
+  [graph]
+   (let [full-graph-name (str config/db-version-prefix graph)
+         graph-already-exists? (some #(= (:url %) full-graph-name) (state/get-repos))]
+     (if graph-already-exists?
+       (state/pub-event! [:notification/show
+                          {:content (str "The graph '" graph "' already exists. Please try again with another name.")
+                           :status :error}])
+       (create-empty-db full-graph-name))))
