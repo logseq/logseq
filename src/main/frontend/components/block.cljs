@@ -1957,7 +1957,7 @@
                :span.inline)]
     (->elem
      elem
-     (merge
+     (merge-with ui/html-attr-merger
       {:data-hl-type (:hl-type properties)}
       (when (and marker
                  (not (string/blank? marker))
