@@ -1942,7 +1942,6 @@
         priority (priority-cp t)
         tags (block-tags-cp t)
         bg-color (:background-color properties)
-        tx-color (:logseq.text-color properties)
         ;; `heading-level` is for backward compatibility, will remove it in later releases
         heading-level (:block/heading-level t)
         heading (or
@@ -1969,13 +1968,7 @@
                                        (str "var(--ls-highlight-color-" bg-color ")")
                                        bg-color)
                    :color (when-not built-in-color? "white")}
-           :class "px-1 with-bg-color"}))
-      (when tx-color
-        (let [built-in-color? (ui/built-in-color? tx-color)]
-          {:style {:color (if built-in-color?
-                            (str "var(--ls-text-color-" tx-color ")")
-                            tx-color)}
-           :class "with-text-color"})))
+           :class "px-1 with-bg-color"})))
 
      ;; children
      (let [area?  (= :area (keyword (:hl-type properties)))
@@ -2849,6 +2842,7 @@
         review-cards? (:review-cards? config)
         own-number-list? (:own-order-number-list? config)
         order-list? (boolean own-number-list?)
+        tx-color (:logseq.text-color properties)
         selected? (when-not slide?
                     (state/sub-block-selected? blocks-container-id uuid))]
     [:div.ls-block
@@ -2879,7 +2873,14 @@
       (assoc :data-embed true)
 
       custom-query?
-      (assoc :data-query true))
+      (assoc :data-query true)
+      
+      (not (nil? tx-color))
+      (merge (if (ui/built-in-color? tx-color)
+              {:data-logseq-property-text-color tx-color}
+              {:style {:color tx-color}})
+              )
+      )
 
      (when (and ref? breadcrumb-show?)
        (breadcrumb config repo uuid {:show-page? false

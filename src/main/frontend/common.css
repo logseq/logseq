@@ -95,13 +95,6 @@ html[data-theme='dark'] {
   --ls-highlight-color-blue: var(--color-blue-900);
   --ls-highlight-color-purple: var(--color-purple-900);
   --ls-highlight-color-pink: var(--color-pink-900);
-  --ls-text-color-gray: var(--color-gray-100);
-  --ls-text-color-red: var(--color-red-100);
-  --ls-text-color-yellow: var(--color-yellow-100);
-  --ls-text-color-green: var(--color-green-100);
-  --ls-text-color-blue: var(--color-blue-100);
-  --ls-text-color-purple: var(--color-purple-100);
-  --ls-text-color-pink: var(--color-pink-100);
   --ls-error-text-color: var(--color-red-400);
   --ls-error-background-color: var(--color-red-900);
   --ls-warning-text-color: var(--color-yellow-400);
@@ -183,13 +176,6 @@ html[data-theme='light'] {
   --ls-highlight-color-blue: var(--color-blue-100);
   --ls-highlight-color-purple: var(--color-purple-100);
   --ls-highlight-color-pink: var(--color-pink-100);
-  --ls-text-color-gray: var(--color-gray-900);
-  --ls-text-color-red: var(--color-red-900);
-  --ls-text-color-yellow: var(--color-yellow-900);
-  --ls-text-color-green: var(--color-green-900);
-  --ls-text-color-blue: var(--color-blue-900);
-  --ls-text-color-purple: var(--color-purple-900);
-  --ls-text-color-pink: var(--color-pink-900);
   --ls-error-text-color: var(--color-red-600);
   --ls-error-background-color: var(--color-red-100);
   --ls-warning-text-color: var(--color-yellow-700);
@@ -207,6 +193,66 @@ html[data-theme='light'] {
   --color-level-4: #d0e6fa;
   --color-level-5: #bbdaf6;
   --color-level-6: #a7cef1;
+}
+
+.white-theme .ls-block {
+  &[data-logseq-property-text-color="gray"] {
+    color: var(--color-gray-900);
+  }
+
+  &[data-logseq-property-text-color="red"] {
+    color: var(--color-red-900);
+  }
+
+  &[data-logseq-property-text-color="yellow"] {
+    color: var(--color-yellow-900);
+  }
+
+  &[data-logseq-property-text-color="green"] {
+    color: var(--color-green-900);
+  }
+
+  &[data-logseq-property-text-color="blue"] {
+    color: var(--color-blue-900);
+  }
+
+  &[data-logseq-property-text-color="purple"] {
+    color: var(--color-purple-900);
+  }
+
+  &[data-logseq-property-text-color="pink"] {
+    color: var(--color-pink-900);
+  }
+}
+
+.dark-theme .ls-block {
+  &[data-logseq-property-text-color="gray"] {
+    color: var(--color-gray-200);
+  }
+
+  &[data-logseq-property-text-color="red"] {
+    color: var(--color-red-300);
+  }
+
+  &[data-logseq-property-text-color="yellow"] {
+    color: var(--color-yellow-300);
+  }
+
+  &[data-logseq-property-text-color="green"] {
+    color: var(--color-green-300);
+  }
+
+  &[data-logseq-property-text-color="blue"] {
+    color: var(--color-blue-300);
+  }
+
+  &[data-logseq-property-text-color="purple"] {
+    color: var(--color-purple-300);
+  }
+
+  &[data-logseq-property-text-color="pink"] {
+    color: var(--color-pink-300);
+  }
 }
 
 html:not(.is-native-android) {
