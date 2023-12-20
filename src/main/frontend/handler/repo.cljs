@@ -456,6 +456,7 @@
                          {:url db
                           :root (config/get-local-dir db)
                           :nfs? true}) nfs-dbs)
+          _ (prn :debug :nfs-dbs nfs-dbs)
           nfs-dbs (and (seq nfs-dbs)
                        (cond (util/electron?)
                              (ipc/ipc :inflateGraphsInfo nfs-dbs)

@@ -9,6 +9,8 @@
             [logseq.db.sqlite.db :as sqlite-db]
             [electron.backup-file :as backup-file]))
 
+(def close! sqlite-db/close!)
+
 (defn get-graphs-dir
   []
   (let [path (.getPath ^object app "home")]
@@ -48,6 +50,7 @@
 
 (defn get-db
   [db-name]
+  (prn :debug :get-db :db-name db-name)
   (let [_ (ensure-graph-dir! db-name)
         [_db-name db-path] (sqlite-db/get-db-full-path (get-graphs-dir) db-name)]
     (when (fs/existsSync db-path)
