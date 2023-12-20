@@ -269,7 +269,9 @@
   (let [*graph-name (::graph-name state)
         new-db-f (fn []
                    (when-not (string/blank? @*graph-name)
-                     (if (fs-util/include-reserved-chars? @*graph-name)
+                     (if (or
+                          (fs-util/include-reserved-chars? @*graph-name)
+                          (string/includes? @*graph-name "+"))
                        (notification/show!
                         [:div
                          [:p "Graph name can't contain following reserved characters:"]
@@ -283,7 +285,9 @@
                           [:li "| (vertical bar or pipe)"]
                           [:li "? (question mark)"]
                           [:li "* (asterisk)"]
-                          [:li "# (hash)"]]]
+                          [:li "# (hash)"]
+                          ;; `+` is used to encode path that includes `:` or `/`
+                          [:li "+ (plus)"]]]
                         :warning false)
                        (do
                          (repo-handler/new-db! @*graph-name)

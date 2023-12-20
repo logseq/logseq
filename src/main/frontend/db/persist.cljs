@@ -13,9 +13,7 @@
   []
   (p/let [repos (idb/get-nfs-dbs)
           db-repos (persist-db/<list-db)
-          _ (prn :debug :db-repos db-repos)
           electron-disk-graphs (when (util/electron?) (ipc/ipc "getGraphs"))]
-    (prn :debug :electron-disk-graphs electron-disk-graphs)
     (distinct (concat repos db-repos (some-> electron-disk-graphs bean/->clj)))))
 
 (defn delete-graph!

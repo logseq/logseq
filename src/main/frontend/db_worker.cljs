@@ -38,10 +38,14 @@
   [repo]
   (get @*opfs-pools repo))
 
+(defn- get-pool-name
+  [graph-name]
+  (str "logseq-pool-" (sqlite-common-db/sanitize-db-name graph-name)))
+
 (defn- <get-opfs-pool
   [graph]
   (or (get-opfs-pool graph)
-      (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (str "logseq-pool-" graph)
+      (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (get-pool-name graph)
                                                              :initialCapacity 20})]
         (swap! *opfs-pools assoc graph pool)
         pool)))
@@ -59,6 +63,7 @@
                                                 :printErr js/console.error}))]
       (reset! *sqlite sqlite)
       nil)))
+
 
 (def repo-path "/db.sqlite")
 
@@ -184,7 +189,7 @@
   [graph]
   (->
    (p/let [^js root (.getDirectory js/navigator.storage)
-           _dir-handle (.getDirectoryHandle root (str ".logseq-pool-" graph))]
+           _dir-handle (.getDirectoryHandle root (str "." (get-pool-name graph)))]
      true)
    (p/catch
     (fn [_e]                           ; not found
@@ -226,7 +231,11 @@
                         (when (and
                                (= (.-kind file) "directory")
                                (string/starts-with? (.-name file) ".logseq-pool-"))
-                          (string/replace-first (.-name file) ".logseq-pool-" "")))
+                          (-> (.-name file)
+                              (string/replace-first ".logseq-pool-" "")
+                              ;; TODO: DRY
+                              (string/replace "+3A+" ":")
+                              (string/replace "++" "/"))))
                       all-files)
                 distinct)]
      ;; (prn :debug :all-files (map #(.-name %) all-files))

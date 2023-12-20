@@ -50,7 +50,6 @@
 
 (defn get-db
   [db-name]
-  (prn :debug :get-db :db-name db-name)
   (let [_ (ensure-graph-dir! db-name)
         [_db-name db-path] (sqlite-db/get-db-full-path (get-graphs-dir) db-name)]
     (when (fs/existsSync db-path)
