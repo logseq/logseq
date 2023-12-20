@@ -729,6 +729,9 @@
 (defmethod handle :server/set-config [^js _win [_ config]]
   (server/set-config! config))
 
+(defmethod handle :window/open-blank-callback [^js win [_ _type]]
+  (win/setup-window-listeners! win) nil)
+
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]
     (.handle ipcMain main-channel
