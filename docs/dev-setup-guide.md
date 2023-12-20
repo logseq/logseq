@@ -6,11 +6,11 @@ This document is for first time contributors to get their local instance of lose
 ## What kind of Setup do you want?
 To get started, first determine how you want to set up your instance:
 
-- [**Docker** instance](docs\docker-web-app-guide.md)
-- If you are using **Windows**, first [get dependencies](docs\logseq-dependencies-windows.md)
-- [Mobile Development](docs\develop-logseq-on-mobile.md)
+- [**Docker** instance](docker-web-app-guide.md)
+- If you are using **Windows**, first [get dependencies](logseq-dependencies-windows.md)
+- [Mobile Development](develop-logseq-on-mobile.md)
 
-If you are having trouble building your Logseq windows app on Ubuntu. Check out the guide on [setting up Logseq desktop for Windows on Ubuntu](docs\build-logseq-desktop-windows-on-ubuntu.md).
+If you are having trouble building your Logseq windows app on Ubuntu. Check out the guide on [setting up Logseq desktop for Windows on Ubuntu](build-logseq-desktop-windows-on-ubuntu.md).
 
 If none of these setups apply to you, you can continue with general instructions below...
 
