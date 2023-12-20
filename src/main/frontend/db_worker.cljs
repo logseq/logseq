@@ -23,14 +23,6 @@
 ;; repo -> pool
 (defonce *opfs-pools (atom nil))
 
-(defn sanitize-db-name
-  [db-name]
-  (-> db-name
-      (string/replace " " "_")
-      (string/replace "/" "_")
-      (string/replace "\\" "_")
-      (string/replace ":" "_")))
-
 (defn- get-sqlite-conn
   [repo & {:keys [search?]
            :or {search? false}
@@ -49,7 +41,7 @@
 (defn- <get-opfs-pool
   [graph]
   (or (get-opfs-pool graph)
-      (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (str "logseq-pool-" (sanitize-db-name graph))
+      (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (str "logseq-pool-" graph)
                                                              :initialCapacity 20})]
         (swap! *opfs-pools assoc graph pool)
         pool)))
@@ -68,20 +60,17 @@
       (reset! *sqlite sqlite)
       nil)))
 
-(defn- get-repo-path
-  [repo]
-  (str "/" (sanitize-db-name repo) ".sqlite"))
+(def repo-path "/db.sqlite")
 
 (defn- <export-db-file
   [repo]
-  (p/let [^js pool (<get-opfs-pool repo)
-          path (get-repo-path repo)]
+  (p/let [^js pool (<get-opfs-pool repo)]
     (when pool
-      (.exportFile ^js pool path))))
+      (.exportFile ^js pool repo-path))))
 
 (defn- <import-db
-  [^js pool repo data]
-  (.importDb ^js pool (get-repo-path repo) data))
+  [^js pool data]
+  (.importDb ^js pool repo-path data))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
@@ -151,9 +140,8 @@
             capacity (.getCapacity pool)
             _ (when (zero? capacity)   ; file handle already releases since pool will be initialized only once
                 (.acquireAccessHandles pool))
-            path (get-repo-path repo)
-            db (new (.-OpfsSAHPoolDb pool) path)
-            search-db (new (.-OpfsSAHPoolDb pool) (str "search-" path))
+            db (new (.-OpfsSAHPoolDb pool) repo-path)
+            search-db (new (.-OpfsSAHPoolDb pool) (str "search-" repo-path))
             storage (new-sqlite-storage repo {})]
       (swap! *sqlite-conns assoc repo {:db db
                                        :search search-db})
@@ -192,15 +180,15 @@
                         (rest dirs))]
             (p/recur result dirs)))))))
 
-(comment
-  (defn <remove-all-files!
-    "!! Dangerous: use it only for development."
-    []
-    (p/let [all-files (<list-all-files)
-            files (filter #(= (.-kind %) "file") all-files)
-            dirs (filter #(= (.-kind %) "directory") all-files)
-            _ (p/all (map (fn [file] (.remove file)) files))]
-      (p/all (map (fn [dir] (.remove dir)) dirs)))))
+(defn- <db-exists?
+  [graph]
+  (->
+   (p/let [^js root (.getDirectory js/navigator.storage)
+           _dir-handle (.getDirectoryHandle root (str ".logseq-pool-" graph))]
+     true)
+   (p/catch
+    (fn [_e]                           ; not found
+      false))))
 
 (defn- remove-vfs!
   [^js pool]
@@ -290,6 +278,10 @@
    (when-let [^js pool (get-opfs-pool repo)]
      (.releaseAccessHandles pool)))
 
+  (dbExists
+   [_this repo]
+   (<db-exists? repo))
+
   (exportDB
    [_this repo]
    (<export-db-file repo))
@@ -298,7 +290,7 @@
    [this repo data]
    (when-not (string/blank? repo)
      (p/let [pool (<get-opfs-pool repo)]
-       (<import-db pool repo data))))
+       (<import-db pool data))))
 
   ;; Search
   (search-blocks
@@ -323,10 +315,25 @@
    [this repo]
    (p/let [db (get-search-db repo)]
      (search/truncate-table! db)
-     nil)))
+     nil))
+
+  (dangeriousRemoveAllDbs
+   [this repo]
+   (p/let [dbs (.listDB this)]
+     (p/all (map #(.unsafeUnlinkDB this %) dbs)))))
 
 (defn init
   "web worker entry"
   []
   (let [^js obj (SQLiteDB.)]
     (Comlink/expose obj)))
+
+(comment
+  (defn <remove-all-files!
+   "!! Dangerous: use it only for development."
+   []
+   (p/let [all-files (<list-all-files)
+           files (filter #(= (.-kind %) "file") all-files)
+           dirs (filter #(= (.-kind %) "directory") all-files)
+           _ (p/all (map (fn [file] (.remove file)) files))]
+     (p/all (map (fn [dir] (.remove dir)) dirs)))))

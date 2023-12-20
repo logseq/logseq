@@ -31,9 +31,10 @@
   [db-name]
   (-> db-name
       (string/replace sqlite-util/db-version-prefix "")
+      (string/replace sqlite-util/file-version-prefix "")
       (string/replace "/" "_")
       (string/replace "\\" "_")
-      (string/replace ":" "_")))  ;; windows
+      (string/replace ":" "_")));; windows
 
 (defn get-db-full-path
   [graphs-dir db-name]

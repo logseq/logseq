@@ -19,8 +19,7 @@
             [logseq.common.path :as path]
             [logseq.graph-parser.util :as gp-util]
             [promesa.core :as p]
-            [frontend.handler.property.util :as pu]
-            [frontend.persist-db :as persist-db]))
+            [frontend.handler.property.util :as pu]))
 
 (defn- safe-api-call
   "Force the callback result to be nil, otherwise, ipc calls could lead to
@@ -28,22 +27,6 @@
   [k f]
   (js/window.apis.on k (fn [data] (f data) nil)))
 
-(defn persist-dbs!
-  []
-  (when-let [repo (state/get-current-repo)]
-    (->
-     (p/let [_ (persist-db/<export-db repo {})]
-       (ipc/ipc "persistent-dbs-saved"))
-     (p/catch (fn [error]
-                (prn :debug :persist-db-failed :repo repo)
-                (js/console.error error)
-                (notification/show! error :error))))))
-
-
-
-(defn listen-persistent-dbs!
-  []
-  (safe-api-call "persistent-dbs" (fn [_data] (persist-dbs!))))
 
 (defn ^:large-vars/cleanup-todo listen-to-electron!
   []
@@ -171,5 +154,4 @@
 
 (defn listen!
   []
-  (listen-to-electron!)
-  (listen-persistent-dbs!))
+  (listen-to-electron!))

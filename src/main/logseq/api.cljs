@@ -34,7 +34,6 @@
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.handler.command-palette :as palette-handler]
             [frontend.modules.shortcut.core :as st]
-            [electron.listener :as el]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
@@ -1021,7 +1020,6 @@
 
 (defn ^:export force_save_graph
   []
-  (p/let [_ (el/persist-dbs!)]
-    true))
+  true)
 
 (def ^:export set_blocks_id #(editor-handler/set-blocks-id! (map uuid %)))

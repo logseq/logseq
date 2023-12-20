@@ -6,6 +6,7 @@
             [logseq.db.frontend.schema :as db-schema]))
 
 (defonce db-version-prefix "logseq_db_")
+(defonce file-version-prefix "logseq_local_")
 
 (defn db-based-graph?
   [graph-name]
