@@ -31,6 +31,7 @@
   [db-name]
   (-> db-name
       (string/replace sqlite-util/db-version-prefix "")
+      (string/replace sqlite-util/file-version-prefix "")
       (string/replace "/" "_")
       (string/replace "\\" "_")
       (string/replace ":" "_")))
