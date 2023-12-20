@@ -82,7 +82,9 @@
           tx-meta' (pr-str tx-meta)]
       (p/do!
        (ipc/ipc :db-transact repo tx-data' tx-meta')
-       (when sqlite (.transact sqlite repo tx-data' tx-meta'))
+       (if sqlite
+         (.transact sqlite repo tx-data' tx-meta')
+         (notification/show! "Latest change was not saved! Please restart the application." :error))
        nil)))
 
   (<fetch-initial-data [_this repo _opts]
