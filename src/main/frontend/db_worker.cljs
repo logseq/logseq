@@ -148,6 +148,16 @@
                         (rest dirs))]
             (p/recur result dirs)))))))
 
+(defn- <db-exists?
+  [graph]
+  (->
+   (p/let [^js root (.getDirectory js/navigator.storage)
+           _dir-handle (.getDirectoryHandle root (str ".logseq-pool-" graph))]
+     true)
+   (p/catch
+    (fn [_e]                           ; not found
+      false))))
+
 (defn- create-or-open-db!
   [repo]
   (when-not (get-sqlite-conn repo)
@@ -166,13 +176,13 @@
 
 (comment
   (defn <remove-all-files!
-   "!! Dangerous: use it only for development."
-   []
-   (p/let [all-files (<list-all-files)
-           files (filter #(= (.-kind %) "file") all-files)
-           dirs (filter #(= (.-kind %) "directory") all-files)
-           _ (p/all (map (fn [file] (.remove file)) files))]
-     (p/all (map (fn [dir] (.remove dir)) dirs)))))
+    "!! Dangerous: use it only for development."
+    []
+    (p/let [all-files (<list-all-files)
+            files (filter #(= (.-kind %) "file") all-files)
+            dirs (filter #(= (.-kind %) "directory") all-files)
+            _ (p/all (map (fn [file] (.remove file)) files))]
+      (p/all (map (fn [dir] (.remove dir)) dirs)))))
 
 (defn- remove-vfs!
   [^js pool]
@@ -258,6 +268,10 @@
    [_this repo]
    (when-let [^js pool (get-opfs-pool repo)]
      (.releaseAccessHandles pool)))
+
+  (dbExists
+   [_this repo]
+   (<db-exists? repo))
 
   (exportDB
    [_this repo]

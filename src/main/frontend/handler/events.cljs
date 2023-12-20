@@ -73,8 +73,7 @@
             [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.db.listener :as db-listener]
-            [frontend.persist-db :as persist-db]))
+            [frontend.db.listener :as db-listener]))
 
 ;; TODO: should we move all events here?
 
