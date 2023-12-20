@@ -158,6 +158,7 @@
                                                                          :empty-graph? (nil? (seq markup-files))
                                                                          :file-objs    files})
                                      (state/add-repo! {:url repo :nfs? true})
+                                     (persist-db/<export-db repo {})
                                      (state/set-loading-files! repo false)
                                      (when ok-handler (ok-handler {:url repo})))))))
                 (p/catch (fn [error]
