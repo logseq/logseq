@@ -119,5 +119,5 @@
   (defn clean-all-dbs!
     []
     (when-let [sqlite @*sqlite]
-      (.dangeriousRemoveAllDbs sqlite)
+      (.dangerousRemoveAllDbs sqlite)
       (state/set-current-repo! nil))))

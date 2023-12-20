@@ -273,7 +273,7 @@
      (p/let [pool (<get-opfs-pool repo)]
        (<import-db pool data))))
 
-  (dangeriousRemoveAllDbs
+  (dangerousRemoveAllDbs
    [this repo]
    (p/let [dbs (.listDB this)]
      (p/all (map #(.unsafeUnlinkDB this %) dbs)))))
