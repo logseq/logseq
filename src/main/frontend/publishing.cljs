@@ -2,7 +2,6 @@
   "Entry ns for publishing build. Provides frontend for publishing single page
   application"
   (:require [frontend.state :as state]
-            [frontend.colors :as colors]
             [datascript.core :as d]
             [frontend.db :as db]
             [logseq.db.schema :as db-schema]
