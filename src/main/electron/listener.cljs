@@ -21,8 +21,7 @@
             [logseq.common.path :as path]
             [logseq.graph-parser.util :as gp-util]
             [promesa.core :as p]
-            [frontend.handler.property.util :as pu]
-            [frontend.persist-db :as persist-db]))
+            [frontend.handler.property.util :as pu]))
 
 (defn- safe-api-call
   "Force the callback result to be nil, otherwise, ipc calls could lead to
@@ -37,11 +36,7 @@
                           (prn :debug :persist-db-failed :repo repo)
                           (js/console.error error)
                           (notification/show! error :error))]
-      (if (config/db-based-graph? repo)
-        (->
-         (p/let [_ (persist-db/<export-db repo {})]
-           (ipc/ipc "persistent-dbs-saved"))
-         (p/catch error-handler))
+      (when-not (config/db-based-graph? repo)
         ;; TODO: Move all file based graphs to use the above persist approach
         (repo-handler/persist-db! {:before     ui/notify-graph-persist!
                                    :on-success #(ipc/ipc "persistent-dbs-saved")

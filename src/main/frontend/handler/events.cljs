@@ -189,9 +189,6 @@
        (when (util/electron?)
          (p/do!
           (cond
-            (config/db-based-graph? current-repo)
-            (persist-db/<export-db current-repo {})
-
             (config/local-file-based-graph? current-repo)
             (repo-handler/persist-db! current-repo persist-db-noti-m)
 
