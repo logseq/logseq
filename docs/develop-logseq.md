@@ -1,4 +1,14 @@
 # Develop Logseq
+
+## Introduction
+Welcome, developer! This documentation is intended for anyone seeking to contribute to the code base. To get started, first determine how you want to set up your instance:
+
+- [**Docker** instance](docs\docker-web-app-guide.md)
+- If you are using **Windows**, first [get dependencies](docs\logseq-dependencies-windows.md)
+- [Mobile Development](docs\develop-logseq-on-mobile.md)
+
+If you are having trouble building your Logseq windows app on Ubuntu. [Go here](docs\Build LogSeq Desktop for windows on Ubuntu.md)
+
 ## Requirements
 
 - [Node.js](https://nodejs.org/en/download/) (See [build.yml](https://github.com/logseq/logseq/blob/master/.github/workflows/build.yml) for allowed version)  & [Yarn](https://classic.yarnpkg.com/en/docs/install/)
@@ -27,7 +37,7 @@ Then open the browser <http://localhost:3001>.
 ### REPL setup
 
 #### VSCode + Calva
-With ```yarn watch``` running, it should prints ``shadow-cljs - nREPL server started on port 8701``
+With ```yarn watch``` running, it should print ``shadow-cljs - nREPL server started on port 8701``
 
 You may connect to the nREPL server with:
 
