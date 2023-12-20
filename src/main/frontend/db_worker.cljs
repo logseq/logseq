@@ -326,7 +326,7 @@
      (search/truncate-table! db)
      nil))
 
-  (dangeriousRemoveAllDbs
+  (dangerousRemoveAllDbs
    [this repo]
    (p/let [dbs (.listDB this)]
      (p/all (map #(.unsafeUnlinkDB this %) dbs)))))

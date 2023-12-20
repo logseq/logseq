@@ -85,7 +85,7 @@
   (let [[db-sanitized-name db-full-path] (get-db-full-path graphs-dir db-name)
         db (new sqlite db-full-path nil)
         schema (if (sqlite-util/db-based-graph? db-name)
-                 db-schema/db-version-retract-attributes
+                 db-schema/schema-for-db-based-graph
                  db-schema/schema)]
     (sqlite-common-db/create-kvs-table! db)
     (swap! databases assoc db-sanitized-name db)
