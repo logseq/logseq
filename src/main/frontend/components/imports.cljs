@@ -5,6 +5,7 @@
             [frontend.ui :as ui]
             [frontend.context.i18n :refer [t]]
             [frontend.components.svg :as svg]
+            [frontend.components.repo :as repo]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.notification :as notification]
@@ -12,6 +13,7 @@
             [clojure.string :as string]
             [goog.object :as gobj]
             [frontend.components.onboarding.setups :as setups]
+            [frontend.util.fs :as fs-util]
             [frontend.util.text :as text-util]
             [frontend.util :as util]))
 
@@ -125,7 +127,9 @@
   (rum/local "" ::input)
   [state sqlite-input-e opts]
   (let [*input (::input state)
-        on-submit #(lsq-import-handler sqlite-input-e (assoc opts :graph-name @*input))]
+        on-submit #(if (fs-util/include-reserved-chars? @*input)
+                     (repo/invalid-graph-name-warning)
+                     (lsq-import-handler sqlite-input-e (assoc opts :graph-name @*input)))]
     [:div.container
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left

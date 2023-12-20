@@ -263,6 +263,24 @@
         (when (seq repos)
           (ui/dropdown-with-links render-content links links-header))))))
 
+(defn invalid-graph-name-warning
+  []
+  (notification/show!
+   [:div
+    [:p "Graph name can't contain following reserved characters:"]
+    [:ul
+     [:li "< (less than)"]
+     [:li "> (greater than)"]
+     [:li ": (colon)"]
+     [:li "\" (double quote)"]
+     [:li "/ (forward slash)"]
+     [:li "\\ (backslash)"]
+     [:li "| (vertical bar or pipe)"]
+     [:li "? (question mark)"]
+     [:li "* (asterisk)"]
+     [:li "# (hash)"]]]
+   :warning false))
+
 (rum/defcs new-db-graph <
   (rum/local "" ::graph-name)
   [state]
@@ -270,21 +288,7 @@
         new-db-f (fn []
                    (when-not (string/blank? @*graph-name)
                      (if (fs-util/include-reserved-chars? @*graph-name)
-                       (notification/show!
-                        [:div
-                         [:p "Graph name can't contain following reserved characters:"]
-                         [:ul
-                          [:li "< (less than)"]
-                          [:li "> (greater than)"]
-                          [:li ": (colon)"]
-                          [:li "\" (double quote)"]
-                          [:li "/ (forward slash)"]
-                          [:li "\\ (backslash)"]
-                          [:li "| (vertical bar or pipe)"]
-                          [:li "? (question mark)"]
-                          [:li "* (asterisk)"]
-                          [:li "# (hash)"]]]
-                        :warning false)
+                       (invalid-graph-name-warning)
                        (do
                          (repo-handler/new-db! @*graph-name)
                          (state/close-modal!)))))]

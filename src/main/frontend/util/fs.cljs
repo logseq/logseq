@@ -73,6 +73,7 @@
   (when-let [repo-dir (config/get-repo-dir repo-url)]
     (fs/read-file repo-dir file-rpath)))
 
+;; Update repo/invalid-graph-name-warning if characters change
 (def multiplatform-reserved-chars ":\\*\\?\"<>|\\#\\\\")
 
 (def reserved-chars-pattern

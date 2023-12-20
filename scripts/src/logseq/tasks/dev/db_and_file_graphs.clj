@@ -35,8 +35,7 @@
    "src/main/frontend/components/property.cljs"
    "src/main/frontend/components/property"
    "src/main/frontend/components/db_based"
-   ;; TODO: Enable this when run-export-periodically is deleted or moved out of the ns
-   #_"src/main/frontend/persist_db.cljs"
+   "src/main/frontend/persist_db.cljs"
    "src/main/frontend/persist_db"
    "src/electron/electron/db.cljs"])
 
