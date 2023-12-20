@@ -95,8 +95,6 @@
   (i18n/start)
   (restore-from-transit-str!)
   (restore-state!)
-  (when-let [radix-color (state/get-color-accent)]
-    (colors/set-radix radix-color))
   (shortcut/refresh!)
   (events/run!)
   ;; actually, there's no persist for publishing
