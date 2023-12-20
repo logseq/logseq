@@ -13,6 +13,7 @@
             [rum.core :as rum]
             [frontend.config :as config]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.common.developer :as dev-common-handler]
             [reitit.frontend.easy :as rfe]
             [clojure.string :as string]))
 
@@ -203,7 +204,20 @@
                              :id (config/get-repo-dir url)
                              :graph url
                              :original-graph original-graph}))))
-    :on-chosen #(repo-handler/remove-repo! (:original-graph %))}})
+    :on-chosen #(repo-handler/remove-repo! (:original-graph %))}
+   :db-graph-replace
+   {:items-fn (fn []
+                (let [current-repo (state/get-current-repo)]
+                  (->> (state/get-repos)
+                      (remove (fn [{:keys [url]}]
+                                ;; Can't replace current graph as ui wouldn't reload properly
+                                (or (= url current-repo) (not (config/db-based-graph? url)))))
+                      (map (fn [{:keys [url] :as original-graph}]
+                             {:value (text-util/get-graph-name-from-path url)
+                              :id (config/get-repo-dir url)
+                              :graph url
+                              :original-graph original-graph})))))
+    :on-chosen #(dev-common-handler/import-chosen-graph (:graph %))}})
 
 (rum/defc select-modal < rum/reactive
   []
