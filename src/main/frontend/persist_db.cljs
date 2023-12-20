@@ -48,15 +48,3 @@
 (defn <release-access-handles
   [repo]
   (protocol/<release-access-handles (get-impl) repo))
-
-(comment
-  (defn run-export-periodically!
-    []
-    (js/setInterval
-     (fn []
-       (when-let [repo (state/get-current-repo)]
-         (when (and (util/electron?) (config/db-based-graph? repo))
-           (println :debug :save-db-to-disk repo)
-           (<export-db repo {}))))
-   ;; every 10 minutes
-     (* 10 60 1000))))

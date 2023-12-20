@@ -39,8 +39,7 @@
   [graph]
   (let [key (db-conn/datascript-db graph)
         db-based? (config/db-based-graph? graph)]
-    (p/let [_ (persist-db/<export-db graph {})
-            _ (persist-db/<unsafe-delete graph)]
+    (p/let [_ (persist-db/<unsafe-delete graph)]
       (if (util/electron?)
         (ipc/ipc "deleteGraph" graph key db-based?)
         (idb/remove-item! key)))))
