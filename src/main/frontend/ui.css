@@ -368,7 +368,7 @@ html.is-mobile {
 }
 
 .ui__toggle-background-on {
-  @apply bg-primary/70;
+  @apply bg-primary;
 }
 
 .ui__toggle-background-off {

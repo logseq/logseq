@@ -45,6 +45,10 @@ html[data-theme=light] {
       --lx-bg-override: var(--rx-gray-03-alpha);
     }
   }
+
+  .extensions__pdf-container {
+    --lx-pdf-container-dark-bg: var(--lx-gray-11, #042f3c);
+  }
 }
 
 html[data-theme=dark] {

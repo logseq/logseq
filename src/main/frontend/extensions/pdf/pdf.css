@@ -307,7 +307,7 @@ input::-webkit-inner-spin-button {
           }
 
           &.dark {
-            background-color: #0a4251;
+            background-color: var(--lx-pdf-container-dark-bg, #0a4251);
 
             svg {
               color: white;
@@ -718,6 +718,8 @@ input::-webkit-inner-spin-button {
 }
 
 .extensions__pdf-container {
+  --lx-pdf-container-dark-bg: var(--lx-gray-03);
+
   background-color: transparent;
 
   .extensions__pdf-toolbar .buttons {
@@ -729,7 +731,7 @@ input::-webkit-inner-spin-button {
   }
 
   &[data-theme=dark] {
-    background-color: #042f3c;
+    background-color: var(--lx-pdf-container-dark-bg, var(--ls-primary-background-color, #042f3c));
 
     .pdfViewer {
       background: transparent;
@@ -741,7 +743,7 @@ input::-webkit-inner-spin-button {
     }
 
     .textLayer {
-      background-color: #023d4cf7;
+      background-color: var(--lx-pdf-container-dark-bg, var(--ls-primary-background-color, #042f3c));
       -webkit-filter: invert(100%);
       filter: invert(100%);
     }
