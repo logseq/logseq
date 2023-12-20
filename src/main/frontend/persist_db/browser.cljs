@@ -114,3 +114,10 @@
                      (prn :debug :import-db-error repo)
                      (js/console.error error)
                      (notification/show! [:div (str "SQLiteDB import error: " error)] :error) {}))))))
+
+(comment
+  (defn clean-all-dbs!
+    []
+    (when-let [sqlite @*sqlite]
+      (.dangeriousRemoveAllDbs sqlite)
+      (state/set-current-repo! nil))))

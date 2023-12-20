@@ -174,16 +174,6 @@
         (swap! *datascript-conns assoc repo conn)
         nil))))
 
-(comment
-  (defn <remove-all-files!
-    "!! Dangerous: use it only for development."
-    []
-    (p/let [all-files (<list-all-files)
-            files (filter #(= (.-kind %) "file") all-files)
-            dirs (filter #(= (.-kind %) "directory") all-files)
-            _ (p/all (map (fn [file] (.remove file)) files))]
-      (p/all (map (fn [dir] (.remove dir)) dirs)))))
-
 (defn- remove-vfs!
   [^js pool]
   (when pool
@@ -281,10 +271,25 @@
    [this repo data]
    (when-not (string/blank? repo)
      (p/let [pool (<get-opfs-pool repo)]
-       (<import-db pool data)))))
+       (<import-db pool data))))
+
+  (dangeriousRemoveAllDbs
+   [this repo]
+   (p/let [dbs (.listDB this)]
+     (p/all (map #(.unsafeUnlinkDB this %) dbs)))))
 
 (defn init
   "web worker entry"
   []
   (let [^js obj (SQLiteDB.)]
     (Comlink/expose obj)))
+
+(comment
+  (defn <remove-all-files!
+   "!! Dangerous: use it only for development."
+   []
+   (p/let [all-files (<list-all-files)
+           files (filter #(= (.-kind %) "file") all-files)
+           dirs (filter #(= (.-kind %) "directory") all-files)
+           _ (p/all (map (fn [file] (.remove file)) files))]
+     (p/all (map (fn [dir] (.remove dir)) dirs)))))
