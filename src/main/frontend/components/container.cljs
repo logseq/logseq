@@ -32,6 +32,7 @@
             [frontend.mobile.mobile-bar :refer [mobile-bar]]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
+            [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.shui.ui :as shui]
@@ -112,12 +113,13 @@
             {:on-click #(page-handler/unfavorite-page! original-name)}
             (ctx-icon "star-off")
             (t :page/unfavorite)
-            (shui/context-menu-shortcut (shui2/shortcut "mod+y")))
+            (shui/context-menu-shortcut (some-> (shortcut-dh/shortcut-binding :command/toggle-favorite) (first)
+                                          (shortcut-utils/decorate-binding))))
           (shui/context-menu-item
             {:on-click open-in-sidebar}
             (ctx-icon "layout-sidebar-right")
             (t :content/open-in-sidebar)
-            (shui/context-menu-shortcut (shui2/shortcut "shift+click"))))))))
+            (shui/context-menu-shortcut (shortcut-utils/decorate-binding "shift+click"))))))))
 
 (defn get-page-icon [page-entity]
   (let [default-icon (ui/icon "page" {:extension? true})
