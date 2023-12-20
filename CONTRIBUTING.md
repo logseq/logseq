@@ -67,13 +67,6 @@ If everything checks out from above, make sure:
    - Dependency updates e.g. in package.json
    - Changes that contain multiple unverified resources. This is risky for our users and is a lot of work to verify. A change with one resource that can be verified is acceptable.
 
-### PR Additional Links
-
-* To run Logseq locally, see [this doc](https://github.com/logseq/logseq/blob/master/docs/develop-logseq.md) or [this doc for windows](https://github.com/logseq/logseq/blob/master/docs/develop-logseq-on-windows.md).
-* To contribute to translations, please read our [translation contribution guidelines][translations].
-* See [our development practices doc](https://github.com/logseq/logseq/blob/master/docs/dev-practices.md) to learn how we develop.
-* See [the overview doc](CODEBASE_OVERVIEW.md) to get an overview of the codebase.
-
 ### <a name="cla"></a> Sign the CLA
 
 Please sign our Contributor License Agreement (CLA) before sending pull requests. For any code
@@ -92,8 +85,7 @@ The following documents can help you sort out issues with GitHub accounts and mu
 - <https://help.github.com/articles/blocking-command-line-pushes-that-expose-your-personal-email-address/>
 
 
-
-## <a name="question"></a> Got a Question or a Problem?
+## Got a Question or a Problem?
 
 Please do not open issues for general support questions or feature requests as we want to keep GitHub issues for bug reports.
 Instead, we recommend using [Logseq forum][forum] to ask support-related questions.
@@ -108,17 +100,17 @@ To save your and our time, we will systematically close all issues that are requ
 
 If you would like to chat about the question in real-time, you can reach out via [our Discord server][discord].
 
-## <a name="issue"></a> Found a Bug?
+## Found a Bug?
 
 If you find a bug, you can help us by [submitting an issue](#submit-issue) to our [GitHub Repository][github].
 Even better, you can [submit a Pull Request](#submit-pr) with a fix.
 
-## <a name="feature"></a> Missing a Feature?
+## Missing a Feature?
 
 You can *request* a new feature by [Creating a thread][feature-request] in our forum.
 If you would like to *implement* a new feature, please open an issue and outline your proposal so that it can be discussed.
 
-## <a name="submit-issue"></a> Submit an Issue
+## Submit an Issue
 
 Before you submit an issue, please search the [issue tracker][issue-tracker]. An issue for your problem might already exist and the discussion might inform you of workarounds readily available.
 
@@ -138,7 +130,6 @@ The template will ask you to include the following with each issue:
 - Errors from the Dev Tools Console (open from the menu: View > Toggle Developer Tools or press CTRL + Shift + i)
 
 
-
 ## Thank You
 
 Your contributions to open source, large or small, make great projects like this possible. Thank you for taking the time to contribute.
@@ -155,6 +146,6 @@ Your contributions to open source, large or small, make great projects like this
 [new-issue]: https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=bug_report.yaml "Submit a New issue"
 [issue-tracker]: https://github.com/logseq/logseq/issues "Logseq Issue Tracker"
 [good-first-issues]: https://github.com/logseq/logseq/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22
-[new-dev-setup-guide]: C:\Users\ashle\IdeaProjects\logseq\docs\dev-setup-guide.md
+[new-dev-setup-guide]: docs\dev-setup-guide.md
 [plugins]: https://docs.logseq.com/#/page/Plugins
 [marketplace]: https://github.com/logseq/marketplace

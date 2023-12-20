@@ -1,18 +1,25 @@
-# Develop Logseq
+# Developer Setup Guide
 
-## Introduction
-Welcome, developer! This documentation is intended for anyone seeking to contribute to the code base. To get started, first determine how you want to set up your instance:
+## Who is this for?
+This document is for first time contributors to get their local instance of loseq up and running to make changes, write tests, and ensure a smooth pull request!
+
+## What kind of Setup do you want?
+To get started, first determine how you want to set up your instance:
 
 - [**Docker** instance](docs\docker-web-app-guide.md)
 - If you are using **Windows**, first [get dependencies](docs\logseq-dependencies-windows.md)
 - [Mobile Development](docs\develop-logseq-on-mobile.md)
 
-If you are having trouble building your Logseq windows app on Ubuntu. [Go here](docs\Build LogSeq Desktop for windows on Ubuntu.md)
+If you are having trouble building your Logseq windows app on Ubuntu. Check out the guide on [setting up Logseq desktop for Windows on Ubuntu](docs\build-logseq-desktop-windows-on-ubuntu.md).
+
+If none of these setups apply to you, you can continue with general instructions below...
 
 ## Requirements
 
-- [Node.js](https://nodejs.org/en/download/) (See [build.yml](https://github.com/logseq/logseq/blob/master/.github/workflows/build.yml) for allowed version)  & [Yarn](https://classic.yarnpkg.com/en/docs/install/)
-- [Java & Clojure](https://clojure.org/guides/getting_started). (If you run into `Execution error (FileNotFoundException) at java.io.FileInputStream/open0 (FileInputStream.java:-2). -M:cljs (No such file or directory)`, it means you have a wrong Clojure version installed. Please uninstall it and follow the instructions linked.)
+- [Node.js](https://nodejs.org/en/download/) (See [build.yml](https://github.com/logseq/logseq/blob/master/.github/workflows/build.yml) for allowed version)
+- [Yarn](https://classic.yarnpkg.com/en/docs/install/)
+- [Java & Clojure](https://clojure.org/guides/getting_started)
+    - If you run into `Execution error (FileNotFoundException) at java.io.FileInputStream/open0 (FileInputStream.java:-2). -M:cljs (No such file or directory)`, it means you have a wrong Clojure version installed. Please uninstall it and follow the instructions linked.
 
 ## Clone project
 
