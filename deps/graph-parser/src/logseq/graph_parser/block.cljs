@@ -652,8 +652,8 @@
     `with-id?`: If `with-id?` equals to true, all the referenced pages will have new db ids.
     `format`: content's format, it could be either :markdown or :org-mode.
     `options`: Options supported are :user-config, :block-pattern,
-               :extract-macros, :date-formatter, :page-name and :db"
-  [blocks content with-id? format {:keys [user-config] :as options}]
+               :extract-macros, :date-formatter, :page-name, :db-graph-mode? and :db"
+  [blocks content with-id? format {:keys [user-config db-graph-mode?] :as options}]
   {:pre [(seq blocks) (string? content) (boolean? with-id?) (contains? #{:markdown :org} format)]}
   (let [encoded-content (utf8/encode content)
         [blocks body pre-block-properties]
@@ -664,11 +664,13 @@
                body []]
           (if (seq blocks)
             (let [[block pos-meta] (first blocks)
-                  ;; fix start_pos
-                  pos-meta (assoc pos-meta :end_pos
-                                  (if (seq headings)
-                                    (get-in (last headings) [:meta :start_pos])
-                                    nil))]
+                  ;; in db-graph-mode, property part is not included in block/content
+                  pos-meta (if db-graph-mode?
+                             pos-meta
+                             (assoc pos-meta :end_pos
+                                    (if (seq headings)
+                                      (get-in (last headings) [:meta :start_pos])
+                                      nil)))]
               (cond
                 (paragraph-timestamp-block? block)
                 (let [timestamps (extract-timestamps block)
