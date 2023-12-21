@@ -295,7 +295,10 @@
 
 (defmethod handle :deleteGraph [_window [_ graph graph-name _db-based?]]
   (when graph-name
-    (db/unlink-graph! graph)))
+    (db/unlink-graph! graph)
+    (let [old-transit-path (node-path/join (get-graphs-dir) (str (sqlite-db/sanitize-db-name graph) ".transit"))]
+      (when (fs/existsSync old-transit-path)
+        (fs/unlinkSync old-transit-path)))))
 
 ;; DB related IPCs start
 

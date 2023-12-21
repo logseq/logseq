@@ -21,9 +21,9 @@
   ([host action repo-identifier]
    (get-repo-id-url host action repo-identifier true))
   ([host action repo-identifier protocol?]
-   (str (when protocol? (str LSP_SCHEME "://")) 
-        (when host (str host "/")) 
-        action "/" 
+   (str (when protocol? (str LSP_SCHEME "://"))
+        (when host (str host "/"))
+        action "/"
         (encode repo-identifier))))
 
 (defn get-logseq-graph-url

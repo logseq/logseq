@@ -26,7 +26,7 @@
                                string/lower-case)
         current-graph-name (get-graph-name-fn current-repo-url)
         repos (->> (state/sub [:me :repos])
-                   (remove #(= (:url %) config/local-repo))
+                   (remove #(= (:url %) config/demo-repo))
                    (map :url))
         repo-names (map #(get-graph-name-fn %) repos)]
     (cond

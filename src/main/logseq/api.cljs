@@ -146,7 +146,7 @@
 (def ^:export get_current_graph
   (fn []
     (when-let [repo (state/get-current-repo)]
-      (when-not (= config/local-repo repo)
+      (when-not (= config/demo-repo repo)
         (bean/->js {:url  repo
                     :name (util/node-path.basename repo)
                     :path (config/get-repo-dir repo)})))))

@@ -339,14 +339,14 @@
   []
   (or (state/get-whiteboards-directory) default-whiteboards-directory))
 
-(defonce local-repo "local")
+(defonce demo-repo "Logseq demo")
 
 (defn demo-graph?
   "Demo graph or nil graph?"
   ([]
    (demo-graph? (state/get-current-repo)))
   ([repo-url]
-   (or (nil? repo-url) (= repo-url local-repo))))
+   (or (nil? repo-url) (= repo-url demo-repo))))
 
 (defonce recycle-dir ".recycle")
 (def config-file "config.edn")
@@ -426,7 +426,7 @@
           (path/path-join "file://" dir)))
 
     ;; Special handling for demo graph
-      (= repo-url "local")
+      (= repo-url demo-repo)
       "memory:///local"
 
     ;; nfs, browser-fs-access
