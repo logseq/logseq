@@ -547,22 +547,29 @@
 (defonce *builtin-pages? (atom nil))
 (defonce *excluded-pages? (atom true))
 (defonce *show-journals-in-page-graph? (atom nil))
+(defonce *link-dist (atom 180))
 
 (rum/defc ^:large-vars/cleanup-todo graph-filters < rum/reactive
-  [graph settings n-hops]
+  [graph settings forcesettings n-hops]
   (let [{:keys [journal? orphan-pages? builtin-pages? excluded-pages?]
          :or {orphan-pages? true}} settings
+        {:keys [link-dist]} forcesettings
         journal?' (rum/react *journal?)
         orphan-pages?' (rum/react *orphan-pages?)
         builtin-pages?' (rum/react *builtin-pages?)
         excluded-pages?' (rum/react *excluded-pages?)
+        link-dist'  (rum/react *link-dist)
         journal? (if (nil? journal?') journal? journal?')
         orphan-pages? (if (nil? orphan-pages?') orphan-pages? orphan-pages?')
         builtin-pages? (if (nil? builtin-pages?') builtin-pages? builtin-pages?')
         excluded-pages? (if (nil? excluded-pages?') excluded-pages? excluded-pages?')
+        link-dist (if (nil? link-dist') link-dist link-dist')
         set-setting! (fn [key value]
                        (let [new-settings (assoc settings key value)]
                          (config-handler/set-config! :graph/settings new-settings)))
+        set-forcesetting! (fn [key value]
+                       (let [new-forcesettings (assoc forcesettings key value)]
+                         (config-handler/set-config! :graph/forcesettings new-forcesettings)))
         search-graph-filters (state/sub :search/graph-filters)
         focus-nodes (rum/react *focus-nodes)]
     [:div.absolute.top-4.right-4.graph-filters
@@ -671,6 +678,49 @@
                 "Click to search"])]))
          {:search-filters search-graph-filters})
         (graph-filter-section
+         [:span.font-medium "Forces"]
+         (fn [open?]
+           (filter-expand-area
+            open?
+            [:div
+             [:p.text-sm.opacity-70.px-4
+              (let [c1 (count (:nodes graph))
+                    s1 (if (> c1 1) "s" "")
+                    ;; c2 (count (:links graph))
+                    ;; s2 (if (> c2 1) "s" "")
+                    ]
+                ;; (util/format "%d page%s, %d link%s" c1 s1 c2 s2)
+                (util/format "%d page%s" c1 s1))]
+             [:div.p-6
+              [:div.flex.items-center.justify-between.mb-2
+               [:span "Exclude2"]
+               [:div.mt-1
+                (ui/toggle excluded-pages?
+                           (fn []
+                             (let [value (not excluded-pages?)]
+                               (reset! *excluded-pages? value)
+                               (set-setting! :excluded-pages? value)))
+                           true)]]
+              [:div.flex.flex-col.mb-2
+                [:p {:title "Link Distance"}
+                "Link Distance"]
+                (ui/tippy {:html [:div.pr-3 link-dist]}
+                          (ui/slider link-dist
+                                     {:min 5
+                                      :max 180
+                                      :on-change #(reset! *link-dist (int %))}))]
+                                      ;; :on-change #(let [value (util/evalue %)]
+                                      ;;               (set-setting! :link-dist value))}))]
+                                      ;; :on-change #(let [value (util/evalue %)]
+                                      ;;                (reset! *link-dist value)
+                                      ;;                (set-forcesetting! :link-dist value))}))]
+
+              [:a.opacity-70.opacity-100 {:on-click (fn []
+                                                      (swap! *graph-reset? not)
+                                                      (reset! *link-dist 180))}
+               "Reset Graph"]]]))
+         {})
+        (graph-filter-section
          [:span.font-medium "Export"]
          (fn [open?]
            (filter-expand-area
@@ -699,10 +749,11 @@
          (reset! last-node-position [node (.-x event) (.-y event)]))))
 
 (rum/defc global-graph-inner < rum/reactive
-  [graph settings theme]
+  [graph settings forcesettings theme]
   (let [[width height] (rum/react layout)
         dark? (= theme "dark")
         n-hops (rum/react *n-hops)
+        link-dist (rum/react *link-dist)
         reset? (rum/react *graph-reset?)
         focus-nodes (when n-hops (rum/react *focus-nodes))
         graph (if (and (integer? n-hops)
@@ -722,11 +773,12 @@
                       :width (- width 24)
                       :height (- height 48)
                       :dark? dark?
+                      :link-dist link-dist
                       :register-handlers-fn
                       (fn [graph]
                         (graph-register-handlers graph *focus-nodes *n-hops dark?))
                       :reset? reset?})
-     (graph-filters graph settings n-hops)]))
+     (graph-filters graph settings forcesettings n-hops)]))
 
 (defn- filter-graph-nodes
   [nodes filters]
@@ -748,11 +800,12 @@
                    state)}
   [state]
   (let [settings (state/graph-settings)
+        forcesettings (state/graph-forcesettings)
         theme (state/sub :ui/theme)
         graph (graph-handler/build-global-graph theme settings)
         search-graph-filters (state/sub :search/graph-filters)
         graph (update graph :nodes #(filter-graph-nodes % search-graph-filters))]
-    (global-graph-inner graph settings theme)))
+    (global-graph-inner graph settings forcesettings theme)))
 
 (rum/defc page-graph-inner < rum/reactive
   [_page graph dark?]

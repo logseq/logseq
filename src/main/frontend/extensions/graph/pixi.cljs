@@ -54,14 +54,14 @@
    :edge {:color "#A5B4FC"}})
 
 (defn layout!
-  [nodes links]
+  [nodes links link-dist]
   (let [nodes-count (count nodes)
         simulation (forceSimulation nodes)]
-    (-> simulation
+    (-> simulation 
         (.force "link"
                 (-> (forceLink)
                     (.id (fn [d] (.-id d)))
-                    (.distance 180)
+                    (.distance link-dist)
                     (.links links)))
         (.force "charge"
                 (-> (forceManyBody)
@@ -167,7 +167,7 @@
     (when @*graph-instance
       (clear-nodes! (:graph @*graph-instance))
       (destroy-instance!))
-    (let [{:keys [nodes links style hover-style height register-handlers-fn dark?]} (first (:rum/args state))
+    (let [{:keys [nodes links style hover-style height register-handlers-fn dark? link-dist]} (first (:rum/args state))
           style                                                                     (or style (default-style dark?))
           hover-style                                                               (or hover-style (default-hover-style dark?))
           graph                                                                     (Graph.)
@@ -182,7 +182,7 @@
           links                                                                     (remove (fn [{:keys [source target]}] (or (nil? source) (nil? target))) links)
           nodes-js                                                                  (bean/->js nodes)
           links-js                                                                  (bean/->js links)
-          simulation                                                                (layout! nodes-js links-js)]
+          simulation                                                                (layout! nodes-js links-js link-dist)]
       (doseq [node nodes-js]
         (try (.addNode graph (.-id node) node)
           (catch :default e

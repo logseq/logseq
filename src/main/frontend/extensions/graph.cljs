@@ -51,9 +51,9 @@
   {:did-update pixi/render!
    :should-update (fn [old-state new-state]
                     (not= (select-keys (first (:rum/args old-state))
-                                       [:nodes :links :dark?])
+                                       [:nodes :links :dark? :link-dist])
                           (select-keys (first (:rum/args new-state))
-                                       [:nodes :links :dark?])))
+                                       [:nodes :links :dark? :link-dist])))
    :will-unmount (fn [state]
                    (reset! pixi/*graph-instance nil)
                    state)}
