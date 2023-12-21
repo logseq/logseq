@@ -550,24 +550,27 @@
 (defonce *show-journals-in-page-graph? (atom nil))
 (defonce *link-dist (atom 70))
 (defonce *charge-strength (atom -600))
+(defonce *charge-range (atom 600))
 
 (rum/defc ^:large-vars/cleanup-todo graph-filters < rum/reactive
   [graph settings forcesettings n-hops]
   (let [{:keys [journal? orphan-pages? builtin-pages? excluded-pages?]
          :or {orphan-pages? true}} settings
-        {:keys [link-dist charge-strength]} forcesettings
+        {:keys [link-dist charge-strength charge-range]} forcesettings
         journal?' (rum/react *journal?)
         orphan-pages?' (rum/react *orphan-pages?)
         builtin-pages?' (rum/react *builtin-pages?)
         excluded-pages?' (rum/react *excluded-pages?)
         link-dist'  (rum/react *link-dist)
         charge-strength'  (rum/react *charge-strength)
+        charge-range'  (rum/react *charge-range)
         journal? (if (nil? journal?') journal? journal?')
         orphan-pages? (if (nil? orphan-pages?') orphan-pages? orphan-pages?')
         builtin-pages? (if (nil? builtin-pages?') builtin-pages? builtin-pages?')
         excluded-pages? (if (nil? excluded-pages?') excluded-pages? excluded-pages?')
         link-dist (if (nil? link-dist') link-dist link-dist')
         charge-strength (if (nil? charge-strength') charge-strength charge-strength')
+        charge-range (if (nil? charge-range') charge-range charge-range')
         set-setting! (fn [key value]
                        (let [new-settings (assoc settings key value)]
                          (config-handler/set-config! :graph/settings new-settings)))
@@ -690,11 +693,11 @@
              [:p.text-sm.opacity-70.px-4
               (let [c1 (count (:nodes graph))
                     s1 (if (> c1 1) "s" "")
-                    ;; c2 (count (:links graph))
-                    ;; s2 (if (> c2 1) "s" "")
+                    c2 (count (:links graph))
+                    s2 (if (> c2 1) "s" "")
                     ]
                 ;; (util/format "%d page%s, %d link%s" c1 s1 c2 s2)
-                (util/format "%d page%s" c1 s1))]
+                (util/format "%d link%s" c2 s2))]
              [:div.p-6
               [:div.flex.flex-col.mb-2
                 [:p {:title "Link Distance"}
@@ -720,12 +723,23 @@
                                       :on-change #(let [value (int %)]
                                                     (reset! *charge-strength (* value 100))
                                                     (set-forcesetting! :charge-strength (* value 100)))}))]
+              [:div.flex.flex-col.mb-2
+                [:p {:title "Charge Range"}
+                "Charge Range"]
+                (ui/tippy {:html [:div.pr-3 charge-range]}
+                          (ui/slider (/ charge-range 100)
+                                     {:min 5    ;;500
+                                      :max 40   ;;4000
+                                      :on-change #(let [value (int %)]
+                                                    (reset! *charge-range (* value 100))
+                                                    (set-forcesetting! :charge-range (* value 100)))}))]
 
 
               [:a.opacity-70.opacity-100 {:on-click (fn []
                                                       (swap! *graph-forcereset? not)
                                                       (reset! *link-dist 70)
-                                                      (reset! *charge-strength -600))}
+                                                      (reset! *charge-strength -600)
+                                                      (reset! *charge-range 600))}
                "Reset Forces"]]]))
          {})
         (graph-filter-section
@@ -763,6 +777,7 @@
         n-hops (rum/react *n-hops)
         link-dist (rum/react *link-dist)
         charge-strength (rum/react *charge-strength)
+        charge-range (rum/react *charge-range)
         reset? (rum/react *graph-reset?)
         forcereset? (rum/react *graph-forcereset?)
         focus-nodes (when n-hops (rum/react *focus-nodes))
@@ -785,6 +800,7 @@
                       :dark? dark?
                       :link-dist link-dist
                       :charge-strength charge-strength
+                      :charge-range charge-range
                       :register-handlers-fn
                       (fn [graph]
                         (graph-register-handlers graph *focus-nodes *n-hops dark?))
