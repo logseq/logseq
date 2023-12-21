@@ -1,7 +1,6 @@
 (ns frontend.colors
   "Colors used"
   (:require [clojure.string :as string]
-            ["@radix-ui/colors" :as radix-colors]
             [frontend.util :as util]))
 
 (def color-list [:tomato :red :crimson :pink :plum :purple :violet :indigo :blue :cyan :teal :green :grass :orange :brown])
