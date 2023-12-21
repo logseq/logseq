@@ -228,18 +228,16 @@
 
 ;; TODO: migrate transit to the new db
 ;; TODO: migrate indexeddb backed graphs too on mobile
-(comment
-  (defn- get-file-based-graphs
-   "Returns all graph names in the cache directory (starting with `logseq_local_`)"
-   []
-   (let [dir (get-graphs-dir)]
-     (->> (common-graph/readdir dir)
-          (remove #{dir})
-          (map #(node-path/basename % ".transit"))
-          (map graph-name->path)))))
+(defn- get-file-based-graphs
+  "Returns all graph names in the cache directory (starting with `logseq_local_`)"
+  []
+  (let [dir (get-graphs-dir)]
+    (->> (common-graph/readdir dir)
+         (remove #{dir})
+         (map #(node-path/basename % ".transit"))
+         (map graph-name->path))))
 
-(defn- get-graphs
-  "Returns all graph names"
+(defn- get-db-based-graphs
   []
   (let [dir (get-db-based-graphs-dir)]
     (->> (common-graph/read-directories dir)
@@ -249,6 +247,13 @@
                 (if (string/starts-with? s sqlite-util/file-version-prefix)
                   s
                   (str sqlite-util/db-version-prefix s)))))))
+
+(defn- get-graphs
+  "Returns all graph names"
+  []
+  (let [db-graphs (get-db-based-graphs)
+        file-graphs (get-file-based-graphs)]
+    (distinct (concat db-graphs file-graphs))))
 
 ;; TODO support alias mechanism
 (defn get-graph-name
