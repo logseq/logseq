@@ -55,7 +55,7 @@
 
 (defn layout!
   "Node forces documentation can be read in more detail here https://d3js.org/d3-force"
-  [nodes links link-dist charge-strength]
+  [nodes links link-dist charge-strength charge-range]
   (let [nodes-count (count nodes)
         simulation (forceSimulation nodes)]
     (-> simulation 
@@ -76,7 +76,7 @@
                     (.distanceMin 1)
                     ;; The maximum distance between nodes over which this force is considered.
                     ;; Specifying a finite maximum distance improves performance and produces a more localized layout.
-                    (.distanceMax (if (> nodes-count 500) 4000 600))
+                    (.distanceMax charge-range)
                     ;; For a cluster of nodes that is far away, the charge force can be approximated by treating the cluster as a single, larger node.
                     ;; The theta parameter determines the accuracy of the approximation
                     (.theta 0.5)
@@ -185,7 +185,7 @@
     (when @*graph-instance
       (clear-nodes! (:graph @*graph-instance))
       (destroy-instance!))
-    (let [{:keys [nodes links style hover-style height register-handlers-fn dark? link-dist charge-strength]} (first (:rum/args state))
+    (let [{:keys [nodes links style hover-style height register-handlers-fn dark? link-dist charge-strength charge-range]} (first (:rum/args state))
           style                                                                     (or style (default-style dark?))
           hover-style                                                               (or hover-style (default-hover-style dark?))
           graph                                                                     (Graph.)
@@ -200,7 +200,7 @@
           links                                                                     (remove (fn [{:keys [source target]}] (or (nil? source) (nil? target))) links)
           nodes-js                                                                  (bean/->js nodes)
           links-js                                                                  (bean/->js links)
-          simulation                                                                (layout! nodes-js links-js link-dist charge-strength)]
+          simulation                                                                (layout! nodes-js links-js link-dist charge-strength charge-range)]
       (doseq [node nodes-js]
         (try (.addNode graph (.-id node) node)
           (catch :default e
