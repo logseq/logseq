@@ -44,7 +44,7 @@
             base-url (str js/self.location.protocol "//" js/self.location.host)
             sqlite-wasm-url (if electron?
                               (js/URL. "sqlite3.wasm" (.. js/location -href))
-                              (str base-url "/js/"))
+                              (str base-url (string/replace js/self.location.pathname "db-worker.js" "")))
             sqlite (sqlite3InitModule (clj->js {:url sqlite-wasm-url
                                                 :print js/console.log
                                                 :printErr js/console.error}))]
