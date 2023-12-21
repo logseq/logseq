@@ -93,7 +93,7 @@
         ;; The decay factor is akin to atmospheric friction; after the application of any forces during a tick, 
         ;; each node’s velocity is multiplied by 1 - decay. As with lowering the alpha decay rate, 
         ;; less velocity decay may converge on a better solution, but risks numerical instabilities and oscillation.
-        (.velocityDecay 0.8))
+        (.velocityDecay 0.5))
     (reset! *simulation simulation)
     simulation))
 

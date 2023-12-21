@@ -547,7 +547,7 @@
 (defonce *builtin-pages? (atom nil))
 (defonce *excluded-pages? (atom true))
 (defonce *show-journals-in-page-graph? (atom nil))
-(defonce *link-dist (atom 180))
+(defonce *link-dist (atom 75))
 
 (rum/defc ^:large-vars/cleanup-todo graph-filters < rum/reactive
   [graph settings forcesettings n-hops]
@@ -708,16 +708,17 @@
                           (ui/slider link-dist
                                      {:min 5
                                       :max 180
-                                      :on-change #(reset! *link-dist (int %))}))]
-                                      ;; :on-change #(let [value (util/evalue %)]
-                                      ;;               (set-setting! :link-dist value))}))]
+                                      ;; :on-change #(reset! *link-dist (int %))}))]
+                                      :on-change #(let [value (int %)]
+                                                    (reset! *link-dist value)
+                                                    (set-forcesetting! :link-dist value))}))]
                                       ;; :on-change #(let [value (util/evalue %)]
                                       ;;                (reset! *link-dist value)
                                       ;;                (set-forcesetting! :link-dist value))}))]
 
               [:a.opacity-70.opacity-100 {:on-click (fn []
                                                       (swap! *graph-reset? not)
-                                                      (reset! *link-dist 180))}
+                                                      (reset! *link-dist 75))}
                "Reset Graph"]]]))
          {})
         (graph-filter-section
