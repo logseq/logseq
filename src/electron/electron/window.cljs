@@ -9,7 +9,6 @@
             ["url" :as URL]
             [electron.state :as state]
             [cljs-bean.core :as bean]
-            [clojure.core.async :as async]
             [clojure.string :as string]))
 
 (defonce *quitting? (atom false))
@@ -94,11 +93,7 @@
   (let [web-contents (. win -webContents)]
     (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents))
     (.send web-contents "persistent-dbs"))
-  (async/go
-    (let [_ (async/<! state/persistent-dbs-chan)]
-      (destroy-window! win)
-      (when @*quitting?
-        (async/put! state/persistent-dbs-chan true)))))
+  (destroy-window! win))
 
 (defn on-close-actions!
   ;; TODO merge with the on close in core
