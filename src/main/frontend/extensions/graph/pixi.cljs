@@ -55,7 +55,7 @@
 
 (defn layout!
   "Node forces documentation can be read in more detail here https://d3js.org/d3-force"
-  [nodes links link-dist]
+  [nodes links link-dist charge-strength]
   (let [nodes-count (count nodes)
         simulation (forceSimulation nodes)]
     (-> simulation 
@@ -82,7 +82,7 @@
                     (.theta 0.5)
                     ;; A positive value causes nodes to attract each other, similar to gravity, 
                     ;; while a negative value causes nodes to repel each other, similar to electrostatic charge.
-                    (.strength -600)))
+                    (.strength charge-strength)))
         (.force "collision"
                 (-> (forceCollide)
                     (.radius (+ 8 18))
@@ -185,7 +185,7 @@
     (when @*graph-instance
       (clear-nodes! (:graph @*graph-instance))
       (destroy-instance!))
-    (let [{:keys [nodes links style hover-style height register-handlers-fn dark? link-dist]} (first (:rum/args state))
+    (let [{:keys [nodes links style hover-style height register-handlers-fn dark? link-dist charge-strength]} (first (:rum/args state))
           style                                                                     (or style (default-style dark?))
           hover-style                                                               (or hover-style (default-hover-style dark?))
           graph                                                                     (Graph.)
@@ -200,7 +200,7 @@
           links                                                                     (remove (fn [{:keys [source target]}] (or (nil? source) (nil? target))) links)
           nodes-js                                                                  (bean/->js nodes)
           links-js                                                                  (bean/->js links)
-          simulation                                                                (layout! nodes-js links-js link-dist)]
+          simulation                                                                (layout! nodes-js links-js link-dist charge-strength)]
       (doseq [node nodes-js]
         (try (.addNode graph (.-id node) node)
           (catch :default e
