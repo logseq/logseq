@@ -3,13 +3,14 @@ html * {
 }
 
 html {
+  .ui__dropdown-menu-content,
+  .ui__context-menu-content,
+  .ui__select-content {
+    --accent: var(--rx-gray-04-hsl);
+    --accent-foreground: var(--rx-gray-12-hsl);
+  }
+
   &:not([data-color=logseq]) {
-    .ui__dropdown-menu-content,
-    .ui__context-menu-content,
-    .ui__select-content {
-      --accent: var(--rx-gray-04-hsl);
-      --accent-foreground: var(--rx-gray-12-hsl);
-    }
   }
 
   &[data-color=logseq] {
@@ -43,6 +44,10 @@ html[data-theme=light] {
     .references-blocks-item {
       --lx-bg-override: var(--rx-gray-03-alpha);
     }
+  }
+
+  .extensions__pdf-container {
+    --lx-pdf-container-dark-bg: var(--lx-gray-11, #042f3c);
   }
 }
 

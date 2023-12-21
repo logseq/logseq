@@ -59,6 +59,7 @@ html {
       --lx-gray-10: var(--rx-mauve-10);
       --lx-gray-11: var(--rx-mauve-11);
       --lx-gray-12: var(--rx-mauve-12);
+
       --lx-gray-01-alpha: var(--rx-mauve-01-alpha);
       --lx-gray-02-alpha: var(--rx-mauve-02-alpha);
       --lx-gray-03-alpha: var(--rx-mauve-03-alpha);
@@ -1254,6 +1255,7 @@ html {
       --lx-gray-10-alpha: var(--rx-sand-10-alpha);
       --lx-gray-11-alpha: var(--rx-sand-11-alpha);
       --lx-gray-12-alpha: var(--rx-sand-12-alpha);
+
       --ls-primary-background-color: var(--rx-sand-01);
       --ls-secondary-background-color: var(--rx-sand-02);
       --ls-tertiary-background-color: var(--rx-sand-03);
