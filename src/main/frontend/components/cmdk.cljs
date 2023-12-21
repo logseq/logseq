@@ -410,7 +410,7 @@
   (let [command (some-> state state->highlighted-item :source-command)]
     (when-let [action (:action command)]
       (action)
-      (when-not (contains? #{:graph/open :graph/remove :ui/toggle-settings :go/flashcards} (:id command))
+      (when-not (contains? #{:graph/open :graph/remove :dev/replace-graph-with-db-file :ui/toggle-settings :go/flashcards} (:id command))
         (state/close-modal!)))))
 
 (defmethod handle-action :create [_ state _event]

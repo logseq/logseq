@@ -12,7 +12,6 @@
             [clojure.string :as string]
             [cljs-bean.core :as bean]
             [frontend.worker.search :as search]
-            [frontend.util :as util]
             [logseq.db.sqlite.util :as sqlite-util]))
 
 (defonce *sqlite (atom nil))
@@ -57,7 +56,7 @@
             base-url (str js/self.location.protocol "//" js/self.location.host)
             sqlite-wasm-url (if electron?
                               (js/URL. "sqlite3.wasm" (.. js/location -href))
-                              (str base-url "/js/"))
+                              (str base-url (string/replace js/self.location.pathname "db-worker.js" "")))
             sqlite (sqlite3InitModule (clj->js {:url sqlite-wasm-url
                                                 :print js/console.log
                                                 :printErr js/console.error}))]
@@ -105,14 +104,13 @@
   [repo _opts]
   (reify IStorage
     (-store [_ addr+data-seq delete-addrs]
-      (util/profile
-       (str "SQLite store addr+data count: " (count addr+data-seq))
-       (let [data (map
-                   (fn [[addr data]]
-                     #js {:$addr addr
-                          :$content (pr-str data)})
-                   addr+data-seq)]
-         (upsert-addr-content! repo data delete-addrs))))
+      (prn :debug (str "SQLite store addr+data count: " (count addr+data-seq)))
+      (let [data (map
+                  (fn [[addr data]]
+                    #js {:$addr addr
+                         :$content (pr-str data)})
+                  addr+data-seq)]
+        (upsert-addr-content! repo data delete-addrs)))
 
     (-restore [_ addr]
       (restore-data-from-addr repo addr))))
@@ -258,16 +256,14 @@
   (transact
    [_this repo tx-data tx-meta]
    (when-let [conn (get-datascript-conn repo)]
-     (util/profile
-      "DB transact!"
-      (try
-        (let [tx-data (edn/read-string tx-data)
-              tx-meta (edn/read-string tx-meta)]
-          (d/transact! conn tx-data tx-meta)
-          nil)
-        (catch :default e
-          (prn :debug :error)
-          (js/console.error e))))))
+     (try
+       (let [tx-data (edn/read-string tx-data)
+             tx-meta (edn/read-string tx-meta)]
+         (d/transact! conn tx-data tx-meta)
+         nil)
+       (catch :default e
+         (prn :debug :error)
+         (js/console.error e)))))
 
   (getInitialData
    [_this repo]

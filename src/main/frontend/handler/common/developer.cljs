@@ -8,7 +8,9 @@
             [frontend.util.page :as page-util]
             [frontend.handler.db-based.property.util :as db-pu]
             [frontend.format.mldoc :as mldoc]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.persist-db :as persist-db]
+            [promesa.core :as p]))
 
 ;; Fns used between menus and commands
 (defn show-entity-data
@@ -69,3 +71,12 @@
       (if (get-in page-data [:block/file :file/content])
         (show-content-ast (get-in page-data [:block/file :file/content]) (:block/format page-data))
         (notification/show! "No page found" :warning)))))
+
+(defn import-chosen-graph
+  [repo]
+  (p/let [_ (persist-db/<unsafe-delete repo)
+          _ (persist-db/<fetch-init-data repo)]
+    (notification/show! "Graph updated!" :success)))
+
+(defn ^:export replace-graph-with-db-file []
+  (state/set-state! :ui/open-select :db-graph-replace))

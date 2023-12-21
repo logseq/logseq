@@ -96,5 +96,6 @@
 
 (defn transact!
   [repo tx-data tx-meta]
-  (when-let [conn (get-conn repo)]
-    (d/transact! conn tx-data tx-meta)))
+  (if-let [conn (get-conn repo)]
+    (d/transact! conn tx-data tx-meta)
+    (throw (ex-info (str "Failed to transact! No db connection found for " repo) {}))))

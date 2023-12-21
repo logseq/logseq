@@ -548,6 +548,10 @@
                                              :file-graph? true
                                              :fn       commit/show-commit-modal!}
 
+   :dev/replace-graph-with-db-file           {:binding  []
+                                              :inactive (or (not (util/electron?)) (not (state/developer-mode?)))
+                                              :fn       :frontend.handler.common.developer/replace-graph-with-db-file}
+
    :dev/show-block-data                     {:binding  []
                                              :inactive (not (state/developer-mode?))
                                              :fn       :frontend.handler.common.developer/show-block-data}
@@ -758,6 +762,7 @@
           :dev/show-block-ast
           :dev/show-page-data
           :dev/show-page-ast
+          :dev/replace-graph-with-db-file
           :ui/cycle-color
           :ui/cycle-color-off])
         (with-meta {:before m/enable-when-not-editing-mode!}))
@@ -941,6 +946,7 @@
      :dev/show-block-ast
      :dev/show-page-data
      :dev/show-page-ast
+     :dev/replace-graph-with-db-file
      :ui/clear-all-notifications]
 
     :shortcut.category/plugins
