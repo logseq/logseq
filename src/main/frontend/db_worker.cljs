@@ -236,7 +236,7 @@
                               (string/replace "++" "/"))))
                       all-files)
                 distinct)]
-     ;; (prn :debug :all-files (map #(.-name %) all-files))
+     (prn :debug :all-files (map #(.-name %) all-files))
      ;; (prn :debug :all-files-count (count (filter
      ;;                                      #(= (.-kind %) "file")
      ;;                                      all-files)))

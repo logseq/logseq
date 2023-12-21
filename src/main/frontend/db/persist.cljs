@@ -13,8 +13,13 @@
   []
   (p/let [repos (idb/get-nfs-dbs)
           db-repos (persist-db/<list-db)
+          db-repos' (map
+                      #(if (config/local-file-based-graph? %)
+                         %
+                         (str config/db-version-prefix %))
+                      db-repos)
           electron-disk-graphs (when (util/electron?) (ipc/ipc "getGraphs"))]
-    (distinct (concat repos db-repos (some-> electron-disk-graphs bean/->clj)))))
+    (distinct (concat repos db-repos' (some-> electron-disk-graphs bean/->clj)))))
 
 (defn delete-graph!
   [graph]
