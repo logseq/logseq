@@ -10,8 +10,7 @@
             ["@logseq/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [clojure.string :as string]
-            [cljs-bean.core :as bean]
-            [frontend.util :as util]))
+            [cljs-bean.core :as bean]))
 
 (defonce *sqlite (atom nil))
 (defonce *sqlite-conns (atom nil))
@@ -92,14 +91,13 @@
   [repo _opts]
   (reify IStorage
     (-store [_ addr+data-seq delete-addrs]
-      (util/profile
-       (str "SQLite store addr+data count: " (count addr+data-seq))
-       (let [data (map
-                   (fn [[addr data]]
-                     #js {:$addr addr
-                          :$content (pr-str data)})
-                   addr+data-seq)]
-         (upsert-addr-content! repo data delete-addrs))))
+      (prn :debug (str "SQLite store addr+data count: " (count addr+data-seq)))
+      (let [data (map
+                  (fn [[addr data]]
+                    #js {:$addr addr
+                         :$content (pr-str data)})
+                  addr+data-seq)]
+        (upsert-addr-content! repo data delete-addrs)))
 
     (-restore [_ addr]
       (restore-data-from-addr repo addr))))
@@ -229,16 +227,14 @@
   (transact
    [_this repo tx-data tx-meta]
    (when-let [conn (get-datascript-conn repo)]
-     (util/profile
-      "DB transact!"
-      (try
-        (let [tx-data (edn/read-string tx-data)
-              tx-meta (edn/read-string tx-meta)]
-          (d/transact! conn tx-data tx-meta)
-          nil)
-        (catch :default e
-          (prn :debug :error)
-          (js/console.error e))))))
+     (try
+       (let [tx-data (edn/read-string tx-data)
+             tx-meta (edn/read-string tx-meta)]
+         (d/transact! conn tx-data tx-meta)
+         nil)
+       (catch :default e
+         (prn :debug :error)
+         (js/console.error e)))))
 
   (getInitialData
    [_this repo]
