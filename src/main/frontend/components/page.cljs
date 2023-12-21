@@ -542,28 +542,32 @@
 (defonce *n-hops (atom nil))
 (defonce *focus-nodes (atom []))
 (defonce *graph-reset? (atom false))
+(defonce *graph-forcereset? (atom false))
 (defonce *journal? (atom nil))
 (defonce *orphan-pages? (atom true))
 (defonce *builtin-pages? (atom nil))
 (defonce *excluded-pages? (atom true))
 (defonce *show-journals-in-page-graph? (atom nil))
-(defonce *link-dist (atom 75))
+(defonce *link-dist (atom 70))
+(defonce *charge-strength (atom -600))
 
 (rum/defc ^:large-vars/cleanup-todo graph-filters < rum/reactive
   [graph settings forcesettings n-hops]
   (let [{:keys [journal? orphan-pages? builtin-pages? excluded-pages?]
          :or {orphan-pages? true}} settings
-        {:keys [link-dist]} forcesettings
+        {:keys [link-dist charge-strength]} forcesettings
         journal?' (rum/react *journal?)
         orphan-pages?' (rum/react *orphan-pages?)
         builtin-pages?' (rum/react *builtin-pages?)
         excluded-pages?' (rum/react *excluded-pages?)
         link-dist'  (rum/react *link-dist)
+        charge-strength'  (rum/react *charge-strength)
         journal? (if (nil? journal?') journal? journal?')
         orphan-pages? (if (nil? orphan-pages?') orphan-pages? orphan-pages?')
         builtin-pages? (if (nil? builtin-pages?') builtin-pages? builtin-pages?')
         excluded-pages? (if (nil? excluded-pages?') excluded-pages? excluded-pages?')
         link-dist (if (nil? link-dist') link-dist link-dist')
+        charge-strength (if (nil? charge-strength') charge-strength charge-strength')
         set-setting! (fn [key value]
                        (let [new-settings (assoc settings key value)]
                          (config-handler/set-config! :graph/settings new-settings)))
@@ -692,34 +696,37 @@
                 ;; (util/format "%d page%s, %d link%s" c1 s1 c2 s2)
                 (util/format "%d page%s" c1 s1))]
              [:div.p-6
-              [:div.flex.items-center.justify-between.mb-2
-               [:span "Exclude2"]
-               [:div.mt-1
-                (ui/toggle excluded-pages?
-                           (fn []
-                             (let [value (not excluded-pages?)]
-                               (reset! *excluded-pages? value)
-                               (set-setting! :excluded-pages? value)))
-                           true)]]
               [:div.flex.flex-col.mb-2
                 [:p {:title "Link Distance"}
                 "Link Distance"]
                 (ui/tippy {:html [:div.pr-3 link-dist]}
-                          (ui/slider link-dist
-                                     {:min 5
-                                      :max 180
+                          (ui/slider (/ link-dist 10)
+                                     {:min 1   ;; 10
+                                      :max 18  ;; 180
                                       ;; :on-change #(reset! *link-dist (int %))}))]
                                       :on-change #(let [value (int %)]
-                                                    (reset! *link-dist value)
-                                                    (set-forcesetting! :link-dist value))}))]
+                                                    (reset! *link-dist (* value 10))
+                                                    (set-forcesetting! :link-dist (* value 10)))}))]
                                       ;; :on-change #(let [value (util/evalue %)]
                                       ;;                (reset! *link-dist value)
                                       ;;                (set-forcesetting! :link-dist value))}))]
+              [:div.flex.flex-col.mb-2
+                [:p {:title "Charge Strength"}
+                "Charge Strength"]
+                (ui/tippy {:html [:div.pr-3 charge-strength]}
+                          (ui/slider (/ charge-strength 100)
+                                     {:min -10  ;;-1000
+                                      :max 10   ;;1000
+                                      :on-change #(let [value (int %)]
+                                                    (reset! *charge-strength (* value 100))
+                                                    (set-forcesetting! :charge-strength (* value 100)))}))]
+
 
               [:a.opacity-70.opacity-100 {:on-click (fn []
-                                                      (swap! *graph-reset? not)
-                                                      (reset! *link-dist 75))}
-               "Reset Graph"]]]))
+                                                      (swap! *graph-forcereset? not)
+                                                      (reset! *link-dist 70)
+                                                      (reset! *charge-strength -600))}
+               "Reset Forces"]]]))
          {})
         (graph-filter-section
          [:span.font-medium "Export"]
@@ -755,7 +762,9 @@
         dark? (= theme "dark")
         n-hops (rum/react *n-hops)
         link-dist (rum/react *link-dist)
+        charge-strength (rum/react *charge-strength)
         reset? (rum/react *graph-reset?)
+        forcereset? (rum/react *graph-forcereset?)
         focus-nodes (when n-hops (rum/react *focus-nodes))
         graph (if (and (integer? n-hops)
                        (seq focus-nodes)
@@ -775,10 +784,12 @@
                       :height (- height 48)
                       :dark? dark?
                       :link-dist link-dist
+                      :charge-strength charge-strength
                       :register-handlers-fn
                       (fn [graph]
                         (graph-register-handlers graph *focus-nodes *n-hops dark?))
-                      :reset? reset?})
+                      :reset? reset?
+                      :forcereset? forcereset?})
      (graph-filters graph settings forcesettings n-hops)]))
 
 (defn- filter-graph-nodes
