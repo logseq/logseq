@@ -10,7 +10,7 @@
             [frontend.components.reference :as reference]
             [frontend.components.whiteboard :as whiteboard]
             [frontend.config :as config]
-            [frontend.context.i18n :as i18n :refer [t]]
+            [frontend.context.i18n :as i18n]
             [frontend.colors :as colors]
             [frontend.db :as db]
             [frontend.db.restore :as db-restore]
