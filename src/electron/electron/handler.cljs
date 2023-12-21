@@ -226,8 +226,6 @@
     (fs-extra/ensureDirSync dir)
     dir))
 
-;; TODO: migrate transit to the new db
-;; TODO: migrate indexeddb backed graphs too on mobile
 (defn- get-file-based-graphs
   "Returns all graph names in the cache directory (starting with `logseq_local_`)"
   []
