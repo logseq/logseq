@@ -855,7 +855,7 @@ Similar to re-frame subscriptions"
   "Returns the current repo URL, or else open demo graph"
   []
   (or (:git/current-repo @state)
-      "local"))
+      "Logseq demo"))
 
 (defn get-remote-graphs
   []

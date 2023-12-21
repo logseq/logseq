@@ -95,13 +95,13 @@
                 (shortcut/refresh!)
 
                 (cond
-                  (and (not (seq (db/get-files config/local-repo)))
+                  (and (not (seq (db/get-files config/demo-repo)))
                        ;; Not native local directory
                        (not (some config/local-file-based-graph? (map :url repos)))
                        (not (mobile-util/native-platform?))
                        (not (config/db-based-graph? repo)))
                   ;; will execute `(state/set-db-restoring! false)` inside
-                  (repo-handler/setup-local-repo-if-not-exists!)
+                  (repo-handler/setup-demo-repo-if-not-exists!)
 
                   :else
                   (state/set-db-restoring! false)))))))

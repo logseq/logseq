@@ -802,7 +802,7 @@
     ;;  [:li.it
     ;;   [:h1.dark:text-white "50G"]
     ;;   [:h2 "Total Storage"]]]
-    
+
 
    [:div.pt-6.flex.justify-end.space-x-2
     (ui/button "Done" :on-click close-fn)]])
@@ -840,14 +840,14 @@
   (when-not (get (state/sub :file-sync/onboarding-state) (keyword type))
     (try
       (let [current-repo (state/get-current-repo)
-            local-repo?  (= current-repo config/local-repo)
+            demo-repo?  (= current-repo config/demo-repo)
             login?       (boolean (state/sub :auth/id-token))]
 
         (when login?
           (case type
 
             :welcome
-            (when (or local-repo?
+            (when (or demo-repo?
                       (:GraphUUID (repo-handler/get-detail-graph-info current-repo)))
               (throw (js/Error. "current repo have been local or remote graph")))
 
