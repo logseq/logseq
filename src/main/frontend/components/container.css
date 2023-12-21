@@ -216,7 +216,7 @@
 
     .header {
       @apply px-6 py-1 flex justify-between items-center select-none sticky top-[-4px];
-      @apply cursor-pointer z-[2] opacity-50 hover:opacity-70;
+      @apply cursor-pointer z-[2];
 
       background-color: var(--left-sidebar-bg-color);
 
@@ -245,9 +245,14 @@
       }
 
       .wrap-th {
-        > span {
-          font-size: 11px;
-          font-weight: 600;
+        @apply opacity-50;
+
+        > .ui__icon {
+          @apply relative top-[-1px];
+        }
+
+        > strong {
+          @apply text-[11px] font-semibold;
         }
       }
     }

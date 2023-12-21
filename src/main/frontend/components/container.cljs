@@ -16,6 +16,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [electron.ipc :as ipc]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as db-model]
             [frontend.extensions.pdf.utils :as pdf-utils]
@@ -23,6 +24,7 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.util.page :as page-util]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
@@ -62,8 +64,8 @@
       [:div.header.items-center
        {:on-click (fn [^js/MouseEvent _e]
                     (state/toggle-navigation-item-collapsed! class))}
-       [:div.font-medium name]
-       (ui/icon "chevron-left" {:class "more"})]
+       [:div.a name]
+       [:div.b (ui/icon "chevron-left" {:class "more"})]]
       (when child [:div.bd child])]]))
 
 (defn- delta-y
@@ -83,6 +85,7 @@
         whiteboard-page? (db-model/whiteboard-page? name)
         untitled? (db-model/untitled-page? name)
         name (util/safe-page-name-sanity-lc name)
+        file-rpath (when (util/electron?) (page-util/get-page-file-rpath name))
         source-page (db-model/get-alias-source-page (state/get-current-repo) name)
         ctx-icon #(shui/tabler-icon %1 {:class "scale-90 pr-1 opacity-80"})
         open-in-sidebar #(when-let [page-entity (and (not whiteboard-page?)
@@ -109,12 +112,26 @@
                         (pdf-utils/fix-local-asset-pagename original-name))]]
         (shui/context-menu-content
           {:class "w-60"}
-          (shui/context-menu-item
-            {:on-click #(page-handler/unfavorite-page! original-name)}
-            (ctx-icon "star-off")
-            (t :page/unfavorite)
-            (shui/context-menu-shortcut (some-> (shortcut-dh/shortcut-binding :command/toggle-favorite) (first)
-                                          (shortcut-utils/decorate-binding))))
+          (when-not recent?
+            (shui/context-menu-item
+              {:on-click #(page-handler/unfavorite-page! original-name)}
+              (ctx-icon "star-off")
+              (t :page/unfavorite)
+              (shui/context-menu-shortcut (some-> (shortcut-dh/shortcut-binding :command/toggle-favorite) (first)
+                                            (shortcut-utils/decorate-binding)))))
+          (when-let [page-fpath (and (util/electron?) file-rpath
+                                  (config/get-repo-fpath (state/get-current-repo) file-rpath))]
+            [:<>
+             (shui/context-menu-item
+               {:on-click #(ipc/ipc :openFileInFolder page-fpath)}
+               (ctx-icon "folder")
+               (t :page/open-in-finder))
+
+             (shui/context-menu-item
+               {:on-click #(js/window.apis.openPath page-fpath)}
+               (ctx-icon "file")
+               (t :page/open-with-default-app))])
+
           (shui/context-menu-item
             {:on-click open-in-sidebar}
             (ctx-icon "layout-sidebar-right")
@@ -173,7 +190,7 @@
     (nav-content-item
      [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
       (ui/icon "star" {:size 16})
-      [:span.flex-1.ml-2 (string/upper-case (t :left-side-bar/nav-favorites))]]
+      [:strong.flex-1.ml-2 (string/upper-case (t :left-side-bar/nav-favorites))]]
 
      {:class "favorites"
       :count (count favorite-entities)
@@ -199,7 +216,7 @@
     (nav-content-item
      [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
       (ui/icon "history" {:size 16})
-      [:span.flex-1.ml-2
+      [:strong.flex-1.ml-2
        (string/upper-case (t :left-side-bar/nav-recent-pages))]]
 
      {:class "recent"
