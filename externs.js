@@ -142,6 +142,7 @@ dummy.DOCUMENT_TYPE = function() {};
 dummy.ELEMENT = function() {};
 dummy.TEXT = function() {};
 dummy.isAbsolute = function() {};
+dummy._address = function() {};
 
 var utils = {}
 utils.withFileTypes = true;
