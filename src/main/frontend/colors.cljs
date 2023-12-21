@@ -7,27 +7,11 @@
 (def color-list [:tomato :red :crimson :pink :plum :purple :violet :indigo :blue :cyan :teal :green :grass :orange :brown])
 ;(def color-list [:tomato :red :blue])
 
-(def gray-pairing-map {:tomato :mauve :red :mauve :crimson :mauve :pink :mauve :plum :mauve :purple :mauve :violet :mauve
-                       :indigo :slate :blue :slate :sky :slate :cyan :slate
-                       :teal :sage :mint :sage :green :sage
-                       :grass :olive :lime :olive
-                       :yellow :sand :amber :sand :orange :sand :brown :sand})
-
 (defn variable
   ; ([value])
   ([color value] (variable color value false))
   ([color value alpha?]
    (str "var(--rx-" (name color) "-" (cond-> value keyword? name) (if alpha? "-alpha" "") ")")))
-
-(defn accent-base-hsl
-  ([color] (accent-base-hsl color "9"))
-  ([color level]
-   (some-> radix-colors
-     (aget color)
-     (aget (str color level))
-     (string/replace "hsl(" "")
-     (string/replace ")" "")
-     (string/replace "," ""))))
 
 (defn linear-gradient [color-name color-stop gradient-level]
   (let [color-index (.indexOf color-list color-name)
