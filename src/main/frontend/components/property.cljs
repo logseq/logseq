@@ -140,7 +140,8 @@
         class? (contains? (:block/type block) "class")
         property-type (get-in property [:block/schema :type])
         save-property-fn (fn [] (components-pu/update-property! property @*property-name @*property-schema))
-        enable-closed-values? (contains? db-property-type/closed-value-property-types (or property-type :default))]
+        enable-closed-values? (contains? db-property-type/closed-value-property-types (or property-type :default))
+        enable-position? (contains? db-property-type/closed-value-property-position-types (or property-type :default))]
     [:div.property-configure.flex.flex-1.flex-col
      {:on-mouse-down #(state/set-state! :editor/mouse-down-from-property-configure? true)
       :on-mouse-up #(state/set-state! :editor/mouse-down-from-property-configure? nil)}
@@ -220,29 +221,28 @@
                                       (swap! *property-schema assoc :cardinality (if many? :one :many))
                                       (save-property-fn))}))])
 
-
       (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :classes)
-       (case (:type @*property-schema)
-         :page
-         (when (empty? (:values @*property-schema))
-           [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-            [:label "Specify classes:"]
-            (class-select *property-schema
-                          (:classes @*property-schema)
-                          (assoc opts
-                                 :disabled? disabled?
-                                 :save-property-fn save-property-fn))])
+        (case (:type @*property-schema)
+          :page
+          (when (empty? (:values @*property-schema))
+            [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+             [:label "Specify classes:"]
+             (class-select *property-schema
+                           (:classes @*property-schema)
+                           (assoc opts
+                                  :disabled? disabled?
+                                  :save-property-fn save-property-fn))])
 
-         :template
-         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-          [:label "Specify template:"]
-          (class-select *property-schema (:classes @*property-schema)
-                        (assoc opts
-                               :multiple-choices? false
-                               :disabled? disabled?
-                               :save-property-fn save-property-fn))]
+          :template
+          [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+           [:label "Specify template:"]
+           (class-select *property-schema (:classes @*property-schema)
+                         (assoc opts
+                                :multiple-choices? false
+                                :disabled? disabled?
+                                :save-property-fn save-property-fn))]
 
-         nil))
+          nil))
 
       (when (and enable-closed-values? (empty? (:classes @*property-schema)))
         [:div.grid.grid-cols-4.gap-1.items-start.leading-8
@@ -250,7 +250,9 @@
          [:div.col-span-3
           (closed-value/choices property *property-name *property-schema)]])
 
-      (when (and enable-closed-values? (seq (:values @*property-schema)))
+      (when (and enable-closed-values?
+                 enable-position?
+                 (seq (:values @*property-schema)))
         (let [position (:position @*property-schema)
               choices (map
                        (fn [item]
