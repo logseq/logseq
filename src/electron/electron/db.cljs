@@ -3,6 +3,8 @@
   (:require ["path" :as node-path]
             ["fs-extra" :as fs]
             ["electron" :refer [app]]
+            ;; [electron.logger :as logger]
+            [logseq.db.sqlite.common-db :as sqlite-common-db]
             [electron.logger :as logger]
             [logseq.db.sqlite.db :as sqlite-db]
             [electron.backup-file :as backup-file]))
@@ -21,7 +23,7 @@
 (defn ensure-graph-dir!
   [db-name]
   (ensure-graphs-dir!)
-  (let [graph-dir (node-path/join (get-graphs-dir) (sqlite-db/sanitize-db-name db-name))]
+  (let [graph-dir (node-path/join (get-graphs-dir) (sqlite-common-db/sanitize-db-name db-name))]
     (fs/ensureDirSync graph-dir)
     graph-dir))
 
@@ -36,7 +38,7 @@
 (defn save-db!
   [db-name data]
   (let [graph-dir (ensure-graph-dir! db-name)
-        [_db-name db-path] (sqlite-db/get-db-full-path (get-graphs-dir) db-name)]
+        [_db-name db-path] (sqlite-common-db/get-db-full-path (get-graphs-dir) db-name)]
     (fs/writeFileSync db-path data)
     (backup-file/backup-file graph-dir :backup-dir
                              ""
@@ -57,7 +59,7 @@
 
 (defn unlink-graph!
   [repo]
-  (let [db-name (sqlite-db/sanitize-db-name repo)
+  (let [db-name (sqlite-common-db/sanitize-db-name repo)
         path (node-path/join (get-graphs-dir) db-name)
         unlinked (node-path/join (get-graphs-dir) unlinked-graphs-dir)
         new-path (node-path/join unlinked db-name)

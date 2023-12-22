@@ -63,14 +63,13 @@
           repo (cond
                  global-dir (state/get-current-repo)
                  ;; FIXME(andelf): hack for demo graph, demo graph does not bind to local directory
-                 (string/starts-with? dir "memory://") "local"
+                 (string/starts-with? dir "memory://") "Logseq demo"
                  :else (config/get-local-repo dir))
           repo-dir (config/get-local-dir repo)
           {:keys [mtime]} stat
           db-content (db/get-file repo path)
           exists-in-db? (not (nil? db-content))
           db-content (or db-content "")]
-
       (when (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
         (cond
           (and (= "unlinkDir" type) dir)

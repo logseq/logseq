@@ -161,9 +161,6 @@
       :editor/create-page?                   (atom false)
 
       :db/properties-changed-pages           {}
-      :db/last-transact-time                 (atom {})
-      ;; whether database is persisted
-      :db/persisted?                         {}
       :editor/cursor-range                   (atom nil)
 
       :selection/mode                        (atom false)
@@ -858,7 +855,7 @@ Similar to re-frame subscriptions"
   "Returns the current repo URL, or else open demo graph"
   []
   (or (:git/current-repo @state)
-      "local"))
+      "Logseq demo"))
 
 (defn get-remote-graphs
   []
@@ -1771,25 +1768,6 @@ Similar to re-frame subscriptions"
 (defn set-editor-last-input-time!
   [repo time]
   (set-state! :editor/last-input-time time :path-in-sub-atom repo))
-
-
-(defn set-last-transact-time!
-  [repo time]
-  (set-state! :db/last-transact-time time :path-in-sub-atom repo)
-
-  ;; THINK: new block, indent/outdent, drag && drop, etc.
-  (set-editor-last-input-time! repo time))
-
-(defn set-db-persisted!
-  [repo value]
-  (set-state! [:db/persisted? repo] value))
-
-(defn db-idle?
-  [repo]
-  (when repo
-    (when-let [last-time (get (:db/last-transact-time @state) repo)]
-      (let [now (util/time-ms)]
-        (>= (- now last-time) 3000)))))
 
 (defn input-idle?
   [repo & {:keys [diff]

@@ -346,7 +346,7 @@
         delete-db-f (fn []
                       (let [current-repo (state/get-current-repo)]
                         (db/remove-conn! url)
-                        (when db-based? (db-persist/delete-graph! url))
+                        (db-persist/delete-graph! url)
                         (search/remove-db! url)
                         (state/delete-repo! repo)
                         (if (= current-repo url)
@@ -372,11 +372,11 @@
                            {:listen-handler db-listener/listen-and-persist!
                             :db-graph? (config/db-based-graph? repo)})))
 
-(defn- setup-local-repo-if-not-exists-impl!
+(defn- setup-demo-repo-if-not-exists-impl!
   []
   ;; loop query if js/window.pfs is ready, interval 100ms
   (if js/window.pfs
-    (let [repo config/local-repo
+    (let [repo config/demo-repo
           repo-dir (config/get-repo-dir repo)]
       (p/do! (fs/mkdir-if-not-exists repo-dir) ;; create memory://local
              (state/set-current-repo! repo)
@@ -394,16 +394,16 @@
              (state/set-db-restoring! false)
              (ui-handler/re-render-root!)))
     (p/then (p/delay 100) ;; TODO Junyi remove the string
-            setup-local-repo-if-not-exists-impl!)))
+            setup-demo-repo-if-not-exists-impl!)))
 
-(defn setup-local-repo-if-not-exists!
-  "Setup demo repo, i.e. `local-repo`"
+(defn setup-demo-repo-if-not-exists!
+  "Setup demo repo, i.e. `demo-repo`"
   []
   ;; ensure `(state/set-db-restoring! false)` at exit
-  (-> (setup-local-repo-if-not-exists-impl!)
+  (-> (setup-demo-repo-if-not-exists-impl!)
       (p/timeout 3000)
       (p/catch (fn []
-                 (prn "setup-local-repo failed! timeout 3000ms")))
+                 (prn "setup-demo-repo failed! timeout 3000ms")))
       (p/finally (fn []
                    (state/set-db-restoring! false)))))
 
@@ -449,27 +449,6 @@
           (route-handler/redirect-to-home!)
           500))))))
 
-(defn persist-db!
-  ([]
-   (persist-db! {}))
-  ([handlers]
-   (persist-db! (state/get-current-repo) handlers))
-  ([repo {:keys [before on-success on-error]}]
-   (->
-    (p/do!
-     (when before
-       (before))
-     (db-listener/persist! repo)
-     (when on-success
-       (on-success)))
-    (p/catch (fn [error]
-               (js/console.error error)
-               (state/pub-event! [:capture-error
-                                  {:error error
-                                   :payload {:type :db/persist-failed}}])
-               (when on-error
-                 (on-error error)))))))
-
 (defn get-repos
   []
   (p/let [nfs-dbs (db-persist/get-all-graphs)
@@ -492,14 +471,14 @@
       nfs-dbs
 
       :else
-      [{:url config/local-repo
+      [{:url config/demo-repo
         :example? true}])))
 
 (defn combine-local-&-remote-graphs
-  [local-repos remote-repos]
+  [demo-repos remote-repos]
   (when-let [repos' (seq (concat (map #(if-let [sync-meta (seq (:sync-meta %))]
                                          (assoc % :GraphUUID (second sync-meta)) %)
-                                   local-repos)
+                                   demo-repos)
                                  (some->> remote-repos
                                           (map #(assoc % :remote? true)))))]
     (let [repos' (group-by :GraphUUID repos')

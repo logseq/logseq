@@ -271,7 +271,7 @@
       (state/set-today! (date/today))
       (when (or (config/db-based-graph? repo)
                 (config/local-file-based-graph? repo)
-                (and (= "local" repo) (not (mobile-util/native-platform?))))
+                (and (= config/demo-repo repo) (not (mobile-util/native-platform?))))
         (let [title (date/today)
               today-page (util/page-name-sanity-lc title)
               format (state/get-preferred-format repo)

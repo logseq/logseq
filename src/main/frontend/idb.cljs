@@ -47,10 +47,11 @@
         (idb-keyval/set new-key value @store)
         (idb-keyval/del old-key @store)))))
 
-(defn set-batch!
-  [items]
-  (when (and (seq items) @store)
-    (idb-keyval/setBatch (clj->js items) @store)))
+(comment
+  (defn set-batch!
+    [items]
+    (when (and (seq items) @store)
+      (idb-keyval/setBatch (clj->js items) @store))))
 
 (defn get-item
   [key]

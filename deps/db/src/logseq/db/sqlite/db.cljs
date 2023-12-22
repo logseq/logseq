@@ -2,15 +2,15 @@
   "Sqlite fns for db graphs"
   (:require ["path" :as node-path]
             ["better-sqlite3" :as sqlite3]
-            [clojure.string :as string]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [logseq.db.sqlite.util :as sqlite-util]
             ;; FIXME: datascript.core has to come before datascript.storage or else nbb fails
             #_:clj-kondo/ignore
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
             [goog.object :as gobj]
-            [clojure.edn :as edn]))
+            [clojure.edn :as edn]
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 ;; Reference same sqlite default class in cljs + nbb without needing .cljc
 (def sqlite (if (find-ns 'nbb.core) (aget sqlite3 "default") sqlite3))
@@ -27,24 +27,13 @@
       (.close database))
     (reset! databases nil)))
 
-(defn sanitize-db-name
-  [db-name]
-  (-> db-name
-      (string/replace sqlite-util/db-version-prefix "")
-      (string/replace sqlite-util/file-version-prefix "")
-      (string/replace "/" "_")
-      (string/replace "\\" "_")
-      (string/replace ":" "_")))
+(def sanitize-db-name sqlite-common-db/sanitize-db-name)
+
+(def get-db-full-path sqlite-common-db/get-db-full-path)
 
 (defn get-conn
   [repo]
   (get @conns (sanitize-db-name repo)))
-
-(defn get-db-full-path
-  [graphs-dir db-name]
-  (let [db-name' (sanitize-db-name db-name)
-        graph-dir (node-path/join graphs-dir db-name')]
-    [db-name' (node-path/join graph-dir "db.sqlite")]))
 
 (defn query
   [db sql]
@@ -94,11 +83,14 @@
   connected to the sqlite db"
   [graphs-dir db-name]
   (let [[db-sanitized-name db-full-path] (get-db-full-path graphs-dir db-name)
-        db (new sqlite db-full-path nil)]
+        db (new sqlite db-full-path nil)
+        schema (if (sqlite-util/db-based-graph? db-name)
+                 db-schema/schema-for-db-based-graph
+                 db-schema/schema)]
     (sqlite-common-db/create-kvs-table! db)
     (swap! databases assoc db-sanitized-name db)
     (let [storage (new-sqlite-storage db)
-          conn (sqlite-common-db/get-storage-conn storage)]
+          conn (sqlite-common-db/get-storage-conn storage schema)]
       (swap! conns assoc db-sanitized-name conn)
       conn)))
 

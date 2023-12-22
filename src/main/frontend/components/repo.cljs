@@ -110,7 +110,7 @@
         remotes-loading? (state/sub [:file-sync/remote-graphs :loading])
         repos (if (and login? (seq remotes))
                 (repo-handler/combine-local-&-remote-graphs repos remotes) repos)
-        repos (remove #(= (:url %) config/local-repo) repos)
+        repos (remove #(= (:url %) config/demo-repo) repos)
         {remote-graphs true local-graphs false} (group-by (comp boolean :remote?) repos)]
     (if (seq repos)
       [:div#graphs
@@ -183,7 +183,7 @@
                     switch-repos)
         refresh-link (let [nfs-repo? (config/local-file-based-graph? current-repo)]
                        (when (and nfs-repo?
-                                  (not= current-repo config/local-repo)
+                                  (not= current-repo config/demo-repo)
                                   (or (nfs-handler/supported?)
                                       (mobile-util/native-platform?)))
                          {:title (t :sync-from-local-files)
@@ -244,7 +244,7 @@
                                  [:div.graphs
                                   [:span#repo-switch.block.pr-2.whitespace-nowrap
                                    [:span [:span#repo-name.font-medium
-                                           [:span.overflow-hidden.text-ellipsis (if (= config/local-repo short-repo-name) "Demo" short-repo-name)]
+                                           [:span.overflow-hidden.text-ellipsis (if (= config/demo-repo short-repo-name) "Demo" short-repo-name)]
                                            (when remote? [:span.pl-1 (ui/icon "cloud")])]]
                                    [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]]))
             links-header (cond->
@@ -278,7 +278,9 @@
      [:li "| (vertical bar or pipe)"]
      [:li "? (question mark)"]
      [:li "* (asterisk)"]
-     [:li "# (hash)"]]]
+     [:li "# (hash)"]
+     ;; `+` is used to encode path that includes `:` or `/`
+     [:li "+ (plus)"]]]
    :warning false))
 
 (rum/defcs new-db-graph <
@@ -287,7 +289,8 @@
   (let [*graph-name (::graph-name state)
         new-db-f (fn []
                    (when-not (string/blank? @*graph-name)
-                     (if (fs-util/include-reserved-chars? @*graph-name)
+                     (if (or (fs-util/include-reserved-chars? @*graph-name)
+                             (string/includes? @*graph-name "+"))
                        (invalid-graph-name-warning)
                        (do
                          (repo-handler/new-db! @*graph-name)

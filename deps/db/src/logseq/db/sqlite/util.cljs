@@ -2,10 +2,22 @@
   "Utils fns for backend sqlite db"
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [logseq.db.frontend.schema :as db-schema]))
 
 (defonce db-version-prefix "logseq_db_")
 (defonce file-version-prefix "logseq_local_")
+
+(defn db-based-graph?
+  [graph-name]
+  (string/starts-with? graph-name db-version-prefix))
+
+(defn get-schema
+  "Returns schema for given repo"
+  [repo]
+  (if (db-based-graph? repo)
+    db-schema/schema-for-db-based-graph
+    db-schema/schema))
 
 (defn time-ms
   "Copy of util/time-ms. Too basic to couple this to main app"

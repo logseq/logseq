@@ -10,16 +10,24 @@
             ["@logseq/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [clojure.string :as string]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.worker.search :as search]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defonce *sqlite (atom nil))
+;; repo -> {:db conn :search conn}
 (defonce *sqlite-conns (atom nil))
+;; repo -> conn
 (defonce *datascript-conns (atom nil))
+;; repo -> pool
 (defonce *opfs-pools (atom nil))
 
 (defn- get-sqlite-conn
-  [repo]
-  (get @*sqlite-conns repo))
+  [repo & {:keys [search?]
+           :or {search? false}
+           :as _opts}]
+  (let [k (if search? :search :db)]
+    (get-in @*sqlite-conns [repo k])))
 
 (defn get-datascript-conn
   [repo]
@@ -29,11 +37,15 @@
   [repo]
   (get @*opfs-pools repo))
 
+(defn- get-pool-name
+  [graph-name]
+  (str "logseq-pool-" (sqlite-common-db/sanitize-db-name graph-name)))
+
 (defn- <get-opfs-pool
   [graph]
   (or (get-opfs-pool graph)
-      (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (str "logseq-pool-" graph)
-                                                             :initialCapacity 10})]
+      (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (get-pool-name graph)
+                                                             :initialCapacity 20})]
         (swap! *opfs-pools assoc graph pool)
         pool)))
 
@@ -50,6 +62,7 @@
                                                 :printErr js/console.error}))]
       (reset! *sqlite sqlite)
       nil)))
+
 
 (def repo-path "/db.sqlite")
 
@@ -102,22 +115,46 @@
     (-restore [_ addr]
       (restore-data-from-addr repo addr))))
 
-(defn- close-db!
-  [repo ^js db]
+(defn- close-db-aux!
+  [repo ^Object db ^Object search]
   (swap! *sqlite-conns dissoc repo)
   (swap! *datascript-conns dissoc repo)
-
   (when db (.close db))
+  (when search (.close search))
   (when-let [^js pool (get-opfs-pool repo)]
     (.releaseAccessHandles pool))
-
   (swap! *opfs-pools dissoc repo))
 
 (defn- close-other-dbs!
   [repo]
-  (doseq [[r db] @*sqlite-conns]
+  (doseq [[r {:keys [db search]}] @*sqlite-conns]
     (when-not (= repo r)
-      (close-db! r db))))
+      (close-db-aux! r db search))))
+
+(defn- close-db!
+  [repo]
+  (let [{:keys [db search]} (@*sqlite-conns repo)]
+    (close-db-aux! repo db search)))
+
+(defn- create-or-open-db!
+  [repo]
+  (when-not (get-sqlite-conn repo)
+    (p/let [^js pool (<get-opfs-pool repo)
+            capacity (.getCapacity pool)
+            _ (when (zero? capacity)   ; file handle already releases since pool will be initialized only once
+                (.acquireAccessHandles pool))
+            db (new (.-OpfsSAHPoolDb pool) repo-path)
+            search-db (new (.-OpfsSAHPoolDb pool) (str "search-" repo-path))
+            storage (new-sqlite-storage repo {})]
+      (swap! *sqlite-conns assoc repo {:db db
+                                       :search search-db})
+      (.exec db "PRAGMA locking_mode=exclusive")
+      (sqlite-common-db/create-kvs-table! db)
+      (search/create-tables-and-triggers! search-db)
+      (let [schema (sqlite-util/get-schema repo)
+            conn (sqlite-common-db/get-storage-conn storage schema)]
+        (swap! *datascript-conns assoc repo conn)
+        nil))))
 
 (defn- iter->vec [iter]
   (when iter
@@ -150,32 +187,29 @@
   [graph]
   (->
    (p/let [^js root (.getDirectory js/navigator.storage)
-           _dir-handle (.getDirectoryHandle root (str ".logseq-pool-" graph))]
+           _dir-handle (.getDirectoryHandle root (str "." (get-pool-name graph)))]
      true)
    (p/catch
     (fn [_e]                           ; not found
       false))))
 
-(defn- create-or-open-db!
-  [repo]
-  (when-not (get-sqlite-conn repo)
-    (p/let [^js pool (<get-opfs-pool repo)
-            capacity (.getCapacity pool)
-            _ (when (zero? capacity)   ; file handle already releases since pool will be initialized only once
-                (.acquireAccessHandles pool))
-            db (new (.-OpfsSAHPoolDb pool) repo-path)
-            storage (new-sqlite-storage repo {})]
-      (swap! *sqlite-conns assoc repo db)
-      (.exec db "PRAGMA locking_mode=exclusive")
-      (sqlite-common-db/create-kvs-table! db)
-      (let [conn (sqlite-common-db/get-storage-conn storage)]
-        (swap! *datascript-conns assoc repo conn)
-        nil))))
-
 (defn- remove-vfs!
   [^js pool]
   (when pool
     (.removeVfs ^js pool)))
+
+(defn- get-search-db
+  [repo]
+  (get-sqlite-conn repo {:search? true}))
+
+(defn <remove-all-files!
+  "!! Dangerous: use it only for development."
+  []
+  (p/let [all-files (<list-all-files)
+          files (filter #(= (.-kind %) "file") all-files)
+          dirs (filter #(= (.-kind %) "directory") all-files)
+          _ (p/all (map (fn [file] (.remove file)) files))]
+    (p/all (map (fn [dir] (.remove dir)) dirs))))
 
 #_:clj-kondo/ignore
 (defclass SQLiteDB
@@ -204,7 +238,11 @@
                         (when (and
                                (= (.-kind file) "directory")
                                (string/starts-with? (.-name file) ".logseq-pool-"))
-                          (string/replace-first (.-name file) ".logseq-pool-" "")))
+                          (-> (.-name file)
+                              (string/replace-first ".logseq-pool-" "")
+                              ;; TODO: DRY
+                              (string/replace "+3A+" ":")
+                              (string/replace "++" "/"))))
                       all-files)
                 distinct)]
      ;; (prn :debug :all-files (map #(.-name %) all-files))
@@ -244,9 +282,8 @@
 
   (unsafeUnlinkDB
    [_this repo]
-   (p/let [db (get-sqlite-conn repo)
-           pool (<get-opfs-pool repo)
-           _ (when db (close-db! repo db))
+   (p/let [pool (<get-opfs-pool repo)
+           _ (close-db! repo)
            result (remove-vfs! pool)]
      nil))
 
@@ -268,6 +305,31 @@
    (when-not (string/blank? repo)
      (p/let [pool (<get-opfs-pool repo)]
        (<import-db pool data))))
+
+  ;; Search
+  (search-blocks
+   [this repo q option]
+   (p/let [db (get-search-db repo)
+           result (search/search-blocks db q (bean/->clj option))]
+     (bean/->js result)))
+
+  (search-upsert-blocks
+   [this repo blocks]
+   (p/let [db (get-search-db repo)]
+     (search/upsert-blocks! db blocks)
+     nil))
+
+  (search-delete-blocks
+   [this repo ids]
+   (p/let [db (get-search-db repo)]
+     (search/delete-blocks! db ids)
+     nil))
+
+  (search-truncate-tables
+   [this repo]
+   (p/let [db (get-search-db repo)]
+     (search/truncate-table! db)
+     nil))
 
   (dangerousRemoveAllDbs
    [this repo]

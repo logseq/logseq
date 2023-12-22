@@ -1,9 +1,6 @@
 (ns electron.state
-  (:require [clojure.core.async :as async]
-            [electron.configs :as config]
+  (:require [electron.configs :as config]
             [medley.core :as medley]))
-
-(defonce persistent-dbs-chan (async/chan 1))
 
 (defonce state
   (atom {:git/auto-commit-interval nil

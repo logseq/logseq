@@ -764,18 +764,6 @@
      (when-not (string/blank? content)
        [:span.text.pl-2 content])]]))
 
-(defn notify-graph-persist!
-  []
-  (notification/show!
-   (loading (t :graph/persist))
-   :warning))
-
-(defn notify-graph-persist-error!
-  []
-  (notification/show!
-   (t :graph/persist-error)
-   :error))
-
 (rum/defc rotating-arrow
   [collapsed?]
   [:span

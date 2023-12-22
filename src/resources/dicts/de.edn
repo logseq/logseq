@@ -178,12 +178,6 @@
 
  :graph/all-graphs "Alle Graphen"
  :graph/local-graphs "Lokale Graphen:"
- :graph/persist "Logseq synchronisiert gerade den internen Status, bitte warten Sie einige Sekunden."
- :graph/persist-error "Synchronisation des internen Status fehlgeschlagen."
- :graph/remote-graphs "Remote-Graphen:"
- :graph/save "Speichern..."
- :graph/save-error "Speichern fehlgeschlagen"
- :graph/save-success "Erfolgreich gespeichert"
 
  :header/go-back "Zurück"
  :header/go-forward "Vorwärts"
@@ -720,7 +714,6 @@
  :command.graph/open                     "Graph zum Öffnen auswählen"
  :command.graph/re-index                 "Aktuellen Graph neu indizieren"
  :command.graph/remove                   "Einen Graph entfernen"
- :command.graph/save                     "Aktuellen Graph auf Festplatte speichern"
  :command.misc/copy                      "Kopieren"
  :command.pdf/close                      "PDF: Aktuelles PDF-Dokument schließen"
  :command.pdf/find                       "PDF: Text des aktuellen PDF-Dokuments durchsuchen"

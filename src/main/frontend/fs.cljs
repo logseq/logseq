@@ -40,8 +40,8 @@
   [dir & {:keys [repo rpath]}]
   (let [repo (or repo (state/get-current-repo))
         bfs-local? (and dir
-                        (or (string/starts-with? dir "/local")
-                            (string/starts-with? dir "local")))
+                        (or (string/starts-with? dir (str "/" config/demo-repo))
+                            (string/starts-with? dir config/demo-repo)))
         db-assets? (and
                     (config/db-based-graph? repo)
                     rpath

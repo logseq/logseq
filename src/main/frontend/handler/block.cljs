@@ -13,7 +13,6 @@
    [goog.dom :as gdom]
    [logseq.graph-parser.block :as gp-block]
    [frontend.config :as config]
-   [frontend.db.listener :as db-listener]
    [frontend.util.drawer :as drawer]
    [frontend.handler.file-based.property.util :as property-util]
    [frontend.handler.property.util :as pu]
@@ -322,8 +321,7 @@
 (defn mark-last-input-time!
   [repo]
   (when repo
-    (state/set-editor-last-input-time! repo (util/time-ms))
-    (db-listener/clear-repo-persistent-job! repo)))
+    (state/set-editor-last-input-time! repo (util/time-ms))))
 
 (defn- edit-block-aux
   [repo block content block-node text-range {:keys [direction retry-times max-retry-times]

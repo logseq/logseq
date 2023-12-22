@@ -1,6 +1,5 @@
 (ns electron.core
   (:require [electron.handler :as handler]
-            [electron.search :as search]
             [electron.db :as db]
             [electron.updater :refer [init-updater] :as updater]
             [electron.utils :refer [*win mac? linux? dev? get-win-from-sender
@@ -255,10 +254,7 @@
 
            (js-utils/disableXFrameOptions win)
 
-           (search/ensure-search-dir!)
            (db/ensure-graphs-dir!)
-
-           (search/open-dbs!)
 
            (git/auto-commit-current-graph!)
 
@@ -309,7 +305,6 @@
   (if-not (.requestSingleInstanceLock app)
     (do
       (db/close!)
-      (search/close!)
       (.quit app))
     (let [privileges {:standard        true
                       :secure          true
@@ -339,7 +334,6 @@
                                      (try
                                        (fs-watcher/close-watcher!)
                                        (db/close!)
-                                       (search/close!)
                                        (catch :default e
                                          (logger/error "window-all-closed" e)))
                                      (.quit app)))

@@ -72,12 +72,6 @@
  :file-sync/graph-deleted "Het huidige remote grafiek is verwijderd"
  :file-sync/other-user-graph "De huidige lokale grafiek is gebonden aan de remote grafiek van de andere gebruiker. Dus kan de synchronisatie niet starten."
 
- :graph/persist "Logseq is de interne status aan het synchroniseren, wacht alstublieft enkele seconden."
- :graph/persist-error "Interne status sync mislukt."
- :graph/save "Opslaan..."
- :graph/save-error "Opslaan mislukt"
- :graph/save-success "Opslaan succesvol"
-
  :help/about "Over Logseq"
  :help/block-reference "Blok referentie"
  :help/bug "Rapporteer een fout"
@@ -302,7 +296,6 @@
  :command.graph/open                     "Selecteer grafiek om te openen"
  :command.graph/re-index                 "Huidige grafiek opnieuw indexeren"
  :command.graph/remove                   "Verwijder een grafiek"
- :command.graph/save                     "Huidige grafiek opslaan op schijf"
  :command.misc/copy                      "Kopieer"
  :command.pdf/close                      "Huidige pdf-viewer sluiten"
  :command.pdf/next-page                  "Volgende pagina van huidige pdf doc"
