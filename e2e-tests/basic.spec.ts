@@ -192,6 +192,7 @@ test('block selection', async ({ page, block }) => {
   await expect(page.locator('.block-main-container >> nth=6')).toHaveCSS('border-radius', '0px')
   await expect(page.locator('.ls-block >> nth=7')).toHaveCSS('border-radius', '0px')
   await expect(page.locator('.ls-block >> nth=8')).toHaveCSS('border-radius', '0px')
+  await page.keyboard.up('Shift')
 })
 
 test('template', async ({ page, block }) => {
