@@ -550,6 +550,7 @@
         ;; FIXME: Bring back fix from https://github.com/logseq/logseq/pull/10434/commits/42f68ce32e7a035e6926bc2798d46843bbd70297
         *mouse-down? (::mouse-down? state)
         tag? (:tag? config)
+        breadcrumb? (:breadcrumb? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
         untitled? (model/untitled-page? page-name)
         display-close-button? (and (not (:hide-close-button? config))
@@ -568,8 +569,11 @@
       :on-mouse-over #(reset! *hover? true)
       :on-mouse-leave #(reset! *hover? false)
       :on-mouse-down (fn [e]
-                       (util/stop e)
-                       (reset! *mouse-down? true))
+                       (if breadcrumb?
+                         (.preventDefault e)
+                         (do
+                           (util/stop e)
+                           (reset! *mouse-down? true))))
       :on-mouse-up (fn [e]
                      (when @*mouse-down?
                        (open-page-ref e config page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)
@@ -704,18 +708,11 @@
                             page-name
                             redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?)
           modal? (:modal/show? @state/state)]
-      (cond
-        (:breadcrumb? config)
-        (or (:block/original-name page)
-            (:block/name page))
-
-        (and (not (util/mobile?))
-             (not preview?)
-             (not disable-preview?)
-             (not modal?))
+      (if (and (not (util/mobile?))
+               (not preview?)
+               (not disable-preview?)
+               (not modal?))
         (page-preview-trigger (assoc config :children inner) page-name)
-
-        :else
         inner))))
 
 (rum/defc asset-reference
