@@ -112,10 +112,11 @@
 
 (defn hidden-page?
   [page]
-  (if (string? page)
-    (and (string/starts-with? page "$$$")
-         (util/uuid-string? (gp-util/safe-subs page 3)))
-    (contains? (set (:block/type page)) "hidden")))
+  (when page
+    (if (string? page)
+      (and (string/starts-with? page "$$$")
+           (util/uuid-string? (gp-util/safe-subs page 3)))
+      (contains? (set (:block/type page)) "hidden"))))
 
 (defn get-pages
   [repo]
@@ -1364,9 +1365,10 @@ independent of format as format specific heading characters are stripped"
 ;; block/uuid and block/content
 (defn get-single-block-contents [id]
   (let [e (db-utils/entity [:block/uuid id])]
-    (when (and (not (:block/name e))
-               (not (string/blank? (:block/content e))))
+    (when-not (and (nil? (:block/name e))
+                   (string/blank? (:block/content e))) ; empty block
       {:db/id (:db/id e)
+       :block/name (:block/name e)
        :block/uuid id
        :block/page (:db/id (:block/page e))
        :block/content (:block/content e)

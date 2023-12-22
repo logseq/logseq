@@ -10,13 +10,11 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user]
             [frontend.handler.search :as search-handler]
             [frontend.state :as state]
-            [frontend.config :as config]
             [frontend.ui :as ui]
             [logseq.common.path :as path]
             [logseq.graph-parser.util :as gp-util]
@@ -29,23 +27,6 @@
   [k f]
   (js/window.apis.on k (fn [data] (f data) nil)))
 
-(defn persist-dbs!
-  []
-  (when-let [repo (state/get-current-repo)]
-    (let [error-handler (fn [error]
-                          (prn :debug :persist-db-failed :repo repo)
-                          (js/console.error error)
-                          (notification/show! error :error))]
-      (when-not (config/db-based-graph? repo)
-        ;; TODO: Move all file based graphs to use the above persist approach
-        (repo-handler/persist-db! {:before     ui/notify-graph-persist!
-                                   :on-success #(ipc/ipc "persistent-dbs-saved")
-                                   :on-error   error-handler})))))
-
-
-(defn listen-persistent-dbs!
-  []
-  (safe-api-call "persistent-dbs" (fn [_data] (persist-dbs!))))
 
 (defn ^:large-vars/cleanup-todo listen-to-electron!
   []
@@ -173,5 +154,4 @@
 
 (defn listen!
   []
-  (listen-to-electron!)
-  (listen-persistent-dbs!))
+  (listen-to-electron!))

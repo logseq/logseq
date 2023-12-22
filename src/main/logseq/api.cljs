@@ -34,7 +34,6 @@
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.handler.command-palette :as palette-handler]
             [frontend.modules.shortcut.core :as st]
-            [electron.listener :as el]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
@@ -147,7 +146,7 @@
 (def ^:export get_current_graph
   (fn []
     (when-let [repo (state/get-current-repo)]
-      (when-not (= config/local-repo repo)
+      (when-not (= config/demo-repo repo)
         (bean/->js {:url  repo
                     :name (util/node-path.basename repo)
                     :path (config/get-repo-dir repo)})))))
@@ -887,13 +886,7 @@
 (defn ^:export download_graph_db
   []
   (when-let [repo (state/get-current-repo)]
-    (when-let [db (db/get-db repo)]
-      (let [db-str   (if db (db/db->string db) "")
-            data-str (str "data:text/edn;charset=utf-8," (js/encodeURIComponent db-str))]
-        (when-let [anchor (gdom/getElement "download")]
-          (.setAttribute anchor "href" data-str)
-          (.setAttribute anchor "download" (str (string/replace repo "/" " ") ".transit"))
-          (.click anchor))))))
+    (export-handler/export-repo-as-sqlite-db! repo)))
 
 (defn ^:export download_graph_pages
   []
@@ -1027,7 +1020,6 @@
 
 (defn ^:export force_save_graph
   []
-  (p/let [_ (el/persist-dbs!)]
-    true))
+  true)
 
 (def ^:export set_blocks_id #(editor-handler/set-blocks-id! (map uuid %)))

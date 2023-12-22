@@ -133,7 +133,6 @@
 (defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
   (db/set-key-value repo :ast/version db-schema/ast-version)
   (search-handler/rebuild-indices!)
-  (db-listener/persist! repo)
   (plugin-handler/hook-plugin-app :graph-after-indexed {:repo repo :empty-graph? empty-graph?})
   (when (state/setups-picker?)
     (if empty-graph?
@@ -156,46 +155,31 @@
   ([graph]
    (graph-switch graph false))
   ([graph skip-ios-check?]
-   (if (and (mobile-util/native-ios?) (not skip-ios-check?))
-     (state/pub-event! [:validate-appId graph-switch graph])
-     (do
-       (state/set-current-repo! graph)
-       (page-handler/init-commands!)
+   (let [db-based? (config/db-based-graph? graph)]
+     (if (and (mobile-util/native-ios?) (not skip-ios-check?))
+       (state/pub-event! [:validate-appId graph-switch graph])
+       (do
+         (state/set-current-repo! graph)
+         (page-handler/init-commands!)
        ;; load config
-       (repo-config-handler/restore-repo-config! graph)
-       (when-not (= :draw (state/get-current-route))
-         (route-handler/redirect-to-home!))
-       (srs/update-cards-due-count!)
-       (state/pub-event! [:graph/ready graph])
-       (file-sync-restart!)
-       (when-let [dir-name (and (not (config/db-based-graph? graph)) (config/get-repo-dir graph))]
-         (fs/watch-dir! dir-name))))))
+         (repo-config-handler/restore-repo-config! graph)
+         (when-not (= :draw (state/get-current-route))
+           (route-handler/redirect-to-home!))
+         (srs/update-cards-due-count!)
+         (state/pub-event! [:graph/ready graph])
+         (when-not db-based?
+           (file-sync-restart!))
+         (when-let [dir-name (and (not db-based?) (config/get-repo-dir graph))]
+           (fs/watch-dir! dir-name)))))))
 
 ;; Parameters for the `persist-db` function, to show the notification messages
-(def persist-db-noti-m
-  {:before     #(ui/notify-graph-persist!)
-   :on-error   #(ui/notify-graph-persist-error!)})
-
 (defn- graph-switch-on-persisted
-  "Logic for keeping db sync when switching graphs
-   Only works for electron
-   graph: the target graph to switch to"
-  [graph {:keys [persist?]
-          :or {persist? true}}]
-  (let [current-repo (state/get-current-repo)]
-    (p/do!
-     (when persist?
-       (when (util/electron?)
-         (p/do!
-          (cond
-            (config/local-file-based-graph? current-repo)
-            (repo-handler/persist-db! current-repo persist-db-noti-m)
-
-            :else
-            nil))))
-     (repo-handler/restore-and-setup-repo! graph)
-     (graph-switch graph)
-     state/set-state! :sync-graph/init? false)))
+  "graph: the target graph to switch to"
+  [graph _opts]
+  (p/do!
+   (repo-handler/restore-and-setup-repo! graph)
+   (graph-switch graph)
+   state/set-state! :sync-graph/init? false))
 
 (defmethod handle :graph/switch [[_ graph opts]]
   (if (or (not (false? (get @outliner-file/*writes-finished? graph)))
@@ -552,7 +536,6 @@
                   (js/console.error e)))
               (state/set-current-repo! current-repo)
               (db-listener/listen-and-persist! current-repo)
-              (db-listener/persist-if-idle! current-repo)
               (repo-config-handler/restore-repo-config! current-repo)
               (when graph-switch-f (graph-switch-f current-repo true))
               (.watch mobile-util/fs-watcher #js {:path current-repo-dir})

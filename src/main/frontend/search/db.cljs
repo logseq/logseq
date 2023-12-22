@@ -8,7 +8,6 @@
             [frontend.config :as config]
             [frontend.util :as util]
             ["fuse.js" :as fuse]
-            [datascript.impl.entity :as e]
             [frontend.handler.file-based.property.util :as property-util]))
 
 ;; Notice: When breaking changes happen, bump version in src/electron/electron/search.cljs
@@ -59,49 +58,32 @@
 
 (defn block->index
   "Convert a block to the index for searching"
-  [{:block/keys [uuid page content properties format]
+  [{:block/keys [name uuid page content properties format]
     :or {format :markdown}
     :as block}]
-  (let [repo (state/get-current-repo)]
-    (when-not (> (count content) (max-len))
-      (when-not (and (string/blank? content)
-                     (empty? properties))
-        (let [db-based? (config/db-based-graph? repo)
-              content (if db-based? content
-                          (property-util/remove-built-in-properties format content))
-              m {:id (:db/id block)
-                 :uuid (str uuid)
-                 :page (if (or (map? page) (e/entity? page)) (:db/id page) page)
-                 :content (sanitize content)}
-              m' (cond-> m
-                   (and db-based? (seq properties))
-                   (update :content
-                           (fn [content]
-                             (str content "\n"
-                                  (get-db-properties-str properties)))))]
-          m')))))
-
-(defn build-blocks-indice
-  ;; TODO: Remove repo effects fns further up the call stack. db fns need standardization on taking connection
-  #_:clj-kondo/ignore
-  [repo]
-  (->> (db/get-all-block-contents)
-       (map block->index)
-       (remove nil?)
-       (bean/->js)))
-
-(defn make-blocks-indice!
-  ([repo] (make-blocks-indice! repo (build-blocks-indice repo)))
-  ([repo blocks]
-   (let [indice (fuse. blocks
-                       (clj->js {:keys ["uuid" "content" "page"]
-                                 :shouldSort true
-                                 :tokenize true
-                                 :minMatchCharLength 1
-                                 :distance 1000
-                                 :threshold 0.35}))]
-     (swap! indices assoc-in [repo :blocks] indice)
-     indice)))
+  (let [repo (state/get-current-repo)
+        page? (some? name)
+        block? (nil? name)
+        db-based? (config/db-based-graph? repo)]
+    (when-not (or
+               (and page? name (model/whiteboard-page? name))
+               (and block? (> (count content) (max-len)))
+               (and (empty? properties)
+                    (or (and block? (string/blank? content))
+                        (and db-based? page?))))        ; empty page or block
+      (let [content (if block?
+                      (if db-based? content (property-util/remove-built-in-properties format content))
+                        ;; File based page content
+                      (if db-based?
+                        ""            ; empty page content
+                        (some-> (:block/file (db/entity (:db/id block))) :file/content)))
+            content' (if (and db-based? (seq properties))
+                       (str content (when (not= content "") "\n") (get-db-properties-str properties))
+                       content)]
+        (when-not (string/blank? content')
+          {:id (str uuid)
+           :page (str (:block/uuid page))
+           :content (sanitize content')})))))
 
 (defn original-page-name->index
   [p]
@@ -127,3 +109,10 @@
                                   :minMatchCharLength 1}))]
       (swap! indices assoc-in [repo :pages] indice)
       indice)))
+
+(defn build-blocks-indice
+  []
+  (->> (db/get-all-block-contents)
+       (map block->index)
+       (remove nil?)
+       (bean/->js)))

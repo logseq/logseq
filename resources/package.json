@@ -13,14 +13,12 @@
     "electron:make": "electron-forge make",
     "electron:make-macos-arm64": "electron-forge make --platform=darwin --arch=arm64",
     "electron:publish:github": "electron-forge publish",
-    "rebuild:all": "electron-rebuild -v 25.9.3 -f",
     "postinstall": "install-app-deps"
   },
   "config": {
     "forge": "./forge.config.js"
   },
   "dependencies": {
-    "better-sqlite3": "8.0.1",
     "chokidar": "^3.5.1",
     "dugite": "2.5.0",
     "electron-dl": "3.3.0",

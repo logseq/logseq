@@ -10,7 +10,8 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.graph-parser.util :as gp-util]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defonce conns (atom {}))
 
@@ -54,12 +55,7 @@
       (str (if (util/electron?) "" config/idb-db-prefix)
            path))))
 
-(defn get-schema
-  "Returns schema for given repo"
-  [repo]
-  (if (config/db-based-graph? repo)
-    db-schema/schema-for-db-based-graph
-    db-schema/schema))
+(def get-schema sqlite-util/get-schema)
 
 (defn get-db
   ([]
@@ -74,9 +70,6 @@
        (if deref?
          @conn
          conn)))))
-
-(defn reset-conn! [conn db]
-  (reset! conn db))
 
 (defn remove-conn!
   [repo]

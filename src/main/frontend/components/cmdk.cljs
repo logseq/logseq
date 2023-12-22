@@ -26,7 +26,8 @@
     [logseq.graph-parser.util.block-ref :as block-ref]
     [logseq.graph-parser.util :as gp-util]
     [logseq.shui.button.v2 :as button]
-    [frontend.modules.shortcut.utils :as shortcut-utils]))
+    [frontend.modules.shortcut.utils :as shortcut-utils]
+    [frontend.util.text :as text-util]))
 
 (defn translate [t {:keys [id desc]}]
   (when id
@@ -224,26 +225,43 @@
                                       :source-page page)))))]
       (swap! !results update group        merge {:status :success :items items}))))
 
+(defn highlight-content-query
+  "Return hiccup of highlighted content FTS result"
+  [content q]
+  (when-not (or (string/blank? content) (string/blank? q))
+    [:div (loop [content content ;; why recur? because there might be multiple matches
+                 result  []]
+            (let [[b-cut hl-cut e-cut] (text-util/cut-by content "$pfts_2lqh>$" "$<pfts_2lqh$")
+                  hiccups-add [(when-not (string/blank? b-cut)
+                                 [:span b-cut])
+                               (when-not (string/blank? hl-cut)
+                                 [:mark.p-0.rounded-none hl-cut])]
+                  hiccups-add (remove nil? hiccups-add)
+                  new-result (concat result hiccups-add)]
+              (if-not (string/blank? e-cut)
+                (recur e-cut new-result)
+                new-result)))]))
+
 ;; The blocks search action uses an existing handler
 (defmethod load-results :blocks [group state]
   (let [!input (::input state)
         !results (::results state)
         repo (state/get-current-repo)
-        current-page (page-util/get-current-page-id)
+        current-page (when-let [id (page-util/get-current-page-id)]
+                       (db/entity id))
         opts {:limit 100}]
     (swap! !results assoc-in [group :status] :loading)
     (swap! !results assoc-in [:current-page :status] :loading)
     (p/let [blocks (search/block-search repo @!input opts)
             blocks (remove nil? blocks)
             items (map (fn [block]
-                         (let [id (if (uuid? (:block/uuid block))
-                                    (:block/uuid block)
-                                    (uuid (:block/uuid block)))]
+                         (let [id (:block/uuid block)]
                            {:icon "block"
                             :icon-theme :gray
-                            :text (:block/content block)
+                            :text (highlight-content-query (:block/content block) @!input)
                             :header (block/breadcrumb {:search? true} repo id {})
-                            :current-page? (some-> block :block/page #{current-page})
+                            :current-page? (when-let [page-id (:block/page block)]
+                                             (= page-id (:block/uuid current-page)))
                             :source-block block})) blocks)
             items-on-other-pages (remove :current-page? items)
             items-on-current-page (filter :current-page? items)]
@@ -314,14 +332,21 @@
       (load-results :files state))))
 
 (defn- copy-block-ref [state]
-  (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid uuid)]
+  (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid)]
     (editor-handler/copy-block-ref! block-uuid block-ref/->block-ref)
     (state/close-modal!)))
 
 (defmulti handle-action (fn [action _state _event] action))
 
+(defn- get-highlighted-page-name
+  [state]
+  (let [highlighted-item (some-> state state->highlighted-item)]
+    (or (when-let [id (:block/uuid (:source-block highlighted-item))]
+          (:block/name (db/entity [:block/uuid id])))
+        (:source-page highlighted-item))))
+
 (defmethod handle-action :open-page [_ state _event]
-  (when-let [page-name (some-> state state->highlighted-item :source-page)]
+  (when-let [page-name (get-highlighted-page-name state)]
     (let [redirect-page-name (model/get-redirect-page-name page-name)
           page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])
           original-name (:block/original-name page)]
@@ -331,7 +356,7 @@
     (state/close-modal!)))
 
 (defmethod handle-action :open-block [_ state _event]
-  (let [block-id (some-> state state->highlighted-item :source-block :block/uuid uuid)
+  (let [block-id (some-> state state->highlighted-item :source-block :block/uuid)
         get-block-page (partial model/get-block-page (state/get-current-repo))]
     (when-let [page (some-> block-id get-block-page)]
       (let [page-name (:block/name page)]
@@ -341,7 +366,7 @@
       (state/close-modal!))))
 
 (defmethod handle-action :open-page-right [_ state _event]
-  (when-let [page-name (some-> state state->highlighted-item :source-page)]
+  (when-let [page-name (get-highlighted-page-name state)]
     (let [redirect-page-name (model/get-redirect-page-name page-name)
           page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
       (when page
@@ -349,13 +374,15 @@
     (state/close-modal!)))
 
 (defmethod handle-action :open-block-right [_ state _event]
-  (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid uuid)]
+  (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid)]
     (editor-handler/open-block-in-sidebar! block-uuid)
     (state/close-modal!)))
 
 (defmethod handle-action :open [_ state event]
   (when-let [item (some-> state state->highlighted-item)]
-    (let [page? (boolean (:source-page item))
+    (let [block-uuid (:block/uuid (:source-block item))
+          page? (or (boolean (:source-page item))
+                    (and block-uuid (:block/name (db/entity [:block/uuid block-uuid]))))
           block? (boolean (:source-block item))
           shift?  @(::shift? state)
           shift-or-sidebar? (or shift? (boolean (:open-sidebar? (:opts state))))
@@ -371,8 +398,8 @@
                                                (reset! (::input state) ""))
         (and shift-or-sidebar? block?) (handle-action :open-block-right state event)
         (and shift-or-sidebar? page?) (handle-action :open-page-right state event)
-        block? (handle-action :open-block state event)
-        page? (handle-action :open-page state event)))))
+        page? (handle-action :open-page state event)
+        block? (handle-action :open-block state event)))))
 
 (defmethod handle-action :search [_ state _event]
   (when-let [item (some-> state state->highlighted-item)]

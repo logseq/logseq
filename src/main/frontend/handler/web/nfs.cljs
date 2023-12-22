@@ -21,7 +21,8 @@
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.util :as gp-util]
             [promesa.core :as p]
-            [frontend.db.listener :as db-listener]))
+            [frontend.db.listener :as db-listener]
+            [frontend.persist-db :as persist-db]))
 
 (defn remove-ignore-files
   [files dir-name nfs?]
@@ -148,7 +149,8 @@
                                [:notification/show
                                 {:content (str "This graph already exists in \"" (:root exists-graph) "\"")
                                  :status :warning}])
-                              (p/do! (repo-handler/start-repo-db-if-not-exists! repo)
+                              (p/do! (persist-db/<new repo)
+                                     (repo-handler/start-repo-db-if-not-exists! repo)
                                      (when (config/global-config-enabled?)
                                        (global-config-handler/restore-global-config!))
                                      (repo-handler/load-new-repo-to-db! repo
@@ -156,9 +158,9 @@
                                                                          :empty-graph? (nil? (seq markup-files))
                                                                          :file-objs    files})
                                      (state/add-repo! {:url repo :nfs? true})
+                                     (persist-db/<export-db repo {})
                                      (state/set-loading-files! repo false)
-                                     (when ok-handler (ok-handler {:url repo}))
-                                     (db-listener/persist-if-idle! repo))))))
+                                     (when ok-handler (ok-handler {:url repo})))))))
                 (p/catch (fn [error]
                            (log/error :nfs/load-files-error repo)
                            (log/error :exception error)))))))
