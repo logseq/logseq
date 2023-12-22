@@ -1,7 +1,7 @@
 {:deps
  ;; External deps should be kept in sync with https://github.com/logseq/nbb-logseq/blob/main/bb.edn
  {datascript/datascript {:git/url "https://github.com/logseq/datascript" ;; fork
-                         :sha     "29985da9844e37c89bba12f9fce70f94aed16ba6"}
+                         :sha     "6d9b5f0db22d960ddf4870503bc181bff9a50c5d"}
   com.cognitect/transit-cljs   {:mvn/version "0.8.280"}
   cljs-bean/cljs-bean          {:mvn/version "1.5.0"}}
  :aliases
