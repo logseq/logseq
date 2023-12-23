@@ -32,6 +32,7 @@ export const AppCanvas = observer(function InnerApp<S extends TLReactShape>(
       showSelectionRotation={app.showSelectionRotation}
       showResizeHandles={app.showResizeHandles}
       showRotateHandles={app.showRotateHandles}
+      showCloneHandles={app.showCloneHandles}
       showSelectionDetail={app.showSelectionDetail}
       showContextBar={app.showContextBar}
       cursor={app.cursors.cursor}

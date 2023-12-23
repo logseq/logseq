@@ -276,7 +276,7 @@
                          "text-md px-3 py-2 cursor-default whiteboard-page-refs-count"
                          {:hover? true
                           :render-fn (fn [open? refs-count] [:span.whiteboard-page-refs-count-label
-                                                             (if (> refs-count 1) "References" "Reference")
+                                                             (t :whiteboard/reference-count refs-count)
                                                              (ui/icon (if open? "references-hide" "references-show")
                                                                       {:extension? true})])})]]
      (tldraw-app page-name block-id)]))

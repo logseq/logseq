@@ -106,7 +106,7 @@
                  :height (if wide-mode? 650 500)}}
         (excalidraw
          (merge
-          {:on-change (fn [elements app-state]
+          {:on-change (fn [elements app-state files]
                         (when-not (or (= "down" (gobj/get app-state "cursorButton"))
                                       (gobj/get app-state "draggingElement")
                                       (gobj/get app-state "editingElement")
@@ -118,7 +118,7 @@
                               (reset! *elements elements->clj)
                               (draw/save-excalidraw!
                                file
-                               (serializeAsJSON elements app-state))))))
+                               (serializeAsJSON elements app-state files "local"))))))
 
            :zen-mode-enabled @*zen-mode?
            :view-mode-enabled @*view-mode?

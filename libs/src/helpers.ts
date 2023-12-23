@@ -2,7 +2,7 @@ import { SettingSchemaDesc, StyleString, UIOptions } from './LSPlugin'
 import { PluginLocal } from './LSPlugin.core'
 import * as nodePath from 'path'
 import DOMPurify from 'dompurify'
-import merge from 'deepmerge';
+import merge from 'deepmerge'
 import { snakeCase } from 'snake-case'
 import * as callables from './callable.apis'
 import EventEmitter from 'eventemitter3'
@@ -211,12 +211,23 @@ export function deferred<T = any>(timeout?: number, tag?: string) {
 
 export function invokeHostExportedApi(method: string, ...args: Array<any>) {
   method = method?.startsWith('_call') ? method : method?.replace(/^[_$]+/, '')
-  const method1 = safeSnakeCase(method)
+  let method1 = safeSnakeCase(method)
+
+  // @ts-ignore
+  const nsSDK = window.logseq?.sdk
+  const supportedNS = nsSDK && Object.keys(nsSDK)
+  let nsTarget = {}
+  const ns0 = method1?.split('_')?.[0]
+
+  if (ns0 && supportedNS.includes(ns0)) {
+    method1 = method1.replace(new RegExp(`^${ns0}_`), '')
+    nsTarget = nsSDK?.[ns0]
+  }
 
   const logseqHostExportedApi = Object.assign(
     // @ts-ignore
-    window.logseq?.api || {},
-    callables
+    {}, window.logseq?.api,
+    nsTarget, callables
   )
 
   const fn =
@@ -266,9 +277,9 @@ export function setupInjectedStyle(
   el.textContent = style
 
   attrs &&
-    Object.entries(attrs).forEach(([k, v]) => {
-      el.setAttribute(k, v)
-    })
+  Object.entries(attrs).forEach(([k, v]) => {
+    el.setAttribute(k, v)
+  })
 
   document.head.append(el)
 
@@ -313,7 +324,7 @@ export function setupInjectedUI(
     console.error(
       `${this.debugTag} can not resolve selector target ${selector}`
     )
-    return
+    return false
   }
 
   if (ui.template) {
@@ -344,22 +355,22 @@ export function setupInjectedUI(
 
     // update attributes
     attrs &&
-      Object.entries(attrs).forEach(([k, v]) => {
-        el.setAttribute(k, v)
-      })
+    Object.entries(attrs).forEach(([k, v]) => {
+      el.setAttribute(k, v)
+    })
 
     let positionDirty = el.dataset.dx != null
     ui.style &&
-      Object.entries(ui.style).forEach(([k, v]) => {
-        if (
-          positionDirty &&
-          ['left', 'top', 'bottom', 'right', 'width', 'height'].includes(k)
-        ) {
-          return
-        }
+    Object.entries(ui.style).forEach(([k, v]) => {
+      if (
+        positionDirty &&
+        ['left', 'top', 'bottom', 'right', 'width', 'height'].includes(k)
+      ) {
+        return
+      }
 
-        el.style[k] = v
-      })
+      el.style[k] = v
+    })
     return
   }
 
@@ -379,14 +390,14 @@ export function setupInjectedUI(
   content.innerHTML = ui.template
 
   attrs &&
-    Object.entries(attrs).forEach(([k, v]) => {
-      el.setAttribute(k, v)
-    })
+  Object.entries(attrs).forEach(([k, v]) => {
+    el.setAttribute(k, v)
+  })
 
   ui.style &&
-    Object.entries(ui.style).forEach(([k, v]) => {
-      el.style[k] = v
-    })
+  Object.entries(ui.style).forEach(([k, v]) => {
+    el.style[k] = v
+  })
 
   let teardownUI: () => void
   let disposeFloat: () => void
@@ -399,11 +410,11 @@ export function setupInjectedUI(
     el.classList.add('lsp-ui-float-container', 'visible')
     disposeFloat =
       (pl._setupResizableContainer(el, key),
-      pl._setupDraggableContainer(el, {
-        key,
-        close: () => teardownUI(),
-        title: attrs?.title,
-      }))
+        pl._setupDraggableContainer(el, {
+          key,
+          close: () => teardownUI(),
+          title: attrs?.title,
+        }))
   }
 
   if (!!slot && ui.reset) {
@@ -541,4 +552,9 @@ export function mergeSettingsWithSchema(
 
   // shadow copy
   return Object.assign(defaults, settings)
+}
+
+export function normalizeKeyStr(s: string) {
+  if (typeof s !== 'string') return
+  return s.trim().replace(/\s/g, '_').toLowerCase()
 }
