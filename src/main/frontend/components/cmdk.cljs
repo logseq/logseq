@@ -389,7 +389,7 @@
           (load-results :pages state)
           (load-results :filters state)
           (load-results :files state)
-          (load-results :recents state)
+          ;; (load-results :recents state)
           (load-results :whiteboards state))))))
 
 (defn- copy-block-ref [state]
@@ -417,7 +417,7 @@
     (state/close-modal!)))
 
 (defmethod handle-action :open-block [_ state _event]
-  (let [block-id (some-> state state->highlighted-item :source-block :block/uuid uuid)
+  (let [block-id (some-> state state->highlighted-item :source-block :block/uuid)
         get-block-page (partial model/get-block-page (state/get-current-repo))
         block (db/entity [:block/uuid block-id])]
     (when block
