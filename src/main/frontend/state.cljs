@@ -966,9 +966,13 @@ Similar to re-frame subscriptions"
 
 (defn get-edit-input-id
   []
-  (when-let [node @*editor-editing-ref]
-    (some-> (dom/sel1 node "textarea")
-            (gobj/get "id"))))
+  (or
+   (when-let [node @*editor-editing-ref]
+     (some-> (dom/sel1 node "textarea")
+             (gobj/get "id")))
+   (when-let [elem js/document.activeElement]
+     (when (util/input? elem)
+       (gobj/get elem "id")))))
 
 (defn get-input
   []
