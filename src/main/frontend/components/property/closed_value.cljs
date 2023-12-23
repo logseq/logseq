@@ -108,10 +108,11 @@
 
 (rum/defcs choice-with-close <
   (rum/local false ::hover?)
-  [state item {:keys [toggle-fn delete-choice update-icon]}]
+  [state item {:keys [toggle-fn delete-choice update-icon]} parent-opts]
   (let [*hover? (::hover? state)
         value (or (:block/original-name item)
-                  (get-in item [:block/schema :value]))]
+                  (get-in item [:block/schema :value]))
+        page? (:block/original-name item)]
     [:div.flex.flex-1.flex-row.items-center.gap-2.justify-between
      {:on-mouse-over #(reset! *hover? true)
       :on-mouse-out #(reset! *hover? false)}
@@ -119,15 +120,17 @@
       (icon (pu/get-property item :icon)
             {:on-chosen (fn [_e icon]
                           (update-icon icon))})
-      [:a {:on-click toggle-fn}
-       value]]
+      (if (and page? (:page-cp parent-opts))
+        ((:page-cp parent-opts) {} item)
+        [:a {:on-click toggle-fn}
+         value])]
      (when @*hover?
        [:a.fade-link.flex {:on-click delete-choice
                            :title "Delete this choice"}
         (ui/icon "X")])]))
 
 (rum/defc choice-item-content
-  [property *property-schema block dropdown-opts]
+  [property *property-schema block dropdown-opts parent-opts]
   (let [{:block/keys [uuid]} block]
     (ui/dropdown
      (fn [opts]
@@ -140,7 +143,8 @@
                  (swap! *property-schema update :values (fn [vs] (vec (remove #(= uuid %) vs)))))
                :update-icon
                (fn [icon]
-                 (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :icon icon)))))
+                 (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :icon icon)))
+        parent-opts))
      (if config/publishing?
        (constantly [])
        (fn [opts]
@@ -171,7 +175,7 @@
                  (toggle-fn))})])
 
 (rum/defc choices < rum/reactive
-  [property *property-name *property-schema]
+  [property *property-name *property-schema opts]
   (let [schema (:block/schema property)
         property-type (:type schema)
         values (:values schema)
@@ -183,7 +187,7 @@
                             (when-let [block (db/sub-block (:db/id (db/entity [:block/uuid id])))]
                               {:id (str id)
                                :value id
-                               :content (choice-item-content property *property-schema block dropdown-opts)}))
+                               :content (choice-item-content property *property-schema block dropdown-opts opts)}))
                           values))]
        (dnd/items choices
                   {:on-drag-end (fn [new-values]

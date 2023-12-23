@@ -554,7 +554,8 @@
         config (assoc config :whiteboard-page? whiteboard-page?)
         untitled? (model/untitled-page? page-name)
         display-close-button? (and (not (:hide-close-button? config))
-                                   (not config/publishing?))]
+                                   (not config/publishing?))
+        hide-icon? (:hide-icon? config)]
     [:a.relative
      {:tabIndex "0"
       :class (cond->
@@ -580,7 +581,9 @@
                        (reset! *mouse-down? false)))
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
                            (open-page-ref e config page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)))}
-
+     (when-not hide-icon?
+       (when-let [icon (pu/get-property page-entity :icon)]
+         [:span.mr-1 (icon/icon icon)]))
      (if (and (coll? children) (seq children))
        (for [child children]
          (if (= (first child) "Label")
