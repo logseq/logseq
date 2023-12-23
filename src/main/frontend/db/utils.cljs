@@ -121,13 +121,7 @@
   [repo-url tx-data tx-meta]
   (let [tx-data (gp-util/fast-remove-nils tx-data)]
     (when (seq tx-data)
-      ;; (prn :debug "DB transact:")
-      ;; (frontend.util/pprint {:tx-data tx-data
-      ;;                        :tx-meta tx-meta})
-      (when-let [conn (conn/get-db repo-url false)]
-        (if tx-meta
-          (d/transact! conn (vec tx-data) tx-meta)
-          (d/transact! conn (vec tx-data)))))))
+      (conn/transact! repo-url tx-data tx-meta))))
 
 (if config/publishing?
   (defn- transact!*

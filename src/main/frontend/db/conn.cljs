@@ -81,6 +81,18 @@
    :db/ident key
    key value})
 
+(defn transact!
+  ([repo tx-data]
+   (transact! repo tx-data nil))
+  ([repo tx-data tx-meta]
+   (when-let [conn (get-db repo false)]
+     ;; (prn :debug "DB transact:")
+     ;; (frontend.util/pprint {:tx-data tx-data
+     ;;                        :tx-meta tx-meta})
+     (if tx-meta
+       (d/transact! conn (vec tx-data) tx-meta)
+       (d/transact! conn (vec tx-data))))))
+
 (defn start!
   ([repo]
    (start! repo {}))
@@ -91,8 +103,8 @@
      (when listen-handler
        (listen-handler repo))
      (when db-graph?
-       (d/transact! db-conn [(kv :db/type "db")])
-       (d/transact! db-conn [(kv :schema/version db-schema/version)]))
+       (transact! db-name [(kv :db/type "db")])
+       (transact! db-name [(kv :schema/version db-schema/version)]))
      (ldb/create-default-pages! db-conn {:db-graph? db-graph?}))))
 
 (defn destroy-all!
