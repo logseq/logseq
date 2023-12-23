@@ -671,6 +671,9 @@
 (defmethod handle :system/info [^js _win _]
   {:home-dir (.homedir os)})
 
+(defmethod handle :window/open-blank-callback [^js win [_ _type]]
+  (win/setup-window-listeners! win) nil)
+
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]
     (.handle ipcMain main-channel

@@ -126,6 +126,10 @@ base.beforeEach(async () => {
 
     await expect(page.locator('.notification-close-button')).not.toBeVisible()
 
+    if (await page.locator('.notification-clear button').isVisible()) {
+      await page.locator('.notification-clear button').click()
+    }
+
     const rightSidebar = page.locator('.cp__right-sidebar-inner')
     if (await rightSidebar.isVisible()) {
       await page.click('button.toggle-right-sidebar', {delay: 100})

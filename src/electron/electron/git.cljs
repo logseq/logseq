@@ -54,7 +54,7 @@
   (try
     (let [graph-path (state/get-graph-path)
           _ (when (string/blank? graph-path)
-              (utils/send-to-renderer "getCurrentGraph" {})
+              (utils/send-to-renderer :setCurrentGraph {})
               (throw (js/Error. "Empty graph path")))
           p (.join node-path graph-path ".git")]
       (when (and (fs/existsSync p)

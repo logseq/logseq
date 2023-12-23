@@ -4,7 +4,8 @@ module.exports = {
   packagerConfig: {
     name: 'Logseq',
     icon: './icons/logseq_big_sur.icns',
-    buildVersion: 74,
+    buildVersion: 76,
+    asar: true,
     protocols: [
       {
         "protocol": "logseq",
@@ -47,8 +48,9 @@ module.exports = {
     },
     {
       name: '@electron-forge/maker-zip',
-      platforms: ['darwin', 'linux']
+      platforms: ['darwin', 'linux', 'win32'],
     },
+
     {
       name: 'electron-forge-maker-appimage',
       platforms: ['linux'],
@@ -68,6 +70,13 @@ module.exports = {
         },
         prerelease: true
       }
+    }
+  ],
+
+  plugins: [
+    {
+      name: '@electron-forge/plugin-auto-unpack-natives',
+      config: {}
     }
   ]
 }

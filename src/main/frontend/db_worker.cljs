@@ -202,14 +202,6 @@
   [repo]
   (get-sqlite-conn repo {:search? true}))
 
-(defn <remove-all-files!
-  "!! Dangerous: use it only for development."
-  []
-  (p/let [all-files (<list-all-files)
-          files (filter #(= (.-kind %) "file") all-files)
-          dirs (filter #(= (.-kind %) "directory") all-files)
-          _ (p/all (map (fn [file] (.remove file)) files))]
-    (p/all (map (fn [dir] (.remove dir)) dirs))))
 
 #_:clj-kondo/ignore
 (defclass SQLiteDB

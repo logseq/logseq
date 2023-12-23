@@ -19,7 +19,6 @@
 
 (deftype Agency [repo]
   protocol/Engine
-
   (query [_this q opts]
     (let [[e1 e2] (get-registered-engines repo)]
       (doseq [e e2]

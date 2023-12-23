@@ -4,7 +4,6 @@
             [logseq.sdk.core]
             [logseq.sdk.utils :as sdk-utils]
             [logseq.sdk.ui :as sdk-ui]
-            [logseq.sdk.git :as sdk-git]
             [logseq.sdk.assets :as sdk-assets]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -34,6 +33,7 @@
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.handler.command-palette :as palette-handler]
             [frontend.modules.shortcut.core :as st]
+            [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
@@ -352,7 +352,7 @@
             cmd         (assoc cmd :key (string/replace (:key cmd) ":" "-"))
             key         (:key cmd)
             keybinding  (:keybinding cmd)
-            palette-cmd (and palette? (plugin-handler/simple-cmd->palette-cmd pid cmd action))
+            palette-cmd (plugin-handler/simple-cmd->palette-cmd pid cmd action)
             action'     #(state/pub-event! [:exec-plugin-cmd {:type type :key key :pid pid :cmd cmd :action action}])]
 
         ;; handle simple commands
@@ -369,8 +369,16 @@
                                  (palette-handler/invoke-command palette-cmd)
                                  (action')))
                 [mode-id id shortcut-map] (update shortcut-args 2 merge cmd {:fn dispatch-cmd :cmd palette-cmd})]
-            (println :shortcut/register-shortcut [mode-id id shortcut-map])
-            (st/register-shortcut! mode-id id shortcut-map)))))))
+
+            (cond
+              ;; FIX ME: move to register logic
+              (= mode-id :shortcut.handler/block-editing-only)
+              (shortcut-config/add-shortcut! mode-id id shortcut-map)
+
+              :else
+              (do
+                (println :shortcut/register-shortcut [mode-id id shortcut-map])
+                (st/register-shortcut! mode-id id shortcut-map)))))))))
 
 (defn ^:export unregister_plugin_simple_command
   [pid]
@@ -378,10 +386,10 @@
   (plugin-handler/unregister-plugin-simple-command pid)
 
   ;; remove palette commands
-  (let [palette-matched (->> (palette-handler/get-commands)
-                             (filter #(string/includes? (str (:id %)) (str "plugin." pid))))]
-    (when (seq palette-matched)
-      (doseq [cmd palette-matched]
+  (let [cmds-matched (->> (vals @shortcut-config/*shortcut-cmds)
+                          (filter #(string/includes? (str (:id %)) (str "plugin." pid))))]
+    (when (seq cmds-matched)
+      (doseq [cmd cmds-matched]
         (palette-handler/unregister (:id cmd))
         ;; remove keybinding commands
         (when (seq (:shortcut cmd))
@@ -898,19 +906,10 @@
   (when-let [args (and args (seq (bean/->clj args)))]
     (shell/run-git-command! args)))
 
-;; git
-(def ^:export git_exec_command sdk-git/exec_command)
-(def ^:export git_load_ignore_file sdk-git/load_ignore_file)
-(def ^:export git_save_ignore_file sdk-git/save_ignore_file)
-
 ;; ui
 (def ^:export show_msg sdk-ui/-show_msg)
-(def ^:export ui_show_msg sdk-ui/show_msg)
-(def ^:export ui_close_msg sdk-ui/close_msg)
 
 ;; assets
-(def ^:export assets_list_files_of_current_graph sdk-assets/list_files_of_current_graph)
-(def ^:export assets_make_url sdk-assets/make_url)
 (def ^:export make_asset_url sdk-assets/make_url)
 
 ;; experiments
@@ -1002,16 +1001,6 @@
       (p/then #(bean/->js %))))
 
 ;; helpers
-(defn ^:export query_element_by_id
-  [id]
-  (when-let [^js el (gdom/getElement id)]
-    (if el (str (.-tagName el) "#" id) false)))
-
-(defn ^:export query_element_rect
-  [selector]
-  (when-let [^js el (js/document.querySelector selector)]
-    (bean/->js (.toJSON (.getBoundingClientRect el)))))
-
 (defn ^:export set_focused_settings
   [pid]
   (when-let [plugin (state/get-plugin-by-id pid)]

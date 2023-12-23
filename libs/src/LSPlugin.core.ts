@@ -54,6 +54,7 @@ const DIR_PLUGINS = 'plugins'
 declare global {
   interface Window {
     LSPluginCore: LSPluginCore
+    DOMPurify: typeof DOMPurify
   }
 }
 
@@ -308,23 +309,25 @@ function initProviderHandlers(pluginLocal: PluginLocal) {
   // provider:ui
   pluginLocal.on(_('ui'), (ui: UIOptions) => {
     pluginLocal._onHostMounted(() => {
-      pluginLocal._dispose(
-        setupInjectedUI.call(
-          pluginLocal,
-          ui,
-          Object.assign(
-            {
-              'data-ref': pluginLocal.id,
-            },
-            ui.attrs || {}
-          ),
-          ({ el, float }) => {
-            if (!float) return
-            const identity = el.dataset.identity
-            pluginLocal.layoutCore.move_container_to_top(identity)
-          }
-        )
+      const ret = setupInjectedUI.call(
+        pluginLocal,
+        ui,
+        Object.assign(
+          {
+            'data-ref': pluginLocal.id,
+          },
+          ui.attrs || {}
+        ),
+        ({ el, float }) => {
+          if (!float) return
+          const identity = el.dataset.identity
+          pluginLocal.layoutCore.move_container_to_top(identity)
+        }
       )
+
+      if (typeof ret === 'function') {
+        pluginLocal._dispose(ret)
+      }
     })
   })
 }
@@ -346,14 +349,14 @@ function initApiProxyHandlers(pluginLocal: PluginLocal) {
       }
     }
 
-    const { _sync } = payload
-
     if (pluginLocal.shadow) {
       if (payload.actor) {
         payload.actor.resolve(ret)
       }
       return
     }
+
+    const { _sync } = payload
 
     if (_sync != null) {
       const reply = (result: any) => {
@@ -430,7 +433,7 @@ class PluginLocal extends EventEmitter<
 
   async _setupUserSettings(reload?: boolean) {
     const { _options } = this
-    const logger = (this._logger = new PluginLogger('Loader'))
+    const logger = (this._logger = new PluginLogger(`Loader:${this.debugTag}`))
 
     if (_options.settings && !reload) {
       return
@@ -532,7 +535,7 @@ class PluginLocal extends EventEmitter<
     const localRoot = (this._localRoot = safetyPathNormalize(url))
     const logseq: Partial<LSPluginPkgConfig> = pkg.logseq || {}
 
-    // Pick legal attrs
+      // Pick legal attrs
     ;[
       'name',
       'author',
@@ -642,10 +645,10 @@ class PluginLocal extends EventEmitter<
     <meta charset="UTF-8">
     <title>logseq plugin entry</title>
     ${
-      IS_DEV
-        ? `<script src="${sdkPathRoot}/lsplugin.user.js?v=${tag}"></script>`
-        : `<script src="https://cdn.jsdelivr.net/npm/@logseq/libs/dist/lsplugin.user.min.js?v=${tag}"></script>`
-    }
+        IS_DEV
+          ? `<script src="${sdkPathRoot}/lsplugin.user.js?v=${tag}"></script>`
+          : `<script src="https://cdn.jsdelivr.net/npm/@logseq/libs/dist/lsplugin.user.min.js?v=${tag}"></script>`
+      }
     
   </head>
   <body>
@@ -866,7 +869,7 @@ class PluginLocal extends EventEmitter<
 
       this._dispose(cleanInjectedScripts.bind(this))
     } catch (e) {
-      this.logger?.error('[Load Plugin]', e, true)
+      this.logger.error('load', e, true)
 
       this.dispose().catch(null)
       this._status = PluginLocalLoadStatus.ERROR
@@ -924,7 +927,7 @@ class PluginLocal extends EventEmitter<
           )
           this.emit('beforeunload', eventBeforeUnload)
         } catch (e) {
-          this.logger.error('[beforeunload]', e)
+          this.logger.error('beforeunload', e)
         }
 
         await this.dispose()
@@ -932,7 +935,7 @@ class PluginLocal extends EventEmitter<
 
       this.emit('unloaded')
     } catch (e) {
-      this.logger.error('[unload Error]', e)
+      this.logger.error('unload', e)
     } finally {
       this._status = PluginLocalLoadStatus.UNLOADED
     }
@@ -1038,7 +1041,7 @@ class PluginLocal extends EventEmitter<
 
   get debugTag() {
     const name = this._options?.name
-    return `#${this._id} ${name ?? ''}`
+    return `#${this._id} - ${name ?? ''}`
   }
 
   get localRoot(): string {
@@ -1103,8 +1106,7 @@ class LSPluginCore
     | 'beforereload'
     | 'reloaded'
   >
-  implements ILSPluginThemeManager
-{
+  implements ILSPluginThemeManager {
   private _isRegistering = false
   private _readyIndicator?: DeferredActor
   private readonly _hostMountedActor: DeferredActor = deferred()
@@ -1566,12 +1568,12 @@ class LSPluginCore
       await this.saveUserPreferences(
         theme.mode
           ? {
-              themes: {
-                ...this._userPreferences.themes,
-                mode: theme.mode,
-                [theme.mode]: theme,
-              },
-            }
+            themes: {
+              ...this._userPreferences.themes,
+              mode: theme.mode,
+              [theme.mode]: theme,
+            },
+          }
           : { theme: theme }
       )
     }

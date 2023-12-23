@@ -116,7 +116,7 @@
 (defn page-search
   "Return a list of page names that match the query"
   ([q]
-   (page-search q 500))
+   (page-search q 100))
   ([q limit]
    (when-let [repo (state/get-current-repo)]
      (let [q (util/search-normalize q (state/enable-search-remove-accents?))

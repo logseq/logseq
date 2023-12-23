@@ -134,19 +134,11 @@
           (and (<= 400 (:status resp))
                (> 500 (:status resp)))
           ;; invalid refresh-token
-          (do
+          (let [invalid-grant? (and (= 400 (:status resp))
+                                    (= (:error (:body resp)) "invalid_grant"))]
             (prn :debug :refresh-token-failed
-                 :status (:status resp)
-                 :user-id (user-uuid)
-                 :refresh-token refresh-token
-                 :resp resp)
-            (state/pub-event! [:instrument {:type :refresh-token-failed
-                                            :payload {:status (:status resp)
-                                                      :user-id (user-uuid)
-                                                      :refresh-token refresh-token
-                                                      :resp resp}}])
-            (when (and (= 400 (:status resp))
-                       (= (:error (:body resp)) "invalid_grant"))
+                 :status (:status resp))
+            (when invalid-grant?
               (clear-tokens)))
 
           ;; e.g. api return 500, server internal error

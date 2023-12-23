@@ -2040,8 +2040,8 @@
                   keep-uuid?
                   revert-cut-txs]
            :or {exclude-properties []}}]
-  (let [repo (state/get-current-repo)
-        editing-block (when-let [editing-block (state/get-edit-block)]
+  (state/set-editor-op! :paste-blocks)
+  (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (some-> (db/pull [:block/uuid (:block/uuid editing-block)])
                                 (assoc :block/content (state/get-edit-content))))
         has-unsaved-edits (and editing-block
@@ -2080,19 +2080,21 @@
        (outliner-core/save-block! editing-block)))
 
     (outliner-tx/transact!
-     {:outliner-op :insert-blocks
-      :additional-tx revert-cut-txs}
-     (when target-block'
-       (let [format (or (:block/format target-block') (state/get-preferred-format))
-             blocks' (map (fn [block]
-                            (paste-block-cleanup repo block page exclude-properties format content-update-fn keep-uuid?))
-                       blocks)
-             result (outliner-core/insert-blocks! blocks' target-block' {:sibling? sibling?
-                                                                         :outliner-op :paste
-                                                                         :replace-empty-target? replace-empty-target?
-                                                                         :keep-uuid? keep-uuid?})]
-         (state/set-block-op-type! nil)
-         (edit-last-block-after-inserted! result))))))
+      {:outliner-op :insert-blocks
+       :additional-tx revert-cut-txs}
+      (when target-block'
+        (let [format (or (:block/format target-block') (state/get-preferred-format))
+              repo (state/get-current-repo)
+              blocks' (map (fn [block]
+                             (paste-block-cleanup repo block page exclude-properties format content-update-fn keep-uuid?))
+                        blocks)
+              result (outliner-core/insert-blocks! blocks' target-block' {:sibling? sibling?
+                                                                          :outliner-op :paste
+                                                                          :replace-empty-target? replace-empty-target?
+                                                                          :keep-uuid? keep-uuid?})]
+          (state/set-block-op-type! nil)
+          (edit-last-block-after-inserted! result)))))
+  (state/set-editor-op! nil))
 
 (defn- block-tree->blocks
   "keep-uuid? - maintain the existing :uuid in tree vec"
@@ -2897,7 +2899,7 @@
              (contains? #{:property-search :property-value-search} (state/get-editor-action)))
         (state/clear-editor-action!)
 
-        (and (util/event-is-composing? e true) ;; #3218
+        (and (util/goog-event-is-composing? e true) ;; #3218
              (not hashtag?) ;; #3283 @Rime
              (not (state/get-editor-show-page-search-hashtag?))) ;; #3283 @MacOS pinyin
         nil
@@ -3056,7 +3058,7 @@
 (defn keyup-handler
   [_state input input-id]
   (fn [e key-code]
-    (when-not (util/event-is-composing? e)
+    (when-not (util/goog-event-is-composing? e)
       (let [current-pos (cursor/pos input)
             value (gobj/get input "value")
             c (util/nth-safe value (dec current-pos))
@@ -3083,7 +3085,7 @@
                  (gobj/get e "key")
                  (gobj/getValueByKeys e "event_" "code"))
                 ;; #3440
-               (util/event-is-composing? e true)])]
+               (util/goog-event-is-composing? e true)])]
         (cond
           ;; When you type something after /
           (and (= :commands (state/get-editor-action)) (not= k commands/command-trigger))
