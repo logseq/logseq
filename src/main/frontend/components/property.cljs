@@ -248,7 +248,7 @@
         [:div.grid.grid-cols-4.gap-1.items-start.leading-8
          [:label.col-span-1 "Available choices:"]
          [:div.col-span-3
-          (closed-value/choices property *property-name *property-schema)]])
+          (closed-value/choices property *property-name *property-schema opts)]])
 
       (when (and enable-closed-values?
                  enable-position?
@@ -485,7 +485,7 @@
 
 (rum/defcs property-key <
   (rum/local false ::hover?)
-  [state block property {:keys [class-schema? block? collapsed? inline-text]}]
+  [state block property {:keys [class-schema? block? collapsed? page-cp inline-text]}]
   (let [*hover? (::hover? state)
         repo (state/get-current-repo)
         icon (pu/get-property property :icon)]
@@ -543,6 +543,7 @@
          (property-config block property
                           {:toggle-fn toggle-fn
                            :inline-text inline-text
+                           :page-cp page-cp
                            :class-schema? class-schema?})])
       {:modal-class (util/hiccup->class
                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg")})]))
@@ -564,7 +565,7 @@
 (rum/defc property-cp <
   rum/reactive
   db-mixins/query
-  [block k v {:keys [inline-text] :as opts}]
+  [block k v {:keys [inline-text page-cp] :as opts}]
   (when (uuid? k)
     (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid k])))]
       (let [type (get-in property [:block/schema :type] :default)
@@ -588,7 +589,8 @@
           (property-key block property (assoc (select-keys opts [:class-schema?])
                                               :block? block?
                                               :collapsed? collapsed?
-                                              :inline-text inline-text))]
+                                              :inline-text inline-text
+                                              :page-cp page-cp))]
          (if (and (:class-schema? opts) (:page-configure? opts))
            [:div.property-description.text-sm.opacity-70
             {:class "col-span-3"}

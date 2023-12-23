@@ -464,7 +464,7 @@
                                          (:block/uuid template-instance-block)
                                          opts))
 
-        ;; page/class/etc.
+              ;; page/class/etc.
               (:block/name v-block)
               (page-cp {:disable-preview? true
                         :hide-close-button? true
