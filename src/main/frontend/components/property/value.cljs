@@ -497,11 +497,8 @@
             (= type :number)
             [:span.number (str value')]
 
-            (= type :url)
-            (inline-text {} :markdown (str value'))
-
             :else
-            value'))))))
+            (inline-text {} :markdown (str value'))))))))
 
 (rum/defc select-item
   [property type value {:keys [page-cp inline-text _icon?] :as opts}]
