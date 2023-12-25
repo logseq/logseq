@@ -23,11 +23,13 @@
   (query [_this q opts]
     (call-service! service "search:query" (merge {:q q} opts) true))
 
-
   (rebuild-blocks-indice! [_this]
    ;; Not pushing all data for performance temporarily
    ;;(let [blocks (search-db/build-blocks-indice repo)])
     (call-service! service "search:rebuildBlocksIndice" {}))
+
+  (rebuild-pages-indice! [_this]
+    (call-service! service "search:rebuildPagesIndice" {}))
 
   (transact-blocks! [_this data]
     (let [{:keys [blocks-to-remove-set blocks-to-add]} data]

@@ -17,7 +17,6 @@
             [logseq.db.frontend.rules :as rules]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.util.db :as db-util]
             [logseq.graph-parser.util :as gp-util]
             [logseq.outliner.pipeline :as outliner-pipeline]
@@ -1186,130 +1185,6 @@ independent of format as format specific heading characters are stripped"
   [page-name]
   (:block/journal? (db-utils/entity [:block/name page-name])))
 
-;; This is a file graph only feature
-(defn get-all-templates
-  []
-  (let [pred (fn [_db properties]
-               (some? (:template properties)))]
-    (->> (d/q
-          '[:find ?b ?p
-            :in $ ?pred
-            :where
-            [?b :block/properties ?p]
-            [(?pred $ ?p)]]
-          (conn/get-db)
-          pred)
-         (map (fn [[e m]]
-                [(get m :template) e]))
-         (into {}))))
-
-(defn file-based-get-all-properties
-  []
-  (let [db (conn/get-db)
-        properties (d/q
-                    '[:find [?p ...]
-                      :where
-                      [_ :block/properties ?p]]
-                    db)
-        properties (remove (fn [m] (empty? m)) properties)]
-    (->> (map keys properties)
-         (apply concat)
-         distinct
-         sort)))
-
-(defn db-based-get-all-properties
-  ":block/type could be one of [property, class]."
-  []
-  (let [db (conn/get-db)
-        ids (->> (d/datoms db :aevt :block/schema)
-                 (map :e))]
-    (->> ids
-         (map db-utils/entity)
-         (filter #(contains? (:block/type %) "property"))
-         (map :block/original-name))))
-
-(defn get-all-properties
-  "Returns a seq of property name strings"
-  []
-  (if (config/db-based-graph? (state/get-current-repo))
-    (db-based-get-all-properties)
-    (map name (file-based-get-all-properties))))
-
-(defn- property-value-for-refs-and-text
-  "Given a property value's refs and full text, determines the value to
-  autocomplete"
-  [[refs text]]
-  (if (or (not (coll? refs)) (= 1 (count refs)))
-    text
-    (map #(cond
-            (string/includes? text (page-ref/->page-ref %))
-            (page-ref/->page-ref %)
-            (string/includes? text (str "#" %))
-            (str "#" %)
-            :else
-            %)
-         refs)))
-
-(defn get-property-values
-  [property]
-  (let [pred (fn [_db properties text-properties]
-               [(get properties property)
-                (get text-properties property)])]
-    (->>
-     (d/q
-      '[:find ?property-val ?text-property-val
-        :in $ ?pred
-        :where
-        [?b :block/properties ?p]
-        [?b :block/properties-text-values ?p2]
-        [(?pred $ ?p ?p2) [?property-val ?text-property-val]]]
-      (conn/get-db)
-      pred)
-     (map property-value-for-refs-and-text)
-     (map (fn [x] (if (coll? x) x [x])))
-     (apply concat)
-     (map str)
-     (remove string/blank?)
-     (distinct)
-     (sort))))
-
-(defn get-db-property-values
-  "Returns all property values of a given property for use in a simple query.
-   Property values that are references are displayed as page references"
-  [repo property]
-  (let [property-name (if (keyword? property)
-                        (name property)
-                        (util/page-name-sanity-lc property))]
-    (->> (d/q
-         '[:find ?prop-type ?v
-           :in $ ?prop-name
-           :where
-           [?b :block/properties ?bp]
-           [?prop-b :block/name ?prop-name]
-           [?prop-b :block/uuid ?prop-uuid]
-           [?prop-b :block/schema ?prop-schema]
-           [(get ?prop-schema :type) ?prop-type]
-           [(get ?bp ?prop-uuid) ?v]]
-         (conn/get-db repo)
-         property-name)
-        (map (fn [[prop-type v]] [prop-type (if (coll? v) v [v])]))
-        (mapcat (fn [[prop-type vals]]
-                  (case prop-type
-                    :default
-                   ;; Remove multi-block properties as there isn't a supported approach to query them yet
-                    (map str (remove uuid? vals))
-                    (:page :date)
-                    (map #(page-ref/->page-ref (:block/original-name (db-utils/entity repo [:block/uuid %])))
-                         vals)
-                    :number
-                    vals
-                   ;; Checkboxes returned as strings as builder doesn't display boolean values correctly
-                    (map str vals))))
-       ;; Remove blanks as they match on everything
-        (remove string/blank?)
-        (distinct)
-        (sort))))
-
 (defn get-block-property-values
   "Get blocks which have this property."
   [property-uuid]
@@ -1361,27 +1236,6 @@ independent of format as format specific heading characters are stripped"
            ;; ?referee-b is block with ref towards ?refed-b
            [?refed-b   :block/uuid ?refed-uuid]
            [?referee-b :block/refs ?refed-b]] db)))
-
-;; block/uuid and block/content
-(defn get-single-block-contents [id]
-  (let [e (db-utils/entity [:block/uuid id])]
-    (when-not (and (nil? (:block/name e))
-                   (string/blank? (:block/content e))) ; empty block
-      {:db/id (:db/id e)
-       :block/name (:block/name e)
-       :block/uuid id
-       :block/page (:db/id (:block/page e))
-       :block/content (:block/content e)
-       :block/format (:block/format e)
-       :block/properties (:block/properties e)})))
-
-(defn get-all-block-contents
-  []
-  (when-let [db (conn/get-db)]
-    (->> (d/datoms db :avet :block/uuid)
-         (map :v)
-         (map get-single-block-contents)
-         (remove nil?))))
 
 (defn delete-blocks
   [repo-url files _delete-page?]

@@ -7,7 +7,6 @@
             [frontend.config :as config]
             [logseq.graph-parser.util :as gp-util]
             [lambdaisland.glogi :as log]
-            [frontend.search :as search]
             [clojure.string :as string]
             [frontend.util :as util]
             [logseq.graph-parser.util.block-ref :as block-ref]
@@ -61,9 +60,7 @@
     (when (or (:outliner/transact? tx-meta)
               (:outliner-op tx-meta)
               (:whiteboard/transact? tx-meta))
-      (undo-redo/listen-db-changes! tx-report))
-
-    (search/sync-search-indice! repo tx-report)))
+      (undo-redo/listen-db-changes! tx-report))))
 
 (defn- remove-nil-from-transaction
   [txs]

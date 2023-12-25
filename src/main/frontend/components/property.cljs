@@ -29,7 +29,8 @@
             [frontend.components.dnd :as dnd]
             [dommy.core :as dom]
             [frontend.components.property.closed-value :as closed-value]
-            [frontend.components.property.util :as components-pu]))
+            [frontend.components.property.util :as components-pu]
+            [promesa.core :as p]))
 
 (def icon closed-value/icon)
 
@@ -345,6 +346,27 @@
         (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
             (pv/exit-edit-property))))))
 
+(rum/defc property-select
+  [exclude-properties on-chosen input-opts]
+  (let [[properties set-properties!] (rum/use-state nil)]
+    (rum/use-effect!
+     (fn []
+       (p/let [properties (search/get-all-properties)]
+         (set-properties! (remove exclude-properties properties))))
+     [])
+    [:div.ls-property-add.flex.flex-row.items-center
+    [:span.bullet-container.cursor [:span.bullet]]
+    [:div.ls-property-key {:style {:padding-left 6
+                                   :height "1.5em"}} ; TODO: ugly
+     (select/select {:items (map (fn [x] {:value x}) properties)
+                     :dropdown? true
+                     :close-modal? false
+                     :show-new-when-not-exact-match? true
+                     :exact-match-exclude-items exclude-properties
+                     :input-default-placeholder "Add property"
+                     :on-chosen on-chosen
+                     :input-opts input-opts})]]))
+
 (rum/defcs property-input < rum/reactive
   (rum/local false ::show-new-property-config?)
   shortcut/disable-all-shortcuts
@@ -364,9 +386,7 @@
                                    #{}
                                    [:tags :alias])
         exclude-properties* (set/union entity-properties existing-tag-alias)
-        exclude-properties (set/union exclude-properties* (set (map string/lower-case exclude-properties*)))
-        properties (->> (search/get-all-properties)
-                        (remove exclude-properties))]
+        exclude-properties (set/union exclude-properties* (set (map string/lower-case exclude-properties*)))]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
      (if in-block-container? {:style {:padding-left 22}} {})
      (if @*property-key
@@ -395,26 +415,17 @@
                                "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
                (pv/property-value entity property @*property-value (assoc opts :editing? true))))]])
 
-       [:div.ls-property-add.flex.flex-row.items-center
-        [:span.bullet-container.cursor [:span.bullet]]
-        [:div.ls-property-key {:style {:padding-left 6
-                                       :height "1.5em"}} ; TODO: ugly
-         (select/select {:items (map (fn [x] {:value x}) properties)
-                         :dropdown? true
-                         :close-modal? false
-                         :show-new-when-not-exact-match? true
-                         :exact-match-exclude-items exclude-properties
-                         :input-default-placeholder "Add property"
-                         :on-chosen (fn [{:keys [value]}]
-                                      (reset! *property-key value)
-                                      (add-property-from-dropdown entity value (assoc opts :*show-new-property-config? *show-new-property-config?)))
-                         :input-opts {:on-blur (fn [] (pv/exit-edit-property))
-                                      :on-key-down
-                                      (fn [e]
-                                        (case (util/ekey e)
-                                          "Escape"
-                                          (pv/exit-edit-property)
-                                          nil))}})]])]))
+       (let [on-chosen (fn [{:keys [value]}]
+                         (reset! *property-key value)
+                         (add-property-from-dropdown entity value (assoc opts :*show-new-property-config? *show-new-property-config?)))
+             input-opts {:on-blur (fn [] (pv/exit-edit-property))
+                         :on-key-down
+                         (fn [e]
+                           (case (util/ekey e)
+                             "Escape"
+                             (pv/exit-edit-property)
+                             nil))}]
+         (property-select exclude-properties on-chosen input-opts)))]))
 
 (defonce *last-new-property-input-id (atom nil))
 (rum/defcs new-property < rum/reactive

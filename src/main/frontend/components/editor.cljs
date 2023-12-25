@@ -121,12 +121,73 @@
                                                  :other-attrs {:block/link (:db/id (db/entity [:block/name page-name]))}}))))
     (page-handler/on-chosen-handler input id q pos format)))
 
-(rum/defcs page-search < rum/reactive
+(rum/defc page-search-aux
+  [id format embed? db-tag? create-page? q current-pos edit-content input pos]
+  (let [[matched-pages set-matched-pages!] (rum/use-state nil)]
+    (rum/use-effect! (fn []
+                       (when-not (string/blank? q)
+                         (p/let [result (editor-handler/<get-matched-pages q)]
+                           (set-matched-pages! result))))
+                     [q])
+    (let [matched-pages (cond
+                          (contains? (set (map util/page-name-sanity-lc matched-pages))
+                                     (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched
+                          (sort-by (fn [m]
+                                     [(count m) m])
+                                   matched-pages)
+
+                          (string/blank? q)
+                          nil
+
+                          (empty? matched-pages)
+                          (when-not (db/page-exists? q)
+                            (if db-tag?
+                              (concat [(str (t :new-page) " " q)
+                                       (str (t :new-class) " " q)]
+                                      matched-pages)
+                              (cons q matched-pages)))
+
+                                ;; reorder, shortest and starts-with first.
+                          :else
+                          (let [matched-pages (remove nil? matched-pages)
+                                matched-pages (sort-by
+                                               (fn [m]
+                                                 [(not (gstring/caseInsensitiveStartsWith m q)) (count m) m])
+                                               matched-pages)]
+                            (if (gstring/caseInsensitiveStartsWith (first matched-pages) q)
+                              (cons (first matched-pages)
+                                    (cons q (rest matched-pages)))
+                              (cons q matched-pages))))]
+      [:div
+       (when (and db-tag?
+                        ;; Don't display in heading
+                  (not (some->> edit-content (re-find #"^\s*#"))))
+         [:div.flex.flex-row.items-center.px-4.py-1.text-sm.opacity-70.gap-2
+          "Turn this block into a page:"
+          (ui/toggle create-page?
+                     (fn [_e]
+                       (swap! (:editor/create-page? @state/state) not))
+                     true)])
+       (ui/auto-complete
+        matched-pages
+        {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
+         :on-enter    (fn []
+                        (page-handler/page-not-exists-handler input id q current-pos))
+         :item-render (fn [page-name _chosen?]
+                        [:div.flex
+                         (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
+                         (search-handler/highlight-exact-query page-name q)])
+         :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
+                                                                    "Search for a page or a class"
+                                                                    "Search for a page")]
+         :class       "black"})])))
+
+(rum/defc page-search < rum/reactive
   {:will-unmount (fn [state]
                    (reset! commands/*current-command nil)
                    state)}
   "Page or tag searching popup"
-  [state id format]
+  [id format]
   (let [action (state/sub :editor/action)
         db? (config/db-based-graph? (state/get-current-repo))
         embed? (and db? (= @commands/*current-command "Page embed"))
@@ -145,63 +206,8 @@
                      (gp-util/safe-subs edit-content pos current-pos))
                    (when (> (count edit-content) current-pos)
                      (gp-util/safe-subs edit-content pos current-pos))
-                   "")
-                ;; FIXME: display refed pages recentedly or frequencyly used
-                matched-pages (when-not (string/blank? q)
-                                (editor-handler/get-matched-pages q))
-                matched-pages (cond
-                                (contains? (set (map util/page-name-sanity-lc matched-pages))
-                                           (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched
-                                (sort-by (fn [m]
-                                           [(count m) m])
-                                         matched-pages)
-
-                                (string/blank? q)
-                                nil
-
-                                (empty? matched-pages)
-                                (when-not (db/page-exists? q)
-                                  (if db-tag?
-                                    (concat [(str (t :new-page) " " q)
-                                             (str (t :new-class) " " q)]
-                                            matched-pages)
-                                    (cons q matched-pages)))
-
-                                ;; reorder, shortest and starts-with first.
-                                :else
-                                (let [matched-pages (remove nil? matched-pages)
-                                      matched-pages (sort-by
-                                                     (fn [m]
-                                                       [(not (gstring/caseInsensitiveStartsWith m q)) (count m) m])
-                                                     matched-pages)]
-                                  (if (gstring/caseInsensitiveStartsWith (first matched-pages) q)
-                                    (cons (first matched-pages)
-                                          (cons q (rest matched-pages)))
-                                    (cons q matched-pages))))]
-            [:div
-             (when (and db-tag?
-                        ;; Don't display in heading
-                        (not (some->> edit-content (re-find #"^\s*#"))))
-               [:div.flex.flex-row.items-center.px-4.py-1.text-sm.opacity-70.gap-2
-                "Turn this block into a page:"
-                (ui/toggle create-page?
-                           (fn [_e]
-                             (swap! (:editor/create-page? @state/state) not))
-                           true)])
-             (ui/auto-complete
-              matched-pages
-              {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
-               :on-enter    (fn []
-                              (page-handler/page-not-exists-handler input id q current-pos))
-               :item-render (fn [page-name _chosen?]
-                              [:div.flex
-                               (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
-                               (search-handler/highlight-exact-query page-name q)])
-               :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
-                                                                          "Search for a page or a class"
-                                                                          "Search for a page")]
-               :class       "black"})]))))))
-
+                   "")]
+            (page-search-aux id format embed? db-tag? create-page? q current-pos edit-content input pos)))))))
 
 (defn- search-blocks!
   [state result]
@@ -231,6 +237,7 @@
           (state/clear-edit!))))
     (editor-handler/block-on-chosen-handler id q format selected-text)))
 
+;; TODO: use rum/use-effect instead
 (rum/defcs block-search-auto-complete < rum/reactive
   {:init (fn [state]
            (let [result (atom nil)]
@@ -283,6 +290,22 @@
       (when input
         (block-search-auto-complete edit-block input id q format selected-text)))))
 
+(rum/defc template-search-aux
+  [id q]
+  (let [[matched-templates set-matched-templates!] (rum/use-state nil)]
+    (rum/use-effect! (fn []
+                       (p/let [result (editor-handler/<get-matched-templates q)]
+                         (set-matched-templates! result)))
+                     [q])
+    (ui/auto-complete
+     matched-templates
+     {:on-chosen   (editor-handler/template-on-chosen-handler id)
+      :on-enter    (fn [_state] (state/clear-editor-action!))
+      :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
+      :item-render (fn [[template _block-db-id]]
+                     template)
+      :class       "black"})))
+
 (rum/defc template-search < rum/reactive
   [id _format]
   (let [pos (state/get-editor-last-pos)
@@ -293,37 +316,32 @@
             q (or
                (when (>= (count edit-content) current-pos)
                  (subs edit-content pos current-pos))
-               "")
-            matched-templates (editor-handler/get-matched-templates q)
-            non-exist-handler (fn [_state]
-                                (state/clear-editor-action!))]
-        (ui/auto-complete
-         matched-templates
-         {:on-chosen   (editor-handler/template-on-chosen-handler id)
-          :on-enter    non-exist-handler
-          :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
-          :item-render (fn [[template _block-db-id]]
-                         template)
-          :class       "black"})))))
+               "")]
+        (template-search-aux id q)))))
 
-(rum/defc property-search < rum/reactive
+(rum/defc property-search
   [id]
-  (let [input (gdom/getElement id)]
+  (let [input (gdom/getElement id)
+        [matched-properties set-matched-properties!] (rum/use-state nil)]
     (when input
       (let [q (or (:searching-property (editor-handler/get-searching-property input))
-                  "")
-            matched-properties (editor-handler/get-matched-properties q)
-            q-property (string/replace (string/lower-case q) #"\s+" "-")
-            non-exist-handler (fn [_state]
-                                ((editor-handler/property-on-chosen-handler id q-property) nil))]
-        (ui/auto-complete
-         matched-properties
-         {:on-chosen (editor-handler/property-on-chosen-handler id q-property)
-          :on-enter non-exist-handler
-          :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property: " q-property)]
-          :header [:div.px-4.py-2.text-sm.font-medium "Matched properties: "]
-          :item-render (fn [property] property)
-          :class       "black"})))))
+                  "")]
+        (rum/use-effect!
+         (fn []
+           (p/let [matched-properties (editor-handler/<get-matched-properties q)]
+             (set-matched-properties! matched-properties)))
+         [q])
+        (let [q-property (string/replace (string/lower-case q) #"\s+" "-")
+              non-exist-handler (fn [_state]
+                                  ((editor-handler/property-on-chosen-handler id q-property) nil))]
+          (ui/auto-complete
+           matched-properties
+           {:on-chosen (editor-handler/property-on-chosen-handler id q-property)
+            :on-enter non-exist-handler
+            :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property: " q-property)]
+            :header [:div.px-4.py-2.text-sm.font-medium "Matched properties: "]
+            :item-render (fn [property] property)
+            :class       "black"}))))))
 
 (rum/defc property-value-search < rum/reactive
   [id]

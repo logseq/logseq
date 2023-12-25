@@ -31,7 +31,8 @@
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [cljs.core.async :as async]
             [cljs.pprint :as pp]
-            [cljs-time.coerce :as tc]))
+            [cljs-time.coerce :as tc]
+            [promesa.core :as p]))
 
 ;; TODO i18n support
 
@@ -156,15 +157,16 @@
                      :on-click (fn []
                                  (let [title (string/trim @input)]
                                    (when (not (string/blank? title))
-                                     (if (page-handler/template-exists? title)
-                                       (notification/show!
-                                        [:p (t :context-menu/template-exists-warning)]
-                                        :error)
-                                       (do
-                                         (property-handler/set-block-property! repo block-id :template title)
-                                         (when (false? template-including-parent?)
-                                           (property-handler/set-block-property! repo block-id :template-including-parent false))
-                                         (state/hide-custom-context-menu!)))))))]
+                                     (p/let [exists? (page-handler/<template-exists? title)]
+                                       (if exists?
+                                         (notification/show!
+                                          [:p (t :context-menu/template-exists-warning)]
+                                          :error)
+                                         (do
+                                           (property-handler/set-block-property! repo block-id :template title)
+                                           (when (false? template-including-parent?)
+                                             (property-handler/set-block-property! repo block-id :template-including-parent false))
+                                           (state/hide-custom-context-menu!))))))))]
          [:hr.menu-separator]])
       (ui/menu-link
        {:key "Make a Template"

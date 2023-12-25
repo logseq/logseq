@@ -6,6 +6,7 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.model :as model]
             [frontend.fs :as fs]
             [frontend.handler.common :as common-handler]
@@ -130,10 +131,11 @@
 (def rebuild-slash-commands-list!
   (debounce init-commands! 1500))
 
-(defn template-exists?
+(defn <template-exists?
   [title]
   (when title
-    (let [templates (keys (db/get-all-templates))]
+    (p/let [result (db-async/<get-all-templates (state/get-current-repo))
+            templates (keys result)]
       (when (seq templates)
         (let [templates (map string/lower-case templates)]
           (contains? (set templates) (string/lower-case title)))))))

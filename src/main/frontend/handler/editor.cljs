@@ -1644,14 +1644,14 @@
       (when (>= pos 0)
         (text-util/wrapped-by? value pos before end)))))
 
-(defn get-matched-pages
+(defn <get-matched-pages
   "Return matched page names"
   [q]
-  (let [block (state/get-edit-block)
-        editing-page (and block
-                          (when-let [page-id (:db/id (:block/page block))]
-                            (:block/name (db/entity page-id))))
-        pages (search/page-search q)]
+  (p/let [block (state/get-edit-block)
+          editing-page (and block
+                            (when-let [page-id (:db/id (:block/page block))]
+                              (:block/name (db/entity page-id))))
+          pages (search/page-search q)]
     (if editing-page
       ;; To prevent self references
       (remove (fn [p] (= (util/page-name-sanity-lc p) editing-page)) pages)
@@ -1680,11 +1680,11 @@
          (contains? current-and-parents (:block/uuid h)))
        result))))
 
-(defn get-matched-templates
+(defn <get-matched-templates
   [q]
   (search/template-search q))
 
-(defn get-matched-properties
+(defn <get-matched-properties
   [q]
   (search/property-search q))
 
