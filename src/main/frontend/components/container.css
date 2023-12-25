@@ -127,19 +127,23 @@
     }
   }
 
-  .nav-header a {
-    .keyboard-shortcut {
+  .nav-header {
+    @apply gap-0.5;
+
+    a {
+      .keyboard-shortcut {
         @apply w-0 opacity-0;
         visibility: hidden;
-    }
+      }
 
-    &:hover {
-      .keyboard-shortcut {
-        visibility: visible;
-        transition: opacity 1s;
-        transition-delay: 2s;
-        width: auto;
-        opacity: 1;
+      &:hover {
+        .keyboard-shortcut {
+          visibility: visible;
+          transition: opacity 1s;
+          transition-delay: 2s;
+          width: auto;
+          opacity: 1;
+        }
       }
     }
   }
@@ -169,24 +173,20 @@
     }
 
     .graph-icon .ui__icon {
-        padding: 0;
-        width: unset;
-        margin-right: 0px;
+      padding: 0;
+      width: unset;
+      margin-right: 0px;
     }
 
     .graph-icon {
-        margin-left: 3px;
-        margin-right: 11px;
+      margin-left: 3px;
+      margin-right: 11px;
     }
 
-    &:hover {
-      background-color: or(--ls-left-sidebar-hover-background, --lx-gray-04, --ls-primary-background-color);
-      color: or(--ls-left-sidebar-text-color-hover, --lx-gray-12);
-    }
-
-    &.active {
+    &:hover, &.active {
       background-color: or(--ls-left-sidebar-active-background, --lx-gray-04, --color-level-3);
       color: or(--ls-left-sidebar-active-text-color, --lx-gray-12);
+
       .ui__icon {
         opacity: .9;
       }
@@ -303,6 +303,7 @@
       .header .more {
         transform: rotate(-90deg);
       }
+
       .bd {
         display: block;
       }

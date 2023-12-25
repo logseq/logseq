@@ -53,7 +53,7 @@
             [rum.core :as rum]))
 
 (rum/defc nav-content-item < rum/reactive
-  [name {:keys [class count]} child]
+  [name {:keys [class _count]} child]
   (let [collapsed? (state/sub [:ui/navigation-item-collapsed? class])
         shrink? (not collapsed?)]
     [:div.nav-content-item
@@ -65,7 +65,7 @@
        {:on-click (fn [^js/MouseEvent _e]
                     (state/toggle-navigation-item-collapsed! class))}
        [:div.a name]
-       [:div.b (ui/icon "chevron-left" {:class "more"})]]
+       [:div.b (ui/icon "chevron-left" {:class "more" :size 16})]]
       (when child [:div.bd child])]]))
 
 (defn- delta-y
@@ -393,7 +393,7 @@
         {:aria-label "Navigation menu"}
         (repo/repos-dropdown)
 
-        [:div.nav-header.flex.gap-1.flex-col.mt-3
+        [:div.nav-header.flex.flex-col.mt-2
          (let [page (:page default-home)]
            (if (and page (not (state/enable-journals? (state/get-current-repo))))
              (sidebar-item
