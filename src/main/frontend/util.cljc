@@ -8,7 +8,6 @@
             ["@capacitor/status-bar" :refer [^js StatusBar Style]]
             ["@capgo/capacitor-navigation-bar" :refer [^js NavigationBar]]
             ["grapheme-splitter" :as GraphemeSplitter]
-            ["remove-accents" :as removeAccents]
             ["sanitize-filename" :as sanitizeFilename]
             ["check-password-strength" :refer [passwordStrength]]
             ["path-complete-extname" :as pathCompleteExtname]
@@ -28,8 +27,8 @@
             [rum.core :as rum]
             [clojure.core.async :as async]
             [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
-            [medley.core :as medley]
-            [frontend.pubsub :as pubsub]))
+            [frontend.pubsub :as pubsub]
+            [frontend.worker.util :as worker-util]))
   #?(:cljs (:import [goog.async Debouncer]))
   (:require
    [clojure.pprint]
@@ -76,23 +75,11 @@
   (string/join "/" parts))
 
 #?(:cljs
-   (defn safe-re-find
-     {:malli/schema [:=> [:cat :any :string] [:or :nil :string [:vector [:maybe :string]]]]}
-     [pattern s]
-     (when-not (string? s)
-       ;; TODO: sentry
-       (js/console.trace))
-     (when (string? s)
-       (re-find pattern s))))
+   (def safe-re-find worker-util/safe-re-find))
 
 #?(:cljs
    (do
-     (def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
-     (defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
-     (defn uuid-string?
-       {:malli/schema [:=> [:cat :string] :boolean]}
-       [s]
-       (boolean (safe-re-find exactly-uuid-pattern s)))
+     (def uuid-string? worker-util/uuid-string?)
      (defn check-password-strength
        {:malli/schema [:=> [:cat :string] [:maybe
                                            [:map
@@ -594,9 +581,7 @@
 
 
 #?(:cljs
-   (defn distinct-by
-     [f col]
-     (medley/distinct-by f (seq col))))
+   (def distinct-by worker-util/distinct-by))
 
 #?(:cljs
    (defn distinct-by-last-wins
@@ -1034,14 +1019,7 @@
      (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
 
 #?(:cljs
-   (defn search-normalize
-     "Normalize string for searching (loose)"
-     [s remove-accents?]
-     (when s
-       (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
-         (if remove-accents?
-           (removeAccents normalize-str)
-           normalize-str)))))
+   (def search-normalize worker-util/search-normalize))
 
 #?(:cljs
    (def page-name-sanity-lc
@@ -1049,10 +1027,7 @@
      gp-util/page-name-sanity-lc))
 
 #?(:cljs
-   (defn safe-page-name-sanity-lc
-     [s]
-     (if (string? s)
-       (page-name-sanity-lc s) s)))
+   (def safe-page-name-sanity-lc worker-util/safe-page-name-sanity-lc))
 
 (defn get-page-original-name
   [page]

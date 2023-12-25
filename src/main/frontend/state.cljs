@@ -972,7 +972,9 @@ Similar to re-frame subscriptions"
              (gobj/get "id")))
    (when-let [elem js/document.activeElement]
      (when (util/input? elem)
-       (gobj/get elem "id")))))
+       (let [id (gobj/get elem "id")]
+         (when (string/starts-with? id "edit-block-")
+           id))))))
 
 (defn get-input
   []

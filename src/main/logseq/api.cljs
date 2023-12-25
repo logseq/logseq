@@ -15,6 +15,7 @@
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.utils :as db-utils]
@@ -137,11 +138,12 @@
 
 (def ^:export get_current_graph_templates
   (fn []
-    (when (state/get-current-repo)
-      (some-> (db-model/get-all-templates)
-              (update-vals db/pull)
-              (sdk-utils/normalize-keyword-for-json)
-              (bean/->js)))))
+    (when-let [repo (state/get-current-repo)]
+      (let [templates (db-async/<get-all-templates repo)]
+        (some-> templates
+                (update-vals db/pull)
+                (sdk-utils/normalize-keyword-for-json)
+                (bean/->js))))))
 
 (def ^:export get_current_graph
   (fn []
@@ -967,20 +969,21 @@
 
 (defn ^:export insert_template
   [target-uuid template-name]
-  (when-let [target (and (page-handler/template-exists? template-name)
-                         (db-model/get-block-by-uuid target-uuid))]
-    (editor-handler/insert-template! nil template-name {:target target}) nil))
+  (p/let [exists? (page-handler/<template-exists? template-name)]
+    (when exists?
+      (when-let [target (db-model/get-block-by-uuid target-uuid)]
+       (editor-handler/insert-template! nil template-name {:target target}) nil))))
 
 (defn ^:export exist_template
   [name]
-  (page-handler/template-exists? name))
+  (page-handler/<template-exists? name))
 
 (defn ^:export create_template
   [target-uuid template-name ^js opts]
   (when (and template-name (db-model/get-block-by-uuid target-uuid))
-    (let [{:keys [overwrite]} (bean/->clj opts)
-          exist? (page-handler/template-exists? template-name)
-          repo (state/get-current-repo)]
+    (p/let [{:keys [overwrite]} (bean/->clj opts)
+            exist? (page-handler/<template-exists? template-name)
+            repo (state/get-current-repo)]
       (if (or (not exist?) (true? overwrite))
         (do (when-let [old-target (and exist? (db-model/get-template-by-name template-name))]
               (property-handler/remove-block-property! repo (:block/uuid old-target) :template))

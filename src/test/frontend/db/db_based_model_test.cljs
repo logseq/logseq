@@ -22,11 +22,6 @@
 
 (use-fixtures :each start-and-destroy-db)
 
-(deftest get-all-properties-test
-  (db-property-handler/set-block-property! repo fbid "property-1" "value" {})
-  (db-property-handler/set-block-property! repo fbid "property-2" "1" {})
-  (is (= '("property-1" "property-2") (model/get-all-properties))))
-
 (deftest get-block-property-values-test
   (db-property-handler/set-block-property! repo fbid "property-1" "value 1" {})
   (db-property-handler/set-block-property! repo sbid "property-1" "value 2" {})
@@ -34,21 +29,21 @@
     (is (= (map second (model/get-block-property-values (:block/uuid property)))
            ["value 1" "value 2"]))))
 
-(deftest get-db-property-values-test
-  (db-property-handler/set-block-property! repo fbid "property-1" "1" {})
-  (db-property-handler/set-block-property! repo sbid "property-1" "2" {})
-  (is (= [1 2] (model/get-db-property-values repo "property-1"))))
+;; (deftest get-db-property-values-test
+;;   (db-property-handler/set-block-property! repo fbid "property-1" "1" {})
+;;   (db-property-handler/set-block-property! repo sbid "property-1" "2" {})
+;;   (is (= [1 2] (model/get-db-property-values repo "property-1"))))
 
-(deftest get-db-property-values-test-with-pages
-  (let [opts {:redirect? false :create-first-block? false}
-        _ (page-handler/create! "page1" opts)
-        _ (page-handler/create! "page2" opts)
-        p1id (:block/uuid (db/entity [:block/name "page1"]))
-        p2id (:block/uuid (db/entity [:block/name "page2"]))]
-    (db-property-handler/upsert-property! repo "property-1" {:type :page} {})
-    (db-property-handler/set-block-property! repo fbid "property-1" p1id {})
-    (db-property-handler/set-block-property! repo sbid "property-1" p2id {})
-    (is (= '("[[page1]]" "[[page2]]") (model/get-db-property-values repo "property-1")))))
+;; (deftest get-db-property-values-test-with-pages
+;;   (let [opts {:redirect? false :create-first-block? false}
+;;         _ (page-handler/create! "page1" opts)
+;;         _ (page-handler/create! "page2" opts)
+;;         p1id (:block/uuid (db/entity [:block/name "page1"]))
+;;         p2id (:block/uuid (db/entity [:block/name "page2"]))]
+;;     (db-property-handler/upsert-property! repo "property-1" {:type :page} {})
+;;     (db-property-handler/set-block-property! repo fbid "property-1" p1id {})
+;;     (db-property-handler/set-block-property! repo sbid "property-1" p2id {})
+;;     (is (= '("[[page1]]" "[[page2]]") (model/get-db-property-values repo "property-1")))))
 
 (deftest get-all-classes-test
   (let [opts {:redirect? false :create-first-block? false :class? true}

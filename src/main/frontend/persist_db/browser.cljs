@@ -10,7 +10,8 @@
             [frontend.handler.notification :as notification]
             [cljs-bean.core :as bean]
             [frontend.state :as state]
-            [electron.ipc :as ipc]))
+            [electron.ipc :as ipc]
+            [frontend.handler.file-based.property.util :as property-util]))
 
 (defonce *sqlite (atom nil))
 
@@ -83,7 +84,20 @@
       (p/do!
        (ipc/ipc :db-transact repo tx-data' tx-meta')
        (if sqlite
-         (.transact sqlite repo tx-data' tx-meta')
+         (p/let [result (.transact sqlite repo tx-data' tx-meta')
+                 result' (bean/->clj result)
+                 file-based? (config/local-file-based-graph? repo)
+                 data (cond-> result'
+                        file-based?
+                        ;; remove built-in properties from content
+                        (update :blocks-to-add
+                                (fn [blocks]
+                                  (map #(update % :content
+                                               (fn [content]
+                                                 (property-util/remove-built-in-properties (get % :format :markdown) content)))
+                                    blocks))))]
+           (state/pub-event! [:search/transact-data repo data])
+           nil)
          (notification/show! "Latest change was not saved! Please restart the application." :error))
        nil)))
 

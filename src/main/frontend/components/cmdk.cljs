@@ -754,13 +754,14 @@
                     (on-blur input)))
        :on-composition-end (fn [e] (handle-input-change state e))
        :on-key-down (fn [e]
-                      (let [value (.-value @input-ref)
-                            last-char (last value)
-                            backspace? (= (util/ekey e) "Backspace")
-                            filter-group (:group @(::filter state))
-                            slash? (= (util/ekey e) "/")
-                            namespace-page-matched? (when (and slash? (contains? #{:pages :whiteboards} filter-group))
-                                                      (some #(string/includes? % "/") (search/page-search (str value "/"))))]
+                      (p/let [value (.-value @input-ref)
+                              last-char (last value)
+                              backspace? (= (util/ekey e) "Backspace")
+                              filter-group (:group @(::filter state))
+                              slash? (= (util/ekey e) "/")
+                              namespace-pages (when (and slash? (contains? #{:pages :whiteboards} filter-group))
+                                                (search/page-search (str value "/")))
+                              namespace-page-matched? (some #(string/includes? % "/") namespace-pages)]
                         (when (and filter-group
                                    (or (and slash? (not namespace-page-matched?))
                                        (and backspace? (= last-char "/"))

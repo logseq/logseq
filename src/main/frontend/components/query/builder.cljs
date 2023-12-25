@@ -1,9 +1,9 @@
 (ns frontend.components.query.builder
   "DSL query builder."
-  (:require [frontend.config :as config]
-            [frontend.date :as date]
+  (:require [frontend.date :as date]
             [frontend.ui :as ui]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.handler.editor :as editor-handler]
@@ -17,7 +17,8 @@
             [rum.core :as rum]
             [clojure.string :as string]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [logseq.graph-parser.util.page-ref :as page-ref]
+            [promesa.core :as p]))
 
 (rum/defc page-block-selector
   [*find]
@@ -118,6 +119,36 @@
                        (append-tree! tree opts loc clause)
                        (reset! *between-dates {}))))))])
 
+(rum/defc property-select
+  [*mode *property]
+  (let [[properties set-properties!] (rum/use-state nil)]
+    (rum/use-effect!
+     (fn []
+       (p/let [properties (search/get-all-properties)]
+         (set-properties! properties)))
+     [])
+    (select properties
+            (fn [{:keys [value]}]
+              (reset! *mode "property-value")
+              (reset! *property (keyword value))))))
+
+(rum/defc property-value-select
+  [repo *property *find *tree opts loc]
+  (let [[values set-values!] (rum/use-state nil)]
+    (rum/use-effect!
+     (fn []
+       (p/let [result (db-async/<get-property-values repo @*property)]
+         (set-values! result)))
+     [@*property])
+    (let [values (cons "Select all" values)]
+      (select values
+              (fn [{:keys [value]}]
+                (let [x (if (= value "Select all")
+                          [(if (= @*find :page) :page-property :property) @*property]
+                          [(if (= @*find :page) :page-property :property) @*property value])]
+                  (reset! *property nil)
+                  (append-tree! *tree opts loc x)))))))
+
 (defn- query-filter-picker
   [state *find *tree loc clause opts]
   (let [*mode (::mode state)
@@ -140,23 +171,10 @@
                    (append-tree! *tree opts loc [:page-tags value]))))
 
        "property"
-       (let [properties (search/get-all-properties)]
-         (select properties
-                 (fn [{:keys [value]}]
-                   (reset! *mode "property-value")
-                   (reset! *property (keyword value)))))
+       (property-select *mode *property)
 
        "property-value"
-       (let [values (cons "Select all" (if (config/db-based-graph? repo)
-                                         (db-model/get-db-property-values repo @*property)
-                                         (db-model/get-property-values @*property)))]
-         (select values
-                 (fn [{:keys [value]}]
-                   (let [x (if (= value "Select all")
-                             [(if (= @*find :page) :page-property :property) @*property]
-                             [(if (= @*find :page) :page-property :property) @*property value])]
-                     (reset! *property nil)
-                     (append-tree! *tree opts loc x)))))
+       (property-value-select repo *property *find *tree opts loc)
 
        "sample"
        (select (range 1 101)

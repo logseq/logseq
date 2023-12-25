@@ -808,6 +808,9 @@
    {:id :new-db-graph
     :label "graph-setup"}))
 
+(defmethod handle :search/transact-data [[_ repo data]]
+  (search/transact-blocks! repo data))
+
 (defmethod handle :class/configure [[_ page]]
   (state/set-modal!
    #(vector :<>

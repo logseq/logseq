@@ -5,7 +5,8 @@
             [promesa.core :as p]
             [frontend.persist-db.browser :as browser]
             [frontend.state :as state]
-            [frontend.search.db :as search-db]))
+            [frontend.config :as config]
+            [frontend.handler.file-based.property.util :as property-util]))
 
 (defonce *sqlite browser/*sqlite)
 
@@ -20,10 +21,24 @@
                  :block/content content
                  :block/page (uuid page)}) result))
       (p/resolved nil)))
+  (rebuild-pages-indice! [_this]
+    (if-let [^js sqlite @*sqlite]
+      (.search-build-pages-indice sqlite repo)
+      (p/resolved nil)))
   (rebuild-blocks-indice! [this]
     (if-let [^js sqlite @*sqlite]
-      (p/let [_ (protocol/truncate-blocks! this)
-              blocks (search-db/build-blocks-indice)
+      (p/let [repo (state/get-current-repo)
+              file-based? (config/local-file-based-graph? repo)
+              _ (protocol/truncate-blocks! this)
+              result (.search-build-blocks-indice sqlite repo)
+              blocks (cond->> (bean/->clj result)
+                       file-based?
+                       ;; remove built-in properties from content
+                       (map #(update % :content
+                                     (fn [content]
+                                       (property-util/remove-built-in-properties (get % :format :markdown) content))))
+                       true
+                       bean/->js)
               _ (when (seq blocks)
                   (.search-upsert-blocks sqlite repo blocks))])
       (p/resolved nil)))

@@ -31,6 +31,12 @@
         (protocol/rebuild-blocks-indice! e))
       (protocol/rebuild-blocks-indice! e1)))
 
+  (rebuild-pages-indice! [_this]
+    (let [[e1 e2] (get-registered-engines repo)]
+      (doseq [e e2]
+        (protocol/rebuild-pages-indice! e))
+      (protocol/rebuild-pages-indice! e1)))
+
   (transact-blocks! [_this data]
     (doseq [e (get-flatten-registered-engines repo)]
       (protocol/transact-blocks! e data)))

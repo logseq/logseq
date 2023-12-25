@@ -254,14 +254,21 @@
    (when-let [conn (get-datascript-conn repo)]
      (:max-tx @conn)))
 
+  (q [_this repo inputs-str]
+     "Datascript q"
+     (when-let [conn (get-datascript-conn repo)]
+       (let [inputs (edn/read-string inputs-str)]
+         (let [result (apply d/q (first inputs) @conn (rest inputs))]
+           (bean/->js result)))))
+
   (transact
    [_this repo tx-data tx-meta]
    (when-let [conn (get-datascript-conn repo)]
      (try
        (let [tx-data (edn/read-string tx-data)
-             tx-meta (edn/read-string tx-meta)]
-         (d/transact! conn tx-data tx-meta)
-         nil)
+             tx-meta (edn/read-string tx-meta)
+             tx-report (d/transact! conn tx-data tx-meta)]
+         (search/sync-search-indice repo tx-report))
        (catch :default e
          (prn :debug :error)
          (js/console.error e)))))
@@ -322,6 +329,21 @@
    (p/let [db (get-search-db repo)]
      (search/truncate-table! db)
      nil))
+
+  (search-build-blocks-indice
+   [this repo]
+   (when-let [conn (get-datascript-conn repo)]
+     (search/build-blocks-indice repo @conn)))
+
+  (search-build-pages-indice
+   [this repo]
+   (when-let [conn (get-datascript-conn repo)]
+     (search/build-blocks-indice repo @conn)))
+
+  (page-search
+   [this repo q limit]
+   (when-let [conn (get-datascript-conn repo)]
+     (search/page-search repo @conn q limit)))
 
   (dangerousRemoveAllDbs
    [this repo]
