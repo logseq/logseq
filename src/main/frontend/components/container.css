@@ -127,7 +127,7 @@
 
   .nav-header a {
     .keyboard-shortcut {
-        @apply w-0 opacity-0;
+        @apply opacity-0;
         visibility: hidden;
     }
 
@@ -136,7 +136,6 @@
         visibility: visible;
         transition: opacity 1s;
         transition-delay: 2s;
-        width: auto;
         opacity: 1;
       }
     }
