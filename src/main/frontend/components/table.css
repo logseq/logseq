@@ -60,6 +60,20 @@
   }
 }
 
+.cp__all_pages_table {
+  td {
+    @apply whitespace-nowrap;
+
+    &.name {
+      @apply whitespace-pre-wrap;
+    }
+
+    &.backlinks {
+      @apply text-center;
+    }
+  }
+}
+
 .dark-theme {
   .cp__shortcut-page, .cp__all_pages-content, .block-content {
     th {

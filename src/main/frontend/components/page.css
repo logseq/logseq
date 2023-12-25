@@ -74,11 +74,7 @@
       }
 
       > span {
-        @apply text-sm;
-
-        color: or(--ls-all-pages-table-text, --lx-gray-11, rgb(115, 115, 115));
-
-        padding: 6px 8px;
+        @apply text-sm py-1.5 px-2;
       }
     }
 
