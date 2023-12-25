@@ -178,21 +178,6 @@
     cross-zip "^4.0.0"
     fs-extra "^10.0.0"
 
-"@electron-forge/plugin-auto-unpack-natives@^6.0.4":
-  version "6.4.2"
-  resolved "https://registry.yarnpkg.com/@electron-forge/plugin-auto-unpack-natives/-/plugin-auto-unpack-natives-6.4.2.tgz#8c8b0066d352b2b5983c4ca3b47818b7b8f9bc1c"
-  integrity sha512-AXmPQc2nUFuh/xFC+Qsebg/eg3M+5GQV6MOzMvTBZ9N1w49XtZbtvEGAdISnZWERExNRcwH+j+zuSAGtm6Y2Yw==
-  dependencies:
-    "@electron-forge/plugin-base" "6.4.2"
-    "@electron-forge/shared-types" "6.4.2"
-
-"@electron-forge/plugin-base@6.4.2":
-  version "6.4.2"
-  resolved "https://registry.yarnpkg.com/@electron-forge/plugin-base/-/plugin-base-6.4.2.tgz#65054f841728688cc31edeb94479e6bd4bc07782"
-  integrity sha512-g6AAtQ7fZ94djBmwcnWasQ8xgaNVNjgaQ00GLK0NkmQ7n0PNbsnlMDuw9vdfTiL6WaLg5nxNSYc9bFJP/rtyeA==
-  dependencies:
-    "@electron-forge/shared-types" "6.4.2"
-
 "@electron-forge/plugin-base@^6.0.4":
   version "6.0.4"
   resolved "https://registry.yarnpkg.com/@electron-forge/plugin-base/-/plugin-base-6.0.4.tgz#a3b62e006632dab66d35f845ca61e09745ccbb82"
@@ -216,15 +201,6 @@
     electron-packager "^15.4.0"
     electron-rebuild "^3.2.6"
     ora "^5.0.0"
-
-"@electron-forge/shared-types@6.4.2":
-  version "6.4.2"
-  resolved "https://registry.yarnpkg.com/@electron-forge/shared-types/-/shared-types-6.4.2.tgz#ffc25a21d1bc7e6cb8fcf8dc1e1767c6a8c52d02"
-  integrity sha512-DKOUMsdTXZIq8XiqY0Hi3C+dam/JKUnvfBjwcUeyZqPdgEE1qry8xZmmjorXuLrRf1Jq8rhxYGQInSK4af0QYw==
-  dependencies:
-    "@electron/rebuild" "^3.2.10"
-    electron-packager "^17.1.2"
-    listr2 "^5.0.3"
 
 "@electron-forge/shared-types@^6.0.4":
   version "6.0.4"
@@ -320,18 +296,6 @@
   version "1.0.4"
   resolved "https://registry.yarnpkg.com/@electron/osx-sign/-/osx-sign-1.0.4.tgz#8e91442846471636ca0469426a82b253b9170151"
   integrity sha512-xfhdEcIOfAZg7scZ9RQPya1G1lWo8/zMCwUXAulq0SfY7ONIW+b9qGyKdMyuMctNYwllrIS+vmxfijSfjeh97g==
-  dependencies:
-    compare-version "^0.1.2"
-    debug "^4.3.4"
-    fs-extra "^10.0.0"
-    isbinaryfile "^4.0.8"
-    minimist "^1.2.6"
-    plist "^3.0.5"
-
-"@electron/osx-sign@^1.0.5":
-  version "1.0.5"
-  resolved "https://registry.yarnpkg.com/@electron/osx-sign/-/osx-sign-1.0.5.tgz#0af7149f2fce44d1a8215660fd25a9fb610454d8"
-  integrity sha512-k9ZzUQtamSoweGQDV2jILiRIHUu7lYlJ3c6IEmjv1hC17rclE+eb9U+f6UFlOOETo0JzY1HNlXy4YOlCvl+Lww==
   dependencies:
     compare-version "^0.1.2"
     debug "^4.3.4"
@@ -2057,31 +2021,6 @@ electron-packager@^17.1.1:
     semver "^7.1.3"
     yargs-parser "^21.1.1"
 
-electron-packager@^17.1.2:
-  version "17.1.2"
-  resolved "https://registry.yarnpkg.com/electron-packager/-/electron-packager-17.1.2.tgz#18030b28024d242b706d0a8a67ed4cd1a57311aa"
-  integrity sha512-XofXdikjYI7MVBcnXeoOvRR+yFFFHOLs3J7PF5KYQweigtgLshcH4W660PsvHr4lYZ03JBpLyEcUB8DzHZ+BNw==
-  dependencies:
-    "@electron/asar" "^3.2.1"
-    "@electron/get" "^2.0.0"
-    "@electron/notarize" "^1.2.3"
-    "@electron/osx-sign" "^1.0.5"
-    "@electron/universal" "^1.3.2"
-    cross-spawn-windows-exe "^1.2.0"
-    debug "^4.0.1"
-    extract-zip "^2.0.0"
-    filenamify "^4.1.0"
-    fs-extra "^11.1.0"
-    galactus "^1.0.0"
-    get-package-info "^1.0.0"
-    junk "^3.1.0"
-    parse-author "^2.0.0"
-    plist "^3.0.0"
-    rcedit "^3.0.1"
-    resolve "^1.1.6"
-    semver "^7.1.3"
-    yargs-parser "^21.1.1"
-
 electron-publish@21.2.0:
   version "21.2.0"
   resolved "https://registry.yarnpkg.com/electron-publish/-/electron-publish-21.2.0.tgz#cc225cb46aa62e74b899f2f7299b396c9802387d"
@@ -2485,14 +2424,6 @@ flora-colossus@^1.0.0:
     debug "^4.1.1"
     fs-extra "^7.0.0"
 
-flora-colossus@^2.0.0:
-  version "2.0.0"
-  resolved "https://registry.yarnpkg.com/flora-colossus/-/flora-colossus-2.0.0.tgz#af1e85db0a8256ef05f3fb531c1235236c97220a"
-  integrity sha512-dz4HxH6pOvbUzZpZ/yXhafjbR2I8cenK5xL0KtBFb7U2ADsR+OwXifnxZjij/pZWF775uSCMzWVd+jDik2H2IA==
-  dependencies:
-    debug "^4.3.4"
-    fs-extra "^10.1.0"
-
 fmix@^0.1.0:
   version "0.1.0"
   resolved "https://registry.yarnpkg.com/fmix/-/fmix-0.1.0.tgz#c7bbf124dec42c9d191cfb947d0a9778dd986c0c"
@@ -2533,15 +2464,6 @@ fs-extra@^10.0.0, fs-extra@^10.1.0:
   version "10.1.0"
   resolved "https://registry.yarnpkg.com/fs-extra/-/fs-extra-10.1.0.tgz#02873cfbc4084dde127eaa5f9905eef2325d1abf"
   integrity sha512-oRXApq54ETRj4eMiFzGnHWGy+zo5raudjuxN0b8H7s/RU2oW0Wvsx9O0ACRN/kRq9E8Vu/ReskGB5o3ji+FzHQ==
-  dependencies:
-    graceful-fs "^4.2.0"
-    jsonfile "^6.0.1"
-    universalify "^2.0.0"
-
-fs-extra@^11.1.0:
-  version "11.2.0"
-  resolved "https://registry.yarnpkg.com/fs-extra/-/fs-extra-11.2.0.tgz#e70e17dfad64232287d01929399e0ea7c86b0e5b"
-  integrity sha512-PmDi3uwK5nFuXh7XDTlVnS17xJS7vW36is2+w3xcv8SVxiB4NyATf4ctkVY5bkSjX0Y4nbvZCq1/EjtEyr9ktw==
   dependencies:
     graceful-fs "^4.2.0"
     jsonfile "^6.0.1"
@@ -2616,15 +2538,6 @@ galactus@^0.2.1:
     debug "^3.1.0"
     flora-colossus "^1.0.0"
     fs-extra "^4.0.0"
-
-galactus@^1.0.0:
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/galactus/-/galactus-1.0.0.tgz#c2615182afa0c6d0859b92e56ae36d052827db7e"
-  integrity sha512-R1fam6D4CyKQGNlvJne4dkNF+PvUUl7TAJInvTGa9fti9qAv95quQz29GXapA4d8Ec266mJJxFVh82M4GIIGDQ==
-  dependencies:
-    debug "^4.3.4"
-    flora-colossus "^2.0.0"
-    fs-extra "^10.1.0"
 
 gar@^1.0.4:
   version "1.0.4"

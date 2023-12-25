@@ -29,7 +29,7 @@
         }
 
         &.active {
-          background-color: var(--ls-quaternary-background-color);
+          @apply bg-black/10;
         }
       }
     }

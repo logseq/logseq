@@ -14,11 +14,11 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'bg-primary/90 hover:bg-primary/100 active:opacity-90 text-primary-foreground as-classic',
+          'bg-primary/90 hover:bg-primary/100 active:opacity-90 text-primary-foreground hover:text-primary-foreground as-classic',
         solid:
-          'bg-primary/90 hover:bg-primary/100 active:opacity-90 text-primary-foreground as-solid',
+          'bg-primary/90 hover:bg-primary/100 active:opacity-90 text-primary-foreground hover:text-primary-foreground as-solid',
         destructive:
-          'bg-destructive/90 hover:bg-destructive/100 active:opacity-90 text-destructive-foreground as-destructive',
+          'bg-destructive/90 hover:bg-destructive/100 active:opacity-90 text-destructive-foreground hover:text-destructive-foreground as-destructive',
         outline:
           'border bg-background hover:bg-accent hover:text-accent-foreground active:opacity-80 as-outline',
         secondary:
