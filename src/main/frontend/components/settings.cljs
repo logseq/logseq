@@ -166,10 +166,11 @@
     {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
     [:div {:style (when stretch {:width "100%"})}
      (if action action (shui-ui/button
-                         {:href     href
+                         {:as-child (not (string/blank? href))
                           :size     :sm
                           :on-click on-click}
-                         button-label))]
+                         (if (string/blank? href) button-label
+                           (shui-ui/link {:href href} button-label))))]
     (when-not (or (util/mobile?)
                   (mobile-util/native-platform?))
       [:div.text-sm.flex desc])]])

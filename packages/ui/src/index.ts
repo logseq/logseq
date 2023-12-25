@@ -84,6 +84,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { TooltipArrow } from '@radix-ui/react-tooltip'
+import { Link } from '@/components/ui/link'
 
 declare global {
   var LSUI: any
@@ -91,7 +92,7 @@ declare global {
 }
 
 const shadui = {
-  Button, Slider,
+  Link, Button, Slider,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
