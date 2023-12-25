@@ -14,7 +14,6 @@
             [frontend.config :as config]
             [logseq.db.frontend.property :as db-property]
             [frontend.handler.file-based.property.util :as property-util]
-            [frontend.db.model :as db-model]
             [cljs-bean.core :as bean]))
 
 (def fuzzy-search fuzzy/fuzzy-search)
