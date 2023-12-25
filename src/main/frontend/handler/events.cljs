@@ -52,6 +52,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.db-based.property.util :as db-pu]
+            [frontend.handler.file-based.property.util :as property-util]
             [frontend.handler.property :as property-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.web.nfs :as nfs-handler]
@@ -809,7 +810,17 @@
     :label "graph-setup"}))
 
 (defmethod handle :search/transact-data [[_ repo data]]
-  (search/transact-blocks! repo data))
+  (let [file-based? (config/local-file-based-graph? repo)
+        data' (cond-> data
+                file-based?
+                        ;; remove built-in properties from content
+                (update :blocks-to-add
+                        (fn [blocks]
+                          (map #(update % :content
+                                        (fn [content]
+                                          (property-util/remove-built-in-properties (get % :format :markdown) content)))
+                               blocks))))]
+    (search/transact-blocks! repo data')))
 
 (defmethod handle :class/configure [[_ page]]
   (state/set-modal!

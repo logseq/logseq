@@ -537,7 +537,7 @@
              (state/get-left-sidebar-open?))
     (ui-handler/close-left-sidebar!)))
 
-(rum/defcs page-inner <
+(rum/defcs ^:large-vars/cleanup-todo page-inner <
   (rum/local false ::mouse-down?)
   (rum/local false ::hover?)
   "The inner div of page reference component

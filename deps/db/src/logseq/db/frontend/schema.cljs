@@ -122,7 +122,7 @@
 (def schema-for-db-based-graph
   (merge
    (dissoc schema
-           :block/properties-text-values :block/pre-block? :recent/pages :file/handle :block/file
+           :block/properties-text-values :block/pre-block? :recent/pages :file/handle
            :block/properties-order)
    {:file/last-modified-at {}}))
 

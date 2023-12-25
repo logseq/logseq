@@ -970,11 +970,13 @@ Similar to re-frame subscriptions"
    (when-let [node @*editor-editing-ref]
      (some-> (dom/sel1 node "textarea")
              (gobj/get "id")))
-   (when-let [elem js/document.activeElement]
-     (when (util/input? elem)
-       (let [id (gobj/get elem "id")]
-         (when (string/starts-with? id "edit-block-")
-           id))))))
+   (try
+     (when-let [elem js/document.activeElement]
+      (when (util/input? elem)
+        (let [id (gobj/get elem "id")]
+          (when (string/starts-with? id "edit-block-")
+            id))))
+     (catch :default _e))))
 
 (defn get-input
   []

@@ -48,7 +48,7 @@
       (when fail-invalid? (js/alert "Invalid DB!")))))
 
 (defn after-transact-pipelines
-  [repo {:keys [_db-before _db-after _tx-data _tempids tx-meta] :as tx-report}]
+  [_repo {:keys [_db-before _db-after _tx-data _tempids tx-meta] :as tx-report}]
   (when-not config/test?
     (pipelines/invoke-hooks tx-report)
     (when (and config/dev?
