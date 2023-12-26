@@ -173,33 +173,39 @@
                         :else
                         (d/q query db))
                       transform-fn)]
-     (when-not (= new-result result)
+      (when-not (= new-result result)
        (set-new-result! k new-result)))))
 
 (defn- refresh-affected-queries!
   [repo-url affected-keys]
-  (let [db (conn/get-db repo-url)]
-    (doseq [[k cache] @query-state]
-     (let [custom? (= :custom (second k))
-           kv? (= :kv (second k))]
-       (when (and
-              (= (first k) repo-url)
-              (or (get affected-keys (vec (rest k)))
-                  custom?
-                  kv?))
+  (util/profile
+   "refresh!"
+   (let [db (conn/get-db repo-url)
+         affected-keys-set (set affected-keys)
+         state (->> (keep (fn [[k cache]]
+                            (let [k' (vec (rest k))]
+                              (when (and (= (first k) repo-url)
+                                         (or (contains? affected-keys-set k')
+                                             (contains? #{:custom :kv} (first k'))))
+                                [k' cache]))) @query-state)
+                    (into {}))
+         all-keys (concat (distinct affected-keys)
+                          (filter #(contains? #{:custom :kv} (first %)) (keys state)))]
+     (doseq [k all-keys]
+       (when-let [cache (get state k)]
          (let [{:keys [query query-fn]} cache
+               custom? (= :custom (first k))
                {:keys [custom-query?]} (state/edit-in-query-or-refs-component)]
-           (util/profile
-            (str "refresh! " (rest k))
-            (when (or query query-fn)
-              (try
-                (let [f #(execute-query! repo-url db k cache {:skip-query-time-check? custom-query?})]
+           (when (or query query-fn)
+             (try
+               (let [f #(execute-query! repo-url db (vec (cons repo-url k)) cache {:skip-query-time-check? custom-query?})]
                        ;; Detects whether user is editing in a custom query, if so, execute the query immediately
-                  (if (and custom? (not custom-query?))
-                    (async/put! (state/get-reactive-custom-queries-chan) [f query])
-                    (f)))
-                (catch :default e
-                  (js/console.error e)))))))))))
+                 (if (and custom? (not custom-query?))
+                   (async/put! (state/get-reactive-custom-queries-chan) [f query])
+                   (f)))
+               (catch :default e
+                 (js/console.error e)
+                 nil)))))))))
 
 (defn refresh!
   "Re-compute corresponding queries (from tx) and refresh the related react components."

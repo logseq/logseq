@@ -79,8 +79,9 @@
                           (let [page-id (or
                                          (when (:block/name block) (:db/id block))
                                          (:db/id (:block/page block)))
-                                blocks [[::block (:db/id block)]
-                                        [::block (:db/id (:block/parent block))]]
+                                blocks [(when-let [parent-id (:db/id (:block/parent block))]
+                                          [::block parent-id])
+                                        [::block (:db/id block)]]
                                 path-refs (:block/path-refs block)
                                 path-refs' (->> (keep (fn [ref]
                                                         (when-not (= (:db/id ref) page-id)
@@ -110,4 +111,4 @@
       affected-keys
       block-children-keys)
      (remove nil?)
-     set)))
+     distinct)))
