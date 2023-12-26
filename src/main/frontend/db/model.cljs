@@ -438,7 +438,7 @@ independent of format as format specific heading characters are stripped"
   [id]
   (when-let [repo (state/get-current-repo)]
     (->
-     (react/q repo [:frontend.db.react/block id]
+     (react/q repo [:frontend.worker.react/block id]
               {:query-fn (fn [_]
                            (let [e (db-utils/entity id)
                                  children (map :db/id (sort-by-left (:block/_parent e) e))]
@@ -907,7 +907,7 @@ independent of format as format specific heading characters are stripped"
            _ (.setDate date (- (.getDate date) (dec n)))
            today (db-util/date->int (js/Date.))]
        (->>
-        (react/q repo-url [:frontend.db.react/journals] {:use-cache? false}
+        (react/q repo-url [:frontend.worker.react/journals] {:use-cache? false}
                  '[:find [(pull ?page [*]) ...]
                    :in $ ?today
                    :where
@@ -1027,7 +1027,7 @@ independent of format as format specific heading characters are stripped"
                    query-base
                    (conj query-base '[?mentioned-page :block/journal? false]))
 
-          mentioned-pages (->> (react/q repo [:frontend.db.react/page<-pages page-id] {:use-cache? false}
+          mentioned-pages (->> (react/q repo [:frontend.worker.react/page<-pages page-id] {:use-cache? false}
                                         query
                                         pages
                                         page)
@@ -1076,7 +1076,7 @@ independent of format as format specific heading characters are stripped"
              aliases (set/difference pages #{page-id})]
          (->>
           (react/q repo
-            [:frontend.db.react/refs page-id]
+            [:frontend.worker.react/refs page-id]
             {:use-cache? false
              :query-fn (fn []
                          (let [entities (mapcat (fn [id]
@@ -1146,7 +1146,7 @@ independent of format as format specific heading characters are stripped"
                                 (re-find p (->> (:v datom)
                                                 (drawer/remove-logbook))))
                               patterns))]
-      (->> (react/q repo [:frontend.db.react/page-unlinked-refs page-id]
+      (->> (react/q repo [:frontend.worker.react/page-unlinked-refs page-id]
              {:query-fn (fn [db _result]
                           (let [ids
                                 (->> (d/datoms db :aevt :block/content)
@@ -1166,7 +1166,7 @@ independent of format as format specific heading characters are stripped"
    (when-let [repo (state/get-current-repo)]
      (when (conn/get-db repo)
        (let [block (db-utils/entity [:block/uuid block-uuid])
-             query-result (->> (react/q repo [:frontend.db.react/refs
+             query-result (->> (react/q repo [:frontend.worker.react/refs
                                               (:db/id block)]
                                  {}
                                  '[:find [(pull ?ref-block ?block-attrs) ...]

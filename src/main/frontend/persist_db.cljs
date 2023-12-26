@@ -48,3 +48,7 @@
 (defn <release-access-handles
   [repo]
   (protocol/<release-access-handles (get-impl) repo))
+
+(defn transact-db->worker!
+  [repo tx-report]
+  (<transact-data repo (:tx-data tx-report) (:tx-meta tx-report)))

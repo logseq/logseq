@@ -5,6 +5,18 @@
             [medley.core :as medley]
             [logseq.graph-parser.util :as gp-util]))
 
+(defonce db-version-prefix "logseq_db_")
+(defonce local-db-prefix "logseq_local_")
+(defn db-based-graph?
+  [s]
+  (boolean
+   (and (string? s)
+        (string/starts-with? s db-version-prefix))))
+(defn local-file-based-graph?
+  [s]
+  (and (string? s)
+       (string/starts-with? s local-db-prefix)))
+
 (defn search-normalize
      "Normalize string for searching (loose)"
      [s remove-accents?]

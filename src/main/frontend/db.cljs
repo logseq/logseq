@@ -50,7 +50,7 @@
   get-current-page set-key-value
   remove-key! remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
   kv q
-  query-state query-components remove-custom-query! set-new-result! sub-key-value refresh!]
+  query-state query-components remove-custom-query! set-new-result! sub-key-value]
 
  [frontend.db.query-custom
   custom-query]
