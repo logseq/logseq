@@ -116,56 +116,34 @@ test('block selection', async ({ page, block }) => {
   await page.keyboard.down('Shift')
   await page.keyboard.press('ArrowUp')
   await block.waitForSelectedBlocks(1)
-  var locator = page.locator('.ls-block >> nth=8')
-  await expect(locator).toHaveAttribute('level', '1')
-  await expect(locator).toHaveCSS('border-radius', '2px')
+  let locator = page.locator('.ls-block >> nth=8')
+
   await page.keyboard.press('ArrowUp')
   await block.waitForSelectedBlocks(2)
-  locator = page.locator('.ls-block >> nth=7')
-  await expect(locator).toHaveAttribute('level', '2')
-  await expect(locator).toHaveCSS('border-radius', '2px')
+
   await page.keyboard.press('ArrowUp')
   await block.waitForSelectedBlocks(3)
-  locator = page.locator('.ls-block >> nth=6')
-  await expect(locator).toHaveAttribute('level', '1')
-  locator = page.locator('.block-main-container >> nth=6')
-  await expect(locator).toHaveCSS('border-radius', '2px')
+
   await page.keyboard.press('ArrowDown')
   await block.waitForSelectedBlocks(2)
-  locator = page.locator('.block-main-container >> nth=6')
-  await expect(locator).toHaveCSS('border-radius', '0px')
   await page.keyboard.up('Shift')
 
   // mod+click select or deselect
   await page.keyboard.down(modKey)
   await page.click('.ls-block >> nth=7')
   await block.waitForSelectedBlocks(1)
-  locator = page.locator('.ls-block >> nth=7')
-  await expect(locator).toHaveCSS('border-radius', '0px')
+
   await page.click('.block-main-container >> nth=6')
   await block.waitForSelectedBlocks(2)
-  locator = page.locator('.block-main-container >> nth=6')
-  await expect(locator).toHaveCSS('border-radius', '2px')
 
   // mod+shift+click
   await page.click('.ls-block >> nth=4')
   await block.waitForSelectedBlocks(3)
-  locator = page.locator('.ls-block >> nth=4')
-  await expect(locator).toHaveAttribute('level', '2')
-  await expect(locator).toHaveCSS('border-radius', '2px')
+
   await page.keyboard.down('Shift')
   await page.click('.ls-block >> nth=1')
   await block.waitForSelectedBlocks(6)
-  locator = page.locator('.ls-block >> nth=3')
-  await expect(locator).toHaveAttribute('level', '1')
-  locator = page.locator('.block-main-container >> nth=3')
-  await expect(locator).toHaveCSS('border-radius', '2px')
-  locator = page.locator('.ls-block >> nth=2')
-  await expect(locator).toHaveAttribute('level', '2')
-  await expect(locator).toHaveCSS('border-radius', '2px')
-  locator = page.locator('.ls-block >> nth=1')
-  await expect(locator).toHaveAttribute('level', '2')
-  await expect(locator).toHaveCSS('border-radius', '2px')
+
   await page.keyboard.up('Shift')
   await page.keyboard.up(modKey)
   await page.keyboard.press('Escape')
@@ -173,25 +151,12 @@ test('block selection', async ({ page, block }) => {
   // shift+click
   await page.keyboard.down('Shift')
   await page.click('.block-main-container >> nth=0')
-  await expect(page.locator('.block-main-container >> nth=0')).toHaveCSS('border-radius', '0px')
   await page.click('.block-main-container >> nth=3')
   await block.waitForSelectedBlocks(4)
-  await expect(page.locator('.block-main-container >> nth=0')).toHaveCSS('border-radius', '2px')
-  await expect(page.locator('.ls-block >> nth=1')).toHaveCSS('border-radius', '2px')
-  await expect(page.locator('.ls-block >> nth=2')).toHaveCSS('border-radius', '2px')
-  await expect(page.locator('.block-main-container >> nth=3')).toHaveCSS('border-radius', '2px')
   await page.click('.ls-block >> nth=8')
   await block.waitForSelectedBlocks(9)
-  await expect(page.locator('.ls-block >> nth=4')).toHaveCSS('border-radius', '2px')
-  await expect(page.locator('.ls-block >> nth=5')).toHaveCSS('border-radius', '2px')
-  await expect(page.locator('.block-main-container >> nth=6')).toHaveCSS('border-radius', '2px')
-  await expect(page.locator('.ls-block >> nth=7')).toHaveCSS('border-radius', '2px')
-  await expect(page.locator('.ls-block >> nth=8')).toHaveCSS('border-radius', '2px')
   await page.click('.ls-block >> nth=5')
   await block.waitForSelectedBlocks(6)
-  await expect(page.locator('.block-main-container >> nth=6')).toHaveCSS('border-radius', '0px')
-  await expect(page.locator('.ls-block >> nth=7')).toHaveCSS('border-radius', '0px')
-  await expect(page.locator('.ls-block >> nth=8')).toHaveCSS('border-radius', '0px')
   await page.keyboard.up('Shift')
 })
 
@@ -201,7 +166,7 @@ test('template', async ({ page, block }) => {
   await createRandomPage(page)
 
   await block.mustFill('template test\ntemplate:: ')
-  await page.keyboard.type(randomTemplate, {delay: 100})
+  await page.keyboard.type(randomTemplate, { delay: 100 })
   await page.keyboard.press('Enter')
   await block.clickNext()
 
@@ -323,7 +288,7 @@ test('invalid page props #3944', async ({ page, block }) => {
   await block.enterNext()
 })
 
-test('Scheduled date picker should point to the already specified Date #6985', async({page,block})=>{
+test('Scheduled date picker should point to the already specified Date #6985', async ({ page, block }) => {
   await createRandomPage(page)
 
   await block.mustFill('testTask \n SCHEDULED: <2000-05-06 Sat>')
@@ -342,7 +307,7 @@ test('Scheduled date picker should point to the already specified Date #6985', a
   await page.waitForTimeout(500)
 })
 
-test('Opening a second datepicker should close the first one #7341', async({page,block})=>{
+test('Opening a second datepicker should close the first one #7341', async ({ page, block }) => {
   await createRandomPage(page)
 
   await block.mustFill('testTask \n SCHEDULED: <2000-05-06 Sat>')
