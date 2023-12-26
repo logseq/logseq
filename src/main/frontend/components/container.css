@@ -483,7 +483,7 @@
   }
 
   .left-sidebar-resizer {
-    @apply absolute w-[2px] top-0 right-[-2px] bottom-0 overflow-hidden cursor-col-resize;
+    @apply absolute w-[3px] top-0 right-[-2px] bottom-0 overflow-hidden cursor-col-resize;
     @apply z-10;
 
     &.is-active {

@@ -20,6 +20,7 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as db-model]
             [frontend.extensions.pdf.utils :as pdf-utils]
+            [frontend.storage :as storage]
             [frontend.extensions.srs :as srs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
@@ -475,7 +476,16 @@
   (let [*el-ref (rum/use-ref nil)
         ^js el-doc js/document.documentElement
         adjust-size! (fn [width]
-                       (.setProperty (.-style el-doc) "--ls-left-sidebar-width" width))]
+                       (.setProperty (.-style el-doc) "--ls-left-sidebar-width" width)
+                       (storage/set :ls-left-sidebar-width width))]
+
+    ;; restore size
+    (rum/use-layout-effect!
+      (fn []
+        (when-let [width (storage/get :ls-left-sidebar-width)]
+          (.setProperty (.-style el-doc) "--ls-left-sidebar-width" width)))
+      [])
+
     ;; draggable handler
     (rum/use-effect!
       (fn []
@@ -485,9 +495,9 @@
               (.draggable
                 #js {:listeners
                      #js {:move (fn [^js/MouseEvent e]
-                                  (let [offset (.-left (.-rect e))
-                                        width (max (min offset 480) 250)]
-                                    (adjust-size! (str width "px"))))}})
+                                  (when-let [offset (.-left (.-rect e))]
+                                    (let [width (.toFixed (max (min offset 460) 240) 2)]
+                                      (adjust-size! (str width "px")))))}})
               (.styleCursor false)
               (.on "dragstart" (fn []
                                  (.. sidebar-el -classList (add "is-resizing"))
