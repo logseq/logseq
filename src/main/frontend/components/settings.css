@@ -29,7 +29,7 @@
         }
 
         &.active {
-          background-color: var(--ls-quaternary-background-color);
+          @apply bg-black/10;
         }
       }
     }
@@ -530,10 +530,10 @@ svg.cmd {
 body[data-settings-tab=keymap] {
   .cp__settings-inner {
     > article {
-      @apply p-0 lg:w-[680px];
+      @apply p-0;
 
       > header {
-        @apply p-4 pb-2 h-auto;
+        @apply px-4 pt-[22px] pb-2 h-auto;
       }
     }
   }

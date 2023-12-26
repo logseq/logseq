@@ -17,8 +17,8 @@
 
 (defonce *once-theme-loaded? (volatile! false))
 
-(rum/defc container
-  [{:keys [route theme on-click current-repo nfs-granted? db-restoring?
+(rum/defc ^:large-vars/cleanup-todo container
+  [{:keys [route theme accent-color on-click current-repo nfs-granted? db-restoring?
            settings-open? sidebar-open? system-theme? sidebar-blocks-len onboarding-state preferred-language]} child]
   (let [mounted-fn (use-mounted)
         [restored-sidebar? set-restored-sidebar?] (rum/use-state false)]
@@ -33,6 +33,13 @@
         (ui/apply-custom-theme-effect! theme)
         (plugin-handler/hook-plugin-app :theme-mode-changed {:mode theme}))
      [theme])
+
+    ;; theme color
+    (rum/use-effect!
+      #(some-> js/document.documentElement
+         (.setAttribute "data-color"
+           (or accent-color "logseq")))
+      [accent-color])
 
     (rum/use-effect!
      #(let [doc js/document.documentElement]
