@@ -77,7 +77,7 @@
 
 (rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value
                         title highlighted on-highlight on-highlight-dep header on-click
-                        hoverable compact rounded on-mouse-enter component-opts] :as _props
+                        hoverable compact rounded on-mouse-enter component-opts source-page] :as _props
                  :or {hoverable true rounded true}}
                 {:keys [app-config] :as context}]
   (let [ref (rum/create-ref)
@@ -124,7 +124,13 @@
       [:div.flex.flex-1.flex-col
        (when title
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])
-       [:div {:class "text-sm font-medium text-gray-12"} (highlight-query text)
+       [:div {:class "text-sm font-medium text-gray-12"}
+        (if (and (= icon "page") (not= text source-page)) ;; alias
+          [:div.flex.flex-row.items-center.gap-2
+            (highlight-query text)
+            [:div.opacity-50.font-normal "alias of"]
+            source-page]
+          (highlight-query text))
         (when info
           [:span.text-xs.text-gray-11 " — " (highlight-query info)])]]
       (when (or value-label value)
