@@ -11,7 +11,6 @@
             [cljs-bean.core :as bean]
             [frontend.state :as state]
             [electron.ipc :as ipc]
-            [frontend.db.react :as react]
             [frontend.modules.outliner.datascript :as outliner-db]
             [clojure.edn :as edn]))
 
@@ -84,9 +83,7 @@
       (when-not (:pipeline-replace? tx-meta) ; from db worker
         (let [tx-meta' (pr-str tx-meta)
               tx-data' (pr-str tx-data)
-              context {:current-page-id (:db/id (react/get-current-page))
-                       :query-keys (keys @react/query-state)
-                       :importing? (:graph/importing @state/state)}]
+              context {:importing? (:graph/importing @state/state)}]
           (if sqlite
             (p/let [result (.transact sqlite repo tx-data' tx-meta'
                                       (pr-str context))
