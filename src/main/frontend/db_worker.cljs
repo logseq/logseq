@@ -12,7 +12,9 @@
             [clojure.string :as string]
             [cljs-bean.core :as bean]
             [frontend.worker.search :as search]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [frontend.worker.pipeline :as pipeline]
+            [datascript.db :as db]))
 
 (defonce *sqlite (atom nil))
 ;; repo -> {:db conn :search conn}
@@ -262,13 +264,23 @@
            (bean/->js result)))))
 
   (transact
-   [_this repo tx-data tx-meta]
+   [_this repo tx-data tx-meta context]
    (when-let [conn (get-datascript-conn repo)]
      (try
        (let [tx-data (edn/read-string tx-data)
              tx-meta (edn/read-string tx-meta)
-             tx-report (d/transact! conn tx-data tx-meta)]
-         (search/sync-search-indice repo tx-report))
+             context (edn/read-string context)
+             tx-report (d/transact! conn tx-data tx-meta)
+             result (pipeline/invoke-hooks conn tx-report context)
+             ;; TODO: delay search indice so that UI can be refreshed earlier
+             search-indice (search/sync-search-indice repo (:tx-report result))
+             data (merge
+                     {:repo repo
+                      :search-indice search-indice
+                      :tx-data tx-data
+                      :tx-meta tx-meta}
+                     (dissoc result :tx-report))]
+         (pr-str data))
        (catch :default e
          (prn :debug :error)
          (js/console.error e)))))

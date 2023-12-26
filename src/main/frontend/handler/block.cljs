@@ -326,7 +326,7 @@
 (defn- edit-block-aux
   [repo block content block-node text-range {:keys [direction retry-times max-retry-times]
                                              :or {retry-times 0
-                                                  max-retry-times 5}
+                                                  max-retry-times 10}
                                              :as opts}]
   (when (and (<= retry-times max-retry-times) block)
     (let [block-node block-node

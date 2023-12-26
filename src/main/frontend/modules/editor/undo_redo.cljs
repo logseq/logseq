@@ -240,7 +240,7 @@
   (reset! *pause-listener false))
 
 (defn listen-db-changes!
-  [{:keys [tx-data tx-meta] :as tx-report}]
+  [{:keys [tx-data tx-meta blocks pages]}]
   (when (and (seq tx-data)
              (not (or (:undo? tx-meta)
                       (:redo? tx-meta)))
@@ -253,9 +253,8 @@
       (let [removed-e (pop-undo)
             entity (update removed-e :txs concat tx-data)]
         (push-undo entity))
-      (let [updated-blocks (ds-report/get-blocks tx-report)
-            entity {:tx-id (get-in tx-report [:tempids :db/current-tx])
-                    :blocks updated-blocks
+      (let [updated-blocks (concat blocks pages)
+            entity {:blocks updated-blocks
                     :txs tx-data
                     :tx-meta tx-meta
                     :app-state (select-keys @state/state

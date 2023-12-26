@@ -48,19 +48,22 @@
       (when fail-invalid? (js/alert "Invalid DB!")))))
 
 (defn after-transact-pipelines
-  [_repo {:keys [_db-before _db-after _tx-data _tempids tx-meta] :as tx-report}]
+  [{:keys [tx-meta] :as opts}]
   (when-not config/test?
-    (pipelines/invoke-hooks tx-report)
-    (when (and config/dev?
-               (config/db-based-graph? (state/get-current-repo))
-                ;; Skip tx with update-tx-ids? because they are immediately followed by the original block tx
-               (not (:update-tx-ids? tx-meta)))
-      (validate-db! tx-report))
+    (when-let [replace-tx-data (:replace-tx-data opts)]
+      (db/transact! (:repo opts) replace-tx-data (:replace-tx-meta opts)))
+
+    (pipelines/invoke-hooks opts)
+    ;; (when (and config/dev?
+    ;;            (config/db-based-graph? (state/get-current-repo))
+    ;;             ;; Skip tx with update-tx-ids? because they are immediately followed by the original block tx
+    ;;            (not (:update-tx-ids? tx-meta)))
+    ;;   (validate-db! tx-report))
 
     (when (or (:outliner/transact? tx-meta)
               (:outliner-op tx-meta)
               (:whiteboard/transact? tx-meta))
-      (undo-redo/listen-db-changes! tx-report))))
+      (undo-redo/listen-db-changes! opts))))
 
 (defn- remove-nil-from-transaction
   [txs]

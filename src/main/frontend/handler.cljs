@@ -32,7 +32,6 @@
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
-            [frontend.modules.outliner.datascript :as outliner-db]
             [frontend.modules.outliner.file :as file]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
@@ -46,7 +45,11 @@
             [cljs-bean.core :as bean]
             [frontend.handler.test :as test]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
-            [frontend.persist-db.browser :as db-browser]))
+            [frontend.persist-db.browser :as db-browser]
+            [frontend.persist-db :as persist-db]))
+
+;; TODO: remove this after transact directly to worker db
+(reset! db-listener/*db-listener persist-db/transact-db->worker!)
 
 (defn- set-global-error-notification!
   []
@@ -167,8 +170,6 @@
   (state/set-component! :block/embed block/block-embed)
   (state/set-component! :editor/box editor/box)
   (command-palette/register-global-shortcut-commands))
-
-(reset! db-listener/*db-listener outliner-db/after-transact-pipelines)
 
 (defn- get-system-info
   []

@@ -10,7 +10,10 @@
             [frontend.handler.notification :as notification]
             [cljs-bean.core :as bean]
             [frontend.state :as state]
-            [electron.ipc :as ipc]))
+            [electron.ipc :as ipc]
+            [frontend.db.react :as react]
+            [frontend.modules.outliner.datascript :as outliner-db]
+            [clojure.edn :as edn]))
 
 (defonce *sqlite (atom nil))
 
@@ -77,18 +80,22 @@
       (.releaseAccessHandles sqlite repo)))
 
   (<transact-data [_this repo tx-data tx-meta]
-    (let [^js sqlite @*sqlite
-          tx-data' (pr-str tx-data)
-          tx-meta' (pr-str tx-meta)]
-      (p/do!
-       (ipc/ipc :db-transact repo tx-data' tx-meta')
-       (if sqlite
-         (p/let [result (.transact sqlite repo tx-data' tx-meta')
-                 data (bean/->clj result)]
-           (state/pub-event! [:search/transact-data repo data])
-           nil)
-         (notification/show! "Latest change was not saved! Please restart the application." :error))
-       nil)))
+    (let [^js sqlite @*sqlite]
+      (when-not (:pipeline-replace? tx-meta) ; from db worker
+        (let [tx-meta' (pr-str tx-meta)
+              tx-data' (pr-str tx-data)
+              context {:current-page-id (:db/id (react/get-current-page))
+                       :query-keys (keys @react/query-state)
+                       :importing? (:graph/importing @state/state)}]
+          (if sqlite
+            (p/let [result (.transact sqlite repo tx-data' tx-meta'
+                                      (pr-str context))
+                    data (edn/read-string result)]
+              (state/pub-event! [:search/transact-data repo (:search-indice data)])
+              (outliner-db/after-transact-pipelines data)
+              (ipc/ipc :db-transact repo (:tx-data data) (:tx-meta data))
+              nil)
+            (notification/show! "Latest change was not saved! Please restart the application." :error))))))
 
   (<fetch-initial-data [_this repo _opts]
     (when-let [^js sqlite @*sqlite]

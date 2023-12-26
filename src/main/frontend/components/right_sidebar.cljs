@@ -75,9 +75,6 @@
   (when v [:.ml-4 (ui/foldable
                    [:div (str k)]
                    [:.ml-4 (case k
-                             :tx-id
-                             [:.my-1 [:pre.code.pre-wrap-white-space.bg-base-4 (str v)]]
-
                              :blocks
                              (map (fn [block]
                                     [:.my-1 [:pre.code.pre-wrap-white-space.bg-base-4 (str block)]]) v)

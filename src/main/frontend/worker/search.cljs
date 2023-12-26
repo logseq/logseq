@@ -9,13 +9,6 @@
             [frontend.search.fuzzy :as fuzzy]
             [frontend.worker.util :as util]))
 
-(defonce db-version-prefix "logseq_db_")
-(defn db-based-graph?
-  [s]
-  (boolean
-   (and (string? s)
-        (string/starts-with? s db-version-prefix))))
-
 ;; TODO: use sqlite for fuzzy search
 (defonce indices (atom nil))
 
@@ -249,7 +242,7 @@
             :as block}]
   (let [page? (some? name)
         block? (nil? name)
-        db-based? (db-based-graph? repo)]
+        db-based? (util/db-based-graph? repo)]
     (when-not (or
                (and page? name (whiteboard-page? db name))
                (and block? (> (count content) 10000))
@@ -359,7 +352,7 @@
                                     (filter #(= :block/uuid (:a %)))
                                     (map :e)
                                     (set))
-          blocks-to-add-set' (if (and (db-based-graph? repo) (seq blocks-to-add-set))
+          blocks-to-add-set' (if (and (util/db-based-graph? repo) (seq blocks-to-add-set))
                                (->> blocks-to-add-set
                                     (mapcat (fn [id] (map :db/id (:block/_refs (d/entity db-after id)))))
                                     (concat blocks-to-add-set)
@@ -410,9 +403,8 @@
     (when (or (seq blocks-to-add) (seq blocks-to-remove))
       (let [blocks-to-add (remove nil? (map #(block->index repo (:db-after tx-report) %) blocks-to-add))
             blocks-to-remove (set (map (comp str :block/uuid) blocks-to-remove))]
-        (bean/->js
-         {:blocks-to-remove-set blocks-to-remove
-          :blocks-to-add        blocks-to-add})))))
+        {:blocks-to-remove-set blocks-to-remove
+         :blocks-to-add        blocks-to-add}))))
 
 (defn exact-matched?
   "Check if two strings points toward same search result"
