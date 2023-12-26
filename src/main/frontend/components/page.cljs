@@ -1015,24 +1015,27 @@
                                       [idx (boolean (get @*checks idx))])))
            (reset! *results pages)))
 
-       [:div
-        [:div.actions
+       [:div.cp__all_pages-content
+        [:div.actions.pt-4
          {:class (util/classnames [{:has-selected (or (nil? @*indeterminate)
                                                       (not= 0 @*indeterminate))}])}
          [:div.l.flex.items-center
           [:div.actions-wrap
            (ui/button
-            [(ui/icon "trash" {:style {:font-size 15}}) (t :delete)]
-            :on-click (fn []
-                        (let [selected (filter (fn [[_ v]] v) @*checks)
-                              selected (and (seq selected)
-                                            (into #{} (for [[k _] selected] k)))]
-                          (when-let [pages (and selected (filter #(contains? selected (:block/idx %)) @*results))]
-                            (state/set-modal! (batch-delete-dialog pages false #(do
-                                                                                  (reset! *checks nil)
-                                                                                  (refresh-pages)))))))
-            :class "fade-link"
-            :small? true)]
+             (t :delete)
+             {:on-click
+              (fn []
+                (let [selected (filter (fn [[_ v]] v) @*checks)
+                      selected (and (seq selected)
+                                 (into #{} (for [[k _] selected] k)))]
+                  (when-let [pages (and selected (filter #(contains? selected (:block/idx %)) @*results))]
+                    (state/set-modal! (batch-delete-dialog pages false #(do
+                                                                          (reset! *checks nil)
+                                                                          (refresh-pages)))))))
+              :icon "trash"
+              :variant :destructive
+              :icon-props {:size 14}
+              :size :sm})]
 
           [:div.search-wrap.flex.items-center.pl-2
            (let [search-fn (fn []
@@ -1046,7 +1049,8 @@
 
              [(ui/button (ui/icon "search")
                          :on-click search-fn
-                         :small? true)
+                         :variant :link
+                         :size :xs)
               [:input.form-input {:placeholder   (t :search/page-names)
                                   :on-key-up     (fn [^js e]
                                                    (let [^js target (.-target e)]

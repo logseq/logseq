@@ -7532,6 +7532,11 @@ tailwind-capitalize-first-letter@^1.0.4:
   resolved "https://registry.yarnpkg.com/tailwind-capitalize-first-letter/-/tailwind-capitalize-first-letter-1.0.4.tgz#d7a07c1dda4a7555f2240d57154df394b0ee8db6"
   integrity sha512-ZB8hBi68JI4aQ1cDUxuFWfMYTxgBvlzIdPPHSkFkMUlo7p2QlbMy0hVv/vAREAFmkUh9QfjuKQnOSbe4Gnqljg==
 
+tailwindcss-animate@^1.0.7:
+  version "1.0.7"
+  resolved "https://registry.yarnpkg.com/tailwindcss-animate/-/tailwindcss-animate-1.0.7.tgz#318b692c4c42676cc9e67b19b78775742388bef4"
+  integrity sha512-bl6mpH3T7I3UFxuvDEXLxy/VuFxBk5bbzplh7tXI68mwMokNYd1t9qPBHlnyTwfa4JGC4zP516I1hYYtQ/vspA==
+
 tailwindcss@3.3.5:
   version "3.3.5"
   resolved "https://registry.yarnpkg.com/tailwindcss/-/tailwindcss-3.3.5.tgz#22a59e2fbe0ecb6660809d9cc5f3976b077be3b8"

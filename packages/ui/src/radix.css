@@ -1,4 +1,17 @@
 :root {
+  --rx-logseq-01: hsl(212, 20%, 98%);
+  --rx-logseq-02: hsl(212, 40%, 98%);
+  --rx-logseq-03: hsl(212, 40%, 94%);
+  --rx-logseq-04: hsl(210, 30%, 88%);
+  --rx-logseq-05: hsl(210, 35%, 82%);
+  --rx-logseq-06: hsl(210, 40%, 75%);
+  --rx-logseq-07: hsl(208, 40%, 70%);
+  --rx-logseq-08: hsl(208, 50%, 68%);
+  --rx-logseq-09: hsl(208, 48%, 58%);
+  --rx-logseq-10: hsl(203, 70%, 38%);
+  --rx-logseq-11: hsl(203, 70%, 35%);
+  --rx-logseq-12: hsl(203, 76%, 28%);
+
   --rx-amber-01: hsl(39, 70.0%, 99.0%);
   --rx-amber-02: hsl(40, 100%, 96.5%);
   --rx-amber-03: hsl(44, 100%, 91.7%);
@@ -701,6 +714,19 @@
 }
 
 html.dark, html[data-theme=dark] {
+  --rx-logseq-01: hsl(192, 100%, 16%);
+  --rx-logseq-02: hsl(192, 100%, 20%);
+  --rx-logseq-03: hsl(192, 85%, 25%);
+  --rx-logseq-04: hsl(188, 85%, 32%);
+  --rx-logseq-05: hsl(188, 85%, 34%);
+  --rx-logseq-06: hsl(188, 85%, 40%);
+  --rx-logseq-07: hsl(183, 64%, 75%);
+  --rx-logseq-08: hsl(183, 70%, 80%);
+  --rx-logseq-09: hsl(188, 95%, 34%);
+  --rx-logseq-10: hsl(181, 90%, 90%);
+  --rx-logseq-11: hsl(181, 40%, 72%);
+  --rx-logseq-12: hsl(181, 80%, 96%);
+
   --rx-amber-01: hsl(36, 100%, 6.1%);
   --rx-amber-02: hsl(35, 100%, 7.6%);
   --rx-amber-03: hsl(32, 100%, 10.2%);

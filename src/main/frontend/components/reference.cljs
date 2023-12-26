@@ -23,7 +23,7 @@
 
 (defn filtered-refs
   [page-name filters filters-atom filtered-references]
-  [:div.flex.gap-2.flex-wrap
+  [:div.flex.gap-2.flex-wrap.items-center
    (for [[ref-name ref-count] filtered-references]
      (when ref-name
        (let [lc-reference (string/lower-case ref-name)]
@@ -37,7 +37,7 @@
                                               (dissoc % lc-reference)))
                        (page-handler/save-filter! page-name @filters-atom))
            :small? true
-           :intent "border-link"
+           :variant :outline
            :key ref-name))))])
 
 (rum/defcs filter-dialog-inner < rum/reactive (rum/local "" ::filterSearch)
