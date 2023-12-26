@@ -470,6 +470,35 @@
                                   (neg? offset-ratio)
                                   (+ 1))}))]]))
 
+(rum/defc sidebar-resizer
+  []
+  (let [*el-ref (rum/use-ref nil)
+        ^js el-doc js/document.documentElement
+        adjust-size! (fn [width]
+                       (.setProperty (.-style el-doc) "--ls-left-sidebar-width" width))]
+    ;; draggable handler
+    (rum/use-effect!
+      (fn []
+        (when-let [el (and (fn? js/window.interact) (rum/deref *el-ref))]
+          (let [^js sidebar-el (.querySelector el-doc "#left-sidebar")]
+            (-> (js/interact el)
+              (.draggable
+                #js {:listeners
+                     #js {:move (fn [^js/MouseEvent e]
+                                  (let [offset (.-left (.-rect e))
+                                        width (max (min offset 480) 250)]
+                                    (adjust-size! (str width "px"))))}})
+              (.styleCursor false)
+              (.on "dragstart" (fn []
+                                 (.. sidebar-el -classList (add "is-resizing"))
+                                 (.. el-doc -classList (add "is-resizing-buf"))))
+              (.on "dragend" (fn []
+                               (.. sidebar-el -classList (remove "is-resizing"))
+                               (.. el-doc -classList (remove "is-resizing-buf"))))))
+          #()))
+      [])
+    [:span.left-sidebar-resizer {:ref *el-ref}]))
+
 (rum/defcs left-sidebar < rum/reactive
   (rum/local false ::closing?)
   (rum/local -1 ::close-signal)
@@ -512,7 +541,9 @@
 
      ;; sidebar contents
      (sidebar-nav route-match close-fn left-sidebar-open? enable-whiteboards? srs-open? *closing?
-                  @*close-signal (and touch-pending? touching-x-offset))]))
+       @*close-signal (and touch-pending? touching-x-offset))
+     ;; resizer
+     (sidebar-resizer)]))
 
 (rum/defc recording-bar
   []

@@ -463,6 +463,14 @@
     }
   }
 
+  &.is-resizing {
+    @apply transition-none;
+
+    .left-sidebar-resizer {
+      @apply bg-primary/90;
+    }
+  }
+
   &:before {
     content: " ";
     height: 3rem;
@@ -472,6 +480,15 @@
     top: 0;
     opacity: 1;
     z-index: 5;
+  }
+
+  .left-sidebar-resizer {
+    @apply absolute w-[2px] top-0 right-[-2px] bottom-0 overflow-hidden cursor-col-resize;
+    @apply z-10;
+
+    &.is-active {
+      @apply bg-primary/90;
+    }
   }
 
   @screen sm {
