@@ -130,6 +130,7 @@
           gp-util/page-name-sanity ;; we want to preserve the case sensitive nature of most file systems, don't lowercase
           (string/replace gp-util/url-encoded-pattern encode-url-percent) ;; pre-encode % in title on demand
           (string/replace reserved-chars-pattern url-encode-file-name)
+          (string/replace #"^\." "%2E") ;; Force percent encoding to distinguish pages with a title starting with a dot from a hidden file.
           (escape-windows-reserved-filebodies) ;; do this before the lowbar encoding to avoid ambiguity
           (escape-namespace-slashes-and-multilowbars)))
 
