@@ -1739,7 +1739,7 @@
    (every? #(= % ["Horizontal_Rule"]) body)))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id collapsed? *control-show? edit?]
+  [state config block uuid block-id collapsed? *control-show? edit? selected?]
   (let [doc-mode?          (state/sub :document/mode?)
         control-show?      (util/react *control-show?)
         ref?               (:ref? config)
@@ -1784,7 +1784,10 @@
                                    " hide-inner-bullet")
                                  (when order-list? " as-order-list typed-list"))}
 
-                    [:span.bullet {:blockid (str uuid)}
+                    [:span.bullet (cond->
+                                    {:blockid (str uuid)}
+                                    selected?
+                                    (assoc :class "selected"))
                      (when order-list?
                        [:label (str order-list-idx ".")])]]]]
        (cond
@@ -1796,14 +1799,14 @@
          bullet
 
          (or
-           (and empty-content?
-                (not edit?)
-                (not (:block.temp/top? block))
-                (not (:block.temp/bottom? block))
-                (not (util/react *control-show?)))
-           (and doc-mode?
-                (not collapsed?)
-                (not (util/react *control-show?))))
+          (and empty-content?
+               (not edit?)
+               (not (:block.temp/top? block))
+               (not (:block.temp/bottom? block))
+               (not (util/react *control-show?)))
+          (and doc-mode?
+               (not collapsed?)
+               (not (util/react *control-show?))))
          ;; hidden
          [:span.bullet-container]
 
@@ -2907,7 +2910,7 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id collapsed? *control-show? edit?))
+        (block-control config block uuid block-id collapsed? *control-show? edit? selected?))
 
       (when @*show-left-menu?
         (block-left-menu config block))
