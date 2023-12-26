@@ -215,8 +215,8 @@
     }
 
     .header {
-      @apply px-6 py-1 flex justify-between items-center select-none sticky top-[-4px];
-      @apply cursor-pointer z-[2];
+      @apply pl-6 pr-4 py-1 flex justify-between items-center select-none sticky top-[-4px];
+      @apply cursor-pointer z-[2] active:opacity-80;
 
       background-color: var(--left-sidebar-bg-color);
 
@@ -226,7 +226,7 @@
       }
 
       .more {
-        display: none;
+        opacity: 0;
         transition: .15s transform;
       }
 
@@ -238,9 +238,7 @@
         }
 
         .more {
-
-          display: block;
-          opacity: .6;
+          opacity: .8 !important;
         }
       }
 
@@ -301,11 +299,18 @@
 
     &.is-expand {
       .header .more {
+        opacity: 0;
         transform: rotate(-90deg);
       }
 
       .bd {
         display: block;
+      }
+    }
+
+    &.has-children:not(.is-expand) {
+      .header .more {
+        opacity: .4;
       }
     }
   }

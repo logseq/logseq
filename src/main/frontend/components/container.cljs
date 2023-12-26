@@ -53,19 +53,17 @@
             [rum.core :as rum]))
 
 (rum/defc nav-content-item < rum/reactive
-  [name {:keys [class _count]} child]
-  (let [collapsed? (state/sub [:ui/navigation-item-collapsed? class])
-        shrink? (not collapsed?)]
+  [name {:keys [class count]} child]
+  (let [collapsed? (state/sub [:ui/navigation-item-collapsed? class])]
     [:div.nav-content-item
      {:class (util/classnames [class {:is-expand (not collapsed?)
-                                      :flex-shrink-0 (not shrink?)
-                                      :flex-shrink shrink?}])}
+                                      :has-children (and (number? count) (> count 0))}])}
      [:div.nav-content-item-inner
       [:div.header.items-center
        {:on-click (fn [^js/MouseEvent _e]
                     (state/toggle-navigation-item-collapsed! class))}
        [:div.a name]
-       [:div.b (ui/icon "chevron-left" {:class "more" :size 16})]]
+       [:div.b (ui/icon "chevron-left" {:class "more" :size 14})]]
       (when child [:div.bd child])]]))
 
 (defn- delta-y
