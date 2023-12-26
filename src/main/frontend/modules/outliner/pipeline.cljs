@@ -42,7 +42,7 @@
 
 (defn invoke-hooks
   [{:keys [tx-meta tx-data deleted-block-uuids affected-keys pages blocks]}]
-  (let [{:keys [from-disk? new-graph? pipeline-replace?]} tx-meta
+  (let [{:keys [from-disk? new-graph?]} tx-meta
         repo (state/get-current-repo)
         tx-report {:tx-meta tx-meta
                    :tx-data tx-data}]
@@ -53,19 +53,16 @@
           (prn :reset-editing-block-content)
           (js/console.error e)))
       (let [importing? (:graph/importing @state/state)]
-        (when (and (not config/publishing?) (not pipeline-replace?))
-          (when-not importing?
-            (react/refresh! repo tx-report affected-keys)))
+        (when-not importing?
+          (react/refresh! repo tx-report affected-keys))
 
-        (when (and (not (:delete-files? tx-meta))
-                   (not pipeline-replace?))
+        (when (not (:delete-files? tx-meta))
           (doseq [p (seq pages)]
             (updated-page-hook tx-meta p)))
 
         (when (and state/lsp-enabled?
                    (seq blocks)
                    (not importing?)
-                   (not pipeline-replace?)
                    (<= (count blocks) 1000))
           (state/pub-event! [:plugin/hook-db-tx
                              {:blocks  blocks
