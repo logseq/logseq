@@ -138,4 +138,4 @@
       (when shortcut
         [:div {:class "flex gap-1"
                :style {:opacity (if (or highlighted hover?) 1 0.5)}}
-         (shortcut/root shortcut context)])]]))
+         (shortcut/root shortcut)])]]))

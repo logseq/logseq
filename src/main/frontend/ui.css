@@ -368,7 +368,7 @@ html.is-mobile {
 }
 
 .ui__toggle-background-on {
-  background: or(--ls-toggle-on-background, --lx-accent-09, --ls-button-background);
+  @apply bg-primary;
 }
 
 .ui__toggle-background-off {

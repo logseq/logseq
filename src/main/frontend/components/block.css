@@ -296,10 +296,12 @@
 }
 
 .page-ref {
-  color: or(--ls-page-ref-text-color, --lx-accent-11, --ls-link-ref-text-color);
+  --lx-text-override: var(--ls-link-ref-text-color);
+  @apply text-accent-11;
 
   &:hover {
-    color: or(--ls-page-ref-text-color-hover, --lx-accent-12, --ls-link-ref-text-hover-color);
+    --lx-text-override: var(--ls-link-ref-text-hover-color);
+    @apply text-accent-12;
   }
 }
 
@@ -566,12 +568,7 @@
   }
 
   .bullet {
-    @apply rounded-full w-[6px] h-[6px];
-
-    font-size: 14px;
-
-    background-color: or(--lx-gray-08, --ls-block-bullet-color, #394b59);
-    transition: transform 0.2s;
+    @apply rounded-full w-[6px] h-[6px] text-[15px] opacity-80;
 
     > * {
       @apply cursor-pointer;
@@ -581,6 +578,11 @@
   &:not(.typed-list) {
     &.bullet-closed {
       background-color: or(--ls-bullet-closed-background, --lx-gray-04-alpha, --ls-block-bullet-border-color, #ced9e0);
+    }
+
+    .bullet {
+      background-color: or(--lx-gray-08, --ls-block-bullet-color, #394b59);
+      transition: transform 0.2s;
     }
   }
 
@@ -597,13 +599,13 @@
 .bullet-link-wrap {
   color: var(--ls-primary-text-color);
 
-  &:hover > .bullet-container .bullet {
-    transform: scale(1.2);
-    background-color: or(--lx-gray-08, --ls-block-bullet-color, inherit) !important;
-  }
-
   &:hover > .bullet-container:not(.typed-list) {
     background-color: or(--lx-gray-04-alpha, --ls-block-bullet-border-color, #ced9e0);
+
+    .bullet {
+      transform: scale(1.2);
+      background-color: or(--lx-gray-08, --ls-block-bullet-color, inherit) !important;
+    }
   }
 }
 
