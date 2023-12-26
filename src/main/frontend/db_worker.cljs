@@ -270,16 +270,19 @@
        (let [tx-data (edn/read-string tx-data)
              tx-meta (edn/read-string tx-meta)
              context (edn/read-string context)
-             tx-report (d/transact! conn tx-data tx-meta)
+             tx-meta' (if (or (:from-disk? tx-meta) (:new-graph? tx-meta))
+                        tx-meta
+                        (assoc tx-meta :skip-store? true))
+             tx-report (d/transact! conn tx-data tx-meta')
              result (pipeline/invoke-hooks conn tx-report context)
              ;; TODO: delay search indice so that UI can be refreshed earlier
              search-indice (search/sync-search-indice repo (:tx-report result))
              data (merge
-                     {:repo repo
-                      :search-indice search-indice
-                      :tx-data tx-data
-                      :tx-meta tx-meta}
-                     (dissoc result :tx-report))]
+                   {:repo repo
+                    :search-indice search-indice
+                    :tx-data tx-data
+                    :tx-meta tx-meta}
+                   (dissoc result :tx-report))]
          (pr-str data))
        (catch :default e
          (prn :debug :error)

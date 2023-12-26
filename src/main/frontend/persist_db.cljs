@@ -51,4 +51,5 @@
 
 (defn transact-db->worker!
   [repo tx-report]
-  (<transact-data repo (:tx-data tx-report) (:tx-meta tx-report)))
+  (when-not (:pipeline-replace? (:tx-meta tx-report))
+    (<transact-data repo (:tx-data tx-report) (:tx-meta tx-report))))
