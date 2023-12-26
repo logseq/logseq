@@ -6,26 +6,22 @@
             [frontend.state :as state]
             [logseq.graph-parser.util :as gp-util]
             [frontend.db :as db]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn lookup
   "Get the value of coll's (a map) `key`. For file and db graphs"
   [coll key]
   (let [repo (state/get-current-repo)
-        property-name (if (keyword? key)
-                        (name key)
-                        key)]
-    (if (config/db-based-graph? repo)
-      (when-let [property (db/entity repo [:block/name (gp-util/page-name-sanity-lc property-name)])]
-        (get coll (:block/uuid property)))
-      (get coll key))))
+        db (db/get-db repo)]
+    (db-property/lookup repo db coll key)))
 
 (defn get-property
   "Get the value of block's property `key`"
   [block key]
-  (let [block (or (db/entity (:db/id block)) block)]
-    (when-let [properties (:block/properties block)]
-      (lookup properties key))))
+  (let [repo (state/get-current-repo)
+        db (db/get-db repo)]
+    (db-property/get-property repo db block key)))
 
 (defn get-page-uuid
   "Get a user property's uuid given its unsanitized name"
@@ -48,5 +44,8 @@
 (defn page-block->tldr-page [block]
   (get-property block :logseq.tldraw.page))
 
-(defn shape-block? [block]
-  (= :whiteboard-shape (get-property block :ls-type)))
+(defn shape-block?
+  [block]
+  (let [repo (state/get-current-repo)
+        db (db/get-db repo)]
+    (db-property/shape-block? repo db block)))

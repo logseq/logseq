@@ -10,7 +10,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.tree :as outliner-tree]
+            [logseq.outliner.tree :as otree]
             [frontend.handler.common.page :as page-common-handler]
             [datascript.core :as d]
             [medley.core :as medley]
@@ -71,7 +71,7 @@
           from-id (:db/id from-page)
           from-first-child (some->> (db/pull from-id)
                                     (outliner-core/block)
-                                    (outliner-tree/-get-down)
+                                    (otree/-get-down)
                                     (outliner-core/get-data))
           to-last-direct-child-id (model/get-block-last-direct-child-id (db/get-db) to-id)
           repo (state/get-current-repo)

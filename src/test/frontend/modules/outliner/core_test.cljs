@@ -4,6 +4,7 @@
             [frontend.test.fixtures :as fixtures]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.tree :as tree]
+            [logseq.outliner.tree :as otree]
             [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
@@ -105,7 +106,7 @@
 (defn get-children
   [id]
   (->> (get-block id true)
-       (tree/-get-children)
+       (otree/-get-children)
        (mapv #(-> % :data :block/uuid))))
 
 (deftest test-delete-block

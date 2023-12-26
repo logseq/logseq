@@ -24,42 +24,13 @@
             [cljs-time.format :as tf]
             ;; add map ops to datascript Entity
             [frontend.db.datascript.entity-plus :as entity-plus]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [logseq.db :as ldb]))
 
 ;; TODO: extract to specific models and move data transform logic to the
 ;; corresponding handlers.
 
-;; Use it as an input argument for datalog queries
-(def block-attrs
-  '[:db/id
-    :block/uuid
-    :block/parent
-    :block/left
-    :block/collapsed?
-    :block/collapsed-properties
-    :block/format
-    :block/refs
-    :block/_refs
-    :block/path-refs
-    :block/tags
-    :block/link
-    :block/content
-    :block/marker
-    :block/priority
-    :block/properties
-    :block/properties-order
-    :block/properties-text-values
-    :block/pre-block?
-    :block/scheduled
-    :block/deadline
-    :block/repeated?
-    :block/created-at
-    :block/updated-at
-    ;; TODO: remove this in later releases
-    :block/heading-level
-    :block/file
-    {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
-    {:block/_parent ...}])
+(def block-attrs ldb/block-attrs)
 
 (def get-original-name util/get-page-original-name)
 
@@ -415,24 +386,8 @@ independent of format as format specific heading characters are stripped"
   (when-let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)])]
     (:block/properties page)))
 
-(defn sort-by-left
-  ([blocks parent]
-   (sort-by-left blocks parent {:check? true}))
-  ([blocks parent {:keys [_check?]}]
-   (let [blocks (util/distinct-by :db/id blocks)
-         left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
-     (loop [block parent
-            result []]
-       (if-let [next (get left->blocks (:db/id block))]
-         (recur next (conj result next))
-         (vec result))))))
-
-(defn try-sort-by-left
-  [blocks parent]
-  (let [result' (sort-by-left blocks parent {:check? false})]
-    (if (= (count result') (count blocks))
-      result'
-      blocks)))
+(def sort-by-left ldb/sort-by-left)
+(def try-sort-by-left ldb/try-sort-by-left)
 
 (defn sub-block
   [id]
@@ -772,27 +727,10 @@ independent of format as format specific heading characters are stripped"
        (let [ids' (map (fn [id] [:block/uuid id]) ids)]
          (db-utils/pull-many repo '[*] ids'))))))
 
-;; TODO: use the tree directly
-(defn- flatten-tree
-  [blocks-tree]
-  (if-let [children (:block/_parent blocks-tree)]
-    (cons (dissoc blocks-tree :block/_parent) (mapcat flatten-tree children))
-    [blocks-tree]))
-
-;; TODO: performance enhance
 (defn get-block-and-children
   [repo block-uuid]
-  (some-> (d/q
-           '[:find [(pull ?block ?block-attrs) ...]
-             :in $ ?id ?block-attrs
-             :where
-             [?block :block/uuid ?id]]
-           (conn/get-db repo)
-           block-uuid
-           block-attrs)
-          first
-          flatten-tree
-          (->> (map #(db-utils/update-block-content % (:db/id %))))))
+  (let [db (conn/get-db repo)]
+    (ldb/get-block-and-children repo db block-uuid)))
 
 (defn get-file-page
   ([file-path]

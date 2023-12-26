@@ -8,7 +8,7 @@
             [frontend.db.conn :as conn]
             [frontend.db.outliner :as db-outliner]
             [frontend.modules.outliner.datascript :as ds]
-            [frontend.modules.outliner.tree :as tree]
+            [logseq.outliner.tree :as otree]
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -249,7 +249,7 @@
 ;; the :block/parent, :block/left should be datascript lookup ref
 
 (extend-type Block
-  tree/INode
+  otree/INode
   (-get-id [this]
     (or
      (when-let [block-id (get-in this [:data :block/uuid])]
@@ -276,20 +276,20 @@
     (update this :data assoc :block/left [:block/uuid left-id]))
 
   (-get-parent [this]
-    (when-let [parent-id (tree/-get-parent-id this)]
+    (when-let [parent-id (otree/-get-parent-id this)]
       (get-block-by-id parent-id)))
 
   (-get-left [this]
-    (let [left-id (tree/-get-left-id this)]
+    (let [left-id (otree/-get-left-id this)]
       (get-block-by-id left-id)))
 
   (-get-right [this]
-    (let [left-id (tree/-get-id this)
-          parent-id (tree/-get-parent-id this)]
+    (let [left-id (otree/-get-id this)
+          parent-id (otree/-get-parent-id this)]
       (get-by-parent-&-left parent-id left-id)))
 
   (-get-down [this]
-    (let [parent-id (tree/-get-id this)]
+    (let [parent-id (otree/-get-id this)]
       (get-by-parent-&-left parent-id parent-id)))
 
   (-save [this txs-state]
@@ -359,7 +359,7 @@
   (-del [this txs-state children?]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
-    (let [block-id (tree/-get-id this)
+    (let [block-id (otree/-get-id this)
           ids (set (if children?
                      (let [children (db/get-block-children (state/get-current-repo) block-id)
                            children-ids (map :block/uuid children)]
@@ -369,7 +369,7 @@
           txs (if-not children?
                 (let [immediate-children (db/get-block-immediate-children (state/get-current-repo) block-id)]
                   (if (seq immediate-children)
-                    (let [left-id (tree/-get-id (tree/-get-left this))]
+                    (let [left-id (otree/-get-id (otree/-get-left this))]
                       (concat txs
                               (map-indexed (fn [idx child]
                                              (let [parent [:block/uuid left-id]]
@@ -393,7 +393,7 @@
       block-id))
 
   (-get-children [this]
-    (let [parent-id (tree/-get-id this)
+    (let [parent-id (otree/-get-id this)
           children (db-model/get-block-immediate-children (state/get-current-repo) parent-id)]
       (map block children))))
 
@@ -496,15 +496,15 @@
 
 (defn- get-left-nodes
   [node limit]
-  (let [parent (tree/-get-parent node)]
+  (let [parent (otree/-get-parent node)]
     (loop [node node
            limit limit
            result []]
       (if (zero? limit)
         result
-        (if-let [left (tree/-get-left node)]
+        (if-let [left (otree/-get-left node)]
           (if-not (= left parent)
-            (recur left (dec limit) (conj result (tree/-get-id left)))
+            (recur left (dec limit) (conj result (otree/-get-id left)))
             result)
           result)))))
 
@@ -539,7 +539,7 @@
   [block']
   {:pre [(map? block')]}
   (let [txs-state (atom [])]
-    (tree/-save (block block') txs-state)
+    (otree/-save (block block') txs-state)
     {:tx-data @txs-state}))
 
 (defn blocks-with-level
@@ -613,16 +613,16 @@
 (defn- get-right-siblings
   "Get `node`'s right siblings."
   [node]
-  {:pre [(tree/satisfied-inode? node)]}
-  (when-let [parent (tree/-get-parent node)]
-    (let [children (tree/-get-children parent)]
-      (->> (split-with #(not= (tree/-get-id node) (tree/-get-id %)) children)
+  {:pre [(otree/satisfied-inode? node)]}
+  (when-let [parent (otree/-get-parent node)]
+    (let [children (otree/-get-children parent)]
+      (->> (split-with #(not= (otree/-get-id node) (otree/-get-id %)) children)
            last
            rest))))
 
 (defn- blocks-with-ordered-list-props
   [blocks target-block sibling?]
-  (let [target-block (if sibling? target-block (some-> target-block :db/id db/pull block tree/-get-down :data))
+  (let [target-block (if sibling? target-block (some-> target-block :db/id db/pull block otree/-get-down :data))
         list-type-fn (fn [block] (pu/get-property block :logseq.order-list-type))
         k (pu/get-pid :logseq.order-list-type)]
     (if-let [list-type (and target-block (list-type-fn target-block))]
@@ -821,12 +821,12 @@
                  (assign-temp-id tx replace-empty-target? target-block'))
             target-node (block target-block')
             next (if sibling?
-                   (tree/-get-right target-node)
-                   (tree/-get-down target-node))
+                   (otree/-get-right target-node)
+                   (otree/-get-down target-node))
             next-tx (when (and next
                                (if move? (not (contains? (set (map :db/id blocks)) (:db/id (:data next)))) true))
                       (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
-                        [{:block/uuid (tree/-get-id next)
+                        [{:block/uuid (otree/-get-id next)
                           :block/left (:db/id left)}]))
             full-tx (util/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx) tx next-tx)]
         (when (and replace-empty-target? (state/editing?))
@@ -891,12 +891,12 @@
            (first (:block/_parent (db/entity [:block/uuid (:block/uuid (get-data node))]))))
     (throw (ex-info "Block can't be deleted because it still has children left, you can pass `children?` equals to `true`."
                     {:block (get-data node)}))
-    (let [right-node (tree/-get-right node)]
-      (tree/-del node txs-state children?)
-      (when (tree/satisfied-inode? right-node)
-        (let [left-node (tree/-get-left node)
-              new-right-node (tree/-set-left-id right-node (tree/-get-id left-node))]
-          (tree/-save new-right-node txs-state)))
+    (let [right-node (otree/-get-right node)]
+      (otree/-del node txs-state children?)
+      (when (otree/satisfied-inode? right-node)
+        (let [left-node (otree/-get-left node)
+              new-right-node (otree/-set-left-id right-node (otree/-get-id left-node))]
+          (otree/-save new-right-node txs-state)))
       @txs-state)))
 
 (defn- delete-blocks
@@ -917,28 +917,28 @@
         end-node-parents (->>
                           (db/get-block-parents
                            (state/get-current-repo)
-                           (tree/-get-id end-node)
+                           (otree/-get-id end-node)
                            {:depth 1000})
                           (map :block/uuid)
                           (set))
-        self-block? (contains? end-node-parents (tree/-get-id start-node))]
+        self-block? (contains? end-node-parents (otree/-get-id start-node))]
     (if (or
          (= 1 (count blocks))
          (= start-node end-node)
          self-block?)
       (delete-block txs-state start-node (assoc delete-opts :children? children?))
-      (let [sibling? (= (tree/-get-parent-id start-node)
-                        (tree/-get-parent-id end-node))
-            right-node (tree/-get-right end-node)]
-        (when (tree/satisfied-inode? right-node)
+      (let [sibling? (= (otree/-get-parent-id start-node)
+                        (otree/-get-parent-id end-node))
+            right-node (otree/-get-right end-node)]
+        (when (otree/satisfied-inode? right-node)
           (let [non-consecutive? (seq (db-model/get-non-consecutive-blocks blocks))
                 left-node-id (if sibling?
-                               (tree/-get-id (tree/-get-left start-node))
+                               (otree/-get-id (otree/-get-left start-node))
                                (let [end-node-left-nodes (get-left-nodes end-node (count block-ids))
                                      parents (->>
                                               (db/get-block-parents
                                                (state/get-current-repo)
-                                               (tree/-get-id start-node)
+                                               (otree/-get-id start-node)
                                                {:depth 1000})
                                               (map :block/uuid)
                                               (set))
@@ -950,15 +950,15 @@
             (when (and (nil? left-node-id) (not non-consecutive?))
               (assert left-node-id
                       (str "Can't find the left-node-id: "
-                           (pr-str {:start (db/entity [:block/uuid (tree/-get-id start-node)])
-                                    :end (db/entity [:block/uuid (tree/-get-id end-node)])
-                                    :right-node (db/entity [:block/uuid (tree/-get-id right-node)])}))))
+                           (pr-str {:start (db/entity [:block/uuid (otree/-get-id start-node)])
+                                    :end (db/entity [:block/uuid (otree/-get-id end-node)])
+                                    :right-node (db/entity [:block/uuid (otree/-get-id right-node)])}))))
             (when left-node-id
-              (let [new-right-node (tree/-set-left-id right-node left-node-id)]
-                (tree/-save new-right-node txs-state)))))
+              (let [new-right-node (otree/-set-left-id right-node left-node-id)]
+                (otree/-save new-right-node txs-state)))))
         (doseq [id block-ids]
           (let [node (block (db/pull id))]
-            (tree/-del node txs-state true)))
+            (otree/-del node txs-state true)))
         (let [fix-non-consecutive-tx (fix-non-consecutive-blocks blocks nil false)]
           (swap! txs-state concat fix-non-consecutive-tx))))
     {:tx-data @txs-state}))
