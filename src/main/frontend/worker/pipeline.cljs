@@ -42,34 +42,30 @@
 (defn invoke-hooks
   [conn tx-report context]
   (let [tx-meta (:tx-meta tx-report)
-        {:keys [from-disk? new-graph? pipeline-replace?]} tx-meta]
+        {:keys [from-disk? new-graph?]} tx-meta]
     (if (or from-disk? new-graph?)
       {:tx-report tx-report}
       (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
             deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))
-            replace-tx (when-not pipeline-replace?
-                         (concat
+            replace-tx (concat
                           ;; block path refs
-                          (set (compute-block-path-refs-tx tx-report blocks))
+                        (set (compute-block-path-refs-tx tx-report blocks))
 
                           ;; delete empty property parent block
-                          (when (seq deleted-block-uuids)
-                            (delete-property-parent-block-if-empty tx-report deleted-block-uuids))
+                        (when (seq deleted-block-uuids)
+                          (delete-property-parent-block-if-empty tx-report deleted-block-uuids))
 
                           ;; update block/tx-id
-                          (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids)  (:block/uuid b))) blocks)
-                                tx-id (get-in tx-report [:tempids :db/current-tx])]
-                            (->>
-                             (map (fn [b]
-                                    (when-let [db-id (:db/id b)]
-                                      {:db/id db-id
-                                       :block/tx-id tx-id})) updated-blocks)
-                             (remove nil?)))))
-            tx-report' (or
-                        (when-not pipeline-replace?
-                          (d/transact! conn replace-tx {:replace? true
-                                                        :pipeline-replace? true}))
-                        tx-report)
+                        (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids)  (:block/uuid b))) blocks)
+                              tx-id (get-in tx-report [:tempids :db/current-tx])]
+                          (->>
+                           (map (fn [b]
+                                  (when-let [db-id (:db/id b)]
+                                    {:db/id db-id
+                                     :block/tx-id tx-id})) updated-blocks)
+                           (remove nil?))))
+            tx-report' (d/transact! conn replace-tx {:replace? true
+                                                     :pipeline-replace? true})
             full-tx-data (concat (:tx-data tx-report) (:tx-data tx-report'))
             final-tx-report (assoc tx-report' :tx-data full-tx-data)
             affected-query-keys (when-not (:importing? context)
