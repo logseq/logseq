@@ -1,6 +1,9 @@
 (ns logseq.db.frontend.property
   "Property related fns for DB graphs and frontend/datascript usage"
-  (:require [clojure.set :as set]))
+  (:require [clojure.set :as set]
+            [logseq.db.sqlite.util :as sqlite-util]
+            [datascript.core :as d]
+            [logseq.graph-parser.util :as gp-util]))
 
 ;; FIXME: no support for built-in-extended-properties
 (def ^:large-vars/data-var built-in-properties
@@ -101,3 +104,27 @@
   {:pre [(string? s)]}
   ;; Disallow tags or page refs as they would create unreferenceable page names
   (not (re-find #"^(#|\[\[)" s)))
+
+(defn lookup
+  "Get the value of coll's (a map) `key`. For file and db graphs"
+  [repo db coll key]
+  (when db
+    (let [property-name (if (keyword? key)
+                          (name key)
+                          key)]
+      (if (sqlite-util/db-based-graph? repo)
+        (when-let [property (d/entity db [:block/name (gp-util/page-name-sanity-lc property-name)])]
+          (get coll (:block/uuid property)))
+        (get coll key)))))
+
+(defn get-property
+  "Get the value of block's property `key`"
+  [repo db block key]
+  (when db
+    (let [block (or (d/entity db (:db/id block)) block)]
+      (when-let [properties (:block/properties block)]
+        (lookup repo db properties key)))))
+
+(defn shape-block?
+  [repo db block]
+  (= :whiteboard-shape (get-property repo db block :ls-type)))

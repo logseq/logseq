@@ -3,7 +3,7 @@
   (:require [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
             [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.tree :as tree]
+            [logseq.outliner.tree :as otree]
             [frontend.modules.outliner.transaction :as outliner-tx]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [frontend.state :as state]
@@ -45,12 +45,12 @@
          (editor-handler/save-current-block!)
          (if top?
            (let [first-child?
-                 (= (tree/-get-parent-id target-node)
-                    (tree/-get-left-id target-node))]
+                 (= (otree/-get-parent-id target-node)
+                    (otree/-get-left-id target-node))]
              (if first-child?
-               (when-let [parent (tree/-get-parent target-node)]
+               (when-let [parent (otree/-get-parent target-node)]
                  (outliner-core/move-blocks! blocks' (:data parent) false))
-               (when-let [before-node (tree/-get-left target-node)]
+               (when-let [before-node (otree/-get-left target-node)]
                  (outliner-core/move-blocks! blocks' (:data before-node) true))))
            (outliner-core/move-blocks! blocks' target-block (not nested?)))))
 

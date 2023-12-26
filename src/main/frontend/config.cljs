@@ -10,7 +10,8 @@
             [logseq.graph-parser.util :as gp-util]
             [shadow.resource :as rc]
             [goog.crypt.Md5]
-            [goog.crypt :as crypt]))
+            [goog.crypt :as crypt]
+            [logseq.db.frontend.content :as db-content]))
 
 (goog-define DEV-RELEASE false)
 (defonce dev-release? DEV-RELEASE)
@@ -525,5 +526,3 @@
 (defn get-block-hidden-properties
   []
   (:block-hidden-properties (state/get-config)))
-
-(defonce page-ref-special-chars "~^")

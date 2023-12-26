@@ -48,10 +48,10 @@
   gp-util/page-name-sanity-lc)
 
 (defn safe-page-name-sanity-lc
-     [s]
-     (if (string? s)
-       (page-name-sanity-lc s) s))
+  [s]
+  (if (string? s)
+    (page-name-sanity-lc s) s))
 
 (defn distinct-by
-     [f col]
-     (medley/distinct-by f (seq col)))
+  [f col]
+  (medley/distinct-by f (seq col)))

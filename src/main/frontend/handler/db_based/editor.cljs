@@ -17,7 +17,8 @@
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.schema.handler.repo-config :as repo-config-schema]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db.frontend.content :as db-content]))
 
 (defn- remove-non-existed-refs!
   [refs]
@@ -29,7 +30,7 @@
 
 (defn- replace-tag-ref
   [content page-name id]
-  (let [id' (str config/page-ref-special-chars id)
+  (let [id' (str db-content/page-ref-special-chars id)
         [page wrapped-id] (if (string/includes? page-name " ")
                             (map page-ref/->page-ref [page-name id'])
                             [page-name id'])
@@ -46,7 +47,7 @@
 
 (defn- replace-page-ref
   [content page-name id]
-  (let [id' (str config/page-ref-special-chars id)
+  (let [id' (str db-content/page-ref-special-chars id)
         [page wrapped-id] (map page-ref/->page-ref [page-name id'])]
         (util/replace-ignore-case content page wrapped-id)))
 

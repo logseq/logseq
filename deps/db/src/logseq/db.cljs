@@ -8,7 +8,42 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.db.sqlite.util :as sqlite-util]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.db.frontend.content :as db-content]))
+
+;; Use it as an input argument for datalog queries
+(def block-attrs
+  '[:db/id
+    :block/uuid
+    :block/parent
+    :block/left
+    :block/collapsed?
+    :block/collapsed-properties
+    :block/format
+    :block/refs
+    :block/_refs
+    :block/path-refs
+    :block/tags
+    :block/link
+    :block/content
+    :block/marker
+    :block/priority
+    :block/properties
+    :block/properties-order
+    :block/properties-text-values
+    :block/pre-block?
+    :block/scheduled
+    :block/deadline
+    :block/repeated?
+    :block/created-at
+    :block/updated-at
+    ;; TODO: remove this in later releases
+    :block/heading-level
+    :block/file
+    {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
+    {:block/_parent ...}])
+
 
 (defn create-default-pages!
   "Creates default pages if one of the default pages does not exist. This
@@ -57,3 +92,44 @@
     (when-not file-based?
       (create-built-in-properties! db-conn))
     db-conn))
+
+(defn sort-by-left
+  ([blocks parent]
+   (sort-by-left blocks parent {:check? true}))
+  ([blocks parent {:keys [_check?]}]
+   (let [blocks (gp-util/distinct-by :db/id blocks)
+         left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
+     (loop [block parent
+            result []]
+       (if-let [next (get left->blocks (:db/id block))]
+         (recur next (conj result next))
+         (vec result))))))
+
+(defn try-sort-by-left
+  [blocks parent]
+  (let [result' (sort-by-left blocks parent {:check? false})]
+    (if (= (count result') (count blocks))
+      result'
+      blocks)))
+
+;; TODO: use the tree directly
+(defn flatten-tree
+  [blocks-tree]
+  (if-let [children (:block/_parent blocks-tree)]
+    (cons (dissoc blocks-tree :block/_parent) (mapcat flatten-tree children))
+    [blocks-tree]))
+
+;; TODO: performance enhance
+(defn get-block-and-children
+  [repo db block-uuid]
+  (some-> (d/q
+           '[:find [(pull ?block ?block-attrs) ...]
+             :in $ ?id ?block-attrs
+             :where
+             [?block :block/uuid ?id]]
+           db
+           block-uuid
+           block-attrs)
+          first
+          flatten-tree
+          (->> (map #(db-content/update-block-content repo db % (:db/id %))))))

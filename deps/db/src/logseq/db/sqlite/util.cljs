@@ -3,7 +3,8 @@
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [clojure.string :as string]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.graph-parser.util :as gp-util]))
 
 (defonce db-version-prefix "logseq_db_")
 (defonce file-version-prefix "logseq_local_")
@@ -34,12 +35,7 @@
                 (assoc :block/created-at updated-at))]
     block))
 
-(defn sanitize-page-name
-  "Prepares a string for insertion to :block/name. Not using
-  gp-util/page-name-sanity-lc yet because it's unclear if db graphs have all the
-  same naming constraints"
-  [s]
-  (string/lower-case s))
+(def sanitize-page-name gp-util/page-name-sanity-lc)
 
 (defn build-new-property
   "Build a standard new property so that it is is consistent across contexts"

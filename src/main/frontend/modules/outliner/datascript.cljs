@@ -54,6 +54,8 @@
       (db/transact! (:repo opts) replace-tx-data (:replace-tx-meta opts)))
 
     (pipelines/invoke-hooks opts)
+
+    ;; TODO: move validate to worker
     ;; (when (and config/dev?
     ;;            (config/db-based-graph? (state/get-current-repo))
     ;;             ;; Skip tx with update-tx-ids? because they are immediately followed by the original block tx
