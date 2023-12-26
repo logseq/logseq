@@ -377,7 +377,9 @@
   }
 
   .bullet-container .selected {
-    border: 1px solid;
+    border-width: thick;
+    border-style: double;
+    border-color: #8cb91a;
   }
 }
 
