@@ -486,7 +486,11 @@
     @apply absolute w-[3px] top-0 right-[-2px] bottom-0 overflow-hidden cursor-col-resize;
     @apply z-10;
 
-    &.is-active {
+    transition: background-color 300ms;
+    transition-delay: 300ms;
+
+    &.is-active, &:hover,
+    &:focus, &:active {
       @apply bg-primary/90;
     }
   }
@@ -629,11 +633,13 @@
 
   .resizer {
     @apply absolute top-0 bottom-0;
+
     touch-action: none;
-    left: 2px;
-    width: 4px;
+    left: 1px;
+    width: 3px;
     user-select: none;
     cursor: col-resize !important;
+
     transition: background-color 300ms;
     transition-delay: 300ms;
     z-index: 1000;
@@ -641,16 +647,12 @@
     &:hover,
     &:focus,
     &:active {
-      background-color: or(--ls-right-sidebar-resizer-color, --lx-gray-08-alpha, --ls-active-primary-color);
+      @apply bg-primary/90;
     }
   }
 
   &.closed {
     width: 0 !important;
-
-    @screen lg {
-      width: 4px !important;
-    }
   }
 
   &.open {
