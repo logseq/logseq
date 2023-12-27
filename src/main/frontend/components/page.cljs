@@ -691,8 +691,8 @@
             open?
             [:div
              [:p.text-sm.opacity-70.px-4
-              (let [c1 (count (:nodes graph))
-                    s1 (if (> c1 1) "s" "")
+              (let [;; c1 (count (:nodes graph))
+                    ;; s1 (if (> c1 1) "s" "")
                     c2 (count (:links graph))
                     s2 (if (> c2 1) "s" "")
                     ]
