@@ -991,8 +991,7 @@ Similar to re-frame subscriptions"
 
 (defn set-selection-start-block!
   [start-block]
-  (when-not (get-selection-start-block)
-    (swap! state assoc :selection/start-block start-block)))
+  (swap! state assoc :selection/start-block start-block))
 
 (defn set-selection-blocks!
   ([blocks]
@@ -1043,13 +1042,26 @@ Similar to re-frame subscriptions"
   (and (in-selection-mode?) (seq (get-selection-blocks))))
 
 (defn conj-selection-block!
-  [block direction]
+  [block-or-blocks direction]
+  (let [selection-blocks (get-selection-blocks)
+        blocks (-> (if (sequential? block-or-blocks)
+                     (apply conj selection-blocks block-or-blocks)
+                     (conj selection-blocks block-or-blocks))
+                   distinct
+                   util/sort-by-height
+                   vec)]
+    (swap! state assoc
+           :selection/mode true
+           :selection/blocks blocks
+           :selection/direction direction)))
+
+(defn drop-selection-block!
+  [block]
   (swap! state assoc
          :selection/mode true
-         :selection/blocks (-> (conj (vec (:selection/blocks @state)) block)
+         :selection/blocks (-> (remove #(= block %) (get-selection-blocks))
                                util/sort-by-height
-                               vec)
-         :selection/direction direction))
+                               vec)))
 
 (defn drop-last-selection-block!
   []

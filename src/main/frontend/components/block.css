@@ -373,12 +373,11 @@
   transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 
   &.selected {
-    border-bottom-color: var(--ls-primary-background-color);
     border-radius: 2px;
+  }
 
-    &:last-child {
-      border-bottom-color: transparent;
-    }
+  .bullet-container .selected {
+    border: 1px solid;
   }
 }
 
