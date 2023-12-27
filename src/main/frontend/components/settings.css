@@ -14,7 +14,7 @@
     }
 
     aside {
-      @apply bg-gray-400/5 p-4;
+      @apply bg-gray-400/5 p-4 outline-0;
 
       > ul > li {
         > a {

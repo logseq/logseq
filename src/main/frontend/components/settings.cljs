@@ -1001,14 +1001,15 @@
           [:div.flex-1 (ui/button
                          (t :settings-account/create)
                          {:class    "h-8 w-full text-center justify-center"
+                          :variant  :solid
                           :on-click (fn []
                                       (state/close-settings!)
                                       (state/pub-event! [:user/login :signUp]))})]
           [:div.flex-1 (ui/button
                          (t :login)
                          {:icon     "login"
-                          :class    "h-8 w-full text-center justify-center opacity-80"
-                          :intent   "logseq-2"
+                          :class    "h-8 w-full text-center justify-center"
+                          :variant  :outline
                           :on-click (fn []
                                       (state/close-settings!)
                                       (state/pub-event! [:user/login]))})]]
