@@ -2,6 +2,7 @@
   (:require [cljs-bean.core :as bean]
             [cljs.reader]
             [logseq.sdk.core]
+            [logseq.sdk.git]
             [logseq.sdk.utils :as sdk-utils]
             [logseq.sdk.ui :as sdk-ui]
             [logseq.sdk.assets :as sdk-assets]
