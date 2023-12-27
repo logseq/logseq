@@ -317,7 +317,7 @@
 
   .create {
     width: 100%;
-    padding: 14px;
+    padding: 4px 14px 14px;
     background-image: linear-gradient(transparent, var(--ls-primary-background-color));
     user-select: none;
 

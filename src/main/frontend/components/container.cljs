@@ -39,7 +39,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.shui.ui :as shui]
-            [logseq.shui.core :as shui2]
             [logseq.shui.toaster.core :as shui-toaster]
             [logseq.shui.dialog.core :as shui-dialog]
             [frontend.util :as util]
