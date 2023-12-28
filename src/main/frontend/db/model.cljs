@@ -15,7 +15,6 @@
             [frontend.util.drawer :as drawer]
             [logseq.db.frontend.default :as default-db]
             [logseq.db.frontend.rules :as rules]
-            [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util.db :as db-util]
             [logseq.graph-parser.util :as gp-util]

@@ -158,6 +158,11 @@
 #?(:cljs
    (def format worker-util/format))
 
+#?(:clj
+   (defn format
+     [fmt & args]
+     (apply clojure.core/format fmt args)))
+
 #?(:cljs
    (defn evalue
      [event]

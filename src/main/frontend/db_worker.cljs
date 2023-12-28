@@ -345,6 +345,10 @@
    (when-let [conn (state/get-datascript-conn repo)]
      (search/page-search repo @conn q limit)))
 
+  (file-writes-finished?
+   [this]
+   (empty? @file/*writes))
+
   (dangerousRemoveAllDbs
    [this repo]
    (p/let [dbs (.listDB this)]

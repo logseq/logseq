@@ -219,7 +219,7 @@
         (refresh-affected-queries! repo-url affected-keys)))))
 
 (defn batch-refresh!
-  [repo-url txs]
+  [repo-url _txs]
   ;; (when (and repo-url (seq txs))
   ;;   (let [affected-keys (apply set/union (map get-affected-queries-keys txs))]
   ;;     (refresh-affected-queries! repo-url affected-keys)))

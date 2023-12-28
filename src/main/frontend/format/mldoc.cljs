@@ -3,7 +3,6 @@
   protocol for org and and markdown formats"
   (:require [clojure.string :as string]
             [frontend.format.protocol :as protocol]
-            [frontend.config :as config]
             [frontend.state :as state]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -13,8 +12,6 @@
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.block :as gp-block]
             [clojure.walk :as walk]
-            [cljs-bean.core :as bean]
-            [frontend.worker.mldoc :as mldoc-worker]
             [frontend.worker.mldoc :as worker-mldoc]))
 
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
@@ -55,11 +52,11 @@
 
 (defn get-default-config
   [format]
-  (mldoc-worker/get-default-config (state/get-current-repo) format))
+  (worker-mldoc/get-default-config (state/get-current-repo) format))
 
 (defn ->edn
   [content format]
-  (mldoc-worker/->edn (state/get-current-repo) content format))
+  (worker-mldoc/->edn (state/get-current-repo) content format))
 
 (defrecord MldocMode []
   protocol/Format
