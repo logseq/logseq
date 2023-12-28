@@ -1,4 +1,5 @@
 (ns frontend.worker.file.core
+  "Save file to disk"
   (:require [clojure.string :as string]
             [frontend.worker.file.util :as wfu]
             [frontend.worker.file.property-util :as property-util]

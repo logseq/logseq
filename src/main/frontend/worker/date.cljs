@@ -1,4 +1,5 @@
 (ns frontend.worker.date
+  "Date related fns that used by worker"
   (:require [cljs-time.format :as tf]
             [logseq.graph-parser.util :as gp-util]))
 

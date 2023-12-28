@@ -1,4 +1,5 @@
 (ns frontend.modules.file.core
+  "Convert block trees to content"
   (:require [clojure.string :as string]
             [frontend.db :as db]
             [frontend.state :as state]

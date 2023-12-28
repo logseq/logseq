@@ -1,4 +1,5 @@
 (ns frontend.worker.file.util
+  "File name fns"
   (:require [clojure.string :as string]
             [logseq.graph-parser.util :as gp-util]
             [frontend.worker.util :as util]))

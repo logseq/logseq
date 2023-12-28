@@ -1,4 +1,5 @@
 (ns frontend.handler.worker
+  "Handle messages received from the db worker"
   (:require [cljs-bean.core :as bean]
             [frontend.handler.file :as file-handler]
             [frontend.handler.notification :as notification]
