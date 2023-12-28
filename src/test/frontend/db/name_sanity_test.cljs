@@ -67,17 +67,6 @@
     (is (= "sdaf ___dsakl" (conv-informal "sdaf /dsakl")))
     (is (= nil (conv-informal "sdaf .dsakl")))))
 
-(deftest manual-title-prop-test
-  (are [x y z] (= z (#'conversion-handler/is-manual-title-prop? :legacy x y))
-    "aaa.bbb.ccc" "aaa/bbb/ccc"   false
-    "aa__.bbb.ccc" "aa?#/bbb/ccc" false
-    "aa?#.bbb.ccc" "aa__/bbb/ccc" true
-    "aaa__bbb__ccc" "aaa/bbb/ccc" true
-    "aaa__bbb__cccon" "aaa/bbb/cccon"  true
-    "aaa.bbb.ccc"     "adbcde/aks/sdf" true
-    "a__.bbb.ccc"     "adbcde/aks/sdf" true
-    "aaa__bbb__ccc" nil false))
-
 (deftest rename-previous-tests
   (are [x y] (= y (#'conversion-handler/calc-previous-name :legacy :triple-lowbar x))
     "aa?#.bbb.ccc"   {:status :breaking,
