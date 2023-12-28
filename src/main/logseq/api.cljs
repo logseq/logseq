@@ -908,6 +908,8 @@
 
 ;; ui
 (def ^:export show_msg sdk-ui/-show_msg)
+(def ^:export query_element_rect sdk-ui/query_element_rect)
+(def ^:export query_element_by_id sdk-ui/query_element_by_id)
 
 ;; assets
 (def ^:export make_asset_url sdk-assets/make_url)
