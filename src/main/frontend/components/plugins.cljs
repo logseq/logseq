@@ -440,7 +440,7 @@
          [:option "https://clients3.google.com/generate_204"]]]
 
        (ui/button (if testing? (ui/loading "Testing") "Test URL")
-                  :intent "logseq" :large? false
+                  :intent "logseq"
                   :on-click #(let [val (util/trim-safe (.-value (rum/deref *test-input)))]
                                (when (and (not testing?) (not (string/blank? val)))
                                  (set-testing?! true)
@@ -521,7 +521,7 @@
             (ui/icon "filter")
             :class (str (when-not (contains? #{:default} filter-by) "picked ") "sort-or-filter-by")
             :on-click toggle-fn
-            :intent "link"))
+            :variant :ghost))
 
          (if market?
            [{:title   (t :plugin/all)
@@ -564,7 +564,7 @@
             (ui/icon "arrows-sort")
             :class (str (when-not (contains? #{:default :downloads} sort-by) "picked ") "sort-or-filter-by")
             :on-click toggle-fn
-            :intent "link"))
+            :variant :ghost))
          (let [aim-icon #(if (= sort-by %) "check" "circle")]
            [{:title   (t :plugin/downloads)
              :options {:on-click #(reset! *sort-by :downloads)}
@@ -586,23 +586,23 @@
           (ui/icon "dots-vertical")
           :class "more-do"
           :on-click toggle-fn
-          :intent "link"))
+          :variant :ghost))
 
        (concat (if market?
-                 [{:title   [:span.flex.items-center (ui/icon "rotate-clockwise") (t :plugin/refresh-lists)]
+                 [{:title   [:span.flex.items-center.gap-1 (ui/icon "rotate-clockwise") (t :plugin/refresh-lists)]
                    :options {:on-click #(reload-market-fn)}}]
-                 [{:title   [:span.flex.items-center (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
+                 [{:title   [:span.flex.items-center.gap-1 (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
                    :options {:on-click #(plugin-handler/user-check-enabled-for-updates! (not= :plugins category))}}])
 
-               [{:title   [:span.flex.items-center (ui/icon "world") (t :settings-page/network-proxy)]
+               [{:title   [:span.flex.items-center.gap-1 (ui/icon "world") (t :settings-page/network-proxy)]
                  :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}]
 
-               [{:title   [:span.flex.items-center (ui/icon "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
+               [{:title   [:span.flex.items-center.gap-1 (ui/icon "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
                  :options {:on-click plugin-config-handler/open-replace-plugins-modal}}]
 
                (when (state/developer-mode?)
                  [{:hr true}
-                  {:title   [:span.flex.items-center (ui/icon "file-code") (t :plugin/open-preferences)]
+                  {:title   [:span.flex.items-center.gap-1 (ui/icon "file-code") (t :plugin/open-preferences)]
                    :options {:on-click
                              #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                 (js/apis.openPath (str root "/preferences.json")))}}

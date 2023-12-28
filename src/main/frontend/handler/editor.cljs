@@ -1226,14 +1226,19 @@
       (delete-block-aux! block true))))
 
 (defn highlight-selection-area!
-  [end-block]
-  (when-let [start-block (state/get-selection-start-block-or-first)]
-    (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")
-          direction (util/get-direction-between-two-nodes start-block end-block "ls-block")
-          blocks (if (= :up direction)
-                   (reverse blocks)
-                   blocks)]
-      (state/exit-editing-and-set-selected-blocks! blocks direction))))
+  ([end-block]
+   (highlight-selection-area! end-block false))
+  ([end-block append?]
+   (when-let [start-block (state/get-selection-start-block-or-first)]
+     (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")
+           direction (util/get-direction-between-two-nodes start-block end-block "ls-block")
+           blocks (if (= :up direction)
+                    (reverse blocks)
+                    blocks)]
+       (if append?
+         (do (state/clear-edit!)
+             (state/conj-selection-block! blocks direction))
+         (state/exit-editing-and-set-selected-blocks! blocks direction))))))
 
 (defn- select-block-up-down
   [direction]

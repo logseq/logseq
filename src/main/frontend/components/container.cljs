@@ -34,6 +34,8 @@
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.shui.toaster.core :as shui-toaster]
+            [logseq.shui.dialog.core :as shui-dialog]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.components.window-controls :as window-controls]
@@ -792,6 +794,7 @@
         current-repo (state/sub :git/current-repo)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         theme (state/sub :ui/theme)
+        accent-color (some-> (state/sub :ui/radix-color) (name))
         system-theme? (state/sub :ui/system-theme?)
         light? (= "light" (state/sub :ui/theme))
         sidebar-open?  (state/sub :ui/sidebar-open?)
@@ -819,6 +822,7 @@
     (theme/container
      {:t             t
       :theme         theme
+      :accent-color  accent-color
       :route         route-match
       :current-repo  current-repo
       :edit?         edit?
@@ -884,6 +888,8 @@
       (ui/notification)
       (ui/modal)
       (ui/sub-modal)
+      (shui-toaster/install-toaster)
+      (shui-dialog/install-modals)
       (select/select-modal)
       (custom-context-menu)
       (plugins/custom-js-installer {:t t

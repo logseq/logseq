@@ -12,7 +12,6 @@
             [frontend.components.whiteboard :as whiteboard]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
-            [frontend.colors :as colors]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
             [frontend.db.persist :as db-persist]
@@ -212,8 +211,6 @@
   (instrument/init)
   (state/set-online! js/navigator.onLine)
   (set-network-watcher!)
-  (when-let [radix-color (state/get-color-accent)]
-    (colors/set-radix radix-color))
 
   (util/indexeddb-check?
    (fn [_error]
