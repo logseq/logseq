@@ -248,6 +248,7 @@
 
   (transact
    [_this repo tx-data tx-meta context]
+   (when repo (state/set-db-latest-tx-time! repo))
    (when-let [conn (state/get-datascript-conn repo)]
      (try
        (let [tx-data (edn/read-string tx-data)
