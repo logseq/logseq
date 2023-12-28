@@ -17,7 +17,6 @@
             [frontend.util :as util]
             [frontend.util.fs :as fs-util]
             [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.file :as outliner-file]
             [logseq.outliner.tree :as otree]
             [frontend.fs :as fs]
             [logseq.graph-parser.property :as gp-property]
@@ -148,9 +147,7 @@
                                                     (map :db/id)
                                                     (set))})))) blocks)
                       (remove nil?))]
-    (db/transact! repo tx)
-    (doseq [page-id page-ids]
-      (outliner-file/sync-to-file page-id))))
+    (db/transact! repo tx)))
 
 (defn- compute-new-file-path
   "Construct the full path given old full path and the file sanitized body.
@@ -237,9 +234,7 @@
 
         (rename-update-refs! page old-original-name new-name)
 
-        (page-common-handler/rename-update-namespace! page old-original-name new-name)
-
-        (outliner-file/sync-to-file page))
+        (page-common-handler/rename-update-namespace! page old-original-name new-name))
 
       ;; Redirect to the newly renamed page
       (when redirect?
@@ -341,7 +336,6 @@
                              (= (:block/parent block) {:db/id from-id})
                              (assoc :block/parent {:db/id to-id})))) blocks)]
       (db/transact! repo tx-data)
-      (outliner-file/sync-to-file {:db/id to-id})
 
       (rename-update-refs! from-page
                            (util/get-page-original-name from-page)

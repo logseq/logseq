@@ -32,7 +32,6 @@
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
-            [frontend.modules.outliner.file :as file]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -223,7 +222,6 @@
        (p/finally (fn []
                     (state/set-db-restoring! false))))
 
-   (file/<ratelimit-file-writes!)
    (util/<app-wake-up-from-sleep-loop (atom false))
 
    (when config/dev?

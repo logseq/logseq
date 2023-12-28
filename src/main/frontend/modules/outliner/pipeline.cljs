@@ -4,17 +4,9 @@
             [frontend.db :as db]
             [frontend.db.react :as react]
             [frontend.handler.file-based.property.util :as property-util]
-            [frontend.modules.outliner.file :as file]
             [frontend.state :as state]
             [frontend.util.cursor :as cursor]
             [frontend.util.drawer :as drawer]))
-
-(defn updated-page-hook
-  [tx-meta page]
-  (when (and
-         (not (config/db-based-graph? (state/get-current-repo)))
-         (not (:created-from-journal-template? tx-meta)))
-    (file/sync-to-file page (:outliner-op tx-meta))))
 
 (defn- reset-editing-block-content!
   [tx-data tx-meta]
@@ -41,7 +33,7 @@
                   (when pos (cursor/move-cursor-to input pos)))))))))))
 
 (defn invoke-hooks
-  [{:keys [tx-meta tx-data deleted-block-uuids affected-keys pages blocks]}]
+  [{:keys [tx-meta tx-data deleted-block-uuids affected-keys blocks]}]
   (let [{:keys [from-disk? new-graph?]} tx-meta
         repo (state/get-current-repo)
         tx-report {:tx-meta tx-meta
@@ -55,10 +47,6 @@
       (let [importing? (:graph/importing @state/state)]
         (when-not importing?
           (react/refresh! repo tx-report affected-keys))
-
-        (when (not (:delete-files? tx-meta))
-          (doseq [p (seq pages)]
-            (updated-page-hook tx-meta p)))
 
         (when (and state/lsp-enabled?
                    (seq blocks)

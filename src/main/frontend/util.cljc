@@ -156,10 +156,8 @@
      []
      (string/starts-with? js/window.location.href "file://")))
 
-(defn format
-  [fmt & args]
-  #?(:cljs (apply gstring/format fmt args)
-     :clj (apply clojure.core/format fmt args)))
+#?(:cljs
+   (def format worker-util/format))
 
 #?(:cljs
    (defn evalue
@@ -1197,14 +1195,7 @@
      []
      (js/console.trace)))
 
-(defn remove-first [pred coll]
-  ((fn inner [coll]
-     (lazy-seq
-      (when-let [[x & xs] (seq coll)]
-        (if (pred x)
-          xs
-          (cons x (inner xs))))))
-   coll))
+(def remove-first worker-util/remove-first)
 
 (def pprint clojure.pprint/pprint)
 

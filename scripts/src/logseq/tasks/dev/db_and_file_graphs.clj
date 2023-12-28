@@ -25,8 +25,7 @@
          "frontend.db.file-based"
          "frontend.fs"
          "frontend.components.conversion" "frontend.components.file-sync"
-         "frontend.util.fs"
-         "frontend.modules.outliner.file"]))
+         "frontend.util.fs"]))
 
 (def db-graph-paths
   "Paths _only_ for DB graphs"
