@@ -6,7 +6,8 @@
             [frontend.worker.react :as worker-react]
             [frontend.worker.file :as file]
             [logseq.db.frontend.validate :as validate]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [frontend.worker.db.fix :as db-fix]))
 
 (defn- path-refs-need-recalculated?
   [tx-meta]
@@ -42,14 +43,34 @@
                empty-property-parents)
        (remove nil?)))))
 
-(defn invoke-hooks
-  [repo conn tx-report context]
+(defn fix-db!
+  [conn {:keys [db-before db-after tx-data]}]
+  (let [changed-pages (->> (filter (fn [d] (contains? #{:block/left :block/parent} (:a d))) tx-data)
+                           (map :e)
+                           distinct
+                           (map (fn [id]
+                                  (-> (or (d/entity db-after id)
+                                          (d/entity db-before id))
+                                      :block/page
+                                      :db/id)))
+                           (remove nil?)
+                           (distinct))]
+    (doseq [changed-page-id changed-pages]
+      (db-fix/fix-page-if-broken! conn changed-page-id {}))))
 
+(defn validate-and-fix-db!
+  [repo conn tx-report context]
   (when (and (:dev? context) (sqlite-util/db-based-graph? repo))
     (validate/validate-db! tx-report (:validate-db-options context)))
+  (when (and (:dev? context)
+             (not (:node-test? context)))
+    (fix-db! conn tx-report)))
 
+(defn invoke-hooks
+  [repo conn tx-report context]
   (let [tx-meta (:tx-meta tx-report)
-        {:keys [from-disk? new-graph?]} tx-meta]
+        {:keys [from-disk? new-graph?]} tx-meta
+        fix-tx-data (validate-and-fix-db! repo conn tx-report context)]
     (if (or from-disk? new-graph?)
       {:tx-report tx-report}
       (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
@@ -73,7 +94,7 @@
                            (remove nil?))))
             tx-report' (d/transact! conn replace-tx {:replace? true
                                                      :pipeline-replace? true})
-            full-tx-data (concat (:tx-data tx-report) (:tx-data tx-report'))
+            full-tx-data (concat (:tx-data tx-report) fix-tx-data (:tx-data tx-report'))
             final-tx-report (assoc tx-report' :tx-data full-tx-data)
             affected-query-keys (when-not (:importing? context)
                                   (worker-react/get-affected-queries-keys final-tx-report context))]

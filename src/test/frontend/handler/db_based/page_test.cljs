@@ -5,7 +5,7 @@
             [datascript.core :as d]
             [frontend.handler.page :as page-handler]
             [frontend.db :as db]
-            [frontend.db.fix :as db-fix]
+            [frontend.worker.db.fix :as db-fix]
             [frontend.handler.editor :as editor-handler]
             [goog.dom :as gdom]))
 
