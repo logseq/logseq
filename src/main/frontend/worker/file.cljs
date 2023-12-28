@@ -12,7 +12,10 @@
             [logseq.db :as ldb]
             [malli.core :as m]
             [frontend.worker.state :as state]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [frontend.worker.util :as util]))
+
+(def *writes file/*writes)
 
 (defonce file-writes-chan
   (let [coercer (m/coercer [:catn
@@ -23,8 +26,6 @@
     (async/chan 10000 (map coercer))))
 
 (def batch-write-interval 1000)
-
-(def *writes-finished? (atom {}))
 
 (def whiteboard-blocks-pull-keys-with-persisted-ids
   '[:block/properties
@@ -93,29 +94,22 @@
 
 (defn sync-to-file
   [repo page-id tx-meta]
-  (when (and repo page-id
+  (when (and (util/local-file-based-graph? repo)
+             page-id
              (not (:created-from-journal-template? tx-meta))
              (not (:delete-files? tx-meta)))
+    (swap! *writes conj page-id)
     (async/put! file-writes-chan [repo page-id (:outliner-op tx-meta) (tc/to-long (t/now))])))
 
 (defn <ratelimit-file-writes!
   []
   (worker-util/<ratelimit file-writes-chan batch-write-interval
-                          :filter-fn
-                          (fn [[_repo _ _ time]]
-                            (reset! *writes-finished? {:time time
-                                                       :value false})
-                            true)
+                          :filter-fn (fn [_] true)
                           :flush-fn
                           (fn [col]
                             (when (seq col)
-                              (let [start-time (tc/to-long (t/now))
-                                    repo (ffirst col)
+                              (let [repo (ffirst col)
                                     conn (state/get-datascript-conn repo)]
                                 (if conn
-                                  (do
-                                    (write-files! conn col (state/get-context))
-                                    (let [last-write-time (:time @*writes-finished?)]
-                                      (when (> start-time last-write-time)
-                                        (reset! *writes-finished? {:value true}))))
+                                  (write-files! conn col (state/get-context))
                                   (js/console.error (str "DB is not found for ") repo)))))))

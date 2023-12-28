@@ -73,7 +73,8 @@
             [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.db.listener :as db-listener]))
+            [frontend.db.listener :as db-listener]
+            [frontend.persist-db.browser :as db-browser]))
 
 ;; TODO: should we move all events here?
 
@@ -182,14 +183,13 @@
    state/set-state! :sync-graph/init? false))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  ;; FIXME: wait for writes finished
-  ;; (if (or (not (false? (get @outliner-file/*writes-finished? graph)))
-  ;;         (:sync-graph/init? @state/state))
-  ;;   (graph-switch-on-persisted graph opts)
-  ;;   (notification/show!
-  ;;    "Please wait seconds until all changes are saved for the current graph."
-  ;;    :warning))
-  )
+  (p/let [^js sqlite @db-browser/*sqlite
+          writes-finished? (.file-writes-finished? sqlite)]
+    (if (or writes-finished? (:sync-graph/init? @state/state))
+      (graph-switch-on-persisted graph opts)
+      (notification/show!
+       "Please wait seconds until all changes are saved for the current graph."
+       :warning))))
 
 (defmethod handle :graph/pull-down-remote-graph [[_ graph dir-name]]
   (if (mobile-util/native-ios?)
