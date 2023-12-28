@@ -16,7 +16,6 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.graph-parser.config :as gp-config]
-            [malli.core :as m]
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -37,12 +36,6 @@
      {:route-match                           nil
       :today                                 nil
       :system/events                         (async/chan 1000)
-      :file/writes                           (let [coercer (m/coercer [:catn
-                                                                       [:repo :string]
-                                                                       [:page-id :any]
-                                                                       [:outliner-op :any]
-                                                                       [:epoch :int]])]
-                                               (async/chan 10000 (map coercer)))
       :file/unlinked-dirs                    #{}
       :reactive/custom-queries               (async/chan 1000)
       :notification/show?                    false
@@ -1550,10 +1543,6 @@ Similar to re-frame subscriptions"
              :modal/panel-content nil
              :modal/dropdowns {}
              :ui/open-select nil))))
-
-(defn get-file-write-chan
-  []
-  (:file/writes @state))
 
 (defn get-reactive-custom-queries-chan
   []

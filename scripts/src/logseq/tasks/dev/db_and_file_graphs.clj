@@ -43,8 +43,7 @@
   ["src/main/frontend/handler/file_based" "src/main/frontend/handler/conversion.cljs" "src/main/frontend/handler/file_sync.cljs"
    "src/main/frontend/fs"
    "src/main/frontend/components/conversion.cljs" "src/main/frontend/components/file_sync.cljs"
-   "src/main/frontend/util/fs.cljs"
-   "src/main/frontend/modules/outliner/file.cljs"])
+   "src/main/frontend/util/fs.cljs"])
 
 (defn- validate-db-ns-not-in-file
   []

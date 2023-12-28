@@ -126,9 +126,6 @@
   (let [repo (state/get-current-repo)
         to-page (db/entity [:block/name (util/page-name-sanity-lc new-name)])
         blocks (:block/_refs (db/entity (:db/id page)))
-        page-ids (->> (map (fn [b]
-                             {:db/id (:db/id (:block/page b))}) blocks)
-                      (set))
         tx       (->> (map (fn [{:block/keys [uuid content properties format] :as block}]
                              (let [content    (let [content' (replace-old-page! content old-original-name new-name format)]
                                                 (when-not (= content' content)

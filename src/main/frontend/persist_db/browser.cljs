@@ -86,7 +86,8 @@
         (let [tx-meta' (pr-str tx-meta)
               tx-data' (pr-str tx-data)
               context (if (config/db-based-graph? repo)
-                        {}
+                        {:dev? config/dev?
+                         :validate-db-options (:dev/validate-db-options (state/get-config))}
                         {:importing? (:graph/importing @state/state)
                          :date-formatter (state/get-date-formatter)
                          :export-bullet-indentation (state/get-export-bullet-indentation)

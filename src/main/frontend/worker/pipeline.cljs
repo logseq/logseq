@@ -4,7 +4,9 @@
             [logseq.outliner.datascript-report :as ds-report]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [frontend.worker.react :as worker-react]
-            [frontend.worker.file :as file]))
+            [frontend.worker.file :as file]
+            [logseq.db.frontend.validate :as validate]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn- path-refs-need-recalculated?
   [tx-meta]
@@ -42,6 +44,10 @@
 
 (defn invoke-hooks
   [repo conn tx-report context]
+
+  (when (and (:dev? context) (sqlite-util/db-based-graph? repo))
+    (validate/validate-db! tx-report (:validate-db-options context)))
+
   (let [tx-meta (:tx-meta tx-report)
         {:keys [from-disk? new-graph?]} tx-meta]
     (if (or from-disk? new-graph?)
