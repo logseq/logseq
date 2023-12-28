@@ -9,7 +9,8 @@
             [clojure.core.async :as async]
             [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
             [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]))
+            [cljs-time.core :as t]
+            [cljs-bean.core :as bean]))
 
 (defonce db-version-prefix "logseq_db_")
 (defonce local-db-prefix "logseq_local_")
@@ -136,3 +137,7 @@
 (defn time-ms
   []
   (tc/to-long (t/now)))
+
+(defn post-message
+  [type data]
+  (.postMessage js/self (bean/->js [type data])))

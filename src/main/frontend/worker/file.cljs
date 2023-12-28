@@ -11,7 +11,8 @@
             [datascript.core :as d]
             [logseq.db :as ldb]
             [malli.core :as m]
-            [frontend.worker.state :as state]))
+            [frontend.worker.state :as state]
+            [goog.object :as gobj]))
 
 (defonce file-writes-chan
   (let [coercer (m/coercer [:catn
@@ -81,12 +82,12 @@
     (doseq [[repo page-id outliner-op] (set (map #(take 3 %) pages))] ; remove time to dedupe pages to write
       (try (do-write-file! repo conn page-id outliner-op context)
            (catch :default e
-             ;; FIXME: notification
-             ;; (notification/show!
-             ;;  [:div
-             ;;   [:p "Write file failed, please copy the changes to other editors in case of losing data."]
-             ;;   "Error: " (str (gobj/get e "stack"))]
-             ;;  :error)
+             (worker-util/post-message :notification
+                                       (pr-str
+                                        [[:div
+                                          [:p "Write file failed, please copy the changes to other editors in case of losing data."]
+                                          "Error: " (str (gobj/get e "stack"))]
+                                         :error]))
              (log/error :file/write-file-error {:error e}))))))
 
 (defn sync-to-file
@@ -94,7 +95,6 @@
   (when (and repo page-id
              (not (:created-from-journal-template? tx-meta))
              (not (:delete-files? tx-meta)))
-    (prn :debug :sync-to-file :repo repo :page-id page-id)
     (async/put! file-writes-chan [repo page-id (:outliner-op tx-meta) (tc/to-long (t/now))])))
 
 (defn <ratelimit-file-writes!

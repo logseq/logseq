@@ -5,7 +5,8 @@
             [logseq.common.path :as path]
             [datascript.core :as d]
             [logseq.db :as ldb]
-            [frontend.worker.date :as worker-date]))
+            [frontend.worker.date :as worker-date]
+            [frontend.worker.util :as util]))
 
 (defn- indented-block-content
   [content spaces-tabs]
@@ -149,10 +150,8 @@
                           (tree->file-content repo db tree {:init-level init-level} context))]
         (when-not (and (string/blank? new-content) (not blocks-just-deleted?))
           (let [files [[file-path new-content]]]
-            (prn :debug :write-file :file-path file-path :content new-content)
-            ;; TODO: send files to main thread to save
-            ;; (file-handler/alter-files-handler! repo files {} {})
-            )))
+            (when (seq files)
+              (util/post-message :write-files {:repo repo :files files})))))
       ;; In e2e tests, "card" page in db has no :file/path
       (js/console.error "File path from page-block is not valid" page-block tree))))
 
