@@ -118,11 +118,8 @@
   (worker-date/normalize-journal-title title (state/get-date-formatter)))
 
 (defn valid-journal-title?
-  "This is a loose rule, requires double check by journal-title->custom-format.
-
-   BUG: This also accepts strings like 3/4/5 as journal titles"
   [title]
-  (boolean (normalize-journal-title title)))
+  (worker-date/valid-journal-title? title (state/get-date-formatter)))
 
 (defn journal-title->
   ([journal-title then-fn]
@@ -147,7 +144,7 @@
   [journal-title]
   (journal-title-> journal-title #(tc/to-long %)))
 
-(def default-journal-filename-formatter (tf/formatter "yyyy_MM_dd"))
+(def default-journal-filename-formatter worker-date/default-journal-filename-formatter)
 
 (defn journal-title->default
   "Journal title to filename format"
@@ -158,12 +155,8 @@
     (journal-title-> journal-title #(tf/unparse formatter %))))
 
 (defn date->file-name
-  "Date object to filename format"
   [date]
-  (let [formatter (if-let [format (state/get-journal-file-name-format)]
-                    (tf/formatter format)
-                    default-journal-filename-formatter)]
-    (tf/unparse formatter date)))
+  (worker-date/date->file-name date (state/get-date-formatter)))
 
 (defn journal-title->custom-format
   [journal-title]

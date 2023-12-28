@@ -9,7 +9,8 @@
             [frontend.state :as state]
             [frontend.util.fs :as fs-util]
             [frontend.handler.file-based.property.util :as property-util]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [frontend.worker.file.util :as wfu]))
 
 (defn- indented-block-content
   [content spaces-tabs]

@@ -2,17 +2,28 @@
   "Save pages to files for file-based graphs"
   (:require [clojure.core.async :as async]
             [clojure.string :as string]
-            [frontend.db :as db]
-            [frontend.db.model :as model]
             [frontend.worker.file.core :as file]
             [logseq.outliner.tree :as otree]
-            [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [frontend.state :as state]
             [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]))
+            [cljs-time.coerce :as tc]
+            [frontend.worker.util :as worker-util]
+            [datascript.core :as d]
+            [logseq.db :as ldb]
+            [malli.core :as m]
+            [frontend.worker.state :as state]))
+
+(defonce file-writes-chan
+  (let [coercer (m/coercer [:catn
+                            [:repo :string]
+                            [:page-id :any]
+                            [:outliner-op :any]
+                            [:epoch :int]])]
+    (async/chan 10000 (map coercer))))
 
 (def batch-write-interval 1000)
+
+(def *writes-finished? (atom {}))
 
 (def whiteboard-blocks-pull-keys-with-persisted-ids
   '[:block/properties
@@ -40,23 +51,20 @@
             :block/parent) ;; these are auto-generated for whiteboard shapes
     (dissoc block :db/id :block/page)))
 
-
 (defn do-write-file!
   [repo conn page-db-id outliner-op context]
-  (let [page-block (db/pull repo '[*] page-db-id)
+  (let [page-block (d/pull @conn '[*] page-db-id)
         page-db-id (:db/id page-block)
         whiteboard? (contains? (:block/type page-block) "whiteboard")
-        blocks-count (model/get-page-blocks-count repo page-db-id)
+        blocks-count (ldb/get-page-blocks-count @conn page-db-id)
         blocks-just-deleted? (and (zero? blocks-count)
                                   (contains? #{:delete-blocks :move-blocks} outliner-op))]
     (when (or (>= blocks-count 1) blocks-just-deleted?)
-      (if (or (and (> blocks-count 500)
-                   (not (state/input-idle? repo {:diff 3000}))) ;; long page
-              ;; when this whiteboard page is just being updated
-              (and whiteboard? (not (state/whiteboard-idle? repo))))
-        (async/put! (state/get-file-write-chan) [repo page-db-id outliner-op (tc/to-long (t/now))])
+      (if (and (or (> blocks-count 500) whiteboard?)
+               (not (state/tx-idle? repo {:diff 3000})))
+        (async/put! file-writes-chan [repo page-db-id outliner-op (tc/to-long (t/now))])
         (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
-              blocks (model/get-page-blocks-no-cache repo (:block/name page-block) {:pull-keys pull-keys})
+              blocks (ldb/get-page-blocks @conn (:block/name page-block) {:pull-keys pull-keys})
               blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)]
           (when-not (and (= 1 (count blocks))
                          (string/blank? (:block/content (first blocks)))
@@ -82,28 +90,31 @@
              (log/error :file/write-file-error {:error e}))))))
 
 (defn sync-to-file
-  [repo {page-db-id :db/id} outliner-op tx-meta]
-  (when (and repo page-db-id
+  [repo page-id tx-meta]
+  (when (and repo page-id
              (not (:created-from-journal-template? tx-meta))
              (not (:delete-files? tx-meta)))
-    (async/put! (state/get-file-write-chan) [repo page-db-id outliner-op (tc/to-long (t/now))])))
-
-(def *writes-finished? (atom {}))
+    (prn :debug :sync-to-file :repo repo :page-id page-id)
+    (async/put! file-writes-chan [repo page-id (:outliner-op tx-meta) (tc/to-long (t/now))])))
 
 (defn <ratelimit-file-writes!
-  [conn context]
-  (util/<ratelimit (state/get-file-write-chan) batch-write-interval
-                   :filter-fn
-                   (fn [[repo _ _ time]]
-                     (swap! *writes-finished? assoc repo {:time time
-                                                          :value false})
-                     true)
-                   :flush-fn
-                   (fn [col]
-                     (let [start-time (tc/to-long (t/now))
-                           repos (distinct (map first col))]
-                       (write-files! conn col context)
-                       (doseq [repo repos]
-                         (let [last-write-time (get-in @*writes-finished? [repo :time])]
-                           (when (> start-time last-write-time)
-                             (swap! *writes-finished? assoc repo {:value true}))))))))
+  []
+  (worker-util/<ratelimit file-writes-chan batch-write-interval
+                          :filter-fn
+                          (fn [[_repo _ _ time]]
+                            (reset! *writes-finished? {:time time
+                                                       :value false})
+                            true)
+                          :flush-fn
+                          (fn [col]
+                            (when (seq col)
+                              (let [start-time (tc/to-long (t/now))
+                                    repo (ffirst col)
+                                    conn (state/get-datascript-conn repo)]
+                                (if conn
+                                  (do
+                                    (write-files! conn col (state/get-context))
+                                    (let [last-write-time (:time @*writes-finished?)]
+                                      (when (> start-time last-write-time)
+                                        (reset! *writes-finished? {:value true}))))
+                                  (js/console.error (str "DB is not found for ") repo)))))))
