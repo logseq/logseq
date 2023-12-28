@@ -1,23 +1,21 @@
-(ns frontend.db.fix
+(ns frontend.worker.db.fix
   "DB validation and fix.
   For pages:
   1. Each block should has a unique [:block/parent :block/left] position.
   2. For any block, its children should be connected by :block/left (no broken chain, no circle, no left to self)."
   (:require [datascript.core :as d]
-            [frontend.db :as db]
-            [frontend.db.model :as db-model]
             [frontend.util :as util]
-            [frontend.state :as state]
-            [frontend.handler.notification :as notification]))
+            [frontend.handler.notification :as notification]
+            [logseq.db :as ldb]))
 
 (defn- fix-parent-broken-chain
   [db parent-id]
-  (let [parent (db/entity parent-id)
+  (let [parent (d/entity db parent-id)
         parent-id (:db/id parent)
         blocks (:block/_parent parent)]
     (when (seq blocks)
       (let [children-ids (set (map :db/id blocks))
-            sorted (db-model/sort-by-left blocks parent)
+            sorted (ldb/sort-by-left blocks parent)
             broken-chain? (not= (count sorted) (count blocks))]
         (when broken-chain?
           (let [error-data {:parent {:db/id parent-id
@@ -34,7 +32,7 @@
               (str "Broken chain detected:\n" error-data)]
              :error
              false))
-          (let [first-child-id (:db/id (db-model/get-by-parent-&-left db parent-id parent-id))
+          (let [first-child-id (:db/id (ldb/get-by-parent-&-left db parent-id parent-id))
                 *ids (atom children-ids)
                 sections (loop [sections []]
                            (if (seq @*ids)
@@ -49,7 +47,7 @@
                                                          (swap! *ids disj id)
                                                          [id])))
                                    section-with-left (or
-                                                      (when-let [left-id (:db/id (:block/left (db/entity (first current-section))))]
+                                                      (when-let [left-id (:db/id (:block/left (d/entity db (first current-section))))]
                                                         (swap! *ids disj left-id)
                                                         (when (and
                                                                (not (contains? (set current-section) left-id)) ; circle
@@ -57,7 +55,7 @@
                                                           (vec (cons left-id current-section))))
                                                       current-section)
                                    section-with-right (or
-                                                       (when-let [right-id (:db/id (db-model/get-right-sibling db (last section-with-left)))]
+                                                       (when-let [right-id (:db/id (ldb/get-right-sibling db (last section-with-left)))]
                                                          (swap! *ids disj right-id)
                                                          (when (and (not (contains? (set section-with-left) right-id)) ; circle
                                                                     (contains? children-ids right-id))
@@ -111,7 +109,7 @@
          (into {}))))
 
 (defn- fix-parent-left-conflicts
-  [conflicts]
+  [db conflicts]
   (when (seq conflicts)
     (prn :debug "Parent left id conflicts:")
     (notification/show!
@@ -130,7 +128,7 @@
                   :block/left (:db/id (nth items (if (zero? idx) idx (dec idx))))
                   :block/parent (:db/id (:block/parent first-item))})
                others)
-           right-tx (when-let [right (db-model/get-right-sibling (db/get-db) (:db/id first-item))]
+           right-tx (when-let [right (ldb/get-right-sibling db (:db/id first-item))]
                       [{:db/id (:db/id right)
                         :block/left (:db/id (last items))}])]
        (concat tx right-tx)))
@@ -141,33 +139,37 @@
   (let [parent-left->es (build-parent-left->es db page-id)]
     (filter #(> (count (second %)) 1) parent-left->es)))
 
-(defn loop-fix-conflicts
-  [repo db page-id transact-opts]
-  (let [conflicts (get-conflicts db page-id)
+(defn- loop-fix-conflicts
+  [conn page-id transact-opts *fix-tx-data]
+  (let [db @conn
+        conflicts (get-conflicts db page-id)
         fix-conflicts-tx (when (seq conflicts)
-                           (fix-parent-left-conflicts conflicts))]
+                           (fix-parent-left-conflicts db conflicts))]
     (when (seq fix-conflicts-tx)
       (prn :debug :conflicts-tx)
       (util/pprint fix-conflicts-tx)
-      (db/transact! repo fix-conflicts-tx transact-opts)
-      (let [db (db/get-db repo)]
-        (when (seq (get-conflicts db page-id))
-          (loop-fix-conflicts repo db page-id transact-opts))))))
+      (let [tx-data (:tx-data (d/transact! conn fix-conflicts-tx transact-opts))]
+        (swap! *fix-tx-data (fn [old-data] (concat old-data tx-data))))
+      (when (seq (get-conflicts @conn page-id))
+        (loop-fix-conflicts conn page-id transact-opts *fix-tx-data)))))
 
 (defn fix-page-if-broken!
   "Fix the page if it has either parent-left conflicts or broken chains."
-  [db page-id {:keys [fix-parent-left? fix-broken-chain? replace-tx?]
-            :or {fix-parent-left? true
-                 fix-broken-chain? true
-                 replace-tx? false}
-            :as _opts}]
-  (let [repo (state/get-current-repo)
-        transact-opts (if replace-tx? {:replace? true} {})]
+  [conn page-id {:keys [fix-parent-left? fix-broken-chain? replace-tx?]
+                 :or {fix-parent-left? true
+                      fix-broken-chain? true
+                      replace-tx? false}
+                 :as _opts}]
+  (let [db @conn
+        transact-opts (if replace-tx? {:replace? true} {})
+        *fix-tx-data (atom [])]
     (when fix-parent-left?
-      (loop-fix-conflicts repo db page-id transact-opts))
+      (loop-fix-conflicts conn page-id transact-opts *fix-tx-data))
     (when fix-broken-chain?
-      (let [db' (db/get-db)
-            parent-left->es' (build-parent-left->es (db/get-db) page-id)
+      (let [db' @conn
+            parent-left->es' (build-parent-left->es db page-id)
             fix-broken-chain-tx (fix-broken-chain db' parent-left->es')]
         (when (seq fix-broken-chain-tx)
-          (db/transact! repo fix-broken-chain-tx transact-opts))))))
+          (let [tx-data (:tx-data (d/transact! conn fix-broken-chain-tx transact-opts))]
+            (swap! *fix-tx-data (fn [old-data] (concat old-data tx-data)))))))
+    @*fix-tx-data))

@@ -168,3 +168,18 @@
 (defn get-page-blocks-count
   [db page-id]
   (count (d/datoms db :avet :block/page page-id)))
+
+(defn get-by-parent-&-left
+  [db parent-id left-id]
+  (when (and parent-id left-id)
+    (let [lefts (:block/_left (d/entity db left-id))]
+      (some (fn [node] (when (and (= parent-id (:db/id (:block/parent node)))
+                                  (not= parent-id (:db/id node)))
+                         node)) lefts))))
+
+(defn get-right-sibling
+  [db db-id]
+  (when-let [block (d/entity db db-id)]
+    (get-by-parent-&-left db
+                          (:db/id (:block/parent block))
+                          db-id)))

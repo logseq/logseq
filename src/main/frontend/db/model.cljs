@@ -488,13 +488,7 @@ independent of format as format specific heading characters are stripped"
   [db block]
   (and (:block/collapsed? block) (has-children? db (:block/uuid block))))
 
-(defn get-by-parent-&-left
-  [db parent-id left-id]
-  (when (and parent-id left-id)
-    (let [lefts (:block/_left (db-utils/entity db left-id))]
-      (some (fn [node] (when (and (= parent-id (:db/id (:block/parent node)))
-                                  (not= parent-id (:db/id node)))
-                         node)) lefts))))
+(def get-by-parent-&-left ldb/get-by-parent-&-left)
 
 (defn top-block?
   [block]
@@ -552,12 +546,7 @@ independent of format as format specific heading characters are stripped"
       (when (not= (:db/id left) (:db/id (:block/parent e)))
         left))))
 
-(defn get-right-sibling
-  [db db-id]
-  (when-let [block (db-utils/entity db db-id)]
-    (get-by-parent-&-left db
-                          (:db/id (:block/parent block))
-                          db-id)))
+(def get-right-sibling ldb/get-right-sibling)
 
 (defn get-next
   "Get next block, either its right sibling, or loop to find its next block."

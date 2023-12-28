@@ -86,6 +86,7 @@
         (let [tx-meta' (pr-str tx-meta)
               tx-data' (pr-str tx-data)
               context {:dev? config/dev?
+                       :node-test? util/node-test?
                        :validate-db-options (:dev/validate-db-options (state/get-config))
                        :importing? (:graph/importing @state/state)
                        :date-formatter (state/get-date-formatter)

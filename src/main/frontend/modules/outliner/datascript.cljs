@@ -1,6 +1,5 @@
 (ns frontend.modules.outliner.datascript
-  (:require [datascript.core :as d]
-            [frontend.db :as db]
+  (:require [frontend.db :as db]
             [frontend.modules.outliner.pipeline :as pipelines]
             [frontend.modules.editor.undo-redo :as undo-redo]
             [frontend.state :as state]
@@ -10,7 +9,6 @@
             [clojure.string :as string]
             [frontend.util :as util]
             [logseq.graph-parser.util.block-ref :as block-ref]
-            [frontend.db.fix :as db-fix]
             [frontend.handler.file-based.property.util :as property-util]))
 
 (defn new-outliner-txs-state [] (atom []))
@@ -97,21 +95,6 @@
       (concat txs retracted-tx' macros-tx))
     txs))
 
-(defn fix-db!
-  [{:keys [db-before db-after tx-data]}]
-  (let [changed-pages (->> (filter (fn [d] (contains? #{:block/left :block/parent} (:a d))) tx-data)
-                           (map :e)
-                           distinct
-                           (map (fn [id]
-                                  (-> (or (d/entity db-after id)
-                                          (d/entity db-before id))
-                                      :block/page
-                                      :db/id)))
-                           (remove nil?)
-                           (distinct))]
-    (doseq [changed-page-id changed-pages]
-      (db-fix/fix-page-if-broken! db-after changed-page-id {}))))
-
 (defn transact!
   [txs opts before-editor-cursor]
   (let [repo (state/get-current-repo)
@@ -141,8 +124,7 @@
         (let [repo (get opts :repo (state/get-current-repo))
               rs (db/transact! repo txs (assoc opts :outliner/transact? true))
               tx-id (get-tx-id rs)]
-          ;; TODO: disable this when db is stable
-          (when (and config/dev? (not util/node-test?)) (fix-db! rs))
+
           (state/update-state! :history/tx->editor-cursor
                                (fn [m] (assoc m tx-id before-editor-cursor)))
 
