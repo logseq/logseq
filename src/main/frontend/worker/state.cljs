@@ -31,12 +31,16 @@
   [repo & {:keys [diff]
            :or {diff 1000}}]
   (when repo
-    (let [last-input-time (get @(get @*state :db/latest-transact-time) repo)]
+    (let [last-input-time (get-in @*state [:db/latest-transact-time repo])]
       (or
        (nil? last-input-time)
 
        (let [now (worker-util/time-ms)]
          (>= (- now last-input-time) diff))))))
+
+(defn set-db-latest-tx-time!
+  [repo]
+  (swap! *state assoc-in [:db/latest-transact-time repo] (worker-util/time-ms)))
 
 (defn get-context
   []

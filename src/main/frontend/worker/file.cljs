@@ -56,7 +56,7 @@
   [repo conn page-db-id outliner-op context]
   (let [page-block (d/pull @conn '[*] page-db-id)
         page-db-id (:db/id page-block)
-        whiteboard? (contains? (:block/type page-block) "whiteboard")
+        whiteboard? (contains? (set (:block/type page-block)) "whiteboard")
         blocks-count (ldb/get-page-blocks-count @conn page-db-id)
         blocks-just-deleted? (and (zero? blocks-count)
                                   (contains? #{:delete-blocks :move-blocks} outliner-op))]
@@ -69,7 +69,8 @@
               blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)]
           (when-not (and (= 1 (count blocks))
                          (string/blank? (:block/content (first blocks)))
-                         (nil? (:block/file page-block)))
+                         (nil? (:block/file page-block))
+                         (not whiteboard?))
             (let [tree-or-blocks (if whiteboard? blocks
                                      (otree/blocks->vec-tree repo @conn blocks (:block/name page-block)))]
               (if page-block
