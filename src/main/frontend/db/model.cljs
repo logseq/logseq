@@ -386,7 +386,6 @@ independent of format as format specific heading characters are stripped"
     (:block/properties page)))
 
 (def sort-by-left ldb/sort-by-left)
-(def try-sort-by-left ldb/try-sort-by-left)
 
 (defn sub-block
   [id]

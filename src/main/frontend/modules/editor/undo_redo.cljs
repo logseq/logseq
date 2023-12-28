@@ -1,7 +1,6 @@
 (ns frontend.modules.editor.undo-redo
   (:require [frontend.db :as db]
             [frontend.handler.notification :as notification]
-            [logseq.outliner.datascript-report :as ds-report]
             [frontend.util.page :as page-util]
             [frontend.state :as state]
             [clojure.set :as set]

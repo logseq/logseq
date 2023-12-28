@@ -154,10 +154,6 @@
                     default-journal-filename-formatter)]
     (journal-title-> journal-title #(tf/unparse formatter %))))
 
-(defn date->file-name
-  [date]
-  (worker-date/date->file-name date (state/get-date-formatter)))
-
 (defn journal-title->custom-format
   [journal-title]
   (journal-title-> journal-title #(date-time-util/format % (state/get-date-formatter))))

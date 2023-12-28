@@ -3,7 +3,6 @@
 (ns frontend.util.fs
   "Misc util fns built on top of frontend.fs"
   (:require ["path" :as node-path]
-            [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [clojure.string :as string]
             [frontend.state :as state]

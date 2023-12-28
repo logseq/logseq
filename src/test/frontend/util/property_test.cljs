@@ -1,6 +1,7 @@
 (ns frontend.util.property-test
   (:require [cljs.test :refer [are deftest testing]]
-            [frontend.handler.file-based.property.util :as property-util]))
+            [frontend.handler.file-based.property.util :as property-util]
+            [frontend.worker.file.property-util :as wfp]))
 
 (deftest remove-id-property
   (testing "org"
@@ -167,14 +168,14 @@ SCHEDULED: <2021-10-25 Mon>\n:PROPERTIES:\n:a: b\n:END:\nworld\n" "c" "d")
     "abcd\nempty::\nanother-empty::\nid:: 123"))
 
 (deftest test-build-properties-str
-  (are [x y] (= (#'property-util/build-properties-str :mardown x) y)
+  (are [x y] (= (#'wfp/build-properties-str :mardown x) y)
     {:title "a"}
     "title:: a\n"
     {:title "a/b/c"}
     "title:: a/b/c\n"
     {:title "a/b/c" :tags "d,e"}
     "title:: a/b/c\ntags:: d,e\n")
-  (are [x y] (= (#'property-util/build-properties-str :org x) y)
+  (are [x y] (= (#'wfp/build-properties-str :org x) y)
     {:title "a"}
     ":PROPERTIES:\n:title: a\n:END:"
     {:title "a/b/c"}

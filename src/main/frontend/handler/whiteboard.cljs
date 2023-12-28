@@ -199,9 +199,6 @@
              :updated-at (util/time-ms),
              :created-at (util/time-ms)}]))
 
-(defn get-whiteboard-entity [page-name]
-  (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)]))
-
 (defn create-new-whiteboard-page!
   ([]
    (create-new-whiteboard-page! nil))

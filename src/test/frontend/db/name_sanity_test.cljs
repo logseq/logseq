@@ -4,13 +4,14 @@
             [logseq.graph-parser.util :as gp-util]
             [frontend.handler.file-based.page :as file-page-handler]
             [frontend.handler.conversion :as conversion-handler]
-            [frontend.util.fs :as fs-util]))
+            [frontend.util.fs :as fs-util]
+            [frontend.worker.file.util :as wfu]))
 
 (defn- test-page-name
   "Check if page name can be preserved after escaping"
   [page-name]
   (testing (str "Test sanitization page-name: " page-name)
-    (let [file-name   (#'fs-util/tri-lb-file-name-sanity page-name)
+    (let [file-name   (#'wfu/tri-lb-file-name-sanity page-name)
           page-name'  (#'gp-util/tri-lb-title-parsing file-name)
           url-single  (js/encodeURIComponent file-name)
           url-double  (js/encodeURIComponent url-single)
