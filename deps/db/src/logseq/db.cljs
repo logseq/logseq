@@ -10,6 +10,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [clojure.string :as string]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
             [logseq.db.frontend.content :as db-content]))
 
 ;; Use it as an input argument for datalog queries
@@ -133,3 +134,20 @@
           first
           flatten-tree
           (->> (map #(db-content/update-block-content repo db % (:db/id %))))))
+
+(defn whiteboard-page?
+  "Given a page name or a page object, check if it is a whiteboard page"
+  [db page]
+  (cond
+    (string? page)
+    (let [page (d/entity db [:block/name (gp-util/page-name-sanity-lc page)])]
+      (or
+       (contains? (set (:block/type page)) "whiteboard")
+       (when-let [file (:block/file page)]
+         (when-let [path (:file/path (d/entity db (:db/id file)))]
+           (gp-config/whiteboard? path)))))
+
+    (seq page)
+    (contains? (set (:block/type page)) "whiteboard")
+
+    :else false))

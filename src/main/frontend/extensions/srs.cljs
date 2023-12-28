@@ -25,7 +25,7 @@
             [frontend.template :as template]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.util.block-content :as content]
+            [frontend.format.mldoc :as mldoc]
             [frontend.util.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
             [logseq.graph-parser.property :as gp-property]
@@ -787,7 +787,7 @@
             content (-> (property-file/remove-built-in-properties-when-file-based
                          (state/get-current-repo) (:block/format block) content)
                         (drawer/remove-logbook))
-            [title body] (content/get-title&body content format)]
+            [title body] (mldoc/get-title&body content format)]
         [block (str title " #" card-hash-tag "\n" body)])))
 
 (defn make-block-a-card!

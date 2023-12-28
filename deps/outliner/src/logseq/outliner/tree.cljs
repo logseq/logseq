@@ -129,7 +129,7 @@
 (defn get-sorted-block-and-children
   [repo db db-id]
   (when db-id
-    (when-let [root-block (d/pull db db-id)]
+    (when-let [root-block (d/pull db '[*]  db-id)]
       (let [blocks (ldb/get-block-and-children repo db (:block/uuid root-block))
             blocks-exclude-root (remove (fn [b] (= (:db/id b) db-id)) blocks)]
         (sort-blocks blocks-exclude-root root-block)))))

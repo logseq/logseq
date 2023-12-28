@@ -83,7 +83,15 @@
       (when-not (:pipeline-replace? tx-meta) ; from db worker
         (let [tx-meta' (pr-str tx-meta)
               tx-data' (pr-str tx-data)
-              context {:importing? (:graph/importing @state/state)}]
+              context (if (config/db-based-graph? repo)
+                        {}
+                        {:importing? (:graph/importing @state/state)
+                         :date-formatter (state/get-date-formatter)
+                         :export-bullet-indentation (state/get-export-bullet-indentation)
+                         :preferred-format (state/get-preferred-format)
+                         :journals-directory (config/get-journals-directory)
+                         :whiteboards-directory (config/get-whiteboards-directory)
+                         :pages-directory (config/get-pages-directory)})]
           (if sqlite
             (p/let [result (.transact sqlite repo tx-data' tx-meta'
                                       (pr-str context))

@@ -2,14 +2,11 @@
   "Save pages to files for file-based graphs"
   (:require [clojure.core.async :as async]
             [clojure.string :as string]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.model :as model]
-            [frontend.handler.notification :as notification]
-            [frontend.modules.file.core :as file]
-            [frontend.modules.outliner.tree :as tree]
+            [frontend.worker.file.core :as file]
+            [logseq.outliner.tree :as otree]
             [frontend.util :as util]
-            [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [frontend.state :as state]
             [cljs-time.core :as t]
@@ -45,7 +42,7 @@
 
 
 (defn do-write-file!
-  [repo page-db-id outliner-op]
+  [repo conn page-db-id outliner-op context]
   (let [page-block (db/pull repo '[*] page-db-id)
         page-db-id (:db/id page-block)
         whiteboard? (contains? (:block/type page-block) "whiteboard")
@@ -65,42 +62,36 @@
                          (string/blank? (:block/content (first blocks)))
                          (nil? (:block/file page-block)))
             (let [tree-or-blocks (if whiteboard? blocks
-                                     (tree/blocks->vec-tree repo blocks (:block/name page-block)))]
+                                     (otree/blocks->vec-tree repo @conn blocks (:block/name page-block)))]
               (if page-block
-                (file/save-tree! page-block tree-or-blocks blocks-just-deleted?)
+                (file/save-tree! repo conn page-block tree-or-blocks blocks-just-deleted? context)
                 (js/console.error (str "can't find page id: " page-db-id))))))))))
 
 (defn write-files!
-  [pages]
+  [conn pages context]
   (when (seq pages)
-    (when-not config/publishing?
-      (doseq [[repo page-id outliner-op] (set (map #(take 3 %) pages))] ; remove time to dedupe pages to write
-        (try (do-write-file! repo page-id outliner-op)
-             (catch :default e
-               (notification/show!
-                [:div
-                 [:p "Write file failed, please copy the changes to other editors in case of losing data."]
-                 "Error: " (str (gobj/get e "stack"))]
-                :error)
-               (log/error :file/write-file-error {:error e})))))))
+    (doseq [[repo page-id outliner-op] (set (map #(take 3 %) pages))] ; remove time to dedupe pages to write
+      (try (do-write-file! repo conn page-id outliner-op context)
+           (catch :default e
+             ;; FIXME: notification
+             ;; (notification/show!
+             ;;  [:div
+             ;;   [:p "Write file failed, please copy the changes to other editors in case of losing data."]
+             ;;   "Error: " (str (gobj/get e "stack"))]
+             ;;  :error)
+             (log/error :file/write-file-error {:error e}))))))
 
 (defn sync-to-file
-  ([page]
-   (sync-to-file page nil))
-  ([{page-db-id :db/id} outliner-op]
-   (if (nil? page-db-id)
-     (notification/show!
-      "Write file failed, can't find the current page!"
-      :error)
-     (when-let [repo (state/get-current-repo)]
-       (if (:graph/importing @state/state) ; write immediately
-         (write-files! [[repo page-db-id outliner-op]])
-         (async/put! (state/get-file-write-chan) [repo page-db-id outliner-op (tc/to-long (t/now))]))))))
+  [repo {page-db-id :db/id} outliner-op tx-meta]
+  (when (and repo page-db-id
+             (not (:created-from-journal-template? tx-meta))
+             (not (:delete-files? tx-meta)))
+    (async/put! (state/get-file-write-chan) [repo page-db-id outliner-op (tc/to-long (t/now))])))
 
 (def *writes-finished? (atom {}))
 
 (defn <ratelimit-file-writes!
-  []
+  [conn context]
   (util/<ratelimit (state/get-file-write-chan) batch-write-interval
                    :filter-fn
                    (fn [[repo _ _ time]]
@@ -111,7 +102,7 @@
                    (fn [col]
                      (let [start-time (tc/to-long (t/now))
                            repos (distinct (map first col))]
-                       (write-files! col)
+                       (write-files! conn col context)
                        (doseq [repo repos]
                          (let [last-write-time (get-in @*writes-finished? [repo :time])]
                            (when (> start-time last-write-time)

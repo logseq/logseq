@@ -13,7 +13,9 @@
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.block :as gp-block]
             [clojure.walk :as walk]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.worker.mldoc :as mldoc-worker]
+            [frontend.worker.mldoc :as worker-mldoc]))
 
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
 (defonce parseOPML (gobj/get Mldoc "parseOPML"))
@@ -38,12 +40,7 @@
                       title
                       (or references gp-mldoc/default-references)))
 
-(defn block-with-title?
-  [type]
-  (contains? #{"Paragraph"
-               "Raw_Html"
-               "Hiccup"
-               "Heading"} type))
+(def block-with-title? worker-mldoc/block-with-title?)
 
 (defn opml->edn
   [config content]
@@ -57,20 +54,12 @@
       [])))
 
 (defn get-default-config
-  "Gets a mldoc default config for the given format. Works for DB and file graphs"
   [format]
-  (let [db-based? (config/db-based-graph? (state/get-current-repo))]
-    (->>
-     (cond-> (gp-mldoc/default-config-map format)
-       db-based?
-       (assoc :enable_drawers false))
-     bean/->js
-     js/JSON.stringify)))
+  (mldoc-worker/get-default-config (state/get-current-repo) format))
 
 (defn ->edn
-  "Wrapper around gp-mldoc/->edn that builds mldoc config given a format"
   [content format]
-  (gp-mldoc/->edn content (get-default-config format)))
+  (mldoc-worker/->edn (state/get-current-repo) content format))
 
 (defrecord MldocMode []
   protocol/Format
@@ -87,9 +76,7 @@
   [plains]
   (string/join (map last plains)))
 
-(defn properties?
-  [ast]
-  (contains? #{"Properties" "Property_Drawer"} (ffirst ast)))
+(def properties? worker-mldoc/properties?)
 
 (defn typ-drawer?
   [ast typ]
@@ -168,3 +155,10 @@
     (->> @*result
          (remove string/blank?)
          (distinct))))
+
+(defn get-title&body
+  "parses content and returns [title body]
+   returns nil if no title"
+  [content format]
+  (when-let [repo (state/get-current-repo)]
+    (worker-mldoc/get-title&body repo content format)))

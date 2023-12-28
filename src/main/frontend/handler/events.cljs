@@ -61,7 +61,6 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.instrumentation.sentry :as sentry-event]
-            [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.shortcut.core :as st]
             [frontend.quick-capture :as quick-capture]
             [frontend.search :as search]
@@ -183,12 +182,14 @@
    state/set-state! :sync-graph/init? false))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (if (or (not (false? (get @outliner-file/*writes-finished? graph)))
-          (:sync-graph/init? @state/state))
-    (graph-switch-on-persisted graph opts)
-    (notification/show!
-     "Please wait seconds until all changes are saved for the current graph."
-     :warning)))
+  ;; FIXME: wait for writes finished
+  ;; (if (or (not (false? (get @outliner-file/*writes-finished? graph)))
+  ;;         (:sync-graph/init? @state/state))
+  ;;   (graph-switch-on-persisted graph opts)
+  ;;   (notification/show!
+  ;;    "Please wait seconds until all changes are saved for the current graph."
+  ;;    :warning))
+  )
 
 (defmethod handle :graph/pull-down-remote-graph [[_ graph dir-name]]
   (if (mobile-util/native-ios?)

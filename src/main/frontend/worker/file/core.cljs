@@ -1,15 +1,11 @@
-(ns frontend.modules.file.core
+(ns frontend.worker.file.core
   (:require [clojure.string :as string]
-            [frontend.config :as config]
-            [frontend.date :as date]
-            [frontend.db :as db]
-            [frontend.db.model :as model]
-            [frontend.db.utils :as db-utils]
-            [frontend.handler.file :as file-handler]
-            [frontend.state :as state]
-            [frontend.util.fs :as fs-util]
-            [frontend.handler.file-based.property.util :as property-util]
-            [logseq.common.path :as path]))
+            [frontend.worker.file.util :as wfu]
+            [frontend.worker.file.property-util :as property-util]
+            [logseq.common.path :as path]
+            [datascript.core :as d]
+            [logseq.db :as ldb]
+            [logseq.worker.date :as worker-date]))
 
 (defn- indented-block-content
   [content spaces-tabs]
@@ -18,10 +14,10 @@
 
 (defn- content-with-collapsed-state
   "Only accept nake content (without any indentation)"
-  [_repo format content collapsed?]
+  [repo format content collapsed?]
   (cond
     collapsed?
-    (property-util/insert-property format content :collapsed true)
+    (property-util/insert-property repo format content :collapsed true)
 
     ;; Don't check properties. Collapsed is an internal state log as property in file, but not counted into properties
     (false? collapsed?)
@@ -31,9 +27,8 @@
     content))
 
 (defn transform-content
-  [{:block/keys [collapsed? format pre-block? content left page parent properties] :as b} level {:keys [heading-to-list?]}]
-  (let [repo (state/get-current-repo)
-        block-ref-not-saved? (and (seq (:block/_refs (db/entity (:db/id b))))
+  [repo db {:block/keys [collapsed? format pre-block? content left page parent properties] :as b} level {:keys [heading-to-list?]} context]
+  (let [block-ref-not-saved? (and (seq (:block/_refs (d/entity db (:db/id b))))
                                   (not (string/includes? content (str (:block/uuid b)))))
         heading (:heading properties)
         markdown? (= :markdown format)
@@ -70,7 +65,7 @@
                                           heading)
                                         level)
                                 spaces-tabs (->>
-                                             (repeat (dec level) (state/get-export-bullet-indentation))
+                                             (repeat (dec level) (:export-bullet-indentation context))
                                              (apply str))]
                             [(str spaces-tabs "-") (str spaces-tabs "  ")]))
                         content (if heading-to-list?
@@ -85,93 +80,89 @@
                               " ")]
                     (str prefix sep new-content)))
         content (if block-ref-not-saved?
-                  (property-util/insert-property format content :id (str (:block/uuid b)))
+                  (property-util/insert-property repo format content :id (str (:block/uuid b)))
                   content)]
     content))
 
-
 (defn- tree->file-content-aux
-  [tree {:keys [init-level] :as opts}]
+  [repo db tree {:keys [init-level] :as opts} context]
   (let [block-contents (transient [])]
     (loop [[f & r] tree level init-level]
       (if (nil? f)
         (->> block-contents persistent! flatten (remove nil?))
         (let [page? (nil? (:block/page f))
-              content (if page? nil (transform-content f level opts))
+              content (if page? nil (transform-content repo db f level opts context))
               new-content
               (if-let [children (seq (:block/children f))]
-                     (cons content (tree->file-content-aux children {:init-level (inc level)}))
+                     (cons content (tree->file-content-aux repo db children {:init-level (inc level)} context))
                      [content])]
           (conj! block-contents new-content)
           (recur r level))))))
 
 (defn tree->file-content
-  [tree opts]
-  (->> (tree->file-content-aux tree opts) (string/join "\n")))
-
+  [repo db tree opts context]
+  (->> (tree->file-content-aux repo db tree opts context) (string/join "\n")))
 
 (def init-level 1)
 
 (defn- transact-file-tx-if-not-exists!
-  [page-block ok-handler]
-  (when (and (state/get-current-repo)
-             (:block/name page-block))
-    (let [format (name (get page-block :block/format
-                            (state/get-preferred-format)))
+  [conn page-block ok-handler context]
+  (when (:block/name page-block)
+    (let [format (name (get page-block :block/format (:preferred-format context)))
+          date-formatter (:date-formatter context)
           title (string/capitalize (:block/name page-block))
-          whiteboard-page? (model/whiteboard-page? page-block)
+          whiteboard-page? (ldb/whiteboard-page? @conn page-block)
           format (if whiteboard-page? "edn" format)
-          journal-page? (date/valid-journal-title? title)
-          journal-title (date/normalize-journal-title title)
+          journal-page? (worker-date/valid-journal-title? title date-formatter)
+          journal-title (worker-date/normalize-journal-title title date-formatter)
           journal-page? (and journal-page? (not (string/blank? journal-title)))
           filename (if journal-page?
-                     (date/date->file-name journal-title)
+                     (worker-date/date->file-name journal-title date-formatter)
                      (-> (or (:block/original-name page-block) (:block/name page-block))
-                         (fs-util/file-name-sanity)))
+                         (wfu/file-name-sanity nil)))
           sub-dir (cond
-                    journal-page?    (config/get-journals-directory)
-                    whiteboard-page? (config/get-whiteboards-directory)
-                    :else            (config/get-pages-directory))
+                    journal-page?    (:journals-directory context)
+                    whiteboard-page? (:whiteboards-directory context)
+                    :else            (:pages-directory context))
           ext (if (= format "markdown") "md" format)
           file-rpath (path/path-join sub-dir (str filename "." ext))
           file {:file/path file-rpath}
           tx [{:file/path file-rpath}
               {:block/name (:block/name page-block)
                :block/file file}]]
-      (db/transact! tx)
+      (d/transact! conn tx)
       (when ok-handler (ok-handler)))))
 
 (defn- remove-transit-ids [block] (dissoc block :db/id :block/file))
 
 (defn save-tree-aux!
-  [page-block tree blocks-just-deleted?]
-  (let [page-block (db/pull (:db/id page-block))
+  [repo db page-block tree blocks-just-deleted? context]
+  (let [page-block (d/pull db '[*] (:db/id page-block))
         file-db-id (-> page-block :block/file :db/id)
-        file-path (-> (db-utils/entity file-db-id) :file/path)]
+        file-path (-> (d/entity db file-db-id) :file/path)]
     (if (and (string? file-path) (not-empty file-path))
       (let [new-content (if (contains? (:block/type page-block) "whiteboard")
                           (->
                            (wfu/ugly-pr-str {:blocks tree
-                                            :pages (list (remove-transit-ids page-block))})
+                                             :pages (list (remove-transit-ids page-block))})
                            (string/triml))
-                          (tree->file-content tree {:init-level init-level}))]
-        (if (and (string/blank? new-content)
-                 (not blocks-just-deleted?))
-          (state/pub-event! [:capture-error {:error (js/Error. "Empty content")
-                                             :payload {}}])
-          (let [files [[file-path new-content]]
-                repo (state/get-current-repo)]
-            (file-handler/alter-files-handler! repo files {} {}))))
+                          (tree->file-content repo db tree {:init-level init-level} context))]
+        (when-not (and (string/blank? new-content) (not blocks-just-deleted?))
+          (let [files [[file-path new-content]]]
+            ;; TODO: send files to main thread to save
+            ;; (file-handler/alter-files-handler! repo files {} {})
+            )))
       ;; In e2e tests, "card" page in db has no :file/path
       (js/console.error "File path from page-block is not valid" page-block tree))))
 
 (defn save-tree!
-  [page-block tree blocks-just-deleted?]
+  [repo conn page-block tree blocks-just-deleted? context]
   {:pre [(map? page-block)]}
-  (let [ok-handler #(save-tree-aux! page-block tree blocks-just-deleted?)
-        file (or (:block/file page-block)
-                 (when-let [page (:db/id (:block/page page-block))]
-                   (:block/file (db-utils/entity page))))]
-    (if file
-      (ok-handler)
-      (transact-file-tx-if-not-exists! page-block ok-handler))))
+  (when repo
+    (let [ok-handler #(save-tree-aux! repo @conn page-block tree blocks-just-deleted? context)
+          file (or (:block/file page-block)
+                   (when-let [page-id (:db/id (:block/page page-block))]
+                     (:block/file (d/entity @conn page-id))))]
+      (if file
+        (ok-handler)
+        (transact-file-tx-if-not-exists! conn page-block ok-handler context)))))

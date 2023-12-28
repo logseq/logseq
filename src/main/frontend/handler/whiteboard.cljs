@@ -9,7 +9,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.property.util :as pu]
             [frontend.modules.editor.undo-redo :as history]
-            [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
             [frontend.config :as config]
             [frontend.storage :as storage]
@@ -210,11 +209,6 @@
    (let [uuid (or (and name (parse-uuid name)) (d/squuid))
          name (or name (str uuid))]
      (db/transact! (get-default-new-whiteboard-tx name uuid))
-     (let [page-entity (get-whiteboard-entity name)]
-       (when (and page-entity
-                  (nil? (:block/file page-entity))
-                  (not (config/db-based-graph? (state/get-current-repo))))
-         (outliner-file/sync-to-file page-entity)))
      name)))
 
 (defn create-new-whiteboard-and-redirect!

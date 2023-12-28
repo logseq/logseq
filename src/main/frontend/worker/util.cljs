@@ -3,7 +3,8 @@
   (:require [clojure.string :as string]
             ["remove-accents" :as removeAccents]
             [medley.core :as medley]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [goog.string :as gstring]))
 
 (defonce db-version-prefix "logseq_db_")
 (defonce local-db-prefix "logseq_local_")
@@ -55,3 +56,16 @@
 (defn distinct-by
   [f col]
   (medley/distinct-by f (seq col)))
+
+(defn format
+  [fmt & args]
+  (apply gstring/format fmt args))
+
+(defn remove-first [pred coll]
+  ((fn inner [coll]
+     (lazy-seq
+      (when-let [[x & xs] (seq coll)]
+        (if (pred x)
+          xs
+          (cons x (inner xs))))))
+   coll))
