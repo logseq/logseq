@@ -151,3 +151,20 @@
     (contains? (set (:block/type page)) "whiteboard")
 
     :else false))
+
+(defn get-page-blocks
+  "Return blocks of the designated page, without using cache.
+   page - name / title of the page"
+  [db page {:keys [pull-keys]
+            :or {pull-keys '[*]}}]
+  (when page
+    (let [page (gp-util/page-name-sanity-lc page)
+          page-id (:db/id (d/entity db [:block/name page]))]
+      (when page-id
+        (let [datoms (d/datoms db :avet :block/page page-id)
+              block-eids (mapv :e datoms)]
+          (d/pull-many db pull-keys block-eids))))))
+
+(defn get-page-blocks-count
+  [db page-id]
+  (count (d/datoms db :avet :block/page page-id)))

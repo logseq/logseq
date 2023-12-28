@@ -2,6 +2,8 @@
   (:require [cljs-time.format :as tf]
             [logseq.graph-parser.util :as gp-util]))
 
+(def default-journal-filename-formatter (tf/formatter "yyyy_MM_dd"))
+
 (defn journal-title-formatters
   [date-formatter]
   (->
@@ -58,3 +60,18 @@
   [title date-formatter]
   (and title
        (normalize-date (gp-util/capitalize-all title) date-formatter)))
+
+(defn valid-journal-title?
+  "This is a loose rule, requires double check by journal-title->custom-format.
+
+   BUG: This also accepts strings like 3/4/5 as journal titles"
+  [title date-formatter]
+  (boolean (normalize-journal-title title date-formatter)))
+
+(defn date->file-name
+  "Date object to filename format"
+  [date date-formater]
+  (let [formatter (if date-formater
+                    (tf/formatter date-formater)
+                    default-journal-filename-formatter)]
+    (tf/unparse formatter date)))

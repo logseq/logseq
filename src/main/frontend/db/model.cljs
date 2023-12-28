@@ -627,27 +627,18 @@ independent of format as format specific heading characters are stripped"
     blocks)))
 
 (defn get-page-blocks-no-cache
-  "Return blocks of the designated page, without using cache.
-   page - name / title of the page"
   ([page]
    (get-page-blocks-no-cache (state/get-current-repo) page nil))
-  ([repo-url page]
-   (get-page-blocks-no-cache repo-url page nil))
-  ([repo-url page {:keys [pull-keys]
-                   :or {pull-keys '[*]}}]
-   (when page
-     (let [page (util/page-name-sanity-lc page)
-           page-id (:db/id (db-utils/entity repo-url [:block/name page]))
-           db (conn/get-db repo-url)]
-       (when page-id
-         (let [datoms (d/datoms db :avet :block/page page-id)
-               block-eids (mapv :e datoms)]
-           (db-utils/pull-many repo-url pull-keys block-eids)))))))
+  ([repo page]
+   (get-page-blocks-no-cache repo page nil))
+  ([repo page opts]
+   (when-let [db (conn/get-db repo)]
+     (ldb/get-page-blocks db page opts))))
 
 (defn get-page-blocks-count
   [repo page-id]
   (when-let [db (conn/get-db repo)]
-    (count (d/datoms db :avet :block/page page-id))))
+    (ldb/get-page-blocks-count db page-id)))
 
 (defn page-exists?
   "Whether a page exists."

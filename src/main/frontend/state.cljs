@@ -1792,14 +1792,6 @@ Similar to re-frame subscriptions"
        ;; Is this a good idea to put whiteboard check here?
        (not (get-edit-input-id))))))
 
-(defn whiteboard-idle?
-  "Check if whiteboard is idle."
-  [repo]
-  (when repo
-    (>= (- (util/time-ms) (or (get-in @state [:whiteboard/last-persisted-at repo])
-                              (- (util/time-ms) 10000)))
-        3000)))
-
 (defn set-nfs-refreshing!
   [value]
   (set-state! :nfs/refreshing? value))

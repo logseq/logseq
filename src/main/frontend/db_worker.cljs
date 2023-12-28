@@ -14,30 +14,13 @@
             [frontend.worker.search :as search]
             [logseq.db.sqlite.util :as sqlite-util]
             [frontend.worker.pipeline :as pipeline]
-            [datascript.db :as db]))
+            [frontend.worker.state :as state]
+            [frontend.worker.file :as file]))
 
-(defonce *sqlite (atom nil))
-;; repo -> {:db conn :search conn}
-(defonce *sqlite-conns (atom nil))
-;; repo -> conn
-(defonce *datascript-conns (atom nil))
-;; repo -> pool
-(defonce *opfs-pools (atom nil))
-
-(defn- get-sqlite-conn
-  [repo & {:keys [search?]
-           :or {search? false}
-           :as _opts}]
-  (let [k (if search? :search :db)]
-    (get-in @*sqlite-conns [repo k])))
-
-(defn get-datascript-conn
-  [repo]
-  (get @*datascript-conns repo))
-
-(defn get-opfs-pool
-  [repo]
-  (get @*opfs-pools repo))
+(defonce *sqlite state/*sqlite)
+(defonce *sqlite-conns state/*sqlite-conns)
+(defonce *datascript-conns state/*datascript-conns)
+(defonce *opfs-pools state/*opfs-pools)
 
 (defn- get-pool-name
   [graph-name]
@@ -45,7 +28,7 @@
 
 (defn- <get-opfs-pool
   [graph]
-  (or (get-opfs-pool graph)
+  (or (state/get-opfs-pool graph)
       (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (get-pool-name graph)
                                                              :initialCapacity 20})]
         (swap! *opfs-pools assoc graph pool)
@@ -81,7 +64,7 @@
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
   [repo data delete-addrs]
-  (let [^Object db (get-sqlite-conn repo)]
+  (let [^Object db (state/get-sqlite-conn repo)]
     (assert (some? db) "sqlite db not exists")
     (.transaction db (fn [tx]
                        (doseq [item data]
@@ -94,7 +77,7 @@
 
 (defn restore-data-from-addr
   [repo addr]
-  (let [^Object db (get-sqlite-conn repo)]
+  (let [^Object db (state/get-sqlite-conn repo)]
     (assert (some? db) "sqlite db not exists")
     (when-let [content (-> (.exec db #js {:sql "select content from kvs where addr = ?"
                                           :bind #js [addr]
@@ -123,7 +106,7 @@
   (swap! *datascript-conns dissoc repo)
   (when db (.close db))
   (when search (.close search))
-  (when-let [^js pool (get-opfs-pool repo)]
+  (when-let [^js pool (state/get-opfs-pool repo)]
     (.releaseAccessHandles pool))
   (swap! *opfs-pools dissoc repo))
 
@@ -140,7 +123,7 @@
 
 (defn- create-or-open-db!
   [repo]
-  (when-not (get-sqlite-conn repo)
+  (when-not (state/get-sqlite-conn repo)
     (p/let [^js pool (<get-opfs-pool repo)
             capacity (.getCapacity pool)
             _ (when (zero? capacity)   ; file handle already releases since pool will be initialized only once
@@ -202,7 +185,7 @@
 
 (defn- get-search-db
   [repo]
-  (get-sqlite-conn repo {:search? true}))
+  (state/get-sqlite-conn repo {:search? true}))
 
 
 #_:clj-kondo/ignore
@@ -253,28 +236,29 @@
 
   (getMaxTx
    [_this repo]
-   (when-let [conn (get-datascript-conn repo)]
+   (when-let [conn (state/get-datascript-conn repo)]
      (:max-tx @conn)))
 
   (q [_this repo inputs-str]
      "Datascript q"
-     (when-let [conn (get-datascript-conn repo)]
+     (when-let [conn (state/get-datascript-conn repo)]
        (let [inputs (edn/read-string inputs-str)]
          (let [result (apply d/q (first inputs) @conn (rest inputs))]
            (bean/->js result)))))
 
   (transact
    [_this repo tx-data tx-meta context]
-   (when-let [conn (get-datascript-conn repo)]
+   (when-let [conn (state/get-datascript-conn repo)]
      (try
        (let [tx-data (edn/read-string tx-data)
              tx-meta (edn/read-string tx-meta)
              context (edn/read-string context)
+             _ (state/set-context! context)
              tx-meta' (if (or (:from-disk? tx-meta) (:new-graph? tx-meta))
                         tx-meta
                         (assoc tx-meta :skip-store? true))
              tx-report (d/transact! conn tx-data tx-meta')
-             result (pipeline/invoke-hooks conn tx-report context)
+             result (pipeline/invoke-hooks repo conn tx-report context)
              ;; TODO: delay search indice so that UI can be refreshed earlier
              search-indice (search/sync-search-indice repo (:tx-report result))
              data (merge
@@ -290,7 +274,7 @@
 
   (getInitialData
    [_this repo]
-   (when-let [conn (get-datascript-conn repo)]
+   (when-let [conn (state/get-datascript-conn repo)]
      (->> (sqlite-common-db/get-initial-data @conn)
           dt/write-transit-str)))
 
@@ -303,7 +287,7 @@
 
   (releaseAccessHandles
    [_this repo]
-   (when-let [^js pool (get-opfs-pool repo)]
+   (when-let [^js pool (state/get-opfs-pool repo)]
      (.releaseAccessHandles pool)))
 
   (dbExists
@@ -347,17 +331,17 @@
 
   (search-build-blocks-indice
    [this repo]
-   (when-let [conn (get-datascript-conn repo)]
+   (when-let [conn (state/get-datascript-conn repo)]
      (search/build-blocks-indice repo @conn)))
 
   (search-build-pages-indice
    [this repo]
-   (when-let [conn (get-datascript-conn repo)]
+   (when-let [conn (state/get-datascript-conn repo)]
      (search/build-blocks-indice repo @conn)))
 
   (page-search
    [this repo q limit]
-   (when-let [conn (get-datascript-conn repo)]
+   (when-let [conn (state/get-datascript-conn repo)]
      (search/page-search repo @conn q limit)))
 
   (dangerousRemoveAllDbs
@@ -369,6 +353,7 @@
   "web worker entry"
   []
   (let [^js obj (SQLiteDB.)]
+    (file/<ratelimit-file-writes!)
     (Comlink/expose obj)))
 
 (comment

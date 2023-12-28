@@ -3,7 +3,8 @@
   (:require [datascript.core :as d]
             [logseq.outliner.datascript-report :as ds-report]
             [logseq.outliner.pipeline :as outliner-pipeline]
-            [frontend.worker.react :as worker-react]))
+            [frontend.worker.react :as worker-react]
+            [frontend.worker.file :as file]))
 
 (defn- path-refs-need-recalculated?
   [tx-meta]
@@ -40,7 +41,7 @@
        (remove nil?)))))
 
 (defn invoke-hooks
-  [conn tx-report context]
+  [repo conn tx-report context]
   (let [tx-meta (:tx-meta tx-report)
         {:keys [from-disk? new-graph?]} tx-meta]
     (if (or from-disk? new-graph?)
@@ -70,6 +71,8 @@
             final-tx-report (assoc tx-report' :tx-data full-tx-data)
             affected-query-keys (when-not (:importing? context)
                                   (worker-react/get-affected-queries-keys final-tx-report context))]
+        (doseq [page pages]
+          (file/sync-to-file repo (:db/id page) tx-meta))
         {:tx-report final-tx-report
          :replace-tx-data (:tx-data tx-report')
          :replace-tx-meta (:tx-meta tx-report')

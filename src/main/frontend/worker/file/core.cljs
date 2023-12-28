@@ -5,7 +5,7 @@
             [logseq.common.path :as path]
             [datascript.core :as d]
             [logseq.db :as ldb]
-            [logseq.worker.date :as worker-date]))
+            [frontend.worker.date :as worker-date]))
 
 (defn- indented-block-content
   [content spaces-tabs]
@@ -149,6 +149,7 @@
                           (tree->file-content repo db tree {:init-level init-level} context))]
         (when-not (and (string/blank? new-content) (not blocks-just-deleted?))
           (let [files [[file-path new-content]]]
+            (prn :debug :write-file :file-path file-path :content new-content)
             ;; TODO: send files to main thread to save
             ;; (file-handler/alter-files-handler! repo files {} {})
             )))
