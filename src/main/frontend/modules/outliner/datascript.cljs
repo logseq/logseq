@@ -130,7 +130,6 @@
               true
               (distinct))]
     (when (and (seq txs)
-               (not (:skip-transact? opts))
                (or db-based?
                    (not (contains? (:file/unlinked-dirs @state/state)
                                    (config/get-repo-dir repo)))))
