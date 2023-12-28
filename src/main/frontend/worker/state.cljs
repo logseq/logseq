@@ -1,4 +1,5 @@
 (ns frontend.worker.state
+  "State hub for worker"
   (:require [frontend.worker.util :as worker-util]))
 
 (defonce *state (atom {:db/latest-transact-time {}
