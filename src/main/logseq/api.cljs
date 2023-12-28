@@ -2,6 +2,7 @@
   (:require [cljs-bean.core :as bean]
             [cljs.reader]
             [logseq.sdk.core]
+            [logseq.sdk.git]
             [logseq.sdk.utils :as sdk-utils]
             [logseq.sdk.ui :as sdk-ui]
             [logseq.sdk.assets :as sdk-assets]
@@ -907,6 +908,8 @@
 
 ;; ui
 (def ^:export show_msg sdk-ui/-show_msg)
+(def ^:export query_element_rect sdk-ui/query_element_rect)
+(def ^:export query_element_by_id sdk-ui/query_element_by_id)
 
 ;; assets
 (def ^:export make_asset_url sdk-assets/make_url)
