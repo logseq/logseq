@@ -12,7 +12,8 @@
             [frontend.state :as state]
             [electron.ipc :as ipc]
             [frontend.modules.outliner.datascript :as outliner-db]
-            [clojure.edn :as edn]))
+            [clojure.edn :as edn]
+            [frontend.handler.worker :as worker-handler]))
 
 (defonce *sqlite (atom nil))
 
@@ -31,6 +32,7 @@
                        "/static/js/db-worker.js")
           worker (js/Worker. (str worker-url "?electron=" (util/electron?)))
           sqlite (Comlink/wrap worker)]
+      (worker-handler/handle-message! worker)
       (reset! *sqlite sqlite)
       (-> (p/let [_ (.init sqlite)]
             (ask-persist-permission!))
