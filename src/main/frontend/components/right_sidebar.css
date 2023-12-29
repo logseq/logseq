@@ -16,12 +16,11 @@ html[data-theme=light] {
 }
 
 .sidebar-item-list {
-  margin-top: -8px;
-  padding-bottom: 150px;
+  @apply ml-1 mt-[-8px] pb-[150px];
+
   height: calc(100vh - 48px);
   background-color: or(--ls-right-ridebar-color, --lx-gray-01, --ls-secondary-background-color, #d8e1e8);
 }
-
 
 html[data-theme=light] a.toggle:hover {
   color: var(--ls-primary-text-color);
@@ -37,10 +36,11 @@ html[data-theme=light] a.toggle:hover {
 }
 
 .cp__right-sidebar-topbar {
+  @apply px-1 h-12;
   background-color: var(--ls-primary-background-color);
 
   button {
-    opacity: 1;
+    @apply opacity-100;
   }
 }
 
