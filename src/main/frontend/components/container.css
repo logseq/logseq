@@ -132,8 +132,7 @@
 
     a {
       .keyboard-shortcut {
-        @apply w-0 opacity-0;
-        visibility: hidden;
+        @apply opacity-0 invisible;
       }
 
       &:hover {
@@ -141,7 +140,6 @@
           visibility: visible;
           transition: opacity 1s;
           transition-delay: 2s;
-          width: auto;
           opacity: 1;
         }
       }
