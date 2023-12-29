@@ -2024,7 +2024,8 @@
                   target-block
                   sibling?
                   keep-uuid?
-                  revert-cut-txs]
+                  revert-cut-txs
+                  skip-empty-target?]
            :or {exclude-properties []}}]
   (state/set-editor-op! :paste-blocks)
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
@@ -2037,7 +2038,8 @@
         block (db/entity (:db/id target-block))
         page (if (:block/name block) block
                  (when target-block (:block/page (db/entity (:db/id target-block)))))
-        empty-target? (string/blank? (:block/content target-block))
+        empty-target? (if (true? skip-empty-target?) false
+                        (string/blank? (:block/content target-block)))
         paste-nested-blocks? (nested-blocks blocks)
         target-block-has-children? (db/has-children? (:block/uuid target-block))
         replace-empty-target? (and empty-target?
@@ -2121,9 +2123,10 @@
    A block element: {:content :properties :children [block-1, block-2, ...]}"
   [target-block-id sibling? tree-vec format keep-uuid?]
   (insert-block-tree tree-vec format
-                     {:target-block (db/pull target-block-id)
-                      :keep-uuid?   keep-uuid?
-                      :sibling?     sibling?}))
+    {:target-block       (db/pull target-block-id)
+     :keep-uuid?         keep-uuid?
+     :skip-empty-target? true
+     :sibling?           sibling?}))
 
 (defn insert-template!
   ([element-id db-id]
