@@ -6,7 +6,8 @@
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.state :as state]
             [frontend.util.cursor :as cursor]
-            [frontend.util.drawer :as drawer]))
+            [frontend.util.drawer :as drawer]
+            [frontend.modules.editor.undo-redo :as undo-redo]))
 
 (defn- reset-editing-block-content!
   [tx-data tx-meta]
@@ -32,8 +33,20 @@
                   (state/set-edit-content! input content)
                   (when pos (cursor/move-cursor-to input pos)))))))))))
 
+(defn store-undo-data!
+  [{:keys [tx-meta] :as opts}]
+  (when-not config/test?
+    (when-let [replace-tx-data (:replace-tx-data opts)]
+      (db/transact! (state/get-current-repo) replace-tx-data (:replace-tx-meta opts)))
+
+    (when (or (:outliner/transact? tx-meta)
+              (:outliner-op tx-meta)
+              (:whiteboard/transact? tx-meta))
+      (undo-redo/listen-db-changes! opts))))
+
 (defn invoke-hooks
-  [{:keys [tx-meta tx-data deleted-block-uuids affected-keys blocks]}]
+  [{:keys [tx-meta tx-data deleted-block-uuids affected-keys blocks] :as opts}]
+  (store-undo-data! opts)
   (let [{:keys [from-disk? new-graph?]} tx-meta
         repo (state/get-current-repo)
         tx-report {:tx-meta tx-meta

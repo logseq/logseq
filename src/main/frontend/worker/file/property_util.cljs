@@ -136,3 +136,43 @@
                                         (or (string/starts-with? s (str ":" key ":"))
                                             (string/starts-with? s (str key gp-property/colons " ")))))))]
            (string/join "\n" lines)))))))
+
+(defn remove-properties
+  [format content]
+  (cond
+    (gp-property/contains-properties? content)
+    (let [lines (string/split-lines content)
+          [title-lines properties&body] (split-with #(-> (string/triml %)
+                                                         string/upper-case
+                                                         (string/starts-with? properties-start)
+                                                         not)
+                                                    lines)
+          body (drop-while #(-> (string/trim %)
+                                string/upper-case
+                                (string/starts-with? properties-end)
+                                not
+                                (or (string/blank? %)))
+                           properties&body)
+          body (if (and (seq body)
+                        (-> (first body)
+                            string/triml
+                            string/upper-case
+                            (string/starts-with? properties-end)))
+                 (let [line (string/replace (first body) #"(?i):END:\s?" "")]
+                   (if (string/blank? line)
+                     (rest body)
+                     (cons line (rest body))))
+                 body)]
+      (->> (concat title-lines body)
+           (string/join "\n")))
+
+    (not= format :org)
+    (let [lines (string/split-lines content)
+          lines (if (simplified-property? (first lines))
+                  (drop-while simplified-property? lines)
+                  (cons (first lines)
+                        (drop-while simplified-property? (rest lines))))]
+      (string/join "\n" lines))
+
+    :else
+    content))
