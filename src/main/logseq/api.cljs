@@ -651,16 +651,18 @@
     (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
       (when-let [bb (bean/->clj batch-blocks)]
         (let [bb (if-not (vector? bb) (vector bb) bb)
-              {:keys [sibling keepUUID]} (bean/->clj opts)
+              {:keys [sibling keepUUID before]} (bean/->clj opts)
               keep-uuid? (or keepUUID false)
-              _          (when keep-uuid? (doseq
-                                            [block (outliner/tree-vec-flatten bb :children)]
-                                            (let [uuid (:id (:properties block))]
-                                              (when (and uuid (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error uuid)))
-                                                (throw (js/Error.
-                                                         (util/format "Custom block UUID already exists (%s)." uuid)))))))
-              _          (editor-handler/insert-block-tree-after-target
-                           (:db/id block) sibling bb (:block/format block) keep-uuid?)]
+              _ (when keep-uuid? (doseq
+                                  [block (outliner/tree-vec-flatten bb :children)]
+                                   (let [uuid (:id (:properties block))]
+                                     (when (and uuid (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error uuid)))
+                                       (throw (js/Error.
+                                                (util/format "Custom block UUID already exists (%s)." uuid)))))))
+              block (if (and before sibling)
+                      (db/pull (:db/id (:block/left block))) block)
+              _ (editor-handler/insert-block-tree-after-target
+                  (:db/id block) sibling bb (:block/format block) keep-uuid?)]
           nil)))))
 
 (def ^:export remove_block
