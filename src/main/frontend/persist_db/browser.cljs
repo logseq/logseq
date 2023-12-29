@@ -11,9 +11,10 @@
             [cljs-bean.core :as bean]
             [frontend.state :as state]
             [electron.ipc :as ipc]
-            [frontend.modules.outliner.datascript :as outliner-db]
+            [frontend.modules.outliner.pipeline :as pipeline]
             [clojure.edn :as edn]
-            [frontend.handler.worker :as worker-handler]))
+            [frontend.handler.worker :as worker-handler]
+            [frontend.db :as db]))
 
 (defonce *sqlite (atom nil))
 
@@ -100,7 +101,7 @@
                                       (pr-str context))
                     data (edn/read-string result)]
               (state/pub-event! [:search/transact-data repo (:search-indice data)])
-              (outliner-db/after-transact-pipelines data)
+              (pipeline/invoke-hooks data)
               (ipc/ipc :db-transact repo (:tx-data data) (:tx-meta data))
               nil)
             (notification/show! "Latest change was not saved! Please restart the application." :error))))))
