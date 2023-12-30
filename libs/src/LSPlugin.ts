@@ -141,7 +141,7 @@ export interface AppUserInfo {
 export interface AppInfo {
   version: string
 
-  [key: string]: any
+  [key: string]: unknown
 }
 
 /**
@@ -159,6 +159,8 @@ export interface AppUserConfigs {
   showBracket: boolean
   enabledFlashcards: boolean
   enabledJournals: boolean
+
+  [key: string]: unknown
 }
 
 /**
@@ -168,6 +170,8 @@ export interface AppGraphInfo {
   name: string
   url: string
   path: string
+
+  [key: string]: unknown
 }
 
 /**
@@ -193,6 +197,8 @@ export interface BlockEntity {
   meta?: { timestamps: any; properties: any; startPos: number; endPos: number }
   title?: Array<any>
   marker?: string
+
+  [key: string]: unknown
 }
 
 /**
