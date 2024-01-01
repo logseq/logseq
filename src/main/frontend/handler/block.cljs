@@ -7,7 +7,7 @@
    [frontend.db.model :as db-model]
    [frontend.mobile.haptics :as haptics]
    [frontend.modules.outliner.core :as outliner-core]
-   [frontend.modules.outliner.transaction :as outliner-tx]
+   [frontend.modules.outliner.ui :as ui-outliner-tx]
    [frontend.state :as state]
    [frontend.util :as util]
    [goog.dom :as gdom]
@@ -59,7 +59,7 @@
 
 (defn indent-outdent-block!
   [block direction]
-  (outliner-tx/transact!
+  (ui-outliner-tx/transact!
    {:outliner-op :move-blocks}
    (outliner-core/indent-outdent-blocks! [block] (= direction :right))))
 

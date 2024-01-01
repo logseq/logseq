@@ -4,7 +4,7 @@
             [frontend.handler.block :as block-handler]
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.transaction :as outliner-tx]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [logseq.graph-parser.util :as gp-util]))
 
@@ -23,7 +23,7 @@
   "col: a collection of [block-id property-key property-value]."
   [col]
   (let [col' (group-by first col)]
-    (outliner-tx/transact!
+    (ui-outliner-tx/transact!
      {:outliner-op :save-block}
      (doseq [[block-id items] col']
        (let [block-id (if (string? block-id) (uuid block-id) block-id)

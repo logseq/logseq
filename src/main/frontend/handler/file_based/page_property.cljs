@@ -3,7 +3,7 @@
   (:require [clojure.string :as string]
             [frontend.db :as db]
             [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.transaction :as outliner-tx]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]))
 
@@ -83,7 +83,7 @@
                        :block/properties {key value}
                        :block/pre-block? true}
                 page-properties-tx [(assoc page-id :block/properties {key value})]]
-            (outliner-tx/transact!
+            (ui-outliner-tx/transact!
              {:outliner-op :insert-blocks
               :additional-tx page-properties-tx}
              (outliner-core/insert-blocks! block page {:sibling? false}))))))))
