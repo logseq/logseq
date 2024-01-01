@@ -4,7 +4,7 @@
             [frontend.handler.property :as property-handler]
             [frontend.modules.outliner.core :as outliner-core]
             [logseq.outliner.tree :as otree]
-            [frontend.modules.outliner.transaction :as outliner-tx]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [frontend.state :as state]
             [frontend.db :as db]))
@@ -40,7 +40,7 @@
 
       (every? map? (conj blocks' target-block))
       (let [target-node (outliner-core/block target-block)]
-        (outliner-tx/transact!
+        (ui-outliner-tx/transact!
          {:outliner-op :move-blocks}
          (editor-handler/save-current-block!)
          (if top?

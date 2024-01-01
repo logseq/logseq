@@ -31,14 +31,13 @@
          _# (assert (or (map? opts*#) (symbol? opts*#)) (str "opts is not a map or symbol, type: " (type opts*#)))
          opts# (if transact-data#
                  (assoc opts*# :nested-transaction? true)
-                 opts*#)
-         before-editor-cursor# (frontend.state/get-current-edit-block-and-position)]
+                 opts*#)]
      (if transact-data#
        (do
          (when transaction-opts#
            (conj! transaction-opts# opts#))
          ~@body)
-       (let [repo# (frontend.state/get-current-repo)
+       (let [repo# (get-in opts# [:transact-opts :repo])
              transaction-args# (cond-> {:repo repo#}
                                  (and (frontend.config/db-based-graph? repo#)
                                       (get opts*# :persist-op? true))
@@ -59,7 +58,7 @@
 
              (when (seq all-tx#) ;; If it's empty, do nothing
                (when-not (:nested-transaction? opts#) ; transact only for the whole transaction
-                 (let [result# (frontend.modules.outliner.datascript/transact! all-tx# opts## before-editor-cursor#)]
+                 (let [result# (frontend.modules.outliner.datascript/transact! all-tx# (dissoc opts## :transact-opts) (:transact-opts opts##))]
                    {:tx-report result#
                     :tx-data all-tx#
                     :tx-meta tx-meta#})))))))))

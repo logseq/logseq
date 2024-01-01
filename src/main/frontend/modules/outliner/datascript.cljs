@@ -1,15 +1,11 @@
 (ns frontend.modules.outliner.datascript
   (:require [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
-            [lambdaisland.glogi :as log]
-            [clojure.string :as string]
             [frontend.worker.util :as worker-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [frontend.worker.file.property-util :as wpu]
             [datascript.core :as d]
-            [frontend.state :as state]
-            [frontend.config :as config]
-            [frontend.db :as db]))
+            [clojure.string :as string]))
 
 (defn new-outliner-txs-state [] (atom []))
 
@@ -36,7 +32,7 @@
 
 (defn update-refs-and-macros
   "When a block is deleted, refs are updated and macros associated with the block are deleted"
-  [txs db repo opts]
+  [txs db repo opts set-state-fn]
   (if (= :delete-blocks (:outliner-op opts))
     (let [retracted-block-ids (->> (keep (fn [tx]
                                            (when (and (vector? tx)
@@ -75,18 +71,16 @@
                                        (vector :db.fn/retractEntity (:db/id %)))
                                     (:block/macros b)))
                             retracted-blocks)]
-      (when (seq retracted-tx')
-        (state/set-state! [:editor/last-replace-ref-content-tx repo]
-                          {:retracted-block-ids retracted-block-ids
+      (when (and (seq retracted-tx') (fn? set-state-fn))
+        (set-state-fn [:editor/last-replace-ref-content-tx repo]
+                                 {:retracted-block-ids retracted-block-ids
                            :revert-tx revert-tx}))
       (concat txs retracted-tx' macros-tx))
     txs))
 
 (defn transact!
-  [txs opts before-editor-cursor]
-  (let [repo (state/get-current-repo)
-        conn (db/get-db repo false)
-        db-based? (sqlite-util/db-based-graph? repo)
+  [txs tx-meta {:keys [repo conn unlinked-graph? after-transact-fn set-state-fn] :as opts}]
+  (let [db-based? (sqlite-util/db-based-graph? repo)
         txs (map (fn [m]
                    (if (map? m)
                      (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
@@ -95,27 +89,17 @@
                      m)) txs)
         txs (remove-nil-from-transaction txs)
         txs (cond-> txs
-              (= :delete-blocks (:outliner-op opts))
-              (update-refs-and-macros @conn repo opts)
+              (= :delete-blocks (:outliner-op tx-meta))
+              (update-refs-and-macros @conn repo tx-meta set-state-fn)
 
               true
               (distinct))]
     (when (and (seq txs)
-               (or db-based?
-                   (not (contains? (:file/unlinked-dirs @state/state)
-                                   (config/get-repo-dir repo)))))
+               (or db-based? (not unlinked-graph?)))
       (try
-        (let [rs (d/transact! conn txs (assoc opts :outliner/transact? true))
-              tx-id (get-tx-id rs)]
-
-          (state/update-state! :history/tx->editor-cursor
-                               (fn [m] (assoc m tx-id before-editor-cursor)))
-
-          ;; update the current edit block to include full information
-          (when-let [block (state/get-edit-block)]
-            (when (and (:block/uuid block) (not (:db/id block)))
-              (state/set-state! :editor/block (d/pull @conn '[*] [:block/uuid (:block/uuid block)]))))
-          rs)
+        (let [tx-report (d/transact! conn txs (assoc tx-meta :outliner/transact? true))]
+          (when (fn? after-transact-fn) (after-transact-fn tx-report opts))
+          tx-report)
         (catch :default e
-          (log/error :exception e)
+          (js/console.error e)
           (throw e))))))

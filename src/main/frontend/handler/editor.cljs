@@ -32,7 +32,7 @@
             [frontend.handler.file-based.editor :as file-editor-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.transaction :as outliner-tx]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.tree :as tree]
             [logseq.outliner.tree :as otree]
             [frontend.search :as search]
@@ -266,7 +266,7 @@
         (let [original-block (db/entity (:db/id block))
              original-props (:block/properties original-block)
              {:keys [tx-data]}
-             (outliner-tx/transact!
+             (ui-outliner-tx/transact!
               opts'
               (outliner-core/save-block! block')
               ;; page properties changed
@@ -362,7 +362,7 @@
 
                    :else
                    (not has-children?))]
-    (outliner-tx/transact!
+    (ui-outliner-tx/transact!
      {:outliner-op :insert-blocks}
       (save-current-block! {:current-block current-block
                             :insert-block? true})
@@ -665,7 +665,7 @@
     (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                      (uuid id)) blocks))
                    (remove nil?))]
-      (outliner-tx/transact!
+      (ui-outliner-tx/transact!
        {:outliner-op :cycle-todos}
        (doseq [id ids]
          (let [block (db/pull [:block/uuid id])]
@@ -702,7 +702,7 @@
   (let [repo (or repo (state/get-current-repo))
         block (db/pull repo '[*] [:block/uuid uuid])]
     (when block
-      (outliner-tx/transact!
+      (ui-outliner-tx/transact!
        {:outliner-op :delete-blocks}
         (outliner-core/delete-blocks! [block] (merge
                                                delete-opts
@@ -794,7 +794,7 @@
                                         (assoc :concat-data
                                                {:last-edit-block (:block/uuid block)}))
                         db-based? (config/db-based-graph? repo)]
-                    (outliner-tx/transact!
+                    (ui-outliner-tx/transact!
                      transact-opts
                      (cond
                        (and prev-block (:block/name prev-block)
@@ -863,7 +863,7 @@
           block (first blocks)
           block-parent (get uuid->dom-block (:block/uuid block))
           sibling-block (when block-parent (util/get-prev-block-non-collapsed-non-embed block-parent))]
-      (outliner-tx/transact!
+      (ui-outliner-tx/transact!
        {:outliner-op :delete-blocks}
        (outliner-core/delete-blocks! blocks {}))
       (when sibling-block
@@ -1269,7 +1269,7 @@
                                (map #(block/page-name->map % true) tags)
                                (map :db/id existing-tags))
                     opts {:outliner-op :save-block}]
-                (outliner-tx/transact!
+                (ui-outliner-tx/transact!
                  opts
                  (outliner-core/save-block! {:db/id (:db/id block)
                                              :block/tags tag-pages})))))
@@ -1294,7 +1294,7 @@
 
 (defn save-blocks!
   [blocks]
-  (outliner-tx/transact!
+  (ui-outliner-tx/transact!
    {:outliner-op :save-block}
    (doseq [[block value] blocks]
      (save-block-if-changed! block value))))
@@ -1749,7 +1749,7 @@
     (save-current-block!)
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
-                       (outliner-tx/transact!
+                       (ui-outliner-tx/transact!
                         {:outliner-op :move-blocks}
                         (outliner-core/move-blocks-up-down! blocks up?))
                        (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
@@ -1786,7 +1786,7 @@
   [direction]
   (let [blocks (get-selected-ordered-blocks)]
     (when (seq blocks)
-      (outliner-tx/transact!
+      (ui-outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
        (outliner-core/indent-outdent-blocks! blocks (= direction :right))))))
@@ -2076,11 +2076,11 @@
                    true)]
 
     (when has-unsaved-edits
-      (outliner-tx/transact!
+      (ui-outliner-tx/transact!
        {:outliner-op :save-block}
        (outliner-core/save-block! editing-block)))
 
-    (outliner-tx/transact!
+    (ui-outliner-tx/transact!
       {:outliner-op :insert-blocks
        :additional-tx revert-cut-txs}
       (when target-block'
@@ -2194,7 +2194,7 @@
                              :else
                              true)]
              (try
-               (outliner-tx/transact!
+               (ui-outliner-tx/transact!
                 {:outliner-op :insert-blocks
                  :created-from-journal-template? journal?}
                 (save-current-block!)
@@ -2262,7 +2262,7 @@
         block (:data node)]
     (save-current-block!)
     (when target
-      (outliner-tx/transact!
+      (ui-outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
        (outliner-core/move-blocks! [block] target true))
@@ -2538,7 +2538,7 @@
                                 false))
               (profile
                "Insert block"
-               (outliner-tx/transact!
+               (ui-outliner-tx/transact!
                 {:outliner-op :insert-blocks}
                 (insert-new-block! state))))))))))
 
@@ -2715,7 +2715,7 @@
             repo (state/get-current-repo)
             delete-block (if next-block-has-refs? edit-block next-block)
             keep-block (if next-block-has-refs? next-block edit-block)]
-        (outliner-tx/transact!
+        (ui-outliner-tx/transact!
          {:outliner-op :delete-blocks
           :concat-data {:last-edit-block (:block/uuid edit-block)
                         :end? true}}
@@ -2860,7 +2860,7 @@
         {:keys [block]} (get-state)]
     (when block
       (state/set-editor-last-pos! pos)
-      (outliner-tx/transact!
+      (ui-outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
        (outliner-core/indent-outdent-blocks! [block] indent?)))
@@ -3527,7 +3527,7 @@
         value (boolean value)]
     (when repo
       (save-current-block!) ;; Save the input contents before collapsing
-      (outliner-tx/transact! ;; Save the new collapsed state as an undo transaction (if it changed)
+      (ui-outliner-tx/transact! ;; Save the new collapsed state as an undo transaction (if it changed)
        {:outliner-op :collapse-expand-blocks}
        (doseq [block-id block-ids]
          (when-let [block (db/entity [:block/uuid block-id])]
