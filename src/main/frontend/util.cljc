@@ -864,10 +864,8 @@
     (time (reset! result (doall (f))))
     @result))
 
-(defn concat-without-nil
-  [& cols]
-  (->> (apply concat cols)
-       (remove nil?)))
+#?(:cljs
+   (def concat-without-nil worker-util/concat-without-nil))
 
 #?(:cljs
    (defn set-title!

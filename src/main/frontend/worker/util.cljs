@@ -128,3 +128,8 @@
 (defn post-message
   [type data]
   (.postMessage js/self (bean/->js [type data])))
+
+(defn concat-without-nil
+  [& cols]
+  (->> (apply concat cols)
+       (remove nil?)))

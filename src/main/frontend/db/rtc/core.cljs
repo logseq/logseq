@@ -93,12 +93,12 @@
 (defmethod transact-db! :move-blocks [_ & args]
   (outliner-tx/transact!
    {:persist-op? false}
-   (apply outliner-core/move-blocks! (db/get-db false) args)))
+   (apply outliner-core/move-blocks! (state/get-current-repo) (db/get-db false) args)))
 
 (defmethod transact-db! :insert-blocks [_ & args]
   (outliner-tx/transact!
    {:persist-op? false}
-   (apply outliner-core/insert-blocks! args)))
+   (apply outliner-core/insert-blocks! (state/get-current-repo) (db/get-db false) args)))
 
 (defmethod transact-db! :save-block [_ & args]
   (outliner-tx/transact!

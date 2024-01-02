@@ -372,9 +372,10 @@
      {:outliner-op :insert-blocks}
      (save-current-block! {:current-block current-block
                            :insert-block? true})
-     (outliner-core/insert-blocks! (db/get-db false) [new-block] current-block {:sibling? sibling?
-                                                                                :keep-uuid? keep-uuid?
-                                                                                :replace-empty-target? replace-empty-target?}))))
+     (outliner-core/insert-blocks! (state/get-current-repo) (db/get-db false)
+                                   [new-block] current-block {:sibling? sibling?
+                                                              :keep-uuid? keep-uuid?
+                                                              :replace-empty-target? replace-empty-target?}))))
 
 (defn- block-self-alone-when-insert?
   [config uuid]
@@ -708,12 +709,13 @@
   (let [repo (or repo (state/get-current-repo))
         block (db/pull repo '[*] [:block/uuid uuid])]
     (when block
-      (ui-outliner-tx/transact!
-       {:outliner-op :delete-blocks}
-       (outliner-core/delete-blocks! repo (db/get-db false)
-                                     [block] (merge
-                                              delete-opts
-                                              {:children? children?}))))))
+      (let [blocks (block-handler/get-top-level-blocks [block])]
+        (ui-outliner-tx/transact!
+         {:outliner-op :delete-blocks}
+         (outliner-core/delete-blocks! repo (db/get-db false) blocks
+                                       (merge
+                                        delete-opts
+                                        {:children? children?})))))))
 
 (defn- move-to-prev-block
   [repo sibling-block format _id value]
@@ -869,10 +871,11 @@
     (let [uuid->dom-block (zipmap block-uuids dom-blocks)
           block (first blocks)
           block-parent (get uuid->dom-block (:block/uuid block))
-          sibling-block (when block-parent (util/get-prev-block-non-collapsed-non-embed block-parent))]
+          sibling-block (when block-parent (util/get-prev-block-non-collapsed-non-embed block-parent))
+          blocks' (block-handler/get-top-level-blocks blocks)]
       (ui-outliner-tx/transact!
        {:outliner-op :delete-blocks}
-       (outliner-core/delete-blocks! repo (db/get-db false) blocks {}))
+       (outliner-core/delete-blocks! repo (db/get-db false) blocks' {}))
       (when sibling-block
         (move-to-prev-block repo sibling-block
                             (:block/format block)
@@ -958,7 +961,7 @@
 (defn- compose-copied-blocks-contents
   [repo block-ids]
   (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
-        top-level-block-uuids (->> (outliner-core/get-top-level-blocks blocks)
+        top-level-block-uuids (->> (block-handler/get-top-level-blocks blocks)
                                    (map :block/uuid))
         content (export-text/export-blocks-as-markdown
                  repo top-level-block-uuids
@@ -1052,7 +1055,7 @@
           page-id (:db/id (:block/page (first blocks)))
           ;; filter out blocks not belong to page with 'page-id'
           blocks* (remove (fn [block] (some-> (:db/id (:block/page block)) (not= page-id))) blocks)]
-      (->> (outliner-core/get-top-level-blocks blocks*)
+      (->> (block-handler/get-top-level-blocks blocks*)
            (map :block/uuid)))))
 
 (defn cut-selection-blocks
@@ -1068,7 +1071,7 @@
               block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))
               lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
               blocks (db/pull-many repo '[*] lookup-refs)
-              top-level-blocks (outliner-core/get-top-level-blocks blocks)
+              top-level-blocks (block-handler/get-top-level-blocks blocks)
               sorted-blocks (mapcat (fn [block]
                                       (tree/get-sorted-block-and-children repo (:db/id block)))
                                     top-level-blocks)]
@@ -1756,9 +1759,10 @@
     (save-current-block!)
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
-                       (ui-outliner-tx/transact!
-                        {:outliner-op :move-blocks}
-                        (outliner-core/move-blocks-up-down! (db/get-db false) blocks up?))
+                       (let [blocks' (block-handler/get-top-level-blocks blocks)]
+                         (ui-outliner-tx/transact!
+                         {:outliner-op :move-blocks}
+                         (outliner-core/move-blocks-up-down! (state/get-current-repo) (db/get-db false) blocks' up?)))
                        (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
                          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})))]
       (if edit-block-id
@@ -1796,7 +1800,11 @@
       (ui-outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
-       (outliner-core/indent-outdent-blocks! (db/get-db false) blocks (= direction :right))))))
+       (outliner-core/indent-outdent-blocks! (state/get-current-repo)
+                                             (db/get-db false)
+                                             (block-handler/get-top-level-blocks blocks)
+                                             (= direction :right)
+                                             {:get-first-block-original block-handler/get-first-block-original})))))
 
 (defn- get-link [format link label]
   (let [link (or link "")
@@ -2096,7 +2104,7 @@
              blocks' (map (fn [block]
                             (paste-block-cleanup repo block page exclude-properties format content-update-fn keep-uuid?))
                           blocks)
-             result (outliner-core/insert-blocks! (db/get-db false) blocks' target-block' {:sibling? sibling?
+             result (outliner-core/insert-blocks! repo (db/get-db false) blocks' target-block' {:sibling? sibling?
                                                                                            :outliner-op :paste
                                                                                            :replace-empty-target? replace-empty-target?
                                                                                            :keep-uuid? keep-uuid?})]
@@ -2205,7 +2213,7 @@
                 {:outliner-op :insert-blocks
                  :created-from-journal-template? journal?}
                 (save-current-block!)
-                (let [result (outliner-core/insert-blocks! (db/get-db false) blocks'
+                (let [result (outliner-core/insert-blocks! repo (db/get-db false) blocks'
                                                            target
                                                            (assoc opts
                                                                   :sibling? sibling?'))]
@@ -2262,7 +2270,7 @@
 
 (defn outdent-on-enter
   [node]
-  (let [original-block (outliner-core/get-current-editing-original-block)
+  (let [original-block (block-handler/get-current-editing-original-block)
         parent-node (otree/-get-parent node (db/get-db false))
         target (or original-block (:data parent-node))
         pos (state/get-edit-pos)
@@ -2272,7 +2280,9 @@
       (ui-outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
-       (outliner-core/move-blocks! (db/get-db false) [block] target true))
+       (outliner-core/move-blocks! (state/get-current-repo) (db/get-db false)
+                                   (block-handler/get-top-level-blocks [block])
+                                   target true))
       (when original-block
         (util/schedule #(edit-block! block pos nil))))))
 
@@ -2870,7 +2880,11 @@
       (ui-outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
-       (outliner-core/indent-outdent-blocks! (db/get-db false) [block] indent?)))
+       (outliner-core/indent-outdent-blocks! (state/get-current-repo)
+                                             (db/get-db false)
+                                             (block-handler/get-top-level-blocks [block])
+                                             indent?
+                                             {:get-first-block-original block-handler/get-first-block-original})))
     (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler
