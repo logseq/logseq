@@ -2,26 +2,28 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.impl.entity :as de]
-            [frontend.db :as db]
-            [frontend.db.model :as db-model]
+            [datascript.core :as d]
             [logseq.db.frontend.schema :as db-schema]
-            [frontend.db.conn :as conn]
-            [frontend.db.outliner :as db-outliner]
             [frontend.modules.outliner.datascript :as ds]
             [logseq.outliner.tree :as otree]
             [frontend.modules.outliner.utils :as outliner-u]
-            [frontend.state :as state]
-            [frontend.util :as util]
-            [frontend.config :as config]
             [logseq.graph-parser.util :as gp-util]
             [cljs.spec.alpha :as s]
-            [frontend.format.block :as block]
-            [frontend.handler.file-based.property.util :as property-util]
-            [frontend.handler.property.util :as pu]
-            [frontend.format.mldoc :as mldoc]
-            [dommy.core :as dom]
             [goog.object :as gobj]
-            [logseq.outliner.pipeline :as outliner-pipeline]))
+            [logseq.outliner.pipeline :as outliner-pipeline]
+            [logseq.db :as ldb]
+            [frontend.worker.mldoc :as mldoc]
+            [logseq.graph-parser.block :as gp-block]
+            [frontend.worker.file.property-util :as wpu]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.sqlite.util :as sqlite-util]
+
+            [frontend.db :as db]
+            [frontend.db.model :as db-model]
+            [frontend.db.conn :as conn]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [dommy.core :as dom]))
 
 (s/def ::block-map (s/keys :opt [:db/id :block/uuid :block/page :block/left :block/parent]))
 
@@ -33,32 +35,41 @@
 (defn block
   [m]
   (assert (or (map? m) (de/entity? m)) (util/format "block data must be map or entity, got: %s %s" (type m) m))
-  (if (de/entity? m)
-    (->Block {:db/id (:db/id m)
-              :block/uuid (:block/uuid m)
-              :block/page (:block/page m)
-              :block/left (:block/left m)
-              :block/parent (:block/parent m)})
-    (->Block m)))
+  (let [e (if (de/entity? m)
+            m
+            (let [eid (if (:block/uuid m)
+                        [:block/uuid (:block/uuid m)]
+                        (:db/id m))]
+              (assert eid "eid doesn't exist")
+              (db/entity eid)))
+        e-map {:db/id (:db/id e)
+               :block/uuid (:block/uuid e)
+               :block/page {:db/id (:db/id (:block/page e))
+                            :block/uuid (:block/uuid (:block/page e))}
+               :block/left {:db/id (:db/id (:block/left e))
+                            :block/uuid (:block/uuid (:block/left e))}
+               :block/parent {:db/id (:db/id (:block/parent e))
+                              :block/uuid (:block/uuid (:block/parent e))}}
+        data (merge e-map m)]
+    (->Block data)))
 
 (defn get-data
   [block]
   (:data block))
 
 (defn get-block-by-id
-  [id]
-  (let [c (conn/get-db false)
-        r (db-outliner/get-by-id c (outliner-u/->block-lookup-ref id))]
+  [db id]
+  (let [r (ldb/get-by-id db (outliner-u/->block-lookup-ref id))]
     (when r (->Block r))))
 
 (defn- get-by-parent-&-left
-  [parent-uuid left-uuid]
-  (let [parent-id (:db/id (db/entity [:block/uuid parent-uuid]))
-        left-id (:db/id (db/entity [:block/uuid left-uuid]))]
+  [db parent-uuid left-uuid]
+  (let [parent-id (:db/id (d/entity db [:block/uuid parent-uuid]))
+        left-id (:db/id (d/entity db [:block/uuid left-uuid]))]
     (some->
-     (db-model/get-by-parent-&-left (conn/get-db) parent-id left-id)
+     (db-model/get-by-parent-&-left db parent-id left-id)
      :db/id
-     db/pull
+     d/entity
      block)))
 
 (defn- block-with-timestamps
@@ -151,10 +162,10 @@
                                         (:block/macros block-entity)))))))
 
 (defn- create-linked-page-when-save
-  [txs-state block-entity m tags-has-class?]
+  [conn db date-formatter txs-state block-entity m tags-has-class?]
   (if tags-has-class?
     (let [content (state/get-edit-content)
-          linked-page (some-> content mldoc/extract-plain)
+          linked-page (some-> content #(mldoc/extract-plain (state/get-current-repo) %))
           sanity-linked-page (some-> linked-page util/page-name-sanity-lc)
           linking-page? (and (not (string/blank? sanity-linked-page))
                              @(:editor/create-page? @state/state))]
@@ -163,11 +174,12 @@
                                       (when (= sanity-linked-page (:block/name r))
                                         (:block/uuid r)))
                                     (:block/refs m))
-              page-m (block/page-name->map linked-page (or existing-ref-id true))
-              _ (when-not (db/entity [:block/uuid (:block/uuid page-m)])
-                  (db/transact! [page-m]))
+              page-m (gp-block/page-name->map linked-page (or existing-ref-id true)
+                                              db true date-formatter)
+              _ (when-not (d/entity db [:block/uuid (:block/uuid page-m)])
+                  (d/transact! conn [page-m]))
               merge-tx (let [children (:block/_parent block-entity)
-                             page (db/entity [:block/uuid (:block/uuid page-m)])
+                             page (d/entity db [:block/uuid (:block/uuid page-m)])
                              [target sibling?] (get-last-child-or-self page)]
                          (when (seq children)
                            (:tx-data
@@ -187,7 +199,7 @@
     (reset! (:editor/create-page? @state/state) false)))
 
 (defn rebuild-block-refs
-  [repo block new-properties & {:keys [skip-content-parsing?]}]
+  [repo conn db date-formatter block new-properties & {:keys [skip-content-parsing?]}]
   (let [property-key-refs (keys new-properties)
         property-value-refs (->> (vals new-properties)
                                  (mapcat (fn [v]
@@ -196,7 +208,7 @@
                                              v
 
                                              (uuid? v)
-                                             (when-let [entity (db/entity repo [:block/uuid v])]
+                                             (when-let [entity (d/entity conn [:block/uuid v])]
                                                (let [from-property? (get-in entity [:block/metadata :created-from-property])]
                                                  (if (and from-property? (not (contains? (:block/type entity) "closed value")))
                                                    ;; don't reference hidden block property values except closed values
@@ -204,24 +216,25 @@
                                                    [v])))
 
                                              (and (coll? v) (string? (first v)))
-                                             (mapcat block/extract-refs-from-text v)
+                                             (mapcat #(mldoc/extract-refs-from-text repo db % date-formatter) v)
 
                                              (string? v)
-                                             (block/extract-refs-from-text v)
+                                             (mldoc/extract-refs-from-text repo db v date-formatter)
 
                                              :else
                                              nil))))
         property-refs (->> (concat property-key-refs property-value-refs)
                            (map (fn [id-or-map] (if (uuid? id-or-map) {:block/uuid id-or-map} id-or-map)))
-                           (remove (fn [b] (nil? (db/entity [:block/uuid (:block/uuid b)])))))
+                           (remove (fn [b] (nil? (d/entity db [:block/uuid (:block/uuid b)])))))
         content-refs (when-not skip-content-parsing?
-                       (some-> (:block/content block) block/extract-refs-from-text))]
+                       (when-let [content (:block/content block)]
+                         (mldoc/extract-refs-from-text repo db content date-formatter)))]
     (concat property-refs content-refs)))
 
 (defn- rebuild-refs
-  [repo txs-state block m]
-  (when (config/db-based-graph? repo)
-    (let [refs (->> (rebuild-block-refs repo block (:block/properties block)
+  [repo conn db date-formatter txs-state block m]
+  (when (sqlite-util/db-based-graph? repo)
+    (let [refs (->> (rebuild-block-refs repo conn db date-formatter block (:block/properties block)
                                         :skip-content-parsing? true)
                     (concat (:block/refs m))
                     (concat (:block/tags m)))]
@@ -250,49 +263,49 @@
 
 (extend-type Block
   otree/INode
-  (-get-id [this]
+  (-get-id [this conn]
     (or
      (when-let [block-id (get-in this [:data :block/uuid])]
        block-id)
-     (when-let [db-id (get-in this [:data :db/id])]
-       (let [uuid (:block/uuid (db/pull db-id))]
+     (when-let [data (:data this)]
+       (let [uuid (:block/uuid data)]
          (if uuid
            uuid
            (let [new-id (db/new-block-id)]
-             (db/transact! [{:db/id db-id
-                             :block/uuid new-id}])
+             (d/transact! conn [{:db/id (:db/id data)
+                                 :block/uuid new-id}])
              new-id))))))
 
-  (-get-parent-id [this]
+  (-get-parent-id [this _conn]
     (-> (get-in this [:data :block/parent])
-        (outliner-u/->block-id)))
+        :block/uuid))
 
-  (-get-left-id [this]
+  (-get-left-id [this _conn]
     (-> (get-in this [:data :block/left])
-        (outliner-u/->block-id)))
+        :block/uuid))
 
-  (-set-left-id [this left-id]
+  (-set-left-id [this left-id _conn]
     (outliner-u/check-block-id left-id)
     (update this :data assoc :block/left [:block/uuid left-id]))
 
-  (-get-parent [this]
-    (when-let [parent-id (otree/-get-parent-id this)]
-      (get-block-by-id parent-id)))
+  (-get-parent [this conn]
+    (when-let [parent-id (otree/-get-parent-id this conn)]
+      (get-block-by-id @conn parent-id)))
 
-  (-get-left [this]
-    (let [left-id (otree/-get-left-id this)]
-      (get-block-by-id left-id)))
+  (-get-left [this conn]
+    (let [left-id (otree/-get-left-id this conn)]
+      (get-block-by-id @conn left-id)))
 
-  (-get-right [this]
-    (let [left-id (otree/-get-id this)
-          parent-id (otree/-get-parent-id this)]
-      (get-by-parent-&-left parent-id left-id)))
+  (-get-right [this conn]
+    (let [left-id (otree/-get-id this conn)
+          parent-id (otree/-get-parent-id this conn)]
+      (get-by-parent-&-left @conn parent-id left-id)))
 
-  (-get-down [this]
-    (let [parent-id (otree/-get-id this)]
-      (get-by-parent-&-left parent-id parent-id)))
+  (-get-down [this conn]
+    (let [parent-id (otree/-get-id this conn)]
+      (get-by-parent-&-left @conn parent-id parent-id)))
 
-  (-save [this txs-state]
+  (-save [this txs-state conn repo]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
     (let [m (-> (:data this)
@@ -301,25 +314,23 @@
                 gp-util/remove-nils
                 block-with-updated-at
                 fix-tag-ids)
-          repo (state/get-current-repo)
-          db-based? (config/db-based-graph? repo)
+          db @conn
+          date-formatter (state/get-date-formatter)
+          db-based? (sqlite-util/db-based-graph? repo)
           db-id (:db/id (:data this))
           block-uuid (:block/uuid (:data this))
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
-          block-entity (db/entity eid)
+          block-entity (d/entity db eid)
           tags-has-class? (and db-based?
                                (some (fn [tag]
-                                       (contains? (:block/type (db/entity [:block/uuid (:block/uuid tag)])) "class"))
+                                       (contains? (:block/type (d/entity db [:block/uuid (:block/uuid tag)])) "class"))
                                      (:block/tags m)))]
 
       ;; Ensure block UUID never changes
       (when (and db-id block-uuid)
-        (let [uuid-not-changed? (= block-uuid (:block/uuid (db/entity db-id)))]
+        (let [uuid-not-changed? (= block-uuid (:block/uuid (d/entity db db-id)))]
           (when-not uuid-not-changed?
-            (when config/dev?
-              (state/pub-event! [:notification/show
-                                {:content "Block UUID shouldn't be changed"
-                                 :status :error}])))
+            (js/console.error "Block UUID shouldn't be changed once created"))
           (assert uuid-not-changed? "Block UUID changed")))
 
       (when eid
@@ -350,16 +361,16 @@
         (swap! txs-state conj
                (dissoc m :db/other-tx)))
 
-      (create-linked-page-when-save txs-state block-entity m tags-has-class?)
+      (create-linked-page-when-save conn db (state/get-date-formatter) txs-state block-entity m tags-has-class?)
 
-      (rebuild-refs repo txs-state block-entity m)
+      (rebuild-refs repo conn db date-formatter txs-state block-entity m)
 
       this))
 
-  (-del [this txs-state children?]
+  (-del [this txs-state children? conn]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
-    (let [block-id (otree/-get-id this)
+    (let [block-id (otree/-get-id this conn)
           ids (set (if children?
                      (let [children (db/get-block-children (state/get-current-repo) block-id)
                            children-ids (map :block/uuid children)]
@@ -369,7 +380,7 @@
           txs (if-not children?
                 (let [immediate-children (db/get-block-immediate-children (state/get-current-repo) block-id)]
                   (if (seq immediate-children)
-                    (let [left-id (otree/-get-id (otree/-get-left this))]
+                    (let [left-id (otree/-get-id (otree/-get-left this conn) conn)]
                       (concat txs
                               (map-indexed (fn [idx child]
                                              (let [parent [:block/uuid left-id]]
@@ -381,7 +392,7 @@
                                            immediate-children)))
                     txs))
                 txs)
-          page-tx (let [block (db/entity [:block/uuid block-id])]
+          page-tx (let [block (d/entity @conn [:block/uuid block-id])]
                     (when (:block/pre-block? block)
                       (let [id (:db/id (:block/page block))]
                         [[:db/retract id :block/properties]
@@ -392,8 +403,8 @@
       (swap! txs-state concat txs page-tx)
       block-id))
 
-  (-get-children [this]
-    (let [parent-id (otree/-get-id this)
+  (-get-children [this conn]
+    (let [parent-id (otree/-get-id this conn)
           children (db-model/get-block-immediate-children (state/get-current-repo) parent-id)]
       (map block children))))
 
@@ -495,16 +506,16 @@
         (get-new-id block (nth blocks (dec idx))))))
 
 (defn- get-left-nodes
-  [node limit]
-  (let [parent (otree/-get-parent node)]
+  [conn node limit]
+  (let [parent (otree/-get-parent node conn)]
     (loop [node node
            limit limit
            result []]
       (if (zero? limit)
         result
-        (if-let [left (otree/-get-left node)]
+        (if-let [left (otree/-get-left node conn)]
           (if-not (= left parent)
-            (recur left (dec limit) (conj result (otree/-get-id left)))
+            (recur left (dec limit) (conj result (otree/-get-id left conn)))
             result)
           result)))))
 
@@ -536,10 +547,11 @@
 
 (defn save-block
   "Save the `block`."
-  [block']
+  [repo block']
   {:pre [(map? block')]}
-  (let [txs-state (atom [])]
-    (otree/-save (block block') txs-state)
+  (let [conn (db/get-db false)
+        txs-state (atom [])]
+    (otree/-save (block block') txs-state conn repo)
     {:tx-data @txs-state}))
 
 (defn blocks-with-level
@@ -608,23 +620,29 @@
     (->> (filter (fn [b] (= 1 (:block/level b))) level-blocks)
          (map (fn [b]
                 (let [original (get-original-block b)]
-                  (or (and original (db/pull (:db/id original))) b)))))))
+                  (or (and original (db/entity (:db/id original))) b)))))))
 
 (defn- get-right-siblings
   "Get `node`'s right siblings."
   [node]
   {:pre [(otree/satisfied-inode? node)]}
-  (when-let [parent (otree/-get-parent node)]
-    (let [children (otree/-get-children parent)]
-      (->> (split-with #(not= (otree/-get-id node) (otree/-get-id %)) children)
-           last
-           rest))))
+  (let [conn (db/get-db false)]
+    (when-let [parent (otree/-get-parent node conn)]
+     (let [children (otree/-get-children parent conn)]
+       (->> (split-with #(not= (otree/-get-id node conn) (otree/-get-id % conn)) children)
+            last
+            rest)))))
 
 (defn- blocks-with-ordered-list-props
   [blocks target-block sibling?]
-  (let [target-block (if sibling? target-block (some-> target-block :db/id db/pull block otree/-get-down :data))
-        list-type-fn (fn [block] (pu/get-property block :logseq.order-list-type))
-        k (pu/get-pid :logseq.order-list-type)]
+  (let [repo (state/get-current-repo)
+        conn (db/get-db repo false)
+        db (db/get-db repo)
+        target-block (if sibling? target-block (some-> target-block :db/id db/entity block
+                                                       (#(otree/-get-down % conn))
+                                                       :data))
+        list-type-fn (fn [block] (db-property/get-property repo db block :logseq.order-list-type))
+        k (db-property/get-pid repo db :logseq.order-list-type)]
     (if-let [list-type (and target-block (list-type-fn target-block))]
       (mapv
        (fn [{:block/keys [content format] :as block}]
@@ -633,8 +651,8 @@
                 (nil? (list-type-fn block)))
            (update :block/properties assoc k list-type)
 
-           (not (config/db-based-graph? (state/get-current-repo)))
-           (assoc :block/content (property-util/insert-property format content :logseq.order-list-type list-type))))
+           (not (sqlite-util/db-based-graph? (state/get-current-repo)))
+           (assoc :block/content (wpu/insert-property (state/get-current-repo) format content :logseq.order-list-type list-type))))
        blocks)
       blocks)))
 
@@ -772,7 +790,8 @@
                         :or {update-timestamps? true}}]
   {:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]}
-  (let [[target-block' sibling?] (get-target-block blocks target-block opts)
+  (let [conn (db/get-db false)
+        [target-block' sibling?] (get-target-block blocks target-block opts)
         _ (assert (some? target-block') (str "Invalid target: " target-block))
         sibling? (if (page-block? target-block') false sibling?)
         move? (contains? #{:move-blocks :move-blocks-up-down :indent-outdent-blocks} outliner-op)
@@ -821,12 +840,12 @@
                  (assign-temp-id tx replace-empty-target? target-block'))
             target-node (block target-block')
             next (if sibling?
-                   (otree/-get-right target-node)
-                   (otree/-get-down target-node))
+                   (otree/-get-right target-node conn)
+                   (otree/-get-down target-node conn))
             next-tx (when (and next
                                (if move? (not (contains? (set (map :db/id blocks)) (:db/id (:data next)))) true))
                       (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
-                        [{:block/uuid (otree/-get-id next)
+                        [{:block/uuid (otree/-get-id next conn)
                           :block/left (:db/id left)}]))
             full-tx (util/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx) tx next-tx)]
         (when (and replace-empty-target? (state/editing?))
@@ -891,12 +910,14 @@
            (first (:block/_parent (db/entity [:block/uuid (:block/uuid (get-data node))]))))
     (throw (ex-info "Block can't be deleted because it still has children left, you can pass `children?` equals to `true`."
                     {:block (get-data node)}))
-    (let [right-node (otree/-get-right node)]
-      (otree/-del node txs-state children?)
+    (let [repo (state/get-current-repo)
+          conn (db/get-db false)
+          right-node (otree/-get-right node conn)]
+      (otree/-del node txs-state children? conn)
       (when (otree/satisfied-inode? right-node)
-        (let [left-node (otree/-get-left node)
-              new-right-node (otree/-set-left-id right-node (otree/-get-id left-node))]
-          (otree/-save new-right-node txs-state)))
+        (let [left-node (otree/-get-left node conn)
+              new-right-node (otree/-set-left-id right-node (otree/-get-id left-node conn) conn)]
+          (otree/-save new-right-node txs-state conn repo)))
       @txs-state)))
 
 (defn- delete-blocks
@@ -907,7 +928,9 @@
            :or {children? true}
            :as delete-opts}]
   [:pre [(seq blocks)]]
-  (let [txs-state (ds/new-outliner-txs-state)
+  (let [repo (state/get-current-repo)
+        conn (db/get-db false)
+        txs-state (ds/new-outliner-txs-state)
         blocks (get-top-level-blocks blocks)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) blocks)
         start-block (first blocks)
@@ -916,29 +939,29 @@
         end-node (block end-block)
         end-node-parents (->>
                           (db/get-block-parents
-                           (state/get-current-repo)
-                           (otree/-get-id end-node)
+                           repo
+                           (otree/-get-id end-node conn)
                            {:depth 1000})
                           (map :block/uuid)
                           (set))
-        self-block? (contains? end-node-parents (otree/-get-id start-node))]
+        self-block? (contains? end-node-parents (otree/-get-id start-node conn))]
     (if (or
          (= 1 (count blocks))
          (= start-node end-node)
          self-block?)
       (delete-block txs-state start-node (assoc delete-opts :children? children?))
-      (let [sibling? (= (otree/-get-parent-id start-node)
-                        (otree/-get-parent-id end-node))
-            right-node (otree/-get-right end-node)]
+      (let [sibling? (= (otree/-get-parent-id start-node conn)
+                        (otree/-get-parent-id end-node conn))
+            right-node (otree/-get-right end-node conn)]
         (when (otree/satisfied-inode? right-node)
           (let [non-consecutive? (seq (db-model/get-non-consecutive-blocks blocks))
                 left-node-id (if sibling?
-                               (otree/-get-id (otree/-get-left start-node))
-                               (let [end-node-left-nodes (get-left-nodes end-node (count block-ids))
+                               (otree/-get-id (otree/-get-left start-node conn) conn)
+                               (let [end-node-left-nodes (get-left-nodes conn end-node (count block-ids))
                                      parents (->>
                                               (db/get-block-parents
-                                               (state/get-current-repo)
-                                               (otree/-get-id start-node)
+                                               repo
+                                               (otree/-get-id start-node conn)
                                                {:depth 1000})
                                               (map :block/uuid)
                                               (set))
@@ -950,15 +973,15 @@
             (when (and (nil? left-node-id) (not non-consecutive?))
               (assert left-node-id
                       (str "Can't find the left-node-id: "
-                           (pr-str {:start (db/entity [:block/uuid (otree/-get-id start-node)])
-                                    :end (db/entity [:block/uuid (otree/-get-id end-node)])
-                                    :right-node (db/entity [:block/uuid (otree/-get-id right-node)])}))))
+                           (pr-str {:start (db/entity [:block/uuid (otree/-get-id start-node conn)])
+                                    :end (db/entity [:block/uuid (otree/-get-id end-node conn)])
+                                    :right-node (db/entity [:block/uuid (otree/-get-id right-node conn)])}))))
             (when left-node-id
-              (let [new-right-node (otree/-set-left-id right-node left-node-id)]
-                (otree/-save new-right-node txs-state)))))
+              (let [new-right-node (otree/-set-left-id right-node left-node-id conn)]
+                (otree/-save new-right-node txs-state conn repo)))))
         (doseq [id block-ids]
-          (let [node (block (db/pull id))]
-            (otree/-del node txs-state true)))
+          (let [node (block (db/entity id))]
+            (otree/-del node txs-state true conn)))
         (let [fix-non-consecutive-tx (fix-non-consecutive-blocks blocks nil false)]
           (swap! txs-state concat fix-non-consecutive-tx))))
     {:tx-data @txs-state}))
@@ -977,7 +1000,7 @@
                         :as opts}]
   [:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]]
-  (let [blocks (map (fn [b] (db/pull [:block/uuid (:block/uuid b)])) blocks)
+  (let [blocks (map (fn [b] (db/entity [:block/uuid (:block/uuid b)])) blocks)
         blocks (get-top-level-blocks blocks)
         [target-block sibling?] (get-target-block blocks target-block opts)
         non-consecutive-blocks? (seq (db-model/get-non-consecutive-blocks blocks))
@@ -1128,7 +1151,7 @@
                 (if (state/logical-outdenting?)
                   result
                   ;; direct outdenting (default behavior)
-                  (let [last-top-block (db/pull (:db/id (last blocks')))
+                  (let [last-top-block (db/entity (:db/id (last blocks')))
                         right-siblings (->> (get-right-siblings (block last-top-block))
                                             (map :data))]
                     (if (seq right-siblings)

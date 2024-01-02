@@ -39,7 +39,7 @@
          ~@body)
        (let [repo# (get-in opts# [:transact-opts :repo])
              transaction-args# (cond-> {:repo repo#}
-                                 (and (frontend.config/db-based-graph? repo#)
+                                 (and (logseq.db.sqlite.util/db-based-graph? repo#)
                                       (get opts*# :persist-op? true))
                                  (assoc :persist-op? true))]
          (binding [frontend.modules.outliner.core/*transaction-data* (transient [])

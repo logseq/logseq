@@ -67,6 +67,12 @@
     (catch :default _e
       :default)))
 
+(defn- rebuild-block-refs
+  [repo block new-properties & opts]
+  (let [db (db/get-db repo)
+        date-formatter (state/get-date-formatter)]
+    (outliner-core/rebuild-block-refs repo db date-formatter block new-properties opts)))
+
 (defn convert-property-input-string
   [schema-type v-str]
   (if (and (not (string? v-str)) (not (object? v-str)))
@@ -155,7 +161,7 @@
                 (upsert-property! repo k-name (assoc property-schema :type property-type)
                                   {:property-uuid property-uuid})
                 (let [block-properties (assoc properties property-uuid values')
-                      refs (outliner-core/rebuild-block-refs repo block block-properties)]
+                      refs (rebuild-block-refs repo block block-properties)]
                   (db/transact! repo
                                 [[:db/retract (:db/id block) :block/refs]
                                  {:block/uuid (:block/uuid block)
@@ -250,7 +256,7 @@
                                         (set (remove string/blank? new-value)))
                                       new-value)
                           block-properties (assoc properties property-uuid new-value)
-                          refs (outliner-core/rebuild-block-refs repo
+                          refs (rebuild-block-refs repo
                                                                  block
                                                                  block-properties)]
                       (db/transact! repo
@@ -377,7 +383,7 @@
                                 nil))
                          properties (:block/properties block)
                          block-properties (assoc properties property-uuid v*)
-                         refs (outliner-core/rebuild-block-refs repo block block-properties)]
+                         refs (rebuild-block-refs repo block block-properties)]
                      [[:db/retract (:db/id block) :block/refs]
                       {:block/uuid (:block/uuid block)
                        :block/properties block-properties
@@ -397,7 +403,7 @@
                    (let [origin-properties (:block/properties block)]
                      (when (contains? (set (keys origin-properties)) property-uuid)
                        (let [properties' (dissoc origin-properties property-uuid)
-                             refs (outliner-core/rebuild-block-refs repo block properties')
+                             refs (rebuild-block-refs repo block properties')
                              property (db/entity [:block/uuid property-uuid])
                              value (get origin-properties property-uuid)
                              block-value? (and (= :default (get-in property [:block/schema :type] :default))
@@ -464,7 +470,7 @@
                     properties' (update properties property-id
                                         (fn [col]
                                           (set (remove #{property-value} col))))
-                    refs (outliner-core/rebuild-block-refs repo block properties')]
+                    refs (rebuild-block-refs repo block properties')]
                 (db/transact! repo
                               [[:db/retract (:db/id block) :block/refs]
                                {:block/uuid (:block/uuid block)

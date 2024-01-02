@@ -125,6 +125,13 @@
       (when-let [properties (:block/properties block)]
         (lookup repo db properties key)))))
 
+(defn get-pid
+  "Get a property's id (name or uuid) given its name. For file and db graphs"
+  [repo db property-name]
+  (if (sqlite-util/db-based-graph? repo)
+    (:block/uuid (d/entity db [:block/name (gp-util/page-name-sanity-lc (name property-name))]))
+    property-name))
+
 (defn shape-block?
   [repo db block]
   (= :whiteboard-shape (get-property repo db block :ls-type)))

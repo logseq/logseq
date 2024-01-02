@@ -771,7 +771,7 @@
             :else
             (let [has-children? (seq (:block/_parent block-e))
                   block (db/pull (:db/id block-e))
-                  left (otree/-get-left (outliner-core/block block))
+                  left (otree/-get-left (outliner-core/block block) (db/get-db false))
                   left-has-children? (and left
                                           (when-let [block-id (:block/uuid (:data left))]
                                             (let [block (db/entity [:block/uuid block-id])]
@@ -2256,7 +2256,7 @@
 (defn outdent-on-enter
   [node]
   (let [original-block (outliner-core/get-current-editing-original-block)
-        parent-node (otree/-get-parent node)
+        parent-node (otree/-get-parent node (db/get-db false))
         target (or original-block (:data parent-node))
         pos (state/get-edit-pos)
         block (:data node)]
@@ -2275,7 +2275,7 @@
     (when-let [entity (if-let [id' (parse-uuid (str id))]
                         (db/entity [:block/uuid id'])
                         (db/entity [:block/name (util/page-name-sanity-lc id)]))]
-      (= (:block/uuid entity) (otree/-get-parent-id current-node)))))
+      (= (:block/uuid entity) (otree/-get-parent-id current-node (db/get-db false))))))
 
 (defn insert
   ([insertion]
@@ -2472,7 +2472,7 @@
               content (gobj/get input "value")
               pos (cursor/pos input)
               current-node (outliner-core/block block)
-              has-right? (-> (otree/-get-right current-node)
+              has-right? (-> (otree/-get-right current-node (db/get-db false))
                              (tree/satisfied-inode?))
               db-based? (config/db-based-graph? (state/get-current-repo))
               thing-at-point ;intern is not supported in cljs, need a more elegant solution
