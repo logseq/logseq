@@ -141,8 +141,7 @@
         class? (contains? (:block/type block) "class")
         property-type (get-in property [:block/schema :type])
         save-property-fn (fn [] (components-pu/update-property! property @*property-name @*property-schema))
-        enable-closed-values? (contains? db-property-type/closed-value-property-types (or property-type :default))
-        enable-position? (contains? db-property-type/closed-value-property-position-types (or property-type :default))]
+        enable-closed-values? (contains? db-property-type/closed-value-property-types (or property-type :default))]
     [:div.property-configure.flex.flex-1.flex-col
      {:on-mouse-down #(state/set-state! :editor/mouse-down-from-property-configure? true)
       :on-mouse-up #(state/set-state! :editor/mouse-down-from-property-configure? nil)}
@@ -252,7 +251,7 @@
           (closed-value/choices property *property-name *property-schema opts)]])
 
       (when (and enable-closed-values?
-                 enable-position?
+                 (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :position)
                  (seq (:values @*property-schema)))
         (let [position (:position @*property-schema)
               choices (map
