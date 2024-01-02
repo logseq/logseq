@@ -42,3 +42,5 @@ logseq.graph-parser.schema.mldoc/block-ast-coll-schema
 logseq.graph-parser.config/img-formats
 ;; API
 logseq.graph-parser.config/text-formats
+;; API
+logseq.graph-parser/import-file-to-db-graph
