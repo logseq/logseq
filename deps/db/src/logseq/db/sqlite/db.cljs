@@ -1,7 +1,6 @@
 (ns ^:node-only logseq.db.sqlite.db
   "Sqlite fns for db graphs"
-  (:require ["path" :as node-path]
-            ["better-sqlite3" :as sqlite3]
+  (:require ["better-sqlite3" :as sqlite3]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             ;; FIXME: datascript.core has to come before datascript.storage or else nbb fails
             #_:clj-kondo/ignore
