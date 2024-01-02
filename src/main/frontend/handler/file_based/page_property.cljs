@@ -85,4 +85,4 @@
             (ui-outliner-tx/transact!
              {:outliner-op :insert-blocks
               :additional-tx page-properties-tx}
-             (outliner-core/insert-blocks! (db/get-db false) block page {:sibling? false}))))))))
+             (outliner-core/insert-blocks! repo (db/get-db false) block page {:sibling? false}))))))))

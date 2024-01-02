@@ -51,12 +51,15 @@
             [block-uuid1 block-uuid2] (repeatedly random-uuid)]
         (outliner-tx/transact!
          {}
-         (outliner-core/insert-blocks! [{:block/uuid block-uuid1 :block/content "block1"}
-                                        {:block/uuid block-uuid2 :block/content "block2"
-                                         :block/left [:block/uuid block-uuid1]
-                                         :block/parent [:block/uuid (:block/uuid page-block)]}]
-                                       page-block
-                                       {:sibling? true :keep-uuid? true}))
+         (outliner-core/insert-blocks!
+          test-helper/test-db
+          conn
+          [{:block/uuid block-uuid1 :block/content "block1"}
+           {:block/uuid block-uuid2 :block/content "block2"
+            :block/left [:block/uuid block-uuid1]
+            :block/parent [:block/uuid (:block/uuid page-block)]}]
+          page-block
+          {:sibling? true :keep-uuid? true}))
         (let [ops (op-mem-layer/get-all-ops test-helper/test-db)
               ops* (sort-by (comp :epoch second) < ops)
               [update-page-op move-op-1 update-op-1 move-op-2 update-op-2]

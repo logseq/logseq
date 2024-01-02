@@ -74,15 +74,18 @@
     (page-handler/create! "gen-remote-ops-test" {:redirect? false :create-first-block? false :uuid uuid1})
     (outliner-tx/transact!
      {:persist-op? false}
-     (outliner-core/insert-blocks! [{:block/uuid uuid2 :block/content "uuid2-block"}
-                                    {:block/uuid uuid3 :block/content "uuid3-block"
-                                     :block/left [:block/uuid uuid2]
-                                     :block/parent [:block/uuid (:block/uuid uuid1)]}
-                                    {:block/uuid uuid4 :block/content "uuid4-block"
-                                     :block/left [:block/uuid uuid3]
-                                     :block/parent [:block/uuid (:block/uuid uuid1)]}]
-                                   (d/pull @conn '[*] [:block/name "gen-remote-ops-test"])
-                                   {:sibling? true :keep-uuid? true}))
+     (outliner-core/insert-blocks!
+      test-helper/test-db
+      conn
+      [{:block/uuid uuid2 :block/content "uuid2-block"}
+       {:block/uuid uuid3 :block/content "uuid3-block"
+        :block/left [:block/uuid uuid2]
+        :block/parent [:block/uuid (:block/uuid uuid1)]}
+       {:block/uuid uuid4 :block/content "uuid4-block"
+        :block/left [:block/uuid uuid3]
+        :block/parent [:block/uuid (:block/uuid uuid1)]}]
+      (d/pull @conn '[*] [:block/name "gen-remote-ops-test"])
+      {:sibling? true :keep-uuid? true}))
 
     (op-mem-layer/init-empty-ops-store! test-helper/test-db)
     (op-mem-layer/add-ops! test-helper/test-db [["move" {:block-uuid (str uuid2) :epoch 1}]
