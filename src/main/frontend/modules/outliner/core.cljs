@@ -19,7 +19,6 @@
             [logseq.db.sqlite.util :as sqlite-util]
 
             [frontend.db :as db]
-            [frontend.db.model :as db-model]
             [frontend.db.conn :as conn]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -67,7 +66,7 @@
   (let [parent-id (:db/id (d/entity db [:block/uuid parent-uuid]))
         left-id (:db/id (d/entity db [:block/uuid left-uuid]))]
     (some->
-     (db-model/get-by-parent-&-left db parent-id left-id)
+     (ldb/get-by-parent-&-left db parent-id left-id)
      :db/id
      d/entity
      block)))
@@ -87,7 +86,7 @@
     (assoc block :block/updated-at updated-at)))
 
 (defn- remove-orphaned-page-refs!
-  [db-id txs-state old-refs new-refs]
+  [db db-id txs-state old-refs new-refs]
   (let [old-refs (remove #(some #{"class" "property"} (:block/type %)) old-refs)]
     (when (not= old-refs new-refs)
       (let [new-refs (set (map (fn [ref]
@@ -95,16 +94,16 @@
                                      (and (:db/id ref)
                                           (:block/name (db/entity (:db/id ref)))))) new-refs))
             old-pages (->> (map :db/id old-refs)
-                           (db-model/get-entities-by-ids)
+                           (d/pull-many db '[*])
                            (remove (fn [e] (contains? new-refs (:block/name e))))
                            (map :block/name)
                            (remove nil?))
             orphaned-pages (when (seq old-pages)
-                             (db-model/get-orphaned-pages {:pages old-pages
-                                                           :empty-ref-f (fn [page]
-                                                                          (let [refs (:block/_refs page)]
-                                                                            (or (zero? (count refs))
-                                                                                (= #{db-id} (set (map :db/id refs))))))}))]
+                             (ldb/get-orphaned-pages db {:pages old-pages
+                                                         :empty-ref-f (fn [page]
+                                                                        (let [refs (:block/_refs page)]
+                                                                          (or (zero? (count refs))
+                                                                              (= #{db-id} (set (map :db/id refs))))))}))]
         (when (seq orphaned-pages)
           (let [tx (mapv (fn [page] [:db/retractEntity (:db/id page)]) orphaned-pages)]
             (swap! txs-state (fn [state] (vec (concat state tx))))))))))
@@ -135,16 +134,16 @@
             (swap! txs-state into txs))))
 
 (defn- remove-orphaned-refs-when-save
-  [txs-state block-entity m]
+  [db txs-state block-entity m]
   (let [remove-self-page #(remove (fn [b]
                                     (= (:db/id b) (:db/id (:block/page block-entity)))) %)
         old-refs (remove-self-page (:block/refs block-entity))
         new-refs (remove-self-page (:block/refs m))]
-    (remove-orphaned-page-refs! (:db/id block-entity) txs-state old-refs new-refs)))
+    (remove-orphaned-page-refs! db (:db/id block-entity) txs-state old-refs new-refs)))
 
 (defn- get-last-child-or-self
   [block]
-  (let [last-child (some-> (db-model/get-block-last-direct-child-id (conn/get-db) (:db/id block) true)
+  (let [last-child (some-> (ldb/get-block-last-direct-child-id (conn/get-db) (:db/id block) true)
                            db/entity)
         target (or last-child block)]
     [target (some? last-child)]))
@@ -351,7 +350,7 @@
         ;; Remove macros as they are replaced by new ones
         (remove-macros-when-save repo txs-state block-entity)
         ;; Remove orphaned refs from block
-        (remove-orphaned-refs-when-save txs-state block-entity m))
+        (remove-orphaned-refs-when-save @conn txs-state block-entity m))
 
       ;; handle others txs
       (let [other-tx (:db/other-tx m)]
@@ -405,13 +404,13 @@
 
   (-get-children [this conn]
     (let [parent-id (otree/-get-id this conn)
-          children (db-model/get-block-immediate-children (state/get-current-repo) parent-id)]
+          children (ldb/get-block-immediate-children @conn parent-id)]
       (map block children))))
 
 (defn get-right-sibling
   [db-id]
   (when db-id
-    (db-model/get-right-sibling (conn/get-db) db-id)))
+    (ldb/get-right-sibling (conn/get-db) db-id)))
 
 (defn- assoc-level-aux
   [tree-vec children-key init-level]
@@ -882,12 +881,13 @@
 (defn- fix-non-consecutive-blocks
   [blocks target-block sibling?]
   (when (> (count blocks) 1)
-    (let [page-blocks (group-by :block/page blocks)
+    (let [db (db/get-db)
+          page-blocks (group-by :block/page blocks)
           near-by? (= (:db/id target-block) (:db/id (:block/left (first blocks))))]
       (->>
        (mapcat (fn [[_page blocks]]
-                 (let [blocks (db-model/sort-page-random-blocks blocks)
-                       non-consecutive-blocks (->> (conj (db-model/get-non-consecutive-blocks blocks) (last blocks))
+                 (let [blocks (ldb/sort-page-random-blocks db blocks)
+                       non-consecutive-blocks (->> (conj (ldb/get-non-consecutive-blocks db blocks) (last blocks))
                                                    (util/distinct-by :db/id))]
                    (when (seq non-consecutive-blocks)
                      (map-indexed (fn [idx block]
@@ -954,7 +954,7 @@
                         (otree/-get-parent-id end-node conn))
             right-node (otree/-get-right end-node conn)]
         (when (otree/satisfied-inode? right-node)
-          (let [non-consecutive? (seq (db-model/get-non-consecutive-blocks blocks))
+          (let [non-consecutive? (seq (ldb/get-non-consecutive-blocks @conn blocks))
                 left-node-id (if sibling?
                                (otree/-get-id (otree/-get-left start-node conn) conn)
                                (let [end-node-left-nodes (get-left-nodes conn end-node (count block-ids))
@@ -1000,10 +1000,11 @@
                         :as opts}]
   [:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]]
-  (let [blocks (map (fn [b] (db/entity [:block/uuid (:block/uuid b)])) blocks)
+  (let [db (db/get-db)
+        blocks (map (fn [b] (db/entity [:block/uuid (:block/uuid b)])) blocks)
         blocks (get-top-level-blocks blocks)
         [target-block sibling?] (get-target-block blocks target-block opts)
-        non-consecutive-blocks? (seq (db-model/get-non-consecutive-blocks blocks))
+        non-consecutive-blocks? (seq (ldb/get-non-consecutive-blocks db blocks))
         original-position? (move-to-original-position? blocks target-block sibling? non-consecutive-blocks?)]
     (when (and (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
                (not original-position?))
@@ -1102,13 +1103,13 @@
   "Indent or outdent `blocks`."
   [blocks indent?]
   {:pre [(seq blocks) (boolean? indent?)]}
-  (let [top-level-blocks (get-top-level-blocks blocks)
-        non-consecutive-blocks (db-model/get-non-consecutive-blocks top-level-blocks)]
+  (let [db (db/get-db)
+        top-level-blocks (get-top-level-blocks blocks)
+        non-consecutive-blocks (ldb/get-non-consecutive-blocks db top-level-blocks)]
     (when (empty? non-consecutive-blocks)
       (let [first-block (db/entity (:db/id (first top-level-blocks)))
             left (db/entity (:db/id (:block/left first-block)))
             parent (:block/parent first-block)
-            db (db/get-db)
             concat-tx-fn (fn [& results]
                            {:tx-data (->> (map :tx-data results)
                                           (apply util/concat-without-nil))
@@ -1116,7 +1117,7 @@
             opts {:outliner-op :indent-outdent-blocks}]
         (if indent?
           (when (and left (not (page-first-child? first-block)))
-            (let [last-direct-child-id (db-model/get-block-last-direct-child-id db (:db/id left))
+            (let [last-direct-child-id (ldb/get-block-last-direct-child-id db (:db/id left))
                   blocks' (drop-while (fn [b]
                                         (= (:db/id (:block/parent b))
                                            (:db/id left)))
@@ -1155,7 +1156,7 @@
                         right-siblings (->> (get-right-siblings (block last-top-block))
                                             (map :data))]
                     (if (seq right-siblings)
-                      (let [result2 (if-let [last-direct-child-id (db-model/get-block-last-direct-child-id db (:db/id last-top-block))]
+                      (let [result2 (if-let [last-direct-child-id (ldb/get-block-last-direct-child-id db (:db/id last-top-block))]
                                       (move-blocks right-siblings (db/entity last-direct-child-id) (merge opts {:sibling? true}))
                                       (move-blocks right-siblings last-top-block (merge opts {:sibling? false})))]
                         (concat-tx-fn result result2))
