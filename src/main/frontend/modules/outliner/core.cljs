@@ -61,12 +61,10 @@
 (defn- get-by-parent-&-left
   [db parent-uuid left-uuid]
   (let [parent-id (:db/id (d/entity db [:block/uuid parent-uuid]))
-        left-id (:db/id (d/entity db [:block/uuid left-uuid]))]
-    (some->
-     (ldb/get-by-parent-&-left db parent-id left-id)
-     :db/id
-     d/entity
-     (partial block db))))
+        left-id (:db/id (d/entity db [:block/uuid left-uuid]))
+        entity (ldb/get-by-parent-&-left db parent-id left-id)]
+    (when entity
+      (block db entity))))
 
 (defn- block-with-timestamps
   [block]
@@ -562,9 +560,8 @@
 (defn- blocks-with-ordered-list-props
   [repo conn blocks target-block sibling?]
   (let [db @conn
-        target-block (if sibling? target-block (some->> target-block (partial block db)
-                                                        (#(otree/-get-down % conn))
-                                                        :data))
+        tb (when target-block (block db target-block))
+        target-block (if sibling? target-block (when tb (:block (otree/-get-down tb conn))))
         list-type-fn (fn [block] (db-property/get-property repo db block :logseq.order-list-type))
         k (db-property/get-pid repo db :logseq.order-list-type)]
     (if-let [list-type (and target-block (list-type-fn target-block))]
@@ -646,14 +643,16 @@
                            prev-hop (if outdented-block? (find-outdented-block-prev-hop block blocks) nil)
                            left-exists-in-blocks? (contains? ids (:db/id (:block/left block)))
                            parent (compute-block-parent block parent target-block prev-hop top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
-                           left (compute-block-left blocks block left target-block prev-hop idx replace-empty-target? left-exists-in-blocks? get-new-id)]
-                       (cond->
-                        (merge block {:block/uuid uuid
-                                      :block/page target-page
-                                      :block/parent parent
-                                      :block/left left})
-                         ;; We'll keep the original `:db/id` if it's a move operation,
-                         ;; e.g. internal cut or drag and drop shouldn't change the ids.
+                           left (compute-block-left blocks block left target-block prev-hop idx replace-empty-target? left-exists-in-blocks? get-new-id)
+                           m {:block/uuid uuid
+                              :block/page target-page
+                              :block/parent parent
+                              :block/left left}]
+                       (cond-> (if (de/entity? block)
+                                 m
+                                 (merge block m))
+                           ;; We'll keep the original `:db/id` if it's a move operation,
+                           ;; e.g. internal cut or drag and drop shouldn't change the ids.
                          (not move?)
                          (dissoc :db/id)))))
                  blocks)))
@@ -742,7 +741,7 @@
       `update-timestamps?`: whether to update `blocks` timestamps.
     ``"
   [repo conn blocks target-block {:keys [_sibling? keep-uuid? outliner-op replace-empty-target? update-timestamps?] :as opts
-                             :or {update-timestamps? true}}]
+                                  :or {update-timestamps? true}}]
   {:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]}
   (let [[target-block' sibling?] (get-target-block @conn blocks target-block opts)
@@ -759,16 +758,14 @@
                                      (string/blank? (:block/content target-block'))
                                      (> (count blocks) 1)
                                      (not move?)))
-        blocks' (cond->>
-                 (-> blocks
-                     blocks-with-level
-                     (#(blocks-with-ordered-list-props repo conn % target-block sibling?)))
-                  (= outliner-op :paste)
-                  fix-top-level-blocks
-                  update-timestamps?
-                  (mapv (fn [b] (block-with-timestamps (dissoc b :block/created-at :block/updated-at))))
-                  true
-                  (mapv block-with-timestamps))
+        blocks' (let [blocks' (blocks-with-level blocks)]
+                  (cond->> (blocks-with-ordered-list-props repo conn blocks' target-block sibling?)
+                    (= outliner-op :paste)
+                    fix-top-level-blocks
+                    update-timestamps?
+                    (mapv (fn [b] (block-with-timestamps (dissoc b :block/created-at :block/updated-at))))
+                    true
+                    (mapv block-with-timestamps)))
         insert-opts {:sibling? sibling?
                      :replace-empty-target? replace-empty-target?
                      :keep-uuid? keep-uuid?
@@ -946,7 +943,7 @@
 (defn move-blocks
   "Move `blocks` to `target-block` as siblings or children."
   [repo conn blocks target-block {:keys [_sibling? _up? outliner-op _indent?]
-                             :as opts}]
+                                  :as opts}]
   [:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]]
   (let [db @conn
@@ -963,8 +960,8 @@
         (when-not move-parents-to-child?
           (let [first-block (first blocks)
                 {:keys [tx-data]} (insert-blocks repo conn blocks target-block {:sibling? sibling?
-                                                                           :outliner-op (or outliner-op :move-blocks)
-                                                                           :update-timestamps? false})]
+                                                                                :outliner-op (or outliner-op :move-blocks)
+                                                                                :update-timestamps? false})]
             (when (seq tx-data)
               (let [first-block-page (:db/id (:block/page first-block))
                     target-page (or (:db/id (:block/page target-block))
