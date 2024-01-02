@@ -70,7 +70,6 @@
                        :block/page page-id}
                 tx [(assoc page-id :block/properties new-properties)
                     block]]
-              ;; (util/pprint tx)
             (db/transact! tx))
           (let [block {:block/uuid (db/new-block-id)
                        :block/left page-id
@@ -86,4 +85,4 @@
             (ui-outliner-tx/transact!
              {:outliner-op :insert-blocks
               :additional-tx page-properties-tx}
-             (outliner-core/insert-blocks! block page {:sibling? false}))))))))
+             (outliner-core/insert-blocks! (db/get-db false) block page {:sibling? false}))))))))

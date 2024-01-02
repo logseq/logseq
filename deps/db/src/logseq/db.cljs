@@ -289,6 +289,43 @@
   (when-let [parent (d/entity db [:block/uuid block-uuid])]
     (sort-by-left (:block/_parent parent) parent)))
 
+(defn get-block-parents
+  [db block-id {:keys [depth] :or {depth 100}}]
+  (loop [block-id block-id
+         parents (list)
+         d 1]
+    (if (> d depth)
+      parents
+      (if-let [parent (:block/parent (d/entity db [:block/uuid block-id]))]
+        (recur (:block/uuid parent) (conj parents parent) (inc d))
+        parents))))
+
+(defn get-block-children-ids
+  [db block-uuid]
+  (when-let [eid (:db/id (d/entity db [:block/uuid block-uuid]))]
+    (let [seen   (volatile! [])]
+      (loop [steps          100      ;check result every 100 steps
+             eids-to-expand [eid]]
+        (when (seq eids-to-expand)
+          (let [eids-to-expand*
+                (mapcat (fn [eid] (map first (d/datoms db :avet :block/parent eid))) eids-to-expand)
+                uuids-to-add (remove nil? (map #(:block/uuid (d/entity db %)) eids-to-expand*))]
+            (when (and (zero? steps)
+                       (seq (set/intersection (set @seen) (set uuids-to-add))))
+              (throw (ex-info "bad outliner data, need to re-index to fix"
+                              {:seen @seen :eids-to-expand eids-to-expand})))
+            (vswap! seen (partial apply conj) uuids-to-add)
+            (recur (if (zero? steps) 100 (dec steps)) eids-to-expand*))))
+      @seen)))
+
+(defn get-block-children
+  "Including nested children."
+  [db block-uuid]
+  (let [ids (get-block-children-ids db block-uuid)]
+    (when (seq ids)
+      (let [ids' (map (fn [id] [:block/uuid id]) ids)]
+        (d/pull-many db '[*] ids')))))
+
 (defn- get-sorted-page-block-ids
   [db page-id]
   (let [root (d/entity db page-id)]
@@ -335,7 +372,7 @@
 
 (defn- consecutive-block?
   [db block-1 block-2]
-  (let [        aux-fn (fn [block-1 block-2]
+  (let [aux-fn (fn [block-1 block-2]
                  (and (= (:block/page block-1) (:block/page block-2))
                       (or
                        ;; sibling or child
@@ -353,3 +390,7 @@
         (when-not (consecutive-block? db (nth blocks i) (nth blocks (inc i)))
           (nth blocks i))))
     blocks)))
+
+(defn new-block-id
+  []
+  (d/squuid))

@@ -413,7 +413,9 @@
                                                           (some? (get-in property-block [:block/metadata :created-from-block]))
                                                           (some? (get-in property-block [:block/metadata :created-from-property])))
                                                  (let [txs-state (atom [])]
-                                                   (outliner-core/delete-block txs-state
+                                                   (outliner-core/delete-block repo
+                                                                               (db/get-db false)
+                                                                               txs-state
                                                                                (outliner-core/->Block property-block)
                                                                                {:children? true})
                                                    @txs-state))]

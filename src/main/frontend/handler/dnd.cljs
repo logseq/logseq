@@ -39,7 +39,7 @@
                           :clear? true}])
 
       (every? map? (conj blocks' target-block))
-      (let [target-node (outliner-core/block target-block)
+      (let [target-node (outliner-core/block (db/get-db) target-block)
             conn (db/get-db false)]
         (ui-outliner-tx/transact!
          {:outliner-op :move-blocks}
@@ -50,10 +50,10 @@
                     (otree/-get-left-id target-node conn))]
              (if first-child?
                (when-let [parent (otree/-get-parent target-node conn)]
-                 (outliner-core/move-blocks! blocks' (:data parent) false))
+                 (outliner-core/move-blocks! conn blocks' (:data parent) false))
                (when-let [before-node (otree/-get-left target-node conn)]
-                 (outliner-core/move-blocks! blocks' (:data before-node) true))))
-           (outliner-core/move-blocks! blocks' target-block (not nested?)))))
+                 (outliner-core/move-blocks! conn blocks' (:data before-node) true))))
+           (outliner-core/move-blocks! conn blocks' target-block (not nested?)))))
 
       :else
       nil)))

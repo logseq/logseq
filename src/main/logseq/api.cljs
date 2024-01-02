@@ -718,7 +718,7 @@
 (def ^:export get_next_sibling_block
   (fn [block-uuid]
     (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
-      (when-let [right-sibling (outliner-core/get-right-sibling (:db/id block))]
+      (when-let [right-sibling (outliner-core/get-right-sibling (db/get-db) (:db/id block))]
         (let [block (db/pull (:db/id right-sibling))]
           (bean/->js (sdk-utils/normalize-keyword-for-json block)))))))
 

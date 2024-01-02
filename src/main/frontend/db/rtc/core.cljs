@@ -88,12 +88,12 @@
 (defmethod transact-db! :delete-blocks [_ & args]
   (outliner-tx/transact!
    {:persist-op? false}
-   (apply outliner-core/delete-blocks! args)))
+   (apply outliner-core/delete-blocks! (state/get-current-repo) (db/get-db false) args)))
 
 (defmethod transact-db! :move-blocks [_ & args]
   (outliner-tx/transact!
    {:persist-op? false}
-   (apply outliner-core/move-blocks! args)))
+   (apply outliner-core/move-blocks! (db/get-db false) args)))
 
 (defmethod transact-db! :insert-blocks [_ & args]
   (outliner-tx/transact!
@@ -103,7 +103,7 @@
 (defmethod transact-db! :save-block [_ & args]
   (outliner-tx/transact!
    {:persist-op? false}
-   (apply outliner-core/save-block! args)))
+   (apply outliner-core/save-block! (state/get-current-repo) (db/get-db false) args)))
 
 (defmethod transact-db! :delete-whiteboard-blocks [_ repo block-uuids]
   (db/transact! repo

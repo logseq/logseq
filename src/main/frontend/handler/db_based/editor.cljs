@@ -153,5 +153,5 @@
   (ui-outliner-tx/transact!
    {:outliner-op :save-block}
    (doseq [block-tx (keep #(set-heading-aux! % heading) block-ids)]
-     (outliner-core/save-block! block-tx))
+     (outliner-core/save-block! repo (db/get-db false) block-tx))
    (property-handler/batch-set-block-property! repo block-ids :heading heading)))

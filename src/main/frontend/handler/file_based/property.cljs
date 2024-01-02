@@ -53,7 +53,7 @@
                         :block/properties-order property-ks
                         :block/properties-text-values properties-text-values
                         :block/content content}]
-             (outliner-core/save-block! block)))))))
+             (outliner-core/save-block! (state/get-current-repo) (db/get-db false) block)))))))
   (let [block-id (ffirst col)
         block-id (if (string? block-id) (uuid block-id) block-id)
         input-pos (or (state/get-edit-pos) :max)]

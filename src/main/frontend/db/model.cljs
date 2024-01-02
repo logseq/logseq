@@ -13,12 +13,10 @@
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [frontend.util.drawer :as drawer]
-            [logseq.db.frontend.default :as default-db]
             [logseq.db.frontend.rules :as rules]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util.db :as db-util]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.outliner.pipeline :as outliner-pipeline]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
             ;; add map ops to datascript Entity
@@ -466,7 +464,7 @@ independent of format as format specific heading characters are stripped"
 (defn get-block-parents
   [repo block-id opts]
   (when-let [db (conn/get-db repo)]
-    (outliner-pipeline/get-block-parents db block-id opts)))
+    (ldb/get-block-parents db block-id opts)))
 
 ;; Use built-in recursive
 (defn get-block-parents-v2
@@ -596,7 +594,7 @@ independent of format as format specific heading characters are stripped"
   "Including nested children."
   [repo block-uuid]
   (when-let [db (conn/get-db repo)]
-    (let [ids (outliner-pipeline/get-block-children-ids db block-uuid)]
+    (let [ids (ldb/get-block-children-ids db block-uuid)]
      (when (seq ids)
        (let [ids' (map (fn [id] [:block/uuid id]) ids)]
          (db-utils/pull-many repo '[*] ids'))))))

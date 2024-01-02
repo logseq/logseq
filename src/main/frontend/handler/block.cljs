@@ -61,7 +61,7 @@
   [block direction]
   (ui-outliner-tx/transact!
    {:outliner-op :move-blocks}
-   (outliner-core/indent-outdent-blocks! [block] (= direction :right))))
+   (outliner-core/indent-outdent-blocks! (db/get-db false) [block] (= direction :right))))
 
 (defn select-block!
   [block-uuid]
