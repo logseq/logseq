@@ -96,6 +96,10 @@
               (distinct))]
     (when (and (seq txs)
                (or db-based? (not unlinked-graph?)))
+
+      ;; (prn :debug "DB transact")
+      ;; (cljs.pprint/pprint txs)
+
       (try
         (let [tx-report (d/transact! conn txs (assoc tx-meta :outliner/transact? true))]
           (when (fn? after-transact-fn) (after-transact-fn tx-report opts))

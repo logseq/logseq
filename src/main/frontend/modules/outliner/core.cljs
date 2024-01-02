@@ -947,7 +947,6 @@
   [:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]]
   (let [db @conn
-        blocks (map (fn [b] (d/entity db [:block/uuid (:block/uuid b)])) blocks)
         [target-block sibling?] (get-target-block db blocks target-block opts)
         non-consecutive-blocks? (seq (ldb/get-non-consecutive-blocks db blocks))
         original-position? (move-to-original-position? blocks target-block sibling? non-consecutive-blocks?)]

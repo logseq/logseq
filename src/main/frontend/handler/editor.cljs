@@ -1761,8 +1761,8 @@
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)]
                          (ui-outliner-tx/transact!
-                         {:outliner-op :move-blocks}
-                         (outliner-core/move-blocks-up-down! (state/get-current-repo) (db/get-db false) blocks' up?)))
+                          {:outliner-op :move-blocks}
+                          (outliner-core/move-blocks-up-down! (state/get-current-repo) (db/get-db false) blocks' up?)))
                        (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
                          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})))]
       (if edit-block-id
