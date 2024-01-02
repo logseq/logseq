@@ -79,24 +79,12 @@
   (->> (get-all-namespace-relation repo)
        (map second)))
 
-(defn hidden-page?
-  [page]
-  (when page
-    (if (string? page)
-      (and (string/starts-with? page "$$$")
-           (util/uuid-string? (gp-util/safe-subs page 3)))
-      (contains? (set (:block/type page)) "hidden"))))
+(def hidden-page? ldb/hidden-page?)
 
 (defn get-pages
   [repo]
-  (->> (d/q
-        '[:find ?page-original-name
-          :where
-          [?page :block/name ?page-name]
-          [(get-else $ ?page :block/original-name ?page-name) ?page-original-name]]
-         (conn/get-db repo))
-       (map first)
-       (remove hidden-page?)))
+  (let [db (conn/get-db repo)]
+    (ldb/get-pages db)))
 
 (defn get-all-pages
   [repo]
@@ -336,13 +324,6 @@ independent of format as format specific heading characters are stripped"
      (set)
      (set/union #{page-id}))))
 
-(defn get-entities-by-ids
-  ([ids]
-   (get-entities-by-ids (state/get-current-repo) ids))
-  ([repo ids]
-   (when repo
-     (db-utils/pull-many repo '[*] ids))))
-
 (defn get-page-names-by-ids
   ([ids]
    (get-page-names-by-ids (state/get-current-repo) ids))
@@ -427,28 +408,11 @@ independent of format as format specific heading characters are stripped"
                      f))
                  form))
 
-(defn get-sorted-page-block-ids
-  [page-id]
-  (let [root (db-utils/entity page-id)]
-    (loop [result []
-           children (sort-by-left (:block/_parent root) root)]
-      (if (seq children)
-        (let [child (first children)]
-          (recur (conj result (:db/id child))
-                 (concat
-                  (sort-by-left (:block/_parent child) child)
-                  (rest children))))
-        result))))
-
 (defn sort-page-random-blocks
   "Blocks could be non consecutive."
   [blocks]
-  (assert (every? #(= (:block/page %) (:block/page (first blocks))) blocks) "Blocks must to be in a same page.")
-  (let [page-id (:db/id (:block/page (first blocks)))
-        ;; TODO: there's no need to sort all the blocks
-        sorted-ids (get-sorted-page-block-ids page-id)
-        blocks-map (zipmap (map :db/id blocks) blocks)]
-    (keep blocks-map sorted-ids)))
+  (let [db (conn/get-db)]
+    (ldb/sort-page-random-blocks db blocks)))
 
 ;; Diverged of get-sorted-page-block-ids
 (defn get-sorted-page-block-ids-and-levels
@@ -482,11 +446,7 @@ independent of format as format specific heading characters are stripped"
   ([block-id]
    (has-children? (conn/get-db) block-id))
   ([db block-id]
-   (some? (:block/_parent (db-utils/entity db [:block/uuid block-id])))))
-
-(defn- collapsed-and-has-children?
-  [db block]
-  (and (:block/collapsed? block) (has-children? db (:block/uuid block))))
+   (ldb/has-children? db block-id)))
 
 (def get-by-parent-&-left ldb/get-by-parent-&-left)
 
@@ -515,19 +475,7 @@ independent of format as format specific heading characters are stripped"
           '[:db/id :block/collapsed? :block/properties {:block/parent ...}]
           [:block/uuid block-id]))
 
-(defn get-block-last-direct-child-id
-  "Notice: if `not-collapsed?` is true, will skip searching for any collapsed block."
-  ([db db-id]
-   (get-block-last-direct-child-id db db-id false))
-  ([db db-id not-collapsed?]
-   (when-let [block (db-utils/entity db db-id)]
-     (when (if not-collapsed?
-             (not (collapsed-and-has-children? db block))
-             true)
-       (let [children (:block/_parent block)
-             all-left (set (concat (map (comp :db/id :block/left) children) [db-id]))
-             all-ids (set (map :db/id children))]
-         (first (set/difference all-ids all-left)))))))
+(def get-block-last-direct-child-id ldb/get-block-last-direct-child-id)
 
 (defn get-block-deep-last-open-child-id
   [db db-id]
@@ -539,12 +487,7 @@ independent of format as format specific heading characters are stripped"
           (recur e)))
       nil)))
 
-(defn get-prev-sibling
-  [db id]
-  (when-let [e (db-utils/entity db id)]
-    (let [left (:block/left e)]
-      (when (not= (:db/id left) (:db/id (:block/parent e)))
-        left))))
+(def get-prev-sibling ldb/get-prev-sibling)
 
 (def get-right-sibling ldb/get-right-sibling)
 
@@ -576,42 +519,9 @@ independent of format as format specific heading characters are stripped"
        (when-not (:block/name parent)
          parent)))))
 
-(defn last-child-block?
-  "The child block could be collapsed."
-  [db parent-id child-id]
-  (when-let [child (db-utils/entity db child-id)]
-    (cond
-      (= parent-id child-id)
-      true
-
-      (get-right-sibling db child-id)
-      false
-
-      :else
-      (last-child-block? db parent-id (:db/id (:block/parent child))))))
-
-(defn- consecutive-block?
-  [block-1 block-2]
-  (let [db (conn/get-db)
-        aux-fn (fn [block-1 block-2]
-                 (and (= (:block/page block-1) (:block/page block-2))
-                      (or
-                       ;; sibling or child
-                       (= (:db/id (:block/left block-2)) (:db/id block-1))
-                       (when-let [prev-sibling (get-prev-sibling db (:db/id block-2))]
-                         (last-child-block? db (:db/id prev-sibling) (:db/id block-1))))))]
-    (or (aux-fn block-1 block-2) (aux-fn block-2 block-1))))
-
 (defn get-non-consecutive-blocks
   [blocks]
-  (vec
-   (keep-indexed
-    (fn [i _block]
-      (when (< (inc i) (count blocks))
-        (when-not (consecutive-block? (nth blocks i)
-                                      (nth blocks (inc i)))
-          (nth blocks i))))
-    blocks)))
+  (ldb/get-non-consecutive-blocks (conn/get-db) blocks))
 
 (defn get-page-blocks-no-cache
   ([page]
@@ -638,20 +548,7 @@ independent of format as format specific heading characters are stripped"
   `page-id` could be either a string or a db/id."
   [repo page-id]
   (when-let [db (conn/get-db repo)]
-    (try
-      (let [page-id (if (string? page-id)
-                      [:block/name (util/safe-page-name-sanity-lc page-id)]
-                      page-id)
-            page (db-utils/entity db page-id)]
-        (nil? (:block/_left page)))
-      (catch :default e
-        (when (string/includes? (ex-message e) "Lookup ref attribute should be marked as :db/unique: [:block/name")
-          ;; old db schema
-          (state/pub-event! [:notification/show
-                             {:content (if (config/db-based-graph? repo)
-                                         "Unexpected error occurred."
-                                         "It seems that the current graph is outdated, please re-index it.")
-                              :status :error}]))))))
+    (ldb/page-empty? db page-id)))
 
 (defn page-empty-or-dummy?
   [repo page-id]
@@ -693,8 +590,7 @@ independent of format as format specific heading characters are stripped"
   "Doesn't include nested children."
   [repo block-uuid]
   (when-let [db (conn/get-db repo)]
-    (when-let [parent (db-utils/entity repo [:block/uuid block-uuid])]
-      (sort-by-left (:block/_parent parent) parent))))
+    (ldb/get-block-immediate-children db block-uuid)))
 
 (defn get-block-children
   "Including nested children."
@@ -1256,40 +1152,9 @@ independent of format as format specific heading characters are stripped"
   (ldb/whiteboard-page? (conn/get-db) page))
 
 (defn get-orphaned-pages
-  [{:keys [repo pages empty-ref-f]
-    :or {repo (state/get-current-repo)
-         empty-ref-f (fn [page] (zero? (count (:block/_refs page))))}}]
-  (let [pages (->> (or pages (get-pages repo))
-                   (remove nil?))
-        built-in-pages (set (map string/lower-case default-db/built-in-pages-names))
-        orphaned-pages (->>
-                        (map
-                         (fn [page]
-                           (let [name (util/page-name-sanity-lc page)]
-                             (when-let [page (db-utils/entity [:block/name name])]
-                               (and
-                                (empty-ref-f page)
-                                (or
-                                 (page-empty? repo (:db/id page))
-                                 (let [first-child (first (:block/_left page))
-                                       children (:block/_page page)]
-                                   (and
-                                    first-child
-                                    (= 1 (count children))
-                                    (contains? #{"" "-" "*"} (string/trim (:block/content first-child))))))
-                                (not (contains? built-in-pages name))
-                                (not (whiteboard-page? page))
-                                (not (:block/_namespace page))
-                                (not (contains? (:block/type page) "property"))
-                                 ;; a/b/c might be deleted but a/b/c/d still exists (for backward compatibility)
-                                (not (and (string/includes? name "/")
-                                          (not (:block/journal? page))))
-                                page))))
-                         pages)
-                        (remove false?)
-                        (remove nil?)
-                        (remove hidden-page?))]
-    orphaned-pages))
+  [opts]
+  (let [db (conn/get-db)]
+    (ldb/get-orphaned-pages db opts)))
 
 ;; FIXME: replace :logseq.macro-name with id
 (defn get-macro-blocks

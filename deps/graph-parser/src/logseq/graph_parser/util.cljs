@@ -288,3 +288,20 @@
    (if-let [[ks' & kss] (seq kss)]
      (recur (dissoc-in m ks) ks' kss)
      (dissoc-in m ks))))
+
+(defn safe-re-find
+  {:malli/schema [:=> [:cat :any :string] [:or :nil :string [:vector [:maybe :string]]]]}
+  [pattern s]
+  (when-not (string? s)
+       ;; TODO: sentry
+    (js/console.trace))
+  (when (string? s)
+    (re-find pattern s)))
+
+(def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
+(defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
+
+(defn uuid-string?
+  {:malli/schema [:=> [:cat :string] :boolean]}
+  [s]
+  (boolean (safe-re-find exactly-uuid-pattern s)))

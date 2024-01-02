@@ -11,7 +11,8 @@
             [clojure.string :as string]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
-            [logseq.db.frontend.content :as db-content]))
+            [logseq.db.frontend.content :as db-content]
+            [clojure.set :as set]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
@@ -195,3 +196,160 @@
     :in $ ?id
     :where
     [?a :block/parent ?id]])
+
+(defn hidden-page?
+  [page]
+  (when page
+    (if (string? page)
+      (and (string/starts-with? page "$$$")
+           (gp-util/uuid-string? (gp-util/safe-subs page 3)))
+      (contains? (set (:block/type page)) "hidden"))))
+
+(defn get-pages
+  [db]
+  (->> (d/q
+        '[:find ?page-original-name
+          :where
+          [?page :block/name ?page-name]
+          [(get-else $ ?page :block/original-name ?page-name) ?page-original-name]]
+         db)
+       (map first)
+       (remove hidden-page?)))
+
+(defn page-empty?
+  "Whether a page is empty. Does it has a non-page block?
+  `page-id` could be either a string or a db/id."
+  [db page-id]
+  (let [page-id (if (string? page-id)
+                  [:block/name (gp-util/page-name-sanity-lc page-id)]
+                  page-id)
+        page (d/entity db page-id)]
+    (nil? (:block/_left page))))
+
+(defn get-orphaned-pages
+  [db {:keys [pages empty-ref-f]
+       :or {empty-ref-f (fn [page] (zero? (count (:block/_refs page))))}}]
+  (let [pages (->> (or pages (get-pages db))
+                   (remove nil?))
+        built-in-pages (set (map string/lower-case default-db/built-in-pages-names))
+        orphaned-pages (->>
+                        (map
+                         (fn [page]
+                           (let [name (gp-util/page-name-sanity-lc page)]
+                             (when-let [page (d/entity db [:block/name name])]
+                               (and
+                                (empty-ref-f page)
+                                (or
+                                 (page-empty? db (:db/id page))
+                                 (let [first-child (first (:block/_left page))
+                                       children (:block/_page page)]
+                                   (and
+                                    first-child
+                                    (= 1 (count children))
+                                    (contains? #{"" "-" "*"} (string/trim (:block/content first-child))))))
+                                (not (contains? built-in-pages name))
+                                (not (whiteboard-page? db page))
+                                (not (:block/_namespace page))
+                                (not (contains? (:block/type page) "property"))
+                                 ;; a/b/c might be deleted but a/b/c/d still exists (for backward compatibility)
+                                (not (and (string/includes? name "/")
+                                          (not (:block/journal? page))))
+                                page))))
+                         pages)
+                        (remove false?)
+                        (remove nil?)
+                        (remove hidden-page?))]
+    orphaned-pages))
+
+(defn has-children?
+  [db block-id]
+  (some? (:block/_parent (d/entity db [:block/uuid block-id]))))
+
+(defn- collapsed-and-has-children?
+  [db block]
+  (and (:block/collapsed? block) (has-children? db (:block/uuid block))))
+
+(defn get-block-last-direct-child-id
+  "Notice: if `not-collapsed?` is true, will skip searching for any collapsed block."
+  ([db db-id]
+   (get-block-last-direct-child-id db db-id false))
+  ([db db-id not-collapsed?]
+   (when-let [block (d/entity db db-id)]
+     (when (if not-collapsed?
+             (not (collapsed-and-has-children? db block))
+             true)
+       (let [children (:block/_parent block)
+             all-left (set (concat (map (comp :db/id :block/left) children) [db-id]))
+             all-ids (set (map :db/id children))]
+         (first (set/difference all-ids all-left)))))))
+
+(defn get-block-immediate-children
+  "Doesn't include nested children."
+  [db block-uuid]
+  (when-let [parent (d/entity db [:block/uuid block-uuid])]
+    (sort-by-left (:block/_parent parent) parent)))
+
+(defn- get-sorted-page-block-ids
+  [db page-id]
+  (let [root (d/entity db page-id)]
+    (loop [result []
+           children (sort-by-left (:block/_parent root) root)]
+      (if (seq children)
+        (let [child (first children)]
+          (recur (conj result (:db/id child))
+                 (concat
+                  (sort-by-left (:block/_parent child) child)
+                  (rest children))))
+        result))))
+
+(defn sort-page-random-blocks
+  "Blocks could be non consecutive."
+  [db blocks]
+  (assert (every? #(= (:block/page %) (:block/page (first blocks))) blocks) "Blocks must to be in a same page.")
+  (let [page-id (:db/id (:block/page (first blocks)))
+        ;; TODO: there's no need to sort all the blocks
+        sorted-ids (get-sorted-page-block-ids db page-id)
+        blocks-map (zipmap (map :db/id blocks) blocks)]
+    (keep blocks-map sorted-ids)))
+
+(defn get-prev-sibling
+  [db id]
+  (when-let [e (d/entity db id)]
+    (let [left (:block/left e)]
+      (when (not= (:db/id left) (:db/id (:block/parent e)))
+        left))))
+
+(defn last-child-block?
+  "The child block could be collapsed."
+  [db parent-id child-id]
+  (when-let [child (d/entity db child-id)]
+    (cond
+      (= parent-id child-id)
+      true
+
+      (get-right-sibling db child-id)
+      false
+
+      :else
+      (last-child-block? db parent-id (:db/id (:block/parent child))))))
+
+(defn- consecutive-block?
+  [db block-1 block-2]
+  (let [        aux-fn (fn [block-1 block-2]
+                 (and (= (:block/page block-1) (:block/page block-2))
+                      (or
+                       ;; sibling or child
+                       (= (:db/id (:block/left block-2)) (:db/id block-1))
+                       (when-let [prev-sibling (get-prev-sibling db (:db/id block-2))]
+                         (last-child-block? db (:db/id prev-sibling) (:db/id block-1))))))]
+    (or (aux-fn block-1 block-2) (aux-fn block-2 block-1))))
+
+(defn get-non-consecutive-blocks
+  [db blocks]
+  (vec
+   (keep-indexed
+    (fn [i _block]
+      (when (< (inc i) (count blocks))
+        (when-not (consecutive-block? db (nth blocks i) (nth blocks (inc i)))
+          (nth blocks i))))
+    blocks)))
