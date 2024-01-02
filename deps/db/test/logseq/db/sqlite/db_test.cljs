@@ -4,6 +4,7 @@
             ["path" :as node-path]
             [datascript.core :as d]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.db :as sqlite-db]))
 
 (use-fixtures
@@ -32,7 +33,7 @@
           _ (d/transact! conn* blocks)
           ;; Simulate getting data from sqlite and restoring it for frontend
           conn (-> (sqlite-common-db/get-initial-data @conn*)
-                   sqlite-common-db/restore-initial-data)]
+                   (sqlite-common-db/restore-initial-data db-schema/schema-for-db-based-graph))]
       (is (= blocks
              (->> @conn
                   (d/q '[:find (pull ?b [:block/uuid :file/path :file/content]) :where [?b :file/content]])
@@ -61,7 +62,7 @@
           _ (d/transact! conn* blocks)
           ;; Simulate getting data from sqlite and restoring it for frontend
           conn (-> (sqlite-common-db/get-initial-data @conn*)
-                   sqlite-common-db/restore-initial-data)]
+                   (sqlite-common-db/restore-initial-data db-schema/schema-for-db-based-graph))]
       (is (= blocks
              (->> (d/q '[:find (pull ?b [*])
                          :where [?b :block/created-at]]
