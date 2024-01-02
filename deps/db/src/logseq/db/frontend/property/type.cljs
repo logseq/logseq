@@ -21,17 +21,14 @@
   "Valid schema :type for closed values"
   #{:default :number :url :date :page})
 
-(def closed-value-property-position-types
-  "Valid schema :type for closed values"
-  #{:default :number :url})
-
 (assert (set/subset? closed-value-property-types (set user-built-in-property-types))
         "All closed value types are valid property types")
 
 (def ^:private user-built-in-allowed-schema-attributes
   "Map of types to their set of allowed :schema attributes"
   (merge-with into
-              (zipmap closed-value-property-types (repeat #{:values :position}))
+              (zipmap closed-value-property-types (repeat #{:values}))
+              (zipmap #{:default :number :url} (repeat #{:position}))
               {:number #{:cardinality}
                :date #{:cardinality}
                :url #{:cardinality}
