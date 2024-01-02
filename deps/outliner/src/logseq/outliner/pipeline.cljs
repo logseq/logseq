@@ -1,7 +1,8 @@
 (ns logseq.outliner.pipeline
   "Core fns for use with frontend.modules.outliner.pipeline"
   (:require [datascript.core :as d]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [logseq.db :as ldb]))
 
 (defn filter-deleted-blocks
   [datoms]
@@ -10,36 +11,6 @@
      (when (and (= :block/uuid (:a d)) (false? (:added d)))
        (:v d)))
    datoms))
-
-;; non recursive query
-(defn ^:api get-block-parents
-  [db block-id {:keys [depth] :or {depth 100}}]
-  (loop [block-id block-id
-         parents (list)
-         d 1]
-    (if (> d depth)
-      parents
-      (if-let [parent (:block/parent (d/entity db [:block/uuid block-id]))]
-        (recur (:block/uuid parent) (conj parents parent) (inc d))
-        parents))))
-
-(defn ^:api get-block-children-ids
-  [db block-uuid]
-  (when-let [eid (:db/id (d/entity db [:block/uuid block-uuid]))]
-    (let [seen   (volatile! [])]
-      (loop [steps          100      ;check result every 100 steps
-             eids-to-expand [eid]]
-        (when (seq eids-to-expand)
-          (let [eids-to-expand*
-                (mapcat (fn [eid] (map first (d/datoms db :avet :block/parent eid))) eids-to-expand)
-                uuids-to-add (remove nil? (map #(:block/uuid (d/entity db %)) eids-to-expand*))]
-            (when (and (zero? steps)
-                       (seq (set/intersection (set @seen) (set uuids-to-add))))
-              (throw (ex-info "bad outliner data, need to re-index to fix"
-                              {:seen @seen :eids-to-expand eids-to-expand})))
-            (vswap! seen (partial apply conj) uuids-to-add)
-            (recur (if (zero? steps) 100 (dec steps)) eids-to-expand*))))
-      @seen)))
 
 ;; TODO: it'll be great if we can calculate the :block/path-refs before any
 ;; outliner transaction, this way we can group together the real outliner tx
@@ -58,7 +29,7 @@
     (mapcat (fn [block]
               (when (and (not (@*computed-ids (:block/uuid block))) ; not computed yet
                          (not (:block/name block)))
-                (let [parents (get-block-parents db-after (:block/uuid block) {})
+                (let [parents (ldb/get-block-parents db-after (:block/uuid block) {})
                       parents-refs (->> (mapcat :block/path-refs parents)
                                         (map :db/id))
                       old-refs (if db-before
@@ -69,7 +40,7 @@
                                      (map :db/id (:block/refs block))
                                      parents-refs))
                       refs-changed? (not= old-refs new-refs)
-                      children (get-block-children-ids db-after (:block/uuid block))
+                      children (ldb/get-block-children-ids db-after (:block/uuid block))
                             ;; Builds map of children ids to their parent id and :block/refs ids
                       children-maps (into {}
                                           (map (fn [id]
