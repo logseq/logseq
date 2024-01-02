@@ -4,7 +4,6 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
-            [frontend.handler.property.util :as pu]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.date-time-util :as date-time-util]
@@ -131,6 +130,11 @@ Options available:
      {:tx result
       :ast ast})))
 
+(defn- get-pid
+  "Get a property's id (name or uuid) given its name. For db graphs"
+  [db property-name]
+  (:block/uuid (d/entity db [:block/name (gp-util/page-name-sanity-lc (name property-name))])))
+
 (defn import-file-to-db-graph
   "Parse file and save parsed data to the given db graph."
   [conn file content {:keys [delete-blocks-fn extract-options skip-db-transact?]
@@ -178,7 +182,7 @@ Options available:
                                                (assoc :block/journal? false
                                                       :block/format :markdown
                                                       ;; fixme: missing properties
-                                                      :block/properties {(pu/get-pid :ls-type) :whiteboard-page})))))
+                                                      :block/properties {(get-pid @conn :ls-type) :whiteboard-page})))))
               remove-keys (fn [m pred]
                             (into {} (remove (comp pred key) m)))
               blocks (map (fn [block]
@@ -192,7 +196,7 @@ Options available:
                                          (fn [props]
                                            (-> props
                                                (update-keys (fn [k]
-                                                              (if-let [new-key (pu/get-pid k)]
+                                                              (if-let [new-key (get-pid @conn k)]
                                                                 new-key
                                                                 k)))
                                                (remove-keys keyword?))))))
