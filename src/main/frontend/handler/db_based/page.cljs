@@ -71,7 +71,7 @@
           from-id (:db/id from-page)
           from-first-child (some->> (db/pull from-id)
                                     (outliner-core/block)
-                                    (otree/-get-down)
+                                    (otree/-get-down (db/get-db false))
                                     (outliner-core/get-data))
           to-last-direct-child-id (model/get-block-last-direct-child-id (db/get-db) to-id)
           repo (state/get-current-repo)

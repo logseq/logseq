@@ -106,7 +106,7 @@
 (defn get-children
   [id]
   (->> (get-block id true)
-       (otree/-get-children)
+       (otree/-get-children (db/get-db test-db false))
        (mapv #(-> % :data :block/uuid))))
 
 (deftest test-delete-block

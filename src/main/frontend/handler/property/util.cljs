@@ -33,10 +33,9 @@
 (defn get-pid
   "Get a property's id (name or uuid) given its name. For file and db graphs"
   [property-name]
-  (let [repo (state/get-current-repo)]
-    (if (config/db-based-graph? repo)
-      (:block/uuid (db/entity [:block/name (util/page-name-sanity-lc (name property-name))]))
-      property-name)))
+  (let [repo (state/get-current-repo)
+        db (db/get-db repo)]
+    (db-property/get-pid repo db property-name)))
 
 (defn block->shape [block]
   (get-property block :logseq.tldraw.shape))

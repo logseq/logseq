@@ -196,7 +196,7 @@
       (let [old-original-name   (:block/original-name page)
             file                (:block/file page)
             journal?            (:block/journal? page)
-            properties-block    (:data (otree/-get-down (outliner-core/block page)))
+            properties-block    (:data (otree/-get-down (outliner-core/block page) (db/get-db false)))
             properties-content  (:block/content properties-block)
             properties-block-tx (when (and properties-block
                                            properties-content
@@ -312,7 +312,7 @@
           from-id (:db/id from-page)
           from-first-child (some->> (db/pull from-id)
                                     (outliner-core/block)
-                                    (otree/-get-down)
+                                    (otree/-get-down (db/get-db false))
                                     (outliner-core/get-data))
           to-last-direct-child-id (model/get-block-last-direct-child-id (db/get-db) to-id)
           repo (state/get-current-repo)

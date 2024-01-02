@@ -183,3 +183,15 @@
     (get-by-parent-&-left db
                           (:db/id (:block/parent block))
                           db-id)))
+
+(defn get-by-id
+  [conn id]
+  (try
+    (d/pull @conn '[*] id)
+    (catch :default _e nil)))
+
+(def get-by-parent-id
+  '[:find (pull ?a [*])
+    :in $ ?id
+    :where
+    [?a :block/parent ?id]])

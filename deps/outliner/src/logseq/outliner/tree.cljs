@@ -5,17 +5,17 @@
             [datascript.core :as d]))
 
 (defprotocol INode
-  (-get-id [this])
-  (-get-parent-id [this])
-  (-get-left-id [this])
-  (-set-left-id [this left-id])
-  (-get-parent [this])
-  (-get-left [this])
-  (-get-right [this])
-  (-get-down [this])
-  (-save [this db])
-  (-del [this db children?])
-  (-get-children [this]))
+  (-get-id [this conn])
+  (-get-parent-id [this conn])
+  (-get-left-id [this conn])
+  (-set-left-id [this left-id conn])
+  (-get-parent [this conn])
+  (-get-left [this conn])
+  (-get-right [this conn])
+  (-get-down [this conn])
+  (-save [this db conn repo])
+  (-del [this db children? conn])
+  (-get-children [this conn]))
 
 (defn satisfied-inode?
   [node]
