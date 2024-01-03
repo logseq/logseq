@@ -58,7 +58,7 @@
 
 (defn- block-with-timestamps
   [block]
-  (let [updated-at (util/time-ms)
+  (let [updated-at (common-util/time-ms)
         block (cond->
                (assoc block :block/updated-at updated-at)
                 (nil? (:block/created-at block))
@@ -67,7 +67,7 @@
 
 (defn block-with-updated-at
   [block]
-  (let [updated-at (util/time-ms)]
+  (let [updated-at (common-util/time-ms)]
     (assoc block :block/updated-at updated-at)))
 
 (defn- remove-orphaned-page-refs!
@@ -97,9 +97,9 @@
   [txs-state block-entity m]
   (when-let [e (:block/page block-entity)]
     (let [m' (cond-> {:db/id (:db/id e)
-                      :block/updated-at (util/time-ms)}
+                      :block/updated-at (common-util/time-ms)}
                (not (:block/created-at e))
-               (assoc :block/created-at (util/time-ms)))
+               (assoc :block/created-at (common-util/time-ms)))
           txs (if (or (:block/pre-block? block-entity)
                       (:block/pre-block? m))
                 (let [properties (:block/properties m)

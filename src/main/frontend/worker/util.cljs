@@ -6,8 +6,6 @@
             [logseq.common.util :as common-util]
             [clojure.core.async :as async]
             [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
-            [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]
             [cljs-bean.core :as bean]))
 
 (defn search-normalize
@@ -76,10 +74,6 @@
                  (nil? e))
              (async/close! ch))))
        ch))
-
-(defn time-ms
-  []
-  (tc/to-long (t/now)))
 
 (defn post-message
   [type data]

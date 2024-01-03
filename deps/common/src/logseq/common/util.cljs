@@ -6,7 +6,9 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [logseq.common.log :as log]
-            [goog.string :as gstring]))
+            [goog.string :as gstring]
+            [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]))
 
 (defn safe-decode-uri-component
   [uri]
@@ -329,3 +331,7 @@
   [& cols]
   (->> (apply concat cols)
        (remove nil?)))
+
+(defn time-ms
+  []
+  (tc/to-long (t/now)))

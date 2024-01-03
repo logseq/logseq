@@ -855,7 +855,7 @@
        @ref)))
 
 #?(:cljs
-   (def time-ms worker-util/time-ms))
+   (def time-ms common-util/time-ms))
 
 (defn d
   [k f]
