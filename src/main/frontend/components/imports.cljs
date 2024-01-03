@@ -70,15 +70,12 @@
         json? (string/ends-with? file-name ".json")]
     (cond
       sqlite?
-      (let [graph-name (string/trim graph-name)
-            all-graphs (->> (state/get-repos)
-                            (map #(text-util/get-graph-name-from-path (:url %)))
-                            set)]
+      (let [graph-name (string/trim graph-name)]
         (cond
           (string/blank? graph-name)
           (notification/show! "Empty graph name." :error)
 
-          (contains? all-graphs graph-name)
+          (repo-handler/graph-already-exists? graph-name)
           (notification/show! "Please specify another name as another graph with this name already exists!" :error)
 
           :else
