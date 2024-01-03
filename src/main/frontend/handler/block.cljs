@@ -6,7 +6,7 @@
    [frontend.db :as db]
    [frontend.db.model :as db-model]
    [frontend.mobile.haptics :as haptics]
-   [frontend.modules.outliner.core :as outliner-core]
+   [logseq.outliner.core :as outliner-core]
    [frontend.modules.outliner.ui :as ui-outliner-tx]
    [frontend.state :as state]
    [frontend.util :as util]

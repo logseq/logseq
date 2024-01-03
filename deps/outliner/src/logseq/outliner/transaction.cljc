@@ -1,5 +1,5 @@
-(ns frontend.modules.outliner.transaction
-  #?(:cljs (:require-macros [frontend.modules.outliner.transaction]))
+(ns logseq.outliner.transaction
+  #?(:cljs (:require-macros [logseq.outliner.transaction]))
   #?(:cljs (:require [malli.core :as m])))
 
 (def transact-opts [:or :symbol :map])
@@ -25,8 +25,8 @@
     (move-blocks! ...)
     (delete-blocks! ...))"
   [opts & body]
-  `(let [transact-data# frontend.modules.outliner.core/*transaction-data*
-         transaction-opts# frontend.modules.outliner.core/*transaction-opts*
+  `(let [transact-data# logseq.outliner.core/*transaction-data*
+         transaction-opts# logseq.outliner.core/*transaction-opts*
          opts*# ~opts
          _# (assert (or (map? opts*#) (symbol? opts*#)) (str "opts is not a map or symbol, type: " (type opts*#)))
          opts# (if transact-data#
@@ -42,23 +42,23 @@
                                  (and (logseq.db.sqlite.util/db-based-graph? repo#)
                                       (get opts*# :persist-op? true))
                                  (assoc :persist-op? true))]
-         (binding [frontend.modules.outliner.core/*transaction-data* (transient [])
-                   frontend.modules.outliner.core/*transaction-opts* (transient [])
-                   frontend.modules.outliner.core/*transaction-args* transaction-args#]
-           (conj! frontend.modules.outliner.core/*transaction-opts* opts#)
+         (binding [logseq.outliner.core/*transaction-data* (transient [])
+                   logseq.outliner.core/*transaction-opts* (transient [])
+                   logseq.outliner.core/*transaction-args* transaction-args#]
+           (conj! logseq.outliner.core/*transaction-opts* opts#)
            ~@body
-           (let [r# (persistent! frontend.modules.outliner.core/*transaction-data*)
+           (let [r# (persistent! logseq.outliner.core/*transaction-data*)
                  tx# (mapcat :tx-data r#)
                  ;; FIXME: should we merge all the tx-meta?
                  tx-meta# (first (map :tx-meta r#))
                  all-tx# (concat tx# (:additional-tx opts#))
-                 o# (persistent! frontend.modules.outliner.core/*transaction-opts*)
+                 o# (persistent! logseq.outliner.core/*transaction-opts*)
                  full-opts# (apply merge (reverse o#))
                  opts## (merge (dissoc full-opts# :additional-tx :current-block :nested-transaction?) tx-meta#)]
 
              (when (seq all-tx#) ;; If it's empty, do nothing
                (when-not (:nested-transaction? opts#) ; transact only for the whole transaction
-                 (let [result# (frontend.modules.outliner.datascript/transact! all-tx# (dissoc opts## :transact-opts) (:transact-opts opts##))]
+                 (let [result# (logseq.outliner.datascript/transact! all-tx# (dissoc opts## :transact-opts) (:transact-opts opts##))]
                    {:tx-report result#
                     :tx-data all-tx#
                     :tx-meta tx-meta#})))))))))

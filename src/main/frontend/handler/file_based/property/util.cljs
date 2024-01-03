@@ -5,7 +5,7 @@
             [clojure.set :as set]
             [frontend.config :as config]
             [logseq.graph-parser.property :as gp-property :refer [properties-start properties-end]]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [frontend.format.mldoc :as mldoc]
             [logseq.graph-parser.text :as text]
             [frontend.db :as db]

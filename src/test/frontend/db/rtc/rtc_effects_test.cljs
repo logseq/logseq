@@ -11,8 +11,8 @@
             [frontend.db.rtc.idb-keyval-mock :as idb-keyval-mock :include-macros true]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.handler.page :as page-handler]
-            [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.transaction :as outliner-tx]
+            [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.transaction :as outliner-tx]
             [frontend.test.helper :as test-helper :include-macros true]
             [spy.core :as spy]))
 

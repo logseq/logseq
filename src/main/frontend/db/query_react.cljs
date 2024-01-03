@@ -11,7 +11,7 @@
             [frontend.extensions.sci :as sci]
             [frontend.state :as state]
             [logseq.graph-parser.util.db :as db-util]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [frontend.util :as util]
             [frontend.date :as date]
             [lambdaisland.glogi :as log]))

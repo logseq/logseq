@@ -2,7 +2,7 @@
   "Page property fns for file graphs"
   (:require [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.modules.outliner.core :as outliner-core]
+            [logseq.outliner.core :as outliner-core]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]))

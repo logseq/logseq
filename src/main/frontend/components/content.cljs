@@ -21,7 +21,7 @@
             [frontend.util :as util]
             [frontend.modules.shortcut.core :as shortcut]
             [logseq.common.util :as common-util]
-            [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.common.util.block-ref :as block-ref]
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]

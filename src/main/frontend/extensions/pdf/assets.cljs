@@ -20,7 +20,7 @@
             [frontend.extensions.pdf.windows :as pdf-windows]
             [logseq.common.path :as path]
             [logseq.common.config :as common-config]
-            [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.common.util.block-ref :as block-ref]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]

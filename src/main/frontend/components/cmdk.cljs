@@ -22,7 +22,7 @@
    [promesa.core :as p]
    [rum.core :as rum]
    [frontend.mixins :as mixins]
-   [logseq.graph-parser.util.block-ref :as block-ref]
+   [logseq.common.util.block-ref :as block-ref]
    [logseq.common.util :as common-util]
    [logseq.shui.button.v2 :as button]
    [frontend.modules.shortcut.utils :as shortcut-utils]

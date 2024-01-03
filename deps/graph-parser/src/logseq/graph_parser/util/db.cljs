@@ -3,7 +3,7 @@
   by the graph-parser soon but if not, it should be in its own library"
   (:require [cljs-time.core :as t]
             [logseq.graph-parser.date-time-util :as date-time-util]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [datascript.core :as d]
             [clojure.string :as string]))
 
@@ -42,7 +42,7 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
 
 (defn get-offset-date [relative-date direction amount unit]
   (let [offset-fn (case direction "+" t/plus "-" t/minus)
-        offset-amount (parse-long amount) 
+        offset-amount (parse-long amount)
         offset-unit-fn (case unit
                          "d" t/days
                          "w" t/weeks
@@ -50,7 +50,7 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
                          "y" t/years)]
     (offset-fn (offset-fn relative-date (offset-unit-fn offset-amount)))))
 
-(defn get-ts-units 
+(defn get-ts-units
   "There are currently several time suffixes being used in inputs:
   - ms: milliseconds, will return a time relative to the direction the date is being adjusted
   - start: will return the time at the start of the day [00:00:00.000]
@@ -58,34 +58,34 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
   - HHMM: will return the specified time at the turn of the minute [HH:MM:00.000]
   - HHMMSS: will return the specified time at the turm of the second [HH:MM:SS.000]
   - HHMMSSmmm: will return the specified time at the turn of the millisecond [HH:MM:SS.mmm]
-  
+
   The latter three will be capped to the maximum allowed for each unit so they will always be valid times"
   [offset-direction offset-time]
-  (case offset-time 
-    "ms" (if (= offset-direction "+") [23 59 59 999] [0 0 0 0]) 
-    "start" [0 0 0 0] 
-    "end" [23 59 59 999] 
+  (case offset-time
+    "ms" (if (= offset-direction "+") [23 59 59 999] [0 0 0 0])
+    "start" [0 0 0 0]
+    "end" [23 59 59 999]
     ;; if it's not a matching string, then assume it is HHMM
     (let [[h1 h2 m1 m2 s1 s2 ms1 ms2 ms3] (str offset-time "000000000")]
-      [(min 23  (parse-long (str h1 h2))) 
+      [(min 23  (parse-long (str h1 h2)))
        (min 59  (parse-long (str m1 m2)))
        (min 59  (parse-long (str s1 s2)))
        (min 999 (parse-long (str ms1 ms2 ms3)))])))
 
 (defn keyword-input-dispatch [input]
-  (cond 
+  (cond
     (#{:current-page :query-page :current-block :parent-block :today :yesterday :tomorrow :right-now-ms} input) input
 
     (re-find #"^[+-]\d+[dwmy]?$" (name input)) :relative-date
     (re-find #"^[+-]\d+[dwmy]-(ms|start|end|\d{2}|\d{4}|\d{6}|\d{9})?$" (name input)) :relative-date-time
 
-    (= :start-of-today-ms input) :today-time 
+    (= :start-of-today-ms input) :today-time
     (= :end-of-today-ms input) :today-time
     (re-find #"^today-(start|end|\d{2}|\d{4}|\d{6}|\d{9})$" (name input)) :today-time
 
     (re-find #"^\d+d(-before|-after|-before-ms|-after-ms)?$" (name input)) :DEPRECATED-relative-date))
 
-(defmulti resolve-keyword-input (fn [_db input _opts] (keyword-input-dispatch input))) 
+(defmulti resolve-keyword-input (fn [_db input _opts] (keyword-input-dispatch input)))
 
 (defmethod resolve-keyword-input :current-page [_ _ {:keys [current-page-fn]}]
   (when current-page-fn
@@ -115,15 +115,15 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
 (defmethod resolve-keyword-input :right-now-ms [_ _ _]
   (date-time-util/time-ms))
 
-;; today-time returns an epoch int 
+;; today-time returns an epoch int
 (defmethod resolve-keyword-input :today-time [_db input _opts]
-  (let [[hh mm ss ms] (case input 
+  (let [[hh mm ss ms] (case input
                         :start-of-today-ms [0 0 0 0]
                         :end-of-today-ms [23 59 59 999]
                         (get-ts-units nil (subs (name input) 6)))]
-    (date-at-local-ms (t/today) hh mm ss ms))) 
+    (date-at-local-ms (t/today) hh mm ss ms)))
 
-;; relative-date returns a YYYMMDD string 
+;; relative-date returns a YYYMMDD string
 (defmethod resolve-keyword-input :relative-date [_ input _]
   (let [relative-to (get-relative-date input)
         [_ offset-direction offset offset-unit] (re-find #"^([+-])(\d+)([dwmy])$" (name input))
@@ -136,7 +136,7 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
         [_ offset-direction offset offset-unit ts] (re-find #"^([+-])(\d+)([dwmy])-(ms|start|end|\d{2,9})$" (name input))
         offset-date (get-offset-date relative-to offset-direction offset offset-unit)
         [hh mm ss ms] (get-ts-units offset-direction ts)]
-    (date-at-local-ms offset-date hh mm ss ms))) 
+    (date-at-local-ms offset-date hh mm ss ms)))
 
 (defmethod resolve-keyword-input :DEPRECATED-relative-date [db input opts]
   ;; This handles all of the cases covered by the following:
@@ -151,7 +151,7 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
   [db input {:keys [current-block-uuid current-page-fn]
              :or {current-page-fn (constantly nil)}}]
   (cond
-    (keyword? input) 
+    (keyword? input)
     (or
      (resolve-keyword-input db input {:current-block-uuid current-block-uuid
                                       :current-page-fn current-page-fn})

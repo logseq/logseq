@@ -29,7 +29,7 @@
             [frontend.util.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [medley.core :as medley]
             [rum.core :as rum]))
 

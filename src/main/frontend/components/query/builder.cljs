@@ -17,7 +17,7 @@
             [rum.core :as rum]
             [clojure.string :as string]
             [logseq.common.util :as common-util]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]))
 
 (rum/defc page-block-selector

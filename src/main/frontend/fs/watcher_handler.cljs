@@ -20,7 +20,7 @@
             [frontend.util.fs :as fs-util]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
-            [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.common.util.block-ref :as block-ref]
             [promesa.core :as p]))
 
 ;; all IPC paths must be normalized! (via common-util/path-normalize)

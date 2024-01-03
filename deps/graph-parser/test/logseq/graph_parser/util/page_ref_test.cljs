@@ -1,5 +1,5 @@
-(ns logseq.graph-parser.util.page-ref-test
-  (:require [logseq.graph-parser.util.page-ref :as page-ref]
+(ns logseq.common.util.page-ref-test
+  (:require [logseq.common.util.page-ref :as page-ref]
             [cljs.test :refer [are deftest]]))
 
 (deftest page-ref?

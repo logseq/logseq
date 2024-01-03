@@ -1,5 +1,5 @@
 (ns frontend.modules.outliner.ui
-  #?(:cljs (:require-macros [frontend.modules.outliner.transaction]))
+  #?(:cljs (:require-macros [logseq.outliner.transaction]))
   #?(:cljs (:require-macros [frontend.modules.outliner.ui]))
   #?(:cljs (:require [frontend.state :as state]
                      [frontend.config :as config]
@@ -38,5 +38,5 @@
                          :unlinked-graph? frontend.modules.outliner.ui/unlinked-graph?
                          :set-state-fn frontend.modules.outliner.ui/set-state-fn
                          :after-transact-fn frontend.modules.outliner.ui/after-transact-fn}]
-     (frontend.modules.outliner.transaction/transact! (assoc ~opts :transact-opts transact-opts#)
+     (logseq.outliner.transaction/transact! (assoc ~opts :transact-opts transact-opts#)
                                                       ~@body)))

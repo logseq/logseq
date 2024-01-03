@@ -3,7 +3,7 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser :as graph-parser]
             [logseq.db :as ldb]
-            [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.common.util.block-ref :as block-ref]
             [datascript.core :as d]
             [cljs.test :refer [deftest are testing is]]))
 

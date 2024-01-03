@@ -11,8 +11,7 @@
             [logseq.common.util :as common-util]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.block :as gp-block]
-            [clojure.walk :as walk]
-            [logseq.graph-parser.mldoc :as gp-mldoc]))
+            [clojure.walk :as walk]))
 
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
 (defonce parseOPML (gobj/get Mldoc "parseOPML"))

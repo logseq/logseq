@@ -6,7 +6,7 @@
             [clojure.walk :as walk]
             [clojure.string :as string]
             [goog.string :as gstring]
-            [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util :as common-util]
             [logseq.graph-parser.text :as text]))
 

@@ -1,7 +1,7 @@
 (ns logseq.db.frontend.content
   "fns to handle special ids"
   (:require [clojure.string :as string]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [datascript.core :as d]
             [logseq.db.sqlite.util :as sqlite-util]))
 

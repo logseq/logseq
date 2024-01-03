@@ -1,18 +1,18 @@
-(ns frontend.modules.outliner.utils
+(ns logseq.outliner.util
   (:require [datascript.impl.entity :as e]
             [logseq.common.util :as common-util]))
 
 (defn block-id?
   [id]
   (or
-    (number? id)
-    (string? id)
-    (uuid? id)))
+   (number? id)
+   (string? id)
+   (uuid? id)))
 
 (defn check-block-id
   [id]
   (assert (block-id? id)
-    (common-util/format "The id should match block-id?: %s" (pr-str id))))
+          (common-util/format "The id should match block-id?: %s" (pr-str id))))
 
 (defn ->block-lookup-ref
   "
@@ -24,8 +24,8 @@
   [id]
   (cond
     (and
-      (vector? id)
-      (= (first id) :block/uuid))
+     (vector? id)
+     (= (first id) :block/uuid))
     id
 
     (block-id? id)

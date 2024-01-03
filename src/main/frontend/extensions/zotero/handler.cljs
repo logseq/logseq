@@ -9,7 +9,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.db :as db]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [logseq.common.util.page-ref :as page-ref]))
 
 (defn add [page-name type item]
   (go
