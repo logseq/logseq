@@ -13,8 +13,7 @@
             [electron.ipc :as ipc]
             [frontend.modules.outliner.pipeline :as pipeline]
             [clojure.edn :as edn]
-            [frontend.handler.worker :as worker-handler]
-            [frontend.db :as db]))
+            [frontend.handler.worker :as worker-handler]))
 
 (defonce *sqlite (atom nil))
 

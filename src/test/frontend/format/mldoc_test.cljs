@@ -1,10 +1,11 @@
 (ns frontend.format.mldoc-test
-  (:require [frontend.format.mldoc :as mldoc]
-            [cljs.test :refer [deftest testing are]]))
+  (:require [frontend.worker.mldoc :as worker-mldoc]
+            [cljs.test :refer [deftest testing are]]
+            [frontend.test.helper :as test-helper]))
 
 (deftest test-extract-plain
   (testing "normalize date values"
-    (are [x y] (= (mldoc/extract-plain x) y)
+    (are [x y] (= (worker-mldoc/extract-plain test-helper/test-db x) y)
       "foo #book #[[nice test]]"
       "foo"
 

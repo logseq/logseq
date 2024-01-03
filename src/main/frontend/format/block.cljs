@@ -14,8 +14,7 @@
             [lambdaisland.glogi :as log]
             [datascript.core :as d]
             [logseq.db.frontend.property :as db-property]
-            [frontend.format.mldoc :as mldoc]
-            [frontend.worker.mldoc :as worker-mldoc]))
+            [frontend.format.mldoc :as mldoc]))
 
 (defn- update-extracted-block-properties
   "Updates DB graph blocks to ensure that built-in properties are using uuids
@@ -70,13 +69,6 @@ and handles unexpected failure."
    (page-name->map original-page-name with-id? true))
   ([original-page-name with-id? with-timestamp?]
    (gp-block/page-name->map original-page-name with-id? (db/get-db (state/get-current-repo)) with-timestamp? (state/get-date-formatter))))
-
-(defn extract-refs-from-text
-  [text]
-  (worker-mldoc/extract-refs-from-text (state/get-current-repo)
-                                       (db/get-db (state/get-current-repo))
-                                       text
-                                       (state/get-date-formatter)))
 
 (defn- normalize-as-percentage
   [block]

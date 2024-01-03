@@ -1149,8 +1149,6 @@
 #?(:cljs
    (def remove-first worker-util/remove-first))
 
-(def pprint clojure.pprint/pprint)
-
 #?(:cljs
    (defn backward-kill-word
      [input]

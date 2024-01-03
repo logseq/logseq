@@ -36,7 +36,6 @@
             [frontend.mobile.util :as mobile-util]
             [medley.core :as medley]
             [logseq.common.path :as path]
-            [logseq.common.config :as common-config]
             [frontend.db.listener :as db-listener]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]))
 
