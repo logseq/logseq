@@ -1094,17 +1094,7 @@
           [another-file-name])
          string-join-path)))
 
-;; Copied from https://github.com/tonsky/datascript-todo
-#?(:clj
-   (defmacro profile
-     [k & body]
-     `(if goog.DEBUG
-        (let [k# ~k]
-          (.time js/console k#)
-          (let [res# (do ~@body)]
-            (.timeEnd js/console k#)
-            res#))
-        (do ~@body))))
+#?(:cljs (defmacro profile worker-util/profile))
 
 #?(:clj
    (defmacro with-time

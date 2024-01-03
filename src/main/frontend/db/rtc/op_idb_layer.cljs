@@ -3,7 +3,7 @@
   (:require ["/frontend/idbkv" :as idb-keyval]
             [cljs.core.async.interop :refer [p->c]]
             [promesa.core :as p]
-            [frontend.config :as config]))
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (def stores (atom {}))
 
@@ -11,7 +11,7 @@
   "Return nil when 'repo' is not a db-graph"
   [repo]
   {:pre [(some? repo)]}
-  (when (config/db-based-graph? repo)
+  (when (sqlite-util/db-based-graph? repo)
     (if-let [s (@stores repo)]
       s
       (do (swap! stores assoc repo (idb-keyval/newStore (str "rtc-ops-" repo) "ops"))

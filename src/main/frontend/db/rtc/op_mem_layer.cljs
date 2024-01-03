@@ -3,12 +3,12 @@
   And sync these ops to indexedDb automatically."
   (:require [clojure.core.async :as async :refer [<! go-loop timeout]]
             [clojure.set :as set]
-            [frontend.config :as config]
             [frontend.db.rtc.op-idb-layer :as op-idb-layer]
             [frontend.state :as state]
             [malli.core :as m]
             [malli.transform :as mt]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (def op-schema
   [:multi {:dispatch first}
@@ -398,7 +398,7 @@
          (go-loop []
            (<! (timeout 3000))
            (when-let [repo (state/get-current-repo)]
-             (when (and (config/db-based-graph? repo)
+             (when (and (sqlite-util/db-based-graph? repo)
                         (contains? (@*ops-store repo) :current-branch))
                (<! (<sync-to-idb-layer! repo))))
            (recur)))
@@ -407,5 +407,5 @@
 (defn rtc-db-graph?
   "Is db-graph & RTC enabled"
   [repo]
-  (and (config/db-based-graph? repo)
+  (and (sqlite-util/db-based-graph? repo)
        (some? (get-local-tx repo))))
