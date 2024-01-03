@@ -1,6 +1,6 @@
 (ns frontend.worker.state
   "State hub for worker"
-  (:require [frontend.worker.util :as worker-util]))
+  (:require [logseq.common.util :as common-util]))
 
 (defonce *state (atom {:db/latest-transact-time {}
                        :worker/context {}}))
@@ -36,12 +36,12 @@
       (or
        (nil? last-input-time)
 
-       (let [now (worker-util/time-ms)]
+       (let [now (common-util/time-ms)]
          (>= (- now last-input-time) diff))))))
 
 (defn set-db-latest-tx-time!
   [repo]
-  (swap! *state assoc-in [:db/latest-transact-time repo] (worker-util/time-ms)))
+  (swap! *state assoc-in [:db/latest-transact-time repo] (common-util/time-ms)))
 
 (defn get-context
   []
