@@ -12,7 +12,7 @@
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.block :as gp-block]
             [clojure.walk :as walk]
-            [frontend.worker.mldoc :as worker-mldoc]))
+            [logseq.graph-parser.mldoc :as gp-mldoc]))
 
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
 (defonce parseOPML (gobj/get Mldoc "parseOPML"))
@@ -37,7 +37,7 @@
                       title
                       (or references gp-mldoc/default-references)))
 
-(def block-with-title? worker-mldoc/block-with-title?)
+(def block-with-title? gp-mldoc/block-with-title?)
 
 (defn opml->edn
   [config content]
@@ -52,11 +52,11 @@
 
 (defn get-default-config
   [format]
-  (worker-mldoc/get-default-config (state/get-current-repo) format))
+  (gp-mldoc/get-default-config (state/get-current-repo) format))
 
 (defn ->edn
   [content format]
-  (worker-mldoc/->edn (state/get-current-repo) content format))
+  (gp-mldoc/->edn (state/get-current-repo) content format))
 
 (defrecord MldocMode []
   protocol/Format
@@ -73,7 +73,7 @@
   [plains]
   (string/join (map last plains)))
 
-(def properties? worker-mldoc/properties?)
+(def properties? gp-mldoc/properties?)
 
 (defn typ-drawer?
   [ast typ]
@@ -120,4 +120,4 @@
    returns nil if no title"
   [content format]
   (when-let [repo (state/get-current-repo)]
-    (worker-mldoc/get-title&body repo content format)))
+    (gp-mldoc/get-title&body repo content format)))
