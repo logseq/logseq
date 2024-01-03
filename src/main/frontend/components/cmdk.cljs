@@ -227,13 +227,10 @@
                                 source-page (model/get-alias-source-page repo page)]
                             (hash-map :icon (if whiteboard? "whiteboard" "page")
                                       :icon-theme :gray
-                                      :text (if source-page
-                                              [:div.flex.flex-row.items-center.gap-2
-                                               page
-                                               [:div.opacity-50.font-normal "alias of"]
-                                               (:block/original-name source-page)]
-                                              page)
-                                      :source-page page)))))]
+                                      :text page
+                                      :source-page (if source-page
+                                              (:block/original-name source-page)
+                                              page))))))]
       (swap! !results update group        merge {:status :success :items items}))))
 
 (defmethod load-results :whiteboards [group state]
