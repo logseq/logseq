@@ -137,7 +137,7 @@
   (rum/local "" ::input)
   [state sqlite-input-e opts]
   (let [*input (::input state)
-        on-submit #(if (fs-util/include-reserved-chars? @*input)
+        on-submit #(if (repo/invalid-graph-name? @*input)
                      (repo/invalid-graph-name-warning)
                      (lsq-import-handler sqlite-input-e (assoc opts :graph-name @*input)))]
     [:div.container
