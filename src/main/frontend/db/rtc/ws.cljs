@@ -4,11 +4,11 @@
    [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [cljs-http.client :as http]
             [cljs.core.async :as async :refer [<! chan offer!]]
-            [frontend.async-util :include-macros true :refer [<? go-try]]
+            [frontend.worker.async-util :include-macros true :refer [<? go-try]]
             [frontend.config :as config]
             [frontend.db.rtc.const :as rtc-const]
             [frontend.state :as state]
-            [frontend.util :as util]))
+            [goog.string :as gstring]))
 
 (def WebSocketOPEN (if (= *target* "nodejs")
                      1
@@ -18,7 +18,7 @@
 
 (defn ws-listen
   [token data-from-ws-chan ws-opened-ch]
-  (let [ws (js/WebSocket. (util/format ws-addr token))]
+  (let [ws (js/WebSocket. (gstring/format ws-addr token))]
     (set! (.-onopen ws) (fn [_e] (async/close! ws-opened-ch)))
     (set! (.-onmessage ws) (fn [e]
                              (let [data (js->clj (js/JSON.parse (.-data e)) :keywordize-keys true)]
@@ -58,7 +58,6 @@
   (go-try
    (<? (<ensure-ws-open! state))
    (send! @(:*ws state) message)))
-
 
 (defn <send&receive
   "Send 'message' to ws, and return response of this request.

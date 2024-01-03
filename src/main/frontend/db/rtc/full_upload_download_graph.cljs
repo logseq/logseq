@@ -7,7 +7,7 @@
             [cljs.core.async.interop :refer [p->c]]
             [cognitect.transit :as transit]
             [datascript.core :as d]
-            [frontend.async-util :include-macros true :refer [<? go-try]]
+            [frontend.worker.async-util :include-macros true :refer [<? go-try]]
             [frontend.db.conn :as conn]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.db.rtc.ws :refer [<send!]]

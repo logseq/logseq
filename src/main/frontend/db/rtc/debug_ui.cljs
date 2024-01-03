@@ -4,7 +4,7 @@
    [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [cljs.core.async :as async :refer [<! go]]
             [fipp.edn :as fipp]
-            [frontend.async-util :include-macros true :refer [<? go-try]]
+            [frontend.worker.async-util :include-macros true :refer [<? go-try]]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
             [frontend.db.rtc.core :as rtc-core]
@@ -36,7 +36,7 @@
    (go
      (if-let [graph-uuid (op-mem-layer/get-graph-uuid repo)]
        (do (reset! debug-state state)
-           (<! (rtc-core/<loop-for-rtc state graph-uuid repo))
+           (<! (rtc-core/<loop-for-rtc state graph-uuid repo (db/get-db repo false)))
            state)
        (do (notification/show! "not a rtc-graph" :error false)
            nil)))))
