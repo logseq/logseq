@@ -10,12 +10,11 @@
             [logseq.common.util :as common-util]
             [cljs.spec.alpha :as s]
             [logseq.db :as ldb]
-            [frontend.worker.mldoc :as mldoc]
-            [frontend.worker.file.property-util :as wpu]
+            [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.property :as gp-property]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.util :as sqlite-util]
-            [cljs.pprint :as pprint]
-            [frontend.worker.util :as util]))
+            [cljs.pprint :as pprint]))
 
 (s/def ::block-map (s/keys :opt [:db/id :block/uuid :block/page :block/left :block/parent]))
 
@@ -150,7 +149,7 @@
    [repo conn db date-formatter txs-state block-entity m tags-has-class?]
    (if tags-has-class?
      (let [content (state/get-edit-content)
-           linked-page (some-> content #(mldoc/extract-plain repo %))
+           linked-page (some-> content #(gp-block/extract-plain repo %))
            sanity-linked-page (some-> linked-page util/page-name-sanity-lc)
            linking-page? (and (not (string/blank? sanity-linked-page))
                               @(:editor/create-page? @state/state))]
@@ -201,10 +200,10 @@
                                                    [v])))
 
                                              (and (coll? v) (string? (first v)))
-                                             (mapcat #(mldoc/extract-refs-from-text repo db % date-formatter) v)
+                                             (mapcat #(gp-block/extract-refs-from-text repo db % date-formatter) v)
 
                                              (string? v)
-                                             (mldoc/extract-refs-from-text repo db v date-formatter)
+                                             (gp-block/extract-refs-from-text repo db v date-formatter)
 
                                              :else
                                              nil))))
@@ -213,7 +212,7 @@
                            (remove (fn [b] (nil? (d/entity db [:block/uuid (:block/uuid b)])))))
         content-refs (when-not skip-content-parsing?
                        (when-let [content (:block/content block)]
-                         (mldoc/extract-refs-from-text repo db content date-formatter)))]
+                         (gp-block/extract-refs-from-text repo db content date-formatter)))]
     (concat property-refs content-refs)))
 
 (defn- rebuild-refs
@@ -561,7 +560,7 @@
            (update :block/properties assoc k list-type)
 
            (not (sqlite-util/db-based-graph? repo))
-           (assoc :block/content (wpu/insert-property repo format content :logseq.order-list-type list-type))))
+           (assoc :block/content (gp-property/insert-property repo format content :logseq.order-list-type list-type))))
        blocks)
       blocks)))
 

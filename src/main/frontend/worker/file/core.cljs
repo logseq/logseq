@@ -2,7 +2,7 @@
   "Save file to disk"
   (:require [clojure.string :as string]
             [frontend.worker.file.util :as wfu]
-            [frontend.worker.file.property-util :as property-util]
+            [logseq.graph-parser.property :as gp-property]
             [logseq.common.path :as path]
             [datascript.core :as d]
             [logseq.db :as ldb]
@@ -21,11 +21,11 @@
   [repo format content collapsed?]
   (cond
     collapsed?
-    (property-util/insert-property repo format content :collapsed true)
+    (gp-property/insert-property repo format content :collapsed true)
 
     ;; Don't check properties. Collapsed is an internal state log as property in file, but not counted into properties
     (false? collapsed?)
-    (property-util/remove-property format :collapsed content)
+    (gp-property/remove-property format :collapsed content)
 
     :else
     content))
@@ -84,7 +84,7 @@
                               " ")]
                     (str prefix sep new-content)))
         content (if block-ref-not-saved?
-                  (property-util/insert-property repo format content :id (str (:block/uuid b)))
+                  (gp-property/insert-property repo format content :id (str (:block/uuid b)))
                   content)]
     content))
 

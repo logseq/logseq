@@ -767,3 +767,56 @@
                                [others parents' result'])))]
                      (recur blocks parents result))))]
     (concat result other-blocks)))
+
+(defn extract-plain
+  "Extract plain elements including page refs"
+  [repo content]
+  (let [ast (gp-mldoc/->edn repo content :markdown)
+        *result (atom [])]
+    (walk/prewalk
+     (fn [f]
+       (cond
+           ;; tag
+         (and (vector? f)
+              (= "Tag" (first f)))
+         nil
+
+           ;; nested page ref
+         (and (vector? f)
+              (= "Nested_link" (first f)))
+         (swap! *result conj (:content (second f)))
+
+           ;; page ref
+         (and (vector? f)
+              (= "Link" (first f))
+              (map? (second f))
+              (vector? (:url (second f)))
+              (= "Page_ref" (first (:url (second f)))))
+         (swap! *result conj
+                (:full_text (second f)))
+
+           ;; plain
+         (and (vector? f)
+              (= "Plain" (first f)))
+         (swap! *result conj (second f))
+
+         :else
+         f))
+     ast)
+    (-> (string/trim (apply str @*result))
+        text/page-ref-un-brackets!)))
+
+(defn extract-refs-from-text
+  [repo db text date-formatter]
+  (when (string? text)
+    (let [ast-refs (gp-mldoc/get-references text (gp-mldoc/get-default-config repo :markdown))
+          page-refs (map #(get-page-reference % :markdown) ast-refs)
+          block-refs (map get-block-reference ast-refs)
+          refs' (->> (concat page-refs block-refs)
+                     (remove string/blank?)
+                     distinct)]
+      (-> (map #(if (common-util/uuid-string? %)
+                  {:block/uuid (uuid %)}
+                  (page-name->map % true db true date-formatter))
+               refs')
+          set))))

@@ -2,7 +2,7 @@
   (:require [logseq.common.util :as common-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.db.sqlite.util :as sqlite-util]
-            [frontend.worker.file.property-util :as wpu]
+            [logseq.graph-parser.property :as gp-property]
             [datascript.core :as d]
             [clojure.string :as string]))
 
@@ -38,7 +38,7 @@
                               (let [refs (:block/_refs block)]
                                 (map (fn [ref]
                                        (let [id (:db/id ref)
-                                             block-content (wpu/remove-properties
+                                             block-content (gp-property/remove-properties
                                                             (:block/format block) (:block/content block))
                                              new-content (some-> (:block/content ref)
                                                                  (string/replace (re-pattern (common-util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))

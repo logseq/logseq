@@ -14,7 +14,8 @@
             [clojure.string :as string]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
-            [logseq.graph-parser.schema.mldoc :as mldoc-schema]))
+            [logseq.graph-parser.schema.mldoc :as mldoc-schema]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
@@ -136,22 +137,35 @@
         (cons [["Properties" properties] nil] other-ast)
         original-ast))))
 
+(defn get-default-config
+  "Gets a mldoc default config for the given format. Works for DB and file graphs"
+  [repo format]
+  (let [db-based? (sqlite-util/db-based-graph? repo)]
+    (->>
+     (cond-> (default-config-map format)
+       db-based?
+       (assoc :enable_drawers false))
+     bean/->js
+     js/JSON.stringify)))
+
 (defn ->edn
   {:malli/schema [:=> [:cat :string :string] mldoc-schema/block-ast-with-pos-coll-schema]}
-  [content config]
-  (if (string? content)
-    (try
-      (if (string/blank? content)
-        []
-        (-> content
-            (parse-json config)
-            (common-util/json->clj)
-            (update-src-full-content content)
-            (collect-page-properties config)))
-      (catch :default e
-        (log/error :unexpected-error e)
-        []))
-    (log/error :edn/wrong-content-type content)))
+  ([content config]
+   (if (string? content)
+     (try
+       (if (string/blank? content)
+         []
+         (-> content
+             (parse-json config)
+             (common-util/json->clj)
+             (update-src-full-content content)
+             (collect-page-properties config)))
+       (catch :default e
+         (log/error :unexpected-error e)
+         []))
+     (log/error :edn/wrong-content-type content)))
+  ([repo content format]
+   (->edn content (get-default-config repo format))))
 
 (defn inline->edn
   [text config]
@@ -195,3 +209,28 @@
      (let [result' (first result)]
        (or (contains? #{"Nested_link"} (first result'))
            (contains? #{"Page_ref" "Block_ref" "Complex"} (first (:url (second result')))))))))
+
+(defn properties?
+  [ast]
+  (contains? #{"Properties" "Property_Drawer"} (ffirst ast)))
+
+(defn block-with-title?
+  [type]
+  (contains? #{"Paragraph"
+               "Raw_Html"
+               "Hiccup"
+               "Heading"} type))
+
+(defn- has-title?
+  [repo content format]
+  (let [ast (->edn repo content format)]
+    (block-with-title? (ffirst (map first ast)))))
+
+(defn get-title&body
+  "parses content and returns [title body]
+   returns nil if no title"
+  [repo content format]
+  (let [lines (string/split-lines content)]
+    (if (has-title? repo content format)
+      [(first lines) (string/join "\n" (rest lines))]
+      [nil (string/join "\n" lines)])))

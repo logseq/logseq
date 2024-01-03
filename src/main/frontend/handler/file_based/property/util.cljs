@@ -10,8 +10,7 @@
             [logseq.graph-parser.text :as text]
             [frontend.db :as db]
             [frontend.state :as state]
-            [frontend.util.cursor :as cursor]
-            [frontend.worker.file.property-util :as wpu]))
+            [frontend.util.cursor :as cursor]))
 
 (defn hidden-properties
   "These are properties hidden from user including built-in ones and ones
@@ -35,7 +34,7 @@
                     "")
     content))
 
-(def simplified-property? wpu/simplified-property?)
+(def simplified-property? gp-property/simplified-property?)
 
 (defn- get-property-key
   [line format]
@@ -107,7 +106,7 @@
   (let [from (cursor/pos input)]
     (cursor/move-cursor-to-thing input properties-end from)))
 
-(def remove-properties wpu/remove-properties)
+(def remove-properties gp-property/remove-properties)
 
 ;; title properties body
 (defn with-built-in-properties
@@ -162,7 +161,7 @@
    (insert-property format content key value false))
   ([format content key value front-matter?]
    (let [repo (state/get-current-repo)]
-     (wpu/insert-property repo format content key value front-matter?))))
+     (gp-property/insert-property repo format content key value front-matter?))))
 
 (defn insert-properties
   [format content kvs]
@@ -182,7 +181,7 @@
        (insert-property format content k v)))
    content kvs))
 
-(def remove-property wpu/remove-property)
+(def remove-property gp-property/remove-property)
 
 (defn remove-id-property
   [format content]
