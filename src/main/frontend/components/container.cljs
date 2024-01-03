@@ -93,6 +93,7 @@
                              (state/get-current-repo)
                              (:db/id page-entity)
                              :page))]
+    ;; TODO: move to standalone component
     (shui/context-menu
       (shui/context-menu-trigger
         [:a.flex.items-center
