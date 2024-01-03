@@ -23,7 +23,7 @@
    [rum.core :as rum]
    [frontend.mixins :as mixins]
    [logseq.graph-parser.util.block-ref :as block-ref]
-   [logseq.graph-parser.util :as gp-util]
+   [logseq.common.util :as common-util]
    [logseq.shui.button.v2 :as button]
    [frontend.modules.shortcut.utils :as shortcut-utils]
    [frontend.config :as config]
@@ -341,7 +341,7 @@
   [input]
   (or (when (string/starts-with? input "/")
         (subs input 1))
-      (last (gp-util/split-last "/" input))))
+      (last (common-util/split-last "/" input))))
 
 (defmethod load-results :filters [group state]
   (let [!results (::results state)
@@ -513,7 +513,7 @@
   [input]
   (cond
     (string/includes? input "/")
-    (first (gp-util/split-last "/" input))
+    (first (common-util/split-last "/" input))
     (string/starts-with? input "/")
     ""
     :else

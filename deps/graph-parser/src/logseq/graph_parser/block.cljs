@@ -4,13 +4,13 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.config :as common-config]
             [logseq.graph-parser.date-time-util :as date-time-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]))
 
@@ -45,8 +45,8 @@
                   (and
                    (= url-type "Page_ref")
                    (and (string? value)
-                        (not (or (gp-config/local-asset? value)
-                                 (gp-config/draw? value))))
+                        (not (or (common-config/local-asset? value)
+                                 (common-config/draw? value))))
                    value)
 
                   (and
@@ -56,7 +56,7 @@
 
                   (and (= url-type "Search")
                        (= format :org)
-                       (not (gp-config/local-asset? value))
+                       (not (common-config/local-asset? value))
                        value)
 
                   (and
@@ -250,7 +250,7 @@
                    (map (fn [[k v]]
                           (let [{:keys [date repetition]} v
                                 {:keys [year month day]} date
-                                day (js/parseInt (str year (gp-util/zero-pad month) (gp-util/zero-pad day)))]
+                                day (js/parseInt (str year (common-util/zero-pad month) (common-util/zero-pad day)))]
                             (cond->
                              (case k
                                :scheduled
@@ -265,11 +265,11 @@
   "Convert journal file name to user' custom date format"
   [original-page-name date-formatter]
   (when original-page-name
-    (let [page-name (gp-util/page-name-sanity-lc original-page-name)
+    (let [page-name (common-util/page-name-sanity-lc original-page-name)
           day (date-time-util/journal-title->int page-name (date-time-util/safe-journal-title-formatters date-formatter))]
      (if day
        (let [original-page-name (date-time-util/int->journal-title day date-formatter)]
-         [original-page-name (gp-util/page-name-sanity-lc original-page-name) day])
+         [original-page-name (common-util/page-name-sanity-lc original-page-name) day])
        [original-page-name page-name day]))))
 
 (def convert-page-if-journal (memoize convert-page-if-journal-impl))
@@ -289,7 +289,7 @@
    & {:keys [from-page]}]
   (cond
     (and original-page-name (string? original-page-name))
-    (let [original-page-name (gp-util/remove-boundary-slashes original-page-name)
+    (let [original-page-name (common-util/remove-boundary-slashes original-page-name)
           [original-page-name page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
           namespace? (and (not (boolean (text/get-nested-page-name original-page-name)))
                           (text/namespace-page? original-page-name))
@@ -305,9 +305,9 @@
                          (d/squuid))]
            {:block/uuid new-uuid}))
        (when namespace?
-         (let [namespace (first (gp-util/split-last "/" original-page-name))]
+         (let [namespace (first (common-util/split-last "/" original-page-name))]
            (when-not (string/blank? namespace)
-             {:block/namespace {:block/name (gp-util/page-name-sanity-lc namespace)}})))
+             {:block/namespace {:block/name (common-util/page-name-sanity-lc namespace)}})))
        (when (and with-timestamp? (not page-entity)) ;; Only assign timestamp on creating new entity
          (let [current-ms (date-time-util/time-ms)]
            {:block/created-at current-ms
@@ -343,7 +343,7 @@
            (swap! *refs conj page))
          (when-let [tag (get-tag form)]
            (let [tag (text/page-ref-un-brackets! tag)]
-             (when (gp-util/tag-valid? tag)
+             (when (common-util/tag-valid? tag)
                (swap! *refs conj tag)
                (swap! *structured-tags conj tag))))
          form))
@@ -358,7 +358,7 @@
                                                               (when (string? p)
                                                                 (let [p (or (text/get-nested-page-name p) p)]
                                                                   (when (text/namespace-page? p)
-                                                                    (gp-util/split-namespace-pages p))))))
+                                                                    (common-util/split-namespace-pages p))))))
                                                           col)
                                                   (remove string/blank?)
                                                   (distinct))
@@ -394,7 +394,7 @@
   [blocks]
   (map (fn [block]
          (if (map? block)
-           (block-keywordize (gp-util/remove-nils-non-nested block))
+           (block-keywordize (common-util/remove-nils-non-nested block))
            block))
        blocks))
 
@@ -476,7 +476,7 @@
                                 (remove string/blank?)
                                 (map (fn [ref]
                                        (if (string? ref)
-                                         {:block/name (gp-util/page-name-sanity-lc ref)}
+                                         {:block/name (common-util/page-name-sanity-lc ref)}
                                          ref)))
                                 (remove vector?)
                                 (remove nil?)

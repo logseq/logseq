@@ -9,7 +9,7 @@
             [logseq.graph-parser.text :as text]
             [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [datascript.core :as d]
             [logseq.db.sqlite.util :as sqlite-util]))
 
@@ -40,7 +40,7 @@
                      (text/get-file-basename repo-name)
 
                      (mobile-util/native-platform?)
-                     (gp-util/safe-decode-uri-component (text/get-file-basename repo-name))
+                     (common-util/safe-decode-uri-component (text/get-file-basename repo-name))
 
                      :else
                      repo-name)]

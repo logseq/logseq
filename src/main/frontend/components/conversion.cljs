@@ -3,7 +3,7 @@
             [cljs.core.async.interop :refer [p->c]]
             [promesa.core :as p]
             [electron.ipc :as ipc]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [frontend.util :as util]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -161,8 +161,8 @@
             [:tbody
              (for [{:keys [page file status target old-title changed-title]} rename-items]
                (let [path           (:file/path file)
-                     src-file-name  (gp-util/path->file-name path)
-                     tgt-file-name  (str target "." (gp-util/path->file-ext path))
+                     src-file-name  (common-util/path->file-name path)
+                     tgt-file-name  (str target "." (common-util/path->file-ext path))
                      rm-item-fn     #(swap! *pages dissoc path)
                      rename-fn      #(file-page-handler/rename-file! file target rm-item-fn)
                      rename-but     [:a {:on-click rename-fn

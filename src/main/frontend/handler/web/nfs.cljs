@@ -19,7 +19,7 @@
             [frontend.util.fs :as util-fs]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [promesa.core :as p]
             [frontend.db.listener :as db-listener]
             [frontend.persist-db :as persist-db]))
@@ -52,7 +52,7 @@
      ;; TODO(andelf): use the same structure for both fields
      (mobile-util/native-platform?)
      (map (fn [{:keys [path content size mtime]}]
-            {:file/path             (gp-util/path-normalize path)
+            {:file/path             (common-util/path-normalize path)
              :file/last-modified-at mtime
              :file/size             size
              :file/content content})
@@ -61,7 +61,7 @@
      (util/electron?)
      (map (fn [{:keys [path stat content]}]
             (let [{:keys [mtime size]} stat]
-              {:file/path             (gp-util/path-normalize path)
+              {:file/path             (common-util/path-normalize path)
                :file/last-modified-at mtime
                :file/size             size
                :file/content content}))
@@ -70,7 +70,7 @@
      nfs?
      (map (fn [{:keys [path content size mtime type] :as file-obj}]
             (merge file-obj
-                   {:file/path             (gp-util/path-normalize path)
+                   {:file/path             (common-util/path-normalize path)
                     :file/last-modified-at mtime
                     :file/size             size
                     :file/type             type

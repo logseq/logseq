@@ -3,9 +3,9 @@
   (:require [cljs.test :refer [deftest use-fixtures is testing]]
             [clojure.string :as string]
             [logseq.graph-parser.cli :as gp-cli]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.config :as common-config]
             [frontend.test.helper :as test-helper]
             [frontend.handler.file-based.page :as file-page-handler]
             [frontend.handler.conversion :as conversion-handler]
@@ -21,7 +21,7 @@
   (testing "Query based stats"
     (is (= (->> files
                 ;; logseq files aren't saved under :block/file
-                (remove #(string/includes? % (str graph-dir "/" gp-config/app-name "/")))
+                (remove #(string/includes? % (str graph-dir "/" common-config/app-name "/")))
                 set)
            (->> (d/q '[:find (pull ?b [* {:block/file [:file/path]}])
                        :where [?b :block/name] [?b :block/file]]
@@ -117,7 +117,7 @@
 
 (defn- convert-to-triple-lowbar
   [path]
-  (let [original-body (gp-util/path->file-body path)
+  (let [original-body (common-util/path->file-body path)
         ;; only test file name parsing, don't consider title prop overriding
         rename-target (:target (#'conversion-handler/calc-rename-target-impl :legacy :triple-lowbar original-body nil))]
     (if rename-target

@@ -7,7 +7,8 @@
             [goog.object :as gobj]
             [datascript.core :as d]
             [frontend.search.fuzzy :as fuzzy]
-            [frontend.worker.util :as util]))
+            [frontend.worker.util :as util]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 ;; TODO: use sqlite for fuzzy search
 (defonce indices (atom nil))
@@ -242,7 +243,7 @@
             :as block}]
   (let [page? (some? name)
         block? (nil? name)
-        db-based? (util/db-based-graph? repo)]
+        db-based? (sqlite-util/db-based-graph? repo)]
     (when-not (or
                (and page? name (whiteboard-page? db name))
                (and block? (> (count content) 10000))
@@ -352,7 +353,7 @@
                                     (filter #(= :block/uuid (:a %)))
                                     (map :e)
                                     (set))
-          blocks-to-add-set' (if (and (util/db-based-graph? repo) (seq blocks-to-add-set))
+          blocks-to-add-set' (if (and (sqlite-util/db-based-graph? repo) (seq blocks-to-add-set))
                                (->> blocks-to-add-set
                                     (mapcat (fn [id] (map :db/id (:block/_refs (d/entity db-after id)))))
                                     (concat blocks-to-add-set)

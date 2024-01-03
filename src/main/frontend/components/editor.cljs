@@ -26,7 +26,7 @@
             [goog.dom :as gdom]
             [goog.string :as gstring]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [promesa.core :as p]
             [react-draggable]
             [rum.core :as rum]
@@ -105,8 +105,8 @@
   (if embed?
     (fn [chosen-item _e]
       (let [value (.-value input)
-            value' (str (gp-util/safe-subs value 0 q)
-                        (gp-util/safe-subs value (+ (count q) 4 pos)))]
+            value' (str (common-util/safe-subs value 0 q)
+                        (common-util/safe-subs value (+ (count q) 4 pos)))]
         (state/set-edit-content! (.-id input) value')
         (state/clear-editor-action!)
         (let [page-name (util/page-name-sanity-lc chosen-item)
@@ -192,9 +192,9 @@
                 q (or
                    (editor-handler/get-selected-text)
                    (when (= action :page-search-hashtag)
-                     (gp-util/safe-subs edit-content pos current-pos))
+                     (common-util/safe-subs edit-content pos current-pos))
                    (when (> (count edit-content) current-pos)
-                     (gp-util/safe-subs edit-content pos current-pos))
+                     (common-util/safe-subs edit-content pos current-pos))
                    "")]
             (page-search-aux id format embed? db-tag? q current-pos input pos)))))))
 
@@ -211,8 +211,8 @@
     (fn [chosen-item]
       (let [pos (state/get-editor-last-pos)
             value (.-value input)
-            value' (str (gp-util/safe-subs value 0 q)
-                        (gp-util/safe-subs value (+ (count q) 4 pos)))]
+            value' (str (common-util/safe-subs value 0 q)
+                        (common-util/safe-subs value (+ (count q) 4 pos)))]
         (state/set-edit-content! (.-id input) value')
         (state/clear-editor-action!)
         (let [current-block (state/get-edit-block)
@@ -376,7 +376,7 @@
             current-pos  (cursor/pos input)
             edit-content (or (state/sub-edit-content) "")
             q            (or (editor-handler/get-selected-text)
-                             (gp-util/safe-subs edit-content pos current-pos)
+                             (common-util/safe-subs edit-content pos current-pos)
                              "")
             matched      (seq (fuzzy-search modes q))
             matched      (or matched (if (string/blank? q) modes [q]))]

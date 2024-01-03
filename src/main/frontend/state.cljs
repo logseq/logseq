@@ -15,7 +15,7 @@
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.config :as common-config]
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -518,7 +518,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-date-formatter
   []
-  (gp-config/get-date-formatter (get-config)))
+  (common-config/get-date-formatter (get-config)))
 
 (defn shortcuts []
   (:shortcuts (get-config)))

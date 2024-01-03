@@ -18,7 +18,7 @@
             [clojure.pprint]
             [dommy.core :as d]
             [frontend.mobile.util :as mobile-util]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [goog.string :as gstring]
@@ -836,7 +836,7 @@
    (defn copy-to-clipboard!
      [text & {:keys [html blocks owner-window]}]
      (let [data (clj->js
-                 (gp-util/remove-nils-non-nested
+                 (common-util/remove-nils-non-nested
                   {:text text
                    :html html
                    :blocks (when (seq blocks) (pr-str blocks))}))]
@@ -1022,8 +1022,8 @@
 
 #?(:cljs
    (def page-name-sanity-lc
-     "Delegate to gp-util to loosely couple app usages to graph-parser"
-     gp-util/page-name-sanity-lc))
+     "Delegate to common-util to loosely couple app usages to graph-parser"
+     common-util/page-name-sanity-lc))
 
 #?(:cljs
    (def safe-page-name-sanity-lc worker-util/safe-page-name-sanity-lc))
@@ -1069,7 +1069,7 @@
      (and
       (string? file)
       (string/includes? file ".")
-      (some-> (gp-util/path->file-ext file) string/lower-case))))
+      (some-> (common-util/path->file-ext file) string/lower-case))))
 
 (defn get-dir-and-basename
   [path]

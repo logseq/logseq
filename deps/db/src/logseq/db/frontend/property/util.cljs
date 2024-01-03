@@ -48,7 +48,7 @@
 
 (defn new-property-tx
   "Provide attributes for a new built-in property given name, schema and uuid.
-   TODO: Merge this with sqlite-util/build-new-property once gp-util/page-name-sanity-lc
+   TODO: Merge this with sqlite-util/build-new-property once common-util/page-name-sanity-lc
    is available to deps/db"
   [prop-name prop-schema prop-uuid]
   {:block/uuid prop-uuid

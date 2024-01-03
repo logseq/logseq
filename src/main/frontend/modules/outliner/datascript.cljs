@@ -1,5 +1,5 @@
 (ns frontend.modules.outliner.datascript
-  (:require [logseq.graph-parser.util :as gp-util]
+  (:require [logseq.common.util :as common-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [frontend.worker.util :as worker-util]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -17,7 +17,7 @@
 
 (defn- remove-nil-from-transaction
   [txs]
-  (some->> (gp-util/remove-nils txs)
+  (some->> (common-util/remove-nils txs)
            (map (fn [x]
                   (if (map? x)
                     (update-vals x (fn [v]

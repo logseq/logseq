@@ -3,9 +3,9 @@
   the given database connection"
   (:require [datascript.core :as d]
             [logseq.graph-parser.extract :as extract]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.date-time-util :as date-time-util]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.config :as common-config]
             [logseq.db.frontend.schema :as db-schema]
             [clojure.string :as string]
             [clojure.set :as set]))
@@ -36,7 +36,7 @@
   "Copy of db/get-page-blocks-no-cache. Too basic to couple to main app"
   [db page {:keys [pull-keys]
             :or {pull-keys '[*]}}]
-  (let [sanitized-page (gp-util/page-name-sanity-lc page)
+  (let [sanitized-page (common-util/page-name-sanity-lc page)
         page-id (:db/id (d/entity db [:block/name sanitized-page]))]
     (when page-id
       (let [datoms (d/datoms db :avet :block/page page-id)
@@ -84,10 +84,10 @@ Options available:
                             delete-blocks-fn (constantly [])
                             skip-db-transact? false}
                        :as options}]
-   (let [format (gp-util/get-format file)
+   (let [format (common-util/get-format file)
          file-content [{:file/path file}]
          {:keys [tx ast]}
-         (let [extract-options' (merge {:block-pattern (gp-config/get-block-pattern format)
+         (let [extract-options' (merge {:block-pattern (common-config/get-block-pattern format)
                                         :date-formatter "MMM do, yyyy"
                                         :uri-encoded? false
                                         :filename-format :legacy}
@@ -97,10 +97,10 @@ Options available:
                 :or   {pages []
                        blocks []
                        ast []}}
-               (cond (contains? gp-config/mldoc-support-formats format)
+               (cond (contains? common-config/mldoc-support-formats format)
                  (extract/extract file content extract-options')
 
-                 (gp-config/whiteboard? file)
+                 (common-config/whiteboard? file)
                  (extract/extract-whiteboard-edn file content extract-options')
 
                  :else nil)
@@ -123,7 +123,7 @@ Options available:
                                 new?
                                 ;; TODO: use file system timestamp?
                                 (assoc :file/created-at (date-time-util/time-ms)))])
-         tx' (gp-util/fast-remove-nils tx)
+         tx' (common-util/fast-remove-nils tx)
          result (if skip-db-transact?
                   tx'
                   (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?])))]
@@ -136,8 +136,8 @@ Options available:
   [files]
   (let [support-files (filter
                        (fn [file]
-                         (let [format (gp-util/get-format (:file/path file))]
-                           (contains? (set/union #{:edn :css} gp-config/mldoc-support-formats) format)))
+                         (let [format (common-util/get-format (:file/path file))]
+                           (contains? (set/union #{:edn :css} common-config/mldoc-support-formats) format)))
                        files)
         support-files (sort-by :file/path support-files)
         {journals true non-journals false} (group-by (fn [file] (string/includes? (:file/path file) "journals/")) support-files)

@@ -13,7 +13,7 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.format.block :as block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [logseq.graph-parser.date-time-util :as date-time-util]
             [frontend.handler.page :as page-handler]
@@ -39,7 +39,7 @@
                                       (when journal?
                                         (date/journal-title->default title))
                                       (string/replace title "/" "-"))
-                               title (-> (gp-util/page-name-sanity title)
+                               title (-> (common-util/page-name-sanity title)
                                          (string/replace "\n" " "))
                                path (str (if journal?
                                            (config/get-journals-directory)

@@ -19,9 +19,9 @@
             [frontend.handler.property.file :as property-file]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.config :as common-config]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]))
@@ -299,7 +299,7 @@
                       [:codemirror/focus]] "Insert a calculator"]
        ["Draw" (fn []
                  (let [file (draw/file-name)
-                       path (str gp-config/default-draw-directory "/" file)
+                       path (str common-config/default-draw-directory "/" file)
                        text (page-ref/->page-ref path)]
                    (p/let [_ (draw/create-draw-with-default-content path)]
                      (println "draw file created, " path))
@@ -364,7 +364,7 @@
           current-pos (cursor/pos input)
           current-pos (or
                        (when (and end-pattern (string? end-pattern))
-                         (when-let [i (string/index-of (gp-util/safe-subs edit-content current-pos) end-pattern)]
+                         (when-let [i (string/index-of (common-util/safe-subs edit-content current-pos) end-pattern)]
                            (+ current-pos i)))
                        current-pos)
           orig-prefix (subs edit-content 0 current-pos)
@@ -372,7 +372,7 @@
           postfix (if postfix-fn (postfix-fn postfix) postfix)
           space? (let [space? (when (and last-pattern orig-prefix)
                                 (let [s (when-let [last-index (string/last-index-of orig-prefix last-pattern)]
-                                          (gp-util/safe-subs orig-prefix 0 last-index))]
+                                          (common-util/safe-subs orig-prefix 0 last-index))]
                                   (not
                                    (or
                                     (and (= :page-ref command)
@@ -394,7 +394,7 @@
                      space?))
           prefix (cond
                    (and backward-truncate-number (integer? backward-truncate-number))
-                   (str (gp-util/safe-subs orig-prefix 0 (- (count orig-prefix) backward-truncate-number))
+                   (str (common-util/safe-subs orig-prefix 0 (- (count orig-prefix) backward-truncate-number))
                         (when-not (zero? backward-truncate-number)
                           value))
 

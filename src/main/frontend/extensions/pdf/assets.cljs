@@ -19,7 +19,7 @@
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.pdf.windows :as pdf-windows]
             [logseq.common.path :as path]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.config :as common-config]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [medley.core :as medley]
             [promesa.core :as p]
@@ -48,7 +48,7 @@
 (defn resolve-area-image-file
   [img-stamp current {:keys [page id] :as _hl}]
   (when-let [key (:key current)]
-    (-> (str gp-config/local-assets-dir "/" key "/")
+    (-> (str common-config/local-assets-dir "/" key "/")
         (str (util/format "%s_%s_%s.png" page id img-stamp)))))
 
 (defn load-hls-data$
@@ -72,7 +72,7 @@
 (defn resolve-hls-data-by-key$
   [target-key]
   ;; TODO: fuzzy match
-  (when-let [hls-file (and target-key (str gp-config/local-assets-dir "/" target-key ".edn"))]
+  (when-let [hls-file (and target-key (str common-config/local-assets-dir "/" target-key ".edn"))]
     (load-hls-data$ {:hls-file hls-file})))
 
 (defn area-highlight?
@@ -111,7 +111,7 @@
                                   fstamp     (get-in new-hl [:content :image])
                                   old-fstamp (and old-hl (get-in old-hl [:content :image]))
                                   fname      (str (:page new-hl) "_" (:id new-hl))
-                                  fdir       (str gp-config/local-assets-dir "/" key)
+                                  fdir       (str common-config/local-assets-dir "/" key)
                                   _          (fs/mkdir-if-not-exists (path/path-join repo-dir fdir))
                                   new-fpath  (str fdir "/" fname "_" fstamp ".png")
                                   old-fpath  (and old-fstamp (str fdir "/" fname "_" old-fstamp ".png"))
@@ -142,7 +142,7 @@
           repo-dir (config/get-repo-dir repo-cur)
           fstamp   (get-in hl [:content :image])
           fname    (str (:page hl) "_" (:id hl))
-          fdir     (str gp-config/local-assets-dir "/" fkey)
+          fdir     (str common-config/local-assets-dir "/" fkey)
           fpath    (util/node-path.join repo-dir (str fdir "/" fname "_" fstamp ".png"))]
 
       (fs/unlink! repo-cur fpath {}))))
@@ -155,7 +155,7 @@
           file-path (:original-path pdf-current)
           format (state/get-preferred-format)
           repo-dir (config/get-repo-dir (state/get-current-repo))
-          asset-dir (util/node-path.join repo-dir gp-config/local-assets-dir)
+          asset-dir (util/node-path.join repo-dir common-config/local-assets-dir)
           url (if (string/includes? file-path asset-dir)
                 (str ".." (last (string/split file-path repo-dir)))
                 file-path)]
@@ -293,7 +293,7 @@
             :on-mouse-down util/stop
             :on-click      (fn [e]
                              (util/stop e)
-                             (-> (util/copy-image-to-clipboard (gp-config/remove-asset-protocol asset-path))
+                             (-> (util/copy-image-to-clipboard (common-config/remove-asset-protocol asset-path))
                                  (p/then #(notification/show! "Copied!" :success))))}
            (ui/icon "copy")])
 

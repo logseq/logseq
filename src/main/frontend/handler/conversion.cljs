@@ -2,7 +2,7 @@
 
 (ns frontend.handler.conversion
   "For conversion logic between old version and new version"
-  (:require [logseq.graph-parser.util :as gp-util]
+  (:require [logseq.common.util :as common-util]
             [frontend.util.fs :as fs-util]
             [frontend.handler.config :refer [set-config!]]
             [frontend.util :as util]))
@@ -23,7 +23,7 @@
      if no change of path happens"
   [format file-body prop-title]
   (let [page-title    (or prop-title
-                          (gp-util/title-parsing file-body format))
+                          (common-util/title-parsing file-body format))
         cur-file-body (fs-util/file-name-sanity page-title format)]
     (when-not (= file-body cur-file-body)
       {:status        :informal
@@ -37,8 +37,8 @@
      the file name for that page name under the current file naming rules,
      and the new title if no action applied, or `nil` if no break change happens"
   [old-format new-format file-body]
-  (let [new-title (gp-util/title-parsing file-body new-format) ;; Rename even the prop-title is provided.
-        old-title (gp-util/title-parsing file-body old-format)
+  (let [new-title (common-util/title-parsing file-body new-format) ;; Rename even the prop-title is provided.
+        old-title (common-util/title-parsing file-body old-format)
         target    (fs-util/file-name-sanity old-title new-format)]
     (when (not= new-title old-title)
       (if (not= target file-body)
@@ -53,7 +53,7 @@
          :changed-title new-title}))))
 
 ;; Register sanitization / parsing fns in:
-;; logseq.graph-parser.util (parsing only)
+;; logseq.common.util (parsing only)
 ;; frontend.util.fs         (sanitization only)
 ;; frontend.handler.conversion (both)
 ;;   - the special rule in `is-manual-title-prop?`
@@ -102,7 +102,7 @@
       :changed-title the new title} | nil"
   [page path old-format new-format]
   (let [prop-title (get-in page [:block/properties :title])
-        file-body  (gp-util/path->file-body path)
+        file-body  (common-util/path->file-body path)
         journal?   (:block/journal? page)
         manual-prop-title? (is-manual-title-prop? old-format file-body prop-title)]
     (cond

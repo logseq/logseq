@@ -71,10 +71,10 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.config :as common-config]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.shui.core :as shui]
@@ -185,12 +185,12 @@
   (rum/local false ::loading?)
   {:will-mount  (fn [state]
                   (let [src (first (:rum/args state))]
-                    (if (and (gp-config/local-protocol-asset? src)
+                    (if (and (common-config/local-protocol-asset? src)
                              (file-sync/current-graph-sync-on?))
                       (let [*exist? (::exist? state)
                             ;; special handling for asset:// protocol
                             ;; Capacitor uses a special URL for assets loading
-                            asset-path (gp-config/remove-asset-protocol src)
+                            asset-path (common-config/remove-asset-protocol src)
                             asset-path (fs/asset-path-normalize asset-path)]
                         (if (string/blank? asset-path)
                           (reset! *exist? false)
@@ -226,7 +226,7 @@
         asset-file? (::asset-file? state)
         sync-enabled? (boolean (file-sync/current-graph-sync-on?))
         ext (keyword (util/get-file-ext src))
-        img? (contains? (gp-config/img-formats) ext)
+        img? (contains? (common-config/img-formats) ext)
         audio? (contains? config/audio-formats ext)
         type (cond img? "image"
                    audio? "audio"
@@ -367,7 +367,7 @@
 
 (rum/defc audio-cp [src]
   ;; Change protocol to allow media fragment uris to play
-  [:audio {:src (string/replace-first src gp-config/asset-protocol "file://")
+  [:audio {:src (string/replace-first src common-config/asset-protocol "file://")
            :controls true
            :on-touch-start #(util/stop %)}])
 
@@ -406,11 +406,11 @@
           (asset-loader @src
                         #(audio-cp @src))
 
-          (contains? (gp-config/img-formats) ext)
+          (contains? (common-config/img-formats) ext)
           (asset-loader @src
                         #(resizable-image config title @src metadata full_text true))
 
-          (contains? (gp-config/text-formats) ext)
+          (contains? (common-config/text-formats) ext)
           [:a.asset-ref.is-plaintext {:href (rfe/href :file {:path path})
                                       :on-click (fn [_event]
                                                   (p/let [result (fs/read-file repo-dir path)]
@@ -436,12 +436,12 @@
 (defn image-link [config url href label metadata full_text]
   (let [metadata (if (string/blank? metadata)
                    nil
-                   (gp-util/safe-read-string metadata))
+                   (common-util/safe-read-string metadata))
         title (second (first label))
         repo (state/get-current-repo)]
     (ui/catch-error
      [:span.warning full_text]
-     (if (and (gp-config/local-asset? href)
+     (if (and (common-config/local-asset? href)
               (or (config/local-file-based-graph? repo)
                   (config/db-based-graph? repo)))
        (asset-link config title href metadata full_text)
@@ -699,7 +699,7 @@
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
   [{:keys [html-export? redirect-page-name label children contents-page? preview? disable-preview?] :as config} page]
   (when-let [page-name-in-block (:block/name page)]
-    (let [page-name-in-block (gp-util/remove-boundary-slashes page-name-in-block)
+    (let [page-name-in-block (common-util/remove-boundary-slashes page-name-in-block)
           page-name (util/page-name-sanity-lc page-name-in-block)
           page-entity (db/entity [:block/name page-name])
           whiteboard-page? (model/whiteboard-page? page-name)
@@ -722,7 +722,7 @@
   [config title path]
   (let [repo (state/get-current-repo)
         real-path-url (cond
-                        (gp-util/url? path)
+                        (common-util/url? path)
                         path
 
                         (path/absolute? path)
@@ -862,7 +862,7 @@
   [label]
   (when (and (= 1 (count label))
              (string? (last (first label))))
-    (gp-util/safe-decode-uri-component (last (first label)))))
+    (common-util/safe-decode-uri-component (last (first label)))))
 
 (defn- get-page
   [label]
@@ -1011,7 +1011,7 @@
 (defn- show-link?
   [config metadata s full-text]
   (let [media-formats (set (map name config/media-formats))
-        metadata-show (:show (gp-util/safe-read-string metadata))
+        metadata-show (:show (common-util/safe-read-string metadata))
         format (get-in config [:block :block/format])]
     (or
      (and
@@ -1020,7 +1020,7 @@
        (and
         (nil? metadata-show)
         (or
-         (gp-config/local-asset? s)
+         (common-config/local-asset? s)
          (text-util/media-link? media-formats s)))
        (true? (boolean metadata-show))))
 
@@ -1044,7 +1044,7 @@
 
 (rum/defc audio-link
   [config url href _label metadata full_text]
-  (if (and (gp-config/local-asset? href)
+  (if (and (common-config/local-asset? href)
            (config/local-file-based-graph? (state/get-current-repo)))
     (asset-link config nil href metadata full_text)
     (let [href (cond
@@ -1215,7 +1215,7 @@
                   show-brackets? (state/show-brackets?)]
               (if (and page
                        (when-let [ext (util/get-file-ext href)]
-                         (gp-config/mldoc-support? ext)))
+                         (common-config/mldoc-support? ext)))
                 [:span.page-reference
                  (when show-brackets? [:span.text-gray-500 page-ref/left-brackets])
                  (page-cp config page)
@@ -1350,7 +1350,7 @@
 (defn- macro-video-cp
   [_config arguments]
   (if-let [url (first arguments)]
-    (if (gp-util/url? url)
+    (if (common-util/url? url)
       (let [results (text-util/get-matched-video url)
             src (match results
                   [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
@@ -1572,7 +1572,7 @@
 
 (defn hiccup->html
   [s]
-  (let [result (gp-util/safe-read-string s)
+  (let [result (common-util/safe-read-string s)
         result' (if (seq result) result
                     [:div.warning {:title "Invalid hiccup"}
                      s])]
@@ -2061,8 +2061,8 @@
         date
         date
 
-        (and (string? v) (gp-util/wrapped-by-quotes? v))
-        (gp-util/unquote-string v)
+        (and (string? v) (common-util/wrapped-by-quotes? v))
+        (common-util/unquote-string v)
 
         (and property-separated-by-commas? (coll? v))
         (let [v (->> (remove string/blank? v)

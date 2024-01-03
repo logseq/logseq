@@ -16,7 +16,7 @@
             [logseq.db.frontend.default :as db-default]
             [rum.core :as rum]
             [clojure.string :as string]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]))
 
@@ -445,7 +445,7 @@
   (rum/local nil ::find)
   {:init (fn [state]
            (let [q-str (first (:rum/args state))
-                 query (gp-util/safe-read-string
+                 query (common-util/safe-read-string
                         query-dsl/custom-readers
                         (query-dsl/pre-transform-query q-str))
                  query' (cond

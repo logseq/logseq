@@ -6,8 +6,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.path :as path]
-            [logseq.graph-parser.config :as gp-config]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
             [shadow.resource :as rc]
             [goog.crypt.Md5]
             [goog.crypt :as crypt]))
@@ -138,14 +138,14 @@
 (def video-formats
   #{:mp4 :webm :mov :flv :avi :mkv})
 
-(def media-formats (set/union (gp-config/img-formats) audio-formats))
+(def media-formats (set/union (common-config/img-formats) audio-formats))
 
 (defn extname-of-supported?
   ([input] (extname-of-supported?
             input
             [image-formats doc-formats audio-formats
              video-formats markup-formats
-             (gp-config/text-formats)]))
+             (common-config/text-formats)]))
   ([input formats]
    (when-let [input (some->
                      (cond-> input
@@ -195,7 +195,7 @@
 
 (defn get-block-pattern
   [format]
-  (gp-config/get-block-pattern (or format (state/get-preferred-format))))
+  (common-config/get-block-pattern (or format (state/get-preferred-format))))
 
 (defn get-hr
   [format]
@@ -460,7 +460,7 @@
                  "Local"))
          (->> (string/split repo-dir "Documents/")
               last
-              gp-util/safe-decode-uri-component
+              common-util/safe-decode-uri-component
               (str "/" (string/capitalize app-name) "/")))
     (get-repo-dir (get-local-repo repo-dir))))
 

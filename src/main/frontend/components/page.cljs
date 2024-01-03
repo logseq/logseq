@@ -43,7 +43,7 @@
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.db.frontend.property :as db-property]
             [medley.core :as medley]
@@ -266,8 +266,8 @@
                        (reset! *edit? true)
                        (.focus (rum/deref input-ref)))
         blur-fn (fn [e]
-                  (when (gp-util/wrapped-by-quotes? @*title-value)
-                    (swap! *title-value gp-util/unquote-string)
+                  (when (common-util/wrapped-by-quotes? @*title-value)
+                    (swap! *title-value common-util/unquote-string)
                     (gobj/set (rum/deref input-ref) "value" @*title-value))
                   (cond
                     (or (= old-name @*title-value) (and whiteboard-page? (string/blank? @*title-value)))

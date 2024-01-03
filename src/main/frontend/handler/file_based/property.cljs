@@ -6,7 +6,7 @@
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.common.util :as common-util]))
 
 (defn insert-property
   [format content key value & args]
@@ -35,9 +35,9 @@
                  properties (:block/properties block)
                  properties-text-values (:block/properties-text-values block)
                  properties (-> (merge properties new-properties)
-                                gp-util/remove-nils-non-nested)
+                                common-util/remove-nils-non-nested)
                  properties-text-values (-> (merge properties-text-values new-properties)
-                                            gp-util/remove-nils-non-nested)
+                                            common-util/remove-nils-non-nested)
                  property-ks (->> (concat (:block/properties-order block)
                                           (map second items))
                                   (filter (set (keys properties)))

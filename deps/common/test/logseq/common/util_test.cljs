@@ -1,10 +1,10 @@
-(ns logseq.graph-parser.util-test
+(ns logseq.common.util-test
   (:require [clojure.test :refer [deftest are]]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.common.util :as common-util]))
 
 (deftest valid-edn-keyword?
   (are [x y]
-       (= (gp-util/valid-edn-keyword? x) y)
+       (= (common-util/valid-edn-keyword? x) y)
 
        ":foo-bar"  true
        ":foo!"     true
@@ -15,7 +15,7 @@
 
 (deftest extract-file-extension?
   (are [x y]
-       (= (gp-util/path->file-ext x) y)
+       (= (common-util/path->file-ext x) y)
        "foo.bar" "bar"
        "foo"     nil
        "foo.bar.baz" "baz"
@@ -31,7 +31,7 @@
 
 (deftest url?
   (are [x y]
-       (= (gp-util/url? x) y)
+       (= (common-util/url? x) y)
        "http://logseq.com" true
        "prop:: value" false
        "a:" false))

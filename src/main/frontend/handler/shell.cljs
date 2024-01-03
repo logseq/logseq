@@ -2,7 +2,7 @@
   "Git related handler fns"
   (:require [electron.ipc :as ipc]
             [clojure.string :as string]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [frontend.handler.notification :as notification]
             [promesa.core :as p]
             [frontend.db :as db]
@@ -42,7 +42,7 @@
   [command]
   (let [[command args]
         (if (and (string? command) (string/includes? command " "))
-          (gp-util/split-first " " command)
+          (common-util/split-first " " command)
           [command ""])
         command (and command (string/lower-case command))
         args (-> args str string/trim)]

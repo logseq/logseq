@@ -70,7 +70,7 @@
             [frontend.util.persist-var :as persist-var]
             [goog.dom :as gdom]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.config :as common-config]
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.db.listener :as db-listener]
@@ -881,7 +881,7 @@
                         (for [[file error] parse-errors]
                           (let [data (ex-data error)]
                             (cond
-                             (and (gp-config/whiteboard? file)
+                             (and (common-config/whiteboard? file)
                                   (= :transact/upsert (:error data))
                                   (uuid? (last (:assertion data))))
                              (rum/with-key (file-id-conflict-item repo file data) file)

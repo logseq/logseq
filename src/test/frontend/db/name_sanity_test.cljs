@@ -1,7 +1,7 @@
 (ns frontend.db.name-sanity-test
   (:require [cljs.test :refer [deftest testing is are]]
             [clojure.string :as string]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [frontend.handler.file-based.page :as file-page-handler]
             [frontend.handler.conversion :as conversion-handler]
             [frontend.util.fs :as fs-util]
@@ -12,7 +12,7 @@
   [page-name]
   (testing (str "Test sanitization page-name: " page-name)
     (let [file-name   (#'wfu/tri-lb-file-name-sanity page-name)
-          page-name'  (#'gp-util/tri-lb-title-parsing file-name)
+          page-name'  (#'common-util/tri-lb-title-parsing file-name)
           url-single  (js/encodeURIComponent file-name)
           url-double  (js/encodeURIComponent url-single)
           file-name'  (js/decodeURIComponent url-single)
