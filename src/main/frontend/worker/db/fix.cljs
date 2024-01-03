@@ -4,9 +4,10 @@
   1. Each block should has a unique [:block/parent :block/left] position.
   2. For any block, its children should be connected by :block/left (no broken chain, no circle, no left to self)."
   (:require [datascript.core :as d]
-            [frontend.util :as util]
+            [cljs.pprint :as pprint]
             [frontend.handler.notification :as notification]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [frontend.worker.util :as util]))
 
 (defn- fix-parent-broken-chain
   [db parent-id]
@@ -26,12 +27,11 @@
                                                :block/content (:block/content b)
                                                :block/left (:db/id (:block/left b))}) blocks)}]
             (prn :debug "Broken chain:")
-            (util/pprint error-data)
-            (notification/show!
-             [:div
-              (str "Broken chain detected:\n" error-data)]
-             :error
-             false))
+            (pprint/pprint error-data)
+            (util/post-message :notification
+                               (pr-str [[:div
+                                         (str "Broken chain detected:\n" error-data)]
+                                        :error])))
           (let [first-child-id (:db/id (ldb/get-by-parent-&-left db parent-id parent-id))
                 *ids (atom children-ids)
                 sections (loop [sections []]
@@ -112,12 +112,10 @@
   [db conflicts]
   (when (seq conflicts)
     (prn :debug "Parent left id conflicts:")
-    (notification/show!
-     [:div
-      (str "Parent-left conflicts detected:\n"
-           conflicts)]
-     :error
-     false))
+    (util/post-message :notification (pr-str [[:div
+                                               (str "Parent-left conflicts detected:\n"
+                                                    conflicts)]
+                                              :error])))
   (mapcat
    (fn [[_parent-left blocks]]
      (let [items (sort-by :block/created-at blocks)
@@ -147,7 +145,7 @@
                            (fix-parent-left-conflicts db conflicts))]
     (when (seq fix-conflicts-tx)
       (prn :debug :conflicts-tx)
-      (util/pprint fix-conflicts-tx)
+      (pprint/pprint fix-conflicts-tx)
       (let [tx-data (:tx-data (d/transact! conn fix-conflicts-tx transact-opts))]
         (swap! *fix-tx-data (fn [old-data] (concat old-data tx-data))))
       (when (seq (get-conflicts @conn page-id))

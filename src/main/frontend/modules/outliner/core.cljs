@@ -11,15 +11,11 @@
             [cljs.spec.alpha :as s]
             [logseq.db :as ldb]
             [frontend.worker.mldoc :as mldoc]
-            [logseq.graph-parser.block :as gp-block]
             [frontend.worker.file.property-util :as wpu]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.util :as sqlite-util]
             [cljs.pprint :as pprint]
-            [frontend.worker.util :as util]
-
-            [frontend.state :as state]
-            ))
+            [frontend.worker.util :as util]))
 
 (s/def ::block-map (s/keys :opt [:db/id :block/uuid :block/page :block/left :block/parent]))
 
@@ -149,42 +145,43 @@
                                            (vector :db.fn/retractEntity (:db/id %)))
                                         (:block/macros block-entity)))))))
 
-(defn- create-linked-page-when-save
-  [repo conn db date-formatter txs-state block-entity m tags-has-class?]
-  (if tags-has-class?
-    (let [content (state/get-edit-content)
-          linked-page (some-> content #(mldoc/extract-plain repo %))
-          sanity-linked-page (some-> linked-page util/page-name-sanity-lc)
-          linking-page? (and (not (string/blank? sanity-linked-page))
-                             @(:editor/create-page? @state/state))]
-      (when linking-page?
-        (let [existing-ref-id (some (fn [r]
-                                      (when (= sanity-linked-page (:block/name r))
-                                        (:block/uuid r)))
-                                    (:block/refs m))
-              page-m (gp-block/page-name->map linked-page (or existing-ref-id true)
-                                              db true date-formatter)
-              _ (when-not (d/entity db [:block/uuid (:block/uuid page-m)])
-                  (d/transact! conn [page-m]))
-              merge-tx (let [children (:block/_parent block-entity)
-                             page (d/entity db [:block/uuid (:block/uuid page-m)])
-                             [target sibling?] (get-last-child-or-self db page)]
-                         (when (seq children)
-                           (:tx-data
-                            (move-blocks repo conn children target
-                                         {:sibling? sibling?
-                                          :outliner-op :move-blocks}))))]
-          (swap! txs-state (fn [txs]
-                             (concat txs
-                                     [(assoc page-m
-                                             :block/tags (:block/tags m)
-                                             :block/format :markdown)
-                                      {:db/id (:db/id block-entity)
-                                       :block/content ""
-                                       :block/refs []
-                                       :block/link [:block/uuid (:block/uuid page-m)]}]
-                                     merge-tx))))))
-    (reset! (:editor/create-page? @state/state) false)))
+(comment
+  (defn- create-linked-page-when-save
+   [repo conn db date-formatter txs-state block-entity m tags-has-class?]
+   (if tags-has-class?
+     (let [content (state/get-edit-content)
+           linked-page (some-> content #(mldoc/extract-plain repo %))
+           sanity-linked-page (some-> linked-page util/page-name-sanity-lc)
+           linking-page? (and (not (string/blank? sanity-linked-page))
+                              @(:editor/create-page? @state/state))]
+       (when linking-page?
+         (let [existing-ref-id (some (fn [r]
+                                       (when (= sanity-linked-page (:block/name r))
+                                         (:block/uuid r)))
+                                     (:block/refs m))
+               page-m (gp-block/page-name->map linked-page (or existing-ref-id true)
+                                               db true date-formatter)
+               _ (when-not (d/entity db [:block/uuid (:block/uuid page-m)])
+                   (d/transact! conn [page-m]))
+               merge-tx (let [children (:block/_parent block-entity)
+                              page (d/entity db [:block/uuid (:block/uuid page-m)])
+                              [target sibling?] (get-last-child-or-self db page)]
+                          (when (seq children)
+                            (:tx-data
+                             (move-blocks repo conn children target
+                                          {:sibling? sibling?
+                                           :outliner-op :move-blocks}))))]
+           (swap! txs-state (fn [txs]
+                              (concat txs
+                                      [(assoc page-m
+                                              :block/tags (:block/tags m)
+                                              :block/format :markdown)
+                                       {:db/id (:db/id block-entity)
+                                        :block/content ""
+                                        :block/refs []
+                                        :block/link [:block/uuid (:block/uuid page-m)]}]
+                                      merge-tx))))))
+     (reset! (:editor/create-page? @state/state) false))))
 
 (defn rebuild-block-refs
   [repo conn db date-formatter block new-properties & {:keys [skip-content-parsing?]}]
@@ -293,7 +290,7 @@
     (let [parent-id (otree/-get-id this conn)]
       (get-by-parent-&-left @conn parent-id parent-id)))
 
-  (-save [this txs-state conn repo]
+  (-save [this txs-state conn repo date-formatter]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
     (let [data (:data this)
@@ -307,16 +304,11 @@
                 block-with-updated-at
                 fix-tag-ids)
           db @conn
-          date-formatter (state/get-date-formatter)
           db-based? (sqlite-util/db-based-graph? repo)
           db-id (:db/id (:data this))
           block-uuid (:block/uuid (:data this))
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
-          block-entity (d/entity db eid)
-          tags-has-class? (and db-based?
-                               (some (fn [tag]
-                                       (contains? (:block/type (d/entity db [:block/uuid (:block/uuid tag)])) "class"))
-                                     (:block/tags m)))]
+          block-entity (d/entity db eid)]
 
       ;; Ensure block UUID never changes
       (when (and db-id block-uuid)
@@ -352,8 +344,6 @@
                              (vec (concat txs other-tx)))))
         (swap! txs-state conj
                (dissoc m :db/other-tx)))
-
-      (create-linked-page-when-save repo conn db (state/get-date-formatter) txs-state block-entity m tags-has-class?)
 
       (rebuild-refs repo conn db date-formatter txs-state block-entity m)
 
@@ -539,10 +529,10 @@
 
 (defn save-block
   "Save the `block`."
-  [repo conn block']
+  [repo conn date-formatter block']
   {:pre [(map? block')]}
   (let [txs-state (atom [])]
-    (otree/-save (block @conn block') txs-state conn repo)
+    (otree/-save (block @conn block') txs-state conn repo date-formatter)
     {:tx-data @txs-state}))
 
 (defn- get-right-siblings
@@ -769,38 +759,25 @@
                      :keep-uuid? keep-uuid?
                      :move? move?
                      :outliner-op outliner-op}
-        tx (insert-blocks-aux blocks' target-block' insert-opts)]
-    (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/left b)))) tx)
-      (do
-        (state/pub-event! [:capture-error {:error "Outliner invalid structure"
-                                           :payload {:type :outliner/invalid-structure
-                                                     :opt opts
-                                                     :data (mapv #(dissoc % :block/content) tx)}}])
-        (throw (ex-info "Invalid outliner data"
-                        {:opts insert-opts
-                         :tx (vec tx)
-                         :blocks (vec blocks)
-                         :target-block target-block'})))
-      (let [uuids-tx (->> (map :block/uuid tx)
-                          (remove nil?)
-                          (map (fn [uuid] {:block/uuid uuid})))
-            tx (if move?
-                 tx
-                 (assign-temp-id tx replace-empty-target? target-block'))
-            target-node (block @conn target-block')
-            next (if sibling?
-                   (otree/-get-right target-node conn)
-                   (otree/-get-down target-node conn))
-            next-tx (when (and next
-                               (if move? (not (contains? (set (map :db/id blocks)) (:db/id (:data next)))) true))
-                      (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
-                        [{:block/uuid (otree/-get-id next conn)
-                          :block/left (:db/id left)}]))
-            full-tx (util/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx) tx next-tx)]
-        (when (and replace-empty-target? (state/editing?))
-          (state/set-edit-content! (state/get-edit-input-id) (:block/content (first blocks))))
-        {:tx-data full-tx
-         :blocks  tx}))))
+        tx' (insert-blocks-aux blocks' target-block' insert-opts)
+        uuids-tx (->> (map :block/uuid tx')
+                      (remove nil?)
+                      (map (fn [uuid] {:block/uuid uuid})))
+        tx (if move?
+             tx'
+             (assign-temp-id tx' replace-empty-target? target-block'))
+        target-node (block @conn target-block')
+        next (if sibling?
+               (otree/-get-right target-node conn)
+               (otree/-get-down target-node conn))
+        next-tx (when (and next
+                           (if move? (not (contains? (set (map :db/id blocks)) (:db/id (:data next)))) true))
+                  (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
+                    [{:block/uuid (otree/-get-id next conn)
+                      :block/left (:db/id left)}]))
+        full-tx (util/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx) tx next-tx)]
+    {:tx-data full-tx
+     :blocks  tx}))
 
 (defn- build-move-blocks-next-tx
   [db target-block blocks {:keys [sibling? _non-consecutive-blocks?]}]
@@ -852,7 +829,7 @@
 
 (defn delete-block
   "Delete block from the tree."
-  [repo conn txs-state node {:keys [children? children-check?]
+  [repo conn txs-state node {:keys [children? children-check? date-formatter]
                         :or {children-check? true}}]
   (if (and children-check?
            (not children?)
@@ -864,16 +841,16 @@
       (when (otree/satisfied-inode? right-node)
         (let [left-node (otree/-get-left node conn)
               new-right-node (otree/-set-left-id right-node (otree/-get-id left-node conn) conn)]
-          (otree/-save new-right-node txs-state conn repo)))
+          (otree/-save new-right-node txs-state conn repo date-formatter)))
       @txs-state)))
 
 (defn- delete-blocks
   "Delete blocks from the tree.
    Args:
     `children?`: whether to replace `blocks'` children too. "
-  [repo conn blocks {:keys [children?]
-                     :or {children? true}
-                     :as delete-opts}]
+  [repo conn date-formatter blocks {:keys [children?]
+                                    :or {children? true}
+                                    :as delete-opts}]
   [:pre [(seq blocks)]]
   (let [txs-state (ds/new-outliner-txs-state)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) blocks)
@@ -893,7 +870,8 @@
          (= 1 (count blocks))
          (= start-node end-node)
          self-block?)
-      (delete-block repo conn txs-state start-node (assoc delete-opts :children? children?))
+      (delete-block repo conn txs-state start-node (assoc delete-opts :children? children?
+                                                          :date-formatter date-formatter))
       (let [sibling? (= (otree/-get-parent-id start-node conn)
                         (otree/-get-parent-id end-node conn))
             right-node (otree/-get-right end-node conn)]
@@ -922,7 +900,7 @@
                                     :right-node (d/entity @conn [:block/uuid (otree/-get-id right-node conn)])}))))
             (when left-node-id
               (let [new-right-node (otree/-set-left-id right-node left-node-id conn)]
-                (otree/-save new-right-node txs-state conn repo)))))
+                (otree/-save new-right-node txs-state conn repo date-formatter)))))
         (doseq [id block-ids]
           (let [node (block @conn (d/entity @conn id))]
             (otree/-del node txs-state true conn)))
@@ -1020,7 +998,7 @@
 
 (defn indent-outdent-blocks
   "Indent or outdent `blocks`."
-  [repo conn blocks indent? & {:keys [get-first-block-original]}]
+  [repo conn blocks indent? & {:keys [get-first-block-original logical-outdenting?]}]
   {:pre [(seq blocks) (boolean? indent?)]}
   (let [db @conn
         top-level-blocks blocks
@@ -1069,7 +1047,7 @@
                                                  (:db/id (:block/parent parent))))
                                          top-level-blocks)
                      result (move-blocks repo conn blocks' parent (merge opts {:sibling? true}))]
-                 (if (state/logical-outdenting?)
+                 (if logical-outdenting?
                    result
                   ;; direct outdenting (default behavior)
                    (let [last-top-block (d/entity db (:db/id (last blocks')))
@@ -1108,16 +1086,16 @@
     result))
 
 (defn save-block!
-  [repo conn block]
-  (op-transact! #'save-block repo conn block))
+  [repo conn date-formatter block]
+  (op-transact! #'save-block repo conn date-formatter block))
 
 (defn insert-blocks!
   [repo conn blocks target-block opts]
   (op-transact! #'insert-blocks repo conn blocks target-block (assoc opts :outliner-op :insert-blocks)))
 
 (defn delete-blocks!
-  [repo conn blocks opts]
-  (op-transact! #'delete-blocks repo conn blocks (assoc opts :outliner-op :delete-blocks)))
+  [repo conn date-formatter blocks opts]
+  (op-transact! #'delete-blocks repo conn date-formatter blocks (assoc opts :outliner-op :delete-blocks)))
 
 (defn move-blocks!
   [repo conn blocks target-block sibling?]

@@ -214,7 +214,9 @@
    {:outliner-op :save-block}
    (doseq [block-id block-ids]
      (when-let [block (set-heading-aux! block-id heading)]
-       (outliner-core/save-block! (state/get-current-repo) (db/get-db false) block)))))
+       (outliner-core/save-block! (state/get-current-repo) (db/get-db false)
+                                  (state/get-date-formatter)
+                                  block)))))
 
 (defn set-blocks-id!
   "Persist block uuid to file if the uuid is valid, and it's not persisted in file.
