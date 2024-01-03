@@ -759,25 +759,31 @@
                      :keep-uuid? keep-uuid?
                      :move? move?
                      :outliner-op outliner-op}
-        tx' (insert-blocks-aux blocks' target-block' insert-opts)
-        uuids-tx (->> (map :block/uuid tx')
-                      (remove nil?)
-                      (map (fn [uuid] {:block/uuid uuid})))
-        tx (if move?
-             tx'
-             (assign-temp-id tx' replace-empty-target? target-block'))
-        target-node (block @conn target-block')
-        next (if sibling?
-               (otree/-get-right target-node conn)
-               (otree/-get-down target-node conn))
-        next-tx (when (and next
-                           (if move? (not (contains? (set (map :db/id blocks)) (:db/id (:data next)))) true))
-                  (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
-                    [{:block/uuid (otree/-get-id next conn)
-                      :block/left (:db/id left)}]))
-        full-tx (util/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx) tx next-tx)]
-    {:tx-data full-tx
-     :blocks  tx}))
+        tx' (insert-blocks-aux blocks' target-block' insert-opts)]
+    (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/left b)))) tx')
+      (throw (ex-info "Invalid outliner data"
+                        {:opts insert-opts
+                         :tx (vec tx')
+                         :blocks (vec blocks)
+                         :target-block target-block'}))
+      (let [uuids-tx (->> (map :block/uuid tx')
+                          (remove nil?)
+                          (map (fn [uuid] {:block/uuid uuid})))
+            tx (if move?
+                 tx'
+                 (assign-temp-id tx' replace-empty-target? target-block'))
+            target-node (block @conn target-block')
+            next (if sibling?
+                   (otree/-get-right target-node conn)
+                   (otree/-get-down target-node conn))
+            next-tx (when (and next
+                               (if move? (not (contains? (set (map :db/id blocks)) (:db/id (:data next)))) true))
+                      (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
+                        [{:block/uuid (otree/-get-id next conn)
+                          :block/left (:db/id left)}]))
+            full-tx (util/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx) tx next-tx)]
+        {:tx-data full-tx
+         :blocks  tx}))))
 
 (defn- build-move-blocks-next-tx
   [db target-block blocks {:keys [sibling? _non-consecutive-blocks?]}]
