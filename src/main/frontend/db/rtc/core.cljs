@@ -838,6 +838,13 @@
             (prn ::<get-block-content-versions :ex-message ex-message :ex-data ex-data)
             versions))))))
 
+(defn <query-page-blocks
+  [state page-block-uuid]
+  (go
+    (when (some-> state :*graph-uuid deref)
+      (<! (ws/<send&receive state {:action "query-blocks" :graph-uuid @(:*graph-uuid state)
+                                   :block-uuids [page-block-uuid]})))))
+
 
 (defn init-state
   [ws data-from-ws-chan]

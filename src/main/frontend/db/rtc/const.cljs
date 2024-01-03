@@ -165,6 +165,12 @@
       [:req-id :string]
       [:action :string]
       [:graph-uuid :string]
+      [:block-uuids [:sequential :uuid]]]]
+    ["query-blocks"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:graph-uuid :uuid]
       [:block-uuids [:sequential :uuid]]]]]))
 (def data-to-ws-encoder (m/encoder data-to-ws-schema mt/string-transformer))
 (def data-to-ws-coercer (m/coercer data-to-ws-schema mt/string-transformer))
