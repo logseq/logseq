@@ -3,7 +3,7 @@
   (:require [frontend.db :as db]
             [frontend.handler.block :as block-handler]
             [frontend.handler.file-based.property.util :as property-util]
-            [frontend.modules.outliner.core :as outliner-core]
+            [logseq.outliner.core :as outliner-core]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [logseq.common.util :as common-util]))

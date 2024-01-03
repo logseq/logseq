@@ -9,7 +9,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
-            [frontend.modules.outliner.core :as outliner-core]
+            [logseq.outliner.core :as outliner-core]
             [logseq.outliner.tree :as otree]
             [frontend.handler.common.page :as page-common-handler]
             [datascript.core :as d]

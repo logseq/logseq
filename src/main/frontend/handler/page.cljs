@@ -32,7 +32,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]
             [logseq.common.path :as path]
             [frontend.handler.property.util :as pu]

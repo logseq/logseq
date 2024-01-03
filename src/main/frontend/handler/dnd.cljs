@@ -2,10 +2,10 @@
   "Provides fns for drag and drop"
   (:require [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
-            [frontend.modules.outliner.core :as outliner-core]
+            [logseq.outliner.core :as outliner-core]
             [logseq.outliner.tree :as otree]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.common.util.block-ref :as block-ref]
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.handler.block :as block-handler]))

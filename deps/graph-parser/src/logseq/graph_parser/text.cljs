@@ -7,7 +7,7 @@
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.common.util :as common-util]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [logseq.common.util.page-ref :as page-ref]))
 
 (defn get-file-basename
   "Returns the basename of a file path. e.g. /a/b/c.md -> c.md"

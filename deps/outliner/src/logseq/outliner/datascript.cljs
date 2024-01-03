@@ -1,6 +1,6 @@
-(ns frontend.modules.outliner.datascript
+(ns logseq.outliner.datascript
   (:require [logseq.common.util :as common-util]
-            [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.common.util.block-ref :as block-ref]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.property :as gp-property]
             [datascript.core :as d]

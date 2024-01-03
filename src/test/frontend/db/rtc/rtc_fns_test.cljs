@@ -5,8 +5,8 @@
             [frontend.db.rtc.core :as rtc-core]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.handler.page :as page-handler]
-            [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.transaction :as outliner-tx]
+            [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.transaction :as outliner-tx]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]))
 

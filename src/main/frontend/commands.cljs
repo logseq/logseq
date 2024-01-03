@@ -22,8 +22,8 @@
             [logseq.common.config :as common-config]
             [logseq.graph-parser.property :as gp-property]
             [logseq.common.util :as common-util]
-            [logseq.graph-parser.util.block-ref :as block-ref]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.block-ref :as block-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]))
 
 ;; TODO: move to frontend.handler.editor.commands

@@ -16,7 +16,7 @@
             [logseq.db.frontend.rules :as rules]
             [frontend.template :as template]
             [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.common.util :as common-util]
             [frontend.util.text :as text-util]
             [frontend.util :as util]

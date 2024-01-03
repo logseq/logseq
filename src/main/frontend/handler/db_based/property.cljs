@@ -6,7 +6,7 @@
             [frontend.format.block :as block]
             [frontend.handler.notification :as notification]
             [frontend.handler.db-based.property.util :as db-pu]
-            [frontend.modules.outliner.core :as outliner-core]
+            [logseq.outliner.core :as outliner-core]
             [frontend.util :as util]
             [frontend.state :as state]
             [logseq.common.util :as common-util]
@@ -15,7 +15,7 @@
             [logseq.db.frontend.property.util :as db-property-util]
             [malli.util :as mu]
             [malli.error :as me]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [datascript.impl.entity :as e]))
 
 ;; schema -> type, cardinality, object's class
