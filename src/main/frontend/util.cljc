@@ -1094,7 +1094,10 @@
           [another-file-name])
          string-join-path)))
 
-#?(:cljs (defmacro profile worker-util/profile))
+#?(:clj
+   (defmacro profile
+     [k & body]
+     `(frontend.worker.util/profile ~k ~@body)))
 
 #?(:clj
    (defmacro with-time
