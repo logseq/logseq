@@ -12,9 +12,9 @@
     (let [org? (= format :org)
           kv-format (if org? ":%s: %s" (str "%s" gp-property/colons " %s"))
           full-format (if org? ":PROPERTIES:\n%s\n:END:" "%s\n")
-          properties-content (->> (map (fn [[k v]] (util/format kv-format (name k) v)) properties)
+          properties-content (->> (map (fn [[k v]] (common-util/format kv-format (name k) v)) properties)
                                   (string/join "\n"))]
-      (util/format full-format properties-content))))
+      (common-util/format full-format properties-content))))
 
 (defn simplified-property?
   [line]
@@ -26,7 +26,7 @@
   [line]
   (boolean
    (and (string? line)
-        (util/safe-re-find #"^\s*[^ ]+:" line))))
+        (common-util/safe-re-find #"^\s*[^ ]+:" line))))
 
 (defn insert-property
   "Only accept nake content (without any indentation)"
@@ -127,7 +127,7 @@
    (when (not (string/blank? (name key)))
      (let [format (or format :markdown)
            key (string/lower-case (name key))
-           remove-f (if first? util/remove-first remove)]
+           remove-f (if first? common-util/remove-first remove)]
        (if (and (= format :org) (not (gp-property/contains-properties? content)))
          content
          (let [lines (->> (string/split-lines content)

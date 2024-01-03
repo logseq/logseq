@@ -7,7 +7,7 @@
             [logseq.graph-parser.text :as text]
             [clojure.walk :as walk]
             [logseq.graph-parser.block :as gp-block]
-            [frontend.worker.util :as worker-util]))
+            [logseq.common.util :as common-util]))
 
 (defn get-default-config
   "Gets a mldoc default config for the given format. Works for DB and file graphs"
@@ -97,7 +97,7 @@
           refs' (->> (concat page-refs block-refs)
                      (remove string/blank?)
                      distinct)]
-      (-> (map #(if (worker-util/uuid-string? %)
+      (-> (map #(if (common-util/uuid-string? %)
                   {:block/uuid (uuid %)}
                   (gp-block/page-name->map % true db true date-formatter))
                refs')

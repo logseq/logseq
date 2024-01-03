@@ -74,11 +74,11 @@
   (string/join "/" parts))
 
 #?(:cljs
-   (def safe-re-find worker-util/safe-re-find))
+   (def safe-re-find common-util/safe-re-find))
 
 #?(:cljs
    (do
-     (def uuid-string? worker-util/uuid-string?)
+     (def uuid-string? common-util/uuid-string?)
      (defn check-password-strength
        {:malli/schema [:=> [:cat :string] [:maybe
                                            [:map
@@ -156,7 +156,7 @@
      (string/starts-with? js/window.location.href "file://")))
 
 #?(:cljs
-   (def format worker-util/format))
+   (def format common-util/format))
 
 #?(:clj
    (defn format
@@ -583,7 +583,7 @@
 
 
 #?(:cljs
-   (def distinct-by worker-util/distinct-by))
+   (def distinct-by common-util/distinct-by))
 
 #?(:cljs
    (defn distinct-by-last-wins
@@ -865,7 +865,7 @@
     @result))
 
 #?(:cljs
-   (def concat-without-nil worker-util/concat-without-nil))
+   (def concat-without-nil common-util/concat-without-nil))
 
 #?(:cljs
    (defn set-title!
@@ -1026,7 +1026,7 @@
      common-util/page-name-sanity-lc))
 
 #?(:cljs
-   (def safe-page-name-sanity-lc worker-util/safe-page-name-sanity-lc))
+   (def safe-page-name-sanity-lc common-util/safe-page-name-sanity-lc))
 
 (defn get-page-original-name
   [page]
@@ -1147,7 +1147,7 @@
      (js/console.trace)))
 
 #?(:cljs
-   (def remove-first worker-util/remove-first))
+   (def remove-first common-util/remove-first))
 
 #?(:cljs
    (defn backward-kill-word

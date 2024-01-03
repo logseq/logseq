@@ -26,7 +26,7 @@
 
 (defn block
   [db m]
-  (assert (or (map? m) (de/entity? m)) (util/format "block data must be map or entity, got: %s %s" (type m) m))
+  (assert (or (map? m) (de/entity? m)) (common-util/format "block data must be map or entity, got: %s %s" (type m) m))
   (let [e (if (or (de/entity? m)
                   (and (:block/uuid m) (:db/id m)))
             m
@@ -105,8 +105,8 @@
                 (let [properties (:block/properties m)
                       alias (set (:alias properties))
                       tags (set (:tags properties))
-                      alias (map (fn [p] {:block/name (util/page-name-sanity-lc p)}) alias)
-                      tags (map (fn [p] {:block/name (util/page-name-sanity-lc p)}) tags)
+                      alias (map (fn [p] {:block/name (common-util/page-name-sanity-lc p)}) alias)
+                      tags (map (fn [p] {:block/name (common-util/page-name-sanity-lc p)}) tags)
                       deleteable-page-attributes {:block/alias alias
                                                   :block/tags tags
                                                   :block/properties properties
@@ -781,7 +781,7 @@
                       (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
                         [{:block/uuid (otree/-get-id next conn)
                           :block/left (:db/id left)}]))
-            full-tx (util/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx) tx next-tx)]
+            full-tx (common-util/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx) tx next-tx)]
         {:tx-data full-tx
          :blocks  tx}))))
 
@@ -820,7 +820,7 @@
        (mapcat (fn [[_page blocks]]
                  (let [blocks (ldb/sort-page-random-blocks db blocks)
                        non-consecutive-blocks (->> (conj (ldb/get-non-consecutive-blocks db blocks) (last blocks))
-                                                   (util/distinct-by :db/id))]
+                                                   (common-util/distinct-by :db/id))]
                    (when (seq non-consecutive-blocks)
                      (map-indexed (fn [idx block]
                                     (when-let [right (get-right-sibling db (:db/id block))]
@@ -958,7 +958,7 @@
                     fix-non-consecutive-tx (->> (fix-non-consecutive-blocks db blocks target-block sibling?)
                                                 (remove (fn [b]
                                                           (contains? (set (map :db/id move-blocks-next-tx)) (:db/id b)))))
-                    full-tx (util/concat-without-nil tx-data move-blocks-next-tx children-page-tx fix-non-consecutive-tx)
+                    full-tx (common-util/concat-without-nil tx-data move-blocks-next-tx children-page-tx fix-non-consecutive-tx)
                     tx-meta (cond-> {:move-blocks (mapv :db/id blocks)
                                      :move-op outliner-op
                                      :target (:db/id target-block)}
@@ -1015,7 +1015,7 @@
             parent (:block/parent first-block)
             concat-tx-fn (fn [& results]
                            {:tx-data (->> (map :tx-data results)
-                                          (apply util/concat-without-nil))
+                                          (apply common-util/concat-without-nil))
                             :tx-meta (:tx-meta (first results))})
             opts {:outliner-op :indent-outdent-blocks}]
         (if indent?
