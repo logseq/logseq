@@ -354,7 +354,7 @@
                             (notification/show! (str "Removed graph "
                                                      (pr-str (text-util/get-graph-name-from-path url))
                                                      ". Redirecting to graph "
-                                                     (pr-str (text-util/get-graph-name-from-path url)))
+                                                     (pr-str (text-util/get-graph-name-from-path graph)))
                                                 :success)
                             (state/pub-event! [:graph/switch graph {:persist? false}]))
                           (notification/show! (str "Removed graph " (pr-str (text-util/get-graph-name-from-path url))) :success))))]
@@ -514,6 +514,12 @@
   (when (util/electron?)
     (ipc/ipc "graphReady" graph)))
 
+(defn graph-already-exists?
+  "Checks to see if given db graph name already exists"
+  [graph-name]
+  (let [full-graph-name (string/lower-case (str config/db-version-prefix graph-name))]
+    (some #(= (string/lower-case (:url %)) full-graph-name) (state/get-repos))))
+
 (defn- create-db [full-graph-name]
   (->
    (p/let [_ (persist-db/<new full-graph-name)
@@ -536,9 +542,8 @@
 (defn new-db!
   "Handler for creating a new database graph"
   [graph]
-  (let [full-graph-name (str config/db-version-prefix graph)
-        graph-already-exists? (some #(= (:url %) full-graph-name) (state/get-repos))]
-    (if graph-already-exists?
+  (let [full-graph-name (str config/db-version-prefix graph)]
+    (if (graph-already-exists? graph)
       (state/pub-event! [:notification/show
                          {:content (str "The graph '" graph "' already exists. Please try again with another name.")
                           :status :error}])
