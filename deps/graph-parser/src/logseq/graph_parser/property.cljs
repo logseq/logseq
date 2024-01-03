@@ -166,9 +166,9 @@
     (let [org? (= format :org)
           kv-format (if org? ":%s: %s" (str "%s" colons " %s"))
           full-format (if org? ":PROPERTIES:\n%s\n:END:" "%s\n")
-          properties-content (->> (map (fn [[k v]] (common-util/format kv-format (name k) v)) properties)
+          properties-content (->> (map (fn [[k v]] (gstring/format kv-format (name k) v)) properties)
                                   (string/join "\n"))]
-      (common-util/format full-format properties-content))))
+      (gstring/format full-format properties-content))))
 
 (defn simplified-property?
   [line]
