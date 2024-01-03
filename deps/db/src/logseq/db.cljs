@@ -186,10 +186,8 @@
                           db-id)))
 
 (defn get-by-id
-  [conn id]
-  (try
-    (d/pull @conn '[*] id)
-    (catch :default _e nil)))
+  [db id]
+  (d/pull db '[*] id))
 
 (def get-by-parent-id
   '[:find (pull ?a [*])

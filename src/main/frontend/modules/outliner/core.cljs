@@ -31,23 +31,17 @@
 (defn block
   [db m]
   (assert (or (map? m) (de/entity? m)) (util/format "block data must be map or entity, got: %s %s" (type m) m))
-  (let [e (if (de/entity? m)
+  (let [e (if (or (de/entity? m)
+                  (and (:block/uuid m) (:db/id m)))
             m
             (let [eid (if (:block/uuid m)
                         [:block/uuid (:block/uuid m)]
                         (:db/id m))]
               (assert eid "eid doesn't exist")
-              (d/entity db eid)))
-        e-map {:db/id (:db/id e)
-               :block/uuid (:block/uuid e)
-               :block/page {:db/id (:db/id (:block/page e))
-                            :block/uuid (:block/uuid (:block/page e))}
-               :block/left {:db/id (:db/id (:block/left e))
-                            :block/uuid (:block/uuid (:block/left e))}
-               :block/parent {:db/id (:db/id (:block/parent e))
-                              :block/uuid (:block/uuid (:block/parent e))}}
-        data (merge e-map m)]
-    (->Block data)))
+              (let [entity (d/entity db eid)]
+                (assoc m :db/id (:db/id entity)
+                       :block/uuid (:block/uuid entity)))))]
+    (->Block e)))
 
 (defn get-data
   [block]
@@ -270,13 +264,13 @@
                                  :block/uuid new-id}])
              new-id))))))
 
-  (-get-parent-id [this _conn]
-    (-> (get-in this [:data :block/parent])
-        :block/uuid))
+  (-get-parent-id [this conn]
+    (when-let [id (:db/id (get-in this [:data :block/parent]))]
+      (:block/uuid (d/entity @conn id))))
 
-  (-get-left-id [this _conn]
-    (-> (get-in this [:data :block/left])
-        :block/uuid))
+  (-get-left-id [this conn]
+    (when-let [id (:db/id (get-in this [:data :block/left]))]
+      (:block/uuid (d/entity @conn id))))
 
   (-set-left-id [this left-id _conn]
     (outliner-u/check-block-id left-id)
@@ -302,7 +296,11 @@
   (-save [this txs-state conn repo]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
-    (let [m (-> (:data this)
+    (let [data (:data this)
+          data' (if (de/entity? data)
+                  (assoc (.-kv ^js data) :db/id (:db/id data))
+                  data)
+          m (-> data'
                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom?
                         :block/title :block/body :block/level)
                 gp-util/remove-nils
