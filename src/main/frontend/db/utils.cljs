@@ -5,7 +5,7 @@
             [datascript.transit :as dt]
             [frontend.db.conn :as conn]
             [frontend.config :as config]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.db.frontend.content :as db-content]))
 
 ;; transit serialization
@@ -92,7 +92,7 @@
 
 (defn- actual-transact!
   [repo-url tx-data tx-meta]
-  (let [tx-data (gp-util/fast-remove-nils tx-data)]
+  (let [tx-data (common-util/fast-remove-nils tx-data)]
     (when (seq tx-data)
       (conn/transact! repo-url tx-data tx-meta))))
 

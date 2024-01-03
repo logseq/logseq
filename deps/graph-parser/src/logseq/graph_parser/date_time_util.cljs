@@ -4,7 +4,7 @@
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
             [clojure.string :as string]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.common.util :as common-util]))
 
 (defn time-ms
   "Copy of util/time-ms. Too basic to couple this to main app"
@@ -24,7 +24,7 @@
     (when-let [time (->> (map
                           (fn [formatter]
                             (try
-                              (tf/parse (tf/formatter formatter) (gp-util/capitalize-all journal-title))
+                              (tf/parse (tf/formatter formatter) (common-util/capitalize-all journal-title))
                               (catch :default _e
                                 nil)))
                           formatters)
@@ -35,7 +35,7 @@
 (defn journal-title->int
   [journal-title formatters]
   (when journal-title
-    (let [journal-title (gp-util/capitalize-all journal-title)]
+    (let [journal-title (common-util/capitalize-all journal-title)]
       (journal-title-> journal-title
                        #(parse-long (tf/unparse (tf/formatter "yyyyMMdd") %))
                        formatters))))
@@ -69,8 +69,8 @@
   ([date]
    (let [{:keys [year month day]} date]
      {:year year
-      :month (gp-util/zero-pad month)
-      :day (gp-util/zero-pad day)})))
+      :month (common-util/zero-pad month)
+      :day (common-util/zero-pad day)})))
 
 (defn ymd
   ([]

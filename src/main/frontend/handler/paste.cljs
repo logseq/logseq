@@ -2,7 +2,7 @@
   (:require [frontend.state :as state]
             [frontend.db :as db]
             [frontend.format.block :as block]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [clojure.string :as string]
@@ -64,7 +64,7 @@
 (defn- get-whiteboard-tldr-from-text
   [text]
   (when-let [matched-text (util/safe-re-find #"<whiteboard-tldr>(.*)</whiteboard-tldr>"
-                                             (gp-util/safe-decode-uri-component text))]
+                                             (common-util/safe-decode-uri-component text))]
     (try-parse-as-json (second matched-text))))
 
 (defn- selection-within-link?
@@ -94,7 +94,7 @@
                                           "web application/logseq"))))
           blocks-str (when blocks-blob (.text blocks-blob))]
          (when blocks-str
-           (gp-util/safe-read-string blocks-str))))
+           (common-util/safe-read-string blocks-str))))
 
 (defn- markdown-blocks?
   [text]
@@ -126,8 +126,8 @@
                           ;; text should always be prepared block-ref generated in tldr
                           text)
         {:keys [selection] :as selection-and-format} (editor-handler/get-selection-and-format)
-        text-url? (gp-util/url? text)
-        selection-url? (gp-util/url? selection)]
+        text-url? (common-util/url? text)
+        selection-url? (common-util/url? selection)]
     (cond
       (not (string/blank? shape-refs-text))
       (commands/simple-insert! input-id shape-refs-text nil)
@@ -160,7 +160,7 @@
                         (if (string/blank? result) nil result))
             text-blocks? (if (= format :markdown) markdown-blocks? org-blocks?)
             text' (or html-text
-                      (when (gp-util/url? text)
+                      (when (common-util/url? text)
                         (wrap-macro-url text))
                       text)
             blocks? (text-blocks? text')]
@@ -197,7 +197,7 @@
   (utils/getClipText
    (fn [clipboard-data]
      (when-let [_ (state/get-input)]
-       (if (gp-util/url? clipboard-data)
+       (if (common-util/url? clipboard-data)
          (if (string/blank? (util/get-selected-text))
            (editor-handler/insert (or (wrap-macro-url clipboard-data) clipboard-data) true)
            (editor-handler/html-link-format! clipboard-data))

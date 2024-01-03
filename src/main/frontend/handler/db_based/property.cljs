@@ -9,7 +9,7 @@
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.util :as util]
             [frontend.state :as state]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.property.util :as db-property-util]
@@ -61,7 +61,7 @@
       (fail-parse-long v-str) :number
       (fail-parse-double v-str) :number
       (util/uuid-string? v-str) :page
-      (gp-util/url? v-str) :url
+      (common-util/url? v-str) :url
       (contains? #{"true" "false"} (string/lower-case v-str)) :checkbox
       :else :default)
     (catch :default _e
@@ -94,7 +94,7 @@
 
 (defn upsert-property!
   [repo k-name schema {:keys [property-uuid]}]
-  (let [property (db/entity [:block/name (gp-util/page-name-sanity-lc k-name)])
+  (let [property (db/entity [:block/name (common-util/page-name-sanity-lc k-name)])
         k-name (name k-name)
         property-uuid (or (:block/uuid property) property-uuid (db/new-block-id))]
     (when property
@@ -120,7 +120,7 @@
   [repo block-id k-name values _opts]
   (let [block (db/entity repo [:block/uuid block-id])
         k-name (name k-name)
-        property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
+        property (db/pull repo '[*] [:block/name (common-util/page-name-sanity-lc k-name)])
         values (remove nil? values)
         property-uuid (or (:block/uuid property) (db/new-block-id))
         property-schema (:block/schema property)
@@ -174,7 +174,7 @@
   [v]
   (when (and (string? v)
              (util/tag? (string/trim v)))
-    (let [tag-without-hash (gp-util/safe-subs (string/trim v) 1)
+    (let [tag-without-hash (common-util/safe-subs (string/trim v) 1)
           tag (or (page-ref/get-page-name tag-without-hash) tag-without-hash)]
       (when-not (string/blank? tag)
         (let [e (db/entity [:block/name (util/page-name-sanity-lc tag)])
@@ -194,7 +194,7 @@
   [repo block-id k-name v {:keys [old-value] :as opts}]
   (let [block (db/entity repo [:block/uuid block-id])
         k-name (name k-name)
-        property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
+        property (db/pull repo '[*] [:block/name (common-util/page-name-sanity-lc k-name)])
         property-uuid (or (:block/uuid property) (db/new-block-id))
         property-schema (:block/schema property)
         {:keys [type cardinality]} property-schema
@@ -305,7 +305,7 @@
           (let [tx-data (cond-> {:block/uuid property-uuid}
                           property-name (merge
                                          {:block/original-name property-name
-                                          :block/name (gp-util/page-name-sanity-lc property-name)})
+                                          :block/name (common-util/page-name-sanity-lc property-name)})
                           property-schema (assoc :block/schema
                                                  ;; a property must have a :type when making schema changes
                                                  (merge {:type :default}
@@ -322,7 +322,7 @@
   (when-let [class (db/entity repo [:block/uuid class-uuid])]
     (when (contains? (:block/type class) "class")
       (let [k-name (name k-name)
-            property (db/pull repo '[*] [:block/name (gp-util/page-name-sanity-lc k-name)])
+            property (db/pull repo '[*] [:block/name (common-util/page-name-sanity-lc k-name)])
             property-uuid (or (:block/uuid property) (db/new-block-id))
             property-type (get-in property [:block/schema :type])
             {:keys [properties] :as class-schema} (:block/schema class)
@@ -363,7 +363,7 @@
   "Notice that this works only for properties with cardinality equals to `one`."
   [repo block-ids k-name v]
   (let [k-name (name k-name)
-        property (db/entity repo [:block/name (gp-util/page-name-sanity-lc k-name)])
+        property (db/entity repo [:block/name (common-util/page-name-sanity-lc k-name)])
         property-uuid (or (:block/uuid property) (db/new-block-id))
         type (:type (:block/schema property))
         infer-schema (when-not type (infer-schema-from-input-string v))

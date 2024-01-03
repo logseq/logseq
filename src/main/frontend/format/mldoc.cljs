@@ -8,7 +8,7 @@
             [lambdaisland.glogi :as log]
             ["mldoc" :as mldoc :refer [Mldoc]]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.block :as gp-block]
             [clojure.walk :as walk]
@@ -44,7 +44,7 @@
   (try
     (if (string/blank? content)
       {}
-      (let [[headers blocks] (-> content (parse-opml) (gp-util/json->clj))]
+      (let [[headers blocks] (-> content (parse-opml) (common-util/json->clj))]
         [headers (gp-mldoc/collect-page-properties blocks config)]))
     (catch :default e
       (log/error :edn/convert-failed e)

@@ -12,7 +12,8 @@
             [logseq.db :as ldb]
             [malli.core :as m]
             [frontend.worker.state :as state]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (def *writes file/*writes)
 
@@ -93,7 +94,7 @@
 
 (defn sync-to-file
   [repo page-id tx-meta]
-  (when (and (worker-util/local-file-based-graph? repo)
+  (when (and (sqlite-util/local-file-based-graph? repo)
              page-id
              (not (:created-from-journal-template? tx-meta))
              (not (:delete-files? tx-meta)))

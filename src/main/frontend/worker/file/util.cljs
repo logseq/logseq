@@ -1,7 +1,7 @@
 (ns frontend.worker.file.util
   "File name fns"
   (:require [clojure.string :as string]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [frontend.worker.util :as util]))
 
 ;; Update repo/invalid-graph-name-warning if characters change
@@ -54,14 +54,14 @@
    Use triple lowbar as namespace separator"
   [title]
   (some-> title
-          gp-util/page-name-sanity ;; we want to preserve the case sensitive nature of most file systems, don't lowercase
-          (string/replace gp-util/url-encoded-pattern encode-url-percent) ;; pre-encode % in title on demand
+          common-util/page-name-sanity ;; we want to preserve the case sensitive nature of most file systems, don't lowercase
+          (string/replace common-util/url-encoded-pattern encode-url-percent) ;; pre-encode % in title on demand
           (string/replace reserved-chars-pattern url-encode-file-name)
           (escape-windows-reserved-filebodies) ;; do this before the lowbar encoding to avoid ambiguity
           (escape-namespace-slashes-and-multilowbars)))
 
 ;; Register sanitization / parsing fns in:
-;; logseq.graph-parser.util (parsing only)
+;; logseq.common.util (parsing only)
 ;; frontend.util.fs         (sanitization only)
 ;; frontend.handler.conversion (both)
 (defn file-name-sanity

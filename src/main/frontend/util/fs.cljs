@@ -3,7 +3,7 @@
 (ns frontend.util.fs
   "Misc util fns built on top of frontend.fs"
   (:require ["path" :as node-path]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [clojure.string :as string]
             [frontend.state :as state]
             [frontend.fs :as fs]
@@ -82,7 +82,7 @@
   (and (string? page-name)
        (let [filename-format (state/get-filename-format)
              file-name  (file-name-sanity page-name filename-format)
-             page-name' (gp-util/title-parsing file-name filename-format)
+             page-name' (common-util/title-parsing file-name filename-format)
              result     (or (not= page-name page-name')
                             (include-reserved-chars? file-name))]
          result)))

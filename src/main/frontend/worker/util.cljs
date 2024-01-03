@@ -4,25 +4,13 @@
   (:require [clojure.string :as string]
             ["remove-accents" :as removeAccents]
             [medley.core :as medley]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [goog.string :as gstring]
             [clojure.core.async :as async]
             [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs-bean.core :as bean]))
-
-(defonce db-version-prefix "logseq_db_")
-(defonce local-db-prefix "logseq_local_")
-(defn db-based-graph?
-  [s]
-  (boolean
-   (and (string? s)
-        (string/starts-with? s db-version-prefix))))
-(defn local-file-based-graph?
-  [s]
-  (and (string? s)
-       (string/starts-with? s local-db-prefix)))
 
 (defn search-normalize
      "Normalize string for searching (loose)"
@@ -33,13 +21,13 @@
            (removeAccents normalize-str)
            normalize-str))))
 
-(def safe-re-find gp-util/safe-re-find)
+(def safe-re-find common-util/safe-re-find)
 
-(def uuid-string? gp-util/uuid-string?)
+(def uuid-string? common-util/uuid-string?)
 
 (def page-name-sanity-lc
-  "Delegate to gp-util to loosely couple app usages to graph-parser"
-  gp-util/page-name-sanity-lc)
+  "Delegate to common-util to loosely couple app usages to graph-parser"
+  common-util/page-name-sanity-lc)
 
 (defn safe-page-name-sanity-lc
   [s]

@@ -19,11 +19,11 @@
             [frontend.util :as util]
             [frontend.util.fs :as fs-util]
             [lambdaisland.glogi :as log]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.config :as common-config]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [promesa.core :as p]))
 
-;; all IPC paths must be normalized! (via gp-util/path-normalize)
+;; all IPC paths must be normalized! (via common-util/path-normalize)
 
 (defn- set-missing-block-ids!
   "For every referred block in the content, fix their block ids in files if missing."
@@ -91,7 +91,7 @@
               (and (= "change" type)
                    (= dir repo-dir)
                    (not= (string/trim content) (string/trim db-content))
-                   (not (gp-config/local-asset? path)))
+                   (not (common-config/local-asset? path)))
               (when-not (and
                          (string/includes? path (str "/" (config/get-journals-directory) "/"))
                          (or

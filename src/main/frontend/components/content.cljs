@@ -20,7 +20,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.modules.shortcut.core :as shortcut]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
@@ -472,5 +472,5 @@
     [:div
      (hiccup-content id option)]
     ;; TODO: remove this
-    (let [format (gp-util/normalize-format format)]
+    (let [format (common-util/normalize-format format)]
       (non-hiccup-content id content on-click on-hide config format))))

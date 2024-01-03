@@ -17,7 +17,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.common.path :as path]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [promesa.core :as p]
             [frontend.handler.property.util :as pu]))
 
@@ -34,7 +34,7 @@
   (safe-api-call "file-watcher"
                  (fn [data]
                    (let [{:keys [type payload]} (bean/->clj data)
-                         path (gp-util/path-normalize (:path payload))
+                         path (common-util/path-normalize (:path payload))
                          dir (:dir payload)
                          payload (assoc payload :path (path/relative-path dir path))]
                      (watcher-handler/handle-changed! type payload)

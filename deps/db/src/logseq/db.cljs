@@ -9,8 +9,8 @@
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [clojure.string :as string]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.util :as common-util]
+            [logseq.common.config :as common-config]
             [logseq.db.frontend.content :as db-content]
             [clojure.set :as set]))
 
@@ -99,7 +99,7 @@
   ([blocks parent]
    (sort-by-left blocks parent {:check? true}))
   ([blocks parent {:keys [_check?]}]
-   (let [blocks (gp-util/distinct-by :db/id blocks)
+   (let [blocks (common-util/distinct-by :db/id blocks)
          left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
      (loop [block parent
             result []]
@@ -141,12 +141,12 @@
   [db page]
   (cond
     (string? page)
-    (let [page (d/entity db [:block/name (gp-util/page-name-sanity-lc page)])]
+    (let [page (d/entity db [:block/name (common-util/page-name-sanity-lc page)])]
       (or
        (contains? (set (:block/type page)) "whiteboard")
        (when-let [file (:block/file page)]
          (when-let [path (:file/path (d/entity db (:db/id file)))]
-           (gp-config/whiteboard? path)))))
+           (common-config/whiteboard? path)))))
 
     (seq page)
     (contains? (set (:block/type page)) "whiteboard")
@@ -159,7 +159,7 @@
   [db page {:keys [pull-keys]
             :or {pull-keys '[*]}}]
   (when page
-    (let [page (gp-util/page-name-sanity-lc page)
+    (let [page (common-util/page-name-sanity-lc page)
           page-id (:db/id (d/entity db [:block/name page]))]
       (when page-id
         (let [datoms (d/datoms db :avet :block/page page-id)
@@ -200,7 +200,7 @@
   (when page
     (if (string? page)
       (and (string/starts-with? page "$$$")
-           (gp-util/uuid-string? (gp-util/safe-subs page 3)))
+           (common-util/uuid-string? (common-util/safe-subs page 3)))
       (contains? (set (:block/type page)) "hidden"))))
 
 (defn get-pages
@@ -219,7 +219,7 @@
   `page-id` could be either a string or a db/id."
   [db page-id]
   (let [page-id (if (string? page-id)
-                  [:block/name (gp-util/page-name-sanity-lc page-id)]
+                  [:block/name (common-util/page-name-sanity-lc page-id)]
                   page-id)
         page (d/entity db page-id)]
     (nil? (:block/_left page))))
@@ -233,7 +233,7 @@
         orphaned-pages (->>
                         (map
                          (fn [page]
-                           (let [name (gp-util/page-name-sanity-lc page)]
+                           (let [name (common-util/page-name-sanity-lc page)]
                              (when-let [page (d/entity db [:block/name name])]
                                (and
                                 (empty-ref-f page)

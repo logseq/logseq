@@ -20,7 +20,7 @@
             [frontend.util :as util]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.text :as text]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
@@ -131,13 +131,13 @@
                         (text/page-ref-un-brackets!)
                         ;; remove `#` from tags
                         (string/replace #"^#+" ""))
-         title      (gp-util/remove-boundary-slashes title)
+         title      (common-util/remove-boundary-slashes title)
          page-name  (util/page-name-sanity-lc title)
          repo       (state/get-current-repo)
          with-uuid? (if (uuid? uuid) uuid true)] ;; FIXME: prettier validation
      (when (or (db/page-empty? repo page-name) rename?)
        (let [pages    (if split-namespace?
-                        (gp-util/split-namespace-pages title)
+                        (common-util/split-namespace-pages title)
                         [title])
              format   (or format (state/get-preferred-format))
              pages    (map (fn [page]
@@ -349,10 +349,10 @@
     (cond
       new-namespace?
       ;; update namespace
-      (let [namespace (first (gp-util/split-last "/" new-name))]
+      (let [namespace (first (common-util/split-last "/" new-name))]
         (when namespace
           (create! namespace {:redirect? false}) ;; create parent page if not exist, creation of namespace ref is handled in `create!`
-          (let [namespace-block (db/pull [:block/name (gp-util/page-name-sanity-lc namespace)])
+          (let [namespace-block (db/pull [:block/name (common-util/page-name-sanity-lc namespace)])
                 page-txs [{:db/id (:db/id page)
                            :block/namespace (:db/id namespace-block)}]]
             (db/transact! repo page-txs))))

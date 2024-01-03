@@ -1,11 +1,11 @@
-(ns logseq.graph-parser.util
-  "Util fns shared between graph-parser and rest of app. Util fns only rely on
+(ns logseq.common.util
+  "Util fns shared between the app. Util fns only rely on
   clojure standard libraries."
   (:require [cljs.reader :as reader]
             [clojure.edn :as edn]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [logseq.graph-parser.log :as log]))
+            [logseq.common.log :as log]))
 
 (defn safe-decode-uri-component
   [uri]
@@ -249,7 +249,7 @@
     (or (safe-decode-uri-component title) title)))
 
 ;; Register sanitization / parsing fns in:
-;; logseq.graph-parser.util (parsing only)
+;; logseq.common.util (parsing only)
 ;; frontend.util.fs         (sanitization only)
 ;; frontend.handler.conversion (both)
 (defn title-parsing

@@ -6,7 +6,7 @@
             [clojure.set :as set]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (defn get-file-basename
@@ -82,7 +82,7 @@
        (string/includes? page-name "/")
        (not (string/starts-with? page-name "../"))
        (not (string/starts-with? page-name "./"))
-       (not (gp-util/url? page-name))))
+       (not (common-util/url? page-name))))
 
 (defn parse-non-string-property-value
   "Return parsed non-string property value or nil if none is found"
@@ -174,7 +174,7 @@
                  (name k))
       v'
 
-      (gp-util/wrapped-by-quotes? v')
+      (common-util/wrapped-by-quotes? v')
       v'
 
       ;; parse property value as needed

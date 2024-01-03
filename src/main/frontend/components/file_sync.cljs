@@ -30,7 +30,7 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [goog.functions :refer [debounce]]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.common.util :as common-util]))
 
 (declare maybe-onboarding-show)
 (declare open-icloud-graph-clone-picker)
@@ -79,7 +79,7 @@
 
      [:div.folder-tip.flex.flex-col.items-center
       [:h3
-       [:span (ui/icon "folder") [:label.pl-0.5 (gp-util/safe-decode-uri-component graph-name)]]]
+       [:span (ui/icon "folder") [:label.pl-0.5 (common-util/safe-decode-uri-component graph-name)]]]
       [:h4.px-6 (config/get-string-repo-dir repo)]
 
       (when (not (string/blank? selected-path))

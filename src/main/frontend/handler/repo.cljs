@@ -28,7 +28,7 @@
             [shadow.resource :as rc]
             [frontend.db.persist :as db-persist]
             [logseq.graph-parser :as graph-parser]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.config :as common-config]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [electron.ipc :as ipc]
             [cljs-bean.core :as bean]
@@ -204,7 +204,7 @@
       (async/go-loop [tx []]
         (if-let [item (async/<! chan)]
           (let [[idx file] item
-                whiteboard? (gp-config/whiteboard? (:file/path file))
+                whiteboard? (common-config/whiteboard? (:file/path file))
                 yield-for-ui? (or (not large-graph?)
                                   (zero? (rem idx 10))
                                   (<= (- total idx) 10)

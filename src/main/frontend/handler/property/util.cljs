@@ -4,7 +4,7 @@
   compatible with file graphs"
   (:require [frontend.config :as config]
             [frontend.state :as state]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [frontend.db :as db]
             [frontend.util :as util]
             [logseq.db.frontend.property :as db-property]))
@@ -28,7 +28,7 @@
   ;; Get a page's uuid given its unsanitized name
   ([property-name] (get-page-uuid (state/get-current-repo) property-name))
   ([repo property-name]
-   (:block/uuid (db/entity repo [:block/name (gp-util/page-name-sanity-lc (name property-name))]))))
+   (:block/uuid (db/entity repo [:block/name (common-util/page-name-sanity-lc (name property-name))]))))
 
 (defn get-pid
   "Get a property's id (name or uuid) given its name. For file and db graphs"

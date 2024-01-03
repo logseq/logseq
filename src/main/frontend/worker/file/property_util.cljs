@@ -1,7 +1,7 @@
 (ns frontend.worker.file.property-util
   "Property fns needed by the rest of the app and not graph-parser"
   (:require [clojure.string :as string]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.property :as gp-property :refer [properties-start properties-end]]
             [frontend.worker.mldoc :as worker-mldoc]
             [frontend.worker.util :as util]))
@@ -70,7 +70,7 @@
                           middle (doall
                                   (->> (subvec lines (inc start-idx) end-idx)
                                        (mapv (fn [text]
-                                               (let [[k v] (gp-util/split-first ":" (subs text 1))]
+                                               (let [[k v] (common-util/split-first ":" (subs text 1))]
                                                  (if (and k v)
                                                    (let [key-exists? (= k key)
                                                          _ (when key-exists? (reset! exists? true))
@@ -93,7 +93,7 @@
                                                     (if (property-f (first lines))
                                                       (let [lines (doall
                                                                    (mapv (fn [text]
-                                                                           (let [[k v] (gp-util/split-first sym text)]
+                                                                           (let [[k v] (common-util/split-first sym text)]
                                                                              (if (and k v)
                                                                                (let [key-exists? (= k key)
                                                                                      _ (when key-exists? (reset! exists? true))

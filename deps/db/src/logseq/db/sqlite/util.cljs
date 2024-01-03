@@ -4,7 +4,7 @@
             [cljs-time.core :as t]
             [clojure.string :as string]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.common.util :as common-util]))
 
 (defonce db-version-prefix "logseq_db_")
 (defonce file-version-prefix "logseq_local_")
@@ -12,6 +12,11 @@
 (defn db-based-graph?
   [graph-name]
   (string/starts-with? graph-name db-version-prefix))
+
+(defn local-file-based-graph?
+  [s]
+  (and (string? s)
+       (string/starts-with? s file-version-prefix)))
 
 (defn get-schema
   "Returns schema for given repo"
@@ -35,7 +40,7 @@
                 (assoc :block/created-at updated-at))]
     block))
 
-(def sanitize-page-name gp-util/page-name-sanity-lc)
+(def sanitize-page-name common-util/page-name-sanity-lc)
 
 (defn build-new-property
   "Build a standard new property so that it is is consistent across contexts"

@@ -17,8 +17,8 @@
             [frontend.util.fs :as fs-util]
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
-            [logseq.graph-parser.config :as gp-config]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]))
 
@@ -89,10 +89,10 @@
   (p/let [time (date/get-current-time)
           date-ref-name (date/today)
           title (some-> (or title (node-path/basename url))
-                        gp-util/safe-decode-uri-component
+                        common-util/safe-decode-uri-component
                         util/node-path.name
                         ;; make the title more user friendly
-                        gp-util/page-name-sanity)
+                        common-util/page-name-sanity)
           path (node-path/join (config/get-repo-dir (state/get-current-repo))
                                (config/get-pages-directory)
                                (str (js/encodeURI (fs-util/file-name-sanity title)) (node-path/extname url)))
@@ -127,7 +127,7 @@
           format (db/get-page-format page)
           application-type (last (string/split type "/"))
           content (cond
-                    (gp-config/mldoc-support? application-type)
+                    (common-config/mldoc-support? application-type)
                     (embed-text-file url title)
 
                     (contains? (set/union config/doc-formats config/media-formats)
@@ -158,7 +158,7 @@
 
                       :else
                       (if (mobile-util/native-ios?)
-                        (gp-util/safe-decode-uri-component v)
+                        (common-util/safe-decode-uri-component v)
                         v))])))
 
 (defn- handle-asset-file [url format]

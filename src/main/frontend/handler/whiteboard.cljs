@@ -13,7 +13,7 @@
             [frontend.config :as config]
             [frontend.storage :as storage]
             [frontend.util :as util]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [promesa.core :as p]
             [goog.object :as gobj]
@@ -301,7 +301,7 @@
   []
   (p/let [^js res (js/fetch "./whiteboard/onboarding.edn") ;; do we need to cache it?
           text (.text res)
-          edn (gp-util/safe-read-string text)]
+          edn (common-util/safe-read-string text)]
     edn))
 
 (defn clone-whiteboard-from-edn

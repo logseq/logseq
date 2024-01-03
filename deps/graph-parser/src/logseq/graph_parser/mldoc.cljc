@@ -6,14 +6,14 @@
                                         :unresolved-symbol {:level :off}}}})
   (:require #?(:org.babashka/nbb ["mldoc$default" :refer [Mldoc]]
                :default ["mldoc" :refer [Mldoc]])
-            #?(:org.babashka/nbb [logseq.graph-parser.log :as log]
+            #?(:org.babashka/nbb [logseq.common.log :as log]
                :default [lambdaisland.glogi :as log])
             [goog.object :as gobj]
             [cljs-bean.core :as bean]
             [logseq.graph-parser.utf8 :as utf8]
             [clojure.string :as string]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.util :as common-util]
+            [logseq.common.config :as common-config]
             [logseq.graph-parser.schema.mldoc :as mldoc-schema]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
@@ -46,7 +46,7 @@
 (defn get-references
   [text config]
   (when-not (string/blank? text)
-    (gp-util/json->clj (getReferences text config))))
+    (common-util/json->clj (getReferences text config))))
 
 (defn ast-export-markdown
   [ast config references]
@@ -96,9 +96,9 @@
                     ;; Check if the indentation area only contains white spaces
                     ;; Level = ast level + 1, 1-based indentation level
                     ;; For markdown in Logseq, the indentation area for the non-first line of multi-line block is (ast level - 1) * "\t" + 2 * "(space)"
-                    (if (string/blank? (gp-util/safe-subs line 0 level))
+                    (if (string/blank? (common-util/safe-subs line 0 level))
                       ;; If valid, then remove the indentation area spaces. Keep the rest of the line (might contain leading spaces)
-                      (gp-util/safe-subs line level)
+                      (common-util/safe-subs line level)
                       ;; Otherwise, trim these invalid spaces
                       (string/triml line)))
                (if remove-first-line? lines r))
@@ -145,7 +145,7 @@
         []
         (-> content
             (parse-json config)
-            (gp-util/json->clj)
+            (common-util/json->clj)
             (update-src-full-content content)
             (collect-page-properties config)))
       (catch :default e
@@ -160,7 +160,7 @@
       {}
       (-> text
           (inline-parse-json config)
-          (gp-util/json->clj)))
+          (common-util/json->clj)))
     (catch :default _e
       [])))
 
@@ -175,10 +175,10 @@
           (and (contains? #{"Page_ref"} ref-type)
                (or
                 ;; 2. excalidraw link
-                (gp-config/draw? ref-value)
+                (common-config/draw? ref-value)
 
                 ;; 3. local asset link
-                (boolean (gp-config/local-asset? ref-value))))))))
+                (boolean (common-config/local-asset? ref-value))))))))
 
 (defn link?
   [format link]

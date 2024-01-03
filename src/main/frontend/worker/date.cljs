@@ -1,7 +1,7 @@
 (ns frontend.worker.date
   "Date related fns that used by worker"
   (:require [cljs-time.format :as tf]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.common.util :as common-util]))
 
 (def default-journal-filename-formatter (tf/formatter "yyyy_MM_dd"))
 
@@ -60,7 +60,7 @@
    Return format: 20220812T000000"
   [title date-formatter]
   (and title
-       (normalize-date (gp-util/capitalize-all title) date-formatter)))
+       (normalize-date (common-util/capitalize-all title) date-formatter)))
 
 (defn valid-journal-title?
   "This is a loose rule, requires double check by journal-title->custom-format.

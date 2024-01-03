@@ -4,7 +4,7 @@
             ["child_process" :as child-process]
             [cljs.test :refer [is testing]]
             [clojure.string :as string]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.config :as common-config]
             [datascript.core :as d]))
 
 ;; Helper fns for test setup
@@ -82,9 +82,9 @@
   (testing "Query based stats"
     (is (= (->> files
                 ;; logseq files aren't saved under :block/file
-                (remove #(string/includes? % (str graph-dir "/" gp-config/app-name "/")))
+                (remove #(string/includes? % (str graph-dir "/" common-config/app-name "/")))
                 ;; edn files being listed in docs by parse-graph aren't graph files
-                (remove #(and (not (gp-config/whiteboard? %)) (string/ends-with? % ".edn")))
+                (remove #(and (not (common-config/whiteboard? %)) (string/ends-with? % ".edn")))
                 set)
            (->> (d/q '[:find (pull ?b [* {:block/file [:file/path]}])
                        :where [?b :block/name] [?b :block/file]]

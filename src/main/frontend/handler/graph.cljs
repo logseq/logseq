@@ -8,7 +8,7 @@
             [frontend.util :as util]
             [frontend.handler.property.util :as pu]
             [frontend.config :as config]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.common.util :as common-util]))
 
 (defn- build-links
   [links]
@@ -90,8 +90,8 @@
         current-page (or (:block/name (db/get-current-page)) "")]
     (when-let [repo (state/get-current-repo)]
       (let [relation (db/get-pages-relation repo journal?)
-            tagged-pages (map (fn [[x y]] [x (gp-util/page-name-sanity-lc y)]) (db/get-all-tagged-pages repo))
-            namespaces (map (fn [[x y]] [x (gp-util/page-name-sanity-lc y)]) (db/get-all-namespace-relation repo))
+            tagged-pages (map (fn [[x y]] [x (common-util/page-name-sanity-lc y)]) (db/get-all-tagged-pages repo))
+            namespaces (map (fn [[x y]] [x (common-util/page-name-sanity-lc y)]) (db/get-all-namespace-relation repo))
             tags (set (map second tagged-pages))
             full-pages (db/get-all-pages repo)
             full-pages-map (into {} (map (juxt :block/name identity) full-pages))
@@ -144,7 +144,7 @@
             tags (remove #(= page %) tags)
             ref-pages (db/get-page-referenced-pages repo page)
             mentioned-pages (db/get-pages-that-mentioned-page repo page show-journal)
-            namespaces (map (fn [[x y]] [x (gp-util/page-name-sanity-lc y)]) (db/get-all-namespace-relation repo))
+            namespaces (map (fn [[x y]] [x (common-util/page-name-sanity-lc y)]) (db/get-all-namespace-relation repo))
             links (concat
                    namespaces
                    (map (fn [[p _aliases]]
@@ -196,7 +196,7 @@
   (let [dark? (= "dark" theme)]
     (when-let [repo (state/get-current-repo)]
       (let [ref-blocks (db/get-block-referenced-blocks block)
-            namespaces (map (fn [[x y]] [x (gp-util/page-name-sanity-lc y)]) (db/get-all-namespace-relation repo))
+            namespaces (map (fn [[x y]] [x (common-util/page-name-sanity-lc y)]) (db/get-all-namespace-relation repo))
             links (concat
                    (map (fn [[p _aliases]]
                           [block p]) ref-blocks)

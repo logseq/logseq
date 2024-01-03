@@ -30,8 +30,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.db.frontend.property :as db-property]
-            [logseq.graph-parser.config :as gp-config]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
             [logseq.common.path :as path]
@@ -56,9 +56,9 @@
   (when-let [s (if journal?
                  (date/journal-title->default title)
                  ;; legacy in org-mode format, don't escape slashes except bug reported
-                 (gp-util/page-name-sanity (string/lower-case title)))]
+                 (common-util/page-name-sanity (string/lower-case title)))]
     ;; Win10 file path has a length limit of 260 chars
-    (gp-util/safe-subs s 0 200)))
+    (common-util/safe-subs s 0 200)))
 
 (defn toggle-favorite! []
   ;; NOTE: in journals or settings, current-page is nil
@@ -156,7 +156,7 @@
        (remove (fn [p]
                  (let [name (:block/name p)]
                    (or (util/uuid-string? name)
-                       (gp-config/draw? name)
+                       (common-config/draw? name)
                        (db/built-in-pages-names (string/upper-case name))
                        (db-property/built-in-properties-keys-str name)))))
        (common-handler/fix-pages-timestamps)))
@@ -204,9 +204,9 @@
         q (or
            (editor-handler/get-selected-text)
            (when hashtag?
-             (gp-util/safe-subs edit-content pos current-pos))
+             (common-util/safe-subs edit-content pos current-pos))
            (when (> (count edit-content) current-pos)
-             (gp-util/safe-subs edit-content pos current-pos)))
+             (common-util/safe-subs edit-content pos current-pos)))
         db-based? (config/db-based-graph? (state/get-current-repo))]
     (if hashtag?
       (fn [chosen e]
@@ -216,7 +216,7 @@
               chosen (-> chosen
                          (string/replace-first (str (t :new-class) " ") "")
                          (string/replace-first (str (t :new-page) " ") ""))
-              wrapped? (= page-ref/left-brackets (gp-util/safe-subs edit-content (- pos 2) pos))
+              wrapped? (= page-ref/left-brackets (common-util/safe-subs edit-content (- pos 2) pos))
               wrapped-tag (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
                             (page-ref/->page-ref chosen)
                             chosen)

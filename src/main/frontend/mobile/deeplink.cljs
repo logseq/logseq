@@ -10,7 +10,7 @@
    [frontend.mobile.intent :as intent]
    [frontend.state :as state]
    [frontend.util.text :as text-util]
-   [logseq.graph-parser.util :as gp-util]))
+   [logseq.common.util :as common-util]))
 
 (def *link-to-another-graph (atom false))
 
@@ -73,7 +73,7 @@
                                    [(keyword key) (.get search-params key)])
                                  ["title" "url" "type" "payload"]))]
         (if (:payload result)
-          (let [raw (gp-util/safe-decode-uri-component (:payload result))
+          (let [raw (common-util/safe-decode-uri-component (:payload result))
                 payload (-> raw
                             js/JSON.parse
                             (js->clj :keywordize-keys true))]

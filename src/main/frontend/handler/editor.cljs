@@ -59,7 +59,7 @@
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
@@ -1331,7 +1331,7 @@
                  elem (and input-id (gdom/getElement input-id))
                  db-content (:block/content db-block)
                  db-content-without-heading (and db-content
-                                                 (gp-util/safe-subs db-content (:block/level db-block)))
+                                                 (common-util/safe-subs db-content (:block/level db-block)))
                  value (if (= (:block/uuid current-block) (:block/uuid block))
                          (:block/content current-block)
                          (and elem (gobj/get elem "value")))]
@@ -3450,7 +3450,7 @@
                  (string/includes? content "#+END_QUERY"))
         (let [ast (mldoc/->edn (string/trim content) (or (:block/format entity) :markdown))
               q (mldoc/extract-first-query-from-ast ast)]
-          (some? (:query (gp-util/safe-read-string q))))))))
+          (some? (:query (common-util/safe-read-string q))))))))
 
 (defn collapsable?
   ([block-id]

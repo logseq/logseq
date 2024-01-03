@@ -7,7 +7,7 @@
             [frontend.modules.outliner.datascript :as ds]
             [logseq.outliner.tree :as otree]
             [frontend.modules.outliner.utils :as outliner-u]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [cljs.spec.alpha :as s]
             [logseq.db :as ldb]
             [frontend.worker.mldoc :as mldoc]
@@ -300,7 +300,7 @@
           m (-> data'
                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom?
                         :block/title :block/body :block/level)
-                gp-util/remove-nils
+                common-util/remove-nils
                 block-with-updated-at
                 fix-tag-ids)
           db @conn

@@ -24,7 +24,7 @@
 (deftest get-initial-data
   (testing "Fetches a defined block"
     (create-graph-dir "tmp/graphs" "test-db")
-    
+
     (let [conn* (sqlite-db/open-db! "tmp/graphs" "test-db")
           blocks [{:block/uuid (random-uuid)
                    :file/path "logseq/config.edn"
@@ -55,7 +55,7 @@
                   {:db/id 100002
                    :block/content "test"
                    :block/uuid block-uuid
-                   :block/page {:db/id 100001}
+                   :block/page 100001
                    :block/created-at created-at
                    :block/updated-at created-at}]
           _ (d/transact! conn* blocks)

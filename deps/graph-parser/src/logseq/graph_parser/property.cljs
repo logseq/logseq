@@ -1,6 +1,6 @@
 (ns logseq.graph-parser.property
   "Core vars and util fns for properties and file based graphs"
-  (:require [logseq.graph-parser.util :as gp-util]
+  (:require [logseq.common.util :as common-util]
             [clojure.string :as string]
             [clojure.set :as set]
             [goog.string :as gstring]
@@ -29,7 +29,7 @@
 (defn valid-property-name?
   [s]
   {:pre [(string? s)]}
-  (and (gp-util/valid-edn-keyword? s)
+  (and (common-util/valid-edn-keyword? s)
        (not (re-find #"[\"|^|(|)|{|}]+" s))
        ;; Disallow tags as property names
        (not (re-find #"^:#" s))))
@@ -145,7 +145,7 @@
         (let [before (subvec lines 0 start-idx)
               middle (->> (subvec lines (inc start-idx) end-idx)
                           (map (fn [text]
-                                 (let [[k v] (gp-util/split-first ":" (subs text 1))]
+                                 (let [[k v] (common-util/split-first ":" (subs text 1))]
                                    (if (and k v)
                                      (let [k (string/replace k "_" "-")
                                            compare-k (keyword (string/lower-case k))

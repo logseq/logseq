@@ -9,7 +9,7 @@
             [promesa.core :as p]
             [frontend.search.browser :as search-browser]
             [frontend.search.fuzzy :as fuzzy]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.config :as common-config]
             [frontend.db.async :as db-async]
             [frontend.config :as config]
             [logseq.db.frontend.property :as db-property]
@@ -44,7 +44,7 @@
    (when-let [repo (state/get-current-repo)]
      (let [q (fuzzy/clean-str q)]
       (when-not (string/blank? q)
-        (p/let [mldoc-exts (set (map name gp-config/mldoc-support-formats))
+        (p/let [mldoc-exts (set (map name common-config/mldoc-support-formats))
                 result (db-async/<get-files repo)
                 files (->> result
                            (map first)

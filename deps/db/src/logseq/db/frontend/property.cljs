@@ -3,7 +3,7 @@
   (:require [clojure.set :as set]
             [logseq.db.sqlite.util :as sqlite-util]
             [datascript.core :as d]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.common.util :as common-util]))
 
 ;; FIXME: no support for built-in-extended-properties
 (def ^:large-vars/data-var built-in-properties
@@ -113,7 +113,7 @@
                           (name key)
                           key)]
       (if (sqlite-util/db-based-graph? repo)
-        (when-let [property (d/entity db [:block/name (gp-util/page-name-sanity-lc property-name)])]
+        (when-let [property (d/entity db [:block/name (common-util/page-name-sanity-lc property-name)])]
           (get coll (:block/uuid property)))
         (get coll key)))))
 
@@ -129,7 +129,7 @@
   "Get a property's id (name or uuid) given its name. For file and db graphs"
   [repo db property-name]
   (if (sqlite-util/db-based-graph? repo)
-    (:block/uuid (d/entity db [:block/name (gp-util/page-name-sanity-lc (name property-name))]))
+    (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc (name property-name))]))
     property-name))
 
 (defn shape-block?

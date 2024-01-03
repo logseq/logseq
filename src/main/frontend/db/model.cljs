@@ -16,7 +16,7 @@
             [logseq.db.frontend.rules :as rules]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util.db :as db-util]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
             ;; add map ops to datascript Entity
@@ -302,7 +302,7 @@ independent of format as format specific heading characters are stripped"
        (:block/format page)
        (when-let [file (:block/file page)]
          (when-let [path (:file/path (db-utils/entity (:db/id file)))]
-           (gp-util/get-format path)))))
+           (common-util/get-format path)))))
     (state/get-preferred-format)
     :markdown)))
 
@@ -420,7 +420,7 @@ independent of format as format specific heading characters are stripped"
        :level - the level of the block, 1 for root, 2 for children of root, etc."
   [page-name]
   {:pre [(string? page-name)]}
-  (let [sanitized-page (gp-util/page-name-sanity-lc page-name)
+  (let [sanitized-page (common-util/page-name-sanity-lc page-name)
         page-id (:db/id (db-utils/entity [:block/name sanitized-page]))
         root (db-utils/entity page-id)]
     (loop [result []
