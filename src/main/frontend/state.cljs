@@ -151,8 +151,6 @@
 
       :editor/code-block-context             {}
 
-      :editor/create-page?                   (atom false)
-
       :db/properties-changed-pages           {}
       :editor/cursor-range                   (atom nil)
 

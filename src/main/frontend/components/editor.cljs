@@ -122,7 +122,7 @@
     (page-handler/on-chosen-handler input id q pos format)))
 
 (rum/defc page-search-aux
-  [id format embed? db-tag? create-page? q current-pos edit-content input pos]
+  [id format embed? db-tag? q current-pos input pos]
   (let [[matched-pages set-matched-pages!] (rum/use-state nil)]
     (rum/use-effect! (fn []
                        (when-not (string/blank? q)
@@ -158,29 +158,19 @@
                               (cons (first matched-pages)
                                     (cons q (rest matched-pages)))
                               (cons q matched-pages))))]
-      [:div
-       (when (and db-tag?
-                        ;; Don't display in heading
-                  (not (some->> edit-content (re-find #"^\s*#"))))
-         [:div.flex.flex-row.items-center.px-4.py-1.text-sm.opacity-70.gap-2
-          "Turn this block into a page:"
-          (ui/toggle create-page?
-                     (fn [_e]
-                       (swap! (:editor/create-page? @state/state) not))
-                     true)])
-       (ui/auto-complete
-        matched-pages
-        {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
-         :on-enter    (fn []
-                        (page-handler/page-not-exists-handler input id q current-pos))
-         :item-render (fn [page-name _chosen?]
-                        [:div.flex
-                         (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
-                         (search-handler/highlight-exact-query page-name q)])
-         :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
-                                                                    "Search for a page or a class"
-                                                                    "Search for a page")]
-         :class       "black"})])))
+      (ui/auto-complete
+       matched-pages
+       {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
+        :on-enter    (fn []
+                       (page-handler/page-not-exists-handler input id q current-pos))
+        :item-render (fn [page-name _chosen?]
+                       [:div.flex
+                        (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
+                        (search-handler/highlight-exact-query page-name q)])
+        :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
+                                                                   "Search for a page or a class"
+                                                                   "Search for a page")]
+        :class       "black"}))))
 
 (rum/defc page-search < rum/reactive
   {:will-unmount (fn [state]
@@ -192,8 +182,7 @@
         db? (config/db-based-graph? (state/get-current-repo))
         embed? (and db? (= @commands/*current-command "Page embed"))
         tag? (= action :page-search-hashtag)
-        db-tag? (and db? tag?)
-        create-page? (state/sub :editor/create-page?)]
+        db-tag? (and db? tag?)]
     (when (contains? #{:page-search :page-search-hashtag} action)
       (let [pos (state/get-editor-last-pos)
             input (gdom/getElement id)]
@@ -207,7 +196,7 @@
                    (when (> (count edit-content) current-pos)
                      (gp-util/safe-subs edit-content pos current-pos))
                    "")]
-            (page-search-aux id format embed? db-tag? create-page? q current-pos edit-content input pos)))))))
+            (page-search-aux id format embed? db-tag? q current-pos input pos)))))))
 
 (defn- search-blocks!
   [state result]
@@ -722,9 +711,6 @@
   {:init (fn [state]
            (assoc state
                   ::id (str (random-uuid))))
-   :will-unmount (fn [state]
-                   (reset! (:editor/create-page? @state/state) false)
-                   state)
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))
                 state)}

@@ -305,15 +305,16 @@
    (when-let [node (some-> (first (state/get-selection-blocks)))]
      (get-original-block-by-dom node))))
 
-(defn- get-last-block-original
-  [last-top-block]
-  (or
-   (get-current-editing-original-block)
-   (when-let [last-block-node (->> (state/get-selection-blocks)
-                                   (filter (fn [node]
-                                             (= (dom/attr node "blockid") (str (:block/uuid last-top-block)))))
-                                   last)]
-     (get-original-block-by-dom last-block-node))))
+(comment
+  (defn- get-last-block-original
+    [last-top-block]
+    (or
+     (get-current-editing-original-block)
+     (when-let [last-block-node (->> (state/get-selection-blocks)
+                                     (filter (fn [node]
+                                               (= (dom/attr node "blockid") (str (:block/uuid last-top-block)))))
+                                     last)]
+       (get-original-block-by-dom last-block-node)))))
 
 (defn indent-outdent-block!
   [block direction]
@@ -324,7 +325,8 @@
                                          (db/get-db false)
                                          (get-top-level-blocks [block])
                                          (= direction :right)
-                                         {:get-first-block-original get-first-block-original})))
+                                         {:get-first-block-original get-first-block-original
+                                          :logical-outdenting? (state/logical-outdenting?)})))
 
 (def *swipe (atom nil))
 

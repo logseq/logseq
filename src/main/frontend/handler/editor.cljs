@@ -79,7 +79,7 @@
   [block]
   (let [repo (state/get-current-repo)
         conn (db/get-db false)]
-    (outliner-core/save-block! repo conn block)))
+    (outliner-core/save-block! repo conn (state/get-date-formatter) block)))
 
 (defn get-block-own-order-list-type
   [block]
@@ -712,7 +712,9 @@
       (let [blocks (block-handler/get-top-level-blocks [block])]
         (ui-outliner-tx/transact!
          {:outliner-op :delete-blocks}
-         (outliner-core/delete-blocks! repo (db/get-db false) blocks
+         (outliner-core/delete-blocks! repo (db/get-db false)
+                                       (state/get-date-formatter)
+                                       blocks
                                        (merge
                                         delete-opts
                                         {:children? children?})))))))
@@ -875,7 +877,9 @@
           blocks' (block-handler/get-top-level-blocks blocks)]
       (ui-outliner-tx/transact!
        {:outliner-op :delete-blocks}
-       (outliner-core/delete-blocks! repo (db/get-db false) blocks' {}))
+       (outliner-core/delete-blocks! repo (db/get-db false)
+                                     (state/get-date-formatter)
+                                     blocks' {}))
       (when sibling-block
         (move-to-prev-block repo sibling-block
                             (:block/format block)
@@ -1804,7 +1808,8 @@
                                              (db/get-db false)
                                              (block-handler/get-top-level-blocks blocks)
                                              (= direction :right)
-                                             {:get-first-block-original block-handler/get-first-block-original})))))
+                                             {:get-first-block-original block-handler/get-first-block-original
+                                              :logical-outdenting? (state/logical-outdenting?)})))))
 
 (defn- get-link [format link label]
   (let [link (or link "")
@@ -2884,7 +2889,8 @@
                                              (db/get-db false)
                                              (block-handler/get-top-level-blocks [block])
                                              indent?
-                                             {:get-first-block-original block-handler/get-first-block-original})))
+                                             {:get-first-block-original block-handler/get-first-block-original
+                                              :logical-outdenting? (state/logical-outdenting?)})))
     (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler

@@ -27,11 +27,12 @@
                                 (->> db-content
                                      (property-util/remove-built-in-properties (or (:block/format entity) :markdown))
                                      drawer/remove-logbook))
-                    pos (cursor/pos input)]
+                    pos (cursor/pos input)
+                    pos (when pos (if (zero? pos) (count content) 0))]
                 (when (not= (string/trim content)
                             (string/trim (.-value input)))
-                  (state/set-edit-content! input content)
-                  (when pos (cursor/move-cursor-to input pos)))))))))))
+                  (state/set-edit-content! input content))
+                (when pos (cursor/move-cursor-to input pos))))))))))
 
 (defn store-undo-data!
   [{:keys [tx-meta] :as opts}]

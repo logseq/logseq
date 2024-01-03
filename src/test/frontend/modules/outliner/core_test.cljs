@@ -125,7 +125,10 @@
     (transact-tree! tree)
     (let [block (get-block 6)]
       (outliner-tx/transact! {:graph test-db}
-                             (outliner-core/delete-blocks! test-db (db/get-db test-db false) [block] {:children? true}))
+                             (outliner-core/delete-blocks! test-db
+                                                           (db/get-db test-db false)
+                                                           (state/get-date-formatter)
+                                                           [block] {:children? true}))
       (is (= [3 9] (get-children 2))))))
 
 (deftest test-move-block-as-sibling
@@ -294,7 +297,9 @@
     (transact-tree! tree)
     (outliner-tx/transact!
       {:graph test-db}
-      (outliner-core/delete-blocks! test-db (db/get-db test-db false) [(get-block 6) (get-block 9)] {}))
+      (outliner-core/delete-blocks! test-db (db/get-db test-db false)
+                                    (state/get-date-formatter)
+                                    [(get-block 6) (get-block 9)] {}))
     (is (= [3] (get-children 2)))))
 
 (deftest test-delete-non-consecutive-blocks
@@ -313,7 +318,9 @@
     (transact-tree! tree)
     (outliner-tx/transact!
      {:graph test-db}
-      (outliner-core/delete-blocks! test-db (db/get-db test-db false) [(get-block 10) (get-block 13)] {}))
+     (outliner-core/delete-blocks! test-db (db/get-db test-db false)
+                                   (state/get-date-formatter)
+                                   [(get-block 10) (get-block 13)] {}))
     (is (= [11] (get-children 9)))
     (is (= [14 15] (get-children 12)))))
 
@@ -407,7 +414,9 @@
          (outliner-core/insert-blocks! test-db (db/get-db test-db false) new-blocks target-block {:sibling? false
                                                                                                   :keep-uuid? true
                                                                                                   :replace-empty-target? false})
-         (outliner-core/delete-blocks! test-db (db/get-db test-db false) [(get-block 3)] {}))
+         (outliner-core/delete-blocks! test-db (db/get-db test-db false)
+                                       (state/get-date-formatter)
+                                       [(get-block 3)] {}))
 
         (is (= [4] (get-children 2)))
 
@@ -478,7 +487,9 @@
 (defn- save-block!
   [block]
   (outliner-tx/transact! {:graph test-db}
-                         (outliner-core/save-block! test-db (db/get-db test-db false) block)))
+                         (outliner-core/save-block! test-db (db/get-db test-db false)
+                                                    (state/get-date-formatter)
+                                                    block)))
 
 (deftest save-test
   (load-test-files [{:file/path "pages/page1.md"
@@ -628,7 +639,9 @@ tags:: tag1, tag2
       (let [blocks (get-random-successive-blocks)]
         (when (seq blocks)
           (outliner-tx/transact! {:graph test-db}
-            (outliner-core/delete-blocks! test-db (db/get-db test-db false) blocks {})))))))
+                                 (outliner-core/delete-blocks! test-db (db/get-db test-db false)
+                                                               (state/get-date-formatter)
+                                                               blocks {})))))))
 
 (deftest ^:long random-moves
   (testing "Random moves"
@@ -705,7 +718,9 @@ tags:: tag1, tag2
                      (swap! *random-blocks (fn [old]
                                              (set/difference old (set (map :block/uuid blocks)))))
                      (outliner-tx/transact! {:graph test-db}
-                                            (outliner-core/delete-blocks! test-db (db/get-db test-db false) blocks {})))))
+                                            (outliner-core/delete-blocks! test-db (db/get-db test-db false)
+                                                                          (state/get-date-formatter)
+                                                                          blocks {})))))
 
                ;; move
                (fn []
