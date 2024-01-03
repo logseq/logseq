@@ -1,7 +1,6 @@
 (ns frontend.modules.outliner.datascript
   (:require [logseq.common.util :as common-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
-            [frontend.worker.util :as worker-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [frontend.worker.file.property-util :as wpu]
             [datascript.core :as d]
@@ -42,7 +41,7 @@
                                              block-content (wpu/remove-properties
                                                             (:block/format block) (:block/content block))
                                              new-content (some-> (:block/content ref)
-                                                                 (string/replace (re-pattern (worker-util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
+                                                                 (string/replace (re-pattern (common-util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
                                                                                  block-content)
                                                                  (string/replace (block-ref/->block-ref (str (:block/uuid block)))
                                                                                  block-content))

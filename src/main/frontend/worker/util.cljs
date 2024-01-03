@@ -3,9 +3,7 @@
   (:refer-clojure :exclude [format])
   (:require [clojure.string :as string]
             ["remove-accents" :as removeAccents]
-            [medley.core :as medley]
             [logseq.common.util :as common-util]
-            [goog.string :as gstring]
             [clojure.core.async :as async]
             [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
             [cljs-time.coerce :as tc]
@@ -13,43 +11,13 @@
             [cljs-bean.core :as bean]))
 
 (defn search-normalize
-     "Normalize string for searching (loose)"
-     [s remove-accents?]
-     (when s
-       (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
-         (if remove-accents?
-           (removeAccents normalize-str)
-           normalize-str))))
-
-(def safe-re-find common-util/safe-re-find)
-
-(def uuid-string? common-util/uuid-string?)
-
-(def page-name-sanity-lc
-  "Delegate to common-util to loosely couple app usages to graph-parser"
-  common-util/page-name-sanity-lc)
-
-(defn safe-page-name-sanity-lc
-  [s]
-  (if (string? s)
-    (page-name-sanity-lc s) s))
-
-(defn distinct-by
-  [f col]
-  (medley/distinct-by f (seq col)))
-
-(defn format
-  [fmt & args]
-  (apply gstring/format fmt args))
-
-(defn remove-first [pred coll]
-  ((fn inner [coll]
-     (lazy-seq
-      (when-let [[x & xs] (seq coll)]
-        (if (pred x)
-          xs
-          (cons x (inner xs))))))
-   coll))
+  "Normalize string for searching (loose)"
+  [s remove-accents?]
+  (when s
+    (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
+      (if remove-accents?
+        (removeAccents normalize-str)
+        normalize-str))))
 
 (defn drain-chan
   "drop all stuffs in CH, and return all of them"
@@ -98,7 +66,7 @@
                                filter-v)]
                (if filter-v*
                  (recur timeout-ch (cond->> (conj coll e)
-                                     distinct-key-fn (distinct-by distinct-key-fn)
+                                     distinct-key-fn (common-util/distinct-by distinct-key-fn)
                                      true vec))
                  (recur timeout-ch coll)))
 
@@ -116,8 +84,3 @@
 (defn post-message
   [type data]
   (.postMessage js/self (bean/->js [type data])))
-
-(defn concat-without-nil
-  [& cols]
-  (->> (apply concat cols)
-       (remove nil?)))

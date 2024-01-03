@@ -1,8 +1,7 @@
 (ns frontend.worker.file.util
   "File name fns"
   (:require [clojure.string :as string]
-            [logseq.common.util :as common-util]
-            [frontend.worker.util :as util]))
+            [logseq.common.util :as common-util]))
 
 ;; Update repo/invalid-graph-name-warning if characters change
 (def multiplatform-reserved-chars ":\\*\\?\"<>|\\#\\\\")
@@ -72,7 +71,7 @@
 (defn include-reserved-chars?
   "Includes reserved characters that would broken FS"
   [s]
-  (util/safe-re-find reserved-chars-pattern s))
+  (common-util/safe-re-find reserved-chars-pattern s))
 
 ;; A fast pprint alternative.
 (defn print-prefix-map* [prefix m print-one writer opts]

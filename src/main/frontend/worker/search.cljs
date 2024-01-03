@@ -8,7 +8,8 @@
             [datascript.core :as d]
             [frontend.search.fuzzy :as fuzzy]
             [frontend.worker.util :as util]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.common.util :as common-util]))
 
 ;; TODO: use sqlite for fuzzy search
 (defonce indices (atom nil))
@@ -162,7 +163,7 @@
                                     :page page})))]
       (->>
        all-result
-       (util/distinct-by :uuid)
+       (common-util/distinct-by :uuid)
        (take limit)))))
 
 (defn truncate-table!
@@ -311,7 +312,7 @@
   (when page
     (if (string? page)
       (and (string/starts-with? page "$$$")
-           (util/uuid-string? (safe-subs page 3)))
+           (common-util/uuid-string? (safe-subs page 3)))
       (contains? (set (:block/type page)) "hidden"))))
 
 (defn get-all-pages
@@ -393,7 +394,7 @@
                      (.remove indice
                               (fn [page]
                                 (= (:block/name page-entity)
-                                   (util/safe-page-name-sanity-lc (gobj/get page "original-name"))))))
+                                   (common-util/safe-page-name-sanity-lc (gobj/get page "original-name"))))))
                    (doseq [page pages-to-add]
                      (.add indice (bean/->js (original-page-name->index
                                               (or (:block/original-name page)
@@ -434,7 +435,7 @@
               result (->> (.search indice q (clj->js {:limit limit}))
                           (bean/->clj))]
           (->> result
-               (util/distinct-by (fn [i] (string/trim (get-in i [:item :name]))))
+               (common-util/distinct-by (fn [i] (string/trim (get-in i [:item :name]))))
                (map
                 (fn [{:keys [item]}]
                   (:original-name item)))

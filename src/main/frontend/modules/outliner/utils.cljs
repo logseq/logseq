@@ -1,6 +1,6 @@
 (ns frontend.modules.outliner.utils
   (:require [datascript.impl.entity :as e]
-            [frontend.worker.util :as worker-util]))
+            [logseq.common.util :as common-util]))
 
 (defn block-id?
   [id]
@@ -12,7 +12,7 @@
 (defn check-block-id
   [id]
   (assert (block-id? id)
-    (worker-util/format "The id should match block-id?: %s" (pr-str id))))
+    (common-util/format "The id should match block-id?: %s" (pr-str id))))
 
 (defn ->block-lookup-ref
   "

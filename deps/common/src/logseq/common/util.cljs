@@ -5,7 +5,8 @@
             [clojure.edn :as edn]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [logseq.common.log :as log]))
+            [logseq.common.log :as log]
+            [goog.string :as gstring]))
 
 (defn safe-decode-uri-component
   [uri]
@@ -166,6 +167,11 @@
   [s]
   (page-name-sanity (string/lower-case s)))
 
+(defn safe-page-name-sanity-lc
+  [s]
+  (if (string? s)
+    (page-name-sanity-lc s) s))
+
 (defn capitalize-all
   [s]
   (some->> (string/split s #" ")
@@ -305,3 +311,21 @@
   {:malli/schema [:=> [:cat :string] :boolean]}
   [s]
   (boolean (safe-re-find exactly-uuid-pattern s)))
+
+(defn format
+  [fmt & args]
+  (apply gstring/format fmt args))
+
+(defn remove-first [pred coll]
+  ((fn inner [coll]
+     (lazy-seq
+      (when-let [[x & xs] (seq coll)]
+        (if (pred x)
+          xs
+          (cons x (inner xs))))))
+   coll))
+
+(defn concat-without-nil
+  [& cols]
+  (->> (apply concat cols)
+       (remove nil?)))

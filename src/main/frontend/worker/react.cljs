@@ -1,7 +1,7 @@
 (ns frontend.worker.react
   "Compute reactive query affected keys"
   (:require [datascript.core :as d]
-            [frontend.worker.util :as util]
+            [logseq.common.util :as common-util]
             [cljs.spec.alpha :as s]))
 
 ;;; keywords specs for reactive query, used by `react/q` calls
@@ -42,7 +42,7 @@
                           (map :e))
         blocks (-> (concat blocks other-blocks) distinct)
         block-entities (keep (fn [block-id]
-                               (let [block-id (if (and (string? block-id) (util/uuid-string? block-id))
+                               (let [block-id (if (and (string? block-id) (common-util/uuid-string? block-id))
                                                 [:block/uuid block-id]
                                                 block-id)]
                                  (d/entity db-after block-id))) blocks)
