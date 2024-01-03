@@ -95,12 +95,14 @@
        (icon (rum/react *icon)
              {:on-chosen (fn [_e icon]
                            (reset! *icon icon))})]]
-     [:div.grid.grid-cols-5.gap-1.items-start.leading-8
-      [:label.col-span-2 "Description:"]
-      [:div.col-span-3
-       (ui/ls-textarea
-        {:on-change #(reset! *description (util/evalue %))
-         :default-value @*description})]]
+     ;; Disable description for types that can't edit them
+     (when-not (#{:page :date} property-type)
+       [:div.grid.grid-cols-5.gap-1.items-start.leading-8
+        [:label.col-span-2 "Description:"]
+        [:div.col-span-3
+         (ui/ls-textarea
+          {:on-change #(reset! *description (util/evalue %))
+           :default-value @*description})]])
      [:div
       (ui/button
        "Save"
