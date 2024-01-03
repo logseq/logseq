@@ -2,11 +2,9 @@
   "Utility fns for properties that are for both file and db graphs.
   Some fns like lookup and get-property were written to easily be backwards
   compatible with file graphs"
-  (:require [frontend.config :as config]
-            [frontend.state :as state]
+  (:require [frontend.state :as state]
             [logseq.common.util :as common-util]
             [frontend.db :as db]
-            [frontend.util :as util]
             [logseq.db.frontend.property :as db-property]))
 
 (defn lookup

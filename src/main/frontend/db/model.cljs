@@ -79,11 +79,6 @@
 
 (def hidden-page? ldb/hidden-page?)
 
-(defn get-pages
-  [repo]
-  (let [db (conn/get-db repo)]
-    (ldb/get-pages db)))
-
 (defn get-all-pages
   [repo]
   (->>
@@ -406,12 +401,6 @@ independent of format as format specific heading characters are stripped"
                      f))
                  form))
 
-(defn sort-page-random-blocks
-  "Blocks could be non consecutive."
-  [blocks]
-  (let [db (conn/get-db)]
-    (ldb/sort-page-random-blocks db blocks)))
-
 ;; Diverged of get-sorted-page-block-ids
 (defn get-sorted-page-block-ids-and-levels
   "page-name: the page name, original name
@@ -516,10 +505,6 @@ independent of format as format specific heading characters are stripped"
      (let [parent (:block/parent entity)]
        (when-not (:block/name parent)
          parent)))))
-
-(defn get-non-consecutive-blocks
-  [blocks]
-  (ldb/get-non-consecutive-blocks (conn/get-db) blocks))
 
 (defn get-page-blocks-no-cache
   ([page]

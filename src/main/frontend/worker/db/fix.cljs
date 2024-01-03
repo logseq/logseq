@@ -5,7 +5,6 @@
   2. For any block, its children should be connected by :block/left (no broken chain, no circle, no left to self)."
   (:require [datascript.core :as d]
             [cljs.pprint :as pprint]
-            [frontend.handler.notification :as notification]
             [logseq.db :as ldb]
             [frontend.worker.util :as util]))
 
