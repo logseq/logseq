@@ -10,6 +10,13 @@ html {
     --accent-foreground: var(--rx-gray-12-hsl);
   }
 
+  .ui__dropdown-menu-item,
+  div[data-radix-popper-content-wrapper] div[role=menuitem] {
+    &:focus, &:hover {
+      background-color: var(--lx-gray-04, hsl(var(--accent)));
+    }
+  }
+
   &:not([data-color=logseq]) {
   }
 

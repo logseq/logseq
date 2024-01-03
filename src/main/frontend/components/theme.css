@@ -50,15 +50,10 @@ html {
   transform: scale(1.1);
 }
 
-html[data-theme='dark'] {
-  background-color: var(--ls-primary-background-color);
+html[data-theme='light'] #app-container {
+  background-color: or(--ls-top-bar-background,
+  --lx-gray-01, --ls-primary-background-color, #fff);
 
-  input.form-input {
-    background: none;
-  }
-}
-
-html[data-theme='light'] {
   .form-checkbox {
     &:focus {
       border-color: var(--ls-page-checkbox-border-color);
@@ -77,6 +72,15 @@ html[data-theme='light'] {
 
   a.right-sidebar-button:hover {
     color: var(--ls-link-text-hover-color);
+  }
+}
+
+html[data-theme='dark'] #app-container {
+  background-color: or(--ls-top-bar-background,
+  --lx-gray-02, --ls-primary-background-color, #333);
+
+  input.form-input {
+    background: none;
   }
 }
 

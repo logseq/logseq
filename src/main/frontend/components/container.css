@@ -5,15 +5,6 @@
   }
 }
 
-#app-container {
-  background-color: or(--ls-top-bar-background, --lx-gray-01, --ls-primary-background-color, #fff);
-  position: relative;
-}
-
-.dark #app-container {
-  background-color: or(--ls-top-bar-background, --lx-gray-02, --ls-primary-background-color, #fff);
-}
-
 #root {
   > div {
     color: or(--ls-document-text-color, --lx-gray-12, --ls-primary-text-color, #24292e);
