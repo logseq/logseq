@@ -72,10 +72,15 @@
       (item-value property-type *value)]
      [:div.grid.grid-cols-5.gap-1.items-center.leading-8
       [:label.col-span-2 "Icon:"]
-      [:div.col-span-3
+      [:div.col-span-3.flex.flex-row.items-center.gap-2
        (icon-component/icon-picker (rum/react *icon)
                                    {:on-chosen (fn [_e icon]
-                                                 (reset! *icon icon))})]]
+                                                 (reset! *icon icon))})
+       (when (rum/react *icon)
+        [:a.fade-link.flex {:on-click (fn [_e]
+                                        (reset! *icon nil))
+                            :title "Delete this icon"}
+        (ui/icon "X")])]]
      ;; Disable description for types that can't edit them
      (when-not (#{:page :date} property-type)
        [:div.grid.grid-cols-5.gap-1.items-start.leading-8

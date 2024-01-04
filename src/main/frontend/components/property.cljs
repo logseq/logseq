@@ -158,7 +158,7 @@
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Icon:"]
        (let [icon-value (pu/get-property property :icon)]
-         [:div.col-span-3
+         [:div.col-span-3.flex.flex-row.items-center.gap-2
           (icon-component/icon-picker icon-value
                                       {:disabled? disabled?
                                        :on-chosen (fn [_e icon]
@@ -166,7 +166,15 @@
                                                       (db-property-handler/update-property!
                                                        (state/get-current-repo)
                                                        (:block/uuid property)
-                                                       {:properties {icon-property-id icon}})))})])]
+                                                       {:properties {icon-property-id icon}})))})
+          (when (and icon-value (not disabled?))
+            [:a.fade-link.flex {:on-click (fn [_e]
+                                            (db-property-handler/remove-block-property!
+                                             (state/get-current-repo)
+                                             (:block/uuid property)
+                                             (db-pu/get-built-in-property-uuid :icon)))
+                                :title "Delete this icon"}
+             (ui/icon "X")])])]
 
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Schema type:"]
