@@ -91,7 +91,7 @@
   [:div.grid.grid-cols-5.gap-1.items-center.leading-8
    [:label.col-span-2 "Icon:"]
    (let [icon-value (pu/get-property page :icon)]
-     [:div.col-span-3
+     [:div.col-span-3.flex.flex-row.items-center.gap-2
       (icon-component/icon-picker icon-value
                                   {:disabled? config/publishing?
                                    :on-chosen (fn [_e icon]
@@ -99,7 +99,15 @@
                                                   (db-property-handler/update-property!
                                                    (state/get-current-repo)
                                                    (:block/uuid page)
-                                                   {:properties {icon-property-id icon}})))})])])
+                                                   {:properties {icon-property-id icon}})))})
+      (when (and icon-value (not config/publishing?))
+        [:a.fade-link.flex {:on-click (fn [_e]
+                                        (db-property-handler/remove-block-property!
+                                         (state/get-current-repo)
+                                         (:block/uuid page)
+                                         (db-pu/get-built-in-property-uuid :icon)))
+                            :title "Delete this icon"}
+        (ui/icon "X")])])])
 
 (rum/defcs page-configure-inner <
   (rum/local false ::show-page-properties?)
