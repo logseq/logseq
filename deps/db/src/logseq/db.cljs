@@ -47,6 +47,18 @@
     {:block/_parent ...}])
 
 
+(defn transact!
+  ([conn tx-data]
+   (transact! conn tx-data nil))
+  ([conn tx-data tx-meta]
+   (let [tx-data (common-util/fast-remove-nils tx-data)]
+    (when (seq tx-data)
+
+      (prn :debug :transact)
+      (cljs.pprint/pprint tx-data)
+
+      (d/transact! conn tx-data tx-meta)))))
+
 (defn create-default-pages!
   "Creates default pages if one of the default pages does not exist. This
    fn is idempotent"
@@ -61,7 +73,7 @@
                               db-graph?
                               (assoc :block/format :markdown)))
                           default-db/built-in-pages)]
-      (d/transact! db-conn built-in-pages))))
+      (transact! db-conn built-in-pages))))
 
 (defn create-built-in-properties!
   [conn]

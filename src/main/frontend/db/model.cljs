@@ -341,7 +341,8 @@ independent of format as format specific heading characters are stripped"
               {:query-fn (fn [_]
                            (let [e (db-utils/entity id)
                                  children (map :db/id (sort-by-left (:block/_parent e) e))]
-                             [e {:original-name (:block/original-name e)
+                             [e {:name (:block/name e)
+                                 :original-name (:block/original-name e)
                                  :link (:block/link e)
                                  :namespace (:block/namespace e)
                                  :types (:block/type e)

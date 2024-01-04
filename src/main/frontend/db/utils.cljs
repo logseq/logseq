@@ -90,19 +90,13 @@
        (->> (d/pull-many db selector eids)
             (map #(update-block-content % (:db/id %))))))))
 
-(defn- actual-transact!
-  [repo-url tx-data tx-meta]
-  (let [tx-data (common-util/fast-remove-nils tx-data)]
-    (when (seq tx-data)
-      (conn/transact! repo-url tx-data tx-meta))))
-
 (if config/publishing?
   (defn- transact!*
     [repo-url tx-data tx-meta]
     ;; :save-block is for query-table actions like sorting and choosing columns
     (when (#{:collapse-expand-blocks :save-block} (:outliner-op tx-meta))
-      (actual-transact! repo-url tx-data tx-meta)))
-  (def transact!* actual-transact!))
+      (conn/transact! repo-url tx-data tx-meta)))
+  (def transact!* conn/transact!))
 
 (defn transact!
   ([tx-data]

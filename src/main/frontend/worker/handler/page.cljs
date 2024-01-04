@@ -125,7 +125,7 @@
                       page-txs
                       first-block-tx)]
         (when (seq txs)
-          (d/transact! conn txs {:persist-op? persist-op?})
+          (ldb/transact! conn txs {:persist-op? persist-op?})
           page-name)))))
 
 (defn db-refs->page
@@ -207,8 +207,8 @@
           db-based? (sqlite-util/db-based-graph? repo)]
       (if-let [msg (and db-based? (page-unable-to-delete conn page))]
         (do
-          (d/transact! conn truncate-blocks-tx-data
-            {:outliner-op :truncate-page-blocks :persist-op? persist-op?})
+          (ldb/transact! conn truncate-blocks-tx-data
+                         {:outliner-op :truncate-page-blocks :persist-op? persist-op?})
           (error-handler msg))
         (let [file (ldb/get-page-file @conn page-name)
               file-path (:file/path file)
@@ -230,12 +230,12 @@
                                nil)
               tx-data (concat truncate-blocks-tx-data delete-page-tx delete-file-tx)]
 
-          (d/transact! conn tx-data
-                       (cond-> {:outliner-op :delete-page :persist-op? persist-op?}
-                         file-path
-                         (assoc
-                          :deleted-page page-name
-                          :file-path file-path)))
+          (ldb/transact! conn tx-data
+                         (cond-> {:outliner-op :delete-page :persist-op? persist-op?}
+                           file-path
+                           (assoc
+                            :deleted-page page-name
+                            :file-path file-path)))
 
           (when (fn? ok-handler) (ok-handler))
 

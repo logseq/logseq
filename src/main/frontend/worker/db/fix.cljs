@@ -145,7 +145,7 @@
     (when (seq fix-conflicts-tx)
       (prn :debug :conflicts-tx)
       (pprint/pprint fix-conflicts-tx)
-      (let [tx-data (:tx-data (d/transact! conn fix-conflicts-tx transact-opts))]
+      (let [tx-data (:tx-data (ldb/transact! conn fix-conflicts-tx transact-opts))]
         (swap! *fix-tx-data (fn [old-data] (concat old-data tx-data))))
       (when (seq (get-conflicts @conn page-id))
         (loop-fix-conflicts conn page-id transact-opts *fix-tx-data)))))
@@ -167,6 +167,6 @@
             parent-left->es' (build-parent-left->es db page-id)
             fix-broken-chain-tx (fix-broken-chain db' parent-left->es')]
         (when (seq fix-broken-chain-tx)
-          (let [tx-data (:tx-data (d/transact! conn fix-broken-chain-tx transact-opts))]
+          (let [tx-data (:tx-data (ldb/transact! conn fix-broken-chain-tx transact-opts))]
             (swap! *fix-tx-data (fn [old-data] (concat old-data tx-data)))))))
     @*fix-tx-data))

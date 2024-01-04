@@ -15,7 +15,8 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [frontend.worker.pipeline :as pipeline]
             [frontend.worker.state :as state]
-            [frontend.worker.file :as file]))
+            [frontend.worker.file :as file]
+            [logseq.db :as ldb]))
 
 (defonce *sqlite state/*sqlite)
 (defonce *sqlite-conns state/*sqlite-conns)
@@ -258,7 +259,7 @@
              tx-meta' (if (or (:from-disk? tx-meta) (:new-graph? tx-meta))
                         tx-meta
                         (assoc tx-meta :skip-store? true))
-             tx-report (d/transact! conn tx-data tx-meta')
+             tx-report (ldb/transact! conn tx-data tx-meta')
              result (pipeline/invoke-hooks repo conn tx-report context)
              ;; TODO: delay search indice so that UI can be refreshed earlier
              search-indice (search/sync-search-indice repo (:tx-report result))

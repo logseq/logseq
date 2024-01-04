@@ -19,6 +19,7 @@
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.state :as worker-state]
+            [logseq.db :as ldb]
 
             [frontend.db.rtc.const :as rtc-const]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
@@ -110,12 +111,12 @@
    (apply outliner-core/save-block! args)))
 
 (defmethod transact-db! :delete-whiteboard-blocks [_ conn block-uuids]
-  (d/transact! conn
-                (mapv (fn [block-uuid] [:db/retractEntity [:block/uuid block-uuid]]) block-uuids)
-                {:persist-op? false}))
+  (ldb/transact! conn
+                 (mapv (fn [block-uuid] [:db/retractEntity [:block/uuid block-uuid]]) block-uuids)
+                 {:persist-op? false}))
 
 (defmethod transact-db! :upsert-whiteboard-block [_ conn blocks]
-  (d/transact! conn blocks {:persist-op? false}))
+  (ldb/transact! conn blocks {:persist-op? false}))
 
 (defn- whiteboard-page-block?
   [block]

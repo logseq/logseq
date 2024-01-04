@@ -7,6 +7,7 @@
             [logseq.graph-parser.date-time-util :as date-time-util]
             [logseq.common.config :as common-config]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db :as ldb]
             [clojure.string :as string]
             [clojure.set :as set]))
 
@@ -126,7 +127,7 @@ Options available:
          tx' (common-util/fast-remove-nils tx)
          result (if skip-db-transact?
                   tx'
-                  (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?])))]
+                  (ldb/transact! conn tx' (select-keys options [:new-graph? :from-disk?])))]
      {:tx result
       :ast ast})))
 

@@ -134,7 +134,7 @@
           tx [{:file/path file-rpath}
               {:block/name (:block/name page-block)
                :block/file file}]]
-      (d/transact! conn tx)
+      (ldb/transact! conn tx)
       (when ok-handler (ok-handler)))))
 
 (defn- remove-transit-ids [block] (dissoc block :db/id :block/file))
