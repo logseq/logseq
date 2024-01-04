@@ -22,7 +22,6 @@
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.db.rtc.ws :as ws]
 
-            [frontend.state :as state]
             [frontend.handler.page :as page-handler]
             [frontend.handler.user :as user]))
 
@@ -129,10 +128,9 @@
             remote-remove-ops))
 
 (defn apply-remote-remove-ops
-  [repo conn remove-ops]
+  [repo conn date-formatter remove-ops]
   (prn :remove-ops remove-ops)
-  (let [{whiteboard-block-ops true other-ops false} (group-remote-remove-ops-by-whiteboard-block @conn remove-ops)
-        date-formatter (state/get-date-formatter)]
+  (let [{whiteboard-block-ops true other-ops false} (group-remote-remove-ops-by-whiteboard-block @conn remove-ops)]
     (transact-db! :delete-whiteboard-blocks conn (map :block-uuid whiteboard-block-ops))
 
     (doseq [op other-ops]
@@ -257,13 +255,12 @@
         (transact-db! :upsert-whiteboard-block conn [(gp-whiteboard/shape->block repo db shape page-name)])))))
 
 (defn- update-block-attrs
-  [repo conn block-uuid {:keys [parents properties _content] :as op-value}]
+  [repo conn date-formatter block-uuid {:keys [parents properties _content] :as op-value}]
   (let [key-set (set/intersection
                  (conj rtc-const/general-attr-set :content)
                  (set (keys op-value)))]
     (when (seq key-set)
-      (let [date-formatter (state/get-date-formatter)
-            first-remote-parent (first parents)
+      (let [first-remote-parent (first parents)
             local-parent (d/entity @conn [:block/uuid first-remote-parent])
             whiteboard-page-block? (whiteboard-page-block? local-parent)]
         (cond
@@ -294,7 +291,7 @@
             (transact-db! :save-block repo conn date-formatter new-block)))))))
 
 (defn apply-remote-move-ops
-  [repo conn sorted-move-ops]
+  [repo conn date-formatter sorted-move-ops]
   (prn :sorted-move-ops sorted-move-ops)
   (doseq [{:keys [parents left self] :as op-value} sorted-move-ops]
     (let [r (check-block-pos @conn self parents left)]
@@ -305,12 +302,12 @@
         (insert-or-move-block repo conn self parents left true op-value)
         nil                             ; do nothing
         nil)
-      (update-block-attrs repo conn self op-value)
+      (update-block-attrs repo conn date-formatter self op-value)
       (prn :apply-remote-move-ops self r parents left))))
 
 
 (defn apply-remote-update-ops
-  [repo conn update-ops]
+  [repo conn date-formatter update-ops]
   (prn :update-ops update-ops)
   (doseq [{:keys [parents left self] :as op-value} update-ops]
     (when (and parents left)
@@ -321,11 +318,11 @@
           :wrong-pos
           (insert-or-move-block repo conn self parents left true op-value)
           nil)))
-    (update-block-attrs repo conn self op-value)
+    (update-block-attrs repo conn date-formatter self op-value)
     (prn :apply-remote-update-ops self)))
 
 (defn apply-remote-update-page-ops
-  [repo conn update-page-ops]
+  [repo conn date-formatter update-page-ops]
   (doseq [{:keys [self page-name original-name] :as op-value} update-page-ops]
     (let [old-page-original-name (:block/original-name (d/entity @conn [:block/uuid self]))
           exist-page (d/entity @conn [:block/name page-name])]
@@ -350,7 +347,7 @@
         (page-handler/create! original-name {:redirect? false :create-first-block? false
                                              :uuid self :persist-op? false}))
 
-      (update-block-attrs repo conn self op-value))))
+      (update-block-attrs repo conn date-formatter self op-value))))
 
 (defn apply-remote-remove-page-ops
   [conn remove-page-ops]
@@ -391,7 +388,7 @@
    affected-blocks-map local-unpushed-ops))
 
 (defn <apply-remote-data
-  [repo conn data-from-ws]
+  [repo conn date-formatter data-from-ws]
   (assert (rtc-const/data-from-ws-validator data-from-ws) data-from-ws)
   (go
     (let [remote-t (:t data-from-ws)
@@ -429,10 +426,10 @@
           ;; (state/set-state! [:rtc/remote-batch-tx-state repo]
           ;;                   {:in-transaction? true
           ;;                    :txs []})
-          (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn update-page-ops))
-          (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn remove-ops))
-          (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn sorted-move-ops))
-          (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo conn update-ops))
+          (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn date-formatter update-page-ops))
+          (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
+          (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn date-formatter sorted-move-ops))
+          (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo conn date-formatter update-ops))
           (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops conn remove-page-ops))
           ;; (let [txs (get-in @state/state [:rtc/remote-batch-tx-state repo :txs])]
           ;;   (worker-util/profile
@@ -444,10 +441,10 @@
                                              :local-t local-tx}))))))
 
 (defn- <push-data-from-ws-handler
-  [repo conn push-data-from-ws]
+  [repo conn date-formatter push-data-from-ws]
   (prn :push-data-from-ws push-data-from-ws)
   (go
-    (let [r (<! (<apply-remote-data repo conn push-data-from-ws))]
+    (let [r (<! (<apply-remote-data repo conn date-formatter push-data-from-ws))]
       (when (= r ::need-pull-remote-data)
         r))))
 
@@ -683,7 +680,8 @@
          (some? @(:*repo state))]}
   (go
     (let [repo @(:*repo state)
-          conn @(:*db-conn state)]
+          conn @(:*db-conn state)
+          date-formatter (:*date-formatter state)]
       (op-mem-layer/new-branch! repo)
       (try
         (let [ops-for-remote (sort-remote-ops (gen-block-uuid->remote-ops repo conn))
@@ -714,7 +712,7 @@
                   (throw (ex-info "Unavailable" {:remote-ex remote-ex}))))
             (do (assert (pos? (:t r)) r)
                 (op-mem-layer/commit! repo)
-                (<! (<apply-remote-data repo conn r))
+                (<! (<apply-remote-data repo conn date-formatter r))
                 (prn :<client-op-update-handler :t (:t r)))))
         (catch :default e
           (prn ::unknown-ex e)
@@ -730,13 +728,14 @@
       (pos? (op-mem-layer/get-unpushed-block-update-count repo)))))
 
 (defn <loop-for-rtc
-  [state graph-uuid repo conn & {:keys [loop-started-ch]}]
+  [state graph-uuid repo conn date-formatter & {:keys [loop-started-ch]}]
   {:pre [(state-validator state)
          (some? graph-uuid)
          (some? repo)]}
   (go
     (reset! (:*repo state) repo)
     (reset! (:*db-conn state) conn)
+    (reset! (:*date-formatter state) date-formatter)
     (reset! (:*rtc-state state) :open)
     (let [{:keys [data-from-ws-pub _client-op-update-chan]} state
           push-data-from-ws-ch (chan (async/sliding-buffer 100) (map rtc-const/data-from-ws-coercer))
@@ -770,7 +769,7 @@
                 (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?)))
 
                 push-data-from-ws
-                (let [r (<! (<push-data-from-ws-handler repo conn push-data-from-ws))]
+                (let [r (<! (<push-data-from-ws-handler repo conn date-formatter push-data-from-ws))]
                   (when (= r ::need-pull-remote-data)
                     ;; trigger a force push, which can pull remote-diff-data from local-t to remote-t
                     (async/put! force-push-client-ops-ch true))
@@ -842,12 +841,12 @@
    :*ws (atom ws)})
 
 (defn <init-state
-  []
+  [auth-id-token]
   (go
     (let [data-from-ws-chan (chan (async/sliding-buffer 100))
           ws-opened-ch (chan)]
       (<! (user/<wrap-ensure-id&access-token
-           (let [token (state/get-auth-id-token)
+           (let [token auth-id-token
                  ws (ws/ws-listen token data-from-ws-chan ws-opened-ch)]
              (<! ws-opened-ch)
              (init-state ws data-from-ws-chan)))))))

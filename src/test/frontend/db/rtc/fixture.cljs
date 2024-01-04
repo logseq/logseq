@@ -8,7 +8,8 @@
             [frontend.db.conn :as conn]
             [frontend.db.rtc.db-listener :as db-listener]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.state :as state]))
 
 (def *test-rtc-state (atom nil))
 (def test-graph-uuid "e6d04ed7-bbc4-4ed2-a91b-69f3c0b9459d")
@@ -29,7 +30,7 @@
           state (init-state-helper)
           loop-started-ch (chan)]
       (reset! *test-rtc-state state)
-      (rtc-core/<loop-for-rtc state graph-uuid repo (db/get-db repo false) :loop-started-ch loop-started-ch)
+      (rtc-core/<loop-for-rtc state graph-uuid repo (db/get-db repo false) (state/get-date-formatter) :loop-started-ch loop-started-ch)
       (<! loop-started-ch))))
 
 (def start-and-stop-rtc-loop-fixture
