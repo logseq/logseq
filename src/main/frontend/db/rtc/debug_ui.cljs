@@ -24,7 +24,7 @@
 (defn- <start-rtc
   ([]
    (go
-     (let [state (<! (rtc-core/<init-state))]
+     (let [state (<! (rtc-core/<init-state (state/get-auth-id-token)))]
        (<! (<start-rtc state)))))
   ([state]
    (go
@@ -36,7 +36,7 @@
    (go
      (if-let [graph-uuid (op-mem-layer/get-graph-uuid repo)]
        (do (reset! debug-state state)
-           (<! (rtc-core/<loop-for-rtc state graph-uuid repo (db/get-db repo false)))
+           (<! (rtc-core/<loop-for-rtc state graph-uuid repo (db/get-db repo false) (state/get-date-formatter)))
            state)
        (do (notification/show! "not a rtc-graph" :error false)
            nil)))))
@@ -53,13 +53,13 @@
 (defn- <download-graph
   [repo graph-uuid]
   (go-try
-   (let [state (<! (rtc-core/<init-state))]
+   (let [state (<! (rtc-core/<init-state (state/get-auth-id-token)))]
      (<? (full-upload-download-graph/<download-graph state repo graph-uuid)))))
 
 (defn- <upload-graph
   []
   (go
-    (let [state (<! (rtc-core/<init-state))
+    (let [state (<! (rtc-core/<init-state (state/get-auth-id-token)))
           repo (state/get-current-repo)]
       (<! (full-upload-download-graph/<upload-graph state repo))
       (let [conn (conn/get-db repo false)]
@@ -99,7 +99,7 @@
                  :icon "refresh"
                  :on-click (fn [_]
                              (go
-                               (let [s (or s (<! (rtc-core/<init-state)))
+                               (let [s (or s (<! (rtc-core/<init-state (state/get-auth-id-token))))
                                      graph-list (with-sub-data-from-ws s
                                                   (<! (ws/<send! s {:req-id (get-req-id)
                                                                     :action "list-graphs"}))
