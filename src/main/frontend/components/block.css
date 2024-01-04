@@ -296,11 +296,9 @@
 }
 
 .page-ref {
-  --lx-text-override: var(--ls-link-ref-text-color);
   @apply text-accent-11;
 
   &:hover {
-    --lx-text-override: var(--ls-link-ref-text-hover-color);
     @apply text-accent-12;
   }
 }

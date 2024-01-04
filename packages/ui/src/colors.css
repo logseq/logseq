@@ -12,6 +12,21 @@ html {
     --lx-accent-10: var(--rx-logseq-10);
     --lx-accent-11: var(--rx-logseq-11);
     --lx-accent-12: var(--rx-logseq-12);
+
+    &[data-theme=light] {
+      --lx-gray-01: var(--rx-gray-01);
+      --lx-gray-02: var(--rx-gray-02);
+      --lx-gray-03: var(--rx-gray-03);
+      --lx-gray-04: var(--rx-gray-04);
+      --lx-gray-05: var(--rx-gray-05);
+      --lx-gray-06: var(--rx-gray-06);
+      --lx-gray-07: var(--rx-gray-07);
+      --lx-gray-08: var(--rx-gray-08);
+      --lx-gray-09: var(--rx-gray-09);
+      --lx-gray-10: var(--rx-gray-10);
+      --lx-gray-11: var(--rx-gray-11);
+      --lx-gray-12: var(--rx-gray-12);
+    }
   }
 
   &[data-color=tomato] {
