@@ -42,6 +42,7 @@
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
@@ -345,6 +346,9 @@
 
 (defmethod handle :page/create [[_ page-name opts]]
   (page-handler/create! page-name opts))
+
+(defmethod handle :page/deleted [[_ repo page-name file-path]]
+  (page-common-handler/after-page-deleted! repo page-name file-path))
 
 (defmethod handle :page/create-today-journal [[_ _repo]]
   (p/let [_ (page-handler/create-today-journal!)]

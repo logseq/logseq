@@ -107,7 +107,7 @@
                 (when dir-exists?
                   (when-let [page-name (db/get-file-page path)]
                     (println "Delete page: " page-name ", file path: " path ".")
-                    (page-handler/delete! page-name #() :delete-file? false))))
+                    (page-handler/delete! page-name #()))))
 
           ;; global config handling
               (and (= "change" type)

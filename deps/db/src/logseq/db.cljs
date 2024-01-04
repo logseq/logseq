@@ -392,3 +392,62 @@
 (defn new-block-id
   []
   (d/squuid))
+
+(defn get-tag-blocks
+  [db tag-name]
+  (d/q '[:find [?b ...]
+         :in $ ?tag
+         :where
+         [?e :block/name ?tag]
+         [?b :block/tags ?e]]
+       db
+       (common-util/page-name-sanity-lc tag-name)))
+
+(defn get-classes-with-property
+  "Get classes which have given property as a class property"
+  [db property-uuid]
+  (d/q
+   '[:find [?b ...]
+     :in $ ?property-uuid
+     :where
+     [?b :block/schema ?schema]
+     [(get ?schema :properties) ?schema-properties*]
+     [(set ?schema-properties*) ?schema-properties]
+     [(contains? ?schema-properties ?property-uuid)]]
+   db
+   property-uuid))
+
+(defn get-block-property-values
+  "Get blocks which have this property."
+  [db property-uuid]
+  (d/q
+   '[:find ?b ?v
+     :in $ ?property-uuid
+     :where
+     [?b :block/properties ?p]
+     [(get ?p ?property-uuid) ?v]
+     [(some? ?v)]]
+   db
+   property-uuid))
+
+(defn get-alias-source-page
+  "return the source page (page-name) of an alias"
+  [db alias]
+  (let [alias (common-util/page-name-sanity-lc alias)
+        pages (d/q '[:find [(pull ?p [*]) ...]
+                     :in $ ?alias
+                     :where
+                     [?a :block/name ?alias]
+                     [?p :block/alias ?a]]
+                   db
+                   alias)]
+      ;; may be a case that a user added same alias into multiple pages.
+      ;; only return the first result for idiot-proof
+    (when (seq pages)
+      (first pages))))
+
+(defn get-page-file
+  [db page-name]
+  (some-> (or (d/entity db [:block/name page-name])
+              (d/entity db [:block/original-name page-name]))
+          :block/file))

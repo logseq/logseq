@@ -52,6 +52,11 @@
         repo (state/get-current-repo)
         tx-report {:tx-meta tx-meta
                    :tx-data tx-data}]
+
+    (when-let [file-path (and (= (:outliner-op tx-meta) :delete-page)
+                              (:file-path tx-meta))]
+      (state/pub-event! [:page/deleted repo (:deleted-page tx-meta) file-path]))
+
     (when-not (or from-disk? new-graph?)
       (try
         (reset-editing-block-content! tx-data tx-meta)
