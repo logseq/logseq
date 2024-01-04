@@ -13,7 +13,8 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.config :as config]
             [frontend.fs :as fs]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.handler.block :as block-handler]))
 
 (defn create!
   "Create page. Has the following options:
@@ -37,6 +38,8 @@
      (when-let [page-name (worker-page/create! repo conn config title options)]
        (when redirect?
          (route-handler/redirect-to-page! page-name))
+       (when-let [first-block (first (:block/_left (db/entity [:block/name page-name])))]
+         (block-handler/edit-block! first-block :max nil))
        page-name))))
 
 ;; favorite fns

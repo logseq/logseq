@@ -53,9 +53,8 @@
         tx-report {:tx-meta tx-meta
                    :tx-data tx-data}]
 
-    (when-let [file-path (and (= (:outliner-op tx-meta) :delete-page)
-                              (:file-path tx-meta))]
-      (state/pub-event! [:page/deleted repo (:deleted-page tx-meta) file-path]))
+    (when (= (:outliner-op tx-meta) :delete-page)
+      (state/pub-event! [:page/deleted repo (:deleted-page tx-meta) (:file-path tx-meta)]))
 
     (when-not (or from-disk? new-graph?)
       (try

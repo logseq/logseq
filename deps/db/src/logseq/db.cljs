@@ -441,7 +441,7 @@
                      [?p :block/alias ?a]]
                    db
                    alias)]
-      ;; may be a case that a user added same alias into multiple pages.
+    ;; may be a case that a user added same alias into multiple pages.
       ;; only return the first result for idiot-proof
     (when (seq pages)
       (first pages))))
