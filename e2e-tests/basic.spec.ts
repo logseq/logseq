@@ -299,8 +299,8 @@ test('Scheduled date picker should point to the already specified Date #6985', a
   // Open date picker
   await page.click('a.opacity-80')
   await page.waitForTimeout(500)
-  expect(page.locator('text=May 2000')).toBeVisible()
-  expect(page.locator('td:has-text("6").active')).toBeVisible()
+  await expect(page.locator('text=May 2000')).toBeVisible()
+  await expect(page.locator('td:has-text("6").active')).toBeVisible()
 
   // Close date picker
   await page.click('a.opacity-80')
@@ -325,10 +325,10 @@ test('Opening a second datepicker should close the first one #7341', async ({ pa
   await page.waitForTimeout(50)
   await page.click('a:has-text("2000-05-06 Sat").opacity-80')
   await page.waitForTimeout(50)
-  expect(page.locator('text=May 2000')).toBeVisible()
-  expect(page.locator('td:has-text("6").active')).toBeVisible()
-  expect(page.locator('text=June 2000')).not.toBeVisible()
-  expect(page.locator('td:has-text("7").active')).not.toBeVisible()
+  await expect(page.locator('text=May 2000')).toBeVisible()
+  await expect(page.locator('td:has-text("6").active')).toBeVisible()
+  await expect(page.locator('text=June 2000')).not.toBeVisible()
+  await expect(page.locator('td:has-text("7").active')).not.toBeVisible()
 
   // Close date picker
   await page.click('a:has-text("2000-05-06 Sat").opacity-80')
