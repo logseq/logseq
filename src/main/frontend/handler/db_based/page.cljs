@@ -6,7 +6,6 @@
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.util :as util]
-            [frontend.handler.ui :as ui-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [logseq.outliner.core :as outliner-core]
@@ -65,13 +64,14 @@
   (when (and (db/page-exists? from-page-name)
              (db/page-exists? to-page-name)
              (not= from-page-name to-page-name))
-    (let [to-page (db/entity [:block/name to-page-name])
+    (let [conn (db/get-db false)
+          to-page (db/entity [:block/name to-page-name])
           to-id (:db/id to-page)
           from-page (db/entity [:block/name from-page-name])
           from-id (:db/id from-page)
           from-first-child (some->> (db/pull from-id)
-                                    (outliner-core/block (db/get-db))
-                                    (otree/-get-down (db/get-db false))
+                                    (outliner-core/block @conn)
+                                    (#(otree/-get-down % conn))
                                     (outliner-core/get-data))
           to-last-direct-child-id (model/get-block-last-direct-child-id (db/get-db) to-id)
           repo (state/get-current-repo)
@@ -148,5 +148,4 @@
                                         :uuid (:block/uuid page-e)
                                         :redirect? redirect?
                                         :create-first-block? false
-                                        :persist-op? persist-op?}))
-         (ui-handler/re-render-root!))))))
+                                        :persist-op? persist-op?})))))))

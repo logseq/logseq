@@ -7,7 +7,8 @@
             [frontend.worker.file :as file]
             [logseq.db.frontend.validate :as validate]
             [logseq.db.sqlite.util :as sqlite-util]
-            [frontend.worker.db.fix :as db-fix]))
+            [frontend.worker.db.fix :as db-fix]
+            [logseq.db :as ldb]))
 
 (defn- path-refs-need-recalculated?
   [tx-meta]
@@ -92,8 +93,8 @@
                                     {:db/id db-id
                                      :block/tx-id tx-id})) updated-blocks)
                            (remove nil?))))
-            tx-report' (d/transact! conn replace-tx {:replace? true
-                                                     :pipeline-replace? true})
+            tx-report' (ldb/transact! conn replace-tx {:replace? true
+                                                       :pipeline-replace? true})
             full-tx-data (concat (:tx-data tx-report) fix-tx-data (:tx-data tx-report'))
             final-tx-report (assoc tx-report' :tx-data full-tx-data)
             affected-query-keys (when-not (:importing? context)

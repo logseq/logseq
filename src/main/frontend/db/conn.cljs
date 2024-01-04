@@ -86,12 +86,7 @@
    (transact! repo tx-data nil))
   ([repo tx-data tx-meta]
    (when-let [conn (get-db repo false)]
-     ;; (prn :debug "DB transact:")
-     ;; (frontend.util/pprint {:tx-data tx-data
-     ;;                        :tx-meta tx-meta})
-     (if tx-meta
-       (d/transact! conn (vec tx-data) tx-meta)
-       (d/transact! conn (vec tx-data))))))
+     (ldb/transact! conn tx-data tx-meta))))
 
 (defn start!
   ([repo]

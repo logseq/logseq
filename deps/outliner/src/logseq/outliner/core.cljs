@@ -161,7 +161,7 @@
                page-m (gp-block/page-name->map linked-page (or existing-ref-id true)
                                                db true date-formatter)
                _ (when-not (d/entity db [:block/uuid (:block/uuid page-m)])
-                   (d/transact! conn [page-m]))
+                   (ldb/transact! conn [page-m]))
                merge-tx (let [children (:block/_parent block-entity)
                               page (d/entity db [:block/uuid (:block/uuid page-m)])
                               [target sibling?] (get-last-child-or-self db page)]
@@ -256,8 +256,8 @@
          (if uuid
            uuid
            (let [new-id (ldb/new-block-id)]
-             (d/transact! conn [{:db/id (:db/id data)
-                                 :block/uuid new-id}])
+             (ldb/transact! conn [{:db/id (:db/id data)
+                                   :block/uuid new-id}])
              new-id))))))
 
   (-get-parent-id [this conn]

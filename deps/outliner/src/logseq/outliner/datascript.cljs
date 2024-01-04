@@ -4,7 +4,8 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.property :as gp-property]
             [datascript.core :as d]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [logseq.db :as ldb]))
 
 (defn new-outliner-txs-state [] (atom []))
 
@@ -96,7 +97,7 @@
       ;; (cljs.pprint/pprint txs)
 
       (try
-        (let [tx-report (d/transact! conn txs (assoc tx-meta :outliner/transact? true))]
+        (let [tx-report (ldb/transact! conn txs (assoc tx-meta :outliner/transact? true))]
           (when (fn? after-transact-fn) (after-transact-fn tx-report opts))
           tx-report)
         (catch :default e
