@@ -46,13 +46,7 @@
 
 (defn get-tag-blocks
   [repo tag-name]
-  (d/q '[:find [?b ...]
-         :in $ ?tag
-         :where
-         [?e :block/name ?tag]
-         [?b :block/tags ?e]]
-       (conn/get-db repo)
-       (util/page-name-sanity-lc tag-name)))
+  (ldb/get-tag-blocks (conn/get-db repo) tag-name))
 
 (defn get-all-tagged-pages
   [repo]
@@ -123,30 +117,8 @@
 (defn get-alias-source-page
   "return the source page (page-name) of an alias"
   [repo alias]
-  (when-let [db (and repo (conn/get-db repo))]
-    (let [alias (util/page-name-sanity-lc alias)
-          pages (->>
-                 (d/q '[:find (pull ?p [*])
-                        :in $ ?alias
-                        :where
-                        [?a :block/name ?alias]
-                        [?p :block/alias ?a]]
-                      db
-                      alias)
-                 (db-utils/seq-flatten))]
-      ;; may be a case that a user added same alias into multiple pages.
-      ;; only return the first result for idiot-proof
-      (when (seq pages)
-        (if (config/db-based-graph? repo)
-          ;; Just pick first one. No need to re-confirm query
-          (first pages)
-          (some (fn [page]
-                  (let [aliases (->> (get-in page [:block/properties :alias])
-                                     (map util/page-name-sanity-lc)
-                                     set)]
-                    (when (contains? aliases alias)
-                      page)))
-                pages))))))
+  (when-let [db (conn/get-db repo)]
+    (ldb/get-alias-source-page db alias)))
 
 (defn get-files
   [repo]
@@ -618,9 +590,8 @@ independent of format as format specific heading characters are stripped"
   ([page-name]
    (get-page-file (state/get-current-repo) page-name))
   ([repo page-name]
-   (some-> (or (db-utils/entity repo [:block/name page-name])
-               (db-utils/entity repo [:block/original-name page-name]))
-           :block/file)))
+   (when-let [db (conn/get-db repo)]
+     (ldb/get-page-file db page-name))))
 
 (defn get-block-file-path
   [block]
@@ -983,29 +954,12 @@ independent of format as format specific heading characters are stripped"
 (defn get-block-property-values
   "Get blocks which have this property."
   [property-uuid]
-  (d/q
-   '[:find ?b ?v
-     :in $ ?property-uuid
-     :where
-     [?b :block/properties ?p]
-     [(get ?p ?property-uuid) ?v]
-     [(some? ?v)]]
-   (conn/get-db)
-   property-uuid))
+  (ldb/get-block-property-values (conn/get-db) property-uuid))
 
 (defn get-classes-with-property
   "Get classes which have given property as a class property"
   [property-uuid]
-  (d/q
-   '[:find [?b ...]
-     :in $ ?property-uuid
-     :where
-     [?b :block/schema ?schema]
-     [(get ?schema :properties) ?schema-properties*]
-     [(set ?schema-properties*) ?schema-properties]
-     [(contains? ?schema-properties ?property-uuid)]]
-   (conn/get-db)
-   property-uuid))
+  (ldb/get-classes-with-property (conn/get-db) property-uuid))
 
 (defn get-template-by-name
   [name]
