@@ -5,9 +5,7 @@
             [clojure.set :as set]
             [frontend.config :as config]
             [logseq.graph-parser.property :as gp-property :refer [properties-start properties-end]]
-            [logseq.common.util.page-ref :as page-ref]
             [frontend.format.mldoc :as mldoc]
-            [logseq.graph-parser.text :as text]
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.util.cursor :as cursor]))
@@ -165,21 +163,8 @@
 
 (defn insert-properties
   [format content kvs]
-  (reduce
-   (fn [content [k v]]
-     (let [k (if (string? k)
-               (keyword (-> (string/lower-case k)
-                            (string/replace " " "-")))
-               k)
-           v (if (coll? v)
-               (some->>
-                (seq v)
-                (distinct)
-                (map (fn [item] (page-ref/->page-ref (text/page-ref-un-brackets! item))))
-                (string/join ", "))
-               v)]
-       (insert-property format content k v)))
-   content kvs))
+  (let [repo (state/get-current-repo)]
+    (gp-property/insert-properties repo format content kvs)))
 
 (def remove-property gp-property/remove-property)
 

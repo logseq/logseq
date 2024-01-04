@@ -17,12 +17,15 @@
             [logseq.db.frontend.property :as db-property]
             [datascript.core :as d]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
+            [frontend.worker.handler.page :as worker-page]
+            [frontend.worker.state :as worker-state]
 
             [frontend.db.rtc.const :as rtc-const]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.db.rtc.ws :as ws]
 
             [frontend.handler.page :as page-handler]
+
             [frontend.handler.user :as user]))
 
 
@@ -323,31 +326,32 @@
 
 (defn apply-remote-update-page-ops
   [repo conn date-formatter update-page-ops]
-  (doseq [{:keys [self page-name original-name] :as op-value} update-page-ops]
-    (let [old-page-original-name (:block/original-name (d/entity @conn [:block/uuid self]))
-          exist-page (d/entity @conn [:block/name page-name])]
-      (cond
+  (let [config (worker-state/get-config repo)]
+    (doseq [{:keys [self page-name original-name] :as op-value} update-page-ops]
+      (let [old-page-original-name (:block/original-name (d/entity @conn [:block/uuid self]))
+            exist-page (d/entity @conn [:block/name page-name])
+            create-opts {:create-first-block? false
+                         :uuid self :persist-op? false}]
+        (cond
           ;; same name but different uuid
           ;; remote page has same block/name as local's, but they don't have same block/uuid.
           ;; 1. rename local page's name to '<origin-name>-<ms-epoch>-Conflict'
           ;; 2. create page, name=<origin-name>, uuid=remote-uuid
-        (and exist-page (not= (:block/uuid exist-page) self))
-        (do (page-handler/rename! original-name (common-util/format "%s-%s-CONFLICT" original-name (tc/to-long (t/now))))
-            (page-handler/create! original-name {:redirect? false :create-first-block? false
-                                                 :uuid self :persist-op? false}))
+          (and exist-page (not= (:block/uuid exist-page) self))
+          (do (page-handler/rename! original-name (common-util/format "%s-%s-CONFLICT" original-name (tc/to-long (t/now))))
+              (worker-page/create! repo conn config original-name create-opts))
 
           ;; a client-page has same uuid as remote but different page-names,
           ;; then we need to rename the client-page to remote-page-name
-        (and old-page-original-name (not= old-page-original-name original-name))
-        (page-handler/rename! old-page-original-name original-name false false)
+          (and old-page-original-name (not= old-page-original-name original-name))
+          (page-handler/rename! old-page-original-name original-name false false)
 
           ;; no such page, name=remote-page-name, OR, uuid=remote-block-uuid
           ;; just create-page
-        :else
-        (page-handler/create! original-name {:redirect? false :create-first-block? false
-                                             :uuid self :persist-op? false}))
+          :else
+          (worker-page/create! repo conn config original-name create-opts))
 
-      (update-block-attrs repo conn date-formatter self op-value))))
+        (update-block-attrs repo conn date-formatter self op-value)))))
 
 (defn apply-remote-remove-page-ops
   [conn remove-page-ops]
@@ -832,6 +836,8 @@
   {:*rtc-state (atom :closed :validator rtc-state-validator)
    :*graph-uuid (atom nil)
    :*repo (atom nil)
+   :*db-conn (atom nil)
+   :*date-formatter (atom nil)
    :data-from-ws-chan data-from-ws-chan
    :data-from-ws-pub (async/pub data-from-ws-chan :req-id)
    :toggle-auto-push-client-ops-chan (chan (async/sliding-buffer 1))

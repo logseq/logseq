@@ -97,6 +97,13 @@
    (:date-formatter config)
    "MMM do, yyyy"))
 
+(defn get-preferred-format
+  [config]
+  (or
+   (when-let [fmt (:preferred-format config)]
+     (keyword (string/lower-case (name fmt))))
+   :markdown))
+
 (defn get-block-pattern
   [format]
   (let [format' (keyword format)]

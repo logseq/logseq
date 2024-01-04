@@ -9,178 +9,44 @@
             [frontend.db.utils :as db-utils]
             [frontend.format.block :as block]
             [frontend.fs :as fs]
-            [frontend.handler.common :as common-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-based.editor :as file-editor-handler]
-            [frontend.handler.file-based.page-property :as file-page-property]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.util.fs :as fs-util]
             [frontend.util :as util]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.graph-parser.block :as gp-block]
             [logseq.common.util :as common-util]
             [logseq.graph-parser.text :as text]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             [promesa.core :as p]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.worker.handler.page :as worker-page]))
 
-;; create! and its helpers
-;; =======================
-(defn- build-title [page]
-  ;; Don't wrap `\"` anymore, as title property is not effected by `,` now
-  ;; The previous extract behavior isn't unwrapping the `'"` either. So no need
-  ;; to maintain the compatibility.
-  (:block/original-name page))
-
-(defn- default-properties-block
-  ([title format page]
-   (default-properties-block title format page {}))
-  ([title format page properties]
-   (let [repo (state/get-current-repo)
-         db-based? (config/db-based-graph? repo)]
-     (when-not db-based?
-       (let [p (common-handler/get-page-default-properties title)
-             ps (merge p properties)
-             content (if db-based?
-                       ""
-                       (file-page-property/insert-properties format "" ps))
-             refs (gp-block/get-page-refs-from-properties properties
-                                                          (db/get-db repo)
-                                                          (state/get-date-formatter)
-                                                          (state/get-config))]
-         {:block/uuid (db/new-block-id)
-          :block/refs refs
-          :block/left page
-          :block/format format
-          :block/content content
-          :block/parent page
-          :block/page page
-          :block/pre-block? true
-          :block/properties ps
-          :block/properties-order (keys ps)})))))
-
-(defn- create-title-property?
-  [repo journal? page-name]
-  (and (not (config/db-based-graph? repo))
-       (not journal?)
-       (= (state/get-filename-format) :legacy) ;; reduce title computation
-       (fs-util/create-title-property? page-name)))
-
-(defn- build-page-tx [repo format properties page journal? {:keys [whiteboard? class? tags]}]
-  (when (:block/uuid page)
-    (let [page-entity   [:block/uuid (:block/uuid page)]
-          title         (util/get-page-original-name page)
-          create-title? (create-title-property? repo journal? title)
-          page          (merge page
-                               (when (seq properties) {:block/properties properties})
-                               (when whiteboard? {:block/type "whiteboard"})
-                               (when class? {:block/type "class"})
-                               (when tags {:block/tags (mapv #(hash-map :db/id
-                                                                        (:db/id (db/entity repo [:block/uuid %])))
-                                                             tags)}))
-          page-empty?   (db/page-empty? (state/get-current-repo) (:block/name page))
-          db-based? (config/db-based-graph? (state/get-current-repo))]
-      (cond
-        (not page-empty?)
-        [page]
-
-        (and create-title?
-             (not whiteboard?)
-             (not db-based?))
-        (let [properties-block (default-properties-block (build-title page) format page-entity properties)]
-          [page
-           properties-block])
-
-        (and (seq properties)
-             (not whiteboard?)
-             (not db-based?))
-        [page (file-editor-handler/properties-block repo properties format page-entity)]
-
-        :else
-        [page]))))
-
-;; TODO: Move file graph concerns to file-based-handler ns
 (defn create!
   "Create page. Has the following options:
 
    * :redirect?           - when true, redirect to the created page, otherwise return sanitized page name.
-   * :split-namespace?    - when true, split hierarchical namespace into levels.
    * :create-first-block? - when true, create an empty block if the page is empty.
    * :uuid                - when set, use this uuid instead of generating a new one.
    * :class?              - when true, adds a :block/type 'class'
    * :whiteboard?         - when true, adds a :block/type 'whiteboard'
    * :tags                - tag uuids that are added to :block/tags
    * :persist-op?         - when true, add an update-page op
-   TODO: Add other options"
+   "
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid rename? persist-op? whiteboard? class?]
-           :or   {redirect?           true
-                  create-first-block? true
-                  rename?             false
-                  format              nil
-                  properties          nil
-                  split-namespace?    true
-                  uuid                nil
-                  persist-op?         true}
+  ([title {:keys [redirect?]
+           :or   {redirect? true}
            :as options}]
-   (let [title      (-> (string/trim title)
-                        (text/page-ref-un-brackets!)
-                        ;; remove `#` from tags
-                        (string/replace #"^#+" ""))
-         title      (common-util/remove-boundary-slashes title)
-         page-name  (util/page-name-sanity-lc title)
-         repo       (state/get-current-repo)
-         with-uuid? (if (uuid? uuid) uuid true)] ;; FIXME: prettier validation
-     (when (or (db/page-empty? repo page-name) rename?)
-       (let [pages    (if split-namespace?
-                        (common-util/split-namespace-pages title)
-                        [title])
-             format   (or format (state/get-preferred-format))
-             pages    (map (fn [page]
-                             ;; only apply uuid to the deepest hierarchy of page to create if provided.
-                             (-> (block/page-name->map page (if (= page title) with-uuid? true))
-                                 (assoc :block/format format)))
-                           pages)
-             txs      (->> pages
-                           ;; for namespace pages, only last page need properties
-                           drop-last
-                           (mapcat #(build-page-tx repo format nil % journal? {}))
-                           (remove nil?))
-             txs      (map-indexed (fn [i page]
-                                     (if (zero? i)
-                                       page
-                                       (assoc page :block/namespace
-                                              [:block/uuid (:block/uuid (nth txs (dec i)))])))
-                                   txs)
-             last-txs (build-page-tx repo format properties (last pages) journal? (select-keys options [:whiteboard? :class? :tags]))
-             last-txs (if (seq txs)
-                        (update last-txs 0
-                                (fn [p]
-                                  (assoc p :block/namespace [:block/uuid (:block/uuid (last txs))])))
-                        last-txs)
-             txs      (concat
-                       (when (and rename? uuid)
-                         (when-let [e (db/entity [:block/uuid uuid])]
-                           [[:db/retract (:db/id e) :block/namespace]
-                            [:db/retract (:db/id e) :block/refs]]))
-                       txs
-                       last-txs)]
-         (when (seq txs)
-           (db/transact! repo txs {:persist-op? persist-op?})))
-
-       (when (and create-first-block? (not (or whiteboard? class?)))
-         (when (or
-                (db/page-empty? repo (:db/id (db/entity [:block/name page-name])))
-                (create-title-property? repo journal? page-name))
-           (editor-handler/api-insert-new-block! "" {:page page-name}))))
-
-     (when redirect?
-       (route-handler/redirect-to-page! page-name))
-     page-name)))
+   (let [repo (state/get-current-repo)
+         conn (db/get-db repo false)
+         config (state/get-config repo)]
+     (when-let [page-name (worker-page/create! repo conn config title options)]
+       (when redirect?
+         (route-handler/redirect-to-page! page-name))
+       page-name))))
 
 ;; favorite fns
 ;; ============
@@ -293,7 +159,7 @@
 (defn delete!
   "Deletes a page and then either calls the ok-handler or the error-handler if unable to delete"
   [page-name ok-handler & {:keys [delete-file? redirect-to-home? persist-op? error-handler]
-                           :or {delete-file? true
+                                                                                                                                                            :or {delete-file? true
                                 redirect-to-home? true
                                 persist-op? true
                                 error-handler (fn [{:keys [msg]}] (log/error :msg msg))}}]
@@ -332,9 +198,8 @@
 
             (unfavorite-page! page-name)
 
-            (when redirect-to-home? (route-handler/redirect-to-home!))
-
             (when (fn? ok-handler) (ok-handler))
+            (when redirect-to-home? (route-handler/redirect-to-home!))
             (ui-handler/re-render-root!)))))))
 
 

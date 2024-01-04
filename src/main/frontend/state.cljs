@@ -454,10 +454,8 @@ should be done through this fn in order to get global config and config defaults
   ([repo-url]
    (keyword
      (or
-       (when-let [fmt (:preferred-format (get-config repo-url))]
-         (string/lower-case (name fmt)))
-
-       (get-in @state [:me :preferred_format] "markdown")))))
+      (common-config/get-preferred-format (get-config repo-url))
+      (get-in @state [:me :preferred_format] "markdown")))))
 
 (defn markdown?
   []

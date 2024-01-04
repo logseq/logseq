@@ -5,7 +5,8 @@
             [clojure.set :as set]
             [goog.string :as gstring]
             [goog.string.format]
-            [logseq.graph-parser.mldoc :as gp-mldoc]))
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.common.util.page-ref :as page-ref]))
 
 (def colons "Property delimiter for markdown mode" "::")
 (defn colons-org
@@ -330,3 +331,21 @@
 
     :else
     content))
+
+(defn insert-properties
+  [repo format content kvs]
+  (reduce
+   (fn [content [k v]]
+     (let [k (if (string? k)
+               (keyword (-> (string/lower-case k)
+                            (string/replace " " "-")))
+               k)
+           v (if (coll? v)
+               (some->>
+                (seq v)
+                (distinct)
+                (map (fn [item] (page-ref/->page-ref (page-ref/page-ref-un-brackets! item))))
+                (string/join ", "))
+               v)]
+       (insert-property repo format content k v)))
+   content kvs))
