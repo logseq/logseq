@@ -5,11 +5,15 @@
             [frontend.components.class :as class-component]
             [frontend.components.property :as property-component]
             [frontend.components.property.value :as pv]
+            [frontend.components.icon :as icon-component]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.db-based.property :as db-property-handler]
+            [frontend.handler.property.util :as pu]
+            [frontend.handler.db-based.property.util :as db-pu]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.state :as state]
             [rum.core :as rum]))
 
 (rum/defc page-properties < rum/reactive
@@ -82,6 +86,21 @@
                                                   :page-configure? false
                                                   :class-schema? false})])]))])))
 
+(rum/defc icon-row < rum/reactive
+  [page]
+  [:div.grid.grid-cols-5.gap-1.items-center.leading-8
+   [:label.col-span-2 "Icon:"]
+   (let [icon-value (pu/get-property page :icon)]
+     [:div.col-span-3
+      (icon-component/icon-picker icon-value
+                                  {:disabled? config/publishing?
+                                   :on-chosen (fn [_e icon]
+                                                (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
+                                                  (db-property-handler/update-property!
+                                                   (state/get-current-repo)
+                                                   (:block/uuid page)
+                                                   {:properties {icon-property-id icon}})))})])])
+
 (rum/defcs page-configure-inner <
   (rum/local false ::show-page-properties?)
   {:will-unmount (fn [state]
@@ -101,9 +120,10 @@
       (cond
         (not class-or-property?)
         (when (and (not class?)
-                   (not property?)
-                   (not (db-property-handler/block-has-viewable-properties? page)))
-          (page-properties page page-opts))
+                   (not property?))
+          [:<>
+           (icon-row page)
+           (page-properties page page-opts)])
 
         @*show-page-properties?
         (page-properties page page-opts)
@@ -112,6 +132,8 @@
         [:<>
          (when class?
            (class-component/configure page))
+         (when class?
+           (icon-row page))
          (when class?
            (page-properties page page-opts))
          (when (and property? (not class?))
