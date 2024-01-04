@@ -17,6 +17,10 @@ html {
     }
   }
 
+  div[data-radix-popper-content-wrapper] div[role=menu] {
+    background-color: var(--lx-gray-03, hsl(var(--popover)));
+  }
+
   &:not([data-color=logseq]) {
   }
 
