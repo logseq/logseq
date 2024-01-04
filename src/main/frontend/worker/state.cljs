@@ -3,7 +3,10 @@
   (:require [logseq.common.util :as common-util]))
 
 (defonce *state (atom {:db/latest-transact-time {}
-                       :worker/context {}}))
+                       :worker/context {}
+
+                       ;; FIXME load graph config when fetch-initial-data
+                       :config {}}))
 
 (defonce *sqlite (atom nil))
 ;; repo -> {:db conn :search conn}
@@ -50,3 +53,7 @@
 (defn set-context!
   [context]
   (swap! *state assoc :worker/context context))
+
+(defn get-config
+  [repo]
+  (get-in @*state [:config repo]))
