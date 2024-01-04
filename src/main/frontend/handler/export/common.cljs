@@ -605,6 +605,19 @@
       ;; else
       [inline-ast])))
 
+(defn remove-prefix-spaces-in-Plain
+  ":mapcat-fns-on-inline-ast"
+  [inline-ast]
+  (let [[ast-type ast-content] inline-ast]
+    (case ast-type
+      "Plain"
+      (let [content (string/triml ast-content)]
+        (if (empty? content)
+          []
+          [["Plain" content]]))
+      ;; else
+      [inline-ast])))
+
 ;;; inline transformers (ends)
 
 ;;; walk on block-ast, apply inline transformers
