@@ -9,7 +9,7 @@
             [frontend.components.query :as query]
             [frontend.components.reference :as reference]
             [frontend.components.scheduled-deadlines :as scheduled]
-            [frontend.components.property :as property-component]
+            [frontend.components.icon :as icon-component]
             [frontend.components.property.value :as pv]
             [frontend.components.db-based.page :as db-page]
             [frontend.handler.property.util :as pu]
@@ -356,12 +356,13 @@
        (when icon
          [:div.page-icon {:on-mouse-down util/stop-propagation}
           (if (and (map? icon) db-based?)
-            (property-component/icon icon {:on-chosen (fn [_e icon]
-                                                        (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-                                                          (db-property-handler/update-property!
-                                                           repo
-                                                           (:block/uuid page)
-                                                           {:properties {icon-property-id icon}})))})
+            (icon-component/icon-picker icon
+                                        {:on-chosen (fn [_e icon]
+                                                      (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
+                                                        (db-property-handler/update-property!
+                                                         repo
+                                                         (:block/uuid page)
+                                                         {:properties {icon-property-id icon}})))})
             icon)])
 
        [:div.flex.flex-1.flex-row.flex-wrap.items-center.gap-4
@@ -421,9 +422,7 @@
            (when (and (empty? (:block/tags page)) @*hover? (not config/publishing?))
              (db-page/page-tags page tags-property *hover? *configuring?))
 
-           (when (or (some #(contains? #{"class" "property"} %) (:block/type page))
-                     (not (db-property-handler/block-has-viewable-properties? page)))
-             (db-page/page-configure page *hover? *configuring?))]])])))
+           (db-page/page-configure page *hover? *configuring?)]])])))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]

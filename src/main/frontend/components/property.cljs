@@ -32,8 +32,6 @@
             [frontend.components.property.util :as components-pu]
             [promesa.core :as p]))
 
-(def icon closed-value/icon)
-
 (defn- create-class-if-not-exists!
   [value]
   (when (string? value)
@@ -161,14 +159,14 @@
        [:label.col-span-1 "Icon:"]
        (let [icon-value (pu/get-property property :icon)]
          [:div.col-span-3
-          (closed-value/icon icon-value
-                             {:disabled? disabled?
-                              :on-chosen (fn [_e icon]
-                                           (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-                                             (db-property-handler/update-property!
-                                              (state/get-current-repo)
-                                              (:block/uuid property)
-                                              {:properties {icon-property-id icon}})))})])]
+          (icon-component/icon-picker icon-value
+                                      {:disabled? disabled?
+                                       :on-chosen (fn [_e icon]
+                                                    (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
+                                                      (db-property-handler/update-property!
+                                                       (state/get-current-repo)
+                                                       (:block/uuid property)
+                                                       {:properties {icon-property-id icon}})))})])]
 
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Schema type:"]
