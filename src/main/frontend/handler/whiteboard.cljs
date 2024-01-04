@@ -27,14 +27,9 @@
   (js->clj obj :keywordize-keys true))
 
 (defn shape->block [shape page-name]
-  (let [properties {(pu/get-pid :ls-type) :whiteboard-shape
-                    (pu/get-pid :logseq.tldraw.shape) shape}
-        block {:block/uuid (if (uuid? (:id shape)) (:id shape) (uuid (:id shape)))
-               :block/page {:block/name (util/page-name-sanity-lc page-name)}
-               :block/parent {:block/name page-name}
-               :block/properties properties}
-        additional-props (gp-whiteboard/with-whiteboard-block-props block page-name)]
-    (merge block additional-props)))
+  (let [repo (state/get-current-repo)
+        db (db/get-db repo)]
+    (gp-whiteboard/shape->block repo db shape page-name)))
 
 (defn- build-shapes
   [page-block blocks]

@@ -2,7 +2,8 @@
   "Whiteboard related parser utilities"
   (:require [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
-            [logseq.common.util.page-ref :as page-ref]))
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn block->shape [block]
   (get-in block [:block/properties :logseq.tldraw.shape]))
@@ -86,3 +87,13 @@
            (when (nil? (:block/parent block)) {:block/parent default-page-ref})
            (when (nil? (:block/format block)) {:block/format :markdown}) ;; TODO: read from config
            {:block/page default-page-ref})))
+
+(defn shape->block [repo db shape page-name]
+  (let [properties {(db-property/get-pid repo db :ls-type) :whiteboard-shape
+                    (db-property/get-pid repo db :logseq.tldraw.shape) shape}
+        block {:block/uuid (if (uuid? (:id shape)) (:id shape) (uuid (:id shape)))
+               :block/page {:block/name (common-util/page-name-sanity-lc page-name)}
+               :block/parent {:block/name page-name}
+               :block/properties properties}
+        additional-props (with-whiteboard-block-props block page-name)]
+    (merge block additional-props)))
