@@ -16,6 +16,7 @@
             [malli.util :as mu]
             [logseq.db.frontend.property :as db-property]
             [datascript.core :as d]
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]
 
             [frontend.db.rtc.const :as rtc-const]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
@@ -23,8 +24,7 @@
 
             [frontend.state :as state]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.user :as user]
-            [frontend.handler.whiteboard :as whiteboard-handler]))
+            [frontend.handler.user :as user]))
 
 
 ;;                     +-------------+
@@ -254,7 +254,7 @@
                        (get properties* shape-property-id))]
         (assert (some? page-name) local-parent)
         (assert (some? shape) properties*)
-        (transact-db! :upsert-whiteboard-block conn [(whiteboard-handler/shape->block shape page-name)])))))
+        (transact-db! :upsert-whiteboard-block conn [(gp-whiteboard/shape->block repo db shape page-name)])))))
 
 (defn- update-block-attrs
   [repo conn block-uuid {:keys [parents properties _content] :as op-value}]
@@ -426,9 +426,9 @@
               update-ops (vals update-ops-map)
               update-page-ops (vals update-page-ops-map)
               remove-page-ops (vals remove-page-ops-map)]
-          (state/set-state! [:rtc/remote-batch-tx-state repo]
-                            {:in-transaction? true
-                             :txs []})
+          ;; (state/set-state! [:rtc/remote-batch-tx-state repo]
+          ;;                   {:in-transaction? true
+          ;;                    :txs []})
           (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn update-page-ops))
           (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn remove-ops))
           (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn sorted-move-ops))
