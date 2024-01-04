@@ -139,7 +139,7 @@
 (def ^:export get_current_graph_templates
   (fn []
     (when-let [repo (state/get-current-repo)]
-      (let [templates (db-async/<get-all-templates repo)]
+      (p/let [templates (db-async/<get-all-templates repo)]
         (some-> templates
                 (update-vals db/pull)
                 (sdk-utils/normalize-keyword-for-json)
