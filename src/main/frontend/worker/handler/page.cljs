@@ -97,18 +97,18 @@
                                       (assoc page :block/namespace
                                              [:block/uuid (:block/uuid (nth txs (dec i)))])))
                                   txs)
-            last-txs (build-page-tx repo conn config date-formatter format properties (last pages) (select-keys options [:whiteboard? :class? :tags]))
-            last-txs (if (seq txs)
-                       (update last-txs 0
+            page-txs (build-page-tx repo conn config date-formatter format properties (last pages) (select-keys options [:whiteboard? :class? :tags]))
+            page-txs (if (seq txs)
+                       (update page-txs 0
                                (fn [p]
                                  (assoc p :block/namespace [:block/uuid (:block/uuid (last txs))])))
-                       last-txs)
+                       page-txs)
             first-block-tx (when (and
                                   create-first-block?
                                   (not (or whiteboard? class?))
                                   (ldb/page-empty? @conn (:db/id (d/entity @conn [:block/name page-name])))
-                                  (seq txs))
-                             (let [page-id [:block/uuid (:block/uuid (last txs))]]
+                                  page-txs)
+                             (let [page-id [:block/uuid (:block/uuid (first page-txs))]]
                                [(sqlite-util/block-with-timestamps
                                  {:block/uuid (ldb/new-block-id)
                                   :block/page page-id
@@ -122,12 +122,11 @@
                           [[:db/retract (:db/id e) :block/namespace]
                            [:db/retract (:db/id e) :block/refs]]))
                       txs
-                      last-txs
+                      page-txs
                       first-block-tx)]
         (when (seq txs)
           (d/transact! conn txs {:persist-op? persist-op?})
           page-name)))))
-
 
 (defn db-refs->page
   "Replace [[page name]] with page name"
@@ -176,13 +175,13 @@
   (try
     (cond
       (and (contains? (:block/type page) "class")
-           (seq (ldb/get-tag-blocks conn (:block/name page))))
+           (seq (ldb/get-tag-blocks @conn (:block/name page))))
       {:msg "Page content deleted but unable to delete this page because blocks are tagged with this page"}
 
       (contains? (:block/type page) "property")
-      (cond (seq (ldb/get-classes-with-property conn (:block/uuid page)))
+      (cond (seq (ldb/get-classes-with-property @conn (:block/uuid page)))
             {:msg "Page content deleted but unable to delete this page because classes use this property"}
-            (seq (ldb/get-block-property-values conn (:block/uuid page)))
+            (seq (ldb/get-block-property-values @conn (:block/uuid page)))
             {:msg "Page content deleted but unable to delete this page because blocks use this property"})
 
       (or (seq (:block/_refs page)) (contains? (:block/type page) "hidden"))
@@ -219,7 +218,7 @@
               ;; then just remove some attrs of this entity instead of retractEntity
               delete-page-tx (cond
                                (not (:block/_namespace page))
-                               (if (ldb/get-alias-source-page conn page-name)
+                               (if (ldb/get-alias-source-page @conn page-name)
                                  (when-let [id (:db/id (d/entity @conn [:block/name page-name]))]
                                    (mapv (fn [attribute]
                                            [:db/retract id attribute])
