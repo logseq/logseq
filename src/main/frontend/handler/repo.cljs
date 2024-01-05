@@ -558,8 +558,9 @@
            _ (op-mem-layer/<init-load-from-indexeddb! full-graph-name)
            _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name})
-           initial-data (sqlite-create-graph/build-db-initial-data config/config-default-content)
-           _ (db/transact! full-graph-name initial-data)
+          ;; TODO: Enable initial-data without it being invalid
+          ;;  initial-data (sqlite-create-graph/build-db-initial-data config/config-default-content)
+          ;;  _ (db/transact! full-graph-name initial-data)
            _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
           ;; TODO: handle global graph
            _ (state/pub-event! [:init/commands])]
