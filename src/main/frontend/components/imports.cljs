@@ -4,6 +4,7 @@
             [clojure.core.async :as async]
             [clojure.edn :as edn]
             [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
@@ -20,7 +21,6 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.fs :as fs-util]
-            [frontend.util.text :as text-util]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [logseq.common.path :as path]
@@ -211,7 +211,8 @@
       (p/then (fn [content]
                 (when content
                   (p/do!
-                   (db-editor-handler/save-file! "logseq/config.edn" content))
+                   (db-editor-handler/save-file! "logseq/config.edn" content)
+                   (db/transact! [{:file/path "logseq/config.edn" :block/uuid (d/squuid)}]))
                   (edn/read-string content))))))
 
 

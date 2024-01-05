@@ -8,7 +8,8 @@
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.date-time-util :as date-time-util]
             [logseq.graph-parser.extract :as extract]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn- retract-blocks-tx
   [blocks retain-uuids]
@@ -172,7 +173,8 @@ Options available:
                                   (seq))
                  ;; To prevent "unique constraint" on datascript
               block-ids (set/union (set block-ids) (set block-refs-ids))
-              pages (extract/with-ref-pages pages blocks)
+              pages (map #(-> % sqlite-util/block-with-timestamps (assoc :block/format :markdown))
+                         (extract/with-ref-pages pages blocks))
 
               ;; post-handling
               whiteboard-pages (->> pages
@@ -187,19 +189,20 @@ Options available:
                             (into {} (remove (comp pred key) m)))
               blocks (map (fn [block]
                             (prn ::block block)
-                            (cond
-                              (:block/pre-block? block)
-                              block
+                            (sqlite-util/block-with-timestamps
+                             (cond
+                               (:block/pre-block? block)
+                               block
 
-                              :else
-                              (update-in block [:block/properties]
-                                         (fn [props]
-                                           (-> props
-                                               (update-keys (fn [k]
-                                                              (if-let [new-key (get-pid @conn k)]
-                                                                new-key
-                                                                k)))
-                                               (remove-keys keyword?))))))
+                               :else
+                               (update-in block [:block/properties]
+                                          (fn [props]
+                                            (-> props
+                                                (update-keys (fn [k]
+                                                               (if-let [new-key (get-pid @conn k)]
+                                                                 new-key
+                                                                 k)))
+                                                (remove-keys keyword?)))))))
                           blocks)
 
 
