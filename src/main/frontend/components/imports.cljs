@@ -246,9 +246,6 @@
   [ev _opts]
   (let [^js file-objs (array-seq (.-files (.-target ev)))
         original-graph-name (string/replace (.-webkitRelativePath (first file-objs)) #"/.*" "")
-        all-graphs (->> (state/get-repos)
-                        (map #(text-util/get-graph-name-from-path (:url %)))
-                        set)
         import-graph-fn (fn [graph-name]
                           (let [_ (doseq [^js file file-objs]
                                     (set! (.-rpath file) (path/trim-dir-prefix original-graph-name (.-webkitRelativePath file))))
@@ -279,10 +276,13 @@
      #(confirm-graph-name-dialog original-graph-name
                                  (fn [graph-name]
                                    (cond
+                                     (repo/invalid-graph-name? graph-name)
+                                     (repo/invalid-graph-name-warning)
+
                                      (string/blank? graph-name)
                                      (notification/show! "Empty graph name." :error)
 
-                                     (contains? all-graphs graph-name)
+                                     (repo-handler/graph-already-exists? graph-name)
                                      (notification/show! "Please specify another name as another graph with this name already exists!" :error)
 
                                      :else
