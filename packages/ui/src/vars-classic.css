@@ -15,9 +15,9 @@
   --ls-left-sidebar-sm-width: 74vw;
   --ls-left-sidebar-nav-btn-size: 38px;
   --ls-native-kb-height: 0px;
-  --ls-error-color: var(--color-red-500);
-  --ls-warning-color: var(--color-orange-500);
-  --ls-success-color: var(--color-green-500);
+  --ls-error-color: var(--color-red-600);
+  --ls-warning-color: var(--color-orange-600);
+  --ls-success-color: var(--color-green-600);
   --ls-highlight-color-default: var(--ls-secondary-background-color);
 }
 
@@ -160,7 +160,7 @@ html[data-theme='light'] {
   --ls-highlight-color-blue: var(--color-blue-100);
   --ls-highlight-color-purple: var(--color-purple-100);
   --ls-highlight-color-pink: var(--color-pink-100);
-  --ls-error-text-color: var(--color-red-600);
+  --ls-error-text-color: var(--color-red-700);
   --ls-error-background-color: var(--color-red-100);
   --ls-warning-text-color: var(--color-yellow-700);
   --ls-warning-background-color: var(--color-yellow-100);
