@@ -409,7 +409,7 @@ button.menu:focus {
 }
 
 .menu-link {
-  @apply text-popover-foreground/90 select-none hover:text-popover-foreground/100;
+  @apply text-popover-foreground/75 select-none hover:text-popover-foreground/100;
   @apply text-sm px-2 py-1.5 mx-1 hover:rounded transition-opacity duration-150;
 }
 

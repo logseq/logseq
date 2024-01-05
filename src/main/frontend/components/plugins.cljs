@@ -1043,7 +1043,7 @@
           {:title   key
            :item    [:div.flex.items-center.item-wrap
                      (ui-item-renderer pid :toolbar (assoc opts :prefix "pl-" :key (str "pl-" key)))
-                     [:span.opacity-80 {:style {:padding-left "2px"}} key]
+                     [:span {:style {:padding-left "2px"}} key]
                      [:span.pin.flex.items-center.opacity-60
                       {:class (util/classnames [{:pinned pinned?}])}
                       (ui/icon (if pinned? "pinned" "pin"))]]

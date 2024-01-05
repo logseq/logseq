@@ -861,11 +861,10 @@
       }
 
       .menu-link {
-        padding: 3px 5px;
+        @apply px-[5px] py-1.5;
 
         &.extra-item {
-          padding: 4px 15px;
-          opacity: .8;
+          @apply opacity-80 px-4 py-1.5;
 
           .title-wrap {
             margin-left: 8px !important;
@@ -879,7 +878,7 @@
 
       .item-wrap {
         padding-right: 28px;
-        font-size: 13px;
+        font-size: 14px;
         position: relative;
 
         div[data-injected-ui] :is(.ti, .tie) {
@@ -898,6 +897,16 @@
         &.pinned {
           color: var(--ls-link-ref-text-color);
           opacity: 90;
+        }
+      }
+
+      .menu-links-wrapper  {
+        a {
+          @apply !text-popover-foreground/80;
+
+          &.button {
+            @apply h-auto hover:bg-transparent scale-95;
+          }
         }
       }
     }

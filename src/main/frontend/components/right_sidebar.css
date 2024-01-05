@@ -26,13 +26,16 @@ html[data-theme=light] a.toggle:hover {
   color: var(--ls-primary-text-color);
 }
 
-.cp__header a, .cp__header button {
-    opacity: 1;
-    color: or(--ls-header-button-text-color, --lx-gray-11, --ls-header-button-background);
-}
+.cp__header {
+  > .r > div:not(.ui__dropdown-trigger) a, button {
+    @apply opacity-100;
 
-.cp__header a:hover, .cp__header button:hover, .cp__right-sidebar-topbar button:hover {
-    color: or(--ls-header-button-text-color-hover, --lx-gray-12, --ls-header-button-background);
+    color: or(--ls-header-button-text-color, --lx-gray-11, --ls-header-button-background);
+
+    &:hover {
+      color: or(--ls-header-button-text-color-hover, --lx-gray-12, --ls-header-button-background);
+    }
+  }
 }
 
 .cp__right-sidebar-topbar {
@@ -45,7 +48,9 @@ html[data-theme=light] a.toggle:hover {
 }
 
 html[data-theme=dark] {
-    .cp__header a, .cp__header button {
-        opacity: 0.7;
+  .cp__header {
+    > .r > div:not(.ui__dropdown-trigger) a, button {
+      @apply opacity-70;
     }
+  }
 }

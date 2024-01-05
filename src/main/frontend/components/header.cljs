@@ -28,7 +28,7 @@
   < {:key-fn #(identity "home-button")}
   []
   (ui/with-shortcut :go/home "left"
-    [:button.button.icon.inline
+    [:button.button.icon.inline.mx-1
      {:title (t :home)
       :on-click #(do
                    (when (mobile-util/native-iphone?)
