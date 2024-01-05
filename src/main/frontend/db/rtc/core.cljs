@@ -743,6 +743,7 @@
       (pos? (op-mem-layer/get-unpushed-block-update-count repo)))))
 
 (defn <loop-for-rtc
+  ":loop-started-ch used to notify that rtc-loop started"
   [state graph-uuid repo & {:keys [loop-started-ch]}]
   {:pre [(state-validator state)
          (some? graph-uuid)
@@ -838,12 +839,12 @@
             (prn ::<get-block-content-versions :ex-message ex-message :ex-data ex-data)
             versions))))))
 
-(defn <query-page-blocks
-  [state page-block-uuid]
-  (go
-    (when (some-> state :*graph-uuid deref)
-      (<! (ws/<send&receive state {:action "query-blocks" :graph-uuid @(:*graph-uuid state)
-                                   :block-uuids [page-block-uuid]})))))
+;; (defn- <query-page-blocks
+;;   [state page-block-uuid]
+;;   (go
+;;     (when (some-> state :*graph-uuid deref)
+;;       (<! (ws/<send&receive state {:action "query-blocks" :graph-uuid @(:*graph-uuid state)
+;;                                    :block-uuids [page-block-uuid]})))))
 
 
 (defn init-state
