@@ -10,7 +10,7 @@
   --ls-z-index-level-5: 99999;
 }
 
-html {
+.visible-scrollbar {
   ::-webkit-scrollbar-thumb {
     background-color: or(--ls-scrollbar-thumb-color, --lx-gray-05, --ls-scrollbar-foreground-color);
   }
@@ -51,8 +51,7 @@ html {
 }
 
 html[data-theme='light'] #app-container {
-  background-color: or(--ls-top-bar-background,
-  --lx-gray-01, --ls-primary-background-color, #fff);
+  background-color: or(--lx-gray-01, --ls-primary-background-color, #fff);
 
   .form-checkbox {
     &:focus {
@@ -70,8 +69,7 @@ html[data-theme='light'] #app-container {
 }
 
 html[data-theme='dark'] #app-container {
-  background-color: or(--ls-top-bar-background,
-  --lx-gray-02, --ls-primary-background-color, #333);
+  background-color: or(--lx-gray-02, --ls-primary-background-color, #333);
 
   input.form-input {
     background: none;
