@@ -6,7 +6,7 @@
     -webkit-overflow-scrolling: touch;
 
     .menu-link {
-      word-break: break-all;
+      @apply break-all rounded;
 
       .has-help {
         display: flex;
@@ -14,20 +14,17 @@
         justify-content: space-between;
 
         small {
-          visibility: visible;
-          cursor: help;
+          @apply cursor-help visible flex;
 
           svg {
-            opacity: .3;
-          }
-
-          &:hover svg {
-            opacity: .9;
+            @apply opacity-30 hover:opacity-90;
           }
         }
       }
 
       &:hover, &.chosen {
+        background-color: or(--lx-gray-05, --ls-menu-hover-color, #f4f5f7);
+
         .has-help small {
           visibility: visible;
         }
@@ -48,9 +45,7 @@
 }
 
 .ui__ac-group-name {
-  @apply p-2 text-xs;
-  color: or(--ls-dropdown-title-color, --lx-gray-11-alpha, --ls-block-ref-link-text-color);
-  background-color: or(--ls-dropdown-title-background, --lx-gray-03);
+  @apply p-2 text-xs text-popover-foreground/20 font-medium;
 }
 
 .search-all #ui__ac-inner {
@@ -113,9 +108,8 @@
   }
 
   &-panel {
-    @apply relative rounded-md shadow-xl border-none;
+    @apply relative rounded-md shadow-lg border border-gray-06 overflow-hidden;
 
-    overflow: hidden;
     background: or(--ls-modal-panel-color, --lx-gray-04, --ls-secondary-background-color);
 
     .panel-content {
@@ -283,10 +277,11 @@ html.is-mobile {
 }
 
 .dropdown-wrapper {
-  background-color: or(--ls-dropdown-background, --lx-gray-03, --ls-primary-background-color, #fff);
-  border: 1px solid or(--ls-dropdown-border-color, --lx-gray-05, --ls-tertiary-background-color);
-  min-width: 12rem;
-  border-radius: 6px;
+  @apply border min-w-[12rem] rounded-lg bg-popovelx overflow-hidden;
+
+  .menu-links-wrapper {
+    @apply border-0;
+  }
 }
 
 .dropdown-caret {

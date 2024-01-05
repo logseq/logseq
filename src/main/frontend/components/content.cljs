@@ -18,6 +18,7 @@
             [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.modules.shortcut.core :as shortcut]
             [logseq.graph-parser.util :as gp-util]

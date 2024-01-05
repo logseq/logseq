@@ -8,6 +8,8 @@ html {
   .ui__select-content {
     --accent: var(--rx-gray-04-hsl);
     --accent-foreground: var(--rx-gray-12-hsl);
+
+    --muted: var(--rx-gray-05-hsl);
   }
 
   .ui__dropdown-menu-item,
@@ -103,6 +105,7 @@ html[data-theme=dark] {
     .ui__context-menu-content,
     .ui__select-content {
       --accent: 190 100% 15%;
+      --muted: 192 100% 13%;
     }
 
     .ui__calendar {

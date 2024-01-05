@@ -96,11 +96,6 @@
         font-size: 13px;
         padding: 6px 20px;
 
-        > div.flex > div {
-          margin: 0 !important;
-          flex: 1;
-        }
-
         &.is-first-placeholder {
           padding: 0 !important;
           user-select: none;

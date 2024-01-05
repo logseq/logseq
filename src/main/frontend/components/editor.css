@@ -43,6 +43,8 @@
 
   &[data-modal-name="commands"],
   &[data-modal-name="select-code-block-mode"] {
+    @apply bg-popovelx border overflow-auto rounded-lg py-1;
+
     @screen sm {
       width: 380px !important;
       max-width: 90vw !important;

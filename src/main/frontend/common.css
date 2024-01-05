@@ -392,16 +392,14 @@ button.menu {
 .menu-link:hover,
 button.pull:hover,
 button.menu:focus {
-  background-color: or(--ls-settings-list-item-hover-background-color, --lx-gray-05, --ls-menu-hover-color, #f4f5f7);
+  background-color: or(--lx-gray-05, --ls-menu-hover-color, #f4f5f7);
 }
 
 .menu-links-wrapper,
 .menu-links-outer {
-  @apply py-2 rounded-md shadow-lg overflow-y-auto;
+  @apply py-2 rounded-lg shadow-lg overflow-y-auto border bg-popovelx min-w-[12rem];
 
   max-height: calc(100vh - 100px) !important;
-  background-color: or(--ls-settings-dropdown-background, --lx-gray-03, --ls-primary-background-color, #fff);
-  min-width: 12rem;
 }
 
 .menu-backdrop {
@@ -411,9 +409,8 @@ button.menu:focus {
 }
 
 .menu-link {
-  background-color: or(--ls-settings-dropdown-link-item-background, --lx-gray-03, --ls-primary-background-color, #fff);
-  color: or(--ls-settings-dropdown-link-text-color, --lx-gray-11, --ls-primary-text-color);
-  user-select: none;
+  @apply text-popover-foreground/90 select-none hover:text-popover-foreground/100;
+  @apply text-sm px-2 py-1.5 mx-1 hover:rounded transition-opacity duration-150;
 }
 
 .menu-separator {

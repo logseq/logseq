@@ -60,12 +60,6 @@ html[data-theme='light'] #app-container {
     }
   }
 
-  .cp__header {
-    a {
-      color: var(--ls-primary-text-color);
-    }
-  }
-
   a.right-sidebar-button {
     color: var(--ls-primary-text-color);
   }

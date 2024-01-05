@@ -279,6 +279,9 @@ module.exports = {
         DEFAULT: 'hsl(var(--popover))',
         foreground: 'hsl(var(--popover-foreground))',
       },
+      popovelx: {
+        DEFAULT: 'var(--lx-gray-03, hsl(var(--popover)))',
+      },
       card: {
         DEFAULT: 'hsl(var(--card))',
         foreground: 'hsl(var(--card-foreground))',

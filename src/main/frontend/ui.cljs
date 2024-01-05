@@ -184,7 +184,7 @@
   (if only-child?
     [:div.menu-link
      (dissoc options :only-child?) child]
-    [:a.flex.justify-between.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
+    [:a.flex.justify-between.menu-link
      (cond-> options
              (true? no-padding?)
              (assoc :class (str class " no-padding"))
