@@ -433,7 +433,7 @@ input::-webkit-inner-spin-button {
     z-index: 4;
     top: 10vh;
     cursor: col-resize;
-    right: 0;;
+    right: 0;
   }
 
   &-hls-text-region {

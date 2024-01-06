@@ -146,6 +146,8 @@ jobs:
           ./gradlew clean
           ./gradlew zipApksForRelease
         working-directory: android
+        env:
+          LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
 
       - name: Sign Android APK
         run: |
