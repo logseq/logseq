@@ -124,7 +124,7 @@
          work (p/do!
                (.createOrOpenDB sqlite repo)
                (.exportDB sqlite repo)
-               (.transact repo blocks-with-page-id nil (state/get-context))
+               (.transact sqlite repo blocks-with-page-id nil (state/get-context))
                (.releaseAccessHandles sqlite repo))]
      (<? (p->c work))
 
