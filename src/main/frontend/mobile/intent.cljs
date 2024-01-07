@@ -95,7 +95,7 @@
                         common-util/page-name-sanity)
           path (node-path/join (config/get-repo-dir (state/get-current-repo))
                                (config/get-pages-directory)
-                               (str (js/encodeURI (fs-util/file-name-sanity title)) (node-path/extname url)))
+                               (str (js/encodeURI (fs-util/file-name-sanity title :markdown)) (node-path/extname url)))
           _ (p/catch
              (.copy Filesystem (clj->js {:from url :to path}))
              (fn [error]

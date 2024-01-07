@@ -64,7 +64,7 @@
 ;; frontend.util.fs         (sanitization only)
 ;; frontend.handler.conversion (both)
 (defn file-name-sanity
-  [title _file-name-format]
+  [title]
   (when (string? title)
     (tri-lb-file-name-sanity title)))
 

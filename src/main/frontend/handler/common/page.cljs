@@ -4,6 +4,7 @@
   is still some file-specific tech debt to remove from create!"
   (:require [clojure.string :as string]
             [frontend.db :as db]
+            [frontend.db.model :as model]
             [frontend.handler.config :as config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.state :as state]
@@ -14,7 +15,8 @@
             [frontend.config :as config]
             [frontend.fs :as fs]
             [promesa.core :as p]
-            [frontend.handler.block :as block-handler]))
+            [frontend.handler.block :as block-handler]
+            [frontend.handler.file-based.recent :as file-recent-handler]))
 
 (defn create!
   "Create page. Has the following options:
@@ -114,7 +116,9 @@
       ;; TODO: move favorite && unfavorite to worker too
     (unfavorite-page! page-name)
 
-    (route-handler/redirect-to-home!)
+    (when (= (common-util/page-name-sanity-lc (state/get-current-page))
+             (common-util/page-name-sanity-lc page-name))
+      (route-handler/redirect-to-home!))
 
     ;; TODO: why need this?
     (ui-handler/re-render-root!)
@@ -123,3 +127,45 @@
       (-> (p/let [exists? (fs/file-exists? repo-dir file-path)]
             (when exists? (fs/unlink! repo (config/get-repo-fpath repo file-path) nil)))
           (p/catch (fn [error] (js/console.error error)))))))
+
+(defn rename-file!
+  "emit file-rename events to :file/rename-event-chan
+   force-fs? - when true, rename file event the db transact is failed."
+  [old-path new-path]
+  (let [repo (state/get-current-repo)]
+    (->
+     (p/let [_ (state/offer-file-rename-event-chan! {:repo repo
+                                                     :old-path old-path
+                                                     :new-path new-path})]
+       (fs/rename! repo old-path new-path))
+     (p/catch (fn [error]
+                (println "file rename failed: " error))))))
+
+(defn after-page-renamed!
+  [repo {:keys [old-name new-name old-path new-path]}]
+  (let [db-based?           (config/db-based-graph? repo)
+        old-page-name       (common-util/page-name-sanity-lc old-name)
+        new-page-name       (common-util/page-name-sanity-lc new-name)
+        page (db/entity [:block/name new-page-name])
+        redirect? (= (common-util/page-name-sanity-lc (state/get-current-page))
+                     (common-util/page-name-sanity-lc old-page-name))]
+    ;; Redirect to the newly renamed page
+    (when redirect?
+      (route-handler/redirect! {:to          (if (model/whiteboard-page? page) :whiteboard :page)
+                                :push        false
+                                :path-params {:name new-page-name}}))
+
+    (when (favorited? old-page-name)
+      (unfavorite-page! old-page-name)
+      (favorite-page! new-page-name))
+    (let [home (get (state/get-config) :default-home {})]
+      (when (= old-page-name (common-util/page-name-sanity-lc (get home :page "")))
+        (config-handler/set-config! :default-home (assoc home :page new-name))))
+
+    (when-not db-based?
+      (file-recent-handler/update-or-add-renamed-page repo old-page-name new-page-name)
+
+      (when (and old-path new-path)
+        (rename-file! old-path new-path)))
+
+    (ui-handler/re-render-root!)))

@@ -123,7 +123,7 @@
           filename (if journal-page?
                      (worker-date/date->file-name journal-title date-formatter)
                      (-> (or (:block/original-name page-block) (:block/name page-block))
-                         (wfu/file-name-sanity nil)))
+                         wfu/file-name-sanity))
           sub-dir (cond
                     journal-page?    (:journals-directory context)
                     whiteboard-page? (:whiteboards-directory context)

@@ -13,7 +13,6 @@
             [frontend.commands :as commands]
             [frontend.components.class :as class-component]
             [frontend.components.cmdk :as cmdk]
-            [frontend.components.conversion :as conversion-component]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
             [frontend.components.file-sync :as file-sync]
@@ -349,6 +348,9 @@
 
 (defmethod handle :page/deleted [[_ repo page-name file-path]]
   (page-common-handler/after-page-deleted! repo page-name file-path))
+
+(defmethod handle :page/renamed [[_ repo tx-meta]]
+  (page-common-handler/after-page-renamed! repo tx-meta))
 
 (defmethod handle :page/create-today-journal [[_ _repo]]
   (p/let [_ (page-handler/create-today-journal!)]
@@ -744,34 +746,6 @@
     (state/update-state! :file/unlinked-dirs (fn [dirs] (disj dirs dir)))
     (when (= dir (config/get-repo-dir repo))
       (fs/watch-dir! dir))))
-
-(defmethod handle :ui/notify-outdated-filename-format [[_ paths]]
-  ;; paths - the affected paths that contains reserved characters
-  (notification/show!
-   [:div
-    [:div.mb-4
-     [:div.font-semibold.mb-4.text-xl "It seems that some of your filenames are in the outdated format."]
-
-     [:div
-      [:p
-       "We suggest you upgrade now to avoid potential bugs."]
-      (when (seq paths)
-        [:p
-         "For example, the files below have reserved characters that can't be synced on some platforms."])]]
-    (ui/button
-     "Update filename format"
-     :aria-label "Update filename format"
-     :on-click (fn []
-                 (notification/clear-all!)
-                 (state/set-modal!
-                  (fn [_] (conversion-component/files-breaking-changed))
-                  {:id :filename-format-panel :center? true})))
-    (when (seq paths)
-      [:ol.my-2
-       (for [path paths]
-         [:li path])])]
-   :warning
-   false))
 
 (defmethod handle :ui/notify-skipped-downloading-files [[_ paths]]
   (notification/show!

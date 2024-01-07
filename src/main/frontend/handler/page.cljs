@@ -16,7 +16,6 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.db-based.page :as db-page-handler]
-            [frontend.handler.file-based.page :as file-page-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as web-nfs]
@@ -74,9 +73,7 @@
   ([old-name new-name] (rename! old-name new-name true))
   ([old-name new-name redirect?] (rename! old-name new-name redirect? true))
   ([old-name new-name redirect? persist-op?]
-   (if (config/db-based-graph? (state/get-current-repo))
-     (db-page-handler/rename! old-name new-name redirect? persist-op?)
-     (file-page-handler/rename! old-name new-name redirect?))))
+   (db-page-handler/rename! old-name new-name redirect? persist-op?)))
 
 (defn reorder-favorites!
   [favorites]

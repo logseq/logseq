@@ -5,7 +5,6 @@
             [frontend.shui :refer [make-shui-context]]
             [frontend.colors :as colors]
             [frontend.components.assets :as assets]
-            [frontend.components.conversion :as conversion-component]
             [frontend.components.file-sync :as fs]
             [frontend.components.plugins :as plugins]
             [frontend.components.svg :as svg]
@@ -348,23 +347,6 @@
                               :stretch    true
                               :action     pick-theme})]))
 
-(defn file-format-row [t preferred-format]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for "preferred_format"}
-    (t :settings-page/preferred-file-format)]
-   [:div.mt-1.sm:mt-0.sm:col-span-2
-    [:div.max-w-lg.rounded-md
-     [:select.form-select.is-small
-      {:value     (name preferred-format)
-       :on-change (fn [e]
-                    (let [format (-> (util/evalue e)
-                                     (string/lower-case)
-                                     keyword)]
-                      (user-handler/set-preferred-format! format)))}
-      (for [format (map name [:org :markdown])]
-        [:option {:key format :value format} (string/capitalize format)])]]]])
-
 (defn date-format-row [t preferred-date-format]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
@@ -646,9 +628,10 @@
   (row-with-button-action
    {:left-label (t :settings-page/filename-format)
     :button-label (t :settings-page/edit-setting)
-    :on-click #(state/set-sub-modal!
-                (fn [_] (conversion-component/files-breaking-changed))
-                {:id :filename-format-panel :center? true})}))
+    ;; :on-click #(state/set-sub-modal!
+    ;;             (fn [_] (conversion-component/files-breaking-changed))
+    ;;             {:id :filename-format-panel :center? true})
+    }))
 
 (rum/defcs native-titlebar-row < rum/reactive
   [state t]
@@ -681,6 +664,23 @@
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))
      (when current-repo (edit-export-css))]))
+
+(defn file-format-row [t preferred-format]
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "preferred_format"}
+    (t :settings-page/preferred-file-format)]
+   [:div.mt-1.sm:mt-0.sm:col-span-2
+    [:div.max-w-lg.rounded-md
+     [:select.form-select.is-small
+      {:value     (name preferred-format)
+       :on-change (fn [e]
+                    (let [format (-> (util/evalue e)
+                                     (string/lower-case)
+                                     keyword)]
+                      (user-handler/set-preferred-format! format)))}
+      (for [format (map name [:org :markdown])]
+        [:option {:key format :value format} (string/capitalize format)])]]]])
 
 (rum/defcs settings-editor < rum/reactive
   [_state current-repo]
@@ -753,10 +753,6 @@
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (when (util/electron?) (auto-chmod-row t))
-     (when (and (util/electron?)
-                (not (config/demo-graph? current-repo))
-                (not (config/db-based-graph? (state/get-current-repo))))
-       (filename-format-row))
      (clear-cache-row t)
 
      (ui/admonition
