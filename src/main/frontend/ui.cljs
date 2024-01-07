@@ -1039,9 +1039,23 @@
 (defn button
   [text & {:keys []
            :as   opts}]
-  (if (map? text)
-    (button-inner nil text)
-    (button-inner text opts)))
+  (let [origin-on-key-down (get opts :on-key-down)
+        class-name (get opts :class)
+        wrapped-on-key-down (if (and
+                                 class-name
+                                 ;; hint: mixins/on-key-down defined in ui/modal
+                                 (string/includes? class-name "ui__modal-enter"))
+                              (fn [e]
+                                (when origin-on-key-down (origin-on-key-down e))
+                                (let [key-code (.-keyCode e)]
+                                  (cond
+                                    ;; enter
+                                    (= key-code 13) (util/stop-propagation e))))
+                              origin-on-key-down)
+        opts (assoc opts :on-key-down wrapped-on-key-down)]
+    (if (map? text)
+      (button-inner nil text)
+      (button-inner text opts))))
 
 (rum/defc point
   ([] (point "bg-red-600" 5 nil))
