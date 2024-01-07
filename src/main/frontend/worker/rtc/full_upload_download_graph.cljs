@@ -11,10 +11,9 @@
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.ws :refer [<send!]]
             [logseq.db.frontend.schema :as db-schema]
-
-            ;; TODO:
-            [frontend.persist-db :as persist-db]
-            [frontend.state :as state]))
+            [frontend.worker.state :as state]
+            [promesa.core :as p]
+            [frontend.worker.util :as worker-util]))
 
 (def transit-r (transit/reader :json))
 
@@ -120,11 +119,16 @@
   (go-try
    (let [{:keys [t blocks]} all-blocks
          blocks* (replace-db-id-with-temp-id blocks)
-         blocks-with-page-id (fill-block-fields blocks*)]
-     (<? (p->c (persist-db/<new repo)))
-     (<? (p->c (persist-db/<transact-data repo blocks-with-page-id nil)))
-     (<? (p->c (persist-db/<release-access-handles repo)))
-     (state/add-repo! {:url repo})
+         blocks-with-page-id (fill-block-fields blocks*)
+         ^js sqlite @state/*sqlite
+         work (p/do!
+               (.createOrOpenDB sqlite repo)
+               (.exportDB sqlite repo)
+               (.transact repo blocks-with-page-id nil (state/get-context))
+               (.releaseAccessHandles sqlite repo))]
+     (<? (p->c work))
+
+     (worker-util/post-message :add-repo (pr-str {:repo repo}))
      (op-mem-layer/update-local-tx! repo t))))
 
 (defn <download-graph

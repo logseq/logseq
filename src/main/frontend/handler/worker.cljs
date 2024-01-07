@@ -3,7 +3,8 @@
   (:require [cljs-bean.core :as bean]
             [frontend.handler.file :as file-handler]
             [frontend.handler.notification :as notification]
-            [clojure.edn :as edn]))
+            [clojure.edn :as edn]
+            [frontend.state :as state]))
 
 (defmulti handle identity)
 
@@ -12,6 +13,9 @@
 
 (defmethod handle :notification [_ data]
   (apply notification/show! (edn/read-string data)))
+
+(defmethod handle :add-repo [_ data]
+  (state/add-repo! {:url (:repo (edn/read-string data))}))
 
 (defmethod handle :default [_ data]
   (prn :debug "Worker data not handled: " data))

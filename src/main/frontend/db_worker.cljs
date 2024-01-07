@@ -262,10 +262,16 @@
    (when repo (state/set-db-latest-tx-time! repo))
    (when-let [conn (state/get-datascript-conn repo)]
      (try
-       (let [tx-data (edn/read-string tx-data)
-             tx-meta (edn/read-string tx-meta)
-             context (edn/read-string context)
-             _ (state/set-context! context)
+       (let [tx-data (if (string? tx-data)
+                       (edn/read-string tx-data)
+                       tx-data)
+             tx-meta (if (string? tx-meta)
+                       (edn/read-string tx-meta)
+                       tx-meta)
+             context (if (string? context)
+                       (edn/read-string context)
+                       context)
+             _ (when context (state/set-context! context))
              tx-meta' (if (or (:from-disk? tx-meta) (:new-graph? tx-meta))
                         tx-meta
                         (assoc tx-meta :skip-store? true))
