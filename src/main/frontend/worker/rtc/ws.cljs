@@ -1,13 +1,12 @@
-(ns frontend.db.rtc.ws
+(ns frontend.worker.rtc.ws
   "Websocket related util-fns"
   (:require-macros
-   [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
+   [frontend.worker.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [cljs-http.client :as http]
             [cljs.core.async :as async :refer [<! chan offer!]]
             [frontend.worker.async-util :include-macros true :refer [<? go-try]]
             [frontend.config :as config]
-            [frontend.db.rtc.const :as rtc-const]
-            [frontend.state :as state]
+            [frontend.worker.rtc.const :as rtc-const]
             [goog.string :as gstring]))
 
 (def WebSocketOPEN (if (= *target* "nodejs")
@@ -17,7 +16,7 @@
 (def ws-addr config/RTC-WS-URL)
 
 (defn ws-listen
-  [token data-from-ws-chan ws-opened-ch]
+  [ws-addr token data-from-ws-chan ws-opened-ch]
   (let [ws (js/WebSocket. (gstring/format ws-addr token))]
     (set! (.-onopen ws) (fn [_e] (async/close! ws-opened-ch)))
     (set! (.-onmessage ws) (fn [e]
@@ -43,8 +42,7 @@
      (when (or (nil? ws)
                (> (.-readyState ws) WebSocketOPEN))
        (let [ws-opened-ch (chan)
-             token (state/get-auth-id-token)
-             ws* (ws-listen token (:data-from-ws-chan state) ws-opened-ch)]
+             ws* (ws-listen ws-addr @(:*token state) (:data-from-ws-chan state) ws-opened-ch)]
          (<! ws-opened-ch)
          (reset! (:*ws state) ws*)
          (when-let [graph-uuid @(:*graph-uuid state)]

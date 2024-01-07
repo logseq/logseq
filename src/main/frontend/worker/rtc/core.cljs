@@ -1,7 +1,7 @@
-(ns frontend.db.rtc.core
+(ns frontend.worker.rtc.core
   "Main ns for rtc related fns"
   (:require-macros
-   [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
+   [frontend.worker.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs.core.async :as async :refer [<! >! chan go go-loop]]
@@ -21,11 +21,9 @@
             [frontend.worker.handler.page.rename :as worker-page-rename]
             [frontend.worker.state :as worker-state]
             [logseq.db :as ldb]
-
-            [frontend.db.rtc.const :as rtc-const]
-            [frontend.db.rtc.op-mem-layer :as op-mem-layer]
-            [frontend.db.rtc.ws :as ws]
-            [frontend.handler.user :as user]))
+            [frontend.worker.rtc.const :as rtc-const]
+            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.worker.rtc.ws :as ws]))
 
 
 ;;                     +-------------+
@@ -46,7 +44,7 @@
 ;;                     |   client    |                     |  indexeddb |
 ;;                     |             |<--------------------+            |
 ;;                     +-------------+                     +------------+
-;;                                frontend.db.rtc.op/op-schema
+;;                                frontend.worker.rtc.op/op-schema
 
 (def state-schema
   "
@@ -136,8 +134,7 @@
     (transact-db! :delete-whiteboard-blocks conn (map :block-uuid whiteboard-block-ops))
 
     (doseq [op other-ops]
-      ;; TODO: use d/entity instead of d/pull
-      (when-let [block (d/pull @conn '[*] [:block/uuid (:block-uuid op)])]
+      (when-let [block (d/entity @conn [:block/uuid (:block-uuid op)])]
         (transact-db! :delete-blocks repo conn date-formatter [block] {:children? false})
         (prn :apply-remote-remove-ops (:block-uuid op))))))
 
@@ -678,7 +675,7 @@
 
 
 (defn- <client-op-update-handler
-  [state]
+  [state token]
   {:pre [(some? @(:*graph-uuid state))
          (some? @(:*repo state))]}
   (go
@@ -731,7 +728,7 @@
       (pos? (op-mem-layer/get-unpushed-block-update-count repo)))))
 
 (defn <loop-for-rtc
-  [state graph-uuid repo conn date-formatter & {:keys [loop-started-ch]}]
+  [state graph-uuid repo conn date-formatter & {:keys [loop-started-ch token]}]
   {:pre [(state-validator state)
          (some? graph-uuid)
          (some? repo)]}
@@ -779,11 +776,9 @@
                   (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))))
 
                 client-op-update
-                (let [maybe-exp (<! (user/<wrap-ensure-id&access-token
-                                     (<! (<client-op-update-handler state))))]
-                  (if (= :expired-token (:anom (ex-data maybe-exp)))
-                    (prn ::<loop-for-rtc "quitting loop" maybe-exp)
-                    (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?)))))
+                ;; FIXME: access token expired
+                (let [_ (<! (<client-op-update-handler state token))]
+                  (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))))
 
                 stop
                 (do (ws/stop @(:*ws state))
@@ -830,12 +825,14 @@
 
 
 (defn init-state
-  [ws data-from-ws-chan]
+  [ws data-from-ws-chan token ws-addr]
   ;; {:post [(m/validate state-schema %)]}
   {:*rtc-state (atom :closed :validator rtc-state-validator)
    :*graph-uuid (atom nil)
    :*repo (atom nil)
    :*db-conn (atom nil)
+   :*ws-addr (atom ws-addr)
+   :*token (atom token)
    :*date-formatter (atom nil)
    :data-from-ws-chan data-from-ws-chan
    :data-from-ws-pub (async/pub data-from-ws-chan :req-id)
@@ -846,12 +843,11 @@
    :*ws (atom ws)})
 
 (defn <init-state
-  [auth-id-token]
+  [auth-id-token ws-addr]
   (go
     (let [data-from-ws-chan (chan (async/sliding-buffer 100))
-          ws-opened-ch (chan)]
-      (<! (user/<wrap-ensure-id&access-token
-           (let [token auth-id-token
-                 ws (ws/ws-listen token data-from-ws-chan ws-opened-ch)]
-             (<! ws-opened-ch)
-             (init-state ws data-from-ws-chan)))))))
+          ws-opened-ch (chan)
+          token auth-id-token
+          ws (ws/ws-listen ws-addr token data-from-ws-chan ws-opened-ch)]
+      (<! ws-opened-ch)
+      (init-state ws data-from-ws-chan token ws-addr))))

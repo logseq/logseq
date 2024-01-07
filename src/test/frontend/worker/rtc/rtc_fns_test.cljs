@@ -1,9 +1,9 @@
-(ns frontend.db.rtc.rtc-fns-test
+(ns frontend.worker.rtc.rtc-fns-test
   (:require [clojure.test :as t :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
-            [frontend.db.rtc.core :as rtc-core]
-            [frontend.db.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.worker.rtc.core :as rtc-core]
+            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.handler.page :as page-handler]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]

@@ -1064,33 +1064,34 @@
       (string/includes? file ".")
       (some-> (common-util/path->file-ext file) string/lower-case))))
 
-(defn get-dir-and-basename
-  [path]
-  (let [parts (string/split path "/")
-        basename (last parts)
-        dir (->> (butlast parts)
-                 string-join-path)]
-    [dir basename]))
+#?(:cljs
+   (defn get-dir-and-basename
+     [path]
+     (let [parts (string/split path "/")
+           basename (last parts)
+           dir (->> (butlast parts)
+                    string-join-path)]
+       [dir basename])))
 
-(defn get-relative-path
-  [current-file-path another-file-path]
-  (let [directories-f #(butlast (string/split % "/"))
-        parts-1 (directories-f current-file-path)
-        parts-2 (directories-f another-file-path)
-        [parts-1 parts-2] (remove-common-preceding parts-1 parts-2)
-        another-file-name (last (string/split another-file-path "/"))]
-    (->> (concat
-          (if (seq parts-1)
-            (repeat (count parts-1) "..")
-            ["."])
-          parts-2
-          [another-file-name])
-         string-join-path)))
+#?(:cljs
+   (defn get-relative-path
+     [current-file-path another-file-path]
+     (let [directories-f #(butlast (string/split % "/"))
+           parts-1 (directories-f current-file-path)
+           parts-2 (directories-f another-file-path)
+           [parts-1 parts-2] (remove-common-preceding parts-1 parts-2)
+           another-file-name (last (string/split another-file-path "/"))]
+       (->> (concat
+             (if (seq parts-1)
+               (repeat (count parts-1) "..")
+               ["."])
+             parts-2
+             [another-file-name])
+            string-join-path))))
 
-#?(:clj
-   (defmacro profile
-     [k & body]
-     `(frontend.worker.util/profile ~k ~@body)))
+(defmacro profile
+  [k & body]
+  `(frontend.worker.util/profile ~k ~@body))
 
 #?(:clj
    (defmacro with-time

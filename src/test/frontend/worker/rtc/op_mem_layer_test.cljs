@@ -1,10 +1,10 @@
-(ns frontend.db.rtc.op-mem-layer-test
+(ns frontend.worker.rtc.op-mem-layer-test
   (:require [cljs.test :as t :refer [deftest is testing]]
             [clojure.core.async :as async :refer [<! go]]
             [cljs.core.async.interop :refer [p->c]]
-            [frontend.db.rtc.idb-keyval-mock :include-macros true :as idb-keyval-mock]
-            [frontend.db.rtc.op-idb-layer :as op-idb-layer]
-            [frontend.db.rtc.op-mem-layer :as op-layer]
+            [frontend.worker.rtc.idb-keyval-mock :include-macros true :as idb-keyval-mock]
+            [frontend.worker.rtc.op-idb-layer :as op-idb-layer]
+            [frontend.worker.rtc.op-mem-layer :as op-layer]
             #_:clj-kondo/ignore ["/frontend/idbkv" :as idb-keyval]
             [frontend.config :as config]))
 

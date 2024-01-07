@@ -1,4 +1,4 @@
-(ns frontend.db.rtc.const
+(ns frontend.worker.rtc.const
   "RTC constants/schema"
   (:require [malli.util :as mu]
             [malli.core :as m]

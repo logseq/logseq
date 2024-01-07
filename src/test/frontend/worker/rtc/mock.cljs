@@ -1,6 +1,6 @@
-(ns frontend.db.rtc.mock
+(ns frontend.worker.rtc.mock
   (:require [clojure.core.async :as async]
-            [frontend.db.rtc.const :as rtc-const]
+            [frontend.worker.rtc.const :as rtc-const]
             [spy.core :as spy]))
 
 ;;; websocket

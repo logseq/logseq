@@ -1,15 +1,15 @@
-(ns frontend.db.rtc.full-upload-download-graph
+(ns frontend.worker.rtc.full-upload-download-graph
   "- upload local graph to remote
   - download remote graph"
-  (:require-macros [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
+  (:require-macros [frontend.worker.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [cljs-http.client :as http]
             [cljs.core.async :as async :refer [<! go]]
             [cljs.core.async.interop :refer [p->c]]
             [cognitect.transit :as transit]
             [datascript.core :as d]
             [frontend.worker.async-util :include-macros true :refer [<? go-try]]
-            [frontend.db.rtc.op-mem-layer :as op-mem-layer]
-            [frontend.db.rtc.ws :refer [<send!]]
+            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.worker.rtc.ws :refer [<send!]]
             [frontend.persist-db :as persist-db]
             [logseq.db.frontend.schema :as db-schema]
             [frontend.state :as state]))

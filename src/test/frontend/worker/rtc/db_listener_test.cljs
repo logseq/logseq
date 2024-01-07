@@ -1,7 +1,7 @@
-(ns frontend.db.rtc.db-listener-test
+(ns frontend.worker.rtc.db-listener-test
   (:require [cljs.test :as t :refer [deftest is testing]]
             [datascript.core :as d]
-            [frontend.db.rtc.db-listener :as subject]
+            [frontend.worker.rtc.db-listener :as subject]
             [logseq.db.frontend.schema :as db-schema]))
 
 

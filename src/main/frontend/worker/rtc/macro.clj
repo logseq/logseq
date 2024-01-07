@@ -1,4 +1,4 @@
-(ns frontend.db.rtc.macro
+(ns frontend.worker.rtc.macro
   "Macros that are used for rtc")
 
 (def ^:private magic-str "YBTFRD")
@@ -19,7 +19,6 @@
          ~@body
          (finally
            (cljs.core.async/unsub data-from-ws-pub# ~req-id-sym ~result-ch-sym))))))
-
 
 (defmacro get-req-id [] (symbol (str magic-str "-req-id")))
 (defmacro get-result-ch [] (symbol (str magic-str "-result-ch")))

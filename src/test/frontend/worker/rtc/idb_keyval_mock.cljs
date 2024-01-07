@@ -1,4 +1,4 @@
-(ns frontend.db.rtc.idb-keyval-mock
+(ns frontend.worker.rtc.idb-keyval-mock
   "Mock fns for frontend/idbkv.js"
   (:refer-clojure :exclude [get set keys])
   (:require [promesa.core :as p]))
