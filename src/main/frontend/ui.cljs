@@ -635,7 +635,8 @@
      (mixins/on-key-down
       state
       {;; enter
-       13 (fn [state _e]
+       13 (fn [state e]
+            (.preventDefault e)
             (some->
              (.querySelector (rum/dom-node state) "button.ui__modal-enter")
              (.click)))})))
