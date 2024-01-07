@@ -335,3 +335,15 @@
 (defn time-ms
   []
   (tc/to-long (t/now)))
+
+(defn get-page-original-name
+  [page]
+  (or (:block/original-name page)
+      (:block/name page)))
+
+(defn string-join-path
+  #_:clj-kondo/ignore
+  "Replace all `strings/join` used to construct paths with this function to reduce lint output.
+  https://github.com/logseq/logseq/pull/8679"
+  [parts]
+  (string/join "/" parts))
