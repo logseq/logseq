@@ -360,6 +360,12 @@
    [this]
    (empty? @file/*writes))
 
+  (sync-app-state
+   [this new-state-str]
+   (let [new-state (edn/read-string new-state-str)]
+     (state/set-new-state! new-state)
+     nil))
+
   (dangerousRemoveAllDbs
    [this repo]
    (p/let [dbs (.listDB this)]

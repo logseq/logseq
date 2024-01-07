@@ -15,7 +15,7 @@
             [clojure.edn :as edn]
             [frontend.handler.worker :as worker-handler]))
 
-(defonce *sqlite (atom nil))
+(defonce *worker (atom nil))
 
 (defn- ask-persist-permission!
   []
@@ -24,6 +24,20 @@
       (js/console.log "Storage will not be cleared unless from explicit user action")
       (js/console.warn "OPFS storage may be cleared by the browser under storage pressure."))))
 
+(defn- sync-app-state!
+  [^js worker]
+  (add-watch state/state
+             :sync-worker-state
+             (fn [_ _ prev current]
+               (let [new-state (cond-> {}
+                                 (not= (:git/current-repo prev)
+                                       (:git/current-repo current))
+                                 (assoc :git/current-repo (:git/current-repo current))
+                                 (not= (:config prev) (:config current))
+                                 (assoc :config (:config current)))]
+                 (when (seq new-state)
+                   (.sync-app-state worker (pr-str new-state)))))))
+
 (defn start-db-worker!
   []
   (when-not (or config/publishing? util/node-test?)
@@ -31,10 +45,15 @@
                        "js/db-worker.js"
                        "/static/js/db-worker.js")
           worker (js/Worker. (str worker-url "?electron=" (util/electron?)))
-          sqlite (Comlink/wrap worker)]
+          wrapped-worker (Comlink/wrap worker)]
       (worker-handler/handle-message! worker)
-      (reset! *sqlite sqlite)
-      (-> (p/let [_ (.init sqlite)]
+      (reset! *worker wrapped-worker)
+      (-> (p/let [_ (.init wrapped-worker)
+                  _ (.sync-app-state wrapped-worker
+                                     (pr-str
+                                      {:git/current-repo (state/get-current-repo)
+                                       :config (:config @state/state)}))]
+            (sync-app-state! wrapped-worker)
             (ask-persist-permission!))
           (p/catch (fn [error]
                      (prn :debug "Can't init SQLite wasm")
@@ -62,26 +81,26 @@
 (defrecord InBrowser []
   protocol/PersistentDB
   (<new [_this repo]
-    (when-let [^js sqlite @*sqlite]
+    (when-let [^js sqlite @*worker]
       (.createOrOpenDB sqlite repo)))
 
   (<list-db [_this]
-    (when-let [^js sqlite @*sqlite]
+    (when-let [^js sqlite @*worker]
       (-> (.listDB sqlite)
           (p/then (fn [result]
                     (bean/->clj result)))
           (p/catch sqlite-error-handler))))
 
   (<unsafe-delete [_this repo]
-    (when-let [^js sqlite @*sqlite]
+    (when-let [^js sqlite @*worker]
       (.unsafeUnlinkDB sqlite repo)))
 
   (<release-access-handles [_this repo]
-    (when-let [^js sqlite @*sqlite]
+    (when-let [^js sqlite @*worker]
       (.releaseAccessHandles sqlite repo)))
 
   (<transact-data [_this repo tx-data tx-meta]
-    (let [^js sqlite @*sqlite]
+    (let [^js sqlite @*worker]
       (when-not (:pipeline-replace? tx-meta) ; from db worker
         (let [tx-meta' (pr-str tx-meta)
               tx-data' (pr-str tx-data)
@@ -106,7 +125,7 @@
             (notification/show! "Latest change was not saved! Please restart the application." :error))))))
 
   (<fetch-initial-data [_this repo _opts]
-    (when-let [^js sqlite @*sqlite]
+    (when-let [^js sqlite @*worker]
       (-> (p/let [db-exists? (.dbExists sqlite repo)
                   disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
                   _ (when disk-db-data
@@ -116,7 +135,7 @@
           (p/catch sqlite-error-handler))))
 
   (<export-db [_this repo opts]
-    (when-let [^js sqlite @*sqlite]
+    (when-let [^js sqlite @*worker]
       (-> (p/let [data (.exportDB sqlite repo)]
             (when data
               (if (:return-data? opts)
@@ -128,7 +147,7 @@
                      (notification/show! [:div (str "SQLiteDB save error: " error)] :error) {})))))
 
   (<import-db [_this repo data]
-    (when-let [^js sqlite @*sqlite]
+    (when-let [^js sqlite @*worker]
       (-> (.importDb sqlite repo data)
           (p/catch (fn [error]
                      (prn :debug :import-db-error repo)
