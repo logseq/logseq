@@ -349,8 +349,8 @@
 (defmethod handle :page/deleted [[_ repo page-name file-path]]
   (page-common-handler/after-page-deleted! repo page-name file-path))
 
-(defmethod handle :page/renamed [[_ repo tx-meta]]
-  (page-common-handler/after-page-renamed! repo tx-meta))
+(defmethod handle :page/renamed [[_ repo data]]
+  (page-common-handler/after-page-renamed! repo data))
 
 (defmethod handle :page/create-today-journal [[_ _repo]]
   (p/let [_ (page-handler/create-today-journal!)]
