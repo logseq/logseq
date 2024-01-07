@@ -183,7 +183,7 @@
    state/set-state! :sync-graph/init? false))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (let [^js sqlite @db-browser/*sqlite]
+  (let [^js sqlite @db-browser/*worker]
     (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite))
             writes-finished? (if (some? writes-finished?) writes-finished? true)]
       (if (or writes-finished? (:sync-graph/init? @state/state))

@@ -5,9 +5,8 @@
 (defonce *state (atom {:db/latest-transact-time {}
                        :worker/context {}
 
-                       ;; FIXME load graph config when fetch-initial-data
                        :config {}
-                       :repo/current nil}))
+                       :git/current-repo nil}))
 
 (defonce *sqlite (atom nil))
 ;; repo -> {:db conn :search conn}
@@ -61,4 +60,9 @@
 
 (defn get-current-repo
   []
-  (:repo/current @*state))
+  (:git/current-repo @*state))
+
+(defn set-new-state!
+  [new-state]
+  (swap! *state (fn [old-state]
+                  (merge old-state new-state))))
