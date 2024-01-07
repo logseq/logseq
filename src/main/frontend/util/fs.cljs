@@ -75,7 +75,9 @@
 
 (def include-reserved-chars? wfu/include-reserved-chars?)
 (def windows-reserved-filebodies wfu/windows-reserved-filebodies)
-(def file-name-sanity wfu/file-name-sanity)
+(defn file-name-sanity
+  [name _format]
+  (wfu/file-name-sanity name))
 
 (defn create-title-property?
   [page-name]
