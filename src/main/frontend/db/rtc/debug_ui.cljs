@@ -61,7 +61,7 @@
   (go
     (let [state (<! (rtc-core/<init-state (state/get-auth-id-token)))
           repo (state/get-current-repo)]
-      (<! (full-upload-download-graph/<upload-graph state repo))
+      (<! (full-upload-download-graph/<upload-graph state repo (conn/get-db repo)))
       (let [conn (conn/get-db repo false)]
         (db-listener/listen-db-to-generate-ops repo conn)))))
 

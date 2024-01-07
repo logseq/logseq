@@ -8,7 +8,6 @@
             [cognitect.transit :as transit]
             [datascript.core :as d]
             [frontend.worker.async-util :include-macros true :refer [<? go-try]]
-            [frontend.db.conn :as conn]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.db.rtc.ws :refer [<send!]]
             [frontend.persist-db :as persist-db]
@@ -18,9 +17,8 @@
 (def transit-r (transit/reader :json))
 
 (defn- export-as-blocks
-  [repo]
-  (let [db (conn/get-db repo)
-        datoms (d/datoms db :eavt)]
+  [db]
+  (let [datoms (d/datoms db :eavt)]
     (->> datoms
          (partition-by :e)
          (keep (fn [datoms]
@@ -38,12 +36,12 @@
 
 (defn <upload-graph
   "Upload current repo to remote, return remote {:req-id xxx :graph-uuid <new-remote-graph-uuid>}"
-  [state repo]
+  [state repo db]
   (go
     (let [{:keys [url key all-blocks-str]}
           (with-sub-data-from-ws state
             (<! (<send! state {:req-id (get-req-id) :action "presign-put-temp-s3-obj"}))
-            (let [all-blocks (export-as-blocks repo)
+            (let [all-blocks (export-as-blocks db)
                   all-blocks-str (transit/write (transit/writer :json) all-blocks)]
               (merge (<! (get-result-ch)) {:all-blocks-str all-blocks-str})))]
       (<! (http/put url {:body all-blocks-str}))
