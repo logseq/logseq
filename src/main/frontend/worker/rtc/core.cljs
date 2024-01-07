@@ -831,7 +831,7 @@
    :*graph-uuid (atom nil)
    :*repo (atom nil)
    :*db-conn (atom nil)
-   :*ws-addr (atom ws-addr)
+   :ws-addr ws-addr
    :*token (atom token)
    :*date-formatter (atom nil)
    :data-from-ws-chan data-from-ws-chan
