@@ -1,5 +1,5 @@
-(ns frontend.handler.db-based.page
-  "Page handlers for DB graphs"
+(ns frontend.worker.handler.page.rename
+  "Page rename"
   (:require [logseq.outliner.core :as outliner-core]
             [logseq.outliner.tree :as otree]
             [frontend.handler.common.page :as page-common-handler]
@@ -11,8 +11,7 @@
             [frontend.worker.file.page-rename :as page-rename]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db :as ldb]
-            [logseq.common.util :as common-util]
-            [frontend.handler.notification :as notification]))
+            [logseq.common.util :as common-util]))
 
 (defn- replace-page-ref
   "Replace from-page refs with to-page"
@@ -226,16 +225,12 @@
         name-changed? (not= old-name new-name)]
     (cond
       (string/blank? new-name)
-      (do
-        (notification/show! "Please use a valid name, empty name is not allowed!" :error)
-        :invalid-empty-name)
+      :invalid-empty-name
 
       (and page-e new-page-e
            (or (contains? (:block/type page-e) "whiteboard")
                (contains? (:block/type new-page-e) "whiteboard")))
-      (do
-        (notification/show! "Can't merge whiteboard pages" :error)
-        :merge-whiteboard-pages)
+      :merge-whiteboard-pages
 
       (and old-name new-name name-changed?)
       (do

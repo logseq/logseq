@@ -15,10 +15,10 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as web-nfs]
+            [frontend.worker.handler.page.rename :as worker-page-rename]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -70,10 +70,17 @@
         (favorite-page! page-name)))))
 
 (defn rename!
-  ([old-name new-name] (rename! old-name new-name true))
-  ([old-name new-name redirect?] (rename! old-name new-name redirect? true))
-  ([old-name new-name redirect? persist-op?]
-   (db-page-handler/rename! old-name new-name redirect? persist-op?)))
+  [old-name new-name & {:as opts}]
+  (let [repo (state/get-current-repo)
+        conn (db/get-db repo false)
+        config (state/get-config repo)
+        result (worker-page-rename/rename! repo conn config old-name new-name opts)]
+    (case result
+      :invalid-empty-name
+      (notification/show! "Please use a valid name, empty name is not allowed!" :error)
+      :merge-whiteboard-pages
+      (notification/show! "Can't merge whiteboard pages" :error)
+      nil)))
 
 (defn reorder-favorites!
   [favorites]
