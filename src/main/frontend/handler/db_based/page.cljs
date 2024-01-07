@@ -270,5 +270,5 @@
           (based-merge-pages! db config old-page-name new-page-name persist-op? redirect?)
 
           :else                          ; rename
-          (rename-namespace-pages! db config repo old-name new-name))
+          (rename-namespace-pages! conn config repo old-name new-name))
          (rename-nested-pages conn config old-name new-name))))))

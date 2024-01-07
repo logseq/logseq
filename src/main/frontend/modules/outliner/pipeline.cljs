@@ -57,7 +57,7 @@
       (state/pub-event! [:page/deleted repo (:deleted-page tx-meta) (:file-path tx-meta)]))
 
     (when (= (:outliner-op tx-meta) :rename-page)
-      (state/pub-event! [:page/renamed repo tx-meta]))
+      (state/pub-event! [:page/renamed repo (:data tx-meta)]))
 
     (when-not (or from-disk? new-graph?)
       (try
