@@ -18,15 +18,13 @@
             [datascript.core :as d]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [frontend.worker.handler.page :as worker-page]
+            [frontend.worker.handler.page.rename :as worker-page-rename]
             [frontend.worker.state :as worker-state]
             [logseq.db :as ldb]
 
             [frontend.db.rtc.const :as rtc-const]
             [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.db.rtc.ws :as ws]
-
-            [frontend.handler.page :as page-handler]
-
             [frontend.handler.user :as user]))
 
 
@@ -339,13 +337,13 @@
           ;; 1. rename local page's name to '<origin-name>-<ms-epoch>-Conflict'
           ;; 2. create page, name=<origin-name>, uuid=remote-uuid
           (and exist-page (not= (:block/uuid exist-page) self))
-          (do (page-handler/rename! original-name (common-util/format "%s-%s-CONFLICT" original-name (tc/to-long (t/now))))
+          (do (worker-page-rename/rename! repo conn config original-name (common-util/format "%s-%s-CONFLICT" original-name (tc/to-long (t/now))))
               (worker-page/create! repo conn config original-name create-opts))
 
           ;; a client-page has same uuid as remote but different page-names,
           ;; then we need to rename the client-page to remote-page-name
           (and old-page-original-name (not= old-page-original-name original-name))
-          (page-handler/rename! old-page-original-name original-name false false)
+          (worker-page-rename/rename! repo conn config old-page-original-name original-name {:persist-op? false})
 
           ;; no such page, name=remote-page-name, OR, uuid=remote-block-uuid
           ;; just create-page
@@ -355,10 +353,10 @@
         (update-block-attrs repo conn date-formatter self op-value)))))
 
 (defn apply-remote-remove-page-ops
-  [conn remove-page-ops]
+  [repo conn remove-page-ops]
   (doseq [op remove-page-ops]
     (when-let [page-name (:block/name (d/entity @conn [:block/uuid (:block-uuid op)]))]
-      (page-handler/delete! page-name nil {:redirect-to-home? false :persist-op? false}))))
+      (worker-page/delete! repo conn page-name nil {:redirect-to-home? false :persist-op? false}))))
 
 
 (defn filter-remote-data-by-local-unpushed-ops
@@ -435,7 +433,7 @@
           (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
           (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn date-formatter sorted-move-ops))
           (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo conn date-formatter update-ops))
-          (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops conn remove-page-ops))
+          (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo conn remove-page-ops))
           ;; (let [txs (get-in @state/state [:rtc/remote-batch-tx-state repo :txs])]
           ;;   (worker-util/profile
           ;;    :batch-refresh
