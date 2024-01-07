@@ -5,15 +5,12 @@
   (:require [cljs-http.client :as http]
             [cljs.core.async :as async :refer [<! chan offer!]]
             [frontend.worker.async-util :include-macros true :refer [<? go-try]]
-            [frontend.config :as config]
             [frontend.worker.rtc.const :as rtc-const]
             [goog.string :as gstring]))
 
 (def WebSocketOPEN (if (= *target* "nodejs")
                      1
                      js/WebSocket.OPEN))
-
-(def ws-addr config/RTC-WS-URL)
 
 (defn ws-listen
   [ws-addr token data-from-ws-chan ws-opened-ch]
@@ -42,7 +39,7 @@
      (when (or (nil? ws)
                (> (.-readyState ws) WebSocketOPEN))
        (let [ws-opened-ch (chan)
-             ws* (ws-listen ws-addr @(:*token state) (:data-from-ws-chan state) ws-opened-ch)]
+             ws* (ws-listen (:ws-addr state) @(:*token state) (:data-from-ws-chan state) ws-opened-ch)]
          (<! ws-opened-ch)
          (reset! (:*ws state) ws*)
          (when-let [graph-uuid @(:*graph-uuid state)]
