@@ -16,7 +16,8 @@ class Store {
         return;
       }
       this._dbp = new Promise((resolve, reject) => {
-        const openreq = window.indexedDB.open(this._dbName, this._version);
+        let idb = typeof window == 'object' ? window.indexedDB : indexedDB;
+        const openreq = idb.open(this._dbName, this._version);
         openreq.onerror = () => reject(openreq.error);
         openreq.onsuccess = () => resolve(openreq.result);
         // First time setup: create an empty object store
