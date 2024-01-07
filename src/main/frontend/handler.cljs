@@ -43,7 +43,6 @@
             [frontend.db.listener :as db-listener]
             [cljs-bean.core :as bean]
             [frontend.handler.test :as test]
-            [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.persist-db.browser :as db-browser]
             [frontend.persist-db :as persist-db]))
 
@@ -76,9 +75,8 @@
 (defn restore-and-setup!
   [repo repos]
   (when repo
-    (-> (p/let [_ (db-restore/restore-graph! repo)
-                _ (repo-config-handler/start {:repo repo})]
-          (op-mem-layer/<init-load-from-indexeddb! repo))
+    (-> (p/let [_ (db-restore/restore-graph! repo)]
+          (repo-config-handler/start {:repo repo}))
         (p/then
          (fn []
            (db-listener/listen-and-persist! repo)

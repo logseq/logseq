@@ -1,15 +1,15 @@
-(ns frontend.db.rtc.rtc-effects-test
+(ns frontend.worker.rtc.rtc-effects-test
   "This ns include tests abouts rtc-part with other components.
   These tests need to start the rtc-loop.
-  Other simple fn tests are located at `frontend.db.rtc.rtc-fns-test`"
+  Other simple fn tests are located at `frontend.worker.rtc.rtc-fns-test`"
   (:require ["/frontend/idbkv" :as idb-keyval]
             [cljs.core.async :as async :refer [<! >! go timeout]]
             [clojure.test :as t :refer [deftest is use-fixtures]]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
-            [frontend.db.rtc.fixture :as rtc-fixture]
-            [frontend.db.rtc.idb-keyval-mock :as idb-keyval-mock :include-macros true]
-            [frontend.db.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.worker.rtc.fixture :as rtc-fixture]
+            [frontend.worker.rtc.idb-keyval-mock :as idb-keyval-mock :include-macros true]
+            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.handler.page :as page-handler]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]

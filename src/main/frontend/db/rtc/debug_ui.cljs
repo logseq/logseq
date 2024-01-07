@@ -1,30 +1,31 @@
 (ns frontend.db.rtc.debug-ui
   "Debug UI for rtc module"
   (:require-macros
-   [frontend.db.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
+   [frontend.worker.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [cljs.core.async :as async :refer [<! go]]
             [fipp.edn :as fipp]
             [frontend.worker.async-util :include-macros true :refer [<? go-try]]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
-            [frontend.db.rtc.core :as rtc-core]
-            [frontend.db.rtc.db-listener :as db-listener]
-            [frontend.db.rtc.full-upload-download-graph :as full-upload-download-graph]
-            [frontend.db.rtc.op-mem-layer :as op-mem-layer]
-            [frontend.db.rtc.ws :as ws]
+            [frontend.worker.rtc.core :as rtc-core]
+            [frontend.worker.rtc.db-listener :as db-listener]
+            [frontend.worker.rtc.full-upload-download-graph :as full-upload-download-graph]
+            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.worker.rtc.ws :as ws]
             [frontend.handler.notification :as notification]
             [frontend.handler.user :as user]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.config :as config]))
 
 (defonce debug-state (atom nil))
 
 (defn- <start-rtc
   ([]
    (go
-     (let [state (<! (rtc-core/<init-state (state/get-auth-id-token)))]
+     (let [state (<! (rtc-core/<init-state (state/get-auth-id-token) config/RTC-WS-URL))]
        (<! (<start-rtc state)))))
   ([state]
    (go
@@ -53,13 +54,13 @@
 (defn- <download-graph
   [repo graph-uuid]
   (go-try
-   (let [state (<! (rtc-core/<init-state (state/get-auth-id-token)))]
+   (let [state (<! (rtc-core/<init-state (state/get-auth-id-token) config/RTC-WS-URL))]
      (<? (full-upload-download-graph/<download-graph state repo graph-uuid)))))
 
 (defn- <upload-graph
   []
   (go
-    (let [state (<! (rtc-core/<init-state (state/get-auth-id-token)))
+    (let [state (<! (rtc-core/<init-state (state/get-auth-id-token) config/RTC-WS-URL))
           repo (state/get-current-repo)]
       (<! (full-upload-download-graph/<upload-graph state repo (conn/get-db repo)))
       (let [conn (conn/get-db repo false)]
@@ -99,7 +100,7 @@
                  :icon "refresh"
                  :on-click (fn [_]
                              (go
-                               (let [s (or s (<! (rtc-core/<init-state (state/get-auth-id-token))))
+                               (let [s (or s (<! (rtc-core/<init-state (state/get-auth-id-token) config/RTC-WS-URL)))
                                      graph-list (with-sub-data-from-ws s
                                                   (<! (ws/<send! s {:req-id (get-req-id)
                                                                     :action "list-graphs"}))

@@ -27,7 +27,7 @@
             [goog.object :as gobj]
             [rum.core :as rum]
             [frontend.config :as config]
-            [frontend.db.rtc.core :as rtc-core]
+            [frontend.worker.rtc.core :as rtc-core]
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [cljs.core.async :as async]
             [cljs.pprint :as pp]

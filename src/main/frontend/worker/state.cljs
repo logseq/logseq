@@ -6,7 +6,8 @@
                        :worker/context {}
 
                        ;; FIXME load graph config when fetch-initial-data
-                       :config {}}))
+                       :config {}
+                       :repo/current nil}))
 
 (defonce *sqlite (atom nil))
 ;; repo -> {:db conn :search conn}
@@ -57,3 +58,7 @@
 (defn get-config
   [repo]
   (get-in @*state [:config repo]))
+
+(defn get-current-repo
+  []
+  (:repo/current @*state))

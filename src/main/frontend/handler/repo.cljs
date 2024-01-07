@@ -36,8 +36,7 @@
             [frontend.mobile.util :as mobile-util]
             [medley.core :as medley]
             [logseq.common.path :as path]
-            [frontend.db.listener :as db-listener]
-            [frontend.db.rtc.op-mem-layer :as op-mem-layer]))
+            [frontend.db.listener :as db-listener]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -414,7 +413,6 @@
    (state/set-db-restoring! true)
    (db-restore/restore-graph! repo)
    (repo-config-handler/restore-repo-config! repo)
-   (op-mem-layer/<init-load-from-indexeddb! repo)
    (when (config/global-config-enabled?)
      (global-config-handler/restore-global-config!))
     ;; Don't have to unlisten the old listener, as it will be destroyed with the conn
@@ -516,7 +514,6 @@
 (defn- create-db [full-graph-name]
   (->
    (p/let [_ (persist-db/<new full-graph-name)
-           _ (op-mem-layer/<init-load-from-indexeddb! full-graph-name)
            _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name})
            _ (route-handler/redirect-to-home!)

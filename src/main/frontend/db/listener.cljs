@@ -1,9 +1,7 @@
 (ns frontend.db.listener
   "DB listeners"
   (:require [datascript.core :as d]
-            [frontend.db.conn :as conn]
-            [frontend.db.rtc.db-listener :as rtc-db-listener]
-            [frontend.db.rtc.op-mem-layer :as op-mem-layer]))
+            [frontend.db.conn :as conn]))
 
 (defonce *db-listener (atom nil))
 
@@ -19,7 +17,4 @@
   [repo]
   (when-let [conn (conn/get-db repo false)]
     (d/unlisten! conn :persistence)
-    (repo-listen-to-tx! repo conn)
-    (d/unlisten! conn :gen-ops)
-    (when (op-mem-layer/rtc-db-graph? repo)
-      (rtc-db-listener/listen-db-to-generate-ops repo conn))))
+    (repo-listen-to-tx! repo conn)))

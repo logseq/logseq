@@ -1,13 +1,13 @@
-(ns frontend.db.rtc.fixture
+(ns frontend.worker.rtc.fixture
   (:require [cljs.test :as t]
             [cljs.core.async :as async :refer [<! >! chan go]]
-            [frontend.db.rtc.mock :as rtc-mock]
-            [frontend.db.rtc.core :as rtc-core]
+            [frontend.worker.rtc.mock :as rtc-mock]
+            [frontend.worker.rtc.core :as rtc-core]
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
-            [frontend.db.rtc.db-listener :as db-listener]
-            [frontend.db.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.worker.rtc.db-listener :as db-listener]
+            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.db :as db]
             [frontend.state :as state]))
 

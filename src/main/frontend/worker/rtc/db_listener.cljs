@@ -1,11 +1,11 @@
-(ns frontend.db.rtc.db-listener
+(ns frontend.worker.rtc.db-listener
   "listen datascript changes, infer operations from the db tx-report"
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [clojure.data :as data]
             [clojure.set :as set]
             [datascript.core :as d]
-            [frontend.db.rtc.op-mem-layer :as op-mem-layer]))
+            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]))
 
 
 (defn- entity-datoms=>attr->datom

@@ -16,7 +16,9 @@
             [frontend.worker.pipeline :as pipeline]
             [frontend.worker.state :as state]
             [frontend.worker.file :as file]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.worker.rtc.db-listener :as rtc-db-listener]))
 
 (defonce *sqlite state/*sqlite)
 (defonce *sqlite-conns state/*sqlite-conns)
@@ -122,6 +124,12 @@
   (let [{:keys [db search]} (@*sqlite-conns repo)]
     (close-db-aux! repo db search)))
 
+(defn- listen-to-db!
+  [repo conn]
+  (d/unlisten! conn :gen-ops)
+  (when (op-mem-layer/rtc-db-graph? repo)
+      (rtc-db-listener/listen-db-to-generate-ops repo conn)))
+
 (defn- create-or-open-db!
   [repo]
   (when-not (state/get-sqlite-conn repo)
@@ -140,6 +148,8 @@
       (let [schema (sqlite-util/get-schema repo)
             conn (sqlite-common-db/get-storage-conn storage schema)]
         (swap! *datascript-conns assoc repo conn)
+        (op-mem-layer/<init-load-from-indexeddb! repo)
+        (listen-to-db! repo conn)
         nil))))
 
 (defn- iter->vec [iter]
