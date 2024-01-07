@@ -93,8 +93,11 @@
                                     {:db/id db-id
                                      :block/tx-id tx-id})) updated-blocks)
                            (remove nil?))))
-            tx-report' (ldb/transact! conn replace-tx {:replace? true
-                                                       :pipeline-replace? true})
+            tx-report' (or
+                        (when (seq replace-tx)
+                          (ldb/transact! conn replace-tx {:replace? true
+                                                          :pipeline-replace? true}))
+                        tx-report)
             full-tx-data (concat (:tx-data tx-report) fix-tx-data (:tx-data tx-report'))
             final-tx-report (assoc tx-report' :tx-data full-tx-data)
             affected-query-keys (when-not (:importing? context)

@@ -231,11 +231,11 @@
               tx-data (concat truncate-blocks-tx-data delete-page-tx delete-file-tx)]
 
           (ldb/transact! conn tx-data
-                         (cond-> {:outliner-op :delete-page :persist-op? persist-op?}
+                         (cond-> {:outliner-op :delete-page
+                                  :deleted-page page-name
+                                  :persist-op? persist-op?}
                            file-path
-                           (assoc
-                            :deleted-page page-name
-                            :file-path file-path)))
+                           (assoc :file-path file-path)))
 
           (when (fn? ok-handler) (ok-handler))
 
