@@ -496,8 +496,9 @@ independent of format as format specific heading characters are stripped"
 (defn page-exists?
   "Whether a page exists."
   [page-name]
-  (when page-name
-    (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])))
+  (let [repo (state/get-current-repo)]
+    (when-let [db (conn/get-db repo)]
+     (ldb/page-exists? db page-name))))
 
 (defn page-empty?
   "Whether a page is empty. Does it has a non-page block?
@@ -526,21 +527,6 @@ independent of format as format specific heading characters are stripped"
   (assert (uuid? block-uuid) (str "get-block-page requires block-uuid to be of type uuid but got " block-uuid))
   (when-let [block (db-utils/entity repo [:block/uuid block-uuid])]
     (db-utils/entity repo (:db/id (:block/page block)))))
-
-(defn get-pages-by-name-partition
-  [repo partition]
-  (when-let [db (conn/get-db repo)]
-    (when-not (string/blank? partition)
-      (let [partition (util/page-name-sanity-lc (string/trim partition))
-            ids (->> (d/datoms db :aevt :block/name)
-                     (filter (fn [datom]
-                               (let [page (:v datom)]
-                                 (string/includes? page partition))))
-                     (map :e))]
-        (when (seq ids)
-          (db-utils/pull-many repo
-                              '[:db/id :block/name :block/original-name]
-                              ids))))))
 
 (defn get-block-immediate-children
   "Doesn't include nested children."
@@ -1027,20 +1013,7 @@ independent of format as format specific heading characters are stripped"
 (defn get-namespace-pages
   "Accepts both sanitized and unsanitized namespaces"
   [repo namespace]
-  (assert (string? namespace))
-  (let [namespace (util/page-name-sanity-lc namespace)
-        pull-attrs (cond-> [:db/id :block/name :block/original-name :block/namespace]
-                     (not (config/db-based-graph? repo))
-                     (conj {:block/file [:db/id :file/path]}))]
-    (d/q
-     [:find [(list 'pull '?c pull-attrs) '...]
-       :in '$ '% '?namespace
-       :where
-       ['?p :block/name '?namespace]
-       (list 'namespace '?p '?c)]
-     (conn/get-db repo)
-     (:namespace rules/rules)
-     namespace)))
+  (ldb/get-namespace-pages (conn/get-db repo) namespace))
 
 (defn- tree [flat-col root]
   (let [sort-fn #(sort-by :block/name %)

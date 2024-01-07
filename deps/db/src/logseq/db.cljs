@@ -12,7 +12,8 @@
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
             [logseq.db.frontend.content :as db-content]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [logseq.db.frontend.rules :as rules]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
@@ -225,6 +226,12 @@
          db)
        (map first)
        (remove hidden-page?)))
+
+(defn page-exists?
+  "Whether a page exists."
+  [db page-name]
+  (when page-name
+    (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)])))
 
 (defn page-empty?
   "Whether a page is empty. Does it has a non-page block?
@@ -463,3 +470,34 @@
   (some-> (or (d/entity db [:block/name page-name])
               (d/entity db [:block/original-name page-name]))
           :block/file))
+
+(defn get-namespace-pages
+  "Accepts both sanitized and unsanitized namespaces"
+  [db namespace]
+  (assert (string? namespace))
+  (let [namespace (common-util/page-name-sanity-lc namespace)
+        pull-attrs [:db/id :block/name :block/original-name :block/namespace
+                    {:block/file [:db/id :file/path]}]]
+    (d/q
+     [:find [(list 'pull '?c pull-attrs) '...]
+      :in '$ '% '?namespace
+      :where
+      ['?p :block/name '?namespace]
+      (list 'namespace '?p '?c)]
+     db
+     (:namespace rules/rules)
+     namespace)))
+
+(defn get-pages-by-name-partition
+  [db partition]
+  (when-not (string/blank? partition)
+    (let [partition (common-util/page-name-sanity-lc (string/trim partition))
+          ids (->> (d/datoms db :aevt :block/name)
+                   (filter (fn [datom]
+                             (let [page (:v datom)]
+                               (string/includes? page partition))))
+                   (map :e))]
+      (when (seq ids)
+        (d/pull-many db
+                     '[:db/id :block/name :block/original-name]
+                     ids)))))

@@ -58,9 +58,8 @@
    * :persist-op?         - when true, add an update-page op
    TODO: Add other options"
   [repo conn config title
-   & {:keys [create-first-block? format properties uuid rename? persist-op? whiteboard? class?]
+   & {:keys [create-first-block? format properties uuid persist-op? whiteboard? class?]
       :or   {create-first-block? true
-             rename?             false
              format              nil
              properties          nil
              uuid                nil
@@ -76,7 +75,7 @@
         title      (common-util/remove-boundary-slashes title)
         page-name  (common-util/page-name-sanity-lc title)
         with-uuid? (if (uuid? uuid) uuid true)] ;; FIXME: prettier validation
-    (when (or (ldb/page-empty? @conn page-name) rename?)
+    (when (ldb/page-empty? @conn page-name)
       (let [pages    (if split-namespace?
                        (common-util/split-namespace-pages title)
                        [title])
@@ -117,10 +116,6 @@
                                   :block/content ""
                                   :block/format format})]))
             txs      (concat
-                      (when (and rename? uuid)
-                        (when-let [e (d/entity @conn [:block/uuid uuid])]
-                          [[:db/retract (:db/id e) :block/namespace]
-                           [:db/retract (:db/id e) :block/refs]]))
                       txs
                       page-txs
                       first-block-tx)]

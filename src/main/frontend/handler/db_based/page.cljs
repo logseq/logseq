@@ -1,14 +1,6 @@
 (ns frontend.handler.db-based.page
   "Page handlers for DB graphs"
-  (:require [frontend.state :as state]
-            [frontend.db :as db]
-            [frontend.db.model :as model]
-            [frontend.db.conn :as conn]
-            [frontend.db.utils :as db-utils]
-            [frontend.util :as util]
-            [frontend.handler.notification :as notification]
-            [frontend.handler.route :as route-handler]
-            [logseq.outliner.core :as outliner-core]
+  (:require [logseq.outliner.core :as outliner-core]
             [logseq.outliner.tree :as otree]
             [frontend.handler.common.page :as page-common-handler]
             [datascript.core :as d]
@@ -18,7 +10,9 @@
             [frontend.worker.file.util :as wfu]
             [frontend.worker.file.page-rename :as page-rename]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.common.util :as common-util]
+            [frontend.handler.notification :as notification]))
 
 (defn- replace-page-ref
   "Replace from-page refs with to-page"
@@ -51,7 +45,7 @@
 
                                                                   :else
                                                                   v)) properties)
-                                             (util/remove-nils-non-nested))
+                                             (common-util/remove-nils-non-nested))
                              tx (merge
                                  content-tx
                                  (when (not= (seq properties) (seq properties'))
@@ -73,26 +67,24 @@
        (vec)))
 
 (defn- based-merge-pages!
-  [db config from-page-name to-page-name persist-op? redirect?]
-  (when (and (db/page-exists? from-page-name)
-             (db/page-exists? to-page-name)
+  [repo conn config from-page-name to-page-name persist-op?]
+  (when (and (ldb/page-exists? @conn from-page-name)
+             (ldb/page-exists? @conn to-page-name)
              (not= from-page-name to-page-name))
-    (let [conn (db/get-db false)
-          to-page (db/entity [:block/name to-page-name])
+    (let [db @conn
+          to-page (d/entity db [:block/name to-page-name])
           to-id (:db/id to-page)
-          from-page (db/entity [:block/name from-page-name])
+          from-page (d/entity db [:block/name from-page-name])
           from-id (:db/id from-page)
-          from-first-child (some->> (db/pull from-id)
+          from-first-child (some->> (d/pull db from-id)
                                     (outliner-core/block @conn)
                                     (#(otree/-get-down % conn))
                                     (outliner-core/get-data))
-          to-last-direct-child-id (model/get-block-last-direct-child-id (db/get-db) to-id)
-          repo (state/get-current-repo)
+          to-last-direct-child-id (ldb/get-block-last-direct-child-id db to-id)
           db-based? (sqlite-util/db-based-graph? repo)
-          conn (conn/get-db repo false)
           datoms (d/datoms @conn :avet :block/page from-id)
           block-eids (mapv :e datoms)
-          blocks (db-utils/pull-many repo '[:db/id :block/page :block/refs :block/path-refs :block/left :block/parent] block-eids)
+          blocks (d/pull-many db '[:db/id :block/page :block/refs :block/path-refs :block/left :block/parent] block-eids)
           blocks-tx-data (map (fn [block]
                                 (let [id (:db/id block)]
                                   (cond->
@@ -109,17 +101,12 @@
                                 (replace-page-ref from-page to-page)
                                 (page-rename/replace-page-ref db config from-page-name to-page-name))
           tx-data (concat blocks-tx-data replace-ref-tx-data)]
-      (db/transact! repo tx-data {:persist-op? persist-op?})
+      (d/transact! conn tx-data {:persist-op? persist-op?})
       (page-common-handler/rename-update-namespace! from-page
-                                                    (util/get-page-original-name from-page)
-                                                    (util/get-page-original-name to-page)))
+                                                    (common-util/get-page-original-name from-page)
+                                                    (common-util/get-page-original-name to-page)))
 
-    (page-common-handler/delete! from-page-name nil :redirect-to-home? false :persist-op? persist-op?)
-
-    (when redirect?
-      (route-handler/redirect! {:to          :page
-                                :push        false
-                                :path-params {:name to-page-name}}))))
+    (page-common-handler/delete! from-page-name nil :redirect-to-home? false :persist-op? persist-op?)))
 
 (defn- compute-new-file-path
   "Construct the full path given old full path and the file sanitized body.
@@ -129,7 +116,7 @@
         ext (last (string/split (last result) "."))
         new-file (str new-file-name-body "." ext)
         parts (concat (butlast result) [new-file])]
-    (util/string-join-path parts)))
+    (common-util/string-join-path parts)))
 
 (defn- update-file-tx
   [db old-page-name new-page-name]
@@ -146,13 +133,12 @@
 
 (defn- rename-page-aux
   "Only accepts unsanitized page names"
-  [conn config old-name new-name]
+  [repo conn config old-name new-name]
   (let [db                  @conn
-        old-page-name       (util/page-name-sanity-lc old-name)
-        new-page-name       (util/page-name-sanity-lc new-name)
-        repo                (state/get-current-repo)
+        old-page-name       (common-util/page-name-sanity-lc old-name)
+        new-page-name       (common-util/page-name-sanity-lc new-name)
         db-based?           (sqlite-util/db-based-graph? repo)
-        page                (db/pull [:block/name old-page-name])]
+        page                (d/pull @conn [:block/name old-page-name])]
     (when (and repo page)
       (let [old-original-name   (:block/original-name page)
             page-txs            [{:db/id               (:db/id page)
@@ -181,9 +167,9 @@
 
 (defn- rename-namespace-pages!
   "Original names (unsanitized only)"
-  [conn config repo old-name new-name]
-  (let [pages (db/get-namespace-pages repo old-name)
-        page (db/pull [:block/name (util/page-name-sanity-lc old-name)])
+  [repo conn config old-name new-name]
+  (let [pages (ldb/get-namespace-pages @conn old-name)
+        page (d/pull @conn [:block/name (common-util/page-name-sanity-lc old-name)])
         pages (cons page pages)]
     (doseq [{:block/keys [name original-name]} pages]
       (let [old-page-title (or original-name name)
@@ -193,18 +179,17 @@
             ;; but don't rename [[work/worklog]] to [[work1/work1log]]
             new-page-title (string/replace-first old-page-title old-name new-name)]
         (when (and old-page-title new-page-title)
-          (rename-page-aux conn config old-page-title new-page-title)
+          (rename-page-aux repo conn config old-page-title new-page-title)
           (println "Renamed " old-page-title " to " new-page-title))))))
 
 (defn- rename-nested-pages
   "Unsanitized names only"
-  [conn config old-ns-name new-ns-name]
-  (let [repo            (state/get-current-repo)
-        nested-page-str (page-ref/->page-ref (util/page-name-sanity-lc old-ns-name))
+  [repo conn config old-ns-name new-ns-name]
+  (let [nested-page-str (page-ref/->page-ref (common-util/page-name-sanity-lc old-ns-name))
         ns-prefix-format-str (str page-ref/left-brackets "%s/")
-        ns-prefix       (util/format ns-prefix-format-str (util/page-name-sanity-lc old-ns-name))
-        nested-pages    (db/get-pages-by-name-partition repo nested-page-str)
-        nested-pages-ns (db/get-pages-by-name-partition repo ns-prefix)]
+        ns-prefix       (common-util/format ns-prefix-format-str (common-util/page-name-sanity-lc old-ns-name))
+        nested-pages    (ldb/get-pages-by-name-partition @conn nested-page-str)
+        nested-pages-ns (ldb/get-pages-by-name-partition @conn ns-prefix)]
     (when nested-pages
       ;; rename page "[[obsidian]] is a tool" to "[[logseq]] is a tool"
       (doseq [{:block/keys [name original-name]} nested-pages]
@@ -214,7 +199,7 @@
                               (page-ref/->page-ref old-ns-name)
                               (page-ref/->page-ref new-ns-name))]
           (when (and old-page-title new-page-title)
-            (rename-page-aux conn config old-page-title new-page-title)
+            (rename-page-aux repo conn config old-page-title new-page-title)
             (println "Renamed " old-page-title " to " new-page-title)))))
     (when nested-pages-ns
       ;; rename page "[[obsidian/page1]] is a tool" to "[[logseq/page1]] is a tool"
@@ -222,53 +207,49 @@
         (let [old-page-title (or original-name name)
               new-page-title (string/replace
                               old-page-title
-                              (util/format ns-prefix-format-str old-ns-name)
-                              (util/format ns-prefix-format-str new-ns-name))]
+                              (common-util/format ns-prefix-format-str old-ns-name)
+                              (common-util/format ns-prefix-format-str new-ns-name))]
           (when (and old-page-title new-page-title)
-            (rename-page-aux conn config old-page-title new-page-title)
+            (rename-page-aux repo conn config old-page-title new-page-title)
             (println "Renamed " old-page-title " to " new-page-title)))))))
 
 (defn rename!
-  ([old-name new-name]
-   (rename! old-name new-name true true))
-  ([old-name new-name redirect? persist-op?]
-   (let [repo (state/get-current-repo)
-         conn (db/get-db false)
-         db @conn
-         config (state/get-config repo)
-         old-name      (string/trim old-name)
-         new-name      (string/trim new-name)
-         old-page-name (util/page-name-sanity-lc old-name)
-         page-e (db/entity [:block/name old-page-name])
-         new-page-name (util/page-name-sanity-lc new-name)
-         new-page-e (db/entity [:block/name new-page-name])
-         name-changed? (not= old-name new-name)]
-     (cond
-       (string/blank? new-name)
-       (do
-         (notification/show! "Please use a valid name, empty name is not allowed!" :error)
-         :invalid-empty-name)
+  [repo conn config old-name new-name & {:keys [persist-op?]
+                                         :or {persist-op? true}}]
+  (let [db @conn
+        old-name      (string/trim old-name)
+        new-name      (string/trim new-name)
+        old-page-name (common-util/page-name-sanity-lc old-name)
+        page-e (d/entity db [:block/name old-page-name])
+        new-page-name (common-util/page-name-sanity-lc new-name)
+        new-page-e (d/entity db [:block/name new-page-name])
+        name-changed? (not= old-name new-name)]
+    (cond
+      (string/blank? new-name)
+      (do
+        (notification/show! "Please use a valid name, empty name is not allowed!" :error)
+        :invalid-empty-name)
 
-       (and page-e new-page-e
-            (or (contains? (:block/type page-e) "whiteboard")
-                (contains? (:block/type new-page-e) "whiteboard")))
-       (do
-         (notification/show! "Can't merge whiteboard pages" :error)
-         :merge-whiteboard-pages)
+      (and page-e new-page-e
+           (or (contains? (:block/type page-e) "whiteboard")
+               (contains? (:block/type new-page-e) "whiteboard")))
+      (do
+        (notification/show! "Can't merge whiteboard pages" :error)
+        :merge-whiteboard-pages)
 
-       (and old-name new-name name-changed?)
-       (do
-         (cond
+      (and old-name new-name name-changed?)
+      (do
+        (cond
           (= old-page-name new-page-name) ; case changed
-          (db/transact! repo
-                        [{:db/id (:db/id page-e)
-                          :block/original-name new-name}]
-                        {:persist-op? persist-op?})
+          (d/transact! conn
+                       [{:db/id (:db/id page-e)
+                         :block/original-name new-name}]
+                       {:persist-op? persist-op?})
 
           (and (not= old-page-name new-page-name)
-               (db/entity [:block/name new-page-name])) ; merge page
-          (based-merge-pages! db config old-page-name new-page-name persist-op? redirect?)
+               (d/entity @conn [:block/name new-page-name])) ; merge page
+          (based-merge-pages! repo conn config old-page-name new-page-name persist-op?)
 
           :else                          ; rename
-          (rename-namespace-pages! conn config repo old-name new-name))
-         (rename-nested-pages conn config old-name new-name))))))
+          (rename-namespace-pages! repo conn config old-name new-name))
+        (rename-nested-pages repo conn config old-name new-name)))))

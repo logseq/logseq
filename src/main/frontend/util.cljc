@@ -66,12 +66,7 @@
 #?(:cljs (defonce convert-to-letters utils/convertToLetters))
 #?(:cljs (defonce hsl2hex utils/hsl2hex))
 
-(defn string-join-path
-  #_:clj-kondo/ignore
-  "Replace all `strings/join` used to construct paths with this function to reduce lint output.
-  https://github.com/logseq/logseq/pull/8679"
-  [parts]
-  (string/join "/" parts))
+#?(:cljs (def string-join-path common-util/string-join-path))
 
 #?(:cljs
    (def safe-re-find common-util/safe-re-find))
@@ -1028,10 +1023,8 @@
 #?(:cljs
    (def safe-page-name-sanity-lc common-util/safe-page-name-sanity-lc))
 
-(defn get-page-original-name
-  [page]
-  (or (:block/original-name page)
-      (:block/name page)))
+#?(:cljs
+   (def get-page-original-name common-util/get-page-original-name))
 
 #?(:cljs
    (defn add-style!
