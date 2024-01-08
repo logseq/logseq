@@ -473,6 +473,7 @@
   "web worker entry"
   []
   (let [^js obj (DBWorker.)]
+    (state/set-worker-object! obj)
     (file/<ratelimit-file-writes!)
     (Comlink/expose obj)))
 
