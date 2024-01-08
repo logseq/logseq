@@ -64,11 +64,10 @@
                            (count (:block/_page (db/entity [:block/name (util/page-name-sanity-lc page)]))))}
           (fipp/pprint {:width 20})
           with-out-str)]
-     (if (or (nil? state)
+     (if (or (nil? rtc-state)
              (= :closed rtc-state))
        (ui/button "start" {:class "my-2"
                            :on-click (fn []
-                                       (prn :start-rtc)
                                        (let [token (state/get-auth-id-token)
                                              ^object worker @db-browser/*worker]
                                          (.rtc-start worker (state/get-current-repo) token)))})

@@ -75,7 +75,8 @@
    [:*rtc-state :any]
    [:toggle-auto-push-client-ops-chan :any]
    [:*auto-push-client-ops? :any]
-   [:force-push-client-ops-chan :any]])
+   [:force-push-client-ops-chan :any]
+   [:counter :any]])
 
 (def state-validator
   (let [validator (m/validator state-schema)]
@@ -742,6 +743,8 @@
       (<! (async/timeout 2000))
       (pos? (op-mem-layer/get-unpushed-block-update-count repo)))))
 
+(defonce *state (atom nil))
+
 (defn <loop-for-rtc
   [state graph-uuid repo conn date-formatter & {:keys [loop-started-ch token]}]
   {:pre [(state-validator state)
@@ -752,6 +755,7 @@
     (reset! (:*db-conn state) conn)
     (reset! (:*date-formatter state) date-formatter)
     (reset! (:*rtc-state state) :open)
+    (swap! *state update :counter inc)
     (let [{:keys [data-from-ws-pub _client-op-update-chan]} state
           push-data-from-ws-ch (chan (async/sliding-buffer 100) (map rtc-const/data-from-ws-coercer))
           stop-rtc-loop-chan (chan)
@@ -859,9 +863,10 @@
    :*auto-push-client-ops? (atom true :validator boolean?)
    :*stop-rtc-loop-chan (atom nil)
    :force-push-client-ops-chan (chan (async/sliding-buffer 1))
-   :*ws (atom ws)})
+   :*ws (atom ws)
 
-(defonce *state (atom nil))
+   ;; used to trigger state watch
+   :counter 0})
 
 (defn get-debug-state
   ([repo]
@@ -891,6 +896,7 @@
       (<! ws-opened-ch)
       (let [state (init-state ws data-from-ws-chan repo token)]
         (reset! *state state)
+        (swap! *state update :counter inc)
         state))))
 
 (defn <start-rtc
@@ -907,9 +913,10 @@
 
 (defn <stop-rtc
   []
-  (when-let [state @*state]
-    (when-let [*chan (:*stop-rtc-loop-chan state)]
-     (async/close! @*chan))))
+  (when-let [chan (some-> @*state
+                           :*stop-rtc-loop-chan
+                           deref)]
+    (async/close! chan)))
 
 (defn <toggle-sync
   []
@@ -925,14 +932,14 @@
                         (<! (ws/<send! state {:req-id (get-req-id)
                                               :action "list-graphs"}))
                         (:graphs (<! (get-result-ch))))]
-       (prn :debug :graph-list graph-list)
        (p/resolve! d (bean/->js graph-list))))
     d))
 
 (add-watch *state :notify-main-thread
            (fn [_ _ old new]
-             (let [*repo (:*repo new)
-                   new-state (get-debug-state @*repo new)
-                   old-state (get-debug-state @*repo old)]
-               (when (not= new-state old-state)
-                 (worker-util/post-message :rtc-sync-state (pr-str new-state))))))
+             (when-let [*repo (:*repo new)]
+               (let [new-state (get-debug-state @*repo new)
+                     old-state (get-debug-state @*repo old)]
+                 (when (or (not= new-state old-state)
+                           (= :open (:rtc-state new-state)))
+                   (worker-util/post-message :rtc-sync-state (pr-str new-state)))))))
