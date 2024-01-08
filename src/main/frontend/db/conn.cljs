@@ -10,7 +10,6 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.common.util :as common-util]
-            [datascript.core :as d]
             [logseq.db.sqlite.util :as sqlite-util]))
 
 (defonce conns (atom {}))

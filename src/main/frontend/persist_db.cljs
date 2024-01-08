@@ -18,9 +18,6 @@
  (defn <unsafe-delete [repo]
    (protocol/<unsafe-delete (get-impl) repo))
 
-(defn <transact-data [repo tx-data tx-meta]
-  (protocol/<transact-data (get-impl) repo tx-data tx-meta))
-
 (defn <export-db
   [repo opts]
   (protocol/<export-db (get-impl) repo opts))
@@ -44,12 +41,3 @@
   (p/let [_ (protocol/<new (get-impl) repo)
           _ (<export-db repo {})]
     (ipc/ipc :db-open repo)))
-
-(defn <release-access-handles
-  [repo]
-  (protocol/<release-access-handles (get-impl) repo))
-
-(defn transact-db->worker!
-  [repo tx-report]
-  (when-not (:pipeline-replace? (:tx-meta tx-report))
-    (<transact-data repo (:tx-data tx-report) (:tx-meta tx-report))))

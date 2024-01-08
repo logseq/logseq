@@ -46,9 +46,6 @@
             [frontend.persist-db.browser :as db-browser]
             [frontend.persist-db :as persist-db]))
 
-;; TODO: remove this after transact directly to worker db
-(reset! db-listener/*db-listener persist-db/transact-db->worker!)
-
 (defn- set-global-error-notification!
   []
   (when-not config/dev?

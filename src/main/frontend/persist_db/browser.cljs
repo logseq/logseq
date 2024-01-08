@@ -11,7 +11,8 @@
             [cljs-bean.core :as bean]
             [frontend.state :as state]
             [electron.ipc :as ipc]
-            [frontend.handler.worker :as worker-handler]))
+            [frontend.handler.worker :as worker-handler]
+            [logseq.db :as ldb]))
 
 (defonce *worker (atom nil))
 
@@ -36,6 +37,25 @@
                  (when (seq new-state)
                    (.sync-app-state worker (pr-str new-state)))))))
 
+(defn- transact!
+  [^js worker repo tx-data tx-meta]
+  (let [tx-meta' (pr-str tx-meta)
+        tx-data' (pr-str tx-data)
+        context {:dev? config/dev?
+                 :node-test? util/node-test?
+                 :validate-db-options (:dev/validate-db-options (state/get-config))
+                 :importing? (:graph/importing @state/state)
+                 :date-formatter (state/get-date-formatter)
+                 :export-bullet-indentation (state/get-export-bullet-indentation)
+                 :preferred-format (state/get-preferred-format)
+                 :journals-directory (config/get-journals-directory)
+                 :whiteboards-directory (config/get-whiteboards-directory)
+                 :pages-directory (config/get-pages-directory)}]
+    (if worker
+      (.transact worker repo tx-data' tx-meta'
+                 (pr-str context))
+      (notification/show! "Latest change was not saved! Please restart the application." :error))))
+
 (defn start-db-worker!
   []
   (when-not (or config/publishing? util/node-test?)
@@ -50,9 +70,16 @@
                   _ (.sync-app-state wrapped-worker
                                      (pr-str
                                       {:git/current-repo (state/get-current-repo)
-                                       :config (:config @state/state)}))]
-            (sync-app-state! wrapped-worker)
-            (ask-persist-permission!))
+                                       :config (:config @state/state)}))
+                  _ (sync-app-state! wrapped-worker)
+                  _ (ask-persist-permission!)]
+            (ldb/register-transact-fn!
+             (fn worker-transact!
+               [_conn tx-data tx-meta]
+               (prn :debug :transact :tx-meta tx-meta :tx-data tx-data)
+               (transact! wrapped-worker (state/get-current-repo) tx-data
+                 ;; not from remote(rtc)
+                 (assoc tx-meta :local-tx? true)))))
           (p/catch (fn [error]
                      (prn :debug "Can't init SQLite wasm")
                      (js/console.error error)
@@ -96,26 +123,6 @@
   (<release-access-handles [_this repo]
     (when-let [^js sqlite @*worker]
       (.releaseAccessHandles sqlite repo)))
-
-  (<transact-data [_this repo tx-data tx-meta]
-    (let [^js sqlite @*worker]
-      (when-not (:pipeline-replace? tx-meta) ; from db worker
-        (let [tx-meta' (pr-str tx-meta)
-              tx-data' (pr-str tx-data)
-              context {:dev? config/dev?
-                       :node-test? util/node-test?
-                       :validate-db-options (:dev/validate-db-options (state/get-config))
-                       :importing? (:graph/importing @state/state)
-                       :date-formatter (state/get-date-formatter)
-                       :export-bullet-indentation (state/get-export-bullet-indentation)
-                       :preferred-format (state/get-preferred-format)
-                       :journals-directory (config/get-journals-directory)
-                       :whiteboards-directory (config/get-whiteboards-directory)
-                       :pages-directory (config/get-pages-directory)}]
-          (if sqlite
-            (.transact sqlite repo tx-data' tx-meta'
-                       (pr-str context))
-            (notification/show! "Latest change was not saved! Please restart the application." :error))))))
 
   (<fetch-initial-data [_this repo _opts]
     (when-let [^js sqlite @*worker]

@@ -48,18 +48,23 @@
     {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
     {:block/_parent ...}])
 
+(defonce *transact-fn (atom nil))
+(defn register-transact-fn!
+  [f]
+  (when f (reset! *transact-fn f)))
 
 (defn transact!
   ([conn tx-data]
    (transact! conn tx-data nil))
   ([conn tx-data tx-meta]
    (let [tx-data (common-util/fast-remove-nils tx-data)]
-    (when (seq tx-data)
+     (when (seq tx-data)
 
       ;; (prn :debug :transact)
       ;; (cljs.pprint/pprint tx-data)
 
-      (d/transact! conn tx-data tx-meta)))))
+       (let [f (or @*transact-fn d/transact!)]
+         (f conn tx-data tx-meta))))))
 
 (defn create-default-pages!
   "Creates default pages if one of the default pages does not exist. This
