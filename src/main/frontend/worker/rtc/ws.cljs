@@ -21,7 +21,9 @@
                              (let [data (js->clj (js/JSON.parse (.-data e)) :keywordize-keys true)]
                                (offer! data-from-ws-chan data))))
 
-    (set! (.-onclose ws) (fn [_e] (println :ws-stopped)))
+    (set! (.-onclose ws) (fn [e]
+                           (println :ws-stopped)
+                           (js/console.error e)))
     ws))
 
 (defn send!

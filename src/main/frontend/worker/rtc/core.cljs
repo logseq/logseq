@@ -827,8 +827,8 @@
             (if ex-message
               (do
                 (prn ::<get-block-content-versions :ex-message ex-message :ex-data ex-data)
-                (p/resolve! nil))
-              (p/resolve! (bean/->js versions)))))))
+                (p/resolve! d nil))
+              (p/resolve! d (bean/->js versions)))))))
     d))
 
 
@@ -911,7 +911,8 @@
                         (<! (ws/<send! state {:req-id (get-req-id)
                                               :action "list-graphs"}))
                         (:graphs (<! (get-result-ch))))]
-       (p/resolve! (bean/->js graph-list))))
+       (prn :debug :graph-list graph-list)
+       (p/resolve! d (bean/->js graph-list))))
     d))
 
 (add-watch *state :notify-main-thread

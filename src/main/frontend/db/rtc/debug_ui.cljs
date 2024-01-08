@@ -38,8 +38,8 @@
                              (let [repo (state/get-current-repo)
                                    ^object worker @db-browser/*worker]
                                (p/let [result (.rtc-get-debug-state worker repo)
-                                       debug-state (bean/->clj result)]
-                                 (swap! debug-state (fn [old] (merge old debug-state)))))))
+                                       new-state (bean/->clj result)]
+                                 (swap! debug-state (fn [old] (merge old new-state)))))))
       (ui/button "graph-list"
                  :icon "refresh"
                  :on-click (fn [_]
