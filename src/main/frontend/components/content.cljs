@@ -27,12 +27,11 @@
             [goog.object :as gobj]
             [rum.core :as rum]
             [frontend.config :as config]
-            [frontend.worker.rtc.core :as rtc-core]
-            [frontend.db.rtc.debug-ui :as rtc-debug-ui]
-            [cljs.core.async :as async]
             [cljs.pprint :as pp]
             [cljs-time.coerce :as tc]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [cljs-bean.core :as bean]
+            [frontend.persist-db.browser :as db-browser]))
 
 ;; TODO i18n support
 
@@ -314,9 +313,9 @@
             {:key "(Dev) Show block content history"
              :on-click
              (fn []
-               (async/go
-                 (let [blocks-versions
-                       (async/<! (rtc-core/<get-block-content-versions @rtc-debug-ui/debug-state block-id))]
+               (let [^object worker @db-browser/*worker]
+                 (p/let [result (.rtc-get-block-content-versions worker block-id)
+                         blocks-versions (bean/->clj result)]
                    (prn :Dev-show-block-content-history)
                    (doseq [[block-uuid versions] blocks-versions]
                      (prn :block-uuid block-uuid)

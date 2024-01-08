@@ -24,7 +24,9 @@
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.ws :as ws]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [promesa.core :as p]
+            [cljs-bean.core :as bean]))
 
 
 ;;                     +-------------+
@@ -808,21 +810,26 @@
   [state]
   (go
     (swap! (:*auto-push-client-ops? state) not)
-    (>! (:toggle-auto-push-client-ops-chan state) true)))
+    (>! (:toggle-auto-push-client-ops-chan state) true)
+    @(:*auto-push-client-ops? state)))
 
 (defn <get-block-content-versions
   [state block-uuid]
-  (go
-    (when (some-> state :*graph-uuid deref)
-      (with-sub-data-from-ws state
-        (<! (ws/<send! state {:req-id (get-req-id)
-                              :action "query-block-content-versions"
-                              :block-uuids [block-uuid]
-                              :graph-uuid @(:*graph-uuid state)}))
-        (let [{:keys [ex-message ex-data versions]} (<! (get-result-ch))]
-          (if ex-message
-            (prn ::<get-block-content-versions :ex-message ex-message :ex-data ex-data)
-            versions))))))
+  (let [d (p/deferred)]
+    (go
+      (when (some-> state :*graph-uuid deref)
+        (with-sub-data-from-ws state
+          (<! (ws/<send! state {:req-id (get-req-id)
+                                :action "query-block-content-versions"
+                                :block-uuids [block-uuid]
+                                :graph-uuid @(:*graph-uuid state)}))
+          (let [{:keys [ex-message ex-data versions]} (<! (get-result-ch))]
+            (if ex-message
+              (do
+                (prn ::<get-block-content-versions :ex-message ex-message :ex-data ex-data)
+                (p/resolve! nil))
+              (p/resolve! (bean/->js versions)))))))
+    d))
 
 
 (defn init-state
@@ -877,3 +884,15 @@
   []
   (when-let [state @*state]
     (<toggle-auto-push-client-ops state)))
+
+(defn <get-graphs
+  [token]
+  (let [d (p/deferred)]
+    (go
+     (let [state (or @*state (<! (<init-state token)))
+           graph-list (with-sub-data-from-ws state
+                        (<! (ws/<send! state {:req-id (get-req-id)
+                                              :action "list-graphs"}))
+                        (:graphs (<! (get-result-ch))))]
+       (p/resolve! (bean/->js graph-list))))
+    d))

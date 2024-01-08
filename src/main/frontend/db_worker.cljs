@@ -392,8 +392,11 @@
 
   (rtc-toggle-sync
    [this repo]
-   (rtc-core/<toggle-sync)
-   nil)
+   (let [d (p/deferred)]
+     (async/go
+       (let [result (<! (rtc-core/<toggle-sync))]
+         (p/resolve! d result)))
+     d))
 
   (rtc-grant-graph-access
    [this graph-uuid target-user-uuids target-user-emails]
@@ -410,8 +413,8 @@
      (async/go
        (try
          (let [state (<! (rtc-core/<init-state token))]
-          (<! (rtc-updown/<upload-graph state repo conn))
-          (rtc-db-listener/listen-db-to-generate-ops repo conn))
+           (<! (rtc-updown/<upload-graph state repo conn))
+           (rtc-db-listener/listen-db-to-generate-ops repo conn))
          (worker-util/post-message :notification
                                    (pr-str
                                     [[:div
@@ -443,6 +446,19 @@
                                        :error]))
            (prn ::download-graph-failed e)))))
    nil)
+
+  (rtc-push-pending-ops
+   [_this]
+   (async/put! (:force-push-client-ops-chan @rtc-core/*state) true)
+   nil)
+
+  (rtc-get-graphs
+   [_this token]
+   (rtc-core/<get-graphs token))
+
+  (rtc-get-block-content-versions
+   [_this block-id]
+   (rtc-core/<get-block-content-versions @rtc-core/*state block-id))
 
   (dangerousRemoveAllDbs
    [this repo]
