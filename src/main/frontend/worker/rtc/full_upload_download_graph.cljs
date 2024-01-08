@@ -37,12 +37,12 @@
 
 (defn <upload-graph
   "Upload current repo to remote, return remote {:req-id xxx :graph-uuid <new-remote-graph-uuid>}"
-  [state repo db]
+  [state repo conn]
   (go
     (let [{:keys [url key all-blocks-str]}
           (with-sub-data-from-ws state
             (<! (<send! state {:req-id (get-req-id) :action "presign-put-temp-s3-obj"}))
-            (let [all-blocks (export-as-blocks db)
+            (let [all-blocks (export-as-blocks @conn)
                   all-blocks-str (transit/write (transit/writer :json) all-blocks)]
               (merge (<! (get-result-ch)) {:all-blocks-str all-blocks-str})))]
       (<! (http/put url {:body all-blocks-str}))

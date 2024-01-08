@@ -23,7 +23,8 @@
             [logseq.db :as ldb]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
-            [frontend.worker.rtc.ws :as ws]))
+            [frontend.worker.rtc.ws :as ws]
+            [frontend.state :as state]))
 
 
 ;;                     +-------------+
@@ -825,13 +826,12 @@
 
 
 (defn init-state
-  [ws data-from-ws-chan token ws-addr]
+  [ws data-from-ws-chan token]
   ;; {:post [(m/validate state-schema %)]}
   {:*rtc-state (atom :closed :validator rtc-state-validator)
    :*graph-uuid (atom nil)
    :*repo (atom nil)
    :*db-conn (atom nil)
-   :ws-addr ws-addr
    :*token (atom token)
    :*date-formatter (atom nil)
    :data-from-ws-chan data-from-ws-chan
@@ -842,12 +842,38 @@
    :force-push-client-ops-chan (chan (async/sliding-buffer 1))
    :*ws (atom ws)})
 
+(defonce *state (atom nil))
+
+;; FIXME: token might be expired
 (defn <init-state
-  [auth-id-token ws-addr]
+  [token]
   (go
     (let [data-from-ws-chan (chan (async/sliding-buffer 100))
           ws-opened-ch (chan)
-          token auth-id-token
-          ws (ws/ws-listen ws-addr token data-from-ws-chan ws-opened-ch)]
+          ws (ws/ws-listen token data-from-ws-chan ws-opened-ch)]
       (<! ws-opened-ch)
-      (init-state ws data-from-ws-chan token ws-addr))))
+      (let [state (init-state ws data-from-ws-chan token)]
+        ;; (worker-util/post-message :rtc/sync-state state)
+        (reset! *state state)
+        state))))
+
+(defn <start-rtc
+  [repo conn token]
+  (go
+    (let [state (<init-state token)]
+      (if-let [graph-uuid (op-mem-layer/get-graph-uuid repo)]
+        (<! (<loop-for-rtc state graph-uuid repo conn (state/get-date-formatter)))
+        (worker-util/post-message :notification [[:div
+                                                  [:p "RTC is not supported for this graph"]]
+                                                 :error])))))
+
+(defn <stop-rtc
+  []
+  (when-let [state @*state]
+    (when-let [*chan (:*stop-rtc-loop-chan state)]
+     (async/close! @*chan))))
+
+(defn <toggle-sync
+  []
+  (when-let [state @*state]
+    (<toggle-auto-push-client-ops state)))

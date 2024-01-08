@@ -4,43 +4,18 @@
    [frontend.worker.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [cljs.core.async :as async :refer [<! go]]
             [fipp.edn :as fipp]
-            [frontend.worker.async-util :include-macros true :refer [<? go-try]]
             [frontend.db :as db]
-            [frontend.db.conn :as conn]
             [frontend.worker.rtc.core :as rtc-core]
-            [frontend.worker.rtc.db-listener :as db-listener]
-            [frontend.worker.rtc.full-upload-download-graph :as full-upload-download-graph]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.ws :as ws]
-            [frontend.handler.notification :as notification]
             [frontend.handler.user :as user]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [rum.core :as rum]
-            [frontend.config :as config]))
+            [frontend.persist-db.browser :as db-browser]))
 
 (defonce debug-state (atom nil))
-
-(defn- <start-rtc
-  ([]
-   (go
-     (let [state (<! (rtc-core/<init-state (state/get-auth-id-token) config/RTC-WS-URL))]
-       (<! (<start-rtc state)))))
-  ([state]
-   (go
-     (if (= :expired-token (:anom (ex-data state)))
-       (prn ::<start-rtc state)
-       (let [repo (state/get-current-repo)]
-         (<! (<start-rtc state repo))))))
-  ([state repo]
-   (go
-     (if-let [graph-uuid (op-mem-layer/get-graph-uuid repo)]
-       (do (reset! debug-state state)
-           (<! (rtc-core/<loop-for-rtc state graph-uuid repo (db/get-db repo false) (state/get-date-formatter)))
-           state)
-       (do (notification/show! "not a rtc-graph" :error false)
-           nil)))))
 
 (defn- stop
   []
@@ -50,21 +25,6 @@
 (defn- push-pending-ops
   []
   (async/put! (:force-push-client-ops-chan @debug-state) true))
-
-(defn- <download-graph
-  [repo graph-uuid]
-  (go-try
-   (let [state (<! (rtc-core/<init-state (state/get-auth-id-token) config/RTC-WS-URL))]
-     (<? (full-upload-download-graph/<download-graph state repo graph-uuid)))))
-
-(defn- <upload-graph
-  []
-  (go
-    (let [state (<! (rtc-core/<init-state (state/get-auth-id-token) config/RTC-WS-URL))
-          repo (state/get-current-repo)]
-      (<! (full-upload-download-graph/<upload-graph state repo (conn/get-db repo)))
-      (let [conn (conn/get-db repo false)]
-        (db-listener/listen-db-to-generate-ops repo conn)))))
 
 (rum/defcs ^:large-vars/cleanup-todo rtc-debug-ui <
   rum/reactive
@@ -100,7 +60,7 @@
                  :icon "refresh"
                  :on-click (fn [_]
                              (go
-                               (let [s (or s (<! (rtc-core/<init-state (state/get-auth-id-token) config/RTC-WS-URL)))
+                               (let [s (or s (<! (rtc-core/<init-state (state/get-auth-id-token))))
                                      graph-list (with-sub-data-from-ws s
                                                   (<! (ws/<send! s {:req-id (get-req-id)
                                                                     :action "list-graphs"}))
@@ -127,9 +87,9 @@
        (ui/button "start" {:class "my-2"
                            :on-click (fn []
                                        (prn :start-rtc)
-                                       (if s
-                                         (<start-rtc s)
-                                         (<start-rtc)))})
+                                       (let [token (state/get-auth-id-token)
+                                             ^object worker @db-browser/*worker]
+                                         (.rtc-start worker (state/get-current-repo) token)))})
 
        [:div.my-2.flex
         [:div.mr-2 (ui/button (str "send pending ops")
@@ -150,14 +110,13 @@
         (ui/button "grant graph access to"
                    {:class "mr-2"
                     :on-click (fn []
-                                (go
-                                  (let [user-uuid (some-> @(::grant-access-to-user state) parse-uuid)
-                                        user-email (when-not user-uuid @(::grant-access-to-user state))]
-                                    (when-let [graph-uuid @(::graph-uuid state)]
-                                      (<! (rtc-core/<grant-graph-access-to-others
-                                           s graph-uuid
-                                           :target-user-uuids (some-> user-uuid vector)
-                                           :target-user-emails (some-> user-email vector)))))))})
+                                (let [user-uuid (some-> @(::grant-access-to-user state) parse-uuid)
+                                      user-email (when-not user-uuid @(::grant-access-to-user state))]
+                                  (when-let [graph-uuid @(::graph-uuid state)]
+                                    (let [^object worker @db-browser/*worker]
+                                      (.rtc-grant-graph-access worker graph-uuid
+                                                               (some-> user-uuid vector)
+                                                               (some-> user-email vector))))))})
 
         [:input.form-input.my-2
          {:on-change (fn [e] (reset! (::grant-access-to-user state) (util/evalue e)))
@@ -170,16 +129,12 @@
       (ui/button (str "download graph to")
                  {:class "mr-2"
                   :on-click (fn []
-                              (go
-                                (when-let [repo @(::download-graph-to-repo state)]
-                                  (when-let [graph-uuid @(::graph-uuid-to-download state)]
-                                    (prn :download-graph graph-uuid :to repo)
-                                    (try
-                                      (<? (<download-graph repo graph-uuid))
-                                      (notification/show! "download graph successfully")
-                                      (catch :default e
-                                        (notification/show! "download graph failed" :error)
-                                        (prn ::download-graph-failed e)))))))})
+                              (when-let [repo @(::download-graph-to-repo state)]
+                                (when-let [graph-uuid @(::graph-uuid-to-download state)]
+                                  (prn :download-graph graph-uuid :to repo)
+                                  (let [token (state/get-auth-id-token)
+                                        ^object worker @db-browser/*worker]
+                                    (.rtc-download-graph worker repo token graph-uuid)))))})
       [:div.flex.flex-col
        [:select
         {:on-change (fn [e]
@@ -197,7 +152,9 @@
                                (set! (.-value (.-target e)) ""))))
          :default-value "repo name here"}]]]
      [:div.flex.my-2
-      (ui/button (str "upload current repo") {:on-click (fn []
-                                                          (go
-                                                            (<! (<upload-graph))
-                                                            (notification/show! "upload graph successfully")))})]]))
+      (ui/button (str "upload current repo")
+                 {:on-click (fn []
+                              (let [repo (state/get-current-repo)
+                                    token (state/get-auth-id-token)
+                                    ^js worker @db-browser/*worker]
+                                (.rtc-upload-graph worker repo token)))})]]))

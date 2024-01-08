@@ -48,7 +48,7 @@
           wrapped-worker (Comlink/wrap worker)]
       (worker-handler/handle-message! worker)
       (reset! *worker wrapped-worker)
-      (-> (p/let [_ (.init wrapped-worker)
+      (-> (p/let [_ (.init wrapped-worker config/RTC-WS-URL)
                   _ (.sync-app-state wrapped-worker
                                      (pr-str
                                       {:git/current-repo (state/get-current-repo)
