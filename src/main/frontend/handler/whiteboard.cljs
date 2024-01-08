@@ -34,7 +34,9 @@
                :block/page {:block/name (util/page-name-sanity-lc page-name)}
                :block/parent {:block/name page-name}
                :block/properties properties}
-        additional-props (gp-whiteboard/with-whiteboard-block-props block page-name)]
+        additional-props (gp-whiteboard/with-whiteboard-block-props
+                           (assoc block :block/properties {:ls-type :whiteboard-shape :logseq.tldraw.shape shape})
+                           page-name)]
     (merge block additional-props)))
 
 (defn- build-shapes
