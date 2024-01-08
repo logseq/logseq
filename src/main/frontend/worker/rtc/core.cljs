@@ -851,6 +851,23 @@
 
 (defonce *state (atom nil))
 
+(defn get-debug-state
+  ([repo]
+   (get-debug-state repo @*state))
+  ([repo state]
+   (let [graph-uuid (op-mem-layer/get-graph-uuid repo)
+         local-tx (op-mem-layer/get-local-tx repo)
+         unpushed-block-update-count (op-mem-layer/get-unpushed-block-update-count repo)]
+     (cond->
+      {:graph-uuid graph-uuid
+       :local-tx local-tx
+       :unpushed-block-update-count unpushed-block-update-count}
+       state
+       (merge
+        {:rtc-state @(:*rtc-state state)
+         :ws-state (ws/get-state @(:*ws state))
+         :auto-push-updates? (and @*state @(:*auto-push-client-ops? state))})))))
+
 ;; FIXME: token might be expired
 (defn <init-state
   [token]
@@ -860,7 +877,6 @@
           ws (ws/ws-listen token data-from-ws-chan ws-opened-ch)]
       (<! ws-opened-ch)
       (let [state (init-state ws data-from-ws-chan token)]
-        ;; (worker-util/post-message :rtc/sync-state state)
         (reset! *state state)
         state))))
 
@@ -896,3 +912,10 @@
                         (:graphs (<! (get-result-ch))))]
        (p/resolve! (bean/->js graph-list))))
     d))
+
+(add-watch *state :notify-main-thread
+           (fn [_ _ old new]
+             (let [new-state (get-debug-state @(:*repo new) new)
+                   old-state (get-debug-state @(:*repo old) old)]
+               (when (not= new-state old-state)
+                 (worker-util/post-message :rtc-sync-state (bean/->js new-state))))))
