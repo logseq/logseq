@@ -2,7 +2,9 @@
   "State hub for worker"
   (:require [logseq.common.util :as common-util]))
 
-(defonce *state (atom {:db/latest-transact-time {}
+(defonce *state (atom {:worker/object nil
+
+                       :db/latest-transact-time {}
                        :worker/context {}
 
                        :config {}
@@ -68,3 +70,7 @@
   [new-state]
   (swap! *state (fn [old-state]
                   (merge old-state new-state))))
+
+(defn set-worker-object!
+  [worker]
+  (swap! *state assoc :worker/object worker))

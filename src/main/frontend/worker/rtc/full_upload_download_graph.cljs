@@ -120,12 +120,12 @@
    (let [{:keys [t blocks]} all-blocks
          blocks* (replace-db-id-with-temp-id blocks)
          blocks-with-page-id (fill-block-fields blocks*)
-         ^js sqlite @state/*sqlite
+         ^js worker-obj (:worker/object @state/*state)
          work (p/do!
-               (.createOrOpenDB sqlite repo)
-               (.exportDB sqlite repo)
-               (.transact sqlite repo blocks-with-page-id nil (state/get-context))
-               (.releaseAccessHandles sqlite repo))]
+               (.createOrOpenDB worker-obj repo)
+               (.exportDB worker-obj repo)
+               (.transact worker-obj repo blocks-with-page-id nil (state/get-context))
+               (.releaseAccessHandles worker-obj repo))]
      (<? (p->c work))
 
      (worker-util/post-message :add-repo (pr-str {:repo repo}))
