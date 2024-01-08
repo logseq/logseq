@@ -1,11 +1,8 @@
 (ns frontend.db.rtc.debug-ui
   "Debug UI for rtc module"
-  (:require-macros
-   [frontend.worker.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
-  (:require [cljs.core.async :as async :refer [<! go]]
+  (:require [cljs.core.async :as async :refer [go]]
             [fipp.edn :as fipp]
             [frontend.db :as db]
-            [frontend.worker.rtc.core :as rtc-core]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.ws :as ws]
             [frontend.handler.user :as user]
@@ -13,18 +10,22 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [rum.core :as rum]
-            [frontend.persist-db.browser :as db-browser]))
+            [frontend.persist-db.browser :as db-browser]
+            [promesa.core :as p]
+            [cljs-bean.core :as bean]))
 
 (defonce debug-state (atom nil))
 
 (defn- stop
   []
-  (async/close! @(:*stop-rtc-loop-chan @debug-state))
+  (let [^object worker @db-browser/*worker]
+    (.rtc-stop worker))
   (reset! debug-state nil))
 
 (defn- push-pending-ops
   []
-  (async/put! (:force-push-client-ops-chan @debug-state) true))
+  (let [^object worker @db-browser/*worker]
+    (.rtc-push-pending-ops worker)))
 
 (rum/defcs ^:large-vars/cleanup-todo rtc-debug-ui <
   rum/reactive
@@ -59,12 +60,10 @@
       (ui/button "graph-list"
                  :icon "refresh"
                  :on-click (fn [_]
-                             (go
-                               (let [s (or s (<! (rtc-core/<init-state (state/get-auth-id-token))))
-                                     graph-list (with-sub-data-from-ws s
-                                                  (<! (ws/<send! s {:req-id (get-req-id)
-                                                                    :action "list-graphs"}))
-                                                  (:graphs (<! (get-result-ch))))]
+                             (let [token (state/get-auth-id-token)
+                                   ^object worker @db-browser/*worker]
+                               (p/let [result (.rtc-get-graphs worker token)
+                                       graph-list (bean/->clj result)]
                                  (reset! (::remote-graphs state) (map :graph-uuid graph-list))
                                  (reset! debug-state s)))))]
 
@@ -100,9 +99,9 @@
                                    ")")
                               {:on-click
                                (fn []
-                                 (go
-                                   (<! (rtc-core/<toggle-auto-push-client-ops s))
-                                   (reset! (::auto-push-updates? state) @(:*auto-push-client-ops? s))))})]
+                                 (let [^object worker @db-browser/*worker]
+                                   (p/let [result (.rtc-toggle-sync worker (state/get-current-repo))]
+                                     (reset! (::auto-push-updates? state) result))))})]
         [:div (ui/button "stop" {:on-click (fn [] (stop))})]])
      (when (some? s)
        [:hr]
