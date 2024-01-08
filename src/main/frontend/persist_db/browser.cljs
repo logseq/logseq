@@ -11,8 +11,6 @@
             [cljs-bean.core :as bean]
             [frontend.state :as state]
             [electron.ipc :as ipc]
-            [frontend.modules.outliner.pipeline :as pipeline]
-            [clojure.edn :as edn]
             [frontend.handler.worker :as worker-handler]))
 
 (defonce *worker (atom nil))
@@ -115,13 +113,8 @@
                        :whiteboards-directory (config/get-whiteboards-directory)
                        :pages-directory (config/get-pages-directory)}]
           (if sqlite
-            (p/let [result (.transact sqlite repo tx-data' tx-meta'
-                                      (pr-str context))
-                    data (edn/read-string result)]
-              (state/pub-event! [:search/transact-data repo (:search-indice data)])
-              (pipeline/invoke-hooks data)
-              (ipc/ipc :db-transact repo (:tx-data data) (:tx-meta data))
-              nil)
+            (.transact sqlite repo tx-data' tx-meta'
+                       (pr-str context))
             (notification/show! "Latest change was not saved! Please restart the application." :error))))))
 
   (<fetch-initial-data [_this repo _opts]

@@ -5,7 +5,11 @@
             [clojure.data :as data]
             [clojure.set :as set]
             [datascript.core :as d]
-            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]))
+            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.worker.state :as worker-state]
+            [frontend.worker.pipeline :as pipeline]
+            [frontend.worker.search :as search]
+            [frontend.worker.util :as worker-util]))
 
 
 (defn- entity-datoms=>attr->datom
@@ -158,3 +162,38 @@
              (fn [{:keys [tx-data tx-meta db-before db-after]}]
                (when (:persist-op? tx-meta true)
                  (generate-rtc-ops repo db-before db-after tx-data)))))
+
+(comment
+  (defn listen-db-to-batch-txs
+   [conn]
+   (d/listen! conn :batch-txs
+              (fn [{:keys [tx-data]}]
+                (when (worker-state/batch-tx-mode?)
+                  (worker-state/conj-batch-txs! tx-data))))))
+
+(defn sync-db-to-main-thread
+  [repo conn]
+  (d/listen! conn :sync-db
+             (fn [{:keys [tx-data tx-meta] :as tx-report}]
+               (let [result (pipeline/invoke-hooks repo conn tx-report (worker-state/get-context))
+                     ;; TODO: delay search indice so that UI can be refreshed earlier
+                     search-indice (search/sync-search-indice repo (:tx-report result))
+                     data (pr-str
+                           (merge
+                            {:repo repo
+                             :search-indice search-indice
+                             :tx-data tx-data
+                             :tx-meta tx-meta}
+                            (dissoc result :tx-report)))]
+                 (worker-util/post-message :sync-db-changes data)))))
+
+(defn listen-to-db-changes!
+  [repo conn]
+  (d/unlisten! conn :gen-ops)
+  (d/unlisten! conn :sync-db)
+  (when (op-mem-layer/rtc-db-graph? repo)
+    (listen-db-to-generate-ops repo conn)
+    ;; (rtc-db-listener/listen-db-to-batch-txs conn)
+    )
+
+  (sync-db-to-main-thread repo conn))
