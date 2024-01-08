@@ -347,3 +347,16 @@
   https://github.com/logseq/logseq/pull/8679"
   [parts]
   (string/join "/" parts))
+
+(def escape-chars "[]{}().+*?|$")
+
+(defn escape-regex-chars
+  "Escapes characters in string `old-value"
+  [old-value]
+  (reduce (fn [acc escape-char]
+            (string/replace acc escape-char (str "\\" escape-char)))
+          old-value escape-chars))
+
+(defn replace-ignore-case
+  [s old-value new-value]
+  (string/replace s (re-pattern (str "(?i)" (escape-regex-chars old-value))) new-value))

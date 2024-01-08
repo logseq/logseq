@@ -12,6 +12,7 @@
             [logseq.outliner.transaction :as outliner-tx]
             [frontend.worker.util :as worker-util]
             [logseq.common.util :as common-util]
+            [logseq.common.config :as common-config]
             [malli.core :as m]
             [malli.util :as mu]
             [logseq.db.frontend.property :as db-property]
@@ -24,7 +25,6 @@
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.ws :as ws]
-            [frontend.state :as state]
             [promesa.core :as p]
             [cljs-bean.core :as bean]))
 
@@ -883,9 +883,10 @@
 (defn <start-rtc
   [repo conn token]
   (go
-    (let [state (<init-state token)]
+    (let [state (<init-state token)
+          config (worker-state/get-config repo)]
       (if-let [graph-uuid (op-mem-layer/get-graph-uuid repo)]
-        (<! (<loop-for-rtc state graph-uuid repo conn (state/get-date-formatter)))
+        (<! (<loop-for-rtc state graph-uuid repo conn (common-config/get-date-formatter config)))
         (worker-util/post-message :notification [[:div
                                                   [:p "RTC is not supported for this graph"]]
                                                  :error])))))
