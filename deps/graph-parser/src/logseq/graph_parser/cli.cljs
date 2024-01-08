@@ -75,7 +75,7 @@
   ([dir options]
    (let [config (read-config dir)
          files (or (:files options) (build-graph-files dir config))
-         conn (or (:conn options) (ldb/start-conn {:file-based? true}))
+         conn (or (:conn options) (ldb/start-conn))
          _ (when-not (:files options) (println "Parsing" (count files) "files..."))
          asts (parse-files conn files (merge options {:config config}))]
      {:conn conn
