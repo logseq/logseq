@@ -7,9 +7,6 @@
 (defn block->shape [block]
   (get-in block [:block/properties :logseq.tldraw.shape]))
 
-(defn page-block->tldr-page [block]
-  (get-in block [:block/properties :logseq.tldraw.page]))
-
 (defn shape-block? [block]
   (= :whiteboard-shape (get-in block [:block/properties :ls-type])))
 
@@ -74,6 +71,8 @@
                     (str "whiteboard " (:type shape)))})
 
 (defn with-whiteboard-block-props
+  "Builds additional block attributes for a whiteboard block. Expects :block/properties
+   to be in file graph format"
   [block page-name]
   (let [shape? (shape-block? block)
         shape (block->shape block)
