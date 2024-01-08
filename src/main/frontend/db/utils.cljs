@@ -5,7 +5,6 @@
             [datascript.transit :as dt]
             [frontend.db.conn :as conn]
             [frontend.config :as config]
-            [logseq.common.util :as common-util]
             [logseq.db.frontend.content :as db-content]))
 
 ;; transit serialization

@@ -1,26 +1,24 @@
-(ns frontend.db.datascript.entity-plus
+(ns logseq.db.frontend.entity-plus
   "Add map ops such as assoc/dissoc to datascript Entity"
   (:require [cljs.core]
             [datascript.impl.entity :as entity :refer [Entity]]
-            [frontend.state :as state]
-            [frontend.config :as config]
-            [frontend.db.utils :as db-utils]))
+            [logseq.db.frontend.content :as db-content]))
 
 (def lookup-entity @#'entity/lookup-entity)
 (defn lookup-kv-then-entity
   ([e k] (lookup-kv-then-entity e k nil))
   ([^Entity e k default-value]
    (cond
-     (and (= k :block/raw-content) (config/db-based-graph? (state/get-current-repo)))
+     (= k :block/raw-content)
      (lookup-entity e :block/content default-value)
 
-     (and (= k :block/content) (config/db-based-graph? (state/get-current-repo)))
+     (= k :block/content)
      (let [result (lookup-entity e k default-value)
            refs (:block/refs e)
            tags (:block/tags e)]
        (or
         (when (string? result)
-          (db-utils/special-id->page result (distinct (concat refs tags))))
+          (db-content/special-id->page result (distinct (concat refs tags))))
         default-value))
 
      :else

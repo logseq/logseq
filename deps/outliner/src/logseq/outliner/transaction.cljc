@@ -12,8 +12,7 @@
   If no transactions are included in `body`, it does not save a transaction.
   `Args`:
     `opts`: Every key is optional, opts except `additional-tx` will be transacted as `tx-meta`.
-            {:graph \"Which graph will be transacted to\"
-             :outliner-op \"For example, :save-block, :insert-blocks, etc. \"
+            {:outliner-op \"For example, :save-block, :insert-blocks, etc. \"
              :additional-tx \"Additional tx data that can be bundled together
                               with the body in this macro.\"
              :persist-op? \"Boolean, store ops into db (sqlite), by default,
@@ -37,10 +36,8 @@
          (when transaction-opts#
            (conj! transaction-opts# opts#))
          ~@body)
-       (let [repo# (get-in opts# [:transact-opts :repo])
-             transaction-args# (cond-> {:repo repo#}
-                                 (and (logseq.db.sqlite.util/db-based-graph? repo#)
-                                      (get opts*# :persist-op? true))
+       (let [transaction-args# (cond-> {}
+                                 (get opts*# :persist-op? true)
                                  (assoc :persist-op? true))]
          (binding [logseq.outliner.core/*transaction-data* (transient [])
                    logseq.outliner.core/*transaction-opts* (transient [])

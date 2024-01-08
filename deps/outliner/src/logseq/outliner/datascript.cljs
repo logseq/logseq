@@ -69,8 +69,8 @@
                             retracted-blocks)]
       (when (and (seq retracted-tx') (fn? set-state-fn))
         (set-state-fn [:editor/last-replace-ref-content-tx repo]
-                                 {:retracted-block-ids retracted-block-ids
-                           :revert-tx revert-tx}))
+                      {:retracted-block-ids retracted-block-ids
+                       :revert-tx revert-tx}))
       (concat txs retracted-tx' macros-tx))
     txs))
 
