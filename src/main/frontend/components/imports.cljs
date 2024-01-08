@@ -4,7 +4,6 @@
             [clojure.core.async :as async]
             [clojure.edn :as edn]
             [clojure.string :as string]
-            [datascript.core :as d]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
@@ -269,9 +268,8 @@
                                 (async/<! (p->c (import-config-file! config-file)))
                                 (async/<! (import-from-asset-files! asset-files))
                                 (async/<! (import-from-doc-files! db-conn doc-files))
-                                                                                   ;; Go to home
-                                (route-handler/redirect-to-home!)
-                                (state/set-state! :graph/importing nil)))))]
+                                (state/set-state! :graph/importing nil)
+                                (finished-cb)))))]
     (state/set-modal!
      #(confirm-graph-name-dialog original-graph-name
                                  (fn [graph-name]
