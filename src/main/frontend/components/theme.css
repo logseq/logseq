@@ -10,6 +10,12 @@
   --ls-z-index-level-5: 99999;
 }
 
+@media (prefers-color-scheme: dark) {
+  .preboot-loading {
+    color: lightgray;
+  }
+}
+
 .visible-scrollbar {
   ::-webkit-scrollbar-thumb {
     background-color: or(--ls-scrollbar-thumb-color, --lx-gray-05, --ls-scrollbar-foreground-color);
@@ -30,9 +36,12 @@
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  .preboot-loading {
-    color: lightgray;
+.hide-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none !important; /* Firefox */
+
+  &::-webkit-scrollbar {
+    display: none;
   }
 }
 
@@ -73,15 +82,6 @@ html[data-theme='dark'] #app-container {
 
   input.form-input {
     background: none;
-  }
-}
-
-.hide-scrollbar {
-  -ms-overflow-style: none; /* IE and Edge */
-  scrollbar-width: none !important; /* Firefox */
-
-  &::-webkit-scrollbar {
-    display: none;
   }
 }
 
