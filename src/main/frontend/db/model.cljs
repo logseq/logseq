@@ -19,8 +19,6 @@
             [logseq.common.util :as common-util]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
-            ;; add map ops to datascript Entity
-            [frontend.db.datascript.entity-plus :as entity-plus]
             [frontend.config :as config]
             [logseq.db :as ldb]))
 

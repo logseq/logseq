@@ -65,6 +65,9 @@
   [:map {:closed true}
    [:*graph-uuid :any]
    [:*repo :any]
+   [:*db-conn :any]
+   [:*token :any]
+   [:*date-formatter :any]
    [:data-from-ws-chan :any]
    [:data-from-ws-pub :any]
    [:*stop-rtc-loop-chan :any]
@@ -73,6 +76,7 @@
    [:toggle-auto-push-client-ops-chan :any]
    [:*auto-push-client-ops? :any]
    [:force-push-client-ops-chan :any]])
+
 (def state-validator
   (let [validator (m/validator state-schema)]
     (fn [data]
@@ -91,22 +95,30 @@
 
 (defmethod transact-db! :delete-blocks [_ & args]
   (outliner-tx/transact!
-   {:persist-op? false}
+   {:persist-op? false
+    :transact-opts {:repo (first args)
+                    :conn (second args)}}
     (apply outliner-core/delete-blocks! args)))
 
 (defmethod transact-db! :move-blocks [_ & args]
   (outliner-tx/transact!
-   {:persist-op? false}
+   {:persist-op? false
+    :transact-opts {:repo (first args)
+                    :conn (second args)}}
    (apply outliner-core/move-blocks! args)))
 
 (defmethod transact-db! :insert-blocks [_ & args]
   (outliner-tx/transact!
-   {:persist-op? false}
+   {:persist-op? false
+    :transact-opts {:repo (first args)
+                    :conn (second args)}}
    (apply outliner-core/insert-blocks! args)))
 
 (defmethod transact-db! :save-block [_ & args]
   (outliner-tx/transact!
-   {:persist-op? false}
+   {:persist-op? false
+    :transact-opts {:repo (first args)
+                    :conn (second args)}}
    (apply outliner-core/save-block! args)))
 
 (defmethod transact-db! :delete-whiteboard-blocks [_ conn block-uuids]
@@ -272,7 +284,7 @@
           :else
           (let [b-ent (d/entity @conn [:block/uuid block-uuid])
                 new-block
-                (cond-> (d/entity @conn (:db/id b-ent))
+                (cond-> b-ent
                   (and (contains? key-set :content)
                        (not= (:content op-value)
                              (:block/content b-ent))) (assoc :block/content (:content op-value))
@@ -294,7 +306,7 @@
 
 (defn apply-remote-move-ops
   [repo conn date-formatter sorted-move-ops]
-  (prn :sorted-move-ops sorted-move-ops)
+  (prn :repo repo :sorted-move-ops sorted-move-ops)
   (doseq [{:keys [parents left self] :as op-value} sorted-move-ops]
     (let [r (check-block-pos @conn self parents left)]
       (case r
@@ -678,13 +690,13 @@
 
 
 (defn- <client-op-update-handler
-  [state token]
+  [state _token]
   {:pre [(some? @(:*graph-uuid state))
          (some? @(:*repo state))]}
   (go
     (let [repo @(:*repo state)
           conn @(:*db-conn state)
-          date-formatter (:*date-formatter state)]
+          date-formatter @(:*date-formatter state)]
       (op-mem-layer/new-branch! repo)
       (try
         (let [ops-for-remote (sort-remote-ops (gen-block-uuid->remote-ops repo conn))
@@ -884,7 +896,7 @@
 (defn <start-rtc
   [repo conn token]
   (go
-    (let [state (<init-state repo token)
+    (let [state (<! (<init-state repo token))
           config (worker-state/get-config repo)]
       (if-let [graph-uuid (op-mem-layer/get-graph-uuid repo)]
         (<! (<loop-for-rtc state graph-uuid repo conn (common-config/get-date-formatter config)))

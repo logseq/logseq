@@ -13,7 +13,8 @@
             [logseq.common.config :as common-config]
             [logseq.db.frontend.content :as db-content]
             [clojure.set :as set]
-            [logseq.db.frontend.rules :as rules]))
+            [logseq.db.frontend.rules :as rules]
+            [logseq.db.frontend.entity-plus]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
@@ -501,3 +502,9 @@
         (d/pull-many db
                      '[:db/id :block/name :block/original-name]
                      ids)))))
+
+(comment
+  (defn db-based-graph?
+    "Whether the current graph is db-only"
+    [db]
+    (= "db" (:db/type (d/entity db :db/type)))))
