@@ -460,6 +460,10 @@
    [_this block-id]
    (rtc-core/<get-block-content-versions @rtc-core/*state block-id))
 
+  (rtc-get-debug-state
+   [_this repo]
+   (bean/->js (rtc-core/get-debug-state repo)))
+
   (dangerousRemoveAllDbs
    [this repo]
    (p/let [dbs (.listDB this)]

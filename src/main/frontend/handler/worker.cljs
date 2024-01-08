@@ -17,6 +17,10 @@
 (defmethod handle :add-repo [_ data]
   (state/add-repo! {:url (:repo (edn/read-string data))}))
 
+(defmethod handle :rtc-sync-state [_ data]
+  (let [state (edn/read-string data)]
+    (state/pub-event! [:rtc/sync-state state])))
+
 (defmethod handle :default [_ data]
   (prn :debug "Worker data not handled: " data))
 
