@@ -211,8 +211,7 @@
       (p/then (fn [content]
                 (when content
                   (p/do!
-                   (db-editor-handler/save-file! "logseq/config.edn" content)
-                   (db/transact! [{:file/path "logseq/config.edn" :block/uuid (d/squuid)}]))
+                   (db-editor-handler/save-file! "logseq/config.edn" content))
                   (edn/read-string content))))))
 
 
@@ -264,7 +263,7 @@
                             (state/set-state! :graph/importing :folder)
                             (state/set-state! [:graph/importing-state :current-page] (str graph-name " Assets"))
                             (async/go
-                              (async/<! (p->c (repo-handler/new-empty-db! graph-name)))
+                              (async/<! (p->c (repo-handler/new-db! graph-name {:file-graph-import? true})))
                               (let [repo (state/get-current-repo)
                                     db-conn (db/get-db repo false)]
                                 (async/<! (p->c (import-config-file! config-file)))
