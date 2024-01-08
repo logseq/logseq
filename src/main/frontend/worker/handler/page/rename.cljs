@@ -2,7 +2,7 @@
   "Page rename"
   (:require [logseq.outliner.core :as outliner-core]
             [logseq.outliner.tree :as otree]
-            [frontend.handler.common.page :as page-common-handler]
+            [frontend.worker.handler.page :as worker-page]
             [datascript.core :as d]
             [medley.core :as medley]
             [clojure.string :as string]
@@ -11,7 +11,31 @@
             [frontend.worker.file.page-rename :as page-rename]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db :as ldb]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [logseq.graph-parser.text :as text]))
+
+(defn rename-update-namespace!
+  "update :block/namespace of the renamed block"
+  [repo conn config page old-original-name new-name]
+  (let [old-namespace? (text/namespace-page? old-original-name)
+        new-namespace? (text/namespace-page? new-name)]
+    (cond
+      new-namespace?
+      ;; update namespace
+      (let [namespace (first (common-util/split-last "/" new-name))]
+        (when namespace
+          (worker-page/create! repo conn config namespace) ;; create parent page if not exist, creation of namespace ref is handled in `create!`
+          (let [namespace-block (d/entity @conn [:block/name (common-util/page-name-sanity-lc namespace)])
+                page-txs [{:db/id (:db/id page)
+                           :block/namespace (:db/id namespace-block)}]]
+            (d/transact! conn repo page-txs))))
+
+      old-namespace?
+      ;; retract namespace
+      (d/transact! conn [[:db/retract (:db/id page) :block/namespace]])
+
+      :else
+      nil)))
 
 (defn- replace-page-ref
   "Replace from-page refs with to-page"
@@ -101,11 +125,11 @@
                                 (page-rename/replace-page-ref db config from-page-name to-page-name))
           tx-data (concat blocks-tx-data replace-ref-tx-data)]
       (d/transact! conn tx-data {:persist-op? persist-op?})
-      (page-common-handler/rename-update-namespace! from-page
-                                                    (common-util/get-page-original-name from-page)
-                                                    (common-util/get-page-original-name to-page)))
+      (rename-update-namespace! repo conn config from-page
+                                (common-util/get-page-original-name from-page)
+                                (common-util/get-page-original-name to-page)))
 
-    (page-common-handler/delete! from-page-name nil :redirect-to-home? false :persist-op? persist-op?)))
+    (worker-page/delete! repo conn from-page-name (fn [_]))))
 
 (defn- compute-new-file-path
   "Construct the full path given old full path and the file sanitized body.
@@ -162,7 +186,7 @@
                                          (merge {:old-path old-path
                                                  :new-path new-path}))})
 
-        (page-common-handler/rename-update-namespace! page old-original-name new-name)))))
+        (rename-update-namespace! repo conn config page old-original-name new-name)))))
 
 (defn- rename-namespace-pages!
   "Original names (unsanitized only)"

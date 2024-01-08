@@ -10,7 +10,6 @@
             [frontend.state :as state]
             [frontend.worker.handler.page :as worker-page]
             [logseq.common.util :as common-util]
-            [logseq.graph-parser.text :as text]
             [frontend.handler.ui :as ui-handler]
             [frontend.config :as config]
             [frontend.fs :as fs]
@@ -86,29 +85,7 @@
 
 ;; other fns
 ;; =========
-(defn rename-update-namespace!
-  "update :block/namespace of the renamed block"
-  [page old-original-name new-name]
-  (let [old-namespace? (text/namespace-page? old-original-name)
-        new-namespace? (text/namespace-page? new-name)
-        repo           (state/get-current-repo)]
-    (cond
-      new-namespace?
-      ;; update namespace
-      (let [namespace (first (common-util/split-last "/" new-name))]
-        (when namespace
-          (create! namespace {:redirect? false}) ;; create parent page if not exist, creation of namespace ref is handled in `create!`
-          (let [namespace-block (db/pull [:block/name (common-util/page-name-sanity-lc namespace)])
-                page-txs [{:db/id (:db/id page)
-                           :block/namespace (:db/id namespace-block)}]]
-            (db/transact! repo page-txs))))
 
-      old-namespace?
-      ;; retract namespace
-      (db/transact! [[:db/retract (:db/id page) :block/namespace]])
-
-      :else
-      nil)))
 
 (defn after-page-deleted!
   [repo page-name file-path]
@@ -116,7 +93,7 @@
       ;; TODO: move favorite && unfavorite to worker too
     (unfavorite-page! page-name)
 
-    (when (= (common-util/page-name-sanity-lc (state/get-current-page))
+    (when (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
              (common-util/page-name-sanity-lc page-name))
       (route-handler/redirect-to-home!))
 
@@ -147,7 +124,7 @@
         old-page-name       (common-util/page-name-sanity-lc old-name)
         new-page-name       (common-util/page-name-sanity-lc new-name)
         page (db/entity [:block/name new-page-name])
-        redirect? (= (common-util/page-name-sanity-lc (state/get-current-page))
+        redirect? (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
                      (common-util/page-name-sanity-lc old-page-name))]
     ;; Redirect to the newly renamed page
     (when redirect?

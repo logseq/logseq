@@ -1,6 +1,6 @@
 (ns frontend.worker.file.page-rename
   "File based page rename fns"
-  (:require [frontend.util :as util]
+  (:require [logseq.common.util :as common-util]
             [logseq.graph-parser.property :as gp-property]
             [logseq.common.util.page-ref :as page-ref]
             [clojure.walk :as walk]
@@ -22,7 +22,7 @@
                          (:org-mode/insert-file-link? config)
                          (re-find
                           (re-pattern
-                           (util/format
+                           (common-util/format
                             "\\[\\[file:\\.*/.*%s\\.org\\]\\[(.*?)\\]\\]" old-name))
                           content))]
     (-> (if old-org-ref
@@ -39,15 +39,15 @@
 
 (defn- replace-tag-ref!
   [content old-name new-name]
-  (let [old-tag (util/format "#%s" old-name)
+  (let [old-tag (common-util/format "#%s" old-name)
         new-tag (if (re-find #"[\s\t]+" new-name)
-                  (util/format "#[[%s]]" new-name)
+                  (common-util/format "#[[%s]]" new-name)
                   (str "#" new-name))]
     ;; hash tag parsing rules https://github.com/logseq/mldoc/blob/701243eaf9b4157348f235670718f6ad19ebe7f8/test/test_markdown.ml#L631
     ;; Safari doesn't support look behind, don't use
     ;; TODO: parse via mldoc
     (string/replace content
-                    (re-pattern (str "(?i)(^|\\s)(" (util/escape-regex-chars old-tag) ")(?=[,\\.]*($|\\s))"))
+                    (re-pattern (str "(?i)(^|\\s)(" (common-util/escape-regex-chars old-tag) ")(?=[,\\.]*($|\\s))"))
                     ;;    case_insense^    ^lhs   ^_grp2                       look_ahead^         ^_grp3
                     (fn [[_match lhs _grp2 _grp3]]
                       (str lhs new-tag)))))
@@ -58,7 +58,7 @@
         org-format? (= :org format)
         old-property (if org-format? (gp-property/colons-org old-name) (str old-name gp-property/colons))
         new-property (if org-format? (gp-property/colons-org (name new-name)) (str (name new-name) gp-property/colons))]
-    (util/replace-ignore-case content old-property new-property)))
+    (common-util/replace-ignore-case content old-property new-property)))
 
 (defn- replace-old-page!
   "Unsanitized names"
@@ -104,8 +104,8 @@
   "Unsanitized only"
   [db config old-original-name new-name]
   ;; update all pages which have references to this page
-  (let [page (d/entity db [:block/name (util/page-name-sanity-lc old-original-name)])
-        to-page (d/entity db [:block/name (util/page-name-sanity-lc new-name)])
+  (let [page (d/entity db [:block/name (common-util/page-name-sanity-lc old-original-name)])
+        to-page (d/entity db [:block/name (common-util/page-name-sanity-lc new-name)])
         blocks (:block/_refs (d/entity db (:db/id page)))
         tx       (->> (map (fn [{:block/keys [uuid content properties format] :as block}]
                              (let [content    (let [content' (replace-old-page! config content old-original-name new-name format)]
@@ -115,7 +115,7 @@
                                                 (when-not (= properties' properties)
                                                   properties'))]
                                (when (or content properties)
-                                 (util/remove-nils-non-nested
+                                 (common-util/remove-nils-non-nested
                                   {:block/uuid       uuid
                                    :block/content    content
                                    :block/properties properties
