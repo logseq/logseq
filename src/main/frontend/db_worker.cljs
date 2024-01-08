@@ -412,7 +412,7 @@
    (when-let [conn (state/get-datascript-conn repo)]
      (async/go
        (try
-         (let [state (<! (rtc-core/<init-state token))]
+         (let [state (<! (rtc-core/<init-state repo token))]
            (<! (rtc-updown/<upload-graph state repo conn))
            (rtc-db-listener/listen-db-to-generate-ops repo conn))
          (worker-util/post-message :notification
@@ -431,7 +431,7 @@
   (rtc-download-graph
    [this repo token graph-uuid]
    (async/go
-     (let [state (<! (rtc-core/<init-state token))]
+     (let [state (<! (rtc-core/<init-state repo token))]
        (try
          (<? (rtc-updown/<download-graph state repo graph-uuid))
          (worker-util/post-message :notification
@@ -453,8 +453,8 @@
    nil)
 
   (rtc-get-graphs
-   [_this token]
-   (rtc-core/<get-graphs token))
+   [_this repo token]
+   (rtc-core/<get-graphs repo token))
 
   (rtc-get-block-content-versions
    [_this block-id]

@@ -154,7 +154,7 @@
         (when-not (and (string/blank? new-content) (not blocks-just-deleted?))
           (let [files [[file-path new-content]]]
             (when (seq files)
-              (util/post-message :write-files {:repo repo :files files})
+              (util/post-message :write-files (pr-str {:repo repo :files files}))
               (swap! *writes disj (:db/id page-block))))))
       ;; In e2e tests, "card" page in db has no :file/path
       (js/console.error "File path from page-block is not valid" page-block tree))))

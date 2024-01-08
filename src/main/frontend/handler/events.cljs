@@ -942,7 +942,7 @@
   (state/set-state! :error/multiple-tabs-access-opfs? true)
   (state/set-modal! multi-tabs-dialog {:container-overflow-visible? true}))
 
-(defmethod handle :rtc-sync-state [[_ state]]
+(defmethod handle :rtc/sync-state [[_ state]]
   (swap! rtc-debug-ui/debug-state (fn [old] (merge old state))))
 
 (defn run!
