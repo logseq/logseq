@@ -24,20 +24,11 @@
   (let [^object worker @db-browser/*worker]
     (.rtc-push-pending-ops worker)))
 
-(rum/defcs ^:large-vars/cleanup-todo rtc-debug-ui <
+(rum/defc ^:large-vars/cleanup-todo rtc-debug-ui <
   rum/reactive
-  (rum/local nil :graph-uuid)
-  (rum/local nil :local-tx)
-  (rum/local nil :unpushed-block-update-count)
-  (rum/local nil :ws-state)
-  (rum/local nil :download-graph-to-repo)
-  (rum/local nil :remote-graphs)
-  (rum/local nil :graph-uuid-to-download)
-  (rum/local nil :grant-access-to-user)
-  (rum/local nil :auto-push-updates?)
-  [state]
-  (let [s (rum/react debug-state)
-        rtc-state (:rtc-state s)]
+  []
+  (let [state (rum/react debug-state)
+        rtc-state (:rtc-state state)]
     [:div
      [:div.flex
       (ui/button "local-state"
@@ -48,7 +39,7 @@
                                    ^object worker @db-browser/*worker]
                                (p/let [result (.rtc-get-debug-state worker repo)
                                        debug-state (bean/->clj result)]
-                                 (swap! state (fn [old] (merge old debug-state)))))))
+                                 (swap! debug-state (fn [old] (merge old debug-state)))))))
       (ui/button "graph-list"
                  :icon "refresh"
                  :on-click (fn [_]
@@ -56,7 +47,7 @@
                                    ^object worker @db-browser/*worker]
                                (p/let [result (.rtc-get-graphs worker token)
                                        graph-list (bean/->clj result)]
-                                 (swap! state assoc :remote-graphs (map :graph-uuid graph-list))))))]
+                                 (swap! debug-state assoc :remote-graphs (map :graph-uuid graph-list))))))]
 
      [:pre.select-text
       (-> {:user-uuid (user/user-uuid)
@@ -72,7 +63,7 @@
                            (count (:block/_page (db/entity [:block/name (util/page-name-sanity-lc page)]))))}
           (fipp/pprint {:width 20})
           with-out-str)]
-     (if (or (nil? s)
+     (if (or (nil? state)
              (= :closed rtc-state))
        (ui/button "start" {:class "my-2"
                            :on-click (fn []
@@ -85,16 +76,16 @@
         [:div.mr-2 (ui/button (str "send pending ops")
                               {:on-click (fn [] (push-pending-ops))})]
         [:div.mr-2 (ui/button (str "Toggle auto push updates("
-                                   (if (:*auto-push-client-ops? s)
+                                   (if (:auto-push-client-ops? state)
                                      "ON" "OFF")
                                    ")")
                               {:on-click
                                (fn []
                                  (let [^object worker @db-browser/*worker]
                                    (p/let [result (.rtc-toggle-sync worker (state/get-current-repo))]
-                                     (swap! state assoc :auto-push-updates? result))))})]
+                                     (swap! debug-state assoc :auto-push-updates? result))))})]
         [:div (ui/button "stop" {:on-click (fn [] (stop))})]])
-     (when (some? s)
+     (when (some? state)
        [:hr]
        [:div.flex.flex-row
         (ui/button "grant graph access to"
@@ -109,7 +100,7 @@
                                                                (some-> user-email vector))))))})
 
         [:input.form-input.my-2
-         {:on-change (fn [e] (swap! state assoc :grant-access-to-user (util/evalue e)))
+         {:on-change (fn [e] (swap! debug-state assoc :grant-access-to-user (util/evalue e)))
           :on-focus (fn [e] (let [v (.-value (.-target e))]
                               (when (= v "input email or user-uuid here")
                                 (set! (.-value (.-target e)) ""))))
@@ -129,14 +120,14 @@
        [:select
         {:on-change (fn [e]
                       (let [value (util/evalue e)]
-                        (swap! state assoc :graph-uuid-to-download value)))}
+                        (swap! debug-state assoc :graph-uuid-to-download value)))}
         (if (seq (:remote-graphs state))
           (cons [:option {:key "select a remote graph" :value nil} "select a remote graph"]
                 (for [graph-uuid (:remote-graphs state)]
                   [:option {:key graph-uuid :value graph-uuid} (str (subs graph-uuid 0 14) "...")]))
           (list [:option {:key "refresh-first" :value nil} "refresh remote-graphs first"]))]
        [:input.form-input.my-2
-        {:on-change (fn [e] (swap! state assoc :download-graph-to-repo (util/evalue e)))
+        {:on-change (fn [e] (swap! debug-state assoc :download-graph-to-repo (util/evalue e)))
          :on-focus (fn [e] (let [v (.-value (.-target e))]
                              (when (= v "repo name here")
                                (set! (.-value (.-target e)) ""))))
