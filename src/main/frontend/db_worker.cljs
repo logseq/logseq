@@ -18,7 +18,12 @@
             [frontend.worker.file :as file]
             [logseq.db :as ldb]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
-            [frontend.worker.rtc.db-listener :as rtc-db-listener]))
+            [frontend.worker.rtc.db-listener :as rtc-db-listener]
+            [frontend.worker.rtc.full-upload-download-graph :as rtc-updown]
+            [frontend.worker.rtc.core :as rtc-core]
+            [clojure.core.async :as async]
+            [frontend.worker.async-util :include-macros true :refer [<?]]
+            [frontend.worker.util :as worker-util]))
 
 (defonce *sqlite state/*sqlite)
 (defonce *sqlite-conns state/*sqlite-conns)
@@ -128,7 +133,7 @@
   [repo conn]
   (d/unlisten! conn :gen-ops)
   (when (op-mem-layer/rtc-db-graph? repo)
-      (rtc-db-listener/listen-db-to-generate-ops repo conn)))
+    (rtc-db-listener/listen-db-to-generate-ops repo conn)))
 
 (defn- create-or-open-db!
   [repo]
@@ -200,7 +205,7 @@
 
 
 #_:clj-kondo/ignore
-(defclass SQLiteDB
+(defclass DBWorker
   (extends js/Object)
 
   (constructor
@@ -215,7 +220,8 @@
      (.-version sqlite)))
 
   (init
-   [_this]
+   [_this rtc-ws-url]
+   (reset! state/*rtc-ws-url rtc-ws-url)
    (init-sqlite-module!))
 
   (listDB
@@ -372,6 +378,72 @@
      (state/set-new-state! new-state)
      nil))
 
+  ;; RTC
+  (rtc-start
+   [this repo token]
+   (when-let [conn (state/get-datascript-conn repo)]
+     (rtc-core/<start-rtc repo conn token)
+     nil))
+
+  (rtc-stop
+   [this]
+   (rtc-core/<stop-rtc)
+   nil)
+
+  (rtc-toggle-sync
+   [this repo]
+   (rtc-core/<toggle-sync)
+   nil)
+
+  (rtc-grant-graph-access
+   [this graph-uuid target-user-uuids target-user-emails]
+   (when-let [state @rtc-core/*state]
+     (rtc-core/<grant-graph-access-to-others
+      state graph-uuid
+      :target-user-uuids target-user-uuids
+      :target-user-emails target-user-emails))
+   nil)
+
+  (rtc-upload-graph
+   [this repo token]
+   (when-let [conn (state/get-datascript-conn repo)]
+     (async/go
+       (try
+         (let [state (<! (rtc-core/<init-state token))]
+          (<! (rtc-updown/<upload-graph state repo conn))
+          (rtc-db-listener/listen-db-to-generate-ops repo conn))
+         (worker-util/post-message :notification
+                                   (pr-str
+                                    [[:div
+                                      [:p "Upload graph successfully"]]]))
+         (catch :default e
+           (worker-util/post-message :notification
+                                     (pr-str
+                                      [[:div
+                                        [:p "upload graph failed"]]
+                                       :error]))
+           (prn ::download-graph-failed e))))
+     nil))
+
+  (rtc-download-graph
+   [this repo token graph-uuid]
+   (async/go
+     (let [state (<! (rtc-core/<init-state token))]
+       (try
+         (<? (rtc-updown/<download-graph state repo graph-uuid))
+         (worker-util/post-message :notification
+                                   (pr-str
+                                    [[:div
+                                      [:p "download graph successfully"]]]))
+         (catch :default e
+           (worker-util/post-message :notification
+                                     (pr-str
+                                      [[:div
+                                        [:p "download graph failed"]]
+                                       :error]))
+           (prn ::download-graph-failed e)))))
+   nil)
+
   (dangerousRemoveAllDbs
    [this repo]
    (p/let [dbs (.listDB this)]
@@ -380,7 +452,7 @@
 (defn init
   "web worker entry"
   []
-  (let [^js obj (SQLiteDB.)]
+  (let [^js obj (DBWorker.)]
     (file/<ratelimit-file-writes!)
     (Comlink/expose obj)))
 

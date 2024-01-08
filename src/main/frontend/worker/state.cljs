@@ -8,6 +8,8 @@
                        :config {}
                        :git/current-repo nil}))
 
+(defonce *rtc-ws-url (atom nil))
+
 (defonce *sqlite (atom nil))
 ;; repo -> {:db conn :search conn}
 (defonce *sqlite-conns (atom nil))
