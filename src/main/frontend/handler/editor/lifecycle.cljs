@@ -4,7 +4,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [frontend.db :as db]))
 
 (defn did-mount!
   [state]
@@ -43,7 +44,9 @@
            (not (contains? #{:insert :indent-outdent :auto-save :undo :redo :delete} (state/get-editor-op)))
            ;; Don't trigger auto-save if the latest op is undo or redo
            (not (contains? #{:undo :redo :paste-blocks} (state/get-editor-latest-op))))
-      (editor-handler/save-block! (get-state) value)))
+      (let [state (get-state)]
+        (when (db/entity [:block/uuid (:block/uuid (:block state))]) ; block still exists
+          (editor-handler/save-block! state value)))))
   state)
 
 (def lifecycle

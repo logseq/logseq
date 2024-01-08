@@ -489,7 +489,7 @@
       (swap! *depend-on-block-uuid-set conj target-uuid))))
 
 (defmethod local-block-ops->remote-ops-aux :update-op
-  [_ & {:keys [repo conn block update-op left-uuid parent-uuid *remote-ops]}]
+  [_ & {:keys [conn block update-op left-uuid parent-uuid *remote-ops]}]
   (let [block-uuid (:block/uuid block)
         attr-map (:updated-attrs (second update-op))
         attr-alias-map (when (contains? attr-map :alias)

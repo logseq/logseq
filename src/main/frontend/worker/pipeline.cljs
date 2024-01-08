@@ -69,15 +69,14 @@
 
 (defn invoke-hooks
   [repo conn tx-report context]
-  (let [tx-meta (:tx-meta tx-report)
-        {:keys [from-disk? new-graph?]} tx-meta
-        fix-tx-data (validate-and-fix-db! repo conn tx-report context)]
-    (if (or from-disk? new-graph?)
-      {:tx-report tx-report}
-      (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
-            deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))
-            replace-tx (when-not (:pipeline-replace? tx-meta)
-                         (concat
+  (when-not (:pipeline-replace? (:tx-meta tx-report))
+    (let [tx-meta (:tx-meta tx-report)
+          {:keys [from-disk? new-graph?]} tx-meta]
+      (if (or from-disk? new-graph?)
+        {:tx-report tx-report}
+        (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
+              deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))
+              replace-tx (concat
                           ;; block path refs
                           (set (compute-block-path-refs-tx tx-report blocks))
 
@@ -93,22 +92,23 @@
                                     (when-let [db-id (:db/id b)]
                                       {:db/id db-id
                                        :block/tx-id tx-id})) updated-blocks)
-                             (remove nil?)))))
-            tx-report' (or
-                        (when (seq replace-tx)
-                          (ldb/transact! conn replace-tx {:replace? true
-                                                          :pipeline-replace? true}))
-                        tx-report)
-            full-tx-data (concat (:tx-data tx-report) fix-tx-data (:tx-data tx-report'))
-            final-tx-report (assoc tx-report' :tx-data full-tx-data)
-            affected-query-keys (when-not (:importing? context)
-                                  (worker-react/get-affected-queries-keys final-tx-report))]
-        (doseq [page pages]
-          (file/sync-to-file repo (:db/id page) tx-meta))
-        {:tx-report final-tx-report
-         :replace-tx-data (:tx-data tx-report')
-         :replace-tx-meta (:tx-meta tx-report')
-         :affected-keys affected-query-keys
-         :deleted-block-uuids deleted-block-uuids
-         :pages pages
-         :blocks blocks}))))
+                             (remove nil?))))
+              tx-report' (or
+                          (when (seq replace-tx)
+                            (ldb/transact! conn replace-tx {:replace? true
+                                                            :pipeline-replace? true}))
+                          tx-report)
+              fix-tx-data (validate-and-fix-db! repo conn tx-report context)
+              full-tx-data (concat (:tx-data tx-report) fix-tx-data (:tx-data tx-report'))
+              final-tx-report (assoc tx-report' :tx-data full-tx-data)
+              affected-query-keys (when-not (:importing? context)
+                                    (worker-react/get-affected-queries-keys final-tx-report))]
+          (doseq [page pages]
+            (file/sync-to-file repo (:db/id page) tx-meta))
+          {:tx-report final-tx-report
+           :replace-tx-data (:tx-data tx-report')
+           :replace-tx-meta (:tx-meta tx-report')
+           :affected-keys affected-query-keys
+           :deleted-block-uuids deleted-block-uuids
+           :pages pages
+           :blocks blocks})))))
