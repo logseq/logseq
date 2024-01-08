@@ -43,9 +43,10 @@
       (ui/button "graph-list"
                  :icon "refresh"
                  :on-click (fn [_]
-                             (let [token (state/get-auth-id-token)
+                             (let [repo (state/get-current-repo)
+                                   token (state/get-auth-id-token)
                                    ^object worker @db-browser/*worker]
-                               (p/let [result (.rtc-get-graphs worker token)
+                               (p/let [result (.rtc-get-graphs worker repo token)
                                        graph-list (bean/->clj result)]
                                  (swap! debug-state assoc :remote-graphs (map :graph-uuid graph-list))))))]
 

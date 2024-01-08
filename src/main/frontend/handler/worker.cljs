@@ -8,8 +8,9 @@
 
 (defmulti handle identity)
 
-(defmethod handle :write-files [_ {:keys [repo files]}]
-  (file-handler/alter-files repo files {}))
+(defmethod handle :write-files [_ data]
+  (let [{:keys [repo files]} (edn/read-string data)]
+    (file-handler/alter-files repo files {})))
 
 (defmethod handle :notification [_ data]
   (apply notification/show! (edn/read-string data)))

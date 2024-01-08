@@ -19,7 +19,7 @@
   []
   (let [data-from-ws-chan (chan (async/sliding-buffer 100))
         ws (rtc-mock/mock-websocket data-from-ws-chan)]
-    (assoc (rtc-core/init-state ws data-from-ws-chan)
+    (assoc (rtc-core/init-state ws data-from-ws-chan test-helper/test-db "")
            :*auto-push-client-ops? (atom false))))
 
 (defn- <start-rtc-loop

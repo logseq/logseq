@@ -833,11 +833,11 @@
 
 
 (defn init-state
-  [ws data-from-ws-chan token]
+  [ws data-from-ws-chan repo token]
   ;; {:post [(m/validate state-schema %)]}
   {:*rtc-state (atom :closed :validator rtc-state-validator)
    :*graph-uuid (atom nil)
-   :*repo (atom nil)
+   :*repo (atom repo)
    :*db-conn (atom nil)
    :*token (atom token)
    :*date-formatter (atom nil)
@@ -865,31 +865,33 @@
        state
        (merge
         {:rtc-state @(:*rtc-state state)
-         :ws-state (ws/get-state @(:*ws state))
-         :auto-push-updates? (and @*state @(:*auto-push-client-ops? state))})))))
+         :ws-state (some-> @(:*ws state) ws/get-state)
+         :auto-push-updates? (when-let [a (:*auto-push-client-ops? state)]
+                               @a)})))))
 
 ;; FIXME: token might be expired
 (defn <init-state
-  [token]
+  [repo token]
   (go
     (let [data-from-ws-chan (chan (async/sliding-buffer 100))
           ws-opened-ch (chan)
           ws (ws/ws-listen token data-from-ws-chan ws-opened-ch)]
       (<! ws-opened-ch)
-      (let [state (init-state ws data-from-ws-chan token)]
+      (let [state (init-state ws data-from-ws-chan repo token)]
         (reset! *state state)
         state))))
 
 (defn <start-rtc
   [repo conn token]
   (go
-    (let [state (<init-state token)
+    (let [state (<init-state repo token)
           config (worker-state/get-config repo)]
       (if-let [graph-uuid (op-mem-layer/get-graph-uuid repo)]
         (<! (<loop-for-rtc state graph-uuid repo conn (common-config/get-date-formatter config)))
-        (worker-util/post-message :notification [[:div
-                                                  [:p "RTC is not supported for this graph"]]
-                                                 :error])))))
+        (worker-util/post-message :notification (pr-str
+                                                 [[:div
+                                                   [:p "RTC is not supported for this graph"]]
+                                                  :error]))))))
 
 (defn <stop-rtc
   []
@@ -903,10 +905,10 @@
     (<toggle-auto-push-client-ops state)))
 
 (defn <get-graphs
-  [token]
+  [repo token]
   (let [d (p/deferred)]
     (go
-     (let [state (or @*state (<! (<init-state token)))
+     (let [state (or @*state (<! (<init-state repo token)))
            graph-list (with-sub-data-from-ws state
                         (<! (ws/<send! state {:req-id (get-req-id)
                                               :action "list-graphs"}))
@@ -917,7 +919,8 @@
 
 (add-watch *state :notify-main-thread
            (fn [_ _ old new]
-             (let [new-state (get-debug-state @(:*repo new) new)
-                   old-state (get-debug-state @(:*repo old) old)]
+             (let [*repo (:*repo new)
+                   new-state (get-debug-state @*repo new)
+                   old-state (get-debug-state @*repo old)]
                (when (not= new-state old-state)
-                 (worker-util/post-message :rtc-sync-state (bean/->js new-state))))))
+                 (worker-util/post-message :rtc-sync-state (pr-str new-state))))))
