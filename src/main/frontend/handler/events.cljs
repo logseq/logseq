@@ -75,7 +75,9 @@
             [rum.core :as rum]
             [frontend.db.listener :as db-listener]
             [frontend.persist-db.browser :as db-browser]
-            [frontend.db.rtc.debug-ui :as rtc-debug-ui]))
+            [frontend.db.rtc.debug-ui :as rtc-debug-ui]
+            [frontend.modules.outliner.pipeline :as pipeline]
+            [electron.ipc :as ipc]))
 
 ;; TODO: should we move all events here?
 
@@ -944,6 +946,15 @@
 
 (defmethod handle :rtc/sync-state [[_ state]]
   (swap! rtc-debug-ui/debug-state (fn [old] (merge old state))))
+
+;; db-worker -> UI
+(defmethod handle :db/sync-changes [[_ data]]
+  (let [repo (state/get-current-repo)]
+    (pipeline/invoke-hooks data)
+
+    (ipc/ipc :db-transact repo (:tx-data data) (:tx-meta data))
+    (state/pub-event! [:search/transact-data repo (:search-indice data)])
+    nil))
 
 (defn run!
   []

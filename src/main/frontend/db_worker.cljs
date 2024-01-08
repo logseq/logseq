@@ -13,7 +13,6 @@
             [cljs-bean.core :as bean]
             [frontend.worker.search :as search]
             [logseq.db.sqlite.util :as sqlite-util]
-            [frontend.worker.pipeline :as pipeline]
             [frontend.worker.state :as state]
             [frontend.worker.file :as file]
             [logseq.db :as ldb]
@@ -129,12 +128,6 @@
   (let [{:keys [db search]} (@*sqlite-conns repo)]
     (close-db-aux! repo db search)))
 
-(defn- listen-to-db!
-  [repo conn]
-  (d/unlisten! conn :gen-ops)
-  (when (op-mem-layer/rtc-db-graph? repo)
-    (rtc-db-listener/listen-db-to-generate-ops repo conn)))
-
 (defn- create-or-open-db!
   [repo]
   (when-not (state/get-sqlite-conn repo)
@@ -154,7 +147,7 @@
             conn (sqlite-common-db/get-storage-conn storage schema)]
         (swap! *datascript-conns assoc repo conn)
         (p/let [_ (op-mem-layer/<init-load-from-indexeddb! repo)]
-          (listen-to-db! repo conn))
+          (rtc-db-listener/listen-to-db-changes! repo conn))
         nil))))
 
 (defn- iter->vec [iter]
@@ -281,17 +274,8 @@
              tx-meta' (if (or (:from-disk? tx-meta) (:new-graph? tx-meta))
                         tx-meta
                         (assoc tx-meta :skip-store? true))
-             tx-report (ldb/transact! conn tx-data tx-meta')
-             result (pipeline/invoke-hooks repo conn tx-report context)
-             ;; TODO: delay search indice so that UI can be refreshed earlier
-             search-indice (search/sync-search-indice repo (:tx-report result))
-             data (merge
-                   {:repo repo
-                    :search-indice search-indice
-                    :tx-data tx-data
-                    :tx-meta tx-meta}
-                   (dissoc result :tx-report))]
-         (pr-str data))
+             _tx-report (ldb/transact! conn tx-data tx-meta')]
+         nil)
        (catch :default e
          (prn :debug :error)
          (js/console.error e)))))

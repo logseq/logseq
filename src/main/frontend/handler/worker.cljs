@@ -22,6 +22,10 @@
   (let [state (edn/read-string data)]
     (state/pub-event! [:rtc/sync-state state])))
 
+(defmethod handle :sync-db-changes [_ data]
+  (let [data (edn/read-string data)]
+    (state/pub-event! [:db/sync-changes data])))
+
 (defmethod handle :default [_ data]
   (prn :debug "Worker data not handled: " data))
 
