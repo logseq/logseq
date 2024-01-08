@@ -109,11 +109,11 @@
                                               :block/tx-id tx-id})) updated-blocks)
                                     (remove nil?)))))]
 
-          (when (and (not config/publishing?) (not pipeline-replace?))
+          (when (not pipeline-replace?)
             (let [tx-report' (db/transact! repo replace-full-tx {:replace? true
                                                                  :pipeline-replace? true})
                   full-tx-data (concat (:tx-data tx-report) (:tx-data tx-report'))]
-              (persist-db/<transact-data repo full-tx-data (:tx-meta tx-report))
+              (when-not config/publishing? (persist-db/<transact-data repo full-tx-data (:tx-meta tx-report)))
               (when-not importing?
                 (react/refresh! repo (assoc tx-report :tx-data full-tx-data)))))
 
