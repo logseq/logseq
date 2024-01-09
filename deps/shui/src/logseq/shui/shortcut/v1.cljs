@@ -63,10 +63,13 @@
 
 (rum/defc part
   [ks size]
-  (let [tiles (map print-shortcut-key ks)]
-    (ui/button {:variant     :default
-                :class       "bg-gray-03 text-gray-12 px-1.5 py-0 leading-4 h-5 hover:bg-gray-04 active:bg-gray-03 hover:text-gray-11"
-                :interactive false
+  (let [tiles (map print-shortcut-key ks)
+        interactive? false]
+    (ui/button {:variant     :text
+                :class       (str "bg-gray-03 text-gray-10 px-1.5 py-0 leading-4 h-5 "
+                               (if interactive?
+                                 "hover:bg-gray-04 active:bg-gray-03 hover:text-gray-11"
+                                 "cursor-default hover:bg-gray-03 active:bg-gray-03 hover:text-gray-11"))
                 :size        size}
       (for [[index tile] (map-indexed vector tiles)]
         [:<>

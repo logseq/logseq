@@ -177,7 +177,7 @@
                        (string/split #" "))
                    sequence)]
     [:span.keyboard-shortcut
-     (shui/shortcut-v1 sequence opts)]))
+     (shui/shortcut sequence opts)]))
 
 (rum/defc menu-link
   [{:keys [only-child? no-padding? class shortcut] :as options} child]
