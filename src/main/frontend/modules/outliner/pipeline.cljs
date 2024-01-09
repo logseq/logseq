@@ -48,6 +48,10 @@
               (:whiteboard/transact? tx-meta))
       (undo-redo/listen-db-changes! opts))))
 
+(defn- mark-pages-as-loaded!
+  [repo page-names]
+  (state/update-state! [repo :unloaded-pages] #(remove page-names %)))
+
 (defn invoke-hooks
   [{:keys [tx-meta tx-data deleted-block-uuids affected-keys blocks] :as opts}]
   (let [{:keys [from-disk? new-graph? local-tx?]} tx-meta
@@ -59,6 +63,10 @@
 
     (let [conn (db/get-db repo false)]
       (d/transact! conn tx-data tx-meta))
+
+    (let [pages (set (keep #(when (= :block/name (:a %)) (:v %)) tx-data))]
+      (when (seq pages)
+        (mark-pages-as-loaded! repo pages)))
 
     (when (= (:outliner-op tx-meta) :delete-page)
       (state/pub-event! [:page/deleted repo (:deleted-page tx-meta) (:file-path tx-meta)]))

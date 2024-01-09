@@ -43,7 +43,7 @@
     (when (and
            (not (contains? #{:insert :indent-outdent :auto-save :undo :redo :delete} (state/get-editor-op)))
            ;; Don't trigger auto-save if the latest op is undo or redo
-           (not (contains? #{:undo :redo :paste-blocks} (state/get-editor-latest-op))))
+           (not (contains? #{:delete :undo :redo :paste-blocks} (state/get-editor-latest-op))))
       (let [state (get-state)]
         (when (db/entity [:block/uuid (:block/uuid (:block state))]) ; block still exists
           (editor-handler/save-block! state value)))))

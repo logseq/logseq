@@ -2292,6 +2292,13 @@ Similar to re-frame subscriptions"
      (fn [s]
        (contains? s (str block-uuid))))))
 
+(defn sub-page-unloaded?
+  [repo page-name]
+  (rum/react
+   (rum/derived-atom [(rum/cursor-in state [repo :unloaded-pages])] [::page-unloaded repo page-name]
+                     (fn [s]
+                       (contains? s page-name)))))
+
 (defn get-color-accent []
   (get @state :ui/radix-color))
 
