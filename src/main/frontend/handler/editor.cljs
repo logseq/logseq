@@ -710,6 +710,7 @@
         block (db/pull repo '[*] [:block/uuid uuid])]
     (when block
       (let [blocks (block-handler/get-top-level-blocks [block])]
+        (state/set-state! :ui/deleting-block uuid)
         (ui-outliner-tx/transact!
          {:outliner-op :delete-blocks}
          (outliner-core/delete-blocks! repo (db/get-db false)
@@ -799,11 +800,7 @@
                                         (util/get-prev-block-non-collapsed-non-embed block-parent))
                         {:keys [prev-block new-content pos]} (move-to-prev-block repo sibling-block format id value)
                         concat-prev-block? (boolean (and prev-block new-content))
-                        transact-opts (cond->
-                                       {:outliner-op :delete-blocks}
-                                        concat-prev-block?
-                                        (assoc :concat-data
-                                               {:last-edit-block (:block/uuid block)}))
+                        transact-opts {:outliner-op :delete-blocks}
                         db-based? (config/db-based-graph? repo)]
                     (ui-outliner-tx/transact!
                      transact-opts
@@ -2738,9 +2735,7 @@
             delete-block (if next-block-has-refs? edit-block next-block)
             keep-block (if next-block-has-refs? next-block edit-block)]
         (ui-outliner-tx/transact!
-         {:outliner-op :delete-blocks
-          :concat-data {:last-edit-block (:block/uuid edit-block)
-                        :end? true}}
+         {:outliner-op :delete-blocks}
          (delete-block-aux! delete-block false)
          (save-block! repo keep-block new-content {:editor/op :delete})
          (when next-block-has-refs?
