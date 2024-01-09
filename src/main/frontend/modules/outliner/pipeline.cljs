@@ -9,7 +9,8 @@
             [frontend.util.drawer :as drawer]
             [frontend.modules.editor.undo-redo :as undo-redo]
             [datascript.core :as d]
-            [datascript.db :as d-db]))
+            [datascript.db :as d-db]
+            [frontend.handler.ui :as ui-handler]))
 
 (defn- reset-editing-block-content!
   [tx-data tx-meta]
@@ -72,24 +73,28 @@
     (when (= (:outliner-op tx-meta) :rename-page)
       (state/pub-event! [:page/renamed repo (:data tx-meta)]))
 
-    (when-not (or from-disk? new-graph?)
-      (try
-        (reset-editing-block-content! tx-data tx-meta)
-        (catch :default e
-          (prn :reset-editing-block-content)
-          (js/console.error e)))
+    (if (or from-disk? new-graph?)
+      (do
+        (react/clear-query-state!)
+        (ui-handler/re-render-root!))
+      (do
+        (try
+          (reset-editing-block-content! tx-data tx-meta)
+          (catch :default e
+            (prn :reset-editing-block-content)
+            (js/console.error e)))
 
-      (when-not (:graph/importing @state/state)
-        (react/refresh! repo tx-report affected-keys)
+        (when-not (:graph/importing @state/state)
+          (react/refresh! repo tx-report affected-keys)
 
-        (when (and state/lsp-enabled?
-                   (seq blocks)
-                   (<= (count blocks) 1000))
-          (state/pub-event! [:plugin/hook-db-tx
-                             {:blocks  blocks
-                              :deleted-block-uuids deleted-block-uuids
-                              :tx-data (:tx-data tx-report)
-                              :tx-meta (:tx-meta tx-report)}]))))
+          (when (and state/lsp-enabled?
+                     (seq blocks)
+                     (<= (count blocks) 1000))
+            (state/pub-event! [:plugin/hook-db-tx
+                               {:blocks  blocks
+                                :deleted-block-uuids deleted-block-uuids
+                                :tx-data (:tx-data tx-report)
+                                :tx-meta (:tx-meta tx-report)}])))))
 
     (when-let [deleting-block-id (:ui/deleting-block @state/state)]
       (when (some (fn [datom] (and
