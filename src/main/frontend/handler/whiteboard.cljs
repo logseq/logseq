@@ -200,8 +200,11 @@
    (create-new-whiteboard-page! nil))
   ([name]
    (let [uuid (or (and name (parse-uuid name)) (d/squuid))
-         name (or name (str uuid))]
+         name (or name (str uuid))
+         repo (state/get-current-repo)]
      (db/transact! (get-default-new-whiteboard-tx name uuid))
+     (state/update-state! [repo :unloaded-pages] (fn [pages] (conj (set pages)
+                                                                   (util/page-name-sanity-lc name))))
      name)))
 
 (defn create-new-whiteboard-and-redirect!
