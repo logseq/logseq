@@ -514,8 +514,7 @@
   (let [path-string? (string? (first paths))
         f (if path-string?
             fs-util/include-reserved-chars?
-            #(fs-util/include-reserved-chars? (-relative-path %)))
-        reserved-paths (filter f paths)]
+            #(fs-util/include-reserved-chars? (-relative-path %)))]
     (vec (remove f paths))))
 
 (defn- diffs->filetxns

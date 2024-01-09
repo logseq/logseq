@@ -7,7 +7,7 @@
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [logseq.common.config :as common-config]
             [frontend.test.helper :as test-helper]
-            [frontend.handler.file-based.page :as file-page-handler]
+            [frontend.worker.handler.page.rename :as worker-page-rename]
             [frontend.handler.conversion :as conversion-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.db.conn :as conn]
@@ -123,7 +123,7 @@
     (if rename-target
       #_:clj-kondo/ignore
       (do #_(prn "conversion triple-lowbar: " original-body " -> " rename-target)
-       (#'file-page-handler/compute-new-file-path path rename-target))
+       (#'worker-page-rename/compute-new-file-path path rename-target))
       path)))
 
 (defn- convert-graph-files-path

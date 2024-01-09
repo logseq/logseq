@@ -76,7 +76,7 @@
 
 (defn transact!
   [txs tx-meta {:keys [repo conn unlinked-graph? after-transact-fn set-state-fn] :as opts}]
-  (let [db-based? (sqlite-util/db-based-graph? repo)
+  (let [db-based? (and repo (sqlite-util/db-based-graph? repo))
         txs (map (fn [m]
                    (if (map? m)
                      (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor

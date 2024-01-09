@@ -1084,7 +1084,7 @@
 
 (defmacro profile
   [k & body]
-  `(frontend.worker.util/profile ~k ~@body))
+  `(worker-util/profile ~k ~@body))
 
 #?(:clj
    (defmacro with-time

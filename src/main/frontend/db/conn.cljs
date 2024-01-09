@@ -8,7 +8,6 @@
             [frontend.util.text :as text-util]
             [logseq.graph-parser.text :as text]
             [logseq.db :as ldb]
-            [logseq.db.frontend.schema :as db-schema]
             [logseq.common.util :as common-util]
             [logseq.db.sqlite.util :as sqlite-util]))
 

@@ -37,7 +37,7 @@
           content)
         (string/replace old-ref new-ref))))
 
-(defn- replace-tag-ref!
+(defn replace-tag-ref!
   [content old-name new-name]
   (let [old-tag (common-util/format "#%s" old-name)
         new-tag (if (re-find #"[\s\t]+" new-name)
