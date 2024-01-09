@@ -99,7 +99,7 @@
           to-id (:db/id to-page)
           from-page (d/entity db [:block/name from-page-name])
           from-id (:db/id from-page)
-          from-first-child (some->> (d/pull db from-id)
+          from-first-child (some->> (d/pull db '[*] from-id)
                                     (outliner-core/block @conn)
                                     (#(otree/-get-down % conn))
                                     (outliner-core/get-data))
@@ -161,7 +161,7 @@
         old-page-name       (common-util/page-name-sanity-lc old-name)
         new-page-name       (common-util/page-name-sanity-lc new-name)
         db-based?           (sqlite-util/db-based-graph? repo)
-        page                (d/pull @conn [:block/name old-page-name])]
+        page                (d/pull @conn '[*] [:block/name old-page-name])]
     (when (and repo page)
       (let [old-original-name   (:block/original-name page)
             page-txs            [{:db/id               (:db/id page)
@@ -192,7 +192,7 @@
   "Original names (unsanitized only)"
   [repo conn config old-name new-name]
   (let [pages (ldb/get-namespace-pages @conn old-name)
-        page (d/pull @conn [:block/name (common-util/page-name-sanity-lc old-name)])
+        page (d/pull @conn '[*] [:block/name (common-util/page-name-sanity-lc old-name)])
         pages (cons page pages)]
     (doseq [{:block/keys [name original-name]} pages]
       (let [old-page-title (or original-name name)
