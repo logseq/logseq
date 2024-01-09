@@ -91,7 +91,8 @@
               true
               (distinct))]
     (when (and (seq txs)
-               (or db-based? (not unlinked-graph?)))
+               (or db-based?
+                   (and (fn? unlinked-graph?) (not (unlinked-graph?)))))
 
       ;; (prn :debug "DB transact")
       ;; (cljs.pprint/pprint txs)
