@@ -56,8 +56,8 @@
                          (fn [m] (assoc m tx-id editor-cursor)))))
 
 (defn restore-cursor-and-app-state!
-  [{:keys [editor-cursor app-state]}]
-  (history/restore-cursor! editor-cursor)
+  [{:keys [editor-cursor app-state]} undo?]
+  (history/restore-cursor! editor-cursor undo?)
   (history/restore-app-state! app-state))
 
 (defn invoke-hooks
@@ -101,8 +101,10 @@
 
           (when-let [state (:ui/restore-cursor-state @state/state)]
             (when (or undo? redo?)
-              (restore-cursor-and-app-state! state)
+              (restore-cursor-and-app-state! state undo?)
               (state/set-state! :ui/restore-cursor-state nil)))
+
+          (state/set-state! :editor/start-pos nil)
 
           (when (and state/lsp-enabled?
                      (seq blocks)

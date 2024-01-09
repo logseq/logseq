@@ -117,6 +117,7 @@
 
       :config                                {}
       :block/component-editing-mode?         false
+      :editor/start-pos                      (atom nil)
       :editor/op                             (atom nil)
       :editor/latest-op                      (atom nil)
       :editor/hidden-editors                 #{} ;; page names
@@ -1260,7 +1261,8 @@ Similar to re-frame subscriptions"
     (when container
       {:last-edit-block edit-block
        :container       (gobj/get container "id")
-       :pos             (or (cursor/pos (gdom/getElement edit-input-id))
+       :pos             @(:editor/start-pos @state)
+       :end-pos         (or (cursor/pos (gdom/getElement edit-input-id))
                             (count (:block/content edit-block)))})))
 
 (defn clear-edit!
