@@ -842,14 +842,7 @@ input::-webkit-inner-spin-button {
     }
 
     .hl-area {
-      @apply relative;
-
-      display: inline-block;
-      cursor: text;
-      border: 1px solid #eee;
-      border-radius: 4px;
-      overflow: hidden;
-      margin-top: 4px;
+      @apply relative inline-block cursor-text border rounded-md overflow-hidden mt-1;
 
       .actions {
         @apply absolute right-1 top-1 flex opacity-0 transition-opacity;
