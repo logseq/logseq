@@ -328,102 +328,106 @@
              (assoc state ::title-value *title-value)))}
   [state page-name {:keys [fmt-journal? preview?]}]
   (when page-name
-    (let [page (when page-name (db/entity [:block/name page-name]))
-          page (db/sub-block (:db/id page))
-          title (or (:block/original-name page) page-name)
-          icon (pu/lookup (:block/properties page) :icon)
-          *hover? (::hover? state)
-          *title-value (get state ::title-value)
-          *edit? (get state ::edit?)
-          *configuring? (::configuring? state)
-          *input-value (get state ::input-value)
-          repo (state/get-current-repo)
-          hls-page? (pdf-utils/hls-file? title)
-          whiteboard-page? (model/whiteboard-page? page-name)
-          untitled? (and whiteboard-page? (parse-uuid page-name)) ;; normal page cannot be untitled right?
-          title (if hls-page?
-                  [:a.asset-ref (pdf-utils/fix-local-asset-pagename title)]
-                  (if fmt-journal?
-                    (date/journal-title->custom-format title)
-                    title))
-          old-name (or title page-name)
-          db-based? (config/db-based-graph? repo)
-          tags-property (db/entity [:block/name "tags"])]
-      [:div.ls-page-title.flex.flex-1.flex-row.flex-wrap.w-full.relative.items-center.gap-2
-       {:on-mouse-over #(reset! *hover? true)
-        :on-mouse-out #(when-not @*configuring?
-                         (reset! *hover? false))}
-       (when icon
-         [:div.page-icon {:on-mouse-down util/stop-propagation}
-          (if (and (map? icon) db-based?)
-            (property-component/icon icon {:on-chosen (fn [_e icon]
-                                                        (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-                                                          (db-property-handler/update-property!
-                                                           repo
-                                                           (:block/uuid page)
-                                                           {:properties {icon-property-id icon}})))})
-            icon)])
+    (let [repo (state/get-current-repo)
+          page (db/entity [:block/name page-name])
+          page-unloaded? (or (state/sub-page-unloaded? repo page-name) (nil? page))]
+      (when-not page-unloaded?
+        (let [page (when page-name (db/entity [:block/name page-name]))
+              page (db/sub-block (:db/id page))
+              title (or (:block/original-name page) page-name)
+              icon (pu/lookup (:block/properties page) :icon)
+              *hover? (::hover? state)
+              *title-value (get state ::title-value)
+              *edit? (get state ::edit?)
+              *configuring? (::configuring? state)
+              *input-value (get state ::input-value)
+              repo (state/get-current-repo)
+              hls-page? (pdf-utils/hls-file? title)
+              whiteboard-page? (model/whiteboard-page? page-name)
+              untitled? (and whiteboard-page? (parse-uuid page-name)) ;; normal page cannot be untitled right?
+              title (if hls-page?
+                      [:a.asset-ref (pdf-utils/fix-local-asset-pagename title)]
+                      (if fmt-journal?
+                        (date/journal-title->custom-format title)
+                        title))
+              old-name (or title page-name)
+              db-based? (config/db-based-graph? repo)
+              tags-property (db/entity [:block/name "tags"])]
+          [:div.ls-page-title.flex.flex-1.flex-row.flex-wrap.w-full.relative.items-center.gap-2
+           {:on-mouse-over #(reset! *hover? true)
+            :on-mouse-out #(when-not @*configuring?
+                             (reset! *hover? false))}
+           (when icon
+             [:div.page-icon {:on-mouse-down util/stop-propagation}
+              (if (and (map? icon) db-based?)
+                (property-component/icon icon {:on-chosen (fn [_e icon]
+                                                            (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
+                                                              (db-property-handler/update-property!
+                                                               repo
+                                                               (:block/uuid page)
+                                                               {:properties {icon-property-id icon}})))})
+                icon)])
 
-       [:div.flex.flex-1.flex-row.flex-wrap.items-center.gap-4
-        [:h1.page-title.flex-1.cursor-pointer.gap-1
-         {:class (when-not whiteboard-page? "title")
-          :on-mouse-down (fn [e]
-                           (when (util/right-click? e)
-                             (state/set-state! :page-title/context {:page page-name})))
-          :on-click (fn [e]
-                      (when-not (= (.-nodeName (.-target e)) "INPUT")
-                        (.preventDefault e)
-                        (if (gobj/get e "shiftKey")
-                          (when-let [page (db/pull repo '[*] [:block/name page-name])]
-                            (state/sidebar-add-block!
-                             repo
-                             (:db/id page)
-                             :page))
-                          (when (and (not hls-page?)
-                                     (not fmt-journal?)
-                                     (not config/publishing?)
-                                     (not (and (contains? (:block/type page) "property")
-                                               (contains? db-property/built-in-properties-keys-str page-name))))
-                            (reset! *input-value (if untitled? "" old-name))
-                            (reset! *edit? true)))))}
+           [:div.flex.flex-1.flex-row.flex-wrap.items-center.gap-4
+            [:h1.page-title.flex-1.cursor-pointer.gap-1
+             {:class (when-not whiteboard-page? "title")
+              :on-mouse-down (fn [e]
+                               (when (util/right-click? e)
+                                 (state/set-state! :page-title/context {:page page-name})))
+              :on-click (fn [e]
+                          (when-not (= (.-nodeName (.-target e)) "INPUT")
+                            (.preventDefault e)
+                            (if (gobj/get e "shiftKey")
+                              (when-let [page (db/pull repo '[*] [:block/name page-name])]
+                                (state/sidebar-add-block!
+                                 repo
+                                 (:db/id page)
+                                 :page))
+                              (when (and (not hls-page?)
+                                         (not fmt-journal?)
+                                         (not config/publishing?)
+                                         (not (and (contains? (:block/type page) "property")
+                                                   (contains? db-property/built-in-properties-keys-str page-name))))
+                                (reset! *input-value (if untitled? "" old-name))
+                                (reset! *edit? true)))))}
 
-         (if @*edit?
-           (page-title-editor page {:*title-value *title-value
-                                    :*edit? *edit?
-                                    :*input-value *input-value
-                                    :page-name page-name
-                                    :old-name old-name
-                                    :untitled? untitled?
-                                    :whiteboard-page? whiteboard-page?
-                                    :preview? preview?})
-           [:span.title.block
-            {:on-click (fn []
-                         (when (and (state/home?) (not preview?))
-                           (route-handler/redirect-to-page! page-name)))
-             :data-value @*input-value
-             :data-ref   page-name
-             :style      {:opacity (when @*edit? 0)}}
-            (let [nested? (and (string/includes? title page-ref/left-brackets)
-                               (string/includes? title page-ref/right-brackets))]
-              (cond untitled? [:span.opacity-50 (t :untitled)]
-                    nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (mldoc/get-default-config
-                                                                                        (:block/format page))))
-                    :else title))])]
-        (when (and db-based? (seq (:block/tags page)))
-          [:div.page-tags.ml-4
-           (pv/property-value page tags-property (map :block/uuid (:block/tags page))
-                              {:page-cp (fn [config page]
-                                          (component-block/page-cp (assoc config :tag? true) page))})])]
+             (if @*edit?
+               (page-title-editor page {:*title-value *title-value
+                                        :*edit? *edit?
+                                        :*input-value *input-value
+                                        :page-name page-name
+                                        :old-name old-name
+                                        :untitled? untitled?
+                                        :whiteboard-page? whiteboard-page?
+                                        :preview? preview?})
+               [:span.title.block
+                {:on-click (fn []
+                             (when (and (state/home?) (not preview?))
+                               (route-handler/redirect-to-page! page-name)))
+                 :data-value @*input-value
+                 :data-ref   page-name
+                 :style      {:opacity (when @*edit? 0)}}
+                (let [nested? (and (string/includes? title page-ref/left-brackets)
+                                   (string/includes? title page-ref/right-brackets))]
+                  (cond untitled? [:span.opacity-50 (t :untitled)]
+                        nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (mldoc/get-default-config
+                                                                                            (:block/format page))))
+                        :else title))])]
+            (when (and db-based? (seq (:block/tags page)))
+              [:div.page-tags.ml-4
+               (pv/property-value page tags-property (map :block/uuid (:block/tags page))
+                                  {:page-cp (fn [config page]
+                                              (component-block/page-cp (assoc config :tag? true) page))})])]
 
-       (when (and db-based? (not whiteboard-page?))
-         [:div.absolute.bottom-2.left-0
-          [:div.page-add-tags.flex.flex-row.items-center.flex-wrap.gap-2.ml-2
-           (when (and (empty? (:block/tags page)) @*hover? (not config/publishing?))
-             (db-page/page-tags page tags-property *hover? *configuring?))
+           (when (and db-based? (not whiteboard-page?))
+             [:div.absolute.bottom-2.left-0
+              [:div.page-add-tags.flex.flex-row.items-center.flex-wrap.gap-2.ml-2
+               (when (and (empty? (:block/tags page)) @*hover? (not config/publishing?))
+                 (db-page/page-tags page tags-property *hover? *configuring?))
 
-           (when (or (some #(contains? #{"class" "property"} %) (:block/type page))
-                     (not (db-property-handler/block-has-viewable-properties? page)))
-             (db-page/page-configure page *hover? *configuring?))]])])))
+               (when (or (some #(contains? #{"class" "property"} %) (:block/type page))
+                         (not (db-property-handler/block-has-viewable-properties? page)))
+                 (db-page/page-configure page *hover? *configuring?))]])])))))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
