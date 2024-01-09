@@ -95,6 +95,7 @@
                              (remove nil?))))
               tx-report' (or
                           (when (seq replace-tx)
+                            ;; TODO: remove this since transact! is really slow
                             (ldb/transact! conn replace-tx {:replace? true
                                                             :pipeline-replace? true}))
                           tx-report)
