@@ -70,10 +70,13 @@
   (state/set-current-repo! test-helper/test-db)
   (test-helper/reset-test-db!)
   (let [conn (conn/get-db test-helper/test-db false)
-        [uuid1 uuid2 uuid3 uuid4] (repeatedly random-uuid)]
+        [uuid1 uuid2 uuid3 uuid4] (repeatedly random-uuid)
+        opts {:persist-op? false
+              :transact-opts {:repo test-helper/test-db
+                              :conn conn}}]
     (page-handler/create! "gen-remote-ops-test" {:redirect? false :create-first-block? false :uuid uuid1})
     (outliner-tx/transact!
-     {:persist-op? false}
+     opts
      (outliner-core/insert-blocks!
       test-helper/test-db
       conn
@@ -93,9 +96,9 @@
                                                 ["move" {:block-uuid (str uuid3) :epoch 3}]
                                                 ["update" {:block-uuid (str uuid4) :epoch 4}]])
     (let [_ (op-mem-layer/new-branch! test-helper/test-db)
-          r1 (rtc-core/gen-block-uuid->remote-ops test-helper/test-db :n 1)
+          r1 (rtc-core/gen-block-uuid->remote-ops test-helper/test-db conn :n 1)
           _ (op-mem-layer/rollback! test-helper/test-db)
-          r2 (rtc-core/gen-block-uuid->remote-ops test-helper/test-db :n 2)]
+          r2 (rtc-core/gen-block-uuid->remote-ops test-helper/test-db conn :n 2)]
       (is (= {uuid2 [:move]}
              (update-vals r1 keys)))
       (is (= {uuid2 [:move]
