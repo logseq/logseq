@@ -4,9 +4,7 @@
             [frontend.util.page :as page-util]
             [frontend.state :as state]
             [clojure.set :as set]
-            [medley.core :as medley]
-            [frontend.util.drawer :as drawer]
-            [frontend.handler.file-based.property.util :as property-util]))
+            [medley.core :as medley]))
 
 ;;;; APIs
 
@@ -36,22 +34,6 @@
   [txs]
   (let [undo-stack (get-undo-stack)]
     (swap! undo-stack conj txs)))
-
-(comment
-  (defn get-content-from-txs
-    "For test."
-    [txs]
-    (filterv (fn [[_ a & y]]
-               (= :block/content a))
-             txs))
-
-  (defn get-content-from-stack
-    "For test."
-    [stack]
-    (mapv #(get-content-from-txs (:txs %)) stack))
-
-  (debug/pprint "pop entity" (get-content-from-txs (:txs removed-e)))
-  (debug/pprint "undo-stack" (get-content-from-stack @undo-stack)))
 
 (defn pop-undo
   []
@@ -151,15 +133,6 @@
       (pop-undo))
     (pop-undo)))
 
-(defn- set-editor-content!
-  "Prevent block auto-save during undo/redo."
-  []
-  (when-let [block (state/get-edit-block)]
-    (when-let [content (:block/content (db/entity (:db/id block)))]
-      (let [content' (-> (property-util/remove-built-in-properties (:block/format block) content)
-                         (drawer/remove-logbook))]
-        (state/set-edit-content! (state/get-edit-input-id) content')))))
-
 (defn- get-next-tx-editor-cursor
   [tx-id]
   (let [result (->> (sort (keys @(:history/tx->editor-cursor @state/state)))
@@ -198,7 +171,6 @@
       (push-redo e)
       (transact! new-txs (merge {:undo? true}
                                 tx-meta))
-      (set-editor-content!)
       (when (:whiteboard/transact? tx-meta)
         (state/pub-event! [:whiteboard/undo e]))
       (assoc e
@@ -216,7 +188,6 @@
       (push-undo e)
       (transact! new-txs (merge {:redo? true}
                                 tx-meta))
-      (set-editor-content!)
       (when (:whiteboard/transact? tx-meta)
         (state/pub-event! [:whiteboard/redo e]))
       (assoc e
@@ -239,7 +210,7 @@
   (reset! *pause-listener false))
 
 (defn listen-db-changes!
-  [{:keys [tx-data tx-meta blocks pages]}]
+  [{:keys [tx-id tx-data tx-meta blocks pages]}]
   (when (and (seq tx-data)
              (not (or (:undo? tx-meta)
                       (:redo? tx-meta)))
@@ -248,17 +219,14 @@
                    (set (map :a tx-data))
                    #{:block/created-at :block/updated-at})))
     (reset-redo)
-    (if (:replace? tx-meta)
-      (let [removed-e (pop-undo)
-            entity (update removed-e :txs concat tx-data)]
-        (push-undo entity))
-      (let [updated-blocks (concat blocks pages)
-            entity {:blocks updated-blocks
-                    :txs tx-data
-                    :tx-meta tx-meta
-                    :app-state (select-keys @state/state
-                                            [:route-match
-                                             :ui/sidebar-open?
-                                             :ui/sidebar-collapsed-blocks
-                                             :sidebar/blocks])}]
-        (push-undo entity)))))
+    (let [updated-blocks (concat blocks pages)
+          entity {:blocks updated-blocks
+                  :tx-id tx-id
+                  :txs tx-data
+                  :tx-meta tx-meta
+                  :app-state (select-keys @state/state
+                                          [:route-match
+                                           :ui/sidebar-open?
+                                           :ui/sidebar-collapsed-blocks
+                                           :sidebar/blocks])}]
+      (push-undo entity))))
