@@ -149,7 +149,7 @@
      js/JSON.stringify)))
 
 (defn ->edn
-  {:malli/schema [:=> [:cat :string :string] mldoc-schema/block-ast-with-pos-coll-schema]}
+  ;; {:malli/schema [:=> [:cat :string :string] mldoc-schema/block-ast-with-pos-coll-schema]}
   ([content config]
    (if (string? content)
      (try
