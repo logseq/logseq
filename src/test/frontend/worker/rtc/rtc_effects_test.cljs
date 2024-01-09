@@ -50,7 +50,8 @@
       (let [page-block (d/pull @conn '[*] [:block/name "gen-local-ops-test-2--create-page&insert-blocks"])
             [block-uuid1 block-uuid2] (repeatedly random-uuid)]
         (outliner-tx/transact!
-         {}
+         {:transact-opts {:repo test-helper/test-db
+                          :conn conn}}
          (outliner-core/insert-blocks!
           test-helper/test-db
           conn
