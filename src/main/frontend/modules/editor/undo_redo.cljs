@@ -133,41 +133,13 @@
       (pop-undo))
     (pop-undo)))
 
-(defn- get-next-tx-editor-cursor
-  [tx-id]
-  (let [result (->> (sort (keys @(:history/tx->editor-cursor @state/state)))
-                    (split-with #(not= % tx-id))
-                    second)]
-    (when (> (count result) 1)
-      (when-let [next-tx-id (nth result 1)]
-        (get @(get @state/state :history/tx->editor-cursor) next-tx-id)))))
-
-(defn- get-previous-tx-id
-  [tx-id]
-  (let [result (->> (sort (keys @(:history/tx->editor-cursor @state/state)))
-                    (split-with #(not= % tx-id))
-                    first)]
-    (when (>= (count result) 1)
-      (last result))))
-
-(defn- get-previous-tx-editor-cursor
-  [tx-id]
-  (when-let [prev-tx-id (get-previous-tx-id tx-id)]
-    (get @(get @state/state :history/tx->editor-cursor) prev-tx-id)))
-
 (defn undo
   []
   (when-let [e (smart-pop-undo)]
     (let [{:keys [txs tx-meta tx-id]} e
           new-txs (get-txs false txs)
           current-editor-cursor (get @(get @state/state :history/tx->editor-cursor) tx-id)
-          save-block? (= (:outliner-op tx-meta) :save-block)
-          prev-editor-cursor (get-previous-tx-editor-cursor tx-id)
-          editor-cursor (if (and save-block?
-                                 (= (:block/uuid (:last-edit-block prev-editor-cursor))
-                                    (:block/uuid (state/get-edit-block))))
-                          prev-editor-cursor
-                          current-editor-cursor)]
+          editor-cursor current-editor-cursor]
       (push-redo e)
       (transact! new-txs (merge {:undo? true}
                                 tx-meta))
@@ -181,10 +153,7 @@
   []
   (when-let [{:keys [txs tx-meta tx-id] :as e} (smart-pop-redo)]
     (let [new-txs (get-txs true txs)
-          current-editor-cursor (get @(get @state/state :history/tx->editor-cursor) tx-id)
-          editor-cursor (if (= (:outliner-op tx-meta) :save-block)
-                          current-editor-cursor
-                          (get-next-tx-editor-cursor tx-id))]
+          current-editor-cursor (get @(get @state/state :history/tx->editor-cursor) tx-id)]
       (push-undo e)
       (transact! new-txs (merge {:redo? true}
                                 tx-meta))
@@ -192,7 +161,7 @@
         (state/pub-event! [:whiteboard/redo e]))
       (assoc e
              :txs-op new-txs
-             :editor-cursor editor-cursor))))
+             :editor-cursor current-editor-cursor))))
 
 (defn toggle-undo-redo-mode!
   []

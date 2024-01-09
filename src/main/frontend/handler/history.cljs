@@ -8,13 +8,13 @@
             [goog.dom :as gdom]))
 
 (defn restore-cursor!
-  [{:keys [last-edit-block container pos]}]
+  [{:keys [last-edit-block container pos end-pos]} undo?]
   (when (and container last-edit-block)
     #_:clj-kondo/ignore
     (when-let [container (gdom/getElement container)]
       (when-let [block-uuid (:block/uuid last-edit-block)]
         (when-let [block (db/pull [:block/uuid block-uuid])]
-          (editor/edit-block! block pos
+          (editor/edit-block! block (if undo? pos end-pos)
                               (:block/uuid block)
                               {:custom-content (:block/content block)}))))))
 

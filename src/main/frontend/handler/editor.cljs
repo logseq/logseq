@@ -2917,6 +2917,10 @@
           hashtag? (or (surround-by? input "#" " ")
                        (surround-by? input "#" :end)
                        (= key "#"))]
+      (when (and (not @(:editor/start-pos @state/state))
+                 (not (and key (string/starts-with? key "Arrow"))))
+        (state/set-state! :editor/start-pos pos))
+
       (cond
         (and (contains? #{"ArrowLeft" "ArrowRight"} key)
              (contains? #{:property-search :property-value-search} (state/get-editor-action)))
