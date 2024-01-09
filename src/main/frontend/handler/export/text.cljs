@@ -104,14 +104,18 @@
      l)))
 
 (defn- block-src
-  [{:keys [lines language]}]
-  (let [level (dec (get *state* :current-level 1))]
-    (concatv
-     [(indent-with-2-spaces level) (raw-text "```")]
-     (when language [(raw-text language)])
-     [(newline* 1)]
-     (mapv raw-text lines)
-     [(indent-with-2-spaces level) (raw-text "```") (newline* 1)])))
+  [{:keys [lines language full_content]}]
+  (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
+    ;; when "no-indent", just use :full_content in 'Src' ast
+    [(raw-text full_content) (newline* 1)]
+
+    (let [level (dec (get *state* :current-level 1))]
+      (concatv
+       [(indent-with-2-spaces level) (raw-text "```")]
+       (when language [(raw-text language)])
+       [(newline* 1)]
+       (mapv raw-text lines)
+       [(indent-with-2-spaces level) (raw-text "```") (newline* 1)]))))
 
 (defn- block-quote
   [block-coll]
@@ -459,6 +463,7 @@
             ast** (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
                     (mapv common/replace-Heading-with-Paragraph ast*)
                     ast*)
+            _ (def xxx ast**)
             config-for-walk-block-ast (cond-> {}
                                         (get-in *state* [:export-options :remove-emphasis?])
                                         (update :mapcat-fns-on-inline-ast conj common/remove-emphasis)
@@ -470,7 +475,7 @@
                                         (update :mapcat-fns-on-inline-ast conj common/remove-tags)
 
                                         (= "no-indent" (get-in *state* [:export-options :indent-style]))
-                                        (update :mapcat-fns-on-inline-ast conj common/remove-prefix-spaces-in-Plain))
+                                        (update :fns-on-inline-coll conj common/remove-prefix-spaces-in-Plain))
             ast*** (if-not (empty? config-for-walk-block-ast)
                      (mapv (partial common/walk-block-ast config-for-walk-block-ast) ast**)
                      ast**)
