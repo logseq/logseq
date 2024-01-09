@@ -47,7 +47,7 @@
                   logged?
                   (not sync-enabled?))
       [:span.flex.space-x-2
-       [:a.button.text-sm.font-medium.block
+       [:a.button.text-sm.font-medium.block.text-gray-12
         {:on-click #(state/pub-event! [:user/login])}
         [:span (t :login)]
         (when loading?
