@@ -58,7 +58,20 @@
      [:op :string]
      [:value [:map
               [:block-uuid :uuid]
+              [:epoch :int]]]]]
+   ["update-asset"
+    [:catn
+     [:op :string]
+     [:value [:map
+              [:asset-uuid :uuid]
+              [:epoch :int]]]]]
+   ["remove-asset"
+    [:catn
+     [:op :string]
+     [:value [:map
+              [:asset-uuid :uuid]
               [:epoch :int]]]]]])
+
 (def ops-schema [:sequential op-schema])
 
 (def ops-from-store-schema [:sequential [:catn
@@ -77,7 +90,10 @@
    [:local-tx {:optional true} :int]
    [:block-uuid->ops [:map-of :uuid
                       [:map-of [:enum :move :remove :update :update-page :remove-page] :any]]]
-   [:epoch->block-uuid-sorted-map [:map-of :int :uuid]]])
+   [:asset-uuid->ops [:map-of :uuid
+                      [:map-of [:enum :update-asset :remove-asset] :any]]]
+   [:epoch->block-uuid-sorted-map [:map-of :int :uuid]]
+   [:epoch->asset-uuid-sorted-map [:map-of :int :uuid]]])
 
 (def ops-store-schema
   [:map-of :string                      ; repo-name
@@ -138,22 +154,32 @@
            seq
            (apply min)))
 
+(defn- asset-uuid->min-epoch
+  [asset-uuid->ops asset-uuid]
+  (block-uuid->min-epoch asset-uuid->ops asset-uuid))
+
 (defn add-ops-to-block-uuid->ops
-  [ops block-uuid->ops epoch->block-uuid-sorted-map]
+  [ops block-uuid->ops epoch->block-uuid-sorted-map asset-uuid->ops epoch->asset-uuid-sorted-map]
   (loop [block-uuid->ops block-uuid->ops
          epoch->block-uuid-sorted-map epoch->block-uuid-sorted-map
+         asset-uuid->ops asset-uuid->ops
+         epoch->asset-uuid-sorted-map epoch->asset-uuid-sorted-map
          [op & others] ops]
     (if-not op
       {:block-uuid->ops block-uuid->ops
-       :epoch->block-uuid-sorted-map epoch->block-uuid-sorted-map}
+       :asset-uuid->ops asset-uuid->ops
+       :epoch->block-uuid-sorted-map epoch->block-uuid-sorted-map
+       :epoch->asset-uuid-sorted-map epoch->asset-uuid-sorted-map}
       (let [[op-type value] op
-            {:keys [block-uuid epoch]} value
-            exist-ops (block-uuid->ops block-uuid)]
+            {:keys [block-uuid asset-uuid epoch]} value
+            exist-ops (some-> block-uuid block-uuid->ops)
+            exist-asset-ops (some-> asset-uuid asset-uuid->ops)]
         (case op-type
           "move"
           (let [already-removed? (some-> (get exist-ops :remove) second :epoch (> epoch))]
             (if already-removed?
-              (recur block-uuid->ops epoch->block-uuid-sorted-map others)
+              (recur block-uuid->ops epoch->block-uuid-sorted-map
+                     asset-uuid->ops epoch->asset-uuid-sorted-map others)
               (let [block-uuid->ops* (-> block-uuid->ops
                                          (assoc-in [block-uuid :move] op)
                                          (update block-uuid dissoc :remove))
@@ -165,11 +191,12 @@
                        (-> epoch->block-uuid-sorted-map
                            (dissoc origin-min-epoch)
                            (assoc min-epoch block-uuid))
-                       others))))
+                       asset-uuid->ops epoch->asset-uuid-sorted-map others))))
           "update"
           (let [already-removed? (some-> (get exist-ops :remove) second :epoch (> epoch))]
             (if already-removed?
-              (recur block-uuid->ops epoch->block-uuid-sorted-map others)
+              (recur block-uuid->ops epoch->block-uuid-sorted-map
+                     asset-uuid->ops epoch->asset-uuid-sorted-map others)
               (let [origin-update-op (get-in block-uuid->ops [block-uuid :update])
                     op* (if origin-update-op (merge-update-ops origin-update-op op) op)
                     block-uuid->ops* (-> block-uuid->ops
@@ -181,11 +208,12 @@
                        (-> epoch->block-uuid-sorted-map
                            (dissoc origin-min-epoch)
                            (assoc min-epoch block-uuid))
-                       others))))
+                       asset-uuid->ops epoch->asset-uuid-sorted-map others))))
           "remove"
           (let [add-after-remove? (some-> (get exist-ops :move) second :epoch (> epoch))]
             (if add-after-remove?
-              (recur block-uuid->ops epoch->block-uuid-sorted-map others)
+              (recur block-uuid->ops epoch->block-uuid-sorted-map
+                     asset-uuid->ops epoch->asset-uuid-sorted-map others)
               (let [block-uuid->ops* (assoc block-uuid->ops block-uuid {:remove op})
                     origin-min-epoch (block-uuid->min-epoch block-uuid->ops block-uuid)
                     min-epoch (block-uuid->min-epoch block-uuid->ops* block-uuid)]
@@ -193,11 +221,12 @@
                        (-> epoch->block-uuid-sorted-map
                            (dissoc origin-min-epoch)
                            (assoc min-epoch block-uuid))
-                       others))))
+                       asset-uuid->ops epoch->asset-uuid-sorted-map others))))
           "update-page"
           (let [already-removed? (some-> (get exist-ops :remove-page) second :epoch (> epoch))]
             (if already-removed?
-              (recur block-uuid->ops epoch->block-uuid-sorted-map others)
+              (recur block-uuid->ops epoch->block-uuid-sorted-map
+                     asset-uuid->ops epoch->asset-uuid-sorted-map others)
               (let [block-uuid->ops* (-> block-uuid->ops
                                          (assoc-in [block-uuid :update-page] op)
                                          (update block-uuid dissoc :remove-page))
@@ -207,11 +236,12 @@
                        (-> epoch->block-uuid-sorted-map
                            (dissoc origin-min-epoch)
                            (assoc min-epoch block-uuid))
-                       others))))
+                       asset-uuid->ops epoch->asset-uuid-sorted-map others))))
           "remove-page"
           (let [add-after-remove? (some-> (get exist-ops :update-page) second :epoch (> epoch))]
             (if add-after-remove?
-              (recur block-uuid->ops epoch->block-uuid-sorted-map others)
+              (recur block-uuid->ops epoch->block-uuid-sorted-map
+                     asset-uuid->ops epoch->asset-uuid-sorted-map others)
               (let [block-uuid->ops* (assoc block-uuid->ops block-uuid {:remove-page op})
                     origin-min-epoch (block-uuid->min-epoch block-uuid->ops block-uuid)
                     min-epoch (block-uuid->min-epoch block-uuid->ops* block-uuid)]
@@ -219,11 +249,42 @@
                        (-> epoch->block-uuid-sorted-map
                            (dissoc origin-min-epoch)
                            (assoc min-epoch block-uuid))
-                       others)))))))))
+                       asset-uuid->ops epoch->asset-uuid-sorted-map others))))
+          "update-asset"
+          (let [already-removed? (some-> (get exist-asset-ops :remove-asset) second :epoch (> epoch))]
+            (if already-removed?
+              (recur block-uuid->ops epoch->block-uuid-sorted-map
+                     asset-uuid->ops epoch->asset-uuid-sorted-map others)
+              (let [asset-uuid->ops* (assoc asset-uuid->ops asset-uuid {:update-asset op})
+                    origin-min-epoch (asset-uuid->min-epoch asset-uuid->ops asset-uuid)
+                    min-epoch (asset-uuid->min-epoch asset-uuid->ops* asset-uuid)]
+                (recur block-uuid->ops epoch->block-uuid-sorted-map
+                       asset-uuid->ops*
+                       (-> epoch->asset-uuid-sorted-map
+                           (dissoc origin-min-epoch)
+                           (assoc min-epoch asset-uuid))
+                       others))))
+          "remove-asset"
+          (let [add-after-remove? (some-> (get exist-asset-ops :update-asset) second :epoch (> epoch))]
+            (if add-after-remove?
+              (recur block-uuid->ops epoch->block-uuid-sorted-map
+                     asset-uuid->ops epoch->asset-uuid-sorted-map others)
+              (let [asset-uuid->ops* (assoc asset-uuid->ops asset-uuid {:remove-asset op})
+                    origin-min-epoch (asset-uuid->min-epoch asset-uuid->ops asset-uuid)
+                    min-epoch (asset-uuid->min-epoch asset-uuid->ops* asset-uuid)]
+                (recur block-uuid->ops epoch->block-uuid-sorted-map
+                       asset-uuid->ops*
+                       (-> epoch->asset-uuid-sorted-map
+                           (dissoc origin-min-epoch)
+                           (assoc min-epoch asset-uuid))
+                       others))))
+          )))))
 
 
 (def empty-ops-store-value {:current-branch {:block-uuid->ops {}
-                                             :epoch->block-uuid-sorted-map (sorted-map-by <)}})
+                                             :epoch->block-uuid-sorted-map (sorted-map-by <)
+                                             :asset-uuid->ops {}
+                                             :epoch->asset-uuid-sorted-map (sorted-map-by <)}})
 
 (defn init-empty-ops-store!
   [repo]
@@ -239,14 +300,19 @@
   (let [ops (ops-coercer ops)
         {{old-branch-block-uuid->ops :block-uuid->ops
           old-epoch->block-uuid-sorted-map :epoch->block-uuid-sorted-map
+          old-branch-asset-uuid->ops :asset-uuid->ops
+          old-epoch->asset-uuid-sorted-map :epoch->asset-uuid-sorted-map
           :as old-branch} :old-branch
-         {:keys [block-uuid->ops epoch->block-uuid-sorted-map]} :current-branch}
+         {:keys [block-uuid->ops epoch->block-uuid-sorted-map
+                 asset-uuid->ops epoch->asset-uuid-sorted-map]} :current-branch}
         (get @*ops-store repo)
         {:keys [block-uuid->ops epoch->block-uuid-sorted-map]}
-        (add-ops-to-block-uuid->ops ops block-uuid->ops epoch->block-uuid-sorted-map)
+        (add-ops-to-block-uuid->ops ops block-uuid->ops epoch->block-uuid-sorted-map
+                                    asset-uuid->ops epoch->asset-uuid-sorted-map)
         {old-branch-block-uuid->ops :block-uuid->ops old-epoch->block-uuid-sorted-map :epoch->block-uuid-sorted-map}
         (when old-branch
-          (add-ops-to-block-uuid->ops ops old-branch-block-uuid->ops old-epoch->block-uuid-sorted-map))]
+          (add-ops-to-block-uuid->ops ops old-branch-block-uuid->ops old-epoch->block-uuid-sorted-map
+                                      old-branch-asset-uuid->ops old-epoch->asset-uuid-sorted-map))]
     (swap! *ops-store update repo
            (fn [{:keys [current-branch old-branch]}]
              (cond-> {:current-branch
@@ -373,10 +439,12 @@
                      (sort-by first <)
                      ops-from-store-coercer
                      (map second))
-            {:keys [block-uuid->ops epoch->block-uuid-sorted-map]}
-            (add-ops-to-block-uuid->ops ops {} (sorted-map-by <))
+            {:keys [block-uuid->ops epoch->block-uuid-sorted-map asset-uuid->ops epoch->asset-uuid-sorted-map]}
+            (add-ops-to-block-uuid->ops ops {} (sorted-map-by <) {} (sorted-map-by <))
             r (cond-> {:block-uuid->ops block-uuid->ops
-                       :epoch->block-uuid-sorted-map epoch->block-uuid-sorted-map}
+                       :epoch->block-uuid-sorted-map epoch->block-uuid-sorted-map
+                       :asset-uuid->ops asset-uuid->ops
+                       :epoch->asset-uuid-sorted-map epoch->asset-uuid-sorted-map}
                 graph-uuid (assoc :graph-uuid graph-uuid)
                 local-tx (assoc :local-tx local-tx))]
         (assert (ops-validator ops) ops)
