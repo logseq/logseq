@@ -270,7 +270,8 @@
              context (if (string? context)
                        (edn/read-string context)
                        context)
-             _ (when context (state/set-context! context))]
+             _ (when context (state/set-context! context))
+             tx-meta' (dissoc tx-meta :insert-blocks?)]
          (when-not (and (:create-today-journal? tx-meta)
                         (:today-journal-name tx-meta)
                         (d/entity @conn [:block/name (:today-journal-name tx-meta)])) ; today journal created already
