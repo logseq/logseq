@@ -274,10 +274,7 @@
          (when-not (and (:create-today-journal? tx-meta)
                         (:today-journal-name tx-meta)
                         (d/entity @conn [:block/name (:today-journal-name tx-meta)])) ; today journal created already
-           (let [tx-meta' (if (or (:from-disk? tx-meta) (:new-graph? tx-meta))
-                            tx-meta
-                            (assoc tx-meta :skip-store? true))]
-             (ldb/transact! conn tx-data tx-meta')))
+           (ldb/transact! conn tx-data tx-meta))
          nil)
        (catch :default e
          (prn :debug :error)
