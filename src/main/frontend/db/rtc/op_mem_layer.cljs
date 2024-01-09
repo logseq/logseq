@@ -158,7 +158,7 @@
   [asset-uuid->ops asset-uuid]
   (block-uuid->min-epoch asset-uuid->ops asset-uuid))
 
-(defn add-ops-to-block-uuid->ops
+(defn add-ops-aux
   [ops block-uuid->ops epoch->block-uuid-sorted-map asset-uuid->ops epoch->asset-uuid-sorted-map]
   (loop [block-uuid->ops block-uuid->ops
          epoch->block-uuid-sorted-map epoch->block-uuid-sorted-map
@@ -307,11 +307,11 @@
                  asset-uuid->ops epoch->asset-uuid-sorted-map]} :current-branch}
         (get @*ops-store repo)
         {:keys [block-uuid->ops epoch->block-uuid-sorted-map]}
-        (add-ops-to-block-uuid->ops ops block-uuid->ops epoch->block-uuid-sorted-map
+        (add-ops-aux ops block-uuid->ops epoch->block-uuid-sorted-map
                                     asset-uuid->ops epoch->asset-uuid-sorted-map)
         {old-branch-block-uuid->ops :block-uuid->ops old-epoch->block-uuid-sorted-map :epoch->block-uuid-sorted-map}
         (when old-branch
-          (add-ops-to-block-uuid->ops ops old-branch-block-uuid->ops old-epoch->block-uuid-sorted-map
+          (add-ops-aux ops old-branch-block-uuid->ops old-epoch->block-uuid-sorted-map
                                       old-branch-asset-uuid->ops old-epoch->asset-uuid-sorted-map))]
     (swap! *ops-store update repo
            (fn [{:keys [current-branch old-branch]}]
@@ -325,6 +325,36 @@
                              :block-uuid->ops old-branch-block-uuid->ops
                              :epoch->block-uuid-sorted-map old-epoch->block-uuid-sorted-map)))))))
 
+(defn add-asset-ops!
+  [repo ops]
+  (assert (contains? (@*ops-store repo) :current-branch) (@*ops-store repo))
+  (let [ops (ops-coercer ops)
+        {{old-branch-block-uuid->ops :block-uuid->ops
+          old-epoch->block-uuid-sorted-map :epoch->block-uuid-sorted-map
+          old-branch-asset-uuid->ops :asset-uuid->ops
+          old-epoch->asset-uuid-sorted-map :epoch->asset-uuid-sorted-map
+          :as old-branch} :old-branch
+         {:keys [block-uuid->ops epoch->block-uuid-sorted-map
+                 asset-uuid->ops epoch->asset-uuid-sorted-map]} :current-branch}
+        (get @*ops-store repo)
+        {:keys [asset-uuid->ops epoch->asset-uuid-sorted-map]}
+        (add-ops-aux ops block-uuid->ops epoch->block-uuid-sorted-map
+                                    asset-uuid->ops epoch->asset-uuid-sorted-map)
+        {old-branch-asset-uuid->ops :asset-uuid->ops old-epoch->asset-uuid-sorted-map :epoch->asset-uuid-sorted-map}
+        (when old-branch
+          (add-ops-aux ops old-branch-block-uuid->ops old-epoch->block-uuid-sorted-map
+                                      old-branch-asset-uuid->ops old-epoch->asset-uuid-sorted-map))]
+    (swap! *ops-store update repo
+           (fn [{:keys [current-branch old-branch]}]
+             (cond-> {:current-branch
+                      (assoc current-branch
+                             :asset-uuid->ops asset-uuid->ops
+                             :epoch->asset-uuid-sorted-map epoch->asset-uuid-sorted-map)}
+               old-branch
+               (assoc :old-branch
+                      (assoc old-branch
+                             :asset-uuid->ops old-branch-asset-uuid->ops
+                             :epoch->asset-uuid-sorted-map old-epoch->asset-uuid-sorted-map)))))))
 
 (defn update-local-tx!
   [repo t]
@@ -426,6 +456,17 @@
              :block-uuid->ops (dissoc block-uuid->ops block-uuid)
              :epoch->block-uuid-sorted-map (dissoc epoch->block-uuid-sorted-map min-epoch)))))
 
+(defn remove-asset-ops!
+  [repo asset-uuid]
+  {:pre [(uuid? asset-uuid)]}
+  (let [repo-ops-store (get @*ops-store repo)
+        {:keys [epoch->asset-uuid-sorted-map asset-uuid->ops]} (:current-branch repo-ops-store)]
+    (assert (contains? repo-ops-store :current-branch) repo)
+    (let [min-epoch (asset-uuid->min-epoch asset-uuid->ops asset-uuid)]
+      (swap! *ops-store update-in [repo :current-branch] assoc
+             :asset-uuid->ops (dissoc asset-uuid->ops asset-uuid)
+             :epoch->asset-uuid-sorted-map (dissoc epoch->asset-uuid-sorted-map min-epoch)))))
+
 
 (defn <init-load-from-indexeddb!
   [repo]
@@ -440,7 +481,7 @@
                      ops-from-store-coercer
                      (map second))
             {:keys [block-uuid->ops epoch->block-uuid-sorted-map asset-uuid->ops epoch->asset-uuid-sorted-map]}
-            (add-ops-to-block-uuid->ops ops {} (sorted-map-by <) {} (sorted-map-by <))
+            (add-ops-aux ops {} (sorted-map-by <) {} (sorted-map-by <))
             r (cond-> {:block-uuid->ops block-uuid->ops
                        :epoch->block-uuid-sorted-map epoch->block-uuid-sorted-map
                        :asset-uuid->ops asset-uuid->ops
