@@ -39,8 +39,10 @@
      (when-let [page-name (worker-page/create! repo conn config title options)]
        (when redirect?
          (route-handler/redirect-to-page! page-name))
-       (when-let [first-block (first (:block/_left (db/entity [:block/name page-name])))]
-         (block-handler/edit-block! first-block :max nil))
+       (js/setTimeout
+        #(when-let [first-block (first (:block/_left (db/entity [:block/name page-name])))]
+          (block-handler/edit-block! first-block :max nil))
+        100)
        page-name))))
 
 ;; favorite fns
