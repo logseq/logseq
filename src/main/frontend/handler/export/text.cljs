@@ -463,7 +463,6 @@
             ast** (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
                     (mapv common/replace-Heading-with-Paragraph ast*)
                     ast*)
-            _ (def xxx ast**)
             config-for-walk-block-ast (cond-> {}
                                         (get-in *state* [:export-options :remove-emphasis?])
                                         (update :mapcat-fns-on-inline-ast conj common/remove-emphasis)
