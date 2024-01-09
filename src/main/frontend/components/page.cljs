@@ -579,12 +579,20 @@
          [:div {:key "page-unlinked-references"}
           (reference/unlinked-references route-page-name)])])))
 
-(rum/defcs page
+(rum/defcs page < rum/reactive
   [state option]
-  (rum/with-key
-    (page-inner option)
-    (or (:page-name option)
-        (get-page-name state))))
+  (let [path-page-name (get-path-page-name state (:page-name option))
+        page-name (util/page-name-sanity-lc path-page-name)
+        repo (state/get-current-repo)
+        page (get-page-entity repo path-page-name page-name)
+        block? (some? (:block/page page))
+        page-unloaded? (or (state/sub-page-unloaded? repo page-name) (nil? page))]
+    (if (and page-unloaded? (not block?))
+      (state/update-state! [repo :unloaded-pages] (fn [pages] (conj (set pages) page-name)))
+      (rum/with-key
+        (page-inner option)
+        (or (:page-name option)
+            (get-page-name state))))))
 
 (defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
 
