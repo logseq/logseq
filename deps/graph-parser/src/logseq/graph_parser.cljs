@@ -173,7 +173,12 @@ Options available:
                                   (seq))
                  ;; To prevent "unique constraint" on datascript
               block-ids (set/union (set block-ids) (set block-refs-ids))
-              pages (map #(-> % sqlite-util/block-with-timestamps (assoc :block/format :markdown))
+              pages (map #(-> %
+                              sqlite-util/block-with-timestamps
+                              (assoc :block/format :markdown)
+                              (dissoc :block/properties-text-values :block/properties-order :block/invalid-properties)
+                              ;; FIXME: Remove when properties are supported
+                              (assoc :block/properties {}))
                          (extract/with-ref-pages pages blocks))
 
               ;; post-handling
@@ -189,20 +194,36 @@ Options available:
                             (into {} (remove (comp pred key) m)))
               blocks (map (fn [block]
                             (prn ::block block)
-                            (sqlite-util/block-with-timestamps
-                             (cond
-                               (:block/pre-block? block)
-                               block
+                            (-> (cond
+                                  (seq (:block/macros block))
+                                  (update block :block/macros
+                                          (fn [macros]
+                                            (mapv (fn [m]
+                                                    (-> m
+                                                        (update :block/properties
+                                                                (fn [props]
+                                                                  (update-keys #(get-pid @conn %) props)))
+                                                        (assoc :block/uuid (d/squuid))))
+                                                  macros)))
 
-                               :else
-                               (update-in block [:block/properties]
-                                          (fn [props]
-                                            (-> props
-                                                (update-keys (fn [k]
-                                                               (if-let [new-key (get-pid @conn k)]
-                                                                 new-key
-                                                                 k)))
-                                                (remove-keys keyword?)))))))
+                                  (:block/pre-block? block)
+                                  block
+
+                                  :else
+                                  (update-in block [:block/properties]
+                                             (fn [props]
+                                               (-> props
+                                                   (update-keys (fn [k]
+                                                                  (if-let [new-key (get-pid @conn k)]
+                                                                    new-key
+                                                                    k)))
+                                                   (remove-keys keyword?)))))
+                                sqlite-util/block-with-timestamps
+                                ;; FIXME: Remove when properties are supported
+                                (assoc :block/properties {})
+                                ;; TODO: pre-block? can be removed once page properties are imported
+                                (dissoc :block/pre-block? :block/properties-text-values :block/properties-order
+                                        :block/invalid-properties)))
                           blocks)
 
 
