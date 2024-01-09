@@ -218,9 +218,12 @@
                           (assoc opts' :skip-db-transact? false)
                           opts')
                   result (parse-and-load-file! repo-url file opts')
-                  page-name (some (fn [x] (when (and (map? x) (:block/original-name x)
-                                                     (= (:file/path file) (:file/path (:block/file x))))
-                                            (:block/name x))) result)
+                  page-name (when (coll? result) ; result could be a promise
+                              (some (fn [x] (when (and (map? x)
+                                                       (:block/original-name x)
+                                                       (= (:file/path file) (:file/path (:block/file x))))
+                                              (:block/name x)))
+                                    result))
                   page-exists? (and page-name (get @*page-names page-name))
                   tx' (cond
                         whiteboard? tx
