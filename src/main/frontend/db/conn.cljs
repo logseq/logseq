@@ -89,9 +89,11 @@
 (defn start!
   ([repo]
    (start! repo {}))
-  ([repo {:keys [listen-handler]}]
+  ([repo {:keys [listen-handler create-default-pages?]
+          :or {create-default-pages? false}}]
    (let [db-name (datascript-db repo)
-         db-conn (ldb/start-conn :schema (get-schema repo) :create-default-pages? false)]
+         db-conn (ldb/start-conn :schema (get-schema repo)
+                                 :create-default-pages? create-default-pages?)]
      (swap! conns assoc db-name db-conn)
      (when listen-handler
        (listen-handler repo)))))
