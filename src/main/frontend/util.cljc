@@ -254,14 +254,6 @@
     (reduce-kv #(if (pred %3) (reduced %2) %1) -1
                (cond-> coll (list? coll) (vec)))))
 
-;; (defn format
-;;   [fmt & args]
-;;   (apply gstring/format fmt args))
-
-(defn remove-nils-non-nested
-  [nm]
-  (into {} (remove (comp nil? second)) nm))
-
 ;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
 (defn hiccup->class
   [class]

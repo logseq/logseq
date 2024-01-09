@@ -40,12 +40,6 @@
         (println error-message-or-handler))
       {})))
 
-(defn get-page-default-properties
-  [page-name]
-  {:title page-name
-   ;; :date (date/get-date-time-string)
-   })
-
 (defn fix-pages-timestamps
   [pages]
   (map (fn [{:block/keys [created-at updated-at journal-day] :as p}]

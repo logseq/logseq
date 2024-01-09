@@ -259,7 +259,6 @@
 ;; Register sanitization / parsing fns in:
 ;; logseq.common.util (parsing only)
 ;; frontend.util.fs         (sanitization only)
-;; frontend.handler.conversion (both)
 (defn title-parsing
   "Convert file name in the given file name format to page title"
   [file-name-body filename-format]

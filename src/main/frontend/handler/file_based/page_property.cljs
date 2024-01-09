@@ -31,24 +31,6 @@
           lines (if @key-exists? lines (cons new-property-line lines))]
       (string/join "\n" lines))))
 
-(defn insert-properties
-  "Updates multiple page properties. Mainly just used in legacy title context"
-  [format content kvs]
-  (reduce
-   (fn [content [k v]]
-     (let [k (if (string? k)
-               (keyword (-> (string/lower-case k)
-                            (string/replace " " "-")))
-               k)
-           v (if (coll? v)
-               (some->>
-                (seq v)
-                (distinct)
-                (string/join ", "))
-               v)]
-       (insert-property format content k v)))
-   content kvs))
-
 (defn add-property!
   [page-name key value]
   (let [repo (state/get-current-repo)]

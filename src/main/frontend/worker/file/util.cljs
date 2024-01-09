@@ -62,7 +62,6 @@
 ;; Register sanitization / parsing fns in:
 ;; logseq.common.util (parsing only)
 ;; frontend.util.fs         (sanitization only)
-;; frontend.handler.conversion (both)
 (defn file-name-sanity
   [title]
   (when (string? title)

@@ -17,7 +17,6 @@
             [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.file-based.property.util :as property-util]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.graph-parser.block :as gp-block]
             [logseq.common.util.block-ref :as block-ref]))
 
 (defn- remove-non-existed-refs!
@@ -128,24 +127,6 @@
         (assoc :block/content content
                :block/properties new-properties)
         (merge (if level {:block/level level} {})))))
-
-(defn properties-block
-  [repo properties format page]
-  (let [content (property-file/insert-properties-when-file-based repo format "" properties)
-        refs (gp-block/get-page-refs-from-properties properties
-                                                     (db/get-db (state/get-current-repo))
-                                                     (state/get-date-formatter)
-                                                     (state/get-config))]
-    {:block/pre-block? true
-     :block/uuid (db/new-block-id)
-     :block/properties properties
-     :block/properties-order (keys properties)
-     :block/refs refs
-     :block/left page
-     :block/format format
-     :block/content content
-     :block/parent page
-     :block/page page}))
 
 (defn- set-block-property-aux!
   [block-or-id key value]

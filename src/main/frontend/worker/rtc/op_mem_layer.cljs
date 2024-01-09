@@ -393,15 +393,18 @@
         ops* (ops-encoder ops)]
     (op-idb-layer/<reset! repo ops* graph-uuid local-tx)))
 
+(defn run-sync-loop
+  []
+  (go-loop []
+    (<! (timeout 3000))
+    (when-let [repo (state/get-current-repo)]
+      (when (and (sqlite-util/db-based-graph? repo)
+                 (contains? (@*ops-store repo) :current-branch))
+        (<! (<sync-to-idb-layer! repo))))
+    (recur)))
 
-(defonce #_:clj-kondo/ignore _sync-loop
-         (go-loop []
-           (<! (timeout 3000))
-           (when-let [repo (state/get-current-repo)]
-             (when (and (sqlite-util/db-based-graph? repo)
-                        (contains? (@*ops-store repo) :current-branch))
-               (<! (<sync-to-idb-layer! repo))))
-           (recur)))
+#_:clj-kondo/ignore
+(defonce _sync-loop (run-sync-loop))
 
 
 (defn rtc-db-graph?
