@@ -359,3 +359,7 @@
 (defn replace-ignore-case
   [s old-value new-value]
   (string/replace s (re-pattern (str "(?i)" (escape-regex-chars old-value))) new-value))
+
+(defn replace-first-ignore-case
+  [s old-value new-value]
+  (string/replace-first s (re-pattern (str "(?i)" (escape-regex-chars old-value))) new-value))

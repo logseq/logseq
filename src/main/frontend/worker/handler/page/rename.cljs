@@ -28,11 +28,11 @@
           (let [namespace-block (d/entity @conn [:block/name (common-util/page-name-sanity-lc namespace)])
                 page-txs [{:db/id (:db/id page)
                            :block/namespace (:db/id namespace-block)}]]
-            (d/transact! conn repo page-txs))))
+            (ldb/transact! conn page-txs {:persist-op? true}))))
 
       old-namespace?
       ;; retract namespace
-      (d/transact! conn [[:db/retract (:db/id page) :block/namespace]])
+      (ldb/transact! conn [[:db/retract (:db/id page) :block/namespace]] {:persist-op? true})
 
       :else
       nil)))
@@ -124,7 +124,7 @@
                                 (replace-page-ref from-page to-page)
                                 (page-rename/replace-page-ref db config from-page-name to-page-name))
           tx-data (concat blocks-tx-data replace-ref-tx-data)]
-      (d/transact! conn tx-data {:persist-op? persist-op?})
+      (ldb/transact! conn tx-data {:persist-op? persist-op?})
       (rename-update-namespace! repo conn config from-page
                                 (common-util/get-page-original-name from-page)
                                 (common-util/get-page-original-name to-page)))
@@ -200,7 +200,7 @@
             ;; Example: has pages [[work]] [[work/worklog]],
             ;; we want to rename [[work/worklog]] to [[work1/worklog]] when rename [[work]] to [[work1]],
             ;; but don't rename [[work/worklog]] to [[work1/work1log]]
-            new-page-title (string/replace-first old-page-title old-name new-name)]
+            new-page-title (common-util/replace-first-ignore-case old-page-title old-name new-name)]
         (when (and old-page-title new-page-title)
           (rename-page-aux repo conn config old-page-title new-page-title)
           (println "Renamed " old-page-title " to " new-page-title))))))
@@ -260,10 +260,10 @@
       (do
         (cond
           (= old-page-name new-page-name) ; case changed
-          (d/transact! conn
-                       [{:db/id (:db/id page-e)
-                         :block/original-name new-name}]
-                       {:persist-op? persist-op?})
+          (ldb/transact! conn
+                         [{:db/id (:db/id page-e)
+                           :block/original-name new-name}]
+                         {:persist-op? persist-op?})
 
           (and (not= old-page-name new-page-name)
                (d/entity @conn [:block/name new-page-name])) ; merge page

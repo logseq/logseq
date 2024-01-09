@@ -94,7 +94,7 @@
 ;; TODO: full coverage
 (deftest rename-namespace-pages
   (testing "Rename a page to a namespaced one"
-    (page-handler/rename! "Test" "Abc/Def Ghi/Jk" false false)
+    (page-handler/rename! "Test" "Abc/Def Ghi/Jk" {})
     (let [e1 (db/entity [:block/name "test"])
           e2 (db/entity [:block/name "abc/def ghi/jk"])
           e3 (db/entity [:block/name "abc/def ghi"])
