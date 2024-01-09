@@ -56,7 +56,6 @@
              (when-not contents-matched?
                (ipc/ipc "backupDbFile" (config/get-local-dir repo) rpath disk-content content))
              (db/set-file-last-modified-at! repo rpath mtime)
-             (db/set-file-content! repo rpath content)
              (when ok-handler
                (ok-handler repo rpath result))
              result)
