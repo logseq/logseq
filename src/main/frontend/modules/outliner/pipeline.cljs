@@ -40,9 +40,6 @@
 (defn store-undo-data!
   [{:keys [tx-meta] :as opts}]
   (when-not config/test?
-    (when-let [replace-tx-data (:replace-tx-data opts)]
-      (db/transact! (state/get-current-repo) replace-tx-data (:replace-tx-meta opts)))
-
     (when (or (:outliner/transact? tx-meta)
               (:outliner-op tx-meta)
               (:whiteboard/transact? tx-meta))
