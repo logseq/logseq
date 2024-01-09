@@ -756,11 +756,7 @@
         links (state/sub :custom-context-menu/links)
         position (state/sub :custom-context-menu/position)]
     (when (and show? links position)
-      (ui/css-transition
-       {:class-names "fade"
-        :timeout {:enter 500
-                  :exit 300}}
-       (render-custom-context-menu links position)))))
+      (render-custom-context-menu links position))))
 
 (rum/defc new-block-mode < rum/reactive
   []
