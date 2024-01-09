@@ -45,9 +45,9 @@
   (state/set-block-op-type! nil)
   (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)] nil)
   (editor/save-current-block!)
-  (let [{:keys [editor-cursor app-state]} (undo-redo/undo)]
-    (restore-cursor! editor-cursor)
-    (restore-app-state! app-state))
+  (let [cursor-state (undo-redo/undo)]
+    (state/set-state! :ui/restore-cursor-state (select-keys cursor-state [:editor-cursor :app-state])))
+
   (state/set-editor-op! nil))
 
 (defn redo!
@@ -55,7 +55,6 @@
   (util/stop e)
   (state/set-editor-op! :redo)
   (state/clear-editor-action!)
-  (let [{:keys [editor-cursor app-state]} (undo-redo/redo)]
-    (restore-cursor! editor-cursor)
-    (restore-app-state! app-state))
+  (let [cursor-state (undo-redo/redo)]
+    (state/set-state! :ui/restore-cursor-state (select-keys cursor-state [:editor-cursor :app-state])))
   (state/set-editor-op! nil))

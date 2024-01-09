@@ -1966,34 +1966,38 @@ Similar to re-frame subscriptions"
       (when (first elements)
         (util/scroll-to-element (gobj/get (first elements) "id")))
       (exit-editing-and-set-selected-blocks! elements))
-    (when (and edit-input-id block
-               (or
-                (publishing-enable-editing?)
-                (not @publishing?)))
-      (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
-            container (util/get-block-container block-element)
-            block (if container
-                    (assoc block
-                           :block.temp/container (gobj/get container "id"))
-                    block)
-            content (string/trim (or content ""))]
-        (when ref (set-editing-ref! ref))
-        (set-state! :editor/block block)
-        (set-state! :editor/content content :path-in-sub-atom (:block/uuid block))
-        (set-state! :editor/last-key-code nil)
-        (set-state! :editor/set-timestamp-block nil)
-        (set-state! :editor/cursor-range cursor-range)
+    (let [edit-input-id (if ref
+                          (or (some-> (gobj/get ref "id") (string/replace "ls-block" "edit-block"))
+                              edit-input-id)
+                          edit-input-id)]
+      (when (and edit-input-id block
+                 (or
+                  (publishing-enable-editing?)
+                  (not @publishing?)))
+        (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
+              container (util/get-block-container block-element)
+              block (if container
+                      (assoc block
+                             :block.temp/container (gobj/get container "id"))
+                      block)
+              content (string/trim (or content ""))]
+          (when ref (set-editing-ref! ref))
+          (set-state! :editor/block block)
+          (set-state! :editor/content content :path-in-sub-atom (:block/uuid block))
+          (set-state! :editor/last-key-code nil)
+          (set-state! :editor/set-timestamp-block nil)
+          (set-state! :editor/cursor-range cursor-range)
 
-        (when-let [input (gdom/getElement edit-input-id)]
-          (let [pos (count cursor-range)]
-            (when content
-              (util/set-change-value input content))
+          (when-let [input (gdom/getElement edit-input-id)]
+            (let [pos (count cursor-range)]
+              (when content
+                (util/set-change-value input content))
 
-            (when move-cursor?
-              (cursor/move-cursor-to input pos))
+              (when move-cursor?
+                (cursor/move-cursor-to input pos))
 
-            (when (or (util/mobile?) (mobile-util/native-platform?))
-              (set-state! :mobile/show-action-bar? false))))))))
+              (when (or (util/mobile?) (mobile-util/native-platform?))
+                (set-state! :mobile/show-action-bar? false)))))))))
 
 (defn action-bar-open?
   []

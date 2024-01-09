@@ -174,18 +174,21 @@
 (defn sync-db-to-main-thread
   [repo conn]
   (d/listen! conn :sync-db
-             (fn [{:keys [tx-data tx-meta] :as tx-report}]
-               (let [result (pipeline/invoke-hooks repo conn tx-report (worker-state/get-context))
+             (fn [{:keys [tx-meta] :as tx-report}]
+               (let [{:keys [pipeline-replace?]} tx-meta
+                     result (pipeline/invoke-hooks repo conn tx-report (worker-state/get-context))
+                     tx-report' (or (:tx-report result) tx-report)
                      ;; TODO: delay search indice so that UI can be refreshed earlier
-                     search-indice (search/sync-search-indice repo (:tx-report result))
-                     data (pr-str
-                           (merge
-                            {:repo repo
-                             :search-indice search-indice
-                             :tx-data tx-data
-                             :tx-meta tx-meta}
-                            (dissoc result :tx-report)))]
-                 (worker-util/post-message :sync-db-changes data)))))
+                     search-indice (search/sync-search-indice repo tx-report')]
+                 (when-not pipeline-replace?
+                   (let [data (pr-str
+                               (merge
+                                {:repo repo
+                                 :search-indice search-indice
+                                 :tx-data (:tx-data tx-report')
+                                 :tx-meta tx-meta}
+                                (dissoc result :tx-report)))]
+                     (worker-util/post-message :sync-db-changes data)))))))
 
 (defn listen-to-db-changes!
   [repo conn]
