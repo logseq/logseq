@@ -78,7 +78,7 @@
   [block page-name]
   (let [shape? (shape-block? block)
         shape (block->shape block)
-        default-page-ref {:block/name (common-util/page-name-sanity-lc page-name)}]
+        default-page-ref {:block/name page-name}]
     (merge (when shape?
              (merge
               {:block/uuid (uuid (:id shape))}
@@ -91,8 +91,9 @@
 (defn shape->block [repo db shape page-name]
   (let [properties {(db-property/get-pid repo db :ls-type) :whiteboard-shape
                     (db-property/get-pid repo db :logseq.tldraw.shape) shape}
+        page-name (common-util/page-name-sanity-lc page-name)
         block {:block/uuid (if (uuid? (:id shape)) (:id shape) (uuid (:id shape)))
-               :block/page {:block/name (common-util/page-name-sanity-lc page-name)}
+               :block/page {:block/name page-name}
                :block/parent {:block/name page-name}
                :block/properties properties}
         additional-props (with-whiteboard-block-props block page-name)]
