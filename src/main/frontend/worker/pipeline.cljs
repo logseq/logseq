@@ -106,8 +106,6 @@
           (doseq [page pages]
             (file/sync-to-file repo (:db/id page) tx-meta))
           {:tx-report final-tx-report
-           :replace-tx-data (:tx-data tx-report')
-           :replace-tx-meta (:tx-meta tx-report')
            :affected-keys affected-query-keys
            :deleted-block-uuids deleted-block-uuids
            :pages pages
