@@ -4,7 +4,8 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.util :as db-property-util]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [logseq.db :as ldb]))
 
 (defn build-db-initial-data
   [config-content]
@@ -22,6 +23,7 @@
                         :file/path (str "logseq/" "custom.js")
                         :file/content ""
                         :file/last-modified-at (js/Date.)}]
+        default-pages (ldb/build-default-pages-tx)
         default-properties (mapcat
                             (fn [[k-keyword {:keys [schema original-name closed-values]}]]
                               (let [k-name (name k-keyword)]
@@ -35,5 +37,6 @@
                                      :block/original-name (or original-name k-name)
                                      :block/name (sqlite-util/sanitize-page-name k-name)
                                      :block/uuid (d/squuid)})])))
-                            db-property/built-in-properties)]
-    (concat initial-data initial-files default-properties)))
+                            db-property/built-in-properties)
+        ]
+    (concat initial-data initial-files default-pages default-properties)))

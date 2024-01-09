@@ -19,7 +19,7 @@
   "Builds a closed value block to be transacted"
   [block-uuid block-value page-id property {:keys [icon-id icon description]}]
   (cond->
-   (closed-value-new-block page-id (or block-uuid (d/squuid)) block-value property)
+    (closed-value-new-block page-id (or block-uuid (d/squuid)) block-value property)
     icon
     (assoc :block/properties {icon-id icon})
 

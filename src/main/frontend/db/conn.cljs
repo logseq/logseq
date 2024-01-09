@@ -90,16 +90,12 @@
 (defn start!
   ([repo]
    (start! repo {}))
-  ([repo {:keys [listen-handler db-graph?]}]
+  ([repo {:keys [listen-handler]}]
    (let [db-name (datascript-db repo)
          db-conn (ldb/start-conn :schema (get-schema repo) :create-default-pages? false)]
      (swap! conns assoc db-name db-conn)
      (when listen-handler
-       (listen-handler repo))
-     (when db-graph?
-       (transact! db-name [(kv :db/type "db")])
-       (transact! db-name [(kv :schema/version db-schema/version)]))
-     (ldb/create-default-pages! db-conn {:db-graph? db-graph?}))))
+       (listen-handler repo)))))
 
 (defn destroy-all!
   []
