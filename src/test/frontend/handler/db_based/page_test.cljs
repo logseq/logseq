@@ -56,7 +56,7 @@
 
 (deftest merge-with-empty-page
   (page-handler/create! "Existing page" {:redirect? false :create-first-block? false})
-  (db-page-handler/rename! "Test" "Existing page" false false)
+  (page-handler/rename! "Test" "Existing page")
   (let [e1 (db/entity [:block/name "test"])
         e2 (db/entity [:block/name "existing page"])]
       ;; Old page deleted
@@ -70,8 +70,8 @@
   (testing "Renaming a page to an existing whiteboard page"
     (page-handler/create! "Whiteboard page" {:redirect? false
                                              :whiteboard? true})
-    (is (= :merge-whiteboard-pages (db-page-handler/rename! "Test" "Whiteboard page" false false)))
-    (is (= :merge-whiteboard-pages (db-page-handler/rename! "Whiteboard page" "Test" false false)))))
+    (is (= :merge-whiteboard-pages (page-handler/rename! "Test" "Whiteboard page" false false)))
+    (is (= :merge-whiteboard-pages (page-handler/rename! "Whiteboard page" "Test" false false)))))
 
 (deftest merge-existing-pages-should-update-ref-ids
   (testing "Merge existing page"
@@ -79,7 +79,7 @@
                   editor-handler/edit-block! (constantly nil)]
       (editor-handler/save-block! repo fbid "Block 1 [[Test]]")
       (page-handler/create! "Existing page" {:redirect? false :create-first-block? true})
-      (db-page-handler/rename! "Test" "Existing page" false false)
+      (page-handler/rename! "Test" "Existing page" false false)
       (let [e1 (db/entity [:block/name "test"])
             e2 (db/entity [:block/name "existing page"])]
       ;; Old page deleted
@@ -94,7 +94,7 @@
 ;; TODO: full coverage
 (deftest rename-namespace-pages
   (testing "Rename a page to a namespaced one"
-    (db-page-handler/rename! "Test" "Abc/Def Ghi/Jk" false false)
+    (page-handler/rename! "Test" "Abc/Def Ghi/Jk" false false)
     (let [e1 (db/entity [:block/name "test"])
           e2 (db/entity [:block/name "abc/def ghi/jk"])
           e3 (db/entity [:block/name "abc/def ghi"])
