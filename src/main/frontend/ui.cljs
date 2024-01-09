@@ -194,7 +194,7 @@
 
      [:span.flex-1 child]
      (when shortcut
-       [:span.ml-1 (render-keyboard-shortcut shortcut)])]))
+       [:span.ml-1 (render-keyboard-shortcut shortcut {:interactive? false})])]))
 
 (rum/defc dropdown-with-links
   [content-fn links
