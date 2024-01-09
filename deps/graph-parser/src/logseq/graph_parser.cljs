@@ -136,6 +136,19 @@ Options available:
   [db property-name]
   (:block/uuid (d/entity db [:block/name (gp-util/page-name-sanity-lc (name property-name))])))
 
+(defn- update-block-with-invalid-tags
+  [block]
+  (if (seq (:block/tags block))
+    (update block :block/tags
+            (fn [tags]
+              (mapv #(-> %
+                         sqlite-util/block-with-timestamps
+                         (merge {:block/journal? false
+                                 :block/format :markdown
+                                 :block/uuid (d/squuid)}))
+                    tags)))
+    block))
+
 (defn import-file-to-db-graph
   "Parse file and save parsed data to the given db graph."
   [conn file content {:keys [delete-blocks-fn extract-options skip-db-transact?]
@@ -175,8 +188,10 @@ Options available:
               block-ids (set/union (set block-ids) (set block-refs-ids))
               pages (map #(-> %
                               sqlite-util/block-with-timestamps
+                              ;; TODO: org-mode content needs to be handled
                               (assoc :block/format :markdown)
                               (dissoc :block/properties-text-values :block/properties-order :block/invalid-properties)
+                              update-block-with-invalid-tags
                               ;; FIXME: Remove when properties are supported
                               (assoc :block/properties {}))
                          (extract/with-ref-pages pages blocks))
@@ -218,9 +233,18 @@ Options available:
                                                                     new-key
                                                                     k)))
                                                    (remove-keys keyword?)))))
+                                update-block-with-invalid-tags
+                                ((fn [block]
+                                   (if (seq (:block/refs block))
+                                     (update block :block/refs
+                                             (fn [refs]
+                                               (mapv #(assoc % :block/format :markdown) refs)))
+                                     block)))
                                 sqlite-util/block-with-timestamps
                                 ;; FIXME: Remove when properties are supported
                                 (assoc :block/properties {})
+                                ;; TODO: org-mode content needs to be handled
+                                (assoc :block/format :markdown)
                                 ;; TODO: pre-block? can be removed once page properties are imported
                                 (dissoc :block/pre-block? :block/properties-text-values :block/properties-order
                                         :block/invalid-properties)))
