@@ -115,7 +115,7 @@
                           (let [properties (:block/properties block)
                                 type (pu/lookup properties :logseq.order-list-type)]
                             (= type order-list-type)))
-        prev-block-fn   #(some->> (:db/id %) (db-model/get-prev-sibling (state/get-current-repo)))
+        prev-block-fn   #(some->> (:db/id %) (db-model/get-prev-sibling (db/get-db)))
         prev-block      (prev-block-fn block)]
     (letfn [(page-fn? [b] (some-> b :block/name some?))
             (order-sibling-list [b]

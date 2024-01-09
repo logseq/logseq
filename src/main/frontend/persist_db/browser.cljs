@@ -76,7 +76,6 @@
             (ldb/register-transact-fn!
              (fn worker-transact!
                [_conn tx-data tx-meta]
-               (prn :debug :transact :tx-meta tx-meta :tx-data tx-data)
                (transact! wrapped-worker (state/get-current-repo) tx-data
                  ;; not from remote(rtc)
                  (assoc tx-meta :local-tx? true)))))
