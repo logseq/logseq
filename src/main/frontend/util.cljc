@@ -684,7 +684,7 @@
    (defn safe-dec-current-pos-from-end
      [input current-pos]
      (if-let [len (and (string? input) (.-length input))]
-       (when-let [input (and (>= len 2) (<= current-pos len)
+       (if-let [input (and (>= len 2) (<= current-pos len)
                              (.substring input (max (- current-pos 20) 0) current-pos))]
          (try
            (let [^js splitter (GraphemeSplitter.)
@@ -692,7 +692,8 @@
              (- current-pos (.-length (.pop input))))
            (catch :default e
              (js/console.error e)
-             (dec current-pos))))
+             (dec current-pos)))
+         (dec current-pos))
        (dec current-pos))))
 
 #?(:cljs
