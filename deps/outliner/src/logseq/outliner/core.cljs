@@ -387,7 +387,7 @@
   (-get-children [this conn]
     (let [parent-id (otree/-get-id this conn)
           children (ldb/get-block-immediate-children @conn parent-id)]
-      (map (partial block @conn) children))))
+      (map #(block @conn %) children))))
 
 (defn get-right-sibling
   [db db-id]
