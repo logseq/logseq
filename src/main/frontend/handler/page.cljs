@@ -80,7 +80,8 @@
       (notification/show! "Please use a valid name, empty name is not allowed!" :error)
       :merge-whiteboard-pages
       (notification/show! "Can't merge whiteboard pages" :error)
-      nil)))
+      nil)
+    result))
 
 (defn reorder-favorites!
   [favorites]
