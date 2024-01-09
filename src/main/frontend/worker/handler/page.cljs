@@ -58,7 +58,7 @@
    * :persist-op?         - when true, add an update-page op
    TODO: Add other options"
   [repo conn config title
-   & {:keys [create-first-block? format properties uuid persist-op? whiteboard? class?]
+   & {:keys [create-first-block? format properties uuid persist-op? whiteboard? class? today-journal?]
       :or   {create-first-block? true
              format              nil
              properties          nil
@@ -120,7 +120,10 @@
                       page-txs
                       first-block-tx)]
         (when (seq txs)
-          (ldb/transact! conn txs {:persist-op? persist-op?})
+          (ldb/transact! conn txs (cond-> {:persist-op? persist-op?}
+                                    today-journal?
+                                    (assoc :create-today-journal? true
+                                           :today-journal-name page-name)))
           page-name)))))
 
 (defn db-refs->page

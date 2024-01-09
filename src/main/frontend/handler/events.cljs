@@ -77,7 +77,8 @@
             [frontend.persist-db.browser :as db-browser]
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [frontend.modules.outliner.pipeline :as pipeline]
-            [electron.ipc :as ipc]))
+            [electron.ipc :as ipc]
+            [frontend.date :as date]))
 
 ;; TODO: should we move all events here?
 
@@ -347,7 +348,9 @@
   (page-handler/rename! old-title new-title))
 
 (defmethod handle :page/create [[_ page-name opts]]
-  (page-handler/create! page-name opts))
+  (if (= page-name (date/today))
+    (page-handler/create-today-journal!)
+    (page-handler/create! page-name opts)))
 
 (defmethod handle :page/deleted [[_ repo page-name file-path]]
   (page-common-handler/after-page-deleted! repo page-name file-path))
