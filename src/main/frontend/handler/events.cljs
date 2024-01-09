@@ -73,7 +73,6 @@
             [logseq.common.config :as common-config]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.db.listener :as db-listener]
             [frontend.persist-db.browser :as db-browser]
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [frontend.modules.outliner.pipeline :as pipeline]
@@ -550,7 +549,6 @@
                 (catch :default e
                   (js/console.error e)))
               (state/set-current-repo! current-repo)
-              (db-listener/listen-and-persist! current-repo)
               (repo-config-handler/restore-repo-config! current-repo)
               (when graph-switch-f (graph-switch-f current-repo true))
               (.watch mobile-util/fs-watcher #js {:path current-repo-dir})

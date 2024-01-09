@@ -21,7 +21,6 @@
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [promesa.core :as p]
-            [frontend.db.listener :as db-listener]
             [frontend.persist-db :as persist-db]))
 
 (defn remove-ignore-files
@@ -297,8 +296,7 @@
       (search/reset-indice! repo)
       (db/remove-conn! repo)
       (db/clear-query-state!)
-      (db/start-db-conn! repo {:listen-handler db-listener/listen-and-persist!
-                               :db-graph? (config/db-based-graph? repo)})
+      (db/start-db-conn! repo {:db-graph? (config/db-based-graph? repo)})
       (reload-dir! repo {:re-index? true
                          :ok-handler ok-handler}))))
 

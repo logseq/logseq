@@ -40,11 +40,9 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.core :as mobile]
-            [frontend.db.listener :as db-listener]
             [cljs-bean.core :as bean]
             [frontend.handler.test :as test]
-            [frontend.persist-db.browser :as db-browser]
-            [frontend.persist-db :as persist-db]))
+            [frontend.persist-db.browser :as db-browser]))
 
 (defn- set-global-error-notification!
   []
@@ -76,7 +74,6 @@
           (repo-config-handler/start {:repo repo}))
         (p/then
          (fn []
-           (db-listener/listen-and-persist! repo)
            ;; try to load custom css only for current repo
            (ui-handler/add-style-if-exists!)
 

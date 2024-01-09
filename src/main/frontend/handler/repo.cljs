@@ -35,8 +35,7 @@
             [clojure.core.async :as async]
             [frontend.mobile.util :as mobile-util]
             [medley.core :as medley]
-            [logseq.common.path :as path]
-            [frontend.db.listener :as db-listener]))
+            [logseq.common.path :as path]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -367,8 +366,7 @@
   (state/set-current-repo! repo)
   (db/start-db-conn! repo (merge
                            opts
-                           {:listen-handler db-listener/listen-and-persist!
-                            :db-graph? (config/db-based-graph? repo)})))
+                           {:db-graph? (config/db-based-graph? repo)})))
 
 (defn- setup-demo-repo-if-not-exists-impl!
   []
@@ -378,7 +376,7 @@
           repo-dir (config/get-repo-dir repo)]
       (p/do! (fs/mkdir-if-not-exists repo-dir) ;; create memory://local
              (state/set-current-repo! repo)
-             (db/start-db-conn! repo {:listen-handler db-listener/listen-and-persist!})
+             (db/start-db-conn! repo {})
              (when-not config/publishing?
                (let [dummy-notes (t :tutorial/dummy-notes)]
                  (create-dummy-notes-page repo dummy-notes)))
@@ -416,7 +414,6 @@
    (when (config/global-config-enabled?)
      (global-config-handler/restore-global-config!))
     ;; Don't have to unlisten the old listener, as it will be destroyed with the conn
-   (db-listener/listen-and-persist! repo)
    (ui-handler/add-style-if-exists!)
    (state/set-db-restoring! false)))
 
