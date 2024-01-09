@@ -61,7 +61,8 @@
   [page-name tldraw-page assets shapes-index]
   (let [page-entity (model/get-page page-name)
         get-k #(gobj/get tldraw-page %)]
-    {:block/name page-name
+    {:block/original-name page-name
+     :block/name (util/page-name-sanity-lc page-name)
      :block/type "whiteboard"
      :block/properties {(pu/get-pid :ls-type)
                         :whiteboard-page
