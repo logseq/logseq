@@ -102,7 +102,9 @@
                     #js {:$addr addr
                          :$content (pr-str data)})
                   addr+data-seq)]
-        (upsert-addr-content! repo data delete-addrs)))
+        ;; async write so that UI can be refreshed earlier
+        (async/go
+          (upsert-addr-content! repo data delete-addrs))))
 
     (-restore [_ addr]
       (restore-data-from-addr repo addr))))
@@ -271,12 +273,17 @@
                        (edn/read-string context)
                        context)
              _ (when context (state/set-context! context))
-             tx-meta' (dissoc tx-meta :insert-blocks?)]
+             tx-meta' (if (:new-graph? tx-meta)
+                        tx-meta
+                        (-> tx-meta
+                            (assoc :skip-store? true) ; delay writes to the disk
+                            (dissoc :insert-blocks?)))]
          (when-not (and (:create-today-journal? tx-meta)
                         (:today-journal-name tx-meta)
                         (d/entity @conn [:block/name (:today-journal-name tx-meta)])) ; today journal created already
            ;; (prn :debug :transact :tx-data tx-data :tx-meta tx-meta')
-           (ldb/transact! conn tx-data tx-meta'))
+           (worker-util/profile "Worker db transact"
+             (ldb/transact! conn tx-data tx-meta')))
          nil)
        (catch :default e
          (prn :debug :error)
