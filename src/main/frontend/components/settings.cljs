@@ -743,7 +743,7 @@
      [:p (t :settings-page/git-confirm)])])
 
 (rum/defc settings-advanced < rum/reactive
-  [current-repo]
+  []
   (let [instrument-disabled? (state/sub :instrument/disabled?)
         developer-mode? (state/sub [:ui/developer-mode?])
         https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])]
@@ -756,8 +756,8 @@
      (clear-cache-row t)
 
      (ui/admonition
-       :warning
-       [:p (t :settings-page/clear-cache-warning)])]))
+      :warning
+      [:p (t :settings-page/clear-cache-warning)])]))
 
 (rum/defc sync-enabled-switcher
   [enabled?]
@@ -1195,7 +1195,7 @@
          (assets/settings-content)
 
          :advanced
-         (settings-advanced current-repo)
+         (settings-advanced)
 
          :features
          (settings-features)

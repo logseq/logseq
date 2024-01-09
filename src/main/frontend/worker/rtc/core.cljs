@@ -26,8 +26,7 @@
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.ws :as ws]
             [promesa.core :as p]
-            [cljs-bean.core :as bean]
-            [frontend.worker.react :as worker-react]))
+            [cljs-bean.core :as bean]))
 
 
 ;;                     +-------------+

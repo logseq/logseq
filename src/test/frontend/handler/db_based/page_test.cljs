@@ -1,6 +1,5 @@
 (ns frontend.handler.db-based.page-test
-  (:require [frontend.handler.db-based.page :as db-page-handler]
-            [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
             [frontend.handler.page :as page-handler]
@@ -28,7 +27,7 @@
 (deftest rename-test
   (testing "Case change"
     (let [page (db/entity [:block/name "test"])]
-      (db-page-handler/rename! "test" "Test" false false)
+      (page-handler/rename! "test" "Test")
       (let [entity (db/entity [:block/name "test"])]
         (is (= "Test" (:block/original-name entity)))
         ;; db id not changed
@@ -36,7 +35,7 @@
 
   (testing "Name changed"
     (let [page (db/entity [:block/name "test"])]
-      (db-page-handler/rename! "Test" "New name" false false)
+      (page-handler/rename! "Test" "New name")
       (let [entity (db/entity [:block/name "new name"])]
         (is (= "New name" (:block/original-name entity)))
         (is (= (:db/id page) (:db/id entity))))))
@@ -45,7 +44,7 @@
     (with-redefs [gdom/getElement (constantly #js {:id nil})
                   editor-handler/edit-block! (constantly nil)]
       (page-handler/create! "Existing page" {:redirect? false :create-first-block? true})
-      (db-page-handler/rename! "New name" "Existing page" false false)
+      (page-handler/rename! "New name" "Existing page")
       (let [e1 (db/entity [:block/name "new name"])
             e2 (db/entity [:block/name "existing page"])]
       ;; Old page deleted
