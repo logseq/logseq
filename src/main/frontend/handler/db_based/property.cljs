@@ -738,6 +738,7 @@
           page (get-property-hidden-page property)
           page-tx (when-not (e/entity? page) page)
           page-id (:block/uuid page)
+          values' (remove string/blank? values)
           closed-value-blocks (map (fn [value]
                                      (db-property-util/build-closed-value-block
                                       (db/new-block-id)
@@ -745,7 +746,7 @@
                                       [:block/uuid page-id]
                                       property
                                       {}))
-                                   (remove string/blank? values))
+                                values')
           value->block-id (zipmap
                            (map #(get-in % [:block/schema :value]) closed-value-blocks)
                            (map :block/uuid closed-value-blocks))

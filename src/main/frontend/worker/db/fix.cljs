@@ -158,15 +158,18 @@
                       replace-tx? false}
                  :as _opts}]
   (let [db @conn
-        transact-opts (if replace-tx? {:replace? true} {})
-        *fix-tx-data (atom [])]
-    (when fix-parent-left?
-      (loop-fix-conflicts conn page-id transact-opts *fix-tx-data))
-    (when fix-broken-chain?
-      (let [db' @conn
-            parent-left->es' (build-parent-left->es db page-id)
-            fix-broken-chain-tx (fix-broken-chain db' parent-left->es')]
-        (when (seq fix-broken-chain-tx)
-          (let [tx-data (:tx-data (ldb/transact! conn fix-broken-chain-tx transact-opts))]
-            (swap! *fix-tx-data (fn [old-data] (concat old-data tx-data)))))))
-    @*fix-tx-data))
+        page (d/entity db page-id)]
+    (when-not (or (ldb/whiteboard-page? db page)
+                  (ldb/hidden-page? page))
+      (let [transact-opts (if replace-tx? {:replace? true} {})
+            *fix-tx-data (atom [])]
+        (when fix-parent-left?
+          (loop-fix-conflicts conn page-id transact-opts *fix-tx-data))
+        (when fix-broken-chain?
+          (let [db' @conn
+                parent-left->es' (build-parent-left->es db page-id)
+                fix-broken-chain-tx (fix-broken-chain db' parent-left->es')]
+            (when (seq fix-broken-chain-tx)
+              (let [tx-data (:tx-data (ldb/transact! conn fix-broken-chain-tx transact-opts))]
+                (swap! *fix-tx-data (fn [old-data] (concat old-data tx-data)))))))
+        @*fix-tx-data))))
