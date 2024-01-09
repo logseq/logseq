@@ -8,7 +8,8 @@
             [frontend.util.cursor :as cursor]
             [frontend.util.drawer :as drawer]
             [frontend.modules.editor.undo-redo :as undo-redo]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [datascript.db :as d-db]))
 
 (defn- reset-editing-block-content!
   [tx-data tx-meta]
@@ -78,16 +79,21 @@
           (prn :reset-editing-block-content)
           (js/console.error e)))
 
-      (let [importing? (:graph/importing @state/state)]
-        (when-not importing?
-          (react/refresh! repo tx-report affected-keys))
+      (when-not (:graph/importing @state/state)
+        (react/refresh! repo tx-report affected-keys)
 
         (when (and state/lsp-enabled?
                    (seq blocks)
-                   (not importing?)
                    (<= (count blocks) 1000))
           (state/pub-event! [:plugin/hook-db-tx
                              {:blocks  blocks
                               :deleted-block-uuids deleted-block-uuids
                               :tx-data (:tx-data tx-report)
-                              :tx-meta (:tx-meta tx-report)}]))))))
+                              :tx-meta (:tx-meta tx-report)}]))))
+
+    (when-let [deleting-block-id (:ui/deleting-block @state/state)]
+      (when (some (fn [datom] (and
+                               (= :block/uuid (:a datom))
+                               (= (:v datom) deleting-block-id)
+                               (true? (d-db/datom-added datom)))) tx-data) ; editing-block was added back (could be undo or from remote sync)
+        (state/set-state! :ui/deleting-block nil)))))
