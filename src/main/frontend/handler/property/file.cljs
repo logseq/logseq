@@ -46,7 +46,6 @@
 
 (def property-key-exist?-when-file-based property-util/property-key-exist?)
 (def goto-properties-end-when-file-based property-util/goto-properties-end)
-(def front-matter?-when-file-based property-util/front-matter?)
 
 (defn properties-hidden?
   [properties]

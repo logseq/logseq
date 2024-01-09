@@ -1,4 +1,5 @@
 (ns frontend.worker.handler.page
+  "Page operations"
   (:require [logseq.db :as ldb]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]

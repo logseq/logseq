@@ -218,15 +218,6 @@
       (when (and (not (:skip-refresh? tx-meta)) (seq tx-data))
         (refresh-affected-queries! repo-url affected-keys)))))
 
-(defn batch-refresh!
-  [repo-url _txs]
-  ;; (when (and repo-url (seq txs))
-  ;;   (let [affected-keys (apply set/union (map get-affected-queries-keys txs))]
-  ;;     (refresh-affected-queries! repo-url affected-keys)))
-  (state/set-state! [:rtc/remote-batch-tx-state repo-url]
-                    {:in-transaction? false
-                     :txs []}))
-
 (defn set-key-value
   [repo-url key value]
   (if value

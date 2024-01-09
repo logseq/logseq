@@ -75,25 +75,3 @@
 (defn set-worker-object!
   [worker]
   (swap! *state assoc :worker/object worker))
-
-(defn conj-batch-txs!
-  [tx-data]
-  (swap! *state update :rtc/remote-batch-txs
-         (fn [old-data]
-           (concat old-data tx-data))))
-
-(defn batch-tx-mode?
-  []
-  (some? (:rtc/remote-batch-txs @*state)))
-
-(defn start-batch-tx-mode!
-  []
-  (swap! *state assoc :rtc/remote-batch-txs []))
-
-(defn exit-batch-tx-mode!
-  []
-  (swap! *state assoc :rtc/remote-batch-txs nil))
-
-(defn get-batch-txs
-  []
-  (:rtc/remote-batch-txs @*state))

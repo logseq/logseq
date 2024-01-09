@@ -624,15 +624,6 @@
        (ipc/ipc :userAppCfgs :feature/enable-automatic-chmod? (not enabled?)))
      [:span.text-sm.opacity-50 (t :settings-page/auto-chmod-desc)])))
 
-(defn filename-format-row []
-  (row-with-button-action
-   {:left-label (t :settings-page/filename-format)
-    :button-label (t :settings-page/edit-setting)
-    ;; :on-click #(state/set-sub-modal!
-    ;;             (fn [_] (conversion-component/files-breaking-changed))
-    ;;             {:id :filename-format-panel :center? true})
-    }))
-
 (rum/defcs native-titlebar-row < rum/reactive
   [state t]
   (let [enabled? (state/sub [:electron/user-cfgs :window/native-titlebar?])]

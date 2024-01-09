@@ -3,9 +3,7 @@
 (ns frontend.util.fs
   "Misc util fns built on top of frontend.fs"
   (:require ["path" :as node-path]
-            [logseq.common.util :as common-util]
             [clojure.string :as string]
-            [frontend.state :as state]
             [frontend.fs :as fs]
             [frontend.config :as config]
             [promesa.core :as p]
@@ -78,13 +76,3 @@
 (defn file-name-sanity
   [name _format]
   (wfu/file-name-sanity name))
-
-(defn create-title-property?
-  [page-name]
-  (and (string? page-name)
-       (let [filename-format (state/get-filename-format)
-             file-name  (file-name-sanity page-name filename-format)
-             page-name' (common-util/title-parsing file-name filename-format)
-             result     (or (not= page-name page-name')
-                            (include-reserved-chars? file-name))]
-         result)))

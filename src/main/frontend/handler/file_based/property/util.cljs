@@ -148,11 +148,6 @@
         (string/triml (string/join "\n" body)))
       content)))
 
-;; FIXME:
-(defn front-matter?
-  [s]
-  (string/starts-with? s "---\n"))
-
 (defn insert-property
   "Only accept nake content (without any indentation)"
   ([format content key value]
