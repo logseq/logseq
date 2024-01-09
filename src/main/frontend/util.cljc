@@ -1074,9 +1074,16 @@
              [another-file-name])
             string-join-path))))
 
-(defmacro profile
-  [k & body]
-  `(worker-util/profile ~k ~@body))
+#?(:clj
+   (defmacro profile
+     [k & body]
+     `(if goog.DEBUG
+        (let [k# ~k]
+          (.time js/console k#)
+          (let [res# (do ~@body)]
+            (.timeEnd js/console k#)
+            res#))
+        (do ~@body))))
 
 #?(:clj
    (defmacro with-time

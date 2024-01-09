@@ -90,9 +90,11 @@
 
               true
               (distinct))]
+
     (when (and (seq txs)
                (or db-based?
-                   (and (fn? unlinked-graph?) (not (unlinked-graph?)))))
+                   (and (fn? unlinked-graph?) (not (unlinked-graph?)))
+                   (exists? js/process)))
 
       ;; (prn :debug "DB transact")
       ;; (cljs.pprint/pprint txs)

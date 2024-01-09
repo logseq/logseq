@@ -80,7 +80,8 @@
 
      (defn post-message
        [type data]
-       (.postMessage js/self (bean/->js [type data])))))
+       (when (exists? js/self)
+         (.postMessage js/self (bean/->js [type data]))))))
 
 ;; Copied from https://github.com/tonsky/datascript-todo
 #?(:clj

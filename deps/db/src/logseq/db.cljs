@@ -60,8 +60,8 @@
    (let [tx-data (common-util/fast-remove-nils tx-data)]
      (when (seq tx-data)
 
-      ;; (prn :debug :transact)
-      ;; (cljs.pprint/pprint tx-data)
+       ;; (prn :debug :transact)
+       ;; (cljs.pprint/pprint tx-data)
 
        (let [f (or @*transact-fn d/transact!)]
          (f conn tx-data tx-meta))))))
