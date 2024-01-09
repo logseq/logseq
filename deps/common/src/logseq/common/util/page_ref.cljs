@@ -50,7 +50,7 @@
            (when-let [[_ path _label] (re-matches org-page-ref-re s)]
              (some-> (get-file-rootname path)
                      (string/replace "." "/")))
-           (-> (re-matches page-ref-re s)
+           (-> (re-matches page-ref-any-re s)
                second))))
 
 (defn get-page-name!
