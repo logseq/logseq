@@ -18,6 +18,7 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as web-nfs]
+            [frontend.worker.handler.page :as worker-page]
             [frontend.worker.handler.page.rename :as worker-page-rename]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -39,9 +40,11 @@
             [frontend.context.i18n :refer [t]]))
 
 (def create! page-common-handler/create!)
+(def <create! page-common-handler/<create!)
 (def delete! page-common-handler/delete!)
 (def unfavorite-page! page-common-handler/unfavorite-page!)
 (def favorite-page! page-common-handler/favorite-page!)
+(def get-title-and-pagename worker-page/get-title-and-pagename)
 
 ;; FIXME: add whiteboard
 (defn- get-directory
@@ -232,30 +235,30 @@
                                (subs q 1)
                                q))
               last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)]
-          (when db-based?
-            (let [tag (string/trim chosen)
-                  edit-block (state/get-edit-block)]
-              (when (and (not (string/blank? tag)) (:block/uuid edit-block))
-                (let [tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)])]
-                  (when-not tag-entity
-                    (create! tag {:redirect? false
-                                  :create-first-block? false
-                                  :class? class?}))
-                  (when class?
-                    (let [repo (state/get-current-repo)
-                          tag-entity (or tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)]))
-                          tx-data [[:db/add [:block/uuid (:block/uuid edit-block)] :block/tags (:db/id tag-entity)]
-                                   [:db/add [:block/uuid (:block/uuid edit-block)] :block/refs (:db/id tag-entity)]]]
-                      (db/transact! repo tx-data {:outliner-op :save-block})))))))
+          (p/do!
+           (when db-based?
+             (let [tag (string/trim chosen)
+                   edit-block (state/get-edit-block)]
+               (when (and (not (string/blank? tag)) (:block/uuid edit-block))
+                 (p/let [tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)])
+                         _ (when-not tag-entity
+                             (<create! tag {:redirect? false
+                                            :create-first-block? false
+                                            :class? class?}))]
+                   (when class?
+                     (let [repo (state/get-current-repo)
+                           tag-entity (or tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)]))
+                           tx-data [[:db/add [:block/uuid (:block/uuid edit-block)] :block/tags (:db/id tag-entity)]
+                                    [:db/add [:block/uuid (:block/uuid edit-block)] :block/refs (:db/id tag-entity)]]]
+                       (db/transact! repo tx-data {:outliner-op :save-block})))))))
+           (editor-handler/insert-command! id
+                                           (str "#" wrapped-tag)
+                                           format
+                                           {:last-pattern last-pattern
+                                            :end-pattern (when wrapped? page-ref/right-brackets)
+                                            :command :page-ref})
 
-          (editor-handler/insert-command! id
-                                          (str "#" wrapped-tag)
-                                          format
-                                          {:last-pattern last-pattern
-                                           :end-pattern (when wrapped? page-ref/right-brackets)
-                                           :command :page-ref})
-
-          (when input (.focus input))))
+           (when input (.focus input)))))
       (fn [chosen e]
         (util/stop e)
         (state/clear-editor-action!)
@@ -285,7 +288,7 @@
               template (state/get-default-journal-template)
               create-f (fn []
                          (p/do!
-                           (create! title {:redirect? false
+                           (<create! title {:redirect? false
                                           :split-namespace? false
                                           :create-first-block? (not template)
                                           :journal? true

@@ -19,7 +19,8 @@
             [lambdaisland.glogi :as log]
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [promesa.core :as p]))
 
 (defn- select-type?
   [property type]
@@ -96,15 +97,16 @@
      (fn [{:keys [toggle-fn]}]
        (ui/datepicker value' {:on-change (fn [_e date]
                                            (let [journal (date/js-date->journal-title date)]
-                                             (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
-                                               (page-handler/create! journal {:redirect? false
-                                                                              :create-first-block? false}))
-                                             (when (fn? on-change)
-                                               (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
-                                             (exit-edit-property)
-                                             (toggle-fn)
-                                             (when-let [toggle (:toggle-fn opts)]
-                                               (toggle))))}))
+                                             (p/do!
+                                              (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
+                                                (page-handler/<create! journal {:redirect? false
+                                                                                :create-first-block? false}))
+                                              (when (fn? on-change)
+                                                (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
+                                              (exit-edit-property)
+                                              (toggle-fn)
+                                              (when-let [toggle (:toggle-fn opts)]
+                                                (toggle)))))}))
      {:modal-class (util/hiccup->class
                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})))
 
@@ -122,7 +124,7 @@
                                                                               (:block/uuid page))
                                         (exit-edit-property)))}))))
 
-(defn- create-page-if-not-exists!
+(defn- <create-page-if-not-exists!
   [property classes page]
   (let [page* (string/trim page)
         [_ page inline-class] (or (seq (map string/trim (re-find #"(.*)#(.*)$" page*)))
@@ -135,15 +137,15 @@
               (or (pu/get-page-uuid inline-class)
                   (do (log/error :msg "Given inline class does not exist" :inline-class inline-class)
                       nil)))]
-        (page-handler/create! page {:redirect? false
-                                    :create-first-block? false
-                                    :tags (if inline-class-uuid
-                                            [inline-class-uuid]
+        (p/let [_ (page-handler/<create! page {:redirect? false
+                                               :create-first-block? false
+                                               :tags (if inline-class-uuid
+                                                       [inline-class-uuid]
                                             ;; Only 1st class b/c page normally has
                                             ;; one of and not all these classes
-                                            (take 1 classes))
-                                    :class? class?})))
-    [page id]))
+                                                       (take 1 classes))
+                                               :class? class?})]
+          [page id])))))
 
 (defn- select-aux
   [block property {:keys [items selected-choices multiple-choices?] :as opts}]
@@ -241,17 +243,16 @@
                  :input-opts input-opts})
                 multiple-choices?
                 (assoc :on-apply (fn [choices]
-                                   (let [pages (->> choices
-                                                    (map #(create-page-if-not-exists! property string-classes %))
-                                                    (map first))
-                                         values (set (map #(pu/get-page-uuid repo %) pages))]
+                                   (p/let [result (p/all (map #(<create-page-if-not-exists! property string-classes %) choices))
+                                           pages (map first result)
+                                           values (set (map #(pu/get-page-uuid repo %) pages))]
                                      (when on-chosen (on-chosen values)))))
                 (not multiple-choices?)
                 (assoc :on-chosen (fn [chosen]
                                     (let [page* (string/trim (if (string? chosen) chosen (:value chosen)))]
                                       (when-not (string/blank? page*)
-                                        (let [[page id] (create-page-if-not-exists! property string-classes page*)
-                                              id' (or id (pu/get-page-uuid repo page))]
+                                        (p/let [[page id] (<create-page-if-not-exists! property string-classes page*)
+                                                id' (or id (pu/get-page-uuid repo page))]
                                           (when on-chosen (on-chosen id'))))))))]
     (select-aux block property opts')))
 
@@ -306,6 +307,7 @@
       (when (= js/document.activeElement (gdom/getElement editor-id))
         (exit-edit-property false)))))
 
+;; FIXME:
 (defn create-new-block!
   [block property value]
   (let [last-block-id (db-property-handler/create-property-text-block! block property value
@@ -315,14 +317,15 @@
     (exit-edit-property)
     (editor-handler/edit-block! (db/entity [:block/uuid last-block-id]) :max last-block-id)))
 
+;; FIXME:
 (defn create-new-block-from-template!
   "`template`: tag block"
   [block property template]
   (let [repo (state/get-current-repo)
         {:keys [page blocks]} (db-property-handler/property-create-new-block-from-template block property template)]
-    (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})
-    (add-property! block (:block/original-name property) (:block/uuid (last blocks)))
-    (last blocks)))
+    (p/let [_ (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})
+            _ (add-property! block (:block/original-name property) (:block/uuid (last blocks)))]
+      (last blocks))))
 
 (defn- new-text-editor-opts
   [repo block property value editor-id]

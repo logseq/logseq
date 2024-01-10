@@ -32,15 +32,15 @@
             [frontend.components.property.util :as components-pu]
             [promesa.core :as p]))
 
-(defn- create-class-if-not-exists!
+(defn- <create-class-if-not-exists!
   [value]
   (when (string? value)
     (let [page-name (string/trim value)]
       (when-not (string/blank? page-name)
-        (page-handler/create! page-name {:redirect? false
-                                         :create-first-block? false
-                                         :class? true})
-        (pu/get-page-uuid page-name)))))
+        (p/let [_ (page-handler/<create! page-name {:redirect? false
+                                                   :create-first-block? false
+                                                   :class? true})]
+          (pu/get-page-uuid page-name))))))
 
 (rum/defc class-select
   [*property-schema schema-classes {:keys [multiple-choices? save-property-fn]
@@ -86,16 +86,19 @@
                                     nil))}}
                    multiple-choices?
                    (assoc :on-apply (fn [choices]
-                                      (let [choices' (map (fn [value] (or (create-class-if-not-exists! value) value)) choices)]
-                                        (swap! *property-schema assoc :classes (set choices'))
-                                        (save-property-fn)
+                                      (p/let [choices' (p/all (map (fn [value]
+                                                                     (p/let [result (<create-class-if-not-exists! value)]
+                                                                       (or result value))) choices))
+                                              _ (swap! *property-schema assoc :classes (set choices'))
+                                              _ (save-property-fn)]
                                         (toggle-fn))))
 
                    (not multiple-choices?)
                    (assoc :on-chosen (fn [value]
-                                       (let [value' (or (create-class-if-not-exists! value) value)]
-                                         (swap! *property-schema assoc :classes #{value'})
-                                         (save-property-fn)
+                                       (p/let [result (<create-class-if-not-exists! value)
+                                               value' (or result value)
+                                               _ (swap! *property-schema assoc :classes #{value'})
+                                               _ (save-property-fn)]
                                          (toggle-fn)))))]
 
         (select/select opts)))

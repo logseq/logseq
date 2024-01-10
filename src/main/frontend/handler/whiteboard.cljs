@@ -195,6 +195,7 @@
              :updated-at (util/time-ms),
              :created-at (util/time-ms)}]))
 
+;; FIXME:
 (defn create-new-whiteboard-page!
   ([]
    (create-new-whiteboard-page! nil))

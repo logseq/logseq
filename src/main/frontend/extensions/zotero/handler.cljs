@@ -70,6 +70,7 @@
    (go
      (let [{:keys [page-name properties abstract-note]} (extractor/extract item)]
        (when-not (str/blank? page-name)
+         ;; FIXME:
          (if (db/page-exists? (str/lower-case page-name))
            (if (setting/setting :overwrite-mode?)
              (page-handler/delete!
