@@ -161,7 +161,7 @@
                                          (notification/show!
                                           [:p (t :context-menu/template-exists-warning)]
                                           :error)
-                                         (do
+                                         (p/do!
                                            (property-handler/set-block-property! repo block-id :template title)
                                            (when (false? template-including-parent?)
                                              (property-handler/set-block-property! repo block-id :template-including-parent false))
