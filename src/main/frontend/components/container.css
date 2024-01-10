@@ -13,8 +13,8 @@
 }
 
 #app-container {
-  display: flex;
-  flex: 0 0 100%;
+  @apply flex basis-full;
+  background-color: or(--lx-gray-01, --ls-primary-background-color, #fff);
 }
 
 #skip-to-main {
@@ -553,10 +553,6 @@
 
 .cp__sidebar-main-layout {
   background-color: or(--ls-main-content-background, --lx-gray-01, --ls-primary-background-color);
-}
-
-.dark .cp__sidebar-main-layout {
-  background-color: or(--ls-main-content-background, --lx-gray-02, --ls-primary-background-color);
 }
 
 .cp__sidebar-main-content {
