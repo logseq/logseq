@@ -265,15 +265,6 @@
    closed-value-block
    whiteboard-block])
 
-;; TODO: invalid macros should not generate unknown
-(def unknown-block
-  "A block that has an unknown type. This type of block should be removed when
-  the above TODOs have been addressed and the frontend ensures no unknown blocks
-  are being created"
-  [:map
-   [:block/uuid :uuid]
-   [:block/unknown? :boolean]])
-
 (def file-block
   [:map
    [:block/uuid :uuid]
@@ -308,19 +299,6 @@
   thoroughly validate properties, the entities and this schema should be
   prepared with update-properties-in-ents and update-properties-in-schema
   respectively"
-  [:sequential
-   [:or
-    page
-    block
-    file-block
-    schema-version
-    db-ident
-    macro
-    unknown-block]])
-
-(def DB-known
-  "A stricter version of the DB schema that doesn't allow for unknown blocks.
-   When we've fixed all known causes of unknown blocks this should be the DB schema"
   [:sequential
    [:or
     page
