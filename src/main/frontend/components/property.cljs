@@ -37,10 +37,10 @@
   (when (string? value)
     (let [page-name (string/trim value)]
       (when-not (string/blank? page-name)
-        (p/let [_ (page-handler/<create! page-name {:redirect? false
-                                                   :create-first-block? false
-                                                   :class? true})]
-          (pu/get-page-uuid page-name))))))
+        (p/let [page (page-handler/<create! page-name {:redirect? false
+                                                       :create-first-block? false
+                                                       :class? true})]
+          (:block/uuid page))))))
 
 (rum/defc class-select
   [*property-schema schema-classes {:keys [multiple-choices? save-property-fn]
@@ -339,14 +339,14 @@
             (pv/exit-edit-property))
         ;; Both conditions necessary so that a class can add its own page properties
         (when (and (contains? (:block/type entity) "class") class-schema?)
-          (pv/add-property! entity property-name "" {:class-schema? class-schema?
+          (pv/<add-property! entity property-name "" {:class-schema? class-schema?
                                                      ;; Only enter property names from sub-modal as inputting
                                                      ;; property values is buggy in sub-modal
                                                      :exit-edit? page-configure?})))
       ;; new property entered
       (if (db-property/valid-property-name? property-name)
         (if (and (contains? (:block/type entity) "class") page-configure?)
-          (pv/add-property! entity property-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
+          (pv/<add-property! entity property-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
           (do
             (db-property-handler/upsert-property! repo property-name {} {})
             (when *show-new-property-config?

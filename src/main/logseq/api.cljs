@@ -559,15 +559,13 @@
           {:keys [redirect createFirstBlock format journal]} (bean/->clj opts)]
       (p/let [page (db-model/get-page name)
               new-page (when-not page
-                         (p/let [_ (page-handler/<create!
-                                    name
-                                    {:redirect?           (if (boolean? redirect) redirect true)
-                                     :journal?            journal
-                                     :create-first-block? (if (boolean? createFirstBlock) createFirstBlock true)
-                                     :format              format
-                                     :properties          properties})
-                                 name (second (page-handler/get-title-and-pagename))]
-                           (db-model/get-page name)))]
+                         (page-handler/<create!
+                          name
+                          {:redirect?           (if (boolean? redirect) redirect true)
+                           :journal?            journal
+                           :create-first-block? (if (boolean? createFirstBlock) createFirstBlock true)
+                           :format              format
+                           :properties          properties}))]
         (some-> (or page new-page)
                 :db/id
                 (db-utils/pull)

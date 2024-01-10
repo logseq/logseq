@@ -17,6 +17,7 @@
             [frontend.handler.block :as block-handler]
             [frontend.handler.file-based.recent :as file-recent-handler]))
 
+;; TODO: return page entity instead
 (defn create!
   "Create page. Has the following options:
 
@@ -57,9 +58,10 @@
            [_ page-name] (worker-page/get-title-and-pagename title)]
      (when redirect?
        (route-handler/redirect-to-page! page-name))
-     (when-let [first-block (first (:block/_left (db/entity [:block/name page-name])))]
-       (block-handler/edit-block! first-block :max nil))
-     page-name)))
+     (let [page (db/entity [:block/name page-name])]
+       (when-let [first-block (first (:block/_left page))]
+         (block-handler/edit-block! first-block :max nil))
+       page))))
 
 ;; favorite fns
 ;; ============

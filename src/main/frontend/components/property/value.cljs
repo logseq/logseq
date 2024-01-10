@@ -45,20 +45,21 @@
                        "")]
     (state/set-editing! editor-id v property cursor-range opts)))
 
-(defn add-property!
+(defn <add-property!
   "If a class and in a class schema context, add the property to its schema.
   Otherwise, add a block's property and its value"
-  ([block property-key property-value] (add-property! block property-key property-value {}))
+  ([block property-key property-value] (<add-property! block property-key property-value {}))
   ([block property-key property-value {:keys [exit-edit? class-schema?]
                                        :or {exit-edit? true}}]
    (let [repo (state/get-current-repo)
          class? (contains? (:block/type block) "class")]
-     (when property-key
-       (if (and class? class-schema?)
-         (db-property-handler/class-add-property! repo (:block/uuid block) property-key)
-         (property-handler/set-block-property! repo (:block/uuid block) property-key property-value)))
-     (when exit-edit?
-       (exit-edit-property)))))
+     (p/do!
+      (when property-key
+        (if (and class? class-schema?)
+          (db-property-handler/class-add-property! repo (:block/uuid block) property-key)
+          (property-handler/set-block-property! repo (:block/uuid block) property-key property-value)))
+      (when exit-edit?
+       (exit-edit-property))))))
 
 (defn- navigate-to-date-page
   [value]
@@ -131,21 +132,22 @@
                                   [nil page* nil])
         id (pu/get-page-uuid page)
         class? (= (:block/name property) "tags")]
-    (when (nil? id)
+    (if (nil? id)
       (let [inline-class-uuid
             (when inline-class
               (or (pu/get-page-uuid inline-class)
                   (do (log/error :msg "Given inline class does not exist" :inline-class inline-class)
                       nil)))]
-        (p/let [_ (page-handler/<create! page {:redirect? false
-                                               :create-first-block? false
-                                               :tags (if inline-class-uuid
-                                                       [inline-class-uuid]
-                                            ;; Only 1st class b/c page normally has
-                                            ;; one of and not all these classes
-                                                       (take 1 classes))
-                                               :class? class?})]
-          [page id])))))
+        (p/let [page (page-handler/<create! page {:redirect? false
+                                                  :create-first-block? false
+                                                  :tags (if inline-class-uuid
+                                                          [inline-class-uuid]
+                                                       ;; Only 1st class b/c page normally has
+                                                       ;; one of and not all these classes
+                                                          (take 1 classes))
+                                                  :class? class?})]
+          (:block/uuid page)))
+      id)))
 
 (defn- select-aux
   [block property {:keys [items selected-choices multiple-choices?] :as opts}]
@@ -243,17 +245,15 @@
                  :input-opts input-opts})
                 multiple-choices?
                 (assoc :on-apply (fn [choices]
-                                   (p/let [result (p/all (map #(<create-page-if-not-exists! property string-classes %) choices))
-                                           pages (map first result)
-                                           values (set (map #(pu/get-page-uuid repo %) pages))]
+                                   (p/let [page-ids (p/all (map #(<create-page-if-not-exists! property string-classes %) choices))
+                                           values (set page-ids)]
                                      (when on-chosen (on-chosen values)))))
                 (not multiple-choices?)
                 (assoc :on-chosen (fn [chosen]
                                     (let [page* (string/trim (if (string? chosen) chosen (:value chosen)))]
                                       (when-not (string/blank? page*)
-                                        (p/let [[page id] (<create-page-if-not-exists! property string-classes page*)
-                                                id' (or id (pu/get-page-uuid repo page))]
-                                          (when on-chosen (on-chosen id'))))))))]
+                                        (p/let [id (<create-page-if-not-exists! property string-classes page*)]
+                                          (when on-chosen (on-chosen id))))))))]
     (select-aux block property opts')))
 
 (defn property-value-select-page
@@ -278,8 +278,9 @@
                      :block block
                      :input-opts input-opts
                      :on-chosen (fn [values]
-                                  (add-property! block (:block/original-name property) values)
-                                  (when on-chosen (on-chosen))))]
+                                  (p/do!
+                                   (<add-property! block (:block/original-name property) values)
+                                   (when on-chosen (on-chosen)))))]
     (select-page property opts')))
 
 ;; (defn- move-cursor
@@ -300,31 +301,31 @@
   (let [new-value (util/evalue e)]
     (when (not (state/get-editor-action))
       (util/stop e)
-      (when (not= new-value value)
-        (property-handler/set-block-property! repo (:block/uuid block)
-                                              (:block/original-name property)
-                                              (string/trim new-value)))
-      (when (= js/document.activeElement (gdom/getElement editor-id))
-        (exit-edit-property false)))))
+      (p/do!
+       (when (not= new-value value)
+         (property-handler/set-block-property! repo (:block/uuid block)
+                                               (:block/original-name property)
+                                               (string/trim new-value)))
 
-;; FIXME:
-(defn create-new-block!
+       (when (= js/document.activeElement (gdom/getElement editor-id))
+         (exit-edit-property false))))))
+
+(defn <create-new-block!
   [block property value]
-  (let [last-block-id (db-property-handler/create-property-text-block! block property value
+  (p/let [last-block-id (db-property-handler/create-property-text-block! block property value
                                                                        editor-handler/wrap-parse-block
 
-                                                                       {})]
-    (exit-edit-property)
+                                                                       {})
+          _ (exit-edit-property)]
     (editor-handler/edit-block! (db/entity [:block/uuid last-block-id]) :max last-block-id)))
 
-;; FIXME:
-(defn create-new-block-from-template!
+(defn <create-new-block-from-template!
   "`template`: tag block"
   [block property template]
   (let [repo (state/get-current-repo)
         {:keys [page blocks]} (db-property-handler/property-create-new-block-from-template block property template)]
     (p/let [_ (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})
-            _ (add-property! block (:block/original-name property) (:block/uuid (last blocks)))]
+            _ (<add-property! block (:block/original-name property) (:block/uuid (last blocks)))]
       (last blocks))))
 
 (defn- new-text-editor-opts
@@ -352,7 +353,7 @@
            (save-text! repo block property value editor-id e)
 
            enter?
-           (create-new-block! block property new-value)
+           (<create-new-block! block property new-value)
 
            :else
            nil))))})
@@ -389,10 +390,11 @@
                                       (assoc m :label label)))) items)
                      items)
                    (remove nil?))
-        add-property-f #(add-property! block (:block/original-name property) %)
+        add-property-f #(<add-property! block (:block/original-name property) %)
         on-chosen (fn [chosen]
-                    (add-property-f (if (map? chosen) (:value chosen) chosen))
-                    (when-let [f (:on-chosen opts)] (f)))
+                    (p/do!
+                     (add-property-f (if (map? chosen) (:value chosen) chosen))
+                     (when-let [f (:on-chosen opts)] (f))))
         selected-choices' (get-in block [:block/properties (:block/uuid property)])
         selected-choices (if (coll? selected-choices') selected-choices' [selected-choices'])]
     (select-aux block property
@@ -447,34 +449,44 @@
             [:div.property-block-container.w-full.property-template
              (properties-cp config entity (:editor-id config) (merge opts {:in-block-container? true}))]))))))
 
-(rum/defc property-block-value < rum/reactive
-  [value block property block-cp editor-box opts page-cp editor-id]
-  (when value
-    (if (state/sub-block-unloaded? (state/get-current-repo) value)
-      [:div.text-sm.opacity-70 "loading"]
-      (when-let [v-block (db/sub-block (:db/id (db/entity [:block/uuid value])))]
-        (let [class? (contains? (:block/type v-block) "class")
-              invalid-warning [:div.warning.text-sm
-                               "Invalid block value, please delete the current property."]]
-          (if v-block
-            (cond
-              (:block/page v-block)
-              (property-normal-block-value v-block block-cp editor-box)
+(defn- create-template-block!
+  [block property v-block *template-instance]
+  (when-not @*template-instance
+    (p/let [result (<create-new-block-from-template! block property v-block)]
+      (reset! *template-instance result))))
 
-              (and class? (seq (:properties (:block/schema v-block))))
-              (let [template-instance-block (create-new-block-from-template! block property v-block)]
-                (property-template-value {:editor-id editor-id}
-                                         (:block/uuid template-instance-block)
-                                         opts))
+(rum/defcs property-block-value < rum/reactive
+  (rum/local nil ::template-instance)
+  [state value block property block-cp editor-box opts page-cp editor-id]
+  (let [*template-instance (::template-instance state)
+        template-instance @*template-instance]
+    (when value
+      (if (state/sub-block-unloaded? (state/get-current-repo) value)
+        [:div.text-sm.opacity-70 "loading"]
+        (when-let [v-block (db/sub-block (:db/id (db/entity [:block/uuid value])))]
+          (let [class? (contains? (:block/type v-block) "class")
+                invalid-warning [:div.warning.text-sm
+                                 "Invalid block value, please delete the current property."]]
+            (if v-block
+              (cond
+                (:block/page v-block)
+                (property-normal-block-value v-block block-cp editor-box)
+
+                (and class? (seq (:properties (:block/schema v-block))))
+                (if template-instance
+                  (property-template-value {:editor-id editor-id}
+                                          (:block/uuid template-instance)
+                                          opts)
+                  (create-template-block! block property v-block *template-instance))
 
               ;; page/class/etc.
-              (:block/name v-block)
-              (page-cp {:disable-preview? true
-                        :hide-close-button? true
-                        :tag? class?} v-block)
-              :else
-              invalid-warning)
-            invalid-warning))))))
+                (:block/name v-block)
+                (page-cp {:disable-preview? true
+                          :hide-close-button? true
+                          :tag? class?} v-block)
+                :else
+                invalid-warning)
+              invalid-warning)))))))
 
 (rum/defc closed-value-item < rum/reactive
   [value {:keys [page-cp inline-text icon?]}]
@@ -587,7 +599,7 @@
 
         :checkbox
         (let [add-property! (fn []
-                              (add-property! block (:block/original-name property) (boolean (not value))))]
+                              (<add-property! block (:block/original-name property) (boolean (not value))))]
           (ui/checkbox {:tabIndex "0"
                         :checked value
                         :on-change (fn [_e] (add-property!))
@@ -603,7 +615,7 @@
               (let [id (first (:classes schema))
                     template (when id (db/entity [:block/uuid id]))]
                 (when template
-                  (create-new-block-from-template! block property template)))
+                  (<create-new-block-from-template! block property template)))
 
               (let [config {:editor-opts (new-text-editor-opts repo block property value editor-id)}]
                 [:div
@@ -636,7 +648,7 @@
                         [:a.fade-link.pointer.text-sm
                          {:on-click (fn [e]
                                       (util/stop e)
-                                      (create-new-block-from-template! block property template))}
+                                      (<create-new-block-from-template! block property template))}
                          (str "Use template #" (:block/original-name template))]))
                     [:div.opacity-50.pointer.text-sm "Empty"])
                   (case type
