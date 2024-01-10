@@ -569,15 +569,16 @@
                                    :else
                                    nil)]
           (when block-m
-            (outliner-insert-block! {} block-m new-block {:sibling? sibling?
+            (p/do!
+             (outliner-insert-block! {} block-m new-block {:sibling? sibling?
                                                           :keep-uuid? true
                                                           :replace-empty-target? replace-empty-target?})
-            (when edit-block?
+             (when edit-block?
               (if (and replace-empty-target?
                        (string/blank? (:block/content last-block)))
                 (edit-block! last-block :max nil)
                 (edit-block! new-block :max nil)))
-            new-block))))))
+             new-block)))))))
 
 (defn insert-first-page-block-if-not-exists!
   ([page-title]

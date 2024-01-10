@@ -224,10 +224,11 @@
 
 (defn copy-hl-ref!
   [highlight ^js viewer]
-  (when-let [ref-block (ensure-ref-block! (state/get-current-pdf) highlight)]
-    (util/copy-to-clipboard!
-     (block-ref/->block-ref (:block/uuid ref-block))
-     :owner-window (pdf-windows/resolve-own-window viewer))))
+  (p/let [ref-block (ensure-ref-block! (state/get-current-pdf) highlight)]
+    (when ref-block
+      (util/copy-to-clipboard!
+       (block-ref/->block-ref (:block/uuid ref-block))
+       :owner-window (pdf-windows/resolve-own-window viewer)))))
 
 (defn open-block-ref!
   [block]
@@ -252,9 +253,10 @@
 (defn goto-block-ref!
   [{:keys [id] :as hl}]
   (when id
-    (ensure-ref-block!
-     (state/get-current-pdf) hl {:edit-block? false})
-    (rfe/push-state :page {:name (str id)})))
+    (p/do!
+     (ensure-ref-block!
+      (state/get-current-pdf) hl {:edit-block? false})
+     (rfe/push-state :page {:name (str id)}))))
 
 (defn goto-annotations-page!
   ([current] (goto-annotations-page! current nil))

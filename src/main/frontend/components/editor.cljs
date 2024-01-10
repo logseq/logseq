@@ -218,12 +218,13 @@
         (let [current-block (state/get-edit-block)
               id (:block/uuid chosen-item)
               id (if (string? id) (uuid id) id)]
-          (editor-handler/api-insert-new-block! ""
-                                                {:block-uuid (:block/uuid current-block)
-                                                 :sibling? true
-                                                 :replace-empty-target? true
-                                                 :other-attrs {:block/link (:db/id (db/entity [:block/uuid id]))}})
-          (state/clear-edit!))))
+          (p/do!
+           (editor-handler/api-insert-new-block! ""
+                                                 {:block-uuid (:block/uuid current-block)
+                                                  :sibling? true
+                                                  :replace-empty-target? true
+                                                  :other-attrs {:block/link (:db/id (db/entity [:block/uuid id]))}})
+           (state/clear-edit!)))))
     (editor-handler/block-on-chosen-handler id q format selected-text)))
 
 ;; TODO: use rum/use-effect instead
