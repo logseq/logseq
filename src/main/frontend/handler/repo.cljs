@@ -515,7 +515,7 @@
   "Checks to see if given db graph name already exists"
   [graph-name]
   (let [full-graph-name (string/lower-case (str config/db-version-prefix graph-name))]
-    (some #(= (string/lower-case (:url %)) full-graph-name) (state/get-repos))))
+    (some #(= (some-> (:url %) string/lower-case) full-graph-name) (state/get-repos))))
 
 (defn- create-db [full-graph-name {:keys [file-graph-import?]}]
   (->
