@@ -747,6 +747,7 @@
 (defonce *state (atom nil))
 
 (defn <loop-for-rtc
+  ":loop-started-ch used to notify that rtc-loop started"
   [state graph-uuid repo conn date-formatter & {:keys [loop-started-ch token]}]
   {:pre [(state-validator state)
          (some? graph-uuid)
@@ -847,6 +848,13 @@
                 (p/resolve! d nil))
               (p/resolve! d (bean/->js versions)))))))
     d))
+
+;; (defn- <query-page-blocks
+;;   [state page-block-uuid]
+;;   (go
+;;     (when (some-> state :*graph-uuid deref)
+;;       (<! (ws/<send&receive state {:action "query-blocks" :graph-uuid @(:*graph-uuid state)
+;;                                    :block-uuids [page-block-uuid]})))))
 
 
 (defn init-state

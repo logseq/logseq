@@ -13,6 +13,7 @@
     "electron:make": "electron-forge make",
     "electron:make-macos-arm64": "electron-forge make --platform=darwin --arch=arm64",
     "electron:publish:github": "electron-forge publish",
+    "rebuild:all": "electron-rebuild -v 27.1.3 -f",
     "postinstall": "install-app-deps"
   },
   "config": {
@@ -41,7 +42,8 @@
     "abort-controller": "3.0.0",
     "fastify": "latest",
     "@fastify/cors": "8.2.0",
-    "command-exists": "1.2.9"
+    "command-exists": "1.2.9",
+    "better-sqlite3": "8.0.1"
   },
   "devDependencies": {
     "@electron-forge/cli": "^6.0.4",

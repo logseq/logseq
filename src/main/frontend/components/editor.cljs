@@ -332,6 +332,24 @@
             :item-render (fn [property] property)
             :class       "black"}))))))
 
+(rum/defc property-value-search-aux
+  [id property q]
+  (let [[values set-values!] (rum/use-state nil)]
+    (rum/use-effect!
+     (fn []
+       (p/let [result (editor-handler/get-matched-property-values property q)]
+         (set-values! result)))
+     [property q])
+    (ui/auto-complete
+         values
+         {:on-chosen (editor-handler/property-value-on-chosen-handler id q)
+          :on-enter (fn [_state]
+                      ((editor-handler/property-value-on-chosen-handler id q) nil))
+          :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property value: " q)]
+          :header [:div.px-4.py-2.text-sm.font-medium "Matched property values: "]
+          :item-render (fn [property-value] property-value)
+          :class       "black"})))
+
 (rum/defc property-value-search < rum/reactive
   [id]
   (let [property (:property (state/get-editor-action-data))
@@ -346,18 +364,8 @@
                (when (>= current-pos (+ start-idx 2))
                  (subs edit-content (+ start-idx 2) current-pos))
                "")
-            q (string/triml q)
-            matched-values (editor-handler/get-matched-property-values property q)
-            non-exist-handler (fn [_state]
-                                ((editor-handler/property-value-on-chosen-handler id q) nil))]
-        (ui/auto-complete
-         matched-values
-         {:on-chosen (editor-handler/property-value-on-chosen-handler id q)
-          :on-enter non-exist-handler
-          :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property value: " q)]
-          :header [:div.px-4.py-2.text-sm.font-medium "Matched property values: "]
-          :item-render (fn [property-value] property-value)
-          :class       "black"})))))
+            q (string/triml q)]
+        (property-value-search-aux id property q)))))
 
 (rum/defc code-block-mode-keyup-listener
   [_q _edit-content last-pos current-pos]

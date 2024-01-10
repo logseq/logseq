@@ -354,7 +354,7 @@
                             (notification/show! (str "Removed graph "
                                                      (pr-str (text-util/get-graph-name-from-path url))
                                                      ". Redirecting to graph "
-                                                     (pr-str (text-util/get-graph-name-from-path url)))
+                                                     (pr-str (text-util/get-graph-name-from-path graph)))
                                                 :success)
                             (state/pub-event! [:graph/switch graph {:persist? false}]))
                           (notification/show! (str "Removed graph " (pr-str (text-util/get-graph-name-from-path url))) :success))))]
@@ -511,18 +511,24 @@
   (when (util/electron?)
     (ipc/ipc "graphReady" graph)))
 
-(defn- create-db [full-graph-name]
+(defn graph-already-exists?
+  "Checks to see if given db graph name already exists"
+  [graph-name]
+  (let [full-graph-name (string/lower-case (str config/db-version-prefix graph-name))]
+    (some #(= (string/lower-case (:url %)) full-graph-name) (state/get-repos))))
+
+(defn- create-db [full-graph-name {:keys [file-graph-import?]}]
   (->
    (p/let [_ (persist-db/<new full-graph-name)
            _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name})
-           _ (route-handler/redirect-to-home!)
+           _ (when-not file-graph-import? (route-handler/redirect-to-home!))
            initial-data (sqlite-create-graph/build-db-initial-data config/config-default-content)
            _ (db/transact! full-graph-name initial-data)
            _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
           ;; TODO: handle global graph
            _ (state/pub-event! [:init/commands])
-           _ (state/pub-event! [:page/create (date/today) {:redirect? false}])]
+           _ (when-not file-graph-import? (state/pub-event! [:page/create (date/today) {:redirect? false}]))]
      (js/setTimeout ui-handler/re-render-root! 100)
      (prn "New db created: " full-graph-name))
    (p/catch (fn [error]
@@ -531,11 +537,11 @@
 
 (defn new-db!
   "Handler for creating a new database graph"
-  [graph]
-  (let [full-graph-name (str config/db-version-prefix graph)
-        graph-already-exists? (some #(= (:url %) full-graph-name) (state/get-repos))]
-    (if graph-already-exists?
-      (state/pub-event! [:notification/show
-                         {:content (str "The graph '" graph "' already exists. Please try again with another name.")
-                          :status :error}])
-      (create-db full-graph-name))))
+  ([graph] (new-db! graph {}))
+  ([graph opts]
+   (let [full-graph-name (str config/db-version-prefix graph)]
+     (if (graph-already-exists? graph)
+       (state/pub-event! [:notification/show
+                          {:content (str "The graph '" graph "' already exists. Please try again with another name.")
+                           :status :error}])
+       (create-db full-graph-name opts)))))

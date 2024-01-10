@@ -227,9 +227,11 @@
   (vec
    (concat
     [:map]
-    [[:block/parent :int]
+    [[:block/content :string]
+     [:block/parent :int]
      ;; These blocks only associate with pages of type "whiteboard"
-     [:block/page :int]]
+     [:block/page :int]
+     [:block/path-refs {:optional true} [:set :int]]]
     page-or-block-attrs)))
 
 (def closed-value-block

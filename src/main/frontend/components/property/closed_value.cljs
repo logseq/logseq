@@ -24,25 +24,6 @@
     (when (seq tx-data) (db/transact! tx-data))
     block-id))
 
-(rum/defc icon
-  [icon {:keys [disabled? on-chosen]}]
-  (ui/dropdown
-   (fn [{:keys [toggle-fn]}]
-     [:button.flex {:on-click #(when-not disabled? (toggle-fn))}
-      (if icon
-        (icon-component/icon icon)
-        [:span.bullet-container.cursor [:span.bullet]])])
-   (if config/publishing?
-     (constantly [])
-     (fn [{:keys [toggle-fn]}]
-       [:div.p-4
-        (icon-component/icon-search
-         {:on-chosen (fn [e icon]
-                       (on-chosen e icon)
-                       (toggle-fn))})]))
-   {:modal-class (util/hiccup->class
-                  "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}))
-
 (rum/defc item-value
   [type *value]
   (case type
@@ -91,16 +72,23 @@
       (item-value property-type *value)]
      [:div.grid.grid-cols-5.gap-1.items-center.leading-8
       [:label.col-span-2 "Icon:"]
-      [:div.col-span-3
-       (icon (rum/react *icon)
-             {:on-chosen (fn [_e icon]
-                           (reset! *icon icon))})]]
-     [:div.grid.grid-cols-5.gap-1.items-start.leading-8
-      [:label.col-span-2 "Description:"]
-      [:div.col-span-3
-       (ui/ls-textarea
-        {:on-change #(reset! *description (util/evalue %))
-         :default-value @*description})]]
+      [:div.col-span-3.flex.flex-row.items-center.gap-2
+       (icon-component/icon-picker (rum/react *icon)
+                                   {:on-chosen (fn [_e icon]
+                                                 (reset! *icon icon))})
+       (when (rum/react *icon)
+        [:a.fade-link.flex {:on-click (fn [_e]
+                                        (reset! *icon nil))
+                            :title "Delete this icon"}
+        (ui/icon "X")])]]
+     ;; Disable description for types that can't edit them
+     (when-not (#{:page :date} property-type)
+       [:div.grid.grid-cols-5.gap-1.items-start.leading-8
+        [:label.col-span-2 "Description:"]
+        [:div.col-span-3
+         (ui/ls-textarea
+          {:on-change #(reset! *description (util/evalue %))
+           :default-value @*description})]])
      [:div
       (ui/button
        "Save"
@@ -117,9 +105,9 @@
      {:on-mouse-over #(reset! *hover? true)
       :on-mouse-out #(reset! *hover? false)}
      [:div.flex.flex-row.items-center.gap-2
-      (icon (pu/get-property item :icon)
-            {:on-chosen (fn [_e icon]
-                          (update-icon icon))})
+      (icon-component/icon-picker (pu/get-property item :icon)
+                                  {:on-chosen (fn [_e icon]
+                                                (update-icon icon))})
       (if (and page? (:page-cp parent-opts))
         ((:page-cp parent-opts) {} item)
         [:a {:on-click toggle-fn}

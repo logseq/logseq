@@ -128,8 +128,8 @@
                     (mobile-util/native-platform?))
             [:div.mr-8
              (ui/button
-               (t :open-a-directory)
-               :on-click #(state/pub-event! [:graph/setup-a-repo]))])]]
+              (t :open-a-directory)
+              :on-click #(state/pub-event! [:graph/setup-a-repo]))])]]
 
         (when (and (file-sync/enable-sync?) login?)
           [:div
@@ -283,14 +283,19 @@
      [:li "+ (plus)"]]]
    :warning false))
 
+(defn invalid-graph-name?
+  "Returns boolean indicating if DB graph name is invalid. Must be kept in sync with invalid-graph-name-warning"
+  [graph-name]
+  (or (fs-util/include-reserved-chars? graph-name)
+      (string/includes? graph-name "+")))
+
 (rum/defcs new-db-graph <
   (rum/local "" ::graph-name)
   [state]
   (let [*graph-name (::graph-name state)
         new-db-f (fn []
                    (when-not (string/blank? @*graph-name)
-                     (if (or (fs-util/include-reserved-chars? @*graph-name)
-                             (string/includes? @*graph-name "+"))
+                     (if (invalid-graph-name? @*graph-name)
                        (invalid-graph-name-warning)
                        (do
                          (repo-handler/new-db! @*graph-name)

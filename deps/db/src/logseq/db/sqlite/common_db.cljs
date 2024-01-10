@@ -12,7 +12,7 @@
        vec))
 
 (defn restore-initial-data
-  "Given initial sqlite data, returns a datascript connection"
+  "Given initial sqlite data and schema, returns a datascript connection"
   [datoms schema]
   (d/conn-from-datoms datoms schema))
 

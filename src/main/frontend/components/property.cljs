@@ -32,8 +32,6 @@
             [frontend.components.property.util :as components-pu]
             [promesa.core :as p]))
 
-(def icon closed-value/icon)
-
 (defn- create-class-if-not-exists!
   [value]
   (when (string? value)
@@ -141,8 +139,7 @@
         class? (contains? (:block/type block) "class")
         property-type (get-in property [:block/schema :type])
         save-property-fn (fn [] (components-pu/update-property! property @*property-name @*property-schema))
-        enable-closed-values? (contains? db-property-type/closed-value-property-types (or property-type :default))
-        enable-position? (contains? db-property-type/closed-value-property-position-types (or property-type :default))]
+        enable-closed-values? (contains? db-property-type/closed-value-property-types (or property-type :default))]
     [:div.property-configure.flex.flex-1.flex-col
      {:on-mouse-down #(state/set-state! :editor/mouse-down-from-property-configure? true)
       :on-mouse-up #(state/set-state! :editor/mouse-down-from-property-configure? nil)}
@@ -161,15 +158,23 @@
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Icon:"]
        (let [icon-value (pu/get-property property :icon)]
-         [:div.col-span-3
-          (closed-value/icon icon-value
-                             {:disabled? disabled?
-                              :on-chosen (fn [_e icon]
-                                           (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-                                             (db-property-handler/update-property!
-                                              (state/get-current-repo)
-                                              (:block/uuid property)
-                                              {:properties {icon-property-id icon}})))})])]
+         [:div.col-span-3.flex.flex-row.items-center.gap-2
+          (icon-component/icon-picker icon-value
+                                      {:disabled? disabled?
+                                       :on-chosen (fn [_e icon]
+                                                    (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
+                                                      (db-property-handler/update-property!
+                                                       (state/get-current-repo)
+                                                       (:block/uuid property)
+                                                       {:properties {icon-property-id icon}})))})
+          (when (and icon-value (not disabled?))
+            [:a.fade-link.flex {:on-click (fn [_e]
+                                            (db-property-handler/remove-block-property!
+                                             (state/get-current-repo)
+                                             (:block/uuid property)
+                                             (db-pu/get-built-in-property-uuid :icon)))
+                                :title "Delete this icon"}
+             (ui/icon "X")])])]
 
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Schema type:"]
@@ -252,7 +257,7 @@
           (closed-value/choices property *property-name *property-schema opts)]])
 
       (when (and enable-closed-values?
-                 enable-position?
+                 (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :position)
                  (seq (:values @*property-schema)))
         (let [position (:position @*property-schema)
               choices (map
