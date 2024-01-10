@@ -43,9 +43,11 @@ Open a dev environment (Browser dev app on ``localhost:3000`` or Desktop dev app
 Notice: this works only for the `feat/db` branch for now.
 
 ##### Emacs + Cider
-When you connected to a CLJ nrepl (NOTE: if you already in a CLJS nrepl, use `:cljs/quit` to back to CLJ nrepl),
-you can run `(shadow.user/worker-repl)`, or you can use `(shadow/nrepl-select :app {:runtime-id <id-num>})` to connect to a web-worker context.
-Tip; you can find the `<id-num>` in http://localhost:9630/runtimes.
+When connecting to a CLJ nrepl (NOTE: if you are already in a CLJS nrepl, use `:cljs/quit` to go back to CLJ nrepl),
+you may run `(shadow.user/worker-repl)`, or  use `(shadow/nrepl-select :app {:runtime-id <id-num>})` to connect to a web-worker context.
+
+> [!TIP]
+> you can find the `<id-num>` in http://localhost:9630/runtimes
 
 ##### VSCode
 ;; TODO
