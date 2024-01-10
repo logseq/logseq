@@ -20,8 +20,40 @@
   (testing "safe current position from start for emoji"
     (is (= 5 (util/safe-inc-current-pos-from-start "abc😀d" 3)))
     (is (= 2 (util/safe-inc-current-pos-from-start "😀" 0)))
+    (is (= 2 (util/safe-inc-current-pos-from-start "abcde" 1)))
     (is (= 1 (util/safe-inc-current-pos-from-start "a" 0)))
     (is (= 1 (util/safe-inc-current-pos-from-start "中文" 0)))))
+
+(deftest test-get-line-pos
+  (testing "get-line-pos"
+    (is (= 3 (util/get-line-pos "abcde" 3)))
+    (is (= 4 (util/get-line-pos "abcd\ne" 4)))
+    (is (= 0 (util/get-line-pos "abcd\ne" 5)))
+    (is (= 4 (util/get-line-pos "abc😀d" 5)))
+    (is (= 1 (util/get-line-pos "abc\nde" 5)))
+    (is (= 1 (util/get-line-pos "abc\n😀d" 6)))
+    (is (= 2 (util/get-line-pos "ab\nc😀d" 6)))
+    (is (= 1 (util/get-line-pos "abc\nde\nf" 5)))
+    (is (= 1 (util/get-line-pos "abc\n😀d\ne" 6)))
+    (is (= 2 (util/get-line-pos "ab\nc😀d\ne" 6)))))
+
+(deftest test-get-text-range
+  (testing "get-text-range"
+    (is (= "" (util/get-text-range "abcdefg" 0 true)))
+    (is (= "" (util/get-text-range "abcdefg" 0 false)))
+    (is (= "abcdefg" (util/get-text-range "abcdefg" 10 true)))
+    (is (= "abcdefg" (util/get-text-range "abcdefg" 10 false)))
+    (is (= "abc" (util/get-text-range "abcdefg" 3 true)))
+    (is (= "abc" (util/get-text-range "abcdefg" 3 false)))
+    (is (= "abc" (util/get-text-range "abcdefg\nhijklmn" 3 true)))
+    (is (= "abcdefg\nhij" (util/get-text-range "abcdefg\nhijklmn" 3 false)))
+    (is (= "abcdefg\nhijklmn" (util/get-text-range "abcdefg\nhijklmn" 10 false)))
+    (is (= "abcdefg\nhijklmn\nopq" (util/get-text-range "abcdefg\nhijklmn\nopqrst" 3 false)))
+    (is (= "a😀b" (util/get-text-range "a😀bcdefg" 3 true)))
+    (is (= "a😀b" (util/get-text-range "a😀bcdefg" 3 false)))
+    (is (= "a😀b" (util/get-text-range "a😀bcdefg\nhijklmn" 3 true)))
+    (is (= "a😀bcdefg\nhij" (util/get-text-range "a😀bcdefg\nhijklmn" 3 false)))
+    (is (= "a😀bcdefg\nh😀i" (util/get-text-range "a😀bcdefg\nh😀ijklmn" 3 false)))))
 
 (deftest test-memoize-last
   (testing "memoize-last add test"

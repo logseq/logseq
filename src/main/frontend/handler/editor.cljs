@@ -2586,7 +2586,7 @@
 (defn- move-cross-boundary-up-down
   [direction move-opts]
   (let [input (state/get-input)
-        line-pos (util/get-first-or-last-line-pos input)
+        line-pos (util/get-line-pos (.-value input) (util/get-selection-start input))
         repo (state/get-current-repo)
         f (case direction
             :up util/get-prev-block-non-collapsed

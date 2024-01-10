@@ -414,12 +414,34 @@
   (when input
     (.-selectionDirection input)))
 
-(defn get-first-or-last-line-pos
-  [input]
-  (let [pos (get-selection-start input)
-        value (.-value input)
-        last-newline-pos (or (string/last-index-of value \newline (dec pos)) -1)]
-    (- pos last-newline-pos 1)))
+#?(:cljs
+   (defn get-line-pos
+     "Return the length of the substrings in s between the last index of newline
+      in s searching backward from from-newline-index and from-newline-index.
+
+      multi-char count as 1, like emoji characters"
+     [s from-newline-index]
+     (let [^js splitter (GraphemeSplitter.)
+           last-newline-pos (string/last-index-of s \newline (dec from-newline-index))
+           before-last-newline-length (or last-newline-pos -1)
+           last-newline-content (subs s (inc before-last-newline-length) from-newline-index)]
+       (.countGraphemes splitter last-newline-content))))
+
+#?(:cljs
+   (defn get-text-range
+     "Return the substring of the first grapheme-num characters of s if first-line? is true,
+      otherwise return the substring of s before the last \n and the first grapheme-num characters.
+
+      grapheme-num treats multi-char as 1, like emoji characters"
+     [s grapheme-num first-line?]
+     (let [newline-pos (if first-line?
+                         0
+                         (inc (or (string/last-index-of s \newline) -1)))
+           ^js splitter (GraphemeSplitter.)
+           ^js newline-graphemes (.splitGraphemes splitter (subs s newline-pos))
+           ^js newline-graphemes (.slice newline-graphemes 0 grapheme-num)
+           content (.join newline-graphemes "")]
+       (subs s 0 (+ newline-pos (count content))))))
 
 #?(:cljs
    (defn stop [e]
