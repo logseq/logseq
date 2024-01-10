@@ -2088,22 +2088,24 @@
        {:outliner-op :save-block}
        (outliner-save-block! editing-block)))
 
-    (ui-outliner-tx/transact!
-     {:outliner-op :insert-blocks
-      :additional-tx revert-cut-txs}
-     (when target-block'
-       (let [format (or (:block/format target-block') (state/get-preferred-format))
-             repo (state/get-current-repo)
-             blocks' (map (fn [block]
-                            (paste-block-cleanup repo block page exclude-properties format content-update-fn keep-uuid?))
-                          blocks)
-             result (outliner-core/insert-blocks! repo (db/get-db false) blocks' target-block' {:sibling? sibling?
-                                                                                           :outliner-op :paste
-                                                                                           :replace-empty-target? replace-empty-target?
-                                                                                           :keep-uuid? keep-uuid?})]
-         (state/set-block-op-type! nil)
-         (edit-last-block-after-inserted! result)))))
-  (state/set-editor-op! nil))
+    (p/let [*insert-result (atom nil)
+            _ (ui-outliner-tx/transact!
+               {:outliner-op :insert-blocks
+                :additional-tx revert-cut-txs}
+               (when target-block'
+                 (let [format (or (:block/format target-block') (state/get-preferred-format))
+                       repo (state/get-current-repo)
+                       blocks' (map (fn [block]
+                                      (paste-block-cleanup repo block page exclude-properties format content-update-fn keep-uuid?))
+                                    blocks)
+                       result (outliner-core/insert-blocks! repo (db/get-db false) blocks' target-block' {:sibling? sibling?
+                                                                                                          :outliner-op :paste
+                                                                                                          :replace-empty-target? replace-empty-target?
+                                                                                                          :keep-uuid? keep-uuid?})]
+                   (reset! *insert-result result))))]
+      (state/set-block-op-type! nil)
+      (when-let [result @*insert-result] (edit-last-block-after-inserted! result))
+      (state/set-editor-op! nil))))
 
 (defn- block-tree->blocks
   "keep-uuid? - maintain the existing :uuid in tree vec"
