@@ -26,6 +26,7 @@
             [logseq.graph-parser :as graph-parser]
             [medley.core :as medley]
             [promesa.core :as p]
+            [borkdude.rewrite-edn :as rewrite]
             [rum.core :as rum]
             [frontend.handler.repo :as repo-handler]))
 
@@ -208,10 +209,13 @@
   (-> (when config-file
         (.text config-file))
       (p/then (fn [content]
-                (when content
+                (let [migrated-content (-> (reduce rewrite/dissoc
+                                                   (rewrite/parse-string (str content))
+                                                   [:preferred-format :property/separated-by-commas])
+                                           str)]
                   (p/do!
-                   (db-editor-handler/save-file! "logseq/config.edn" content))
-                  (edn/read-string content))))))
+                   (db-editor-handler/save-file! "logseq/config.edn" migrated-content))
+                  (edn/read-string migrated-content))))))
 
 
 (rum/defc confirm-graph-name-dialog
