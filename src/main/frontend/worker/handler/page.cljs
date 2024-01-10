@@ -48,6 +48,16 @@
         [page (properties-block repo conn config date-formatter properties format page-entity)]
         [page]))))
 
+(defn get-title-and-pagename
+  [title]
+  (let [title      (-> (string/trim title)
+                       (text/page-ref-un-brackets!)
+                        ;; remove `#` from tags
+                       (string/replace #"^#+" ""))
+        title      (common-util/remove-boundary-slashes title)
+        page-name  (common-util/page-name-sanity-lc title)]
+    [title page-name]))
+
 (defn create!
   "Create page. Has the following options:
 
@@ -69,12 +79,8 @@
   (let [date-formatter (common-config/get-date-formatter config)
         split-namespace? (not (or (string/starts-with? title "hls__")
                                   (date/valid-journal-title? date-formatter title)))
-        title      (-> (string/trim title)
-                       (text/page-ref-un-brackets!)
-                        ;; remove `#` from tags
-                       (string/replace #"^#+" ""))
-        title      (common-util/remove-boundary-slashes title)
-        page-name  (common-util/page-name-sanity-lc title)
+
+        [title page-name] (get-title-and-pagename title)
         with-uuid? (if (uuid? uuid) uuid true)] ;; FIXME: prettier validation
     (when (ldb/page-empty? @conn page-name)
       (let [pages    (if split-namespace?
@@ -124,8 +130,7 @@
           (ldb/transact! conn txs (cond-> {:persist-op? persist-op?}
                                     today-journal?
                                     (assoc :create-today-journal? true
-                                           :today-journal-name page-name)))
-          page-name)))))
+                                           :today-journal-name page-name))))))))
 
 (defn db-refs->page
   "Replace [[page name]] with page name"

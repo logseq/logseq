@@ -21,9 +21,7 @@
       (when content
         (editor-handler/restore-cursor-pos! id content)))
 
-    ;; Here we delay this listener, otherwise the click to edit event will trigger a outside click event,
-    ;; which will hide the editor so no way for editing.
-    (js/setTimeout #(keyboards-handler/esc-save! state) 100)
+    (keyboards-handler/esc-save! state)
 
     (when-let [element (gdom/getElement id)]
       (.focus element)
