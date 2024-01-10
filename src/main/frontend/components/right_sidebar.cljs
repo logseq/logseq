@@ -252,7 +252,7 @@
       (let [collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
         [:<>
          (when (zero? idx) (drop-indicator (dec idx) drag-to))
-         [:div.flex.sidebar-item.content.color-level.shadow-md.rounded-md
+         [:div.flex.sidebar-item.content.color-level.rounded-md
           {:class [(str "item-type-" (name block-type))
                    (when collapsed? "collapsed")]}
           (let [[title component] item]
@@ -280,7 +280,7 @@
                                  (state/sidebar-block-toggle-collapse! db-id))}
                [:span.opacity-50.hover:opacity-100.flex.items-center.pr-1
                 (ui/rotating-arrow collapsed?)]
-               [:div.ml-1.font-medium.overflow-hidden
+               [:div.ml-1.font-medium.overflow-hidden.whitespace-nowrap
                 title]]
               [:.item-actions.flex.items-center
                (shui/dropdown-menu

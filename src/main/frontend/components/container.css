@@ -14,7 +14,6 @@
 
 #app-container {
   @apply flex basis-full;
-  background-color: or(--lx-gray-01, --ls-primary-background-color, #fff);
 }
 
 #skip-to-main {
@@ -70,13 +69,7 @@
   overflow: auto;
 }
 
-.dark .left-sidebar-inner {
-  --left-sidebar-bg-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color);
-}
-
 .left-sidebar-inner {
-  --left-sidebar-bg-color: or(--ls-left-sidebar-background-color, --lx-gray-02, --ls-primary-background-color);
-
   position: relative;
   height: 100%;
   padding-top: 12px;
@@ -551,10 +544,6 @@
   /* box-shadow: inset 0 0 0 1px var(--ls-border-color); */
 }
 
-.cp__sidebar-main-layout {
-  background-color: or(--ls-main-content-background, --lx-gray-01, --ls-primary-background-color);
-}
-
 .cp__sidebar-main-content {
   width: 100%;
   max-width: var(--ls-main-content-max-width);
@@ -651,6 +640,7 @@
 
   &-inner {
     padding-top: 0;
+    background-color: transparent;
   }
 
   &-settings {
@@ -721,9 +711,7 @@
   }
 
   .sidebar-item {
-    @apply relative;
-    flex: 1 1;
-    min-height: 100px;
+    @apply relative flex-1 min-h-[100px];
 
     .sidebar-item-header {
       .breadcrumb {
@@ -836,6 +824,16 @@ html[data-theme='dark'] {
   #left-sidebar {
     > .shade-mask {
       background-color: rgba(0, 0, 0, .15);
+    }
+  }
+
+  .left-sidebar-inner {
+    --left-sidebar-bg-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color);
+  }
+
+  .cp__right-sidebar {
+    .sidebar-item {
+      background-color: var(--lx-gray-03, var(--ls-secondary-background-color));
     }
   }
 }

@@ -59,6 +59,10 @@
   transform: scale(1.1);
 }
 
+body {
+  background-color: or(--lx-gray-01, --ls-primary-background-color, #fff);
+}
+
 html[data-theme='light'] #app-container {
   .form-checkbox {
     &:focus {
@@ -155,4 +159,8 @@ main.ls-fold-button-on-right {
       padding-left: 10px;
     }
   }
+}
+
+main.theme-inner {
+  --left-sidebar-bg-color: or(--ls-left-sidebar-background-color, --lx-gray-02, --ls-primary-background-color);
 }
