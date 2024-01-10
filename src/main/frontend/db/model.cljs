@@ -601,7 +601,8 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-page
   [page-name]
-  (if-let [id (parse-uuid page-name)]
+  (if-let [id (if (uuid? page-name) page-name
+                  (parse-uuid page-name))]
     (db-utils/entity [:block/uuid id])
     (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])))
 

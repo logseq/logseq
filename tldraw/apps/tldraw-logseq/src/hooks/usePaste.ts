@@ -398,7 +398,7 @@ const handleCreatingShapes = async (
     if (rawText) {
       const text = rawText.trim()
       // Create a new block that belongs to the current whiteboard
-      const uuid = handlers?.addNewBlock(text)
+      const uuid = await handlers?.addNewBlock(text)
       if (uuid) {
         // create text shape
         return [

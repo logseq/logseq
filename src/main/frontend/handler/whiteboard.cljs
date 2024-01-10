@@ -4,7 +4,6 @@
             [dommy.core :as dom]
             [frontend.db :as db]
             [frontend.db.model :as model]
-            [frontend.db.utils :as db-utils]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.property.util :as pu]
@@ -122,7 +121,8 @@
                        :prev-changed-blocks prev-changed-blocks}}}))
 
 (defonce *last-shapes-nonce (atom {}))
-(defn transact-tldr-delta! [page-name ^js app replace?]
+(defn <transact-tldr-delta!
+  [page-name ^js app replace?]
   (let [tl-page ^js (second (first (.-pages app)))
         shapes (.-shapes ^js tl-page)
         page-block (model/get-page page-name)
@@ -173,7 +173,7 @@
             tx-data' (concat (:tx-data pending-tx-data) tx-data)
             metadata'' (merge metadata' (:metadata pending-tx-data))]
         (state/set-state! :whiteboard/pending-tx-data {})
-        (db-utils/transact! repo tx-data' metadata'')))))
+        (db/transact! repo tx-data' metadata'')))))
 
 (defn get-default-new-whiteboard-tx
   [page-name id]
@@ -195,26 +195,27 @@
              :updated-at (util/time-ms),
              :created-at (util/time-ms)}]))
 
-;; FIXME:
-(defn create-new-whiteboard-page!
+(defn <create-new-whiteboard-page!
   ([]
-   (create-new-whiteboard-page! nil))
+   (<create-new-whiteboard-page! nil))
   ([name]
-   (let [uuid (or (and name (parse-uuid name)) (d/squuid))
-         name (or name (str uuid))
-         repo (state/get-current-repo)]
-     (db/transact! (get-default-new-whiteboard-tx name uuid))
+   (p/let [uuid (or (and name (parse-uuid name)) (d/squuid))
+           name (or name (str uuid))
+           repo (state/get-current-repo)
+           _ (db/transact! (get-default-new-whiteboard-tx name uuid))]
+     ;; TODO: check to remove this
      (state/update-state! [repo :unloaded-pages] (fn [pages] (conj (set pages)
                                                                    (util/page-name-sanity-lc name))))
      name)))
 
-(defn create-new-whiteboard-and-redirect!
+(defn <create-new-whiteboard-and-redirect!
   ([]
-   (create-new-whiteboard-and-redirect! (str (d/squuid))))
+   (<create-new-whiteboard-and-redirect! (str (d/squuid))))
   ([name]
    (when-not config/publishing?
-     (create-new-whiteboard-page! name)
-     (route-handler/redirect-to-whiteboard! name {:new-whiteboard? true}))))
+     (p/do!
+       (<create-new-whiteboard-page! name)
+       (route-handler/redirect-to-whiteboard! name {:new-whiteboard? true})))))
 
 (defn ->logseq-portal-shape
   [block-id point]
@@ -244,14 +245,11 @@
         (.createNewLineBinding api source-shape (:id shape))))))
 
 (defn page-name->tldr!
-  ([page-name]
-   (let [page (if (model/page-exists? page-name)
-                (model/get-page page-name)
-                (let [name (create-new-whiteboard-page! page-name)]
-                  (model/get-page name)))
-         react-page (db/sub-block (:db/id page))
-         blocks (:block/_page react-page)]
-     (whiteboard-clj->tldr react-page blocks))))
+  [page-name]
+  (let [page (model/get-page page-name)
+        react-page (db/sub-block (:db/id page))
+        blocks (:block/_page react-page)]
+    (whiteboard-clj->tldr react-page blocks)))
 
 (defn- get-whiteboard-blocks
   "Given a page, return all the logseq blocks (exclude all shapes)"
@@ -272,21 +270,22 @@
         blocks-with-no-next (remove #(root-block-left-ids (:db/id %)) root-blocks)]
     (when (seq blocks-with-no-next) (first blocks-with-no-next))))
 
-(defn add-new-block!
+(defn <add-new-block!
   [page-name content]
-  (let [uuid (d/squuid)
-        page-entity (model/get-page page-name)
-        last-root-block (or (get-last-root-block page-name) page-entity)
-        tx (sqlite-util/block-with-timestamps
-            {:block/left (select-keys last-root-block [:db/id])
-             :block/uuid uuid
-             :block/content (or content "")
-             :block/format :markdown
-             :block/page {:block/name (util/page-name-sanity-lc page-name)
-                          :block/original-name page-name}
-             :block/parent {:block/name page-name}})]
-    (db-utils/transact! [tx])
-    uuid))
+  (p/let [repo (state/get-current-repo)
+          new-block-id (db/new-block-id)
+          page-entity (model/get-page page-name)
+          last-root-block (or (get-last-root-block page-name) page-entity)
+          tx (sqlite-util/block-with-timestamps
+              {:block/left (select-keys last-root-block [:db/id])
+               :block/uuid new-block-id
+               :block/content (or content "")
+               :block/format :markdown
+               :block/page {:block/name (util/page-name-sanity-lc page-name)
+                            :block/original-name page-name}
+               :block/parent {:block/name page-name}})
+          _ (db/transact! repo [tx] {:whiteboard/transact? true})]
+    new-block-id))
 
 (defn inside-portal?
   [target]
