@@ -1,11 +1,10 @@
 (ns ^:no-doc frontend.handler.editor.lifecycle
-  (:require [frontend.handler.editor :as editor-handler :refer [get-state]]
+  (:require [frontend.handler.editor :as editor-handler]
             [frontend.handler.editor.keyboards :as keyboards-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [goog.dom :as gdom]
-            [frontend.db :as db]))
+            [goog.dom :as gdom]))
 
 (defn did-mount!
   [state]
@@ -38,15 +37,7 @@
 
 (defn will-unmount
   [state]
-  (let [{:keys [value]} (get-state)]
-    (editor-handler/clear-when-saved!)
-    (when (and
-           (not (contains? #{:insert :indent-outdent :auto-save :undo :redo :delete} (state/get-editor-op)))
-           ;; Don't trigger auto-save if the latest op is undo or redo
-           (not (contains? #{:delete :undo :redo :paste-blocks} (state/get-editor-latest-op))))
-      (let [state (get-state)]
-        (when (db/entity [:block/uuid (:block/uuid (:block state))]) ; block still exists
-          (editor-handler/save-block! state value)))))
+  (editor-handler/clear-when-saved!)
   state)
 
 (def lifecycle
