@@ -55,7 +55,4 @@
 
              (when (seq all-tx#) ;; If it's empty, do nothing
                (when-not (:nested-transaction? opts#) ; transact only for the whole transaction
-                 (let [result# (logseq.outliner.datascript/transact! all-tx# (dissoc opts## :transact-opts) (:transact-opts opts##))]
-                   {:tx-report result#
-                    :tx-data all-tx#
-                    :tx-meta tx-meta#})))))))))
+                 (logseq.outliner.datascript/transact! all-tx# (dissoc opts## :transact-opts) (:transact-opts opts##))))))))))

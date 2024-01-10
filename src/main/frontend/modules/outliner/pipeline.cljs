@@ -9,7 +9,9 @@
             [frontend.modules.editor.undo-redo :as undo-redo]
             [datascript.core :as d]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.history :as history]))
+            [frontend.handler.history :as history]
+            [logseq.db :as ldb]
+            [promesa.core :as p]))
 
 (defn- reset-editing-block-content!
   [tx-data]
@@ -61,11 +63,13 @@
   (history/restore-app-state! app-state))
 
 (defn invoke-hooks
-  [{:keys [tx-meta tx-data deleted-block-uuids affected-keys blocks] :as opts}]
+  [{:keys [request-id tx-meta tx-data deleted-block-uuids affected-keys blocks] :as opts}]
   (let [{:keys [from-disk? new-graph? local-tx? undo? redo?]} tx-meta
         repo (state/get-current-repo)
         tx-report {:tx-meta tx-meta
                    :tx-data tx-data}]
+
+    (prn :debug :worker-response :request-id request-id)
 
     (let [conn (db/get-db repo false)
           tx-report (d/transact! conn tx-data tx-meta)]
@@ -120,4 +124,9 @@
                                (= :block/uuid (:a datom))
                                (= (:v datom) deleting-block-id)
                                (true? (:added datom)))) tx-data) ; editing-block was added back (could be undo or from remote sync)
-        (state/set-state! :ui/deleting-block nil)))))
+        (state/set-state! :ui/deleting-block nil)))
+
+    (when-let [deferred (ldb/get-deferred-response request-id)]
+      (p/resolve! deferred {:tx-meta tx-meta
+                            :tx-data tx-data})
+      (swap! ldb/*request-id->response dissoc request-id))))
