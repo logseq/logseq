@@ -77,8 +77,8 @@
 
 .tippy-wrapper {
   background-color: var(--ls-tertiary-background-color);
-  overflow: visible;
   border-radius: 8px;
+  margin: 0 -6px;
 }
 
 .tippy-hover {
