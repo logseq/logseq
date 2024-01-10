@@ -18,7 +18,6 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as web-nfs]
-            [frontend.worker.handler.page :as worker-page]
             [frontend.worker.handler.page.rename :as worker-page-rename]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]

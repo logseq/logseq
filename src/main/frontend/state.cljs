@@ -119,7 +119,6 @@
       :block/component-editing-mode?         false
       :editor/start-pos                      (atom nil)
       :editor/op                             (atom nil)
-      :editor/latest-op                      (atom nil)
       :editor/hidden-editors                 #{} ;; page names
       :editor/draw-mode?                     false
       :editor/action                         (atom nil)
@@ -1842,16 +1841,11 @@ Similar to re-frame subscriptions"
 
 (defn set-editor-op!
   [value]
-  (set-state! :editor/op value)
-  (when value (set-state! :editor/latest-op value)))
+  (set-state! :editor/op value))
 
 (defn get-editor-op
   []
   @(:editor/op @state))
-
-(defn get-editor-latest-op
-  []
-  @(:editor/latest-op @state))
 
 (defn get-events-chan
   []
