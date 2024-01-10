@@ -75,7 +75,7 @@
     txs))
 
 (defn transact!
-  [txs tx-meta {:keys [repo conn unlinked-graph? after-transact-fn set-state-fn] :as opts}]
+  [txs tx-meta {:keys [repo conn unlinked-graph? set-state-fn]}]
   (let [db-based? (and repo (sqlite-util/db-based-graph? repo))
         txs (map (fn [m]
                    (if (map? m)
@@ -100,9 +100,7 @@
       ;; (cljs.pprint/pprint txs)
 
       (try
-        (let [tx-report (ldb/transact! conn txs (assoc tx-meta :outliner/transact? true))]
-          (when (fn? after-transact-fn) (after-transact-fn tx-report opts))
-          tx-report)
+        (ldb/transact! conn txs (assoc tx-meta :outliner/transact? true))
         (catch :default e
           (js/console.error e)
           (throw e))))))

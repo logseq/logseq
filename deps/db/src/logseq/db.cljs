@@ -5,16 +5,14 @@
             [datascript.core :as d]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.util :as db-property-util]
-            [logseq.db.sqlite.util :as sqlite-util]
             [clojure.string :as string]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
             [logseq.db.frontend.content :as db-content]
             [clojure.set :as set]
             [logseq.db.frontend.rules :as rules]
-            [logseq.db.frontend.entity-plus]))
+            [logseq.db.frontend.entity-plus]
+            [promesa.core :as p]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
@@ -53,6 +51,14 @@
   [f]
   (when f (reset! *transact-fn f)))
 
+(defonce *request-id (atom 0))
+(defonce *request-id->response (atom {}))
+
+(defn get-deferred-response
+  [request-id]
+  (assert request-id "request-id shouldn't be empty")
+  (get @*request-id->response request-id))
+
 (defn transact!
   ([conn tx-data]
    (transact! conn tx-data nil))
@@ -63,8 +69,16 @@
        ;; (prn :debug :transact)
        ;; (cljs.pprint/pprint tx-data)
 
-       (let [f (or @*transact-fn d/transact!)]
-         (f conn tx-data tx-meta))))))
+       (let [f (or @*transact-fn d/transact!)
+             sync? (= f d/transact!)
+             request-id (swap! *request-id inc)
+             tx-meta' (if sync? tx-meta
+                          (assoc tx-meta :request-id request-id))
+             result (f conn tx-data tx-meta')]
+         (if sync? result
+             (let [resp (p/deferred)]
+               (swap! *request-id->response assoc request-id resp)
+               resp)))))))
 
 (defn build-default-pages-tx
   []

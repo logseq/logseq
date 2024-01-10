@@ -183,7 +183,8 @@
                  (when-not pipeline-replace?
                    (let [data (pr-str
                                (merge
-                                {:repo repo
+                                {:request-id (:request-id tx-meta)
+                                 :repo repo
                                  :search-indice search-indice
                                  :tx-data (:tx-data tx-report')
                                  :tx-meta tx-meta}
