@@ -2,7 +2,8 @@
   (:require [frontend.handler.editor :as editor-handler]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [frontend.util :as util]))
 
 ;; TODO: don't depend on handler.editor
 
@@ -32,7 +33,9 @@
          :else
          (let [{:keys [on-hide value]} (editor-handler/get-state)]
            (when on-hide
-             (on-hide value event)))))
+             (on-hide value event)
+             (when (contains? #{:esc :visibilitychange :click} event)
+               (util/schedule state/clear-edit!))))))
      :node (gdom/getElement id)
     ;; :visibilitychange? true
-)))
+     )))
