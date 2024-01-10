@@ -97,7 +97,9 @@ nested keys or positional errors e.g. tuples"
                    db-graph?
                    (merge
                     {:preferred-format
-                     "is not used in DB graphs as there is only markdown mode."}))]
+                     "is not used in DB graphs as there is only markdown mode."
+                     :property/separated-by-commas
+                     "is not used in DB graphs"}))]
     (cond
       (= body ::failed-to-detect)
       (log/info :msg "Skip deprecation check since config is not valid edn")
