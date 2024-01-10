@@ -280,9 +280,13 @@
                             (dissoc :insert-blocks?)))]
          (when-not (and (:create-today-journal? tx-meta)
                         (:today-journal-name tx-meta)
+                        (seq tx-data)
                         (d/entity @conn [:block/name (:today-journal-name tx-meta)])) ; today journal created already
+
+           ;; (prn :debug :transact :tx-data tx-data :tx-meta tx-meta')
+
            (worker-util/profile "Worker db transact"
-             (ldb/transact! conn tx-data tx-meta')))
+                                (ldb/transact! conn tx-data tx-meta')))
          nil)
        (catch :default e
          (prn :debug :error)

@@ -270,42 +270,28 @@
                       (assoc :block/uuid (:block/uuid block)))
            opts' (assoc opts :outliner-op :save-block)
            original-block (db/entity (:db/id block))
-           original-props (:block/properties original-block)]
-       (p/let [{:keys [tx-data] :as result}
-               (ui-outliner-tx/transact!
-                opts'
-                (outliner-save-block! block')
-                ;; page properties changed
-                (when-let [page-name (and (:block/pre-block? block')
-                                          (not= original-props (:block/properties block'))
-                                          (some-> (:block/page block') :db/id (db-utils/pull) :block/name))]
-                  (state/set-page-properties-changed! page-name)))
-               [original linked] (when-not (:insert-block? opts)
-                                   (let [original-block (some (fn [m] (and (map? m) (:block/link m) m)) tx-data)
-                                         link (:block/link original-block)
-                                         link' (if (and (map? link) (:db/id link))
-                                                 (db/entity (:db/id link))
-                                                 (db/entity link))]
-                                     [original-block link']))]
+           original-props (:block/properties original-block)
+           result (ui-outliner-tx/transact!
+                   opts'
+                   (outliner-save-block! block')
+                   ;; page properties changed
+                   (when-let [page-name (and (:block/pre-block? block')
+                                             (not= original-props (:block/properties block'))
+                                             (some-> (:block/page block') :db/id (db-utils/pull) :block/name))]
+                     (state/set-page-properties-changed! page-name)))]
 
-         ;; FIXME move this to pipeline
-         ;; Block has been tagged, so we need to edit the linked page now
-         (when (and linked
-                    (= (:db/id (state/get-edit-block)) (:db/id original)))
-           (edit-block! linked :max nil {}))
+       ;; file based graph only
+       ;; sanitized page name changed
+       (when-let [title (get-in block' [:block/properties :title])]
+         (if (string? title)
+           (when-let [old-page-name (:block/name (db/entity (:db/id (:block/page block'))))]
+             (when (and (:block/pre-block? block')
+                        (not (string/blank? title))
+                        (not= (util/page-name-sanity-lc title) old-page-name))
+               (state/pub-event! [:page/title-property-changed old-page-name title true])))
+           (js/console.error (str "Title is not a string: " title))))
 
-         ;; file based graph only
-         ;; sanitized page name changed
-         (when-let [title (get-in block' [:block/properties :title])]
-           (if (string? title)
-             (when-let [old-page-name (:block/name (db/entity (:db/id (:block/page block'))))]
-               (when (and (:block/pre-block? block')
-                          (not (string/blank? title))
-                          (not= (util/page-name-sanity-lc title) old-page-name))
-                 (state/pub-event! [:page/title-property-changed old-page-name title true])))
-             (js/console.error (str "Title is not a string: " title))))
-
-         result)))))
+       result))))
 
 ;; id: block dom id, "ls-block-counter-uuid"
 (defn- another-block-with-same-id-exists?
