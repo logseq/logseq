@@ -90,11 +90,11 @@
      [highlighted on-highlight-dep])
     [:div (merge
            {:style {:opacity (if highlighted 1 0.8)}
-            :class (cond-> "flex flex-col grayscale"
-                     highlighted (str " !grayscale-0 !opacity-100 bg-gray-03-alpha dark:bg-gray-04-alpha")
-                     hoverable (str " transition-all duration-50 ease-in !opacity-75 hover:!opacity-100 hover:grayscale-0 hover:cursor-pointer hover:bg-gradient-to-r hover:from-gray-03-alpha hover:to-gray-01-alpha from-0% to-100%")
+            :class (cond-> "flex flex-col transition-opacity"
+                     highlighted (str " !opacity-100 bg-gray-03-alpha dark:bg-gray-04-alpha")
+                     hoverable (str " transition-all duration-50 ease-in !opacity-75 hover:!opacity-100 hover:cursor-pointer hover:bg-gradient-to-r hover:from-gray-03-alpha hover:to-gray-01-alpha from-0% to-100%")
                      (and hoverable rounded) (str " !rounded-lg")
-                     (not compact) (str  " py-4 px-6 gap-1")
+                     (not compact) (str " py-4 px-6 gap-1")
                      compact (str " py-1.5 px-3 gap-0.5")
                      (not highlighted) (str " "))
             :ref ref
@@ -143,5 +143,5 @@
            [:span.text-gray-11 (to-string value)])])
       (when shortcut
         [:div {:class "flex gap-1"
-               :style {:opacity (if (or highlighted hover?) 1 0.5)}}
+               :style {:opacity (if (or highlighted hover?) 1 0.9)}}
          (shortcut/root shortcut)])]]))
