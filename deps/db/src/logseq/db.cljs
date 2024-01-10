@@ -56,7 +56,6 @@
 
 (defn get-deferred-response
   [request-id]
-  (assert request-id "request-id shouldn't be empty")
   (get @*request-id->response request-id))
 
 (defn transact!
