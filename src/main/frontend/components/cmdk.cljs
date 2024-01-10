@@ -504,7 +504,7 @@
                                             {:redirect? false
                                              :create-first-block? false
                                              :class? true})
-       create-whiteboard? (whiteboard-handler/create-new-whiteboard-and-redirect! @!input)
+       create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
        create-page? (page-handler/<create! @!input {:redirect? true}))
      (if create-class?
        (state/pub-event! [:class/configure (db/entity [:block/name (util/page-name-sanity-lc class)])])
