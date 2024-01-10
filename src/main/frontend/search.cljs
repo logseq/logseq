@@ -96,8 +96,8 @@
   ([property q limit]
    (when-let [repo (state/get-current-repo)]
      (when q
-      (let [q (fuzzy/clean-str q)
-            result (db-async/<get-property-values repo (keyword property))]
+      (p/let [q (fuzzy/clean-str q)
+              result (db-async/<get-property-values repo (keyword property))]
         (when (seq result)
           (if (string/blank? q)
             result

@@ -96,3 +96,5 @@ frontend.worker.rtc.op-mem-layer/_sync-loop
 frontend.db-worker/init
 ;; For defonce
 frontend.persist-db.browser/_do_not_reload_worker
+;; WIP fn, remove when it's ready
+frontend.db.rtc.asset-sync/<loop-for-assets-sync

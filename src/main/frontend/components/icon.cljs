@@ -11,6 +11,7 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [goog.functions :refer [debounce]]
+            [frontend.config :as config]
             [frontend.handler.property.util :as pu]))
 
 (defn icon
@@ -168,3 +169,22 @@
 
         (:name @*hover)]
        [:div {:style {:padding-bottom 32}}])]))
+
+(rum/defc icon-picker
+  [icon-value {:keys [disabled? on-chosen]}]
+  (ui/dropdown
+   (fn [{:keys [toggle-fn]}]
+     [:button.flex {:on-click #(when-not disabled? (toggle-fn))}
+      (if icon-value
+        (icon icon-value)
+        [:span.bullet-container.cursor [:span.bullet]])])
+   (if config/publishing?
+     (constantly [])
+     (fn [{:keys [toggle-fn]}]
+       [:div.p-4
+        (icon-search
+         {:on-chosen (fn [e icon-value]
+                       (on-chosen e icon-value)
+                       (toggle-fn))})]))
+   {:modal-class (util/hiccup->class
+                  "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}))

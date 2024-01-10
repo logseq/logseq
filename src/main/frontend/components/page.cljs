@@ -9,7 +9,7 @@
             [frontend.components.query :as query]
             [frontend.components.reference :as reference]
             [frontend.components.scheduled-deadlines :as scheduled]
-            [frontend.components.property :as property-component]
+            [frontend.components.icon :as icon-component]
             [frontend.components.property.value :as pv]
             [frontend.components.db-based.page :as db-page]
             [frontend.handler.property.util :as pu]
@@ -360,14 +360,14 @@
            (when icon
              [:div.page-icon {:on-mouse-down util/stop-propagation}
               (if (and (map? icon) db-based?)
-                (property-component/icon icon {:on-chosen (fn [_e icon]
-                                                            (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-                                                              (db-property-handler/update-property!
-                                                               repo
-                                                               (:block/uuid page)
-                                                               {:properties {icon-property-id icon}})))})
+                (icon-component/icon-picker icon
+                                            {:on-chosen (fn [_e icon]
+                                                          (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
+                                                            (db-property-handler/update-property!
+                                                             repo
+                                                             (:block/uuid page)
+                                                             {:properties {icon-property-id icon}})))})
                 icon)])
-
            [:div.flex.flex-1.flex-row.flex-wrap.items-center.gap-4
             [:h1.page-title.flex-1.cursor-pointer.gap-1
              {:class (when-not whiteboard-page? "title")
@@ -533,10 +533,10 @@
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (let [original-name (:block/original-name (db/entity [:block/name (util/page-name-sanity-lc page-name)]))]
                (when (and (not whiteboard?) original-name)
-                (page-title page-name {:journal? journal?
-                                       :fmt-journal? fmt-journal?
-                                       :built-in-property? built-in-property?
-                                       :preview? preview?})))
+                 (page-title page-name {:journal? journal?
+                                        :fmt-journal? fmt-journal?
+                                        :built-in-property? built-in-property?
+                                        :preview? preview?})))
              (when (not config/publishing?)
                (when config/lsp-enabled?
                  [:div.flex.flex-row
@@ -718,20 +718,20 @@
                                (set-setting! :excluded-pages? value)))
                            true)]]
               (when (config/db-based-graph? (state/get-current-repo))
-               [:div.flex.flex-col.mb-2
-                [:p "Created before"]
-                (when created-at-filter
-                  [:div (.toDateString (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))])
-                (ui/tippy {:html [:div.pr-3 (str (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))]}
+                [:div.flex.flex-col.mb-2
+                 [:p "Created before"]
+                 (when created-at-filter
+                   [:div (.toDateString (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))])
+                 (ui/tippy {:html [:div.pr-3 (str (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))]}
                           ;; Slider keeps track off the range from min created-at to max created-at
                           ;; because there were bugs with setting min and max directly
-                          (ui/slider created-at-filter
-                                     {:min 0
-                                      :max (- (get-in graph [:all-pages :created-at-max])
-                                              (get-in graph [:all-pages :created-at-min]))
-                                      :on-change #(do
-                                                    (reset! *created-at-filter (int %))
-                                                    (set-setting! :created-at-filter (int %)))}))])
+                           (ui/slider created-at-filter
+                                      {:min 0
+                                       :max (- (get-in graph [:all-pages :created-at-max])
+                                               (get-in graph [:all-pages :created-at-min]))
+                                       :on-change #(do
+                                                     (reset! *created-at-filter (int %))
+                                                     (set-setting! :created-at-filter (int %)))}))])
               (when (seq focus-nodes)
                 [:div.flex.flex-col.mb-2
                  [:p {:title "N hops from selected nodes"}
@@ -861,27 +861,25 @@
 
 (rum/defc page-graph-inner < rum/reactive
   [_page graph dark?]
-   (let [ show-journals-in-page-graph? (rum/react *show-journals-in-page-graph?) ]
-  [:div.sidebar-item.flex-col
-             [:div.flex.items-center.justify-between.mb-0
-              [:span (t :right-side-bar/show-journals)]
-              [:div.mt-1
-               (ui/toggle show-journals-in-page-graph? ;my-val;
-                           (fn []
-                             (let [value (not show-journals-in-page-graph?)]
-                               (reset! *show-journals-in-page-graph? value)
-                               ))
-                          true)]
-              ]
+  (let [show-journals-in-page-graph? (rum/react *show-journals-in-page-graph?)]
+    [:div.sidebar-item.flex-col
+     [:div.flex.items-center.justify-between.mb-0
+      [:span (t :right-side-bar/show-journals)]
+      [:div.mt-1
+       (ui/toggle show-journals-in-page-graph? ;my-val;
+                  (fn []
+                    (let [value (not show-journals-in-page-graph?)]
+                      (reset! *show-journals-in-page-graph? value)))
+                  true)]]
 
-   (graph/graph-2d {:nodes (:nodes graph)
-                    :links (:links graph)
-                    :width 600
-                    :height 600
-                    :dark? dark?
-                    :register-handlers-fn
-                    (fn [graph]
-                      (graph-register-handlers graph (atom nil) (atom nil) dark?))})]))
+     (graph/graph-2d {:nodes (:nodes graph)
+                      :links (:links graph)
+                      :width 600
+                      :height 600
+                      :dark? dark?
+                      :register-handlers-fn
+                      (fn [graph]
+                        (graph-register-handlers graph (atom nil) (atom nil) dark?))})]))
 
 (rum/defc page-graph < db-mixins/query rum/reactive
   []
@@ -928,8 +926,8 @@
   [:th
    {:class [(name key)]}
    [:a.fade-link {:on-click (fn []
-                    (reset! by-item key)
-                    (swap! desc? not))}
+                              (reset! by-item key)
+                              (swap! desc? not))}
     [:span.flex.items-center
      [:span.mr-1 title]
      (when (= @by-item key)
@@ -1050,10 +1048,10 @@
 
         *indeterminate (rum/derived-atom
                         [*checks] ::indeterminate
-                        (fn [checks]
-                          (when-let [checks (vals checks)]
-                            (if (every? true? checks)
-                              1 (if (some true? checks) -1 0)))))
+                         (fn [checks]
+                           (when-let [checks (vals checks)]
+                             (if (every? true? checks)
+                               1 (if (some true? checks) -1 0)))))
 
         mobile? (util/mobile?)
         total-items (count @*results-all)

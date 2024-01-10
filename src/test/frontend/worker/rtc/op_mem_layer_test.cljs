@@ -17,7 +17,7 @@
     (let [ops [["move" {:block-uuid "f4abd682-fb9e-4f1a-84bf-5fe11fe7844b" :epoch 1}]
                ["move" {:block-uuid "8e6d8355-ded7-4500-afaa-6f721f3b0dc6" :epoch 2}]]
           {:keys [block-uuid->ops epoch->block-uuid-sorted-map]}
-          (op-layer/add-ops-to-block-uuid->ops (op-layer/ops-coercer ops) {} (sorted-map-by <))]
+          (op-layer/add-ops-aux (op-layer/ops-coercer ops) {} (sorted-map-by <) {} (sorted-map-by <))]
       (is (= [{#uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b"
                {:move ["move" {:block-uuid #uuid"f4abd682-fb9e-4f1a-84bf-5fe11fe7844b", :epoch 1}]},
                #uuid"8e6d8355-ded7-4500-afaa-6f721f3b0dc6"
@@ -34,7 +34,7 @@
                ["update" {:block-uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02" :epoch 3
                           :updated-attrs {:type {:add #{"type1"}}}}]]
           {:keys [block-uuid->ops epoch->block-uuid-sorted-map]}
-          (op-layer/add-ops-to-block-uuid->ops (op-layer/ops-coercer ops) {} (sorted-map-by <))]
+          (op-layer/add-ops-aux (op-layer/ops-coercer ops) {} (sorted-map-by <) {} (sorted-map-by <))]
       (is (= [{#uuid"f639f13e-ef6f-4ba5-83b4-67527d27cd02"
                {:move
                 ["move" {:block-uuid #uuid"f639f13e-ef6f-4ba5-83b4-67527d27cd02", :epoch 1}],
@@ -52,7 +52,7 @@
                ["update" {:block-uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02" :epoch 4
                           :updated-attrs {:content nil :link nil}}]]
           {:keys [block-uuid->ops]}
-          (op-layer/add-ops-to-block-uuid->ops (op-layer/ops-coercer ops) {} (sorted-map-by <))]
+          (op-layer/add-ops-aux (op-layer/ops-coercer ops) {} (sorted-map-by <) {} (sorted-map-by <))]
       (is (= ["update"
               {:block-uuid #uuid "f639f13e-ef6f-4ba5-83b4-67527d27cd02"
                :updated-attrs {:content nil :link nil}
@@ -61,13 +61,25 @@
   (testing "case4: update-page then remove-page"
     (let [ops1 [["update-page" {:block-uuid #uuid "65564abe-1e79-4ae8-af60-215826cefea9" :epoch 1}]]
           ops2 [["remove-page" {:block-uuid #uuid "65564abe-1e79-4ae8-af60-215826cefea9" :epoch 2}]]
-          {:keys [block-uuid->ops epoch->block-uuid-sorted-map]}
-          (op-layer/add-ops-to-block-uuid->ops (op-layer/ops-coercer ops1) {} (sorted-map-by <))
+          {:keys [block-uuid->ops epoch->block-uuid-sorted-map asset-uuid->ops epoch->asset-uuid-sorted-map]}
+          (op-layer/add-ops-aux (op-layer/ops-coercer ops1) {} (sorted-map-by <) {} (sorted-map-by <))
           {block-uuid->ops2 :block-uuid->ops}
-          (op-layer/add-ops-to-block-uuid->ops (op-layer/ops-coercer ops2) block-uuid->ops epoch->block-uuid-sorted-map)]
+          (op-layer/add-ops-aux (op-layer/ops-coercer ops2)
+                                               block-uuid->ops epoch->block-uuid-sorted-map
+                                               asset-uuid->ops epoch->asset-uuid-sorted-map)]
       (is (= {#uuid "65564abe-1e79-4ae8-af60-215826cefea9"
               {:remove-page ["remove-page" {:block-uuid #uuid "65564abe-1e79-4ae8-af60-215826cefea9", :epoch 2}]}}
              block-uuid->ops2)))))
+
+(deftest add-ops-to-asset-uuid->ops-test
+  (let [[uuid1 uuid2] (repeatedly random-uuid)
+        ops1 [["update-asset" {:asset-uuid uuid1 :epoch 1}]
+              ["update-asset" {:asset-uuid uuid2 :epoch 2}]]
+        {:keys [asset-uuid->ops]}
+        (op-layer/add-ops-aux (op-layer/ops-coercer ops1) {} (sorted-map-by <) {} (sorted-map-by <))]
+    (is (= {uuid1 {:update-asset ["update-asset" {:asset-uuid uuid1 :epoch 1}]}
+            uuid2 {:update-asset ["update-asset" {:asset-uuid uuid2 :epoch 2}]}}
+           asset-uuid->ops))))
 
 
 (deftest process-test
@@ -197,6 +209,8 @@
                           :epoch 4}]}},
                       :epoch->block-uuid-sorted-map
                       {1 #uuid"f639f13e-ef6f-4ba5-83b4-67527d27cd02"}
+                      :asset-uuid->ops {}
+                      :epoch->asset-uuid-sorted-map {}
                       :local-tx 1}}
                     repo-ops-store1))
              (is (= repo-ops-store1 repo-ops-store2)))))

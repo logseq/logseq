@@ -25,8 +25,6 @@ logseq.graph-parser.util/unquote-string
 ;; API
 logseq.graph-parser.util.page-ref/page-ref-re
 ;; API
-logseq.graph-parser.whiteboard/page-block->tldr-page
-;; API
 logseq.graph-parser/get-blocks-to-delete
 ;; API
 logseq.graph-parser.util.db/resolve-input
@@ -42,3 +40,5 @@ logseq.graph-parser.schema.mldoc/block-ast-coll-schema
 logseq.graph-parser.config/img-formats
 ;; API
 logseq.graph-parser.config/text-formats
+;; API
+logseq.graph-parser/import-file-to-db-graph

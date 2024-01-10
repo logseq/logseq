@@ -144,6 +144,7 @@
             page-block (db/entity [:block/name page-name])]
         ;; Missing support for per block format (or deprecated?)
         (try (if whiteboard?
+               ;; only works for file graph :block/properties
                (let [blocks (->> children
                                  (map (partial medley/map-keys (fn [k] (keyword "block" k))))
                                  (map gp-whiteboard/migrate-shape-block)
