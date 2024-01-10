@@ -415,6 +415,21 @@
     (.-selectionDirection input)))
 
 #?(:cljs
+   (defn split-graphemes
+     [s]
+     (let [^js splitter (GraphemeSplitter.)]
+       (.splitGraphemes splitter s))))
+
+#?(:cljs
+   (defn get-graphemes-pos
+     "Return the length of the substrings in s between start and from-index.
+
+      multi-char count as 1, like emoji characters"
+     [s from-index]
+     (let [^js splitter (GraphemeSplitter.)]
+       (.countGraphemes splitter (subs s 0 from-index)))))
+
+#?(:cljs
    (defn get-line-pos
      "Return the length of the substrings in s between the last index of newline
       in s searching backward from from-newline-index and from-newline-index.
@@ -1358,10 +1373,11 @@
              scroll-top  (.-scrollTop main-node)
 
              current-pos (get-selection-start el)
+             grapheme-pos (get-graphemes-pos (.-value (.textContent el)) current-pos)
              mock-text   (some-> (gdom/getElement "mock-text")
                                  gdom/getChildren
                                  array-seq
-                                 (nth-safe current-pos))
+                                 (nth-safe grapheme-pos))
              offset-top   (and mock-text (.-offsetTop mock-text))
              offset-height (and mock-text (.-offsetHeight mock-text))
 
