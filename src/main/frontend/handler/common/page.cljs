@@ -36,14 +36,13 @@
    (let [repo (state/get-current-repo)
          conn (db/get-db repo false)
          config (state/get-config repo)]
-     (when-let [page-name (worker-page/create! repo conn config title options)]
-       (when redirect?
-         (route-handler/redirect-to-page! page-name))
-       (js/setTimeout
-        #(when-let [first-block (first (:block/_left (db/entity [:block/name page-name])))]
-          (block-handler/edit-block! first-block :max nil))
-        100)
-       page-name))))
+     (p/let [_ (worker-page/create! repo conn config title options)]
+       (let [[_ page-name] (worker-page/get-title-and-pagename title)]
+         (when redirect?
+           (route-handler/redirect-to-page! page-name))
+         (when-let [first-block (first (:block/_left (db/entity [:block/name page-name])))]
+         (block-handler/edit-block! first-block :max nil))
+         page-name)))))
 
 ;; favorite fns
 ;; ============

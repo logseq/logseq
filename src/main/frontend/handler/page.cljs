@@ -284,15 +284,15 @@
               format (state/get-preferred-format repo)
               template (state/get-default-journal-template)
               create-f (fn []
-                         (create! title {:redirect? false
-                                         :split-namespace? false
-                                         :create-first-block? (not template)
-                                         :journal? true
-                                         :today-journal? true})
-                         (js/setTimeout #(do
-                                           (state/pub-event! [:journal/insert-template today-page])
-                                           (ui-handler/re-render-root!)
-                                           (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})) 100))]
+                         (p/do!
+                           (create! title {:redirect? false
+                                          :split-namespace? false
+                                          :create-first-block? (not template)
+                                          :journal? true
+                                          :today-journal? true})
+                           (state/pub-event! [:journal/insert-template today-page])
+                           (ui-handler/re-render-root!)
+                           (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})))]
           (when (db/page-empty? repo today-page)
             (if (config/db-based-graph? repo)
               (let [page-exists (db/get-page today-page)]
