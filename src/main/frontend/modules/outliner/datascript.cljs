@@ -29,11 +29,11 @@
   "Validates the entities that have changed in the given datascript tx-report.
    Validation is only for DB graphs"
   [{:keys [db-after tx-data tx-meta]}]
-  (let [{:keys [known-schema? closed-schema? fail-invalid?]} (:dev/validate-db-options (state/get-config))
+  (let [{:keys [closed-schema? fail-invalid?]} (:dev/validate-db-options (state/get-config))
         changed-ids (->> tx-data (map :e) distinct)
         ent-maps* (->> changed-ids (mapcat #(d/datoms db-after :eavt %)) db-malli-schema/datoms->entity-maps vals)
         ent-maps (vec (db-malli-schema/update-properties-in-ents ent-maps*))
-        db-schema (cond-> (if known-schema? db-malli-schema/DB-known db-malli-schema/DB)
+        db-schema (cond-> db-malli-schema/DB
                     true
                     (db-malli-schema/update-properties-in-schema db-after)
                     closed-schema?
