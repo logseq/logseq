@@ -109,11 +109,11 @@
                         (common-util/safe-subs value (+ (count q) 4 pos)))]
         (state/set-edit-content! (.-id input) value')
         (state/clear-editor-action!)
-        (let [page-name (util/page-name-sanity-lc chosen-item)
-              page (db/entity [:block/name page-name])
-              _ (when-not page (page-handler/create! chosen-item {:redirect? false
-                                                                  :create-first-block? false}))
-              current-block (state/get-edit-block)]
+        (p/let [page-name (util/page-name-sanity-lc chosen-item)
+                page (db/entity [:block/name page-name])
+                _ (when-not page (page-handler/<create! chosen-item {:redirect? false
+                                                                     :create-first-block? false}))
+                current-block (state/get-edit-block)]
           (editor-handler/api-insert-new-block! chosen-item
                                                 {:block-uuid (:block/uuid current-block)
                                                  :sibling? true

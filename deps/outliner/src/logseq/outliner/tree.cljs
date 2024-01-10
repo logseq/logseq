@@ -13,7 +13,7 @@
   (-get-left [this conn])
   (-get-right [this conn])
   (-get-down [this conn])
-  (-save [this db conn repo date-formatter])
+  (-save [this txs-state conn repo date-formatter])
   (-del [this db children? conn])
   (-get-children [this conn]))
 

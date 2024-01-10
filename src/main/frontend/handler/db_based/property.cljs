@@ -69,9 +69,9 @@
 
 (defn- rebuild-block-refs
   [repo block new-properties & opts]
-  (let [db (db/get-db repo)
+  (let [conn (db/get-db repo false)
         date-formatter (state/get-date-formatter)]
-    (outliner-core/rebuild-block-refs repo db date-formatter block new-properties opts)))
+    (outliner-core/rebuild-block-refs repo conn date-formatter block new-properties opts)))
 
 (defn convert-property-input-string
   [schema-type v-str]

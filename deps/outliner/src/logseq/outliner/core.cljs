@@ -183,8 +183,9 @@
      (reset! (:editor/create-page? @state/state) false))))
 
 (defn rebuild-block-refs
-  [repo conn db date-formatter block new-properties & {:keys [skip-content-parsing?]}]
-  (let [property-key-refs (keys new-properties)
+  [repo conn date-formatter block new-properties & {:keys [skip-content-parsing?]}]
+  (let [db @conn
+        property-key-refs (keys new-properties)
         property-value-refs (->> (vals new-properties)
                                  (mapcat (fn [v]
                                            (cond
@@ -192,7 +193,7 @@
                                              v
 
                                              (uuid? v)
-                                             (when-let [entity (d/entity conn [:block/uuid v])]
+                                             (when-let [entity (d/entity db [:block/uuid v])]
                                                (let [from-property? (get-in entity [:block/metadata :created-from-property])]
                                                  (if (and from-property? (not (contains? (:block/type entity) "closed value")))
                                                    ;; don't reference hidden block property values except closed values
@@ -216,9 +217,9 @@
     (concat property-refs content-refs)))
 
 (defn- rebuild-refs
-  [repo conn db date-formatter txs-state block m]
+  [repo conn date-formatter txs-state block m]
   (when (sqlite-util/db-based-graph? repo)
-    (let [refs (->> (rebuild-block-refs repo conn db date-formatter block (:block/properties block)
+    (let [refs (->> (rebuild-block-refs repo conn date-formatter block (:block/properties block)
                                         :skip-content-parsing? true)
                     (concat (:block/refs m))
                     (concat (:block/tags m)))]
@@ -344,7 +345,7 @@
         (swap! txs-state conj
                (dissoc m :db/other-tx)))
 
-      (rebuild-refs repo conn db date-formatter txs-state block-entity m)
+      (rebuild-refs repo conn date-formatter txs-state block-entity m)
 
       this))
 

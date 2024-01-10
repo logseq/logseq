@@ -95,9 +95,10 @@
           parsed-blocks (->>
                          (block/extract-blocks parsed-blocks "" :markdown {:page-name page-name})
                          (mapv editor/wrap-parse-block))]
-      (when (not (db/page-exists? page-name))
-        (page-handler/create! page-name {:redirect? false}))
-      (let [page-block (db/entity [:block/name (util/page-name-sanity-lc page-name)])
+      (p/do!
+       (when (not (db/page-exists? page-name))
+         (page-handler/<create! page-name {:redirect? false}))
+       (let [page-block (db/entity [:block/name (util/page-name-sanity-lc page-name)])
             children (:block/_parent page-block)
             blocks (db/sort-by-left children page-block)
             last-block (last blocks)
@@ -111,7 +112,7 @@
          parsed-blocks
          {:target-block target-block
           :sibling? sibling?})
-        (finished-ok-handler [page-name])))))
+        (finished-ok-handler [page-name]))))))
 
 (defn create-page-with-exported-tree!
   "Create page from the per page object generated in `export-repo-as-edn-v2!`
@@ -127,39 +128,40 @@
         has-children? (seq children)
         page-format (or (some-> tree (:children) (first) (:format)) :markdown)
         whiteboard? (= type "whiteboard")]
-    (try (page-handler/create! title {:redirect?           false
-                                      :format              page-format
-                                      :uuid                uuid
-                                      :create-first-block? false
-                                      :properties          properties
-                                      :whiteboard?         whiteboard?})
-         (catch :default e
-           (js/console.error e)
-           (prn {:tree tree})
-           (notification/show! (str "Error happens when creating page " title ":\n"
-                                    e
-                                    "\nSkipped and continue the remaining import.") :error)))
-    (when has-children?
-      (let [page-name (util/page-name-sanity-lc title)
-            page-block (db/entity [:block/name page-name])]
+    (p/do!
+     (try (page-handler/<create! title {:redirect?           false
+                                        :format              page-format
+                                        :uuid                uuid
+                                        :create-first-block? false
+                                        :properties          properties
+                                        :whiteboard?         whiteboard?})
+          (catch :default e
+            (js/console.error e)
+            (prn {:tree tree})
+            (notification/show! (str "Error happens when creating page " title ":\n"
+                                     e
+                                     "\nSkipped and continue the remaining import.") :error)))
+     (when has-children?
+       (let [page-name (util/page-name-sanity-lc title)
+             page-block (db/entity [:block/name page-name])]
         ;; Missing support for per block format (or deprecated?)
-        (try (if whiteboard?
+         (try (if whiteboard?
                ;; only works for file graph :block/properties
-               (let [blocks (->> children
-                                 (map (partial medley/map-keys (fn [k] (keyword "block" k))))
-                                 (map gp-whiteboard/migrate-shape-block)
-                                 (map #(merge % (gp-whiteboard/with-whiteboard-block-props % page-name))))]
-                 (db/transact! blocks))
-               (editor/insert-block-tree children page-format
-                                         {:target-block page-block
-                                          :sibling?     false
-                                          :keep-uuid?   true}))
-             (catch :default e
-               (js/console.error e)
-               (prn {:tree tree})
-               (notification/show! (str "Error happens when creating block content of page " title "\n"
-                                        e
-                                        "\nSkipped and continue the remaining import.") :error))))))
+                (let [blocks (->> children
+                                  (map (partial medley/map-keys (fn [k] (keyword "block" k))))
+                                  (map gp-whiteboard/migrate-shape-block)
+                                  (map #(merge % (gp-whiteboard/with-whiteboard-block-props % page-name))))]
+                  (db/transact! blocks))
+                (editor/insert-block-tree children page-format
+                                          {:target-block page-block
+                                           :sibling?     false
+                                           :keep-uuid?   true}))
+              (catch :default e
+                (js/console.error e)
+                (prn {:tree tree})
+                (notification/show! (str "Error happens when creating block content of page " title "\n"
+                                         e
+                                         "\nSkipped and continue the remaining import.") :error)))))))
   title)
 
 (defn- pre-transact-uuids!

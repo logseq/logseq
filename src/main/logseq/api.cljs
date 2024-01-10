@@ -555,22 +555,24 @@
 
 (def ^:export create_page
   (fn [name ^js properties ^js opts]
-    (some-> (if-let [page (db-model/get-page name)]
-              page
-              (let [properties (bean/->clj properties)
-                    {:keys [redirect createFirstBlock format journal]} (bean/->clj opts)
-                    name       (page-handler/create!
-                                 name
-                                 {:redirect?           (if (boolean? redirect) redirect true)
-                                  :journal?            journal
-                                  :create-first-block? (if (boolean? createFirstBlock) createFirstBlock true)
-                                  :format              format
-                                  :properties          properties})]
-                (db-model/get-page name)))
-            (:db/id)
-            (db-utils/pull)
-            (sdk-utils/normalize-keyword-for-json)
-            (bean/->js))))
+    (let [properties (bean/->clj properties)
+          {:keys [redirect createFirstBlock format journal]} (bean/->clj opts)]
+      (p/let [page (db-model/get-page name)
+              new-page (when-not page
+                         (p/let [_ (page-handler/<create!
+                                    name
+                                    {:redirect?           (if (boolean? redirect) redirect true)
+                                     :journal?            journal
+                                     :create-first-block? (if (boolean? createFirstBlock) createFirstBlock true)
+                                     :format              format
+                                     :properties          properties})
+                                 name (second (page-handler/get-title-and-pagename))]
+                           (db-model/get-page name)))]
+        (some-> (or page new-page)
+                :db/id
+                (db-utils/pull)
+                (sdk-utils/normalize-keyword-for-json)
+                (bean/->js))))))
 
 (def ^:export delete_page
   (fn [name]
@@ -605,45 +607,45 @@
   (fn [block-uuid-or-page-name content ^js opts]
     (when (string/blank? block-uuid-or-page-name)
       (throw (js/Error. "Page title or block UUID shouldn't be empty.")))
-    (let [{:keys [before sibling focus customUUID properties]} (bean/->clj opts)
-          [page-name block-uuid] (if (util/uuid-string? block-uuid-or-page-name)
-                                   [nil (uuid block-uuid-or-page-name)]
-                                   [block-uuid-or-page-name nil])
-          page-name              (when page-name (util/page-name-sanity-lc page-name))
-          _                      (when (and page-name (not (db/entity [:block/name page-name])))
-                                   (page-handler/create! block-uuid-or-page-name {:create-first-block? false}))
-          custom-uuid            (or customUUID (:id properties))
-          custom-uuid            (when custom-uuid (sdk-utils/uuid-or-throw-error custom-uuid))
-          edit-block?            (if (nil? focus) true focus)
-          _                      (when (and custom-uuid (db-model/query-block-by-uuid custom-uuid))
-                                   (throw (js/Error.
-                                            (util/format "Custom block UUID already exists (%s)." custom-uuid))))
-          block-uuid'            (if (and (not sibling) before block-uuid)
-                                   (let [block       (db/entity [:block/uuid block-uuid])
-                                         first-child (db-model/get-by-parent-&-left (db/get-db)
-                                                                                    (:db/id block)
-                                                                                    (:db/id block))]
-                                     (if first-child
-                                       (:block/uuid first-child)
-                                       block-uuid))
-                                   block-uuid)
-          insert-at-first-child? (not= block-uuid' block-uuid)
-          [sibling? before?] (if insert-at-first-child?
-                               [true true]
-                               [sibling before])
-          before?                (if (and (false? sibling?) before? (not insert-at-first-child?))
-                                   false
-                                   before?)
-          new-block              (editor-handler/api-insert-new-block!
-                                   content
-                                   {:block-uuid  block-uuid'
-                                    :sibling?    sibling?
-                                    :before?     before?
-                                    :edit-block? edit-block?
-                                    :page        page-name
-                                    :custom-uuid custom-uuid
-                                    :properties  (merge properties
-                                                        (when custom-uuid {:id custom-uuid}))})]
+    (p/let [{:keys [before sibling focus customUUID properties]} (bean/->clj opts)
+            [page-name block-uuid] (if (util/uuid-string? block-uuid-or-page-name)
+                                     [nil (uuid block-uuid-or-page-name)]
+                                     [block-uuid-or-page-name nil])
+            page-name              (when page-name (util/page-name-sanity-lc page-name))
+            _                      (when (and page-name (not (db/entity [:block/name page-name])))
+                                     (page-handler/<create! block-uuid-or-page-name {:create-first-block? false}))
+            custom-uuid            (or customUUID (:id properties))
+            custom-uuid            (when custom-uuid (sdk-utils/uuid-or-throw-error custom-uuid))
+            edit-block?            (if (nil? focus) true focus)
+            _                      (when (and custom-uuid (db-model/query-block-by-uuid custom-uuid))
+                                     (throw (js/Error.
+                                             (util/format "Custom block UUID already exists (%s)." custom-uuid))))
+            block-uuid'            (if (and (not sibling) before block-uuid)
+                                     (let [block       (db/entity [:block/uuid block-uuid])
+                                           first-child (db-model/get-by-parent-&-left (db/get-db)
+                                                                                      (:db/id block)
+                                                                                      (:db/id block))]
+                                       (if first-child
+                                         (:block/uuid first-child)
+                                         block-uuid))
+                                     block-uuid)
+            insert-at-first-child? (not= block-uuid' block-uuid)
+            [sibling? before?] (if insert-at-first-child?
+                                 [true true]
+                                 [sibling before])
+            before?                (if (and (false? sibling?) before? (not insert-at-first-child?))
+                                     false
+                                     before?)
+            new-block              (editor-handler/api-insert-new-block!
+                                    content
+                                    {:block-uuid  block-uuid'
+                                     :sibling?    sibling?
+                                     :before?     before?
+                                     :edit-block? edit-block?
+                                     :page        page-name
+                                     :custom-uuid custom-uuid
+                                     :properties  (merge properties
+                                                         (when custom-uuid {:id custom-uuid}))})]
       (bean/->js (sdk-utils/normalize-keyword-for-json new-block)))))
 
 (def ^:export insert_batch_block
@@ -818,12 +820,12 @@
 
 (defn ^:export prepend_block_in_page
   [uuid-or-page-name content ^js opts]
-  (let [page?           (not (util/uuid-string? uuid-or-page-name))
-        page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
-        _               (and page-not-exist? (page-handler/create! uuid-or-page-name
-                                                                   {:redirect?           false
-                                                                    :create-first-block? true
-                                                                    :format              (state/get-preferred-format)}))]
+  (p/let [page?           (not (util/uuid-string? uuid-or-page-name))
+          page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
+          _               (and page-not-exist? (page-handler/<create! uuid-or-page-name
+                                                                      {:redirect?           false
+                                                                       :create-first-block? true
+                                                                       :format              (state/get-preferred-format)}))]
     (when-let [block (db-model/get-page uuid-or-page-name)]
       (let [block'   (if page? (second-child-of-block block) (first-child-of-block block))
             sibling? (and page? (not (nil? block')))
@@ -834,12 +836,12 @@
 
 (defn ^:export append_block_in_page
   [uuid-or-page-name content ^js opts]
-  (let [page?           (not (util/uuid-string? uuid-or-page-name))
-        page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
-        _               (and page-not-exist? (page-handler/create! uuid-or-page-name
-                                                                   {:redirect?           false
-                                                                    :create-first-block? true
-                                                                    :format              (state/get-preferred-format)}))]
+  (p/let [page?           (not (util/uuid-string? uuid-or-page-name))
+          page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
+          _               (and page-not-exist? (page-handler/<create! uuid-or-page-name
+                                                                      {:redirect?           false
+                                                                       :create-first-block? true
+                                                                       :format              (state/get-preferred-format)}))]
     (when-let [block (db-model/get-page uuid-or-page-name)]
       (let [block'   (last-child-of-block block)
             sibling? (not (nil? block'))

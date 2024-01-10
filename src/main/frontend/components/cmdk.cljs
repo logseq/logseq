@@ -498,16 +498,17 @@
         create-whiteboard? (= :whiteboard (:source-create item))
         create-page? (= :page (:source-create item))
         class (when create-class? (get-class-from-input @!input))]
-    (cond
-      create-class? (page-handler/create! class
-                                          {:redirect? false
-                                           :create-first-block? false
-                                           :class? true})
-      create-whiteboard? (whiteboard-handler/create-new-whiteboard-and-redirect! @!input)
-      create-page? (page-handler/create! @!input {:redirect? true}))
-    (if create-class?
-      (state/pub-event! [:class/configure (db/entity [:block/name (util/page-name-sanity-lc class)])])
-      (state/close-modal!))))
+    (p/do!
+     (cond
+       create-class? (page-handler/<create! class
+                                            {:redirect? false
+                                             :create-first-block? false
+                                             :class? true})
+       create-whiteboard? (whiteboard-handler/create-new-whiteboard-and-redirect! @!input)
+       create-page? (page-handler/<create! @!input {:redirect? true}))
+     (if create-class?
+       (state/pub-event! [:class/configure (db/entity [:block/name (util/page-name-sanity-lc class)])])
+       (state/close-modal!)))))
 
 (defn- get-filter-user-input
   [input]

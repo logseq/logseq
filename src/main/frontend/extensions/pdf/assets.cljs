@@ -161,56 +161,59 @@
                 file-path)]
       (if-not page
         (let [label (:filename pdf-current)]
-          (page-handler/create! page-name {:redirect?        false :create-first-block? false
-                                           :split-namespace? false
-                                           :format           format
-                                           ;; FIXME: file and file-path properties for db version
-                                           :properties       {:file      (case format
-                                                                           :markdown
-                                                                           (util/format "[%s](%s)" label url)
+          (p/do!
+           (page-handler/<create! page-name {:redirect?        false :create-first-block? false
+                                             :split-namespace? false
+                                             :format           format
+                                             ;; FIXME: file and file-path properties for db version
+                                             :properties       {:file      (case format
+                                                                             :markdown
+                                                                             (util/format "[%s](%s)" label url)
 
-                                                                           :org
-                                                                           (util/format "[[%s][%s]]" url label)
+                                                                             :org
+                                                                             (util/format "[[%s][%s]]" url label)
 
-                                                                           url)
-                                                              :file-path url}})
-          (db-model/get-page page-name))
+                                                                             url)
+                                                                :file-path url}})
+           (db-model/get-page page-name)))
 
-      ;; try to update file path
-      (property-handler/add-page-property! page-name :file-path url))
-    page)))
+        ;; try to update file path
+        (do
+          (property-handler/add-page-property! page-name :file-path url)
+          page)))))
 
 (defn ensure-ref-block!
   ([pdf hl] (ensure-ref-block! pdf hl nil))
   ([pdf-current {:keys [id content page properties]} insert-opts]
-   (when-let [ref-page (and pdf-current (ensure-ref-page! pdf-current))]
-     (let [ref-block (db-model/query-block-by-uuid id)]
-       (if-not (nil? (:block/content ref-block))
-         (do
-           (println "[existed ref block]" ref-block)
-           ref-block)
-         (let [text       (:text content)
-               wrap-props #(if-let [stamp (:image content)]
-                             (assoc %
-                                    (pu/get-pid :hl-type) :area
-                                    (pu/get-pid :hl-stamp) stamp)
-                             %)
-               props (cond->
-                      {(pu/get-pid :ls-type)  :annotation
-                       (pu/get-pid :hl-page)  page
-                       (pu/get-pid :hl-color) (:color properties)}
-                       (not (config/db-based-graph? (state/get-current-repo)))
+   (p/let [ref-page (when pdf-current (ensure-ref-page! pdf-current))]
+     (when ref-page
+       (let [ref-block (db-model/query-block-by-uuid id)]
+         (if-not (nil? (:block/content ref-block))
+           (do
+             (println "[existed ref block]" ref-block)
+             ref-block)
+           (let [text       (:text content)
+                 wrap-props #(if-let [stamp (:image content)]
+                               (assoc %
+                                      (pu/get-pid :hl-type) :area
+                                      (pu/get-pid :hl-stamp) stamp)
+                               %)
+                 props (cond->
+                        {(pu/get-pid :ls-type)  :annotation
+                         (pu/get-pid :hl-page)  page
+                         (pu/get-pid :hl-color) (:color properties)}
+                         (not (config/db-based-graph? (state/get-current-repo)))
                        ;; force custom uuid
-                       (assoc (pu/get-pid :id) (str id)))
-               properties (->>
-                           (wrap-props props)
-                           (property-handler/replace-key-with-id (state/get-current-repo)))]
-           (when (string? text)
-             (editor-handler/api-insert-new-block!
-              text (merge {:page        (:block/name ref-page)
-                           :custom-uuid id
-                           :properties properties}
-                          insert-opts)))))))))
+                         (assoc (pu/get-pid :id) (str id)))
+                 properties (->>
+                             (wrap-props props)
+                             (property-handler/replace-key-with-id (state/get-current-repo)))]
+             (when (string? text)
+               (editor-handler/api-insert-new-block!
+                text (merge {:page        (:block/name ref-page)
+                             :custom-uuid id
+                             :properties properties}
+                            insert-opts))))))))))
 
 (defn del-ref-block!
   [{:keys [id]}]
