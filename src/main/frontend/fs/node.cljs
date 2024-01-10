@@ -19,7 +19,7 @@
     (p/resolved (= (string/trim disk-content) (string/trim db-content)))))
 
 (defn- write-file-impl!
-  [repo dir rpath content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
+  [repo dir rpath content {:keys [ok-handler error-handler old-content skip-compare? skip-transact?]} stat]
   (let [file-fpath (path/path-join dir rpath)]
     (if skip-compare?
       (p/catch
@@ -55,7 +55,7 @@
                    mtime (gobj/get result "mtime")]
              (when-not contents-matched?
                (ipc/ipc "backupDbFile" (config/get-local-dir repo) rpath disk-content content))
-             (db/set-file-last-modified-at! repo rpath mtime)
+             (when-not skip-transact? (db/set-file-last-modified-at! repo rpath mtime))
              (when ok-handler
                (ok-handler repo rpath result))
              result)
