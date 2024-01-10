@@ -2496,9 +2496,9 @@
                                       :format format
                                       :on-hide (fn [value event]
                                                  (when (= event :esc)
-                                                   (editor-handler/save-block! (editor-handler/get-state) value)
-                                                   (let [select? (not (string/includes? value "```"))]
-                                                     (editor-handler/escape-editing select?))))}
+                                                   (p/let [_ (editor-handler/save-block! (editor-handler/get-state) value)]
+                                                     (let [select? (not (string/includes? value "```"))]
+                                                       (editor-handler/escape-editing select?)))))}
                                      edit-input-id
                                      config))]
           (if (and named? (seq (:block/tags block)) db-based?)

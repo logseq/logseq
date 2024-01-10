@@ -736,6 +736,7 @@
                   :on-click          (editor-handler/editor-on-click! id)
                   :on-change         (editor-handler/editor-on-change! block id search-timeout)
                   :on-paste          (paste-handler/editor-on-paste! id)
+                  :on-blur           (fn [] (editor-handler/save-current-block!))
                   :auto-focus        false
                   :class             heading-class}
                (some? parent-block)
