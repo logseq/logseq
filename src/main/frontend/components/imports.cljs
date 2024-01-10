@@ -199,7 +199,7 @@
                                               parent-dir (path/path-join repo-dir (path/dirname (.-rpath file)))]
                                           (p/do!
                                            (fs/mkdir-if-not-exists parent-dir)
-                                           (fs/write-file! repo repo-dir (.-rpath file) content nil))))))))
+                                           (fs/write-file! repo repo-dir (.-rpath file) content {:skip-transact? true}))))))))
           (recur))
         true))))
 
