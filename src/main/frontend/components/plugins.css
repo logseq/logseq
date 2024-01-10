@@ -648,11 +648,10 @@
   &-installed {
     margin: -2rem;
     outline: none;
-    padding: 1rem;
+    padding: .5rem;
 
     .it {
       user-select: none;
-      background-color: var(--ls-secondary-background-color);
       border: 1px solid transparent;
       margin-bottom: 4px;
       cursor: pointer;
@@ -662,18 +661,12 @@
         font-weight: 600;
       }
 
-      &.is-active {
-        background-color: var(--ls-tertiary-background-color);
-        border: 1px solid var(--ls-quaternary-background-color);
-        opacity: 1;
+      &:hover, &.is-active {
+        @apply opacity-100 bg-gray-06;
       }
 
       &.is-selected {
-        opacity: 1;
-      }
-
-      &:hover {
-        opacity: 1;
+        @apply opacity-100;
       }
     }
   }
