@@ -956,17 +956,18 @@ Similar to re-frame subscriptions"
 
 (defn get-edit-input-id
   []
-  (or
-   (when-let [node @*editor-editing-ref]
-     (some-> (dom/sel1 node "textarea")
-             (gobj/get "id")))
-   (try
-     (when-let [elem js/document.activeElement]
-      (when (util/input? elem)
-        (let [id (gobj/get elem "id")]
-          (when (string/starts-with? id "edit-block-")
-            id))))
-     (catch :default _e))))
+  (when-not (exists? js/process)
+    (or
+     (when-let [node @*editor-editing-ref]
+       (some-> (dom/sel1 node "textarea")
+               (gobj/get "id")))
+     (try
+       (when-let [elem js/document.activeElement]
+         (when (util/input? elem)
+           (let [id (gobj/get elem "id")]
+             (when (string/starts-with? id "edit-block-")
+               id))))
+       (catch :default _e)))))
 
 (defn get-input
   []
@@ -1962,44 +1963,45 @@ Similar to re-frame subscriptions"
 (defn set-editing!
   [edit-input-id content block cursor-range & {:keys [move-cursor? ref]
                                                :or {move-cursor? true}}]
-  (if (> (count content)
-         (block-content-max-length (get-current-repo)))
-    (let [elements (array-seq (js/document.getElementsByClassName (str "id" (:block/uuid block))))]
-      (when (first elements)
-        (util/scroll-to-element (gobj/get (first elements) "id")))
-      (exit-editing-and-set-selected-blocks! elements))
-    (let [edit-input-id (if ref
-                          (or (some-> (gobj/get ref "id") (string/replace "ls-block" "edit-block"))
-                              edit-input-id)
-                          edit-input-id)]
-      (when (and edit-input-id block
-                 (or
-                  (publishing-enable-editing?)
-                  (not @publishing?)))
-        (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
-              container (util/get-block-container block-element)
-              block (if container
-                      (assoc block
-                             :block.temp/container (gobj/get container "id"))
-                      block)
-              content (string/trim (or content ""))]
-          (when ref (set-editing-ref! ref))
-          (set-state! :editor/block block)
-          (set-state! :editor/content content :path-in-sub-atom (:block/uuid block))
-          (set-state! :editor/last-key-code nil)
-          (set-state! :editor/set-timestamp-block nil)
-          (set-state! :editor/cursor-range cursor-range)
+  (when-not (exists? js/process)
+    (if (> (count content)
+           (block-content-max-length (get-current-repo)))
+      (let [elements (array-seq (js/document.getElementsByClassName (str "id" (:block/uuid block))))]
+        (when (first elements)
+          (util/scroll-to-element (gobj/get (first elements) "id")))
+        (exit-editing-and-set-selected-blocks! elements))
+      (let [edit-input-id (if ref
+                            (or (some-> (gobj/get ref "id") (string/replace "ls-block" "edit-block"))
+                                edit-input-id)
+                            edit-input-id)]
+        (when (and edit-input-id block
+                   (or
+                    (publishing-enable-editing?)
+                    (not @publishing?)))
+          (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
+                container (util/get-block-container block-element)
+                block (if container
+                        (assoc block
+                               :block.temp/container (gobj/get container "id"))
+                        block)
+                content (string/trim (or content ""))]
+            (when ref (set-editing-ref! ref))
+            (set-state! :editor/block block)
+            (set-state! :editor/content content :path-in-sub-atom (:block/uuid block))
+            (set-state! :editor/last-key-code nil)
+            (set-state! :editor/set-timestamp-block nil)
+            (set-state! :editor/cursor-range cursor-range)
 
-          (when-let [input (gdom/getElement edit-input-id)]
-            (let [pos (count cursor-range)]
-              (when content
-                (util/set-change-value input content))
+            (when-let [input (gdom/getElement edit-input-id)]
+              (let [pos (count cursor-range)]
+                (when content
+                  (util/set-change-value input content))
 
-              (when move-cursor?
-                (cursor/move-cursor-to input pos))
+                (when move-cursor?
+                  (cursor/move-cursor-to input pos))
 
-              (when (or (util/mobile?) (mobile-util/native-platform?))
-                (set-state! :mobile/show-action-bar? false)))))))))
+                (when (or (util/mobile?) (mobile-util/native-platform?))
+                  (set-state! :mobile/show-action-bar? false))))))))))
 
 (defn action-bar-open?
   []

@@ -44,7 +44,6 @@
 (def delete! page-common-handler/delete!)
 (def unfavorite-page! page-common-handler/unfavorite-page!)
 (def favorite-page! page-common-handler/favorite-page!)
-(def get-title-and-pagename worker-page/get-title-and-pagename)
 
 ;; FIXME: add whiteboard
 (defn- get-directory
