@@ -124,7 +124,7 @@ http://ethanschoonover.com/lsradix/img/lsradix-palette.png
 
 /* Dark */
 .cm-s-lsradix.cm-s-dark .CodeMirror-gutters {
-  background-color: or(--lx-gray-01, #073642);
+  background-color: or(--lx-gray-03, #073642);
 }
 
 .cm-s-lsradix.cm-s-dark .CodeMirror-linenumber {
