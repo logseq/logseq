@@ -75,7 +75,7 @@
      :fs/local-file-change - file changed on local disk
      :fs/remote-file-change - file changed on remote"
   [repo-url file-path content {:fs/keys [event] :as options}]
-  (let [db-conn (db/get-db repo-url false)]
+  (when-let [db-conn (db/get-db repo-url false)]
     (case event
       ;; the file is already in db, so we can use the existing file's blocks
       ;; to do the diff-merge
