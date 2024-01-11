@@ -325,37 +325,36 @@
                              :block-uuid->ops old-branch-block-uuid->ops
                              :epoch->block-uuid-sorted-map old-epoch->block-uuid-sorted-map)))))))
 
-(comment
-  (defn add-asset-ops!
-   [repo ops]
-   (assert (contains? (@*ops-store repo) :current-branch) (@*ops-store repo))
-   (let [ops (ops-coercer ops)
-         {{old-branch-block-uuid->ops :block-uuid->ops
-           old-epoch->block-uuid-sorted-map :epoch->block-uuid-sorted-map
-           old-branch-asset-uuid->ops :asset-uuid->ops
-           old-epoch->asset-uuid-sorted-map :epoch->asset-uuid-sorted-map
-           :as old-branch} :old-branch
-          {:keys [block-uuid->ops epoch->block-uuid-sorted-map
-                  asset-uuid->ops epoch->asset-uuid-sorted-map]} :current-branch}
-         (get @*ops-store repo)
-         {:keys [asset-uuid->ops epoch->asset-uuid-sorted-map]}
-         (add-ops-aux ops block-uuid->ops epoch->block-uuid-sorted-map
-                      asset-uuid->ops epoch->asset-uuid-sorted-map)
-         {old-branch-asset-uuid->ops :asset-uuid->ops old-epoch->asset-uuid-sorted-map :epoch->asset-uuid-sorted-map}
-         (when old-branch
-           (add-ops-aux ops old-branch-block-uuid->ops old-epoch->block-uuid-sorted-map
-                        old-branch-asset-uuid->ops old-epoch->asset-uuid-sorted-map))]
-     (swap! *ops-store update repo
-            (fn [{:keys [current-branch old-branch]}]
-              (cond-> {:current-branch
-                       (assoc current-branch
-                              :asset-uuid->ops asset-uuid->ops
-                              :epoch->asset-uuid-sorted-map epoch->asset-uuid-sorted-map)}
-                old-branch
-                (assoc :old-branch
-                       (assoc old-branch
-                              :asset-uuid->ops old-branch-asset-uuid->ops
-                              :epoch->asset-uuid-sorted-map old-epoch->asset-uuid-sorted-map))))))))
+(defn add-asset-ops!
+  [repo ops]
+  (assert (contains? (@*ops-store repo) :current-branch) (@*ops-store repo))
+  (let [ops (ops-coercer ops)
+        {{old-branch-block-uuid->ops :block-uuid->ops
+          old-epoch->block-uuid-sorted-map :epoch->block-uuid-sorted-map
+          old-branch-asset-uuid->ops :asset-uuid->ops
+          old-epoch->asset-uuid-sorted-map :epoch->asset-uuid-sorted-map
+          :as old-branch} :old-branch
+         {:keys [block-uuid->ops epoch->block-uuid-sorted-map
+                 asset-uuid->ops epoch->asset-uuid-sorted-map]} :current-branch}
+        (get @*ops-store repo)
+        {:keys [asset-uuid->ops epoch->asset-uuid-sorted-map]}
+        (add-ops-aux ops block-uuid->ops epoch->block-uuid-sorted-map
+                     asset-uuid->ops epoch->asset-uuid-sorted-map)
+        {old-branch-asset-uuid->ops :asset-uuid->ops old-epoch->asset-uuid-sorted-map :epoch->asset-uuid-sorted-map}
+        (when old-branch
+          (add-ops-aux ops old-branch-block-uuid->ops old-epoch->block-uuid-sorted-map
+                       old-branch-asset-uuid->ops old-epoch->asset-uuid-sorted-map))]
+    (swap! *ops-store update repo
+           (fn [{:keys [current-branch old-branch]}]
+             (cond-> {:current-branch
+                      (assoc current-branch
+                             :asset-uuid->ops asset-uuid->ops
+                             :epoch->asset-uuid-sorted-map epoch->asset-uuid-sorted-map)}
+               old-branch
+               (assoc :old-branch
+                      (assoc old-branch
+                             :asset-uuid->ops old-branch-asset-uuid->ops
+                             :epoch->asset-uuid-sorted-map old-epoch->asset-uuid-sorted-map)))))))
 
 (defn update-local-tx!
   [repo t]
