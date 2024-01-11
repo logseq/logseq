@@ -14,10 +14,10 @@ async function setUpBlocks(page, block) {
   await block.mustFill('a')
   await block.enterNext()
   await block.mustFill('b')
-  await page.keyboard.press(modKey + '+c')
+  await page.keyboard.press(modKey + '+c', { delay: 100 })
   await page.waitForTimeout(100)
   await block.enterNext()
-  await page.keyboard.press(modKey + '+v')
+  await page.keyboard.press(modKey + '+v', { delay: 100 })
   await page.waitForTimeout(100)
 }
 
@@ -27,7 +27,7 @@ test('backspace at the beginning of a refed block #9406', async ({ page, block }
   await moveCursorToBeginning(page)
   await page.keyboard.press('Backspace')
   await expect(page.locator('textarea >> nth=0')).toHaveText("ab")
-  await expect(await block.selectionStart()).toEqual(1)
+    await expect(await block.selectionStart()).toEqual(1)
   await expect(page.locator('.block-ref >> text="ab"')).toHaveCount(1);
 })
 

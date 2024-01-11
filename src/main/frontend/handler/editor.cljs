@@ -315,8 +315,7 @@
          content (-> (property-file/remove-built-in-properties-when-file-based repo format content)
                      (drawer/remove-logbook))]
      (cond
-       (and (another-block-with-same-id-exists? uuid block-id)
-            (not (= :delete (:editor/op opts))))
+       (another-block-with-same-id-exists? uuid block-id)
        (notification/show!
         [:p.content
          (util/format "Block with the id %s already exists!" block-id)]
@@ -456,8 +455,7 @@
   ([state]
    (insert-new-block! state nil))
   ([_state block-value]
-   (when (and (not config/publishing?)
-              (not= :insert (state/get-editor-op)))
+   (when (not config/publishing?)
      (state/set-editor-op! :insert)
      (when-let [state (get-state)]
        (let [{:keys [block value config]} state
@@ -743,15 +741,21 @@
                      0)
                 edit-target (if edit-block-has-refs?
                               (db/pull (:db/id edit-block))
-                              (db/pull (:db/id block)))]
+                              (db/pull (:db/id block)))
+                input (state/get-input)
+                edit-block-fn #(edit-block! (assoc edit-target :block/content new-value)
+                                            pos
+                                            (state/get-edit-block-node)
+                                            {:custom-content new-value
+                                             :tail-len tail-len})]
+            (when (and edit-block-has-refs? input)
+              (state/set-edit-content! (state/get-edit-input-id) new-value)
+              (cursor/move-cursor-to input pos))
+
             {:prev-block block
              :new-content new-value
              :pos pos
-             :edit-block-fn #(edit-block! edit-target
-                                          pos
-                                          (state/get-edit-block-node)
-                                          {:custom-content new-value
-                                           :tail-len tail-len})}))))))
+             :edit-block-fn edit-block-fn}))))))
 
 (declare save-block!)
 
@@ -761,8 +765,7 @@
 
 (declare expand-block!)
 (defn delete-block!
-  [repo delete-children?]
-  (state/set-editor-op! :delete)
+  [repo delete-children? & {:keys [*edit-block-fn]}]
   (let [{:keys [id block-id block-parent-id value format config]} (get-state)]
     (when block-id
       (when-let [block-e (db/entity [:block/uuid block-id])]
@@ -789,7 +792,8 @@
                                          block-parent
                                          {:container (util/rec-get-blocks-container block-parent)})
                                         (util/get-prev-block-non-collapsed-non-embed block-parent))
-                        {:keys [prev-block new-content pos edit-block-fn]} (move-to-prev-block repo sibling-block format id value)
+                        {:keys [prev-block new-content edit-block-fn]} (move-to-prev-block repo sibling-block format id value)
+                        _ (when *edit-block-fn (reset! *edit-block-fn edit-block-fn))
                         concat-prev-block? (boolean (and prev-block new-content))
                         transact-opts {:outliner-op :delete-blocks}
                         db-based? (config/db-based-graph? repo)]
@@ -807,7 +811,7 @@
                          (if (seq (:block/_refs (db/entity (:db/id block))))
                            (let [block-right (outliner-core/get-right-sibling (db/get-db) (:db/id block))]
                              (delete-block-fn prev-block)
-                             (save-block! repo block new-content {:editor/op :delete})
+                             (save-block! repo block new-content {})
                              (outliner-save-block! {:db/id (:db/id block)
                                                     :block/parent (:db/id (:block/parent prev-block))
                                                     :block/left (or (:db/id (:block/left prev-block))
@@ -841,16 +845,13 @@
 
                            (do
                              (delete-block-fn block)
-                             (save-block! repo prev-block new-content {:editor/op :delete})
+                             (save-block! repo prev-block new-content {})
                              (when db-based?
                                (outliner-save-block! {:db/id (:db/id prev-block)
                                                       :block/properties new-properties})))))
 
                        :else
-                       (delete-block-fn block)))
-
-                    (when edit-block-fn (edit-block-fn)))))))))))
-  (state/set-editor-op! nil))
+                       (delete-block-fn block)))))))))))))
 
 (defn delete-blocks!
   [repo block-uuids blocks dom-blocks]
@@ -2680,8 +2681,7 @@
       (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
         (let [content (:block/content block)
               value (state/get-edit-content)]
-          (when (not= (clean-content! repo format content)
-                      (string/trim value))
+          (when (and value (not= (clean-content! repo format content) (string/trim value)))
             (save-block! repo uuid value)))
         (let [block (db/pull repo '[*] [:block/uuid (cljs.core/uuid sibling-block-id)])]
           (edit-block! block pos (state/get-edit-block-node)))))))
@@ -2748,7 +2748,7 @@
          (ui-outliner-tx/transact!
           {:outliner-op :delete-blocks}
           (delete-block-aux! delete-block false)
-          (save-block! repo keep-block new-content {:editor/op :delete})
+          (save-block! repo keep-block new-content {})
           (when next-block-has-refs?
             (outliner-save-block! {:db/id (:db/id keep-block)
                                    :block/left (:db/id (:block/left delete-block))
@@ -2824,10 +2824,13 @@
                    (not single-block?)
                    (not custom-query?))
           (if (own-order-number-list? block)
-            (do
-              (save-current-block!)
-              (remove-block-own-order-list-type! block))
-            (delete-block! repo false))))
+            (p/do!
+             (save-current-block!)
+             (remove-block-own-order-list-type! block))
+            (p/let [*edit-block-fn (atom nil)
+                    _ (delete-block! repo false :*edit-block-fn *edit-block-fn)]
+              (when-let [f @*edit-block-fn]
+                (f))))))
 
       (and (> current-pos 1)
            (= (util/nth-safe value (dec current-pos)) commands/command-trigger))

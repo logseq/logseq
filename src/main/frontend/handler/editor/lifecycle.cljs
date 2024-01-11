@@ -5,8 +5,7 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
-            [frontend.db :as db]
-            [frontend.handler.file-based.property.util :as property-util]))
+            [frontend.db :as db]))
 
 (defn did-mount!
   [state]
