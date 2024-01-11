@@ -1155,6 +1155,8 @@
            (:db/id page)
            :page))))))
 
+(declare save-current-block!)
+
 (defn zoom-in! []
   (if (state/editing?)
     (when-let [id (some-> (state/get-edit-block)
@@ -1162,9 +1164,12 @@
                           ((fn [id] [:block/uuid id]))
                           db/entity
                           :block/uuid)]
-      (let [pos (state/get-edit-pos)]
+      (state/clear-editor-action!)
+      (p/do!
+       (save-current-block!)
+       (let [pos (state/get-edit-pos)]
         (route-handler/redirect-to-page! id)
-        (util/schedule #(edit-block! {:block/uuid id} pos nil))))
+        (util/schedule #(edit-block! {:block/uuid id} pos nil)))))
     (js/window.history.forward)))
 
 (defn zoom-out!
@@ -1172,21 +1177,24 @@
   (if (state/editing?)
     (let [page (state/get-current-page)
           block-id (and (string? page) (parse-uuid page))]
-      (when block-id
-        (let [block-parent (db/get-block-parent block-id)]
-          (if-let [id (and
-                       (nil? (:block/name block-parent))
-                       (:block/uuid block-parent))]
-            (do
-              (route-handler/redirect-to-page! id)
-              (util/schedule #(edit-block! {:block/uuid block-id} :max nil)))
-            (let [page-id (some-> (db/entity [:block/uuid block-id])
-                                  :block/page
-                                  :db/id)]
+      (p/do!
+       (state/clear-editor-action!)
+       (save-current-block!)
+       (when block-id
+         (let [block-parent (db/get-block-parent block-id)]
+           (if-let [id (and
+                        (nil? (:block/name block-parent))
+                        (:block/uuid block-parent))]
+             (do
+               (route-handler/redirect-to-page! id)
+               (util/schedule #(edit-block! {:block/uuid block-id} :max nil)))
+             (let [page-id (some-> (db/entity [:block/uuid block-id])
+                                   :block/page
+                                   :db/id)]
 
-              (when-let [page-name (:block/name (db/entity page-id))]
-                (route-handler/redirect-to-page! page-name)
-                (util/schedule #(edit-block! {:block/uuid block-id} :max nil))))))))
+               (when-let [page-name (:block/name (db/entity page-id))]
+                 (route-handler/redirect-to-page! page-name)
+                 (util/schedule #(edit-block! {:block/uuid block-id} :max nil)))))))))
     (js/window.history.back)))
 
 (defn cut-block!
@@ -1307,39 +1315,41 @@
    (save-current-block! {}))
   ([{:keys [force? skip-properties? current-block] :as opts}]
    ;; non English input method
-   (when-not (or (state/editor-in-composition?)
-                 @(:editor/skip-saving-current-block? @state/state))
-     (when (state/get-current-repo)
-       (when-not (state/get-editor-action)
-         (try
-           (let [input-id (state/get-edit-input-id)
-                 block (state/get-edit-block)
-                 db-block (when-let [block-id (:block/uuid block)]
-                            (db/pull [:block/uuid block-id]))
-                 elem (and input-id (gdom/getElement input-id))
-                 db-content (:block/content db-block)
-                 db-content-without-heading (and db-content
-                                                 (common-util/safe-subs db-content (:block/level db-block)))
-                 value (if (= (:block/uuid current-block) (:block/uuid block))
-                         (:block/content current-block)
-                         (and elem (gobj/get elem "value")))]
-             (when value
-               (cond
-                 force?
-                 (save-block-aux! db-block value opts)
+   (let [result (when-not (or (state/editor-in-composition?)
+                              @(:editor/skip-saving-current-block? @state/state))
+                  (when (state/get-current-repo)
+                    (when-not (state/get-editor-action)
+                      (try
+                        (let [input-id (state/get-edit-input-id)
+                              block (state/get-edit-block)
+                              db-block (when-let [block-id (:block/uuid block)]
+                                         (db/pull [:block/uuid block-id]))
+                              elem (and input-id (gdom/getElement input-id))
+                              db-content (:block/content db-block)
+                              db-content-without-heading (and db-content
+                                                              (common-util/safe-subs db-content (:block/level db-block)))
+                              value (if (= (:block/uuid current-block) (:block/uuid block))
+                                      (:block/content current-block)
+                                      (and elem (gobj/get elem "value")))]
+                          (prn :debug :value value)
+                          (when value
+                            (cond
+                              force?
+                              (save-block-aux! db-block value opts)
 
-                 (and skip-properties?
-                      (db-model/top-block? block)
-                      (when elem (thingatpt/properties-at-point elem)))
-                 nil
+                              (and skip-properties?
+                                   (db-model/top-block? block)
+                                   (when elem (thingatpt/properties-at-point elem)))
+                              nil
 
-                 (and block value db-content-without-heading
-                      (not= (string/trim db-content-without-heading)
-                            (string/trim value)))
-                 (save-block-aux! db-block value opts))))
-           (catch :default error
-             (log/error :save-block-failed error))))))
-   (state/set-state! :editor/skip-saving-current-block? false)))
+                              (and block value db-content-without-heading
+                                   (not= (string/trim db-content-without-heading)
+                                         (string/trim value)))
+                              (save-block-aux! db-block value opts))))
+                        (catch :default error
+                          (log/error :save-block-failed error))))))]
+     (state/set-state! :editor/skip-saving-current-block? false)
+     result)))
 
 (defn- clean-content!
   [repo format content]
