@@ -506,7 +506,7 @@
           *current-block-page (::current-page state)
           block-or-whiteboard? (or block? whiteboard?)
           home? (= :home (state/get-current-route))]
-      (when page-name
+      (when (or page-name block-or-whiteboard?)
         [:div.flex-1.page.relative
          (merge (if (seq (:block/tags page))
                   (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
