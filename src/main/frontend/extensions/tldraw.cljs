@@ -61,6 +61,7 @@
         repo (state/get-current-repo)
         limit 100]
     (p/let [blocks (when blocks? (search/block-search repo q {:limit limit}))
+            blocks (map (fn [b] (update b :block/uuid str)) blocks)
             pages (when pages? (search/page-search q))
             files (when files? (search/file-search q limit))]
       (clj->js {:pages pages :blocks blocks :files files}))))
