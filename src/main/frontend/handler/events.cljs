@@ -188,12 +188,13 @@
 
 (defmethod handle :graph/switch [[_ graph opts]]
   (let [^js sqlite @db-browser/*worker]
-    (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite))]
-      (if (or writes-finished? (:sync-graph/init? @state/state))
-        (graph-switch-on-persisted graph opts)
+    (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite))
+            request-finished? (ldb/request-finished?)]
+      (if (or (not request-finished?) (not writes-finished?)) ; TODO: test (:sync-graph/init? @state/state)
         (notification/show!
          "Please wait seconds until all changes are saved for the current graph."
-         :warning)))))
+         :warning)
+        (graph-switch-on-persisted graph opts)))))
 
 (defmethod handle :graph/pull-down-remote-graph [[_ graph dir-name]]
   (if (mobile-util/native-ios?)

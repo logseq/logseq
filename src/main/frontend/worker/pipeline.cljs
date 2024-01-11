@@ -75,8 +75,10 @@
       (if (or from-disk? new-graph?)
         {:tx-report tx-report}
         (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
-              _ (doseq [page pages]
-                  (file/sync-to-file repo (:db/id page) tx-meta))
+              _ (when (sqlite-util/local-file-based-graph? repo)
+                  (let [page-ids (distinct (map :db/id pages))]
+                    (doseq [page-id page-ids]
+                      (file/sync-to-file repo page-id tx-meta))))
               deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))
               replace-tx (concat
                           ;; block path refs
