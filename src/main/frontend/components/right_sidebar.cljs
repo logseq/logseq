@@ -73,7 +73,7 @@
 (rum/defc history-action-info
   [[k v]]
   (when v [:.ml-4 (ui/foldable
-                   [:div (str k)]
+                   [:div (str k v)]
                    [:.ml-4 (case k
                              :blocks
                              (map (fn [block]
@@ -85,10 +85,14 @@
                                       [:pre.code.pre-wrap-white-space.bg-base-4
                                        [:span.font-bold (str key) " "] (str val)])) v)
 
-                             (map (fn [[key val]]
-                                    (when val
-                                      [:pre.code.pre-wrap-white-space.bg-base-4
-                                       [:span.font-bold (str key) " "] (str val)])) v))]
+                             (if (coll? v)
+                               (map (fn [[key val]]
+                                      (when val
+                                        [:pre.code.pre-wrap-white-space.bg-base-4
+                                         [:span.font-bold (str key) " "] (str val)])) v)
+                               (when v
+                                 [:pre.code.pre-wrap-white-space.bg-base-4
+                                  [:span.font-bold (str key) " "] (str v)])))]
                    {:default-collapsed? true})]))
 
 (rum/defc history-stack
