@@ -1,4 +1,4 @@
-(ns frontend.db.rtc.asset-sync
+(ns frontend.worker.rtc.asset-sync
   "Fns for syncing assets"
   {:clj-kondo/ignore true}              ;; TODO: remove when this ns is ready
   (:require [malli.core :as m]
