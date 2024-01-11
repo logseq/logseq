@@ -39,10 +39,14 @@ async function main () {
    }
   `)
 
-  // test log
-  setTimeout(() => {
+  let dbHookDid = false
+
+  // hook db change
+  logseq.DB.onChanged((e) => {
+    if (dbHookDid) return
     logPane(`DB: hook changed`)
-  }, 2000)
+    dbHookDid = true
+  })
 }
 
 // bootstrap

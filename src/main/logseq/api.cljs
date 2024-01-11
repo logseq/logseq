@@ -667,18 +667,13 @@
   (fn [block-uuid ^js _opts]
     (let [repo            (state/get-current-repo)]
       (editor-handler/delete-block-aux!
-       {:block/uuid (sdk-utils/uuid-or-throw-error block-uuid) :repo repo} true)
-      nil)))
+       {:block/uuid (sdk-utils/uuid-or-throw-error block-uuid) :repo repo} true))))
 
 (def ^:export update_block
   (fn [block-uuid content ^js opts]
-    (let [repo       (state/get-current-repo)
-          edit-input (state/get-edit-input-id)
-          editing?   (and edit-input (string/ends-with? edit-input (str block-uuid)))]
-      (if editing?
-        (state/set-edit-content! edit-input content)
-        (editor-handler/save-block! repo (sdk-utils/uuid-or-throw-error block-uuid) content (bean/->clj opts)))
-      nil)))
+    (let [repo (state/get-current-repo)]
+      (editor-handler/save-block! repo
+        (sdk-utils/uuid-or-throw-error block-uuid) content (bean/->clj opts)))))
 
 (def ^:export move_block
   (fn [src-block-uuid target-block-uuid ^js opts]
@@ -694,7 +689,7 @@
                          nil)
           src-block    (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error src-block-uuid))
           target-block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error target-block-uuid))]
-      (editor-dnd-handler/move-blocks nil [src-block] target-block nil move-to) nil)))
+      (editor-dnd-handler/move-blocks nil [src-block] target-block nil move-to))))
 
 (def ^:export get_block api-block/get_block)
 
