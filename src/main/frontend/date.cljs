@@ -151,7 +151,7 @@
   [journal-title]
   (let [formatter (if-let [format (state/get-journal-file-name-format)]
                     (tf/formatter format)
-                    default-journal-filename-formatter)]
+                    (tf/formatter default-journal-filename-formatter))]
     (journal-title-> journal-title #(tf/unparse formatter %))))
 
 (defn journal-title->custom-format

@@ -12,7 +12,8 @@
             [frontend.state :as state]
             [electron.ipc :as ipc]
             [frontend.handler.worker :as worker-handler]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [frontend.date :as date]))
 
 (defonce *worker (atom nil))
 
@@ -41,11 +42,14 @@
   [^js worker repo tx-data tx-meta]
   (let [tx-meta' (pr-str tx-meta)
         tx-data' (pr-str tx-data)
+        ;; TODO: a better way to share those information with worker, maybe using the state watcher to notify the worker?
         context {:dev? config/dev?
                  :node-test? util/node-test?
                  :validate-db-options (:dev/validate-db-options (state/get-config))
                  :importing? (:graph/importing @state/state)
                  :date-formatter (state/get-date-formatter)
+                 :journal-file-name-format (or (state/get-journal-file-name-format)
+                                               date/default-journal-filename-formatter)
                  :export-bullet-indentation (state/get-export-bullet-indentation)
                  :preferred-format (state/get-preferred-format)
                  :journals-directory (config/get-journals-directory)
