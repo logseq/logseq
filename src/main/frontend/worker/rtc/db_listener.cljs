@@ -56,10 +56,10 @@
       (let [updated-key-set (set (keys attr->datom))
             e (some-> attr->datom first second first)
             {[_e _a block-uuid _t add1?] :block/uuid
-             [_e _a _v _t add2?]  :block/name
-             [_e _a _v _t add3?]  :block/parent
-             [_e _a _v _t add4?]  :block/left
-             [_e _a _v _t add5?]  :block/original-name} attr->datom
+             [_e _a _v _t add2?]         :block/name
+             [_e _a _v _t add3?]         :block/parent
+             [_e _a _v _t add4?]         :block/left
+             [_e _a _v _t add5?]         :block/original-name} attr->datom
             ops (cond
                   (and (not add1?) block-uuid
                        (not add2?) (contains? updated-key-set :block/name))
@@ -142,18 +142,48 @@
                        ops)]
         ops*))))
 
+(defn- entity-datoms=>asset-op
+  [db-after entity-datoms]
+  (let [attr->datom (entity-datoms=>attr->datom entity-datoms)]
+    (when (seq attr->datom)
+      (let [e (some-> attr->datom first second first)
+            {[_e _a asset-uuid _t add1?] :asset/uuid
+             [_e _a asset-meta _t add2?] :asset/meta}
+            attr->datom
+            op (cond
+                 (or (and add1? asset-uuid)
+                     (and add2? asset-meta))
+                 [:update-asset]
+
+                 (and (not add1?) asset-uuid)
+                 [:remove-asset asset-uuid])]
+        (when op
+          (let [asset-uuid (some-> (d/entity db-after e) :asset/uuid str)]
+            (case (first op)
+              :update-asset (when asset-uuid ["update-asset" {:asset-uuid asset-uuid}])
+              :remove-asset ["remove-asset" {:asset-uuid (str (second op))}])))))))
+
+
 (defn generate-rtc-ops
   [repo db-before db-after datoms]
   (let [datom-vec-coll (map vec datoms)
         id->same-entity-datoms (group-by first datom-vec-coll)
         id-order (distinct (map first datom-vec-coll))
         same-entity-datoms-coll (map id->same-entity-datoms id-order)
-        ops (mapcat (partial entity-datoms=>ops db-before db-after) same-entity-datoms-coll)
+        asset-ops (keep (partial entity-datoms=>asset-op db-after) same-entity-datoms-coll)
+        ops (when (empty asset-ops)
+              (mapcat (partial entity-datoms=>ops db-before db-after) same-entity-datoms-coll))
         now-epoch*1000 (* 1000 (tc/to-long (t/now)))
         ops* (map-indexed (fn [idx op]
-                            [(first op) (assoc (second op) :epoch (+ idx now-epoch*1000))]) ops)]
+                            [(first op) (assoc (second op) :epoch (+ idx now-epoch*1000))]) ops)
+        epoch2 (+ now-epoch*1000 (count ops))
+        asset-ops* (map-indexed (fn [idx op]
+                                  [(first op) (assoc (second op) :epoch (+ idx epoch2))]) asset-ops)]
     (when (seq ops*)
-      (op-mem-layer/add-ops! repo ops*))))
+      (op-mem-layer/add-ops! repo ops*))
+    (when (seq asset-ops*)
+      (op-mem-layer/add-asset-ops! repo asset-ops*))))
+
 
 
 (defn listen-db-to-generate-ops
