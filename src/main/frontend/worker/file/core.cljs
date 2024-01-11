@@ -151,7 +151,7 @@
 (defn- remove-transit-ids [block] (dissoc block :db/id :block/file))
 
 (defn save-tree-aux!
-  [repo db page-block tree blocks-just-deleted? context]
+  [repo db page-block tree blocks-just-deleted? context request-id]
   (let [page-block (d/pull db '[*] (:db/id page-block))
         file-db-id (-> page-block :block/file :db/id)
         file-path (-> (d/entity db file-db-id) :file/path)]
@@ -165,8 +165,7 @@
         (when-not (and (string/blank? new-content) (not blocks-just-deleted?))
           (let [files [[file-path new-content]]]
             (when (seq files)
-              (let [page-id (:db/id page-block)
-                    request-id (conj-page-write! page-id)]
+              (let [page-id (:db/id page-block)]
                 (util/post-message :write-files (pr-str {:request-id request-id
                                                          :page-id page-id
                                                          :repo repo
@@ -175,10 +174,10 @@
       (js/console.error "File path from page-block is not valid" page-block tree))))
 
 (defn save-tree!
-  [repo conn page-block tree blocks-just-deleted? context]
+  [repo conn page-block tree blocks-just-deleted? context request-id]
   {:pre [(map? page-block)]}
   (when repo
-    (let [ok-handler #(save-tree-aux! repo @conn page-block tree blocks-just-deleted? context)
+    (let [ok-handler #(save-tree-aux! repo @conn page-block tree blocks-just-deleted? context request-id)
           file (or (:block/file page-block)
                    (when-let [page-id (:db/id (:block/page page-block))]
                      (:block/file (d/entity @conn page-id))))]
