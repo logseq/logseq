@@ -480,11 +480,12 @@
 
 (defn get-namespace-pages
   "Accepts both sanitized and unsanitized namespaces"
-  [db namespace]
+  [db namespace {:keys [db-graph?]}]
   (assert (string? namespace))
   (let [namespace (common-util/page-name-sanity-lc namespace)
-        pull-attrs [:db/id :block/name :block/original-name :block/namespace
-                    {:block/file [:db/id :file/path]}]]
+        pull-attrs  (cond-> [:db/id :block/name :block/original-name :block/namespace]
+                      (not db-graph?)
+                      (conj {:block/file [:db/id :file/path]}))]
     (d/q
      [:find [(list 'pull '?c pull-attrs) '...]
       :in '$ '% '?namespace

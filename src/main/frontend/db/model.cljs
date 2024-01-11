@@ -1012,7 +1012,7 @@ independent of format as format specific heading characters are stripped"
 (defn get-namespace-pages
   "Accepts both sanitized and unsanitized namespaces"
   [repo namespace]
-  (ldb/get-namespace-pages (conn/get-db repo) namespace))
+  (ldb/get-namespace-pages (conn/get-db repo) namespace {:db-graph? (config/db-based-graph? repo)}))
 
 (defn- tree [flat-col root]
   (let [sort-fn #(sort-by :block/name %)
