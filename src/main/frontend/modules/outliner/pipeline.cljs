@@ -69,25 +69,24 @@
       (do
         (react/clear-query-state!)
         (ui-handler/re-render-root!))
-      (do
-        (when-not (:graph/importing @state/state)
-          (react/refresh! repo tx-report affected-keys)
+      (when-not (:graph/importing @state/state)
+        (react/refresh! repo tx-report affected-keys)
 
-          (when-let [state (:ui/restore-cursor-state @state/state)]
-            (when (or undo? redo?)
-              (restore-cursor-and-app-state! state undo?)
-              (state/set-state! :ui/restore-cursor-state nil)))
+        (when-let [state (:ui/restore-cursor-state @state/state)]
+          (when (or undo? redo?)
+            (restore-cursor-and-app-state! state undo?)
+            (state/set-state! :ui/restore-cursor-state nil)))
 
-          (state/set-state! :editor/start-pos nil)
+        (state/set-state! :editor/start-pos nil)
 
-          (when (and state/lsp-enabled?
-                     (seq blocks)
-                     (<= (count blocks) 1000))
-            (state/pub-event! [:plugin/hook-db-tx
-                               {:blocks  blocks
-                                :deleted-block-uuids deleted-block-uuids
-                                :tx-data (:tx-data tx-report)
-                                :tx-meta (:tx-meta tx-report)}])))))
+        (when (and state/lsp-enabled?
+                   (seq blocks)
+                   (<= (count blocks) 1000))
+          (state/pub-event! [:plugin/hook-db-tx
+                             {:blocks  blocks
+                              :deleted-block-uuids deleted-block-uuids
+                              :tx-data (:tx-data tx-report)
+                              :tx-meta (:tx-meta tx-report)}]))))
 
     (when-let [deleting-block-id (:ui/deleting-block @state/state)]
       (when (some (fn [datom] (and
