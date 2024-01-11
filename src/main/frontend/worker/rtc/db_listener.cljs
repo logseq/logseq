@@ -156,11 +156,12 @@
                  [:update-asset]
 
                  (and (not add1?) asset-uuid)
-                 [:remove-asset asset-uuid])
-            asset-uuid (some-> (d/entity db-after e) :asset/uuid str)]
-        (case (first op)
-          :update-asset (when asset-uuid ["update-asset" {:asset-uuid asset-uuid}])
-          :remove-asset ["remove-asset" {:asset-uuid (str (second op))}])))))
+                 [:remove-asset asset-uuid])]
+        (when op
+          (let [asset-uuid (some-> (d/entity db-after e) :asset/uuid str)]
+            (case (first op)
+              :update-asset (when asset-uuid ["update-asset" {:asset-uuid asset-uuid}])
+              :remove-asset ["remove-asset" {:asset-uuid (str (second op))}])))))))
 
 
 (defn generate-rtc-ops
@@ -169,8 +170,9 @@
         id->same-entity-datoms (group-by first datom-vec-coll)
         id-order (distinct (map first datom-vec-coll))
         same-entity-datoms-coll (map id->same-entity-datoms id-order)
-        ops (mapcat (partial entity-datoms=>ops db-before db-after) same-entity-datoms-coll)
-        asset-ops (map (partial entity-datoms=>asset-op db-after) same-entity-datoms-coll)
+        asset-ops (keep (partial entity-datoms=>asset-op db-after) same-entity-datoms-coll)
+        ops (when (empty asset-ops)
+              (mapcat (partial entity-datoms=>ops db-before db-after) same-entity-datoms-coll))
         now-epoch*1000 (* 1000 (tc/to-long (t/now)))
         ops* (map-indexed (fn [idx op]
                             [(first op) (assoc (second op) :epoch (+ idx now-epoch*1000))]) ops)
