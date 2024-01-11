@@ -923,9 +923,6 @@
           (editor-handler/set-blocks-collapsed! [block-id] false)))))
   (property-handler/editing-new-property!))
 
-(defmethod handle :editor/edit-block [[_ block pos id opts]]
-  (editor-handler/edit-block! block pos id opts))
-
 (rum/defc multi-tabs-dialog
   []
   (let [word (if (util/electron?) "window" "tab")]
