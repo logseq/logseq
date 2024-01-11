@@ -354,7 +354,7 @@
 (defn insert!
   [id value
    {:keys [last-pattern postfix-fn backward-pos end-pattern backward-truncate-number
-           command only-breakline? skip-blank-value-check?]
+           command only-breakline?]
     :as _option}]
   (when-let [input (gdom/getElement id)]
     (let [last-pattern (when-not (= last-pattern :skip-check)
@@ -420,8 +420,8 @@
                       (str prefix postfix))
           new-pos (- (count prefix)
                      (or backward-pos 0))]
-      (when (or (not (string/blank? new-value))
-                skip-blank-value-check?)
+      (when-not (and (not (string/blank? value))
+                     (string/blank? new-value))
         (state/set-block-content-and-last-pos! id new-value new-pos)
         (cursor/move-cursor-to input new-pos)))))
 

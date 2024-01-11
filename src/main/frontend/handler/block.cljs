@@ -13,7 +13,6 @@
    [goog.dom :as gdom]
    [logseq.graph-parser.block :as gp-block]
    [frontend.config :as config]
-   [frontend.util.drawer :as drawer]
    [frontend.handler.file-based.property.util :as property-util]
    [frontend.handler.property.util :as pu]
    [dommy.core :as dom]
@@ -247,10 +246,7 @@
 
                          :else
                          (subs content 0 pos))
-            content (if db-graph?
-                      content
-                      (-> (property-util/remove-built-in-properties (:block/format block) content)
-                          (drawer/remove-logbook)))]
+            content (property-util/sanity-block-content repo (:block/format block) content)]
         (state/clear-selection!)
         (edit-block-aux repo block content block-node text-range opts)))))
 

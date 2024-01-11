@@ -2222,7 +2222,8 @@
                   (ui-outliner-tx/transact!
                    {:outliner-op :insert-blocks
                     :created-from-journal-template? journal?}
-                   (save-current-block!)
+                   (when-not (string/blank? (state/get-edit-content))
+                     (save-current-block!))
                    (let [result (outliner-core/insert-blocks! repo (db/get-db false) blocks'
                                                               target
                                                               (assoc opts :sibling? sibling?'))]
