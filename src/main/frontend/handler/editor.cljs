@@ -2215,15 +2215,18 @@
                              :else
                              true)]
              (try
-               (ui-outliner-tx/transact!
-                {:outliner-op :insert-blocks
-                 :created-from-journal-template? journal?}
-                (save-current-block!)
-                (let [result (outliner-core/insert-blocks! repo (db/get-db false) blocks'
-                                                           target
-                                                           (assoc opts
-                                                                  :sibling? sibling?'))]
-                  (edit-last-block-after-inserted! result)))
+               (let [*result (atom nil)]
+                 (p/do!
+                  (ui-outliner-tx/transact!
+                   {:outliner-op :insert-blocks
+                    :created-from-journal-template? journal?}
+                   (save-current-block!)
+                   (let [result (outliner-core/insert-blocks! repo (db/get-db false) blocks'
+                                                              target
+                                                              (assoc opts :sibling? sibling?'))]
+                     (reset! *result result)))
+                  (some-> @*result edit-last-block-after-inserted!)))
+
                (catch :default ^js/Error e
                  (notification/show!
                   [:p.content
