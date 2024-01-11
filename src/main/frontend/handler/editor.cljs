@@ -943,8 +943,10 @@
   ([block-id]
    (copy-block-ref! block-id #(str %)))
   ([block-id tap-clipboard]
-   (set-blocks-id! [block-id])
-   (util/copy-to-clipboard! (tap-clipboard block-id))))
+   (p/do!
+    (save-current-block!)
+    (set-blocks-id! [block-id])
+    (util/copy-to-clipboard! (tap-clipboard block-id)))))
 
 (defn select-block!
   [block-uuid]
@@ -1757,7 +1759,6 @@
   [up?]
   (fn [event]
     (util/stop event)
-    (save-current-block!)
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)
@@ -1769,9 +1770,10 @@
                          result))]
       (if edit-block-id
         (when-let [block (db/pull [:block/uuid edit-block-id])]
-          (let [blocks [block]
+          (let [blocks [(assoc block :block/content (state/get-edit-content))]
                 pos (state/get-edit-pos)]
             (p/do!
+             (save-current-block!)
              (move-nodes blocks)
              (when-let [input-id (state/get-edit-input-id)]
                (when-let [input (gdom/getElement input-id)]

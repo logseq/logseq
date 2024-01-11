@@ -2,8 +2,7 @@
   (:require [frontend.handler.editor :as editor-handler]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
-            [goog.dom :as gdom]
-            [frontend.util :as util]))
+            [goog.dom :as gdom]))
 
 ;; TODO: don't depend on handler.editor
 

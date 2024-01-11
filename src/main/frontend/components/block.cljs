@@ -2218,9 +2218,6 @@
                                                 (property-file/remove-built-in-properties-when-file-based
                                                  (state/get-current-repo) format)
                                                 (drawer/remove-logbook)))]
-                            ;; save current editing block
-                             (let [{:keys [value] :as state} (editor-handler/get-state)]
-                               (editor-handler/save-block! state value))
                              (state/set-editing!
                               edit-input-id
                               content
