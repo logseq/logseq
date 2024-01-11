@@ -1331,7 +1331,6 @@
                               value (if (= (:block/uuid current-block) (:block/uuid block))
                                       (:block/content current-block)
                                       (and elem (gobj/get elem "value")))]
-                          (prn :debug :value value)
                           (when value
                             (cond
                               force?
@@ -2282,16 +2281,17 @@
         target (or original-block (:data parent-node))
         pos (state/get-edit-pos)
         block (:data node)]
-    (save-current-block!)
-    (when target
-      (ui-outliner-tx/transact!
-       {:outliner-op :move-blocks
-        :real-outliner-op :indent-outdent}
-       (outliner-core/move-blocks! (state/get-current-repo) (db/get-db false)
-                                   (block-handler/get-top-level-blocks [block])
-                                   target true))
-      (when original-block
-        (util/schedule #(edit-block! block pos nil))))))
+    (p/do!
+     (ui-outliner-tx/transact!
+      {:outliner-op :move-blocks
+       :real-outliner-op :indent-outdent}
+      (save-current-block!)
+      (when target
+        (outliner-core/move-blocks! (state/get-current-repo) (db/get-db false)
+                                    (block-handler/get-top-level-blocks [block])
+                                    target true)))
+     (when original-block
+       (util/schedule #(edit-block! block pos nil))))))
 
 (defn- last-top-level-child?
   [{:keys [id]} current-node]
@@ -2875,7 +2875,6 @@
 
 (defn indent-outdent
   [indent?]
-  (save-current-block!)
   (state/set-editor-op! :indent-outdent)
   (let [editor (state/get-input)
         pos (some-> editor cursor/pos)
@@ -2886,6 +2885,7 @@
        (ui-outliner-tx/transact!
         {:outliner-op :move-blocks
          :real-outliner-op :indent-outdent}
+        (save-current-block!)
         (outliner-core/indent-outdent-blocks! (state/get-current-repo)
                                               (db/get-db false)
                                               (block-handler/get-top-level-blocks [block])
@@ -2893,10 +2893,7 @@
                                               {:get-first-block-original block-handler/get-first-block-original
                                                :logical-outdenting? (state/logical-outdenting?)})))
 
-     (state/set-editor-op! :nil)
-
-     (when-let [input (state/get-input)]
-       (.focus input)))))
+     (state/set-editor-op! :nil))))
 
 (defn keydown-tab-handler
   [direction]
