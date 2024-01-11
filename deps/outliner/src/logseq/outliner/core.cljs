@@ -986,7 +986,7 @@
                    (not= (:db/id (:block/page first-block-parent))
                          (:db/id left-left)))
           (move-blocks repo conn top-level-blocks left-left (merge opts {:sibling? sibling?
-                                                                    :up? up?}))))
+                                                                         :up? up?}))))
 
       (let [last-top-block (last top-level-blocks)
             last-top-block-right (get-right-sibling db (:db/id last-top-block))
@@ -1007,7 +1007,7 @@
   [repo conn blocks indent? & {:keys [get-first-block-original logical-outdenting?]}]
   {:pre [(seq blocks) (boolean? indent?)]}
   (let [db @conn
-        top-level-blocks blocks
+        top-level-blocks (map (fn [b] (d/entity db (:db/id b))) blocks)
         non-consecutive-blocks (ldb/get-non-consecutive-blocks db top-level-blocks)]
     (when (empty? non-consecutive-blocks)
       (let [first-block (d/entity db (:db/id (first top-level-blocks)))
@@ -1029,42 +1029,42 @@
                 (if last-direct-child-id
                   (let [last-direct-child (d/entity db last-direct-child-id)
                         result (move-blocks repo conn blocks' last-direct-child (merge opts {:sibling? true
-                                                                                        :indent? true}))
+                                                                                             :indent? true}))
                         ;; expand `left` if it's collapsed
                         collapsed-tx (when (:block/collapsed? left)
                                        {:tx-data [{:db/id (:db/id left)
                                                    :block/collapsed? false}]})]
                     (concat-tx-fn result collapsed-tx))
                   (move-blocks repo conn blocks' left (merge opts {:sibling? false
-                                                              :indent? true}))))))
+                                                                   :indent? true}))))))
           (let [parent-original (when get-first-block-original (get-first-block-original))]
             (if parent-original
               (let [blocks' (take-while (fn [b]
-                                         (not= (:db/id (:block/parent b))
-                                               (:db/id (:block/parent parent))))
-                                       top-level-blocks)]
-               (move-blocks repo conn blocks' parent-original (merge opts {:outliner-op :indent-outdent-blocks
-                                                                      :sibling? true
-                                                                      :indent? false})))
+                                          (not= (:db/id (:block/parent b))
+                                                (:db/id (:block/parent parent))))
+                                        top-level-blocks)]
+                (move-blocks repo conn blocks' parent-original (merge opts {:outliner-op :indent-outdent-blocks
+                                                                            :sibling? true
+                                                                            :indent? false})))
 
-             (when (and parent (not (page-block? (d/entity db (:db/id parent)))))
-               (let [blocks' (take-while (fn [b]
-                                           (not= (:db/id (:block/parent b))
-                                                 (:db/id (:block/parent parent))))
-                                         top-level-blocks)
-                     result (move-blocks repo conn blocks' parent (merge opts {:sibling? true}))]
-                 (if logical-outdenting?
-                   result
+              (when (and parent (not (page-block? (d/entity db (:db/id parent)))))
+                (let [blocks' (take-while (fn [b]
+                                            (not= (:db/id (:block/parent b))
+                                                  (:db/id (:block/parent parent))))
+                                          top-level-blocks)
+                      result (move-blocks repo conn blocks' parent (merge opts {:sibling? true}))]
+                  (if logical-outdenting?
+                    result
                   ;; direct outdenting (default behavior)
-                   (let [last-top-block (d/entity db (:db/id (last blocks')))
-                         right-siblings (->> (get-right-siblings conn (block db last-top-block))
-                                             (map :data))]
-                     (if (seq right-siblings)
-                       (let [result2 (if-let [last-direct-child-id (ldb/get-block-last-direct-child-id db (:db/id last-top-block))]
-                                       (move-blocks repo conn right-siblings (d/entity db last-direct-child-id) (merge opts {:sibling? true}))
-                                       (move-blocks repo conn right-siblings last-top-block (merge opts {:sibling? false})))]
-                         (concat-tx-fn result result2))
-                       result))))))))))))
+                    (let [last-top-block (d/entity db (:db/id (last blocks')))
+                          right-siblings (->> (get-right-siblings conn (block db last-top-block))
+                                              (map :data))]
+                      (if (seq right-siblings)
+                        (let [result2 (if-let [last-direct-child-id (ldb/get-block-last-direct-child-id db (:db/id last-top-block))]
+                                        (move-blocks repo conn right-siblings (d/entity db last-direct-child-id) (merge opts {:sibling? true}))
+                                        (move-blocks repo conn right-siblings last-top-block (merge opts {:sibling? false})))]
+                          (concat-tx-fn result result2))
+                        result))))))))))))
 
 ;;; ### write-operations have side-effects (do transactions) ;;;;;;;;;;;;;;;;
 

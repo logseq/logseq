@@ -4,7 +4,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [frontend.db :as db]))
 
 (defn did-mount!
   [state]
@@ -35,7 +36,10 @@
 
 (defn will-unmount
   [state]
-  (editor-handler/clear-when-saved!)
+  (let [{:keys [value] :as state} (editor-handler/get-state)]
+    (editor-handler/clear-when-saved!)
+    (when (db/entity [:block/uuid (:block/uuid (:block state))]) ; block still exists
+      (editor-handler/save-block! state value)))
   state)
 
 (def lifecycle
