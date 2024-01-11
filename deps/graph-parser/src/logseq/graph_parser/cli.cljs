@@ -6,7 +6,6 @@
             [logseq.common.graph :as common-graph]
             [logseq.common.config :as common-config]
             [logseq.graph-parser :as graph-parser]
-            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]))
 

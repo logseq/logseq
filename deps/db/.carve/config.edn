@@ -9,5 +9,7 @@
                   logseq.db.sqlite.create-graph
                   logseq.db.frontend.malli-schema
                   ;; Some fns are used by frontend but not worth moving over yet
-                  logseq.db.frontend.schema]
+                  logseq.db.frontend.schema
+                  logseq.db.frontend.validate
+                  logseq.db]
  :report {:format :ignore}}

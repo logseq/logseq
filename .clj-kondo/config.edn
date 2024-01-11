@@ -134,11 +134,10 @@
              logseq.graph-parser.text text
              logseq.graph-parser.block gp-block
              logseq.graph-parser.mldoc gp-mldoc
-             logseq.graph-parser.util gp-util
+             logseq.common.util common-util
              logseq.graph-parser.property gp-property
-             logseq.graph-parser.config gp-config
-             logseq.graph-parser.util.page-ref page-ref
-             logseq.graph-parser.util.block-ref block-ref
+             logseq.common.util.page-ref page-ref
+             logseq.common.util.block-ref block-ref
              logseq.graph-parser.util.db db-util
              logseq.graph-parser.date-time-util date-time-util
              logseq.outliner.pipeline outliner-pipeline
