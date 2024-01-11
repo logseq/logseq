@@ -2498,7 +2498,9 @@
                                                  (when (= event :esc)
                                                    (p/let [_ (editor-handler/save-block! (editor-handler/get-state) value)]
                                                      (let [select? (not (string/includes? value "```"))]
-                                                       (editor-handler/escape-editing select?)))))}
+                                                       (editor-handler/escape-editing select?)
+                                                       (when (contains? #{:esc :visibilitychange :click} event)
+                                                         (state/clear-edit!))))))}
                                      edit-input-id
                                      config))]
           (if (and named? (seq (:block/tags block)) db-based?)

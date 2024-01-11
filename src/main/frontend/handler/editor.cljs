@@ -2742,27 +2742,28 @@
             repo (state/get-current-repo)
             delete-block (if next-block-has-refs? edit-block next-block)
             keep-block (if next-block-has-refs? next-block edit-block)]
-        (ui-outliner-tx/transact!
-         {:outliner-op :delete-blocks}
-         (delete-block-aux! delete-block false)
-         (save-block! repo keep-block new-content {:editor/op :delete})
-         (when next-block-has-refs?
-           (outliner-save-block! {:db/id (:db/id keep-block)
-                                       :block/left (:db/id (:block/left delete-block))
-                                       :block/parent (:db/id (:block/parent delete-block))})
-           (when (and next-block-right (not= (:db/id (:block/parent next-block))
-                                             (:db/id (:block/parent edit-block))))
-             (outliner-save-block! {:db/id (:db/id next-block-right)
-                                         :block/left (:db/id (:block/left next-block))})))
-         (when db-based?
-           (let [new-properties (merge
-                                 (:block/properties (db/entity (:db/id edit-block)))
-                                 (:block/properties (db/entity (:db/id next-block))))]
-             (when-not (= new-properties (:block/properties keep-block))
-               (outliner-save-block! {:db/id (:db/id keep-block)
-                                           :block/properties new-properties})))))
-        (let [block (if next-block-has-refs? next-block edit-block)]
-          (edit-block! block current-pos nil))))))
+        (p/do!
+          (ui-outliner-tx/transact!
+          {:outliner-op :delete-blocks}
+          (delete-block-aux! delete-block false)
+          (save-block! repo keep-block new-content {:editor/op :delete})
+          (when next-block-has-refs?
+            (outliner-save-block! {:db/id (:db/id keep-block)
+                                   :block/left (:db/id (:block/left delete-block))
+                                   :block/parent (:db/id (:block/parent delete-block))})
+            (when (and next-block-right (not= (:db/id (:block/parent next-block))
+                                              (:db/id (:block/parent edit-block))))
+              (outliner-save-block! {:db/id (:db/id next-block-right)
+                                     :block/left (:db/id (:block/left next-block))})))
+          (when db-based?
+            (let [new-properties (merge
+                                  (:block/properties (db/entity (:db/id edit-block)))
+                                  (:block/properties (db/entity (:db/id next-block))))]
+              (when-not (= new-properties (:block/properties keep-block))
+                (outliner-save-block! {:db/id (:db/id keep-block)
+                                       :block/properties new-properties})))))
+          (let [block (if next-block-has-refs? next-block edit-block)]
+            (edit-block! block current-pos nil)))))))
 
 (defn keydown-delete-handler
   [_e]
