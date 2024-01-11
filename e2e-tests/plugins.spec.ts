@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { callPageAPI } from './logseq-api.spec'
+import { callPageAPI, loadLocalE2eTestsPlugin } from './logseq-api.spec'
 
 test.skip('enabled plugin system default', async ({ page }) => {
   const callAPI = callPageAPI.bind(null, page)
@@ -58,5 +58,20 @@ test.skip('play a plugin<logseq-journals-calendar> from the Marketplace', async 
 
   // TODO: debug
   await expect(page.locator('body[data-page="page"]')).toBeVisible()
+})
+
+test(`play a plugin from local`, async ({ page }) => {
+  const callAPI = callPageAPI.bind(null, page)
+  const _pLoaded = await loadLocalE2eTestsPlugin(page)
+  await callAPI(`ui.show_msg`, 1)
+
+  const loc = page.locator('#a-plugin-for-e2e-tests')
+  await loc.waitFor({state: 'visible'})
+
+  await callAPI(`ui.show_msg`, 1)
+
+  await expect(page.locator('text=DB: hook changed')).toBeVisible()
+
+  // await page.waitForSelector('#test-pause')
 })
 

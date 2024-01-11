@@ -99,7 +99,33 @@ test('block related apis',
  */
 export async function callPageAPI(page, method, ...args) {
   return await page.evaluate(([method, args]) => {
+    const hasNs = method.indexOf('.') !== -1
+    const ns = hasNs ? method.split('.') : method
     // @ts-ignore
-    return window.logseq.api[method]?.(...args)
+    const ctx = hasNs ? window.logseq.sdk[ns[0].toLowerCase()] : window.logseq.api
+    return ctx[hasNs ? ns[1] : method]?.(...args)
   }, [method, args])
+}
+
+/**
+ * load local tests plugin
+ */
+export async function loadLocalE2eTestsPlugin(page) {
+  const pid = 'a-logseq-plugin-for-e2e-tests'
+  const hasLoaded = await page.evaluate(([pid]) => {
+    // @ts-ignore
+    const p = window.LSPluginCore.registeredPlugins.get(pid)
+    return p != null
+  }, [pid])
+
+  if (hasLoaded) return true
+
+  await callPageAPI(page, 'set_state_from_store',
+    'ui/developer-mode?', true)
+  await page.keyboard.press('t+p')
+  await page.locator('text=Load unpacked plugin')
+  await callPageAPI(page, 'set_state_from_store',
+    'plugin/selected-unpacked-pkg', `${__dirname}/plugin`)
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
 }
