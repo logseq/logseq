@@ -56,7 +56,7 @@
                   {:db/id 100002
                    :block/content "test"
                    :block/uuid block-uuid
-                   :block/page 100001
+                   :block/page {:db/id 100001}
                    :block/created-at created-at
                    :block/updated-at created-at}]
           _ (d/transact! conn* blocks)

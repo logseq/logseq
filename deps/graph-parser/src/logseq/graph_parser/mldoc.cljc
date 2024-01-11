@@ -14,6 +14,7 @@
             [clojure.string :as string]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
+            #_:clj-kondo/ignore
             [logseq.graph-parser.schema.mldoc :as mldoc-schema]
             [logseq.db.sqlite.util :as sqlite-util]))
 
@@ -149,6 +150,7 @@
      js/JSON.stringify)))
 
 (defn ->edn
+  ;; TODO: Re-enable schema
   ;; {:malli/schema [:=> [:cat :string :string] mldoc-schema/block-ast-with-pos-coll-schema]}
   ([content config]
    (if (string? content)
