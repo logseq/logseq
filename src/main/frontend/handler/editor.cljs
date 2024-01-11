@@ -1761,25 +1761,27 @@
     (save-current-block!)
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
-                       (let [blocks' (block-handler/get-top-level-blocks blocks)]
-                         (ui-outliner-tx/transact!
-                          {:outliner-op :move-blocks}
-                          (outliner-core/move-blocks-up-down! (state/get-current-repo) (db/get-db false) blocks' up?)))
-                       (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
-                         (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})))]
+                       (let [blocks' (block-handler/get-top-level-blocks blocks)
+                             result (ui-outliner-tx/transact!
+                                     {:outliner-op :move-blocks}
+                                     (outliner-core/move-blocks-up-down! (state/get-current-repo) (db/get-db false) blocks' up?))]
+                         (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
+                           (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))
+                         result))]
       (if edit-block-id
         (when-let [block (db/pull [:block/uuid edit-block-id])]
           (let [blocks [block]
                 pos (state/get-edit-pos)]
-            (move-nodes blocks)
-            (when-let [input-id (state/get-edit-input-id)]
-              (when-let [input (gdom/getElement input-id)]
-                (.focus input)
-                (util/scroll-editor-cursor input))
-              (util/schedule (fn []
-                               (when-not (gdom/getElement input-id)
+            (p/do!
+             (move-nodes blocks)
+             (when-let [input-id (state/get-edit-input-id)]
+               (when-let [input (gdom/getElement input-id)]
+                 (.focus input)
+                 (util/scroll-editor-cursor input))
+               (util/schedule (fn []
+                                (when-not (gdom/getElement input-id)
                                  ;; could be crossing containers
-                                 (edit-block! block pos nil)))))))
+                                  (edit-block! block pos nil))))))))
         (let [ids (state/get-selection-block-ids)]
           (when (seq ids)
             (let [lookup-refs (map (fn [id] [:block/uuid id]) ids)
@@ -2878,18 +2880,23 @@
   (let [editor (state/get-input)
         pos (some-> editor cursor/pos)
         {:keys [block]} (get-state)]
-    (when block
-      (state/set-editor-last-pos! pos)
-      (ui-outliner-tx/transact!
-       {:outliner-op :move-blocks
-        :real-outliner-op :indent-outdent}
-       (outliner-core/indent-outdent-blocks! (state/get-current-repo)
-                                             (db/get-db false)
-                                             (block-handler/get-top-level-blocks [block])
-                                             indent?
-                                             {:get-first-block-original block-handler/get-first-block-original
-                                              :logical-outdenting? (state/logical-outdenting?)})))
-    (state/set-editor-op! :nil)))
+    (p/do!
+     (when block
+       (state/set-editor-last-pos! pos)
+       (ui-outliner-tx/transact!
+        {:outliner-op :move-blocks
+         :real-outliner-op :indent-outdent}
+        (outliner-core/indent-outdent-blocks! (state/get-current-repo)
+                                              (db/get-db false)
+                                              (block-handler/get-top-level-blocks [block])
+                                              indent?
+                                              {:get-first-block-original block-handler/get-first-block-original
+                                               :logical-outdenting? (state/logical-outdenting?)})))
+
+     (state/set-editor-op! :nil)
+
+     (when-let [input (state/get-input)]
+       (.focus input)))))
 
 (defn keydown-tab-handler
   [direction]
