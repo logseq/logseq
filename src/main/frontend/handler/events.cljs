@@ -362,7 +362,6 @@
     (ui-handler/re-render-root!)))
 
 (defmethod handle :file/not-matched-from-disk [[_ path disk-content db-content]]
-  (state/clear-edit!)
   (when-let [repo (state/get-current-repo)]
     (when (and disk-content db-content
                (not= (util/trim-safe disk-content) (util/trim-safe db-content)))
