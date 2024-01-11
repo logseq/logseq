@@ -793,64 +793,63 @@
                         concat-prev-block? (boolean (and prev-block new-content))
                         transact-opts {:outliner-op :delete-blocks}
                         db-based? (config/db-based-graph? repo)]
-                    (p/do!
-                     (ui-outliner-tx/transact!
-                      transact-opts
-                      (cond
-                        (and prev-block (:block/name prev-block)
-                             (not= (:db/id prev-block) (:db/id (:block/parent block)))
-                             (db-model/hidden-page? (:block/page block))) ; embed page
-                        nil
+                    (ui-outliner-tx/transact!
+                     transact-opts
+                     (cond
+                       (and prev-block (:block/name prev-block)
+                            (not= (:db/id prev-block) (:db/id (:block/parent block)))
+                            (db-model/hidden-page? (:block/page block))) ; embed page
+                       nil
 
-                        concat-prev-block?
-                        (let [new-properties (merge (:block/properties (db/entity (:db/id prev-block)))
-                                                    (:block/properties (db/entity (:db/id block))))]
-                          (if (seq (:block/_refs (db/entity (:db/id block))))
-                            (let [block-right (outliner-core/get-right-sibling (db/get-db) (:db/id block))]
-                              (delete-block-fn prev-block)
-                              (save-block! repo block new-content {:editor/op :delete})
-                              (outliner-save-block! {:db/id (:db/id block)
-                                                     :block/parent (:db/id (:block/parent prev-block))
-                                                     :block/left (or (:db/id (:block/left prev-block))
-                                                                     (:db/id (:block/parent prev-block)))})
+                       concat-prev-block?
+                       (let [new-properties (merge (:block/properties (db/entity (:db/id prev-block)))
+                                                   (:block/properties (db/entity (:db/id block))))]
+                         (if (seq (:block/_refs (db/entity (:db/id block))))
+                           (let [block-right (outliner-core/get-right-sibling (db/get-db) (:db/id block))]
+                             (delete-block-fn prev-block)
+                             (save-block! repo block new-content {:editor/op :delete})
+                             (outliner-save-block! {:db/id (:db/id block)
+                                                    :block/parent (:db/id (:block/parent prev-block))
+                                                    :block/left (or (:db/id (:block/left prev-block))
+                                                                    (:db/id (:block/parent prev-block)))})
 
                              ;; block->right needs to point its `left` to block->left
-                              (when (and block-right (not= (:db/id (:block/parent prev-block))
-                                                           (:db/id (:block/parent block))))
-                                (outliner-save-block! {:db/id (:db/id block-right)
-                                                       :block/left (:db/id (:block/left block))}))
+                             (when (and block-right (not= (:db/id (:block/parent prev-block))
+                                                          (:db/id (:block/parent block))))
+                               (outliner-save-block! {:db/id (:db/id block-right)
+                                                      :block/left (:db/id (:block/left block))}))
 
                              ;; update prev-block's children to point to the refed block
-                              (when (or (:block/collapsed? prev-block)
-                                        (= (:db/id prev-block) (:db/id (:block/parent block))))
-                                (let [children (:block/_parent prev-block)]
-                                  (doseq [child children]
-                                    (when-not (= (:db/id child) (:db/id block))
-                                      (outliner-save-block! {:db/id (:db/id child)
-                                                             :block/parent (:db/id block)
-                                                             :block/left (:db/id block)})))))
+                             (when (or (:block/collapsed? prev-block)
+                                       (= (:db/id prev-block) (:db/id (:block/parent block))))
+                               (let [children (:block/_parent prev-block)]
+                                 (doseq [child children]
+                                   (when-not (= (:db/id child) (:db/id block))
+                                     (outliner-save-block! {:db/id (:db/id child)
+                                                            :block/parent (:db/id block)
+                                                            :block/left (:db/id block)})))))
 
                              ;; parent will be removed
-                              (when (= (:db/id prev-block) (:db/id (:block/parent block)))
-                                (when-let [parent-right (outliner-core/get-right-sibling (db/get-db) (:db/id prev-block))]
-                                  (outliner-save-block! {:db/id (:db/id parent-right)
-                                                         :block/left (:db/id block)})))
+                             (when (= (:db/id prev-block) (:db/id (:block/parent block)))
+                               (when-let [parent-right (outliner-core/get-right-sibling (db/get-db) (:db/id prev-block))]
+                                 (outliner-save-block! {:db/id (:db/id parent-right)
+                                                        :block/left (:db/id block)})))
 
-                              (when db-based?
-                                (outliner-save-block! {:db/id (:db/id block)
-                                                       :block/properties new-properties})))
+                             (when db-based?
+                               (outliner-save-block! {:db/id (:db/id block)
+                                                      :block/properties new-properties})))
 
-                            (do
-                              (delete-block-fn block)
-                              (save-block! repo prev-block new-content {:editor/op :delete})
-                              (when db-based?
-                                (outliner-save-block! {:db/id (:db/id prev-block)
-                                                       :block/properties new-properties})))))
+                           (do
+                             (delete-block-fn block)
+                             (save-block! repo prev-block new-content {:editor/op :delete})
+                             (when db-based?
+                               (outliner-save-block! {:db/id (:db/id prev-block)
+                                                      :block/properties new-properties})))))
 
-                        :else
-                        (delete-block-fn block)))
+                       :else
+                       (delete-block-fn block)))
 
-                     (when edit-block-fn (edit-block-fn))))))))))))
+                    (when edit-block-fn (edit-block-fn)))))))))))
   (state/set-editor-op! nil))
 
 (defn delete-blocks!

@@ -638,9 +638,7 @@
                               :block/parent parent
                               :block/left left}]
                        (cond-> (if (de/entity? block)
-                                 (do
-                                   (prn :debug :level (:block/level block))
-                                   (assoc m :block/level (:block/level block)))
+                                 (assoc m :block/level (:block/level block))
                                  (merge block m))
                            ;; We'll keep the original `:db/id` if it's a move operation,
                            ;; e.g. internal cut or drag and drop shouldn't change the ids.
