@@ -1267,7 +1267,6 @@ Similar to re-frame subscriptions"
 
 (defn clear-edit!
   []
-  (js/console.trace)
   (when-let [prev-ref @*editor-editing-ref]
     (reset! (get @(:editor/ref->editing? @state) prev-ref) false))
   (reset! *editor-editing-ref nil)
