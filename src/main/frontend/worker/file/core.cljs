@@ -2,6 +2,7 @@
   "Save file to disk"
   (:require [clojure.string :as string]
             [frontend.worker.file.util :as wfu]
+            [frontend.worker.state :as worker-state]
             [logseq.graph-parser.property :as gp-property]
             [logseq.common.path :as path]
             [datascript.core :as d]
@@ -121,7 +122,7 @@
           journal-title (worker-date/normalize-journal-title title date-formatter)
           journal-page? (and journal-page? (not (string/blank? journal-title)))
           filename (if journal-page?
-                     (worker-date/date->file-name journal-title date-formatter)
+                     (worker-date/date->file-name journal-title (:journal-file-name-format context))
                      (-> (or (:block/original-name page-block) (:block/name page-block))
                          wfu/file-name-sanity))
           sub-dir (cond

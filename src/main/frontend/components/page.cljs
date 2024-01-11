@@ -505,79 +505,80 @@
           *current-block-page (::current-page state)
           block-or-whiteboard? (or block? whiteboard?)
           home? (= :home (state/get-current-route))]
-      [:div.flex-1.page.relative
-       (merge (if (seq (:block/tags page))
-                (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
-                  {:data-page-tags (text-util/build-data-value page-names)})
-                {})
+      (when page-name
+        [:div.flex-1.page.relative
+         (merge (if (seq (:block/tags page))
+                  (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
+                    {:data-page-tags (text-util/build-data-value page-names)})
+                  {})
 
-              {:key path-page-name
-               :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
+                {:key path-page-name
+                 :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
 
-       (if (and whiteboard-page? (not sidebar?))
-         [:div ((state/get-component :whiteboard/tldraw-preview) page-name)] ;; FIXME: this is not reactive
-         [:div.relative
-          (when (and (not sidebar?) (not block?))
-            [:div.flex.flex-row.space-between
-             (when (or (mobile-util/native-platform?) (util/mobile?))
-               [:div.flex.flex-row.pr-2
-                {:style {:margin-left -15}
-                 :on-mouse-over (fn [e]
-                                  (page-mouse-over e *control-show? *all-collapsed?))
-                 :on-mouse-leave (fn [e]
-                                   (page-mouse-leave e *control-show?))}
-                (page-blocks-collapse-control title *control-show? *all-collapsed?)])
-             (let [original-name (:block/original-name (db/entity [:block/name (util/page-name-sanity-lc page-name)]))]
-               (when (and (not whiteboard?) original-name)
-                 (page-title page-name {:journal? journal?
-                                        :fmt-journal? fmt-journal?
-                                        :built-in-property? built-in-property?
-                                        :preview? preview?})))
-             (when (not config/publishing?)
-               (when config/lsp-enabled?
-                 [:div.flex.flex-row
-                  (plugins/hook-ui-slot :page-head-actions-slotted nil)
-                  (plugins/hook-ui-items :pagebar)]))])
+         (if (and whiteboard-page? (not sidebar?))
+           [:div ((state/get-component :whiteboard/tldraw-preview) page-name)] ;; FIXME: this is not reactive
+           [:div.relative
+            (when (and (not sidebar?) (not block?))
+              [:div.flex.flex-row.space-between
+               (when (or (mobile-util/native-platform?) (util/mobile?))
+                 [:div.flex.flex-row.pr-2
+                  {:style {:margin-left -15}
+                   :on-mouse-over (fn [e]
+                                    (page-mouse-over e *control-show? *all-collapsed?))
+                   :on-mouse-leave (fn [e]
+                                     (page-mouse-leave e *control-show?))}
+                  (page-blocks-collapse-control title *control-show? *all-collapsed?)])
+               (let [original-name (:block/original-name (db/entity [:block/name (util/page-name-sanity-lc page-name)]))]
+                 (when (and (not whiteboard?) original-name)
+                   (page-title page-name {:journal? journal?
+                                          :fmt-journal? fmt-journal?
+                                          :built-in-property? built-in-property?
+                                          :preview? preview?})))
+               (when (not config/publishing?)
+                 (when config/lsp-enabled?
+                   [:div.flex.flex-row
+                    (plugins/hook-ui-slot :page-head-actions-slotted nil)
+                    (plugins/hook-ui-items :pagebar)]))])
 
-          [:div
-           (when (and block? (not sidebar?) (not whiteboard?))
-             (let [config {:id "block-parent"
-                           :block? true}]
-               [:div.mb-4
-                (component-block/breadcrumb config repo block-id {:level-limit 3})]))
+            [:div
+             (when (and block? (not sidebar?) (not whiteboard?))
+               (let [config {:id "block-parent"
+                             :block? true}]
+                 [:div.mb-4
+                  (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
-           (when (and db-based? (not block?) (not preview?))
-             (db-page/page-properties-react page {:configure? false}))
+             (when (and db-based? (not block?) (not preview?))
+               (db-page/page-properties-react page {:configure? false}))
 
            ;; blocks
-           (let [_ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
-                 _ (when (and block? (not page))
-                     (route-handler/redirect-to-page! @*current-block-page))]
-             (page-blocks-cp repo page {:sidebar? sidebar? :whiteboard? whiteboard?}))]])
+             (let [_ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
+                   _ (when (and block? (not page))
+                       (route-handler/redirect-to-page! @*current-block-page))]
+               (page-blocks-cp repo page {:sidebar? sidebar? :whiteboard? whiteboard?}))]])
 
-       (when today?
-         (today-queries repo today? sidebar?))
+         (when today?
+           (today-queries repo today? sidebar?))
 
-       (when today?
-         (scheduled/scheduled-and-deadlines page-name))
+         (when today?
+           (scheduled/scheduled-and-deadlines page-name))
 
-       (when-not block?
-         (tagged-pages repo page-name page-original-name))
+         (when-not block?
+           (tagged-pages repo page-name page-original-name))
 
        ;; referenced blocks
-       (when-not block-or-whiteboard?
-         [:div {:key "page-references"}
-          (rum/with-key
-            (reference/references route-page-name)
-            (str route-page-name "-refs"))])
+         (when-not block-or-whiteboard?
+           [:div {:key "page-references"}
+            (rum/with-key
+              (reference/references route-page-name)
+              (str route-page-name "-refs"))])
 
-       (when-not block-or-whiteboard?
-         (when (not journal?)
-           (hierarchy/structures route-page-name)))
+         (when-not block-or-whiteboard?
+           (when (not journal?)
+             (hierarchy/structures route-page-name)))
 
-       (when-not (or block-or-whiteboard? sidebar? home?)
-         [:div {:key "page-unlinked-references"}
-          (reference/unlinked-references route-page-name)])])))
+         (when-not (or block-or-whiteboard? sidebar? home?)
+           [:div {:key "page-unlinked-references"}
+            (reference/unlinked-references route-page-name)])]))))
 
 (rum/defcs page < rum/reactive
   [state option]

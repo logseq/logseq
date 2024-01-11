@@ -3,7 +3,7 @@
   (:require [cljs-time.format :as tf]
             [logseq.common.util :as common-util]))
 
-(def default-journal-filename-formatter (tf/formatter "yyyy_MM_dd"))
+(def default-journal-filename-formatter "yyyy_MM_dd")
 
 (defn journal-title-formatters
   [date-formatter]
@@ -71,8 +71,8 @@
 
 (defn date->file-name
   "Date object to filename format"
-  [date date-formater]
-  (let [formatter (if date-formater
-                    (tf/formatter date-formater)
-                    default-journal-filename-formatter)]
+  [date journal-filename-formatter]
+  (let [formatter (if journal-filename-formatter
+                    (tf/formatter journal-filename-formatter)
+                    (tf/formatter default-journal-filename-formatter))]
     (tf/unparse formatter date)))
