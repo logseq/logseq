@@ -1,7 +1,6 @@
 (ns frontend.worker.state
   "State hub for worker"
-  (:require [logseq.common.util :as common-util]
-            [frontend.worker.date :as date]))
+  (:require [logseq.common.util :as common-util]))
 
 (defonce *state (atom {:worker/object nil
 
