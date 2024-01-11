@@ -1783,7 +1783,7 @@
          :on-click (fn [event]
                      (util/stop event)
                      (state/clear-edit!)
-                     (if ref?
+                     (if (or ref? config/publishing?)
                        (state/toggle-collapsed-block! uuid)
                        (if collapsed?
                          (editor-handler/expand-block! uuid)
@@ -2943,7 +2943,7 @@
         *control-show? (get container-state ::control-show?)
         db-collapsed? (util/collapsed? block)
         collapsed? (cond
-                     (or ref-or-custom-query? (root-block? config block))
+                     (or config/publishing? ref-or-custom-query? (root-block? config block))
                      (state/sub-collapsed uuid)
 
                      :else
