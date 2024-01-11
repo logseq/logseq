@@ -306,18 +306,6 @@
                   :own-order-list-index own-order-list-index
                   :own-order-number-list? (= own-order-list-type "number"))))
 
-(defn- text-range-by-lst-fst-line [content [direction pos]]
-  (case direction
-    :up
-    (let [last-new-line (or (string/last-index-of content \newline) -1)
-          end (+ last-new-line pos 1)]
-      (subs content 0 end))
-    :down
-    (-> (string/split-lines content)
-        first
-        (or "")
-        (subs 0 pos))))
-
 (defn mark-last-input-time!
   [repo]
   (when repo
@@ -394,7 +382,7 @@
             content-length (count content)
             text-range (cond
                          (vector? pos)
-                         (text-range-by-lst-fst-line content pos)
+                         (util/get-text-range content (last pos) (= (first pos) :down))
 
                          (and (> tail-len 0) (>= (count content) tail-len))
                          (subs content 0 (- (count content) tail-len))
