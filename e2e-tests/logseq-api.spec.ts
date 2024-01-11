@@ -41,7 +41,6 @@ test('block related apis',
     // update
     const content1 = content + '+ update!'
     await callAPI('update_block', b1.uuid, content1)
-    await page.waitForTimeout(1000)
     b1 = await callAPI('get_block', b1.uuid)
 
     expect(b1.content).toBe(content1)
