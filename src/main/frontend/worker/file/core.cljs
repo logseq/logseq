@@ -2,7 +2,6 @@
   "Save file to disk"
   (:require [clojure.string :as string]
             [frontend.worker.file.util :as wfu]
-            [frontend.worker.state :as worker-state]
             [logseq.graph-parser.property :as gp-property]
             [logseq.common.path :as path]
             [datascript.core :as d]
@@ -10,7 +9,18 @@
             [frontend.worker.date :as worker-date]
             [frontend.worker.util :as util]))
 
-(def *writes (atom #{}))
+(defonce *writes (atom {}))
+(defonce *request-id (atom 0))
+
+(defn conj-page-write!
+  [page-id]
+  (let [request-id (swap! *request-id inc)]
+    (swap! *writes assoc request-id page-id)
+    request-id))
+
+(defn dissoc-request!
+  [request-id]
+  (swap! *writes dissoc request-id))
 
 (defn- indented-block-content
   [content spaces-tabs]
@@ -155,8 +165,12 @@
         (when-not (and (string/blank? new-content) (not blocks-just-deleted?))
           (let [files [[file-path new-content]]]
             (when (seq files)
-              (util/post-message :write-files (pr-str {:repo repo :files files}))
-              (swap! *writes disj (:db/id page-block))))))
+              (let [page-id (:db/id page-block)
+                    request-id (conj-page-write! page-id)]
+                (util/post-message :write-files (pr-str {:request-id request-id
+                                                         :page-id page-id
+                                                         :repo repo
+                                                         :files files})))))))
       ;; In e2e tests, "card" page in db has no :file/path
       (js/console.error "File path from page-block is not valid" page-block tree))))
 

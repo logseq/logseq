@@ -54,6 +54,11 @@
 (defonce *request-id (atom 0))
 (defonce *request-id->response (atom {}))
 
+(defn request-finished?
+  "Whether any DB transaction request has been finished"
+  []
+  (empty? @*request-id->response))
+
 (defn get-deferred-response
   [request-id]
   (get @*request-id->response request-id))
@@ -63,7 +68,9 @@
    (transact! conn tx-data nil))
   ([conn tx-data tx-meta]
    (let [tx-data (common-util/fast-remove-nils tx-data)]
-     (when (seq tx-data)
+     ;; Ensure worker can handle the request sequentially (one by one)
+     ;; Because UI assumes that the in-memory db has all the data except the last one transaction
+     (when (and (seq tx-data) (request-finished?))
 
        ;; (prn :debug :transact)
        ;; (cljs.pprint/pprint tx-data)

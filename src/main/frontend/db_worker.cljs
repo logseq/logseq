@@ -368,6 +368,11 @@
    [this]
    (empty? @file/*writes))
 
+  (page-file-saved
+   [this request-id page-id]
+   (file/dissoc-request! request-id)
+   nil)
+
   (sync-app-state
    [this new-state-str]
    (let [new-state (edn/read-string new-state-str)]

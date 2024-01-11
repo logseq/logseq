@@ -77,7 +77,8 @@
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [frontend.modules.outliner.pipeline :as pipeline]
             [electron.ipc :as ipc]
-            [frontend.date :as date]))
+            [frontend.date :as date]
+            [logseq.db :as ldb]))
 
 ;; TODO: should we move all events here?
 
@@ -187,8 +188,7 @@
 
 (defmethod handle :graph/switch [[_ graph opts]]
   (let [^js sqlite @db-browser/*worker]
-    (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite))
-            writes-finished? (if (some? writes-finished?) writes-finished? true)]
+    (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite))]
       (if (or writes-finished? (:sync-graph/init? @state/state))
         (graph-switch-on-persisted graph opts)
         (notification/show!
@@ -363,10 +363,15 @@
 
 (defmethod handle :file/not-matched-from-disk [[_ path disk-content db-content]]
   (when-let [repo (state/get-current-repo)]
-    (when (and disk-content db-content
-               (not= (util/trim-safe disk-content) (util/trim-safe db-content)))
-      (state/set-modal! #(diff/local-file repo path disk-content db-content)
-                        {:label "diff__cp"}))))
+    (let [^js sqlite @db-browser/*worker]
+      (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite))
+              request-finished? (ldb/request-finished?)]
+        (prn :debug :writes-finished? writes-finished?
+             :request-finished? request-finished?)
+        (when (and request-finished? writes-finished? disk-content db-content
+                   (not= (util/trim-safe disk-content) (util/trim-safe db-content)))
+          (state/set-modal! #(diff/local-file repo path disk-content db-content)
+                            {:label "diff__cp"}))))))
 
 (defmethod handle :modal/display-file-version [[_ path content hash]]
   (state/set-modal! #(git-component/file-specific-version path hash content)))
@@ -945,13 +950,14 @@
   (swap! rtc-debug-ui/debug-state (fn [old] (merge old state))))
 
 ;; db-worker -> UI
-(defmethod handle :db/sync-changes [[_ data]]
-  (let [repo (state/get-current-repo)]
-    (pipeline/invoke-hooks data)
+(defmethod handle :db/sync-changes [[_ {:keys [request-id] :as data}]]
+  (when request-id                      ; request-id could be nil sometimes
+    (let [repo (state/get-current-repo)]
+      (pipeline/invoke-hooks data)
 
-    (ipc/ipc :db-transact repo (pr-str (:tx-data data)) (pr-str (:tx-meta data)))
-    (state/pub-event! [:search/transact-data repo (:search-indice data)])
-    nil))
+      (ipc/ipc :db-transact repo (pr-str (:tx-data data)) (pr-str (:tx-meta data)))
+      (state/pub-event! [:search/transact-data repo (:search-indice data)])
+      nil)))
 
 (defn run!
   []
