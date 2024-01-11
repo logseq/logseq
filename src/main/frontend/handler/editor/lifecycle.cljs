@@ -5,7 +5,8 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.handler.file-based.property.util :as property-util]))
 
 (defn did-mount!
   [state]
@@ -30,16 +31,22 @@
   state)
 
 (defn will-remount!
-  [_old-state state]
+  [old-state state]
   (keyboards-handler/esc-save! state)
-  state)
+  (let [old-content (:block/content (:block (first (:rum/args old-state))))
+        new-content (:block/content (:block (first (:rum/args state))))
+        input (state/get-input)]
+    (when (and input (not= old-content new-content))
+      (set! (.-new-value input) new-content))
+    state))
 
 (defn will-unmount
   [state]
-  (let [{:keys [value] :as state} (editor-handler/get-state)]
+  (let [{:keys [value block node] :as state} (editor-handler/get-state)
+        new-value (or (and node (.-new-value node)) value)]
     (editor-handler/clear-when-saved!)
-    (when (db/entity [:block/uuid (:block/uuid (:block state))]) ; block still exists
-      (editor-handler/save-block! state value)))
+    (when (db/entity [:block/uuid (:block/uuid block)]) ; block still exists
+      (editor-handler/save-block! state new-value)))
   state)
 
 (def lifecycle
