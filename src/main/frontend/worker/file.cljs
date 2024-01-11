@@ -16,6 +16,7 @@
             [logseq.db.sqlite.util :as sqlite-util]))
 
 (def *writes file/*writes)
+(def dissoc-request! file/dissoc-request!)
 
 (defonce file-writes-chan
   (let [coercer (m/coercer [:catn
@@ -98,7 +99,6 @@
              page-id
              (not (:created-from-journal-template? tx-meta))
              (not (:delete-files? tx-meta)))
-    (swap! *writes conj page-id)
     (async/put! file-writes-chan [repo page-id (:outliner-op tx-meta) (tc/to-long (t/now))])))
 
 (defn <ratelimit-file-writes!

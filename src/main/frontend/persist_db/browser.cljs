@@ -68,7 +68,7 @@
                        "/static/js/db-worker.js")
           worker (js/Worker. (str worker-url "?electron=" (util/electron?)))
           wrapped-worker (Comlink/wrap worker)]
-      (worker-handler/handle-message! worker)
+      (worker-handler/handle-message! worker wrapped-worker)
       (reset! *worker wrapped-worker)
       (-> (p/let [_ (.init wrapped-worker config/RTC-WS-URL)
                   _ (.sync-app-state wrapped-worker
