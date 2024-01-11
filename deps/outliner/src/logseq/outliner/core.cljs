@@ -632,12 +632,15 @@
                            left-exists-in-blocks? (contains? ids (:db/id (:block/left block)))
                            parent (compute-block-parent block parent target-block prev-hop top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
                            left (compute-block-left blocks block left target-block prev-hop idx replace-empty-target? left-exists-in-blocks? get-new-id)
-                           m {:block/uuid uuid
+                           m {:db/id (:db/id block)
+                              :block/uuid uuid
                               :block/page target-page
                               :block/parent parent
                               :block/left left}]
                        (cond-> (if (de/entity? block)
-                                 m
+                                 (do
+                                   (prn :debug :level (:block/level block))
+                                   (assoc m :block/level (:block/level block)))
                                  (merge block m))
                            ;; We'll keep the original `:db/id` if it's a move operation,
                            ;; e.g. internal cut or drag and drop shouldn't change the ids.
@@ -762,10 +765,10 @@
         tx' (insert-blocks-aux blocks' target-block' insert-opts)]
     (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/left b)))) tx')
       (throw (ex-info "Invalid outliner data"
-                        {:opts insert-opts
-                         :tx (vec tx')
-                         :blocks (vec blocks)
-                         :target-block target-block'}))
+                      {:opts insert-opts
+                       :tx (vec tx')
+                       :blocks (vec blocks)
+                       :target-block target-block'}))
       (let [uuids-tx (->> (map :block/uuid tx')
                           (remove nil?)
                           (map (fn [uuid] {:block/uuid uuid})))
