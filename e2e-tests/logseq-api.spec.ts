@@ -1,7 +1,7 @@
 import { test } from './fixtures'
 import { expect } from '@playwright/test'
 
-test.skip('block related apis',
+test('block related apis',
   async ({ page }) => {
     const callAPI = callPageAPI.bind(null, page)
 
