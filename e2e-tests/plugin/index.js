@@ -9,7 +9,7 @@ async function main () {
     logseq.provideUI({
       key: `log-${++msg}`,
       path: `#a-plugin-for-e2e-tests > ul`,
-      template: `<li>${input}</li>`
+      template: `<li>${input}</li>`,
     })
   }
 
@@ -39,14 +39,22 @@ async function main () {
    }
   `)
 
-  let dbHookDid = false
+  let dbChangedDid = false
+  let blockChangedDid = false
 
   // hook db change
   logseq.DB.onChanged((e) => {
-    if (dbHookDid) return
-    logPane(`DB: hook changed`)
-    dbHookDid = true
+    if (dbChangedDid) return
+    logPane(`[DB] hook: changed`)
+    dbChangedDid = true
   })
+
+  logseq.DB.onBlockChanged('65a0babb-4a8b-4cfc-8179-6ece0375a5b6',
+    (e) => {
+      if (blockChangedDid) return
+      logPane(`[DB] hook: block changed`)
+      blockChangedDid = true
+    })
 }
 
 // bootstrap
