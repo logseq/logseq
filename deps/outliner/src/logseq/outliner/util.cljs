@@ -1,4 +1,5 @@
 (ns logseq.outliner.util
+  "Util fns for outliner"
   (:require [datascript.impl.entity :as e]
             [logseq.common.util :as common-util]))
 

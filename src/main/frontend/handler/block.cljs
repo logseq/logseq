@@ -10,8 +10,10 @@
    [frontend.modules.outliner.ui :as ui-outliner-tx]
    [frontend.state :as state]
    [frontend.util :as util]
+   [frontend.util.drawer :as drawer]
    [goog.dom :as gdom]
    [logseq.graph-parser.block :as gp-block]
+   [logseq.db.sqlite.util :as sqlite-util]
    [frontend.config :as config]
    [frontend.handler.file-based.property.util :as property-util]
    [frontend.handler.property.util :as pu]
@@ -214,6 +216,13 @@
         (mark-last-input-time! repo)
         (util/schedule (fn [] (edit-block-aux repo block content block-node text-range (update opts :retry-times inc))))))))
 
+(defn sanity-block-content
+  [repo format content]
+  (if (sqlite-util/db-based-graph? repo)
+    content
+    (-> (property-util/remove-built-in-properties format content)
+        (drawer/remove-logbook))))
+
 (defn edit-block!
   [block pos block-node & {:keys [custom-content tail-len _direction]
                            :or {tail-len 0}
@@ -246,7 +255,7 @@
 
                          :else
                          (subs content 0 pos))
-            content (property-util/sanity-block-content repo (:block/format block) content)]
+            content (sanity-block-content repo (:block/format block) content)]
         (state/clear-selection!)
         (edit-block-aux repo block content block-node text-range opts)))))
 

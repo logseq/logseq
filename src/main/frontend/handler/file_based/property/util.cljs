@@ -8,9 +8,7 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.db :as db]
             [frontend.state :as state]
-            [frontend.util.cursor :as cursor]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [frontend.util.drawer :as drawer]))
+            [frontend.util.cursor :as cursor]))
 
 (defn hidden-properties
   "These are properties hidden from user including built-in ones and ones
@@ -238,10 +236,3 @@
       (keep (fn [k] (when (contains? properties k) [k (get properties k)]))
             (distinct properties-order))
       properties*)))
-
-(defn sanity-block-content
-  [repo format content]
-  (if (sqlite-util/db-based-graph? repo)
-    content
-    (-> (remove-built-in-properties format content)
-        (drawer/remove-logbook))))

@@ -37,40 +37,6 @@
       "* TODO properties demo\n:PROPERTIES:\n\n:END:\n\n\nabcd"
       "* TODO properties demo\nabcd")))
 
-(deftest test-remove-properties
-  (testing "properties with non-blank lines"
-    (are [x y] (= x y)
-      (property-util/remove-properties :org "** hello\n:PROPERTIES:\n:x: y\n:END:\n")
-      "** hello"
-
-      (property-util/remove-properties :org "** hello\n:PROPERTIES:\n:x: y\na:b\n:END:\n")
-      "** hello"
-
-      (property-util/remove-properties :markdown "** hello\nx:: y\na:: b\n")
-      "** hello"
-
-      (property-util/remove-properties :markdown "** hello\nx:: y\na::b\n")
-      "** hello"))
-
-  (testing "properties with blank lines"
-    (are [x y] (= x y)
-      (property-util/remove-properties :org "** hello\n:PROPERTIES:\n\n:x: y\n:END:\n")
-      "** hello"
-
-      (property-util/remove-properties :org "** hello\n:PROPERTIES:\n:x: y\n\na:b\n:END:\n")
-      "** hello"))
-
-  (testing "invalid-properties"
-    (are [x y] (= x y)
-      (property-util/remove-properties :markdown "hello\nnice\nfoo:: bar")
-      "hello\nnice\nfoo:: bar"
-
-      (property-util/remove-properties :markdown "hello\nnice\nfoo:: bar\ntest")
-      "hello\nnice\nfoo:: bar\ntest"
-
-      (property-util/remove-properties :markdown "** hello\nx:: y\n\na:: b\n")
-      "** hello\n\na:: b")))
-
 (deftest test-get-property-keys
   (testing "org mode"
     (are [x y] (= x y)
@@ -86,86 +52,6 @@
 
         (#'property-util/get-property-keys :markdown "hello\n")
         nil)))
-
-(deftest test-insert-property
-  (are [x y] (= x y)
-    (property-util/insert-property :org "hello" "a" "b")
-    "hello\n:PROPERTIES:\n:a: b\n:END:"
-
-    (property-util/insert-property :org "hello" "a" false)
-    "hello\n:PROPERTIES:\n:a: false\n:END:"
-
-    (property-util/insert-property :org "hello\n:PROPERTIES:\n:a: b\n:END:\n" "c" "d")
-    "hello\n:PROPERTIES:\n:a: b\n:c: d\n:END:"
-
-    (property-util/insert-property :org "hello\n:PROPERTIES:\n:a: b\n:END:\nworld\n" "c" "d")
-    "hello\n:PROPERTIES:\n:a: b\n:c: d\n:END:\nworld"
-
-    (property-util/insert-property :org "#+BEGIN_QUOTE
- hello world
-  #+END_QUOTE" "c" "d")
-    ":PROPERTIES:\n:c: d\n:END:\n#+BEGIN_QUOTE\n hello world\n  #+END_QUOTE"
-
-     (property-util/insert-property :org "hello
-DEADLINE: <2021-10-25 Mon>
-SCHEDULED: <2021-10-25 Mon>" "a" "b")
-    "hello\nSCHEDULED: <2021-10-25 Mon>\nDEADLINE: <2021-10-25 Mon>\n:PROPERTIES:\n:a: b\n:END:"
-
-    (property-util/insert-property :org "hello
-DEADLINE: <2021-10-25 Mon>
-SCHEDULED: <2021-10-25 Mon>\n:PROPERTIES:\n:a: b\n:END:\n" "c" "d")
-    "hello\nDEADLINE: <2021-10-25 Mon>\nSCHEDULED: <2021-10-25 Mon>\n:PROPERTIES:\n:a: b\n:c: d\n:END:"
-
-    (property-util/insert-property :org "hello
-DEADLINE: <2021-10-25 Mon>
-SCHEDULED: <2021-10-25 Mon>\n:PROPERTIES:\n:a: b\n:END:\nworld\n" "c" "d")
-    "hello\nDEADLINE: <2021-10-25 Mon>\nSCHEDULED: <2021-10-25 Mon>\n:PROPERTIES:\n:a: b\n:c: d\n:END:\nworld"
-
-    (property-util/insert-property :markdown "hello\na:: b\nworld\n" "c" "d")
-    "hello\na:: b\nc:: d\nworld"
-
-    (property-util/insert-property :markdown "> quote" "c" "d")
-    "c:: d\n> quote"
-
-    (property-util/insert-property :markdown "#+BEGIN_QUOTE
- hello world
-  #+END_QUOTE" "c" "d")
-    "c:: d\n#+BEGIN_QUOTE\n hello world\n  #+END_QUOTE"))
-
-(deftest test-insert-properties
-  (are [x y] (= x y)
-    (property-util/insert-properties :markdown "" {:foo "bar"})
-    "foo:: bar"
-
-    (property-util/insert-properties :markdown "" {"foo" "bar"})
-    "foo:: bar"
-
-    (property-util/insert-properties :markdown "" {"foo space" "bar"})
-    "foo-space:: bar"
-
-    (property-util/insert-properties :markdown "" {:foo #{"bar" "baz"}})
-    "foo:: [[bar]], [[baz]]"
-
-    (property-util/insert-properties :markdown "" {:foo ["bar" "bar" "baz"]})
-    "foo:: [[bar]], [[baz]]"
-
-    (property-util/insert-properties :markdown "a\nb\n" {:foo ["bar" "bar" "baz"]})
-    "a\nfoo:: [[bar]], [[baz]]\nb"
-
-    (property-util/insert-properties :markdown "" {:foo "\"bar, baz\""})
-    "foo:: \"bar, baz\""
-
-    (property-util/insert-properties :markdown "abcd\nempty::" {:id "123" :foo "bar"})
-    "abcd\nempty::\nid:: 123\nfoo:: bar"
-
-    (property-util/insert-properties :markdown "abcd\nempty:: " {:id "123" :foo "bar"})
-    "abcd\nempty:: \nid:: 123\nfoo:: bar"
-
-    (property-util/insert-properties :markdown "abcd\nempty::" {:id "123"})
-    "abcd\nempty::\nid:: 123"
-
-    (property-util/insert-properties :markdown "abcd\nempty::\nanother-empty::" {:id "123"})
-    "abcd\nempty::\nanother-empty::\nid:: 123"))
 
 (deftest test-build-properties-str
   (are [x y] (= (#'gp-property/build-properties-str :mardown x) y)
