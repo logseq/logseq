@@ -104,14 +104,18 @@
      l)))
 
 (defn- block-src
-  [{:keys [lines language]}]
-  (let [level (dec (get *state* :current-level 1))]
-    (concatv
-     [(indent-with-2-spaces level) (raw-text "```")]
-     (when language [(raw-text language)])
-     [(newline* 1)]
-     (mapv raw-text lines)
-     [(indent-with-2-spaces level) (raw-text "```") (newline* 1)])))
+  [{:keys [lines language full_content]}]
+  (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
+    ;; when "no-indent", just use :full_content in 'Src' ast
+    [(raw-text full_content) (newline* 1)]
+
+    (let [level (dec (get *state* :current-level 1))]
+      (concatv
+       [(indent-with-2-spaces level) (raw-text "```")]
+       (when language [(raw-text language)])
+       [(newline* 1)]
+       (mapv raw-text lines)
+       [(indent-with-2-spaces level) (raw-text "```") (newline* 1)]))))
 
 (defn- block-quote
   [block-coll]
@@ -313,7 +317,9 @@
 
 (defn- inline-break-line
   []
-  [(raw-text "  \n")
+  [(if (= "no-indent" (get-in *state* [:export-options :indent-style]))
+     (raw-text "\n")
+     (raw-text "  \n"))
    (when (:indent-after-break-line? *state*)
      (let [current-level (get *state* :current-level 1)]
        (when (> current-level 1)
@@ -465,12 +471,16 @@
                                         (update :map-fns-on-inline-ast conj common/remove-page-ref-brackets)
 
                                         (get-in *state* [:export-options :remove-tags?])
-                                        (update :mapcat-fns-on-inline-ast conj common/remove-tags))
+                                        (update :mapcat-fns-on-inline-ast conj common/remove-tags)
+
+                                        (= "no-indent" (get-in *state* [:export-options :indent-style]))
+                                        (update :fns-on-inline-coll conj common/remove-prefix-spaces-in-Plain))
             ast*** (if-not (empty? config-for-walk-block-ast)
                      (mapv (partial common/walk-block-ast config-for-walk-block-ast) ast**)
                      ast**)
             simple-asts (mapcatv block-ast->simple-ast ast***)]
         (simple-asts->string simple-asts)))))
+
 
 (defn export-blocks-as-markdown
   "options:
@@ -481,15 +491,15 @@
   {:pre [(or (coll? root-block-uuids-or-page-name)
              (string? root-block-uuids-or-page-name))]}
   (util/profile
-   :export-blocks-as-markdown
-   (let [content
-         (if (string? root-block-uuids-or-page-name)
-           ;; page
-           (common/get-page-content root-block-uuids-or-page-name)
-           (common/root-block-uuids->content repo root-block-uuids-or-page-name))
-         first-block (db/entity [:block/uuid (first root-block-uuids-or-page-name)])
-         format (or (:block/format first-block) (state/get-preferred-format))]
-     (export-helper content format options))))
+      :export-blocks-as-markdown
+      (let [content
+            (if (string? root-block-uuids-or-page-name)
+              ;; page
+              (common/get-page-content root-block-uuids-or-page-name)
+              (common/root-block-uuids->content repo root-block-uuids-or-page-name))
+            first-block (db/entity [:block/uuid (first root-block-uuids-or-page-name)])
+            format (or (:block/format first-block) (state/get-preferred-format))]
+        (export-helper content format options))))
 
 (defn export-files-as-markdown
   "options see also `export-blocks-as-markdown`"

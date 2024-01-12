@@ -129,6 +129,23 @@
 	- 4")
     "97a00e55-48c3-48d8-b9ca-417b16e3a616"))
 
+(deftest export-blocks-as-markdown-no-indent
+  (are [expect content]
+      (= (string/trim expect)
+         (string/trim (#'export-text/export-helper (string/trim content) :markdown {:indent-style "no-indent"})))
+      "
+1
+2
+3
+4
+5"
+      "
+- 1
+  2
+  3
+  - 4
+    5"))
+
 
 (deftest-async export-files-as-markdown
   (p/do!
