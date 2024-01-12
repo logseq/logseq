@@ -101,7 +101,6 @@ public class FsWatcher extends Plugin {
             if (relpath.startsWith("/")) {
                 relpath = relpath.substring(1);
             }
-            relpath = Uri.decode(relpath);
         } else {
             Log.e("FsWatcher", "file path not under watch path");
             return;
