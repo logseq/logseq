@@ -5,7 +5,6 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.graph-parser.date-time-util :as date-time-util]
             [logseq.graph-parser.extract :as extract]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
@@ -124,7 +123,7 @@ Options available:
                                  :file/content content}
                                 new?
                                 ;; TODO: use file system timestamp?
-                                (assoc :file/created-at (date-time-util/time-ms)))])
+                                (assoc :file/created-at (common-util/time-ms)))])
          tx' (common-util/fast-remove-nils tx)
          result (if skip-db-transact?
                   tx'
