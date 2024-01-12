@@ -108,6 +108,10 @@ html[data-theme=dark] {
       --muted: 192 100% 13%;
     }
 
+    .menu-separator {
+      @apply opacity-20;
+    }
+
     .ui__calendar {
       --accent: 196 100% 15%;
     }

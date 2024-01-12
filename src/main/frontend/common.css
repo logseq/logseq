@@ -397,7 +397,7 @@ button.menu:focus {
 
 .menu-links-wrapper,
 .menu-links-outer {
-  @apply py-2 rounded-lg shadow-lg overflow-y-auto border bg-popovelx min-w-[12rem];
+  @apply py-2 rounded-md shadow-lg overflow-y-auto border bg-popovelx min-w-[12rem];
 
   max-height: calc(100vh - 100px) !important;
 }

@@ -277,7 +277,7 @@ html.is-mobile {
 }
 
 .dropdown-wrapper {
-  @apply border min-w-[12rem] rounded-lg bg-popovelx overflow-hidden;
+  @apply border min-w-[12rem] rounded-md bg-popovelx overflow-hidden;
 
   .menu-links-wrapper {
     @apply border-0;
