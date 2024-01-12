@@ -10,7 +10,8 @@
             [logseq.common.util :as common-util]
             [shadow.resource :as rc]
             [goog.crypt.Md5]
-            [goog.crypt :as crypt]))
+            [goog.crypt :as crypt]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (goog-define DEV-RELEASE false)
 (defonce dev-release? DEV-RELEASE)
@@ -369,7 +370,7 @@
 (defonce idb-db-prefix "logseq-db/")
 (defonce local-db-prefix "logseq_local_")
 (defonce local-handle "handle")
-(defonce db-version-prefix "logseq_db_")
+(defonce db-version-prefix sqlite-util/db-version-prefix)
 
 (defn local-file-based-graph?
   [s]
@@ -380,7 +381,7 @@
   [s]
   (boolean
    (and (string? s)
-        (string/starts-with? s db-version-prefix))))
+        (sqlite-util/db-based-graph? s))))
 
 (defn get-local-asset-absolute-path
   [s]

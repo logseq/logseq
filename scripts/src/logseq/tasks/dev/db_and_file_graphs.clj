@@ -67,12 +67,12 @@
 
 (defn- validate-multi-graph-fns-not-in-file-or-db
   []
-  (let [multi-graph-fns ["config/db-based-graph\\?"]
+  (let [multi-graph-fns ["config/db-based-graph\\?" "sqlite-util/db-based-graph\\?"]
         res (apply shell {:out :string :continue true}
                    "git grep -E" (str "(" (string/join "|" multi-graph-fns) ")")
                    (into file-graph-paths db-graph-paths))]
     (when-not (and (= 1 (:exit res)) (= "" (:out res)))
-      (println "The following files should not have contained config/db-based-graph:")
+      (println "The following files should not have fns meant to be used in multi-graph contexts:")
       (println (:out res))
       (System/exit 1))))
 
