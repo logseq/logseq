@@ -102,6 +102,10 @@ html[data-theme='light'] {
   @apply w-auto !important;
 }
 
+.tl-menu-item {
+  @apply leading-[20px];
+}
+
 #zoomPopup .tl-menu-item {
   @apply pl-4 !important;
 }
@@ -119,7 +123,7 @@ html[data-theme='light'] {
 }
 
 .tl-menu-icon {
-  @apply text-lg leading-none opacity-70 mr-1;
+  @apply text-[16px] leading-none opacity-70 mr-1;
 }
 
 .tl-menu-icon.ti-circle-dotted {
