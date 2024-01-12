@@ -98,33 +98,6 @@ html[data-theme='light'] {
   background-color: transparent !important;
 }
 
-.tl-menu-item {
-  @apply flex items-center pl-10 pr-4 py-1 text-sm relative !important;
-
-  min-width: 220px;
-  all: unset;
-  line-height: 1;
-  height: 25px;
-  padding: 0 5px;
-  position: relative;
-  user-select: none;
-  color: var(--ls-primary-text-color);
-
-  &:hover,
-  &:focus {
-    cursor: pointer;
-    background-color: var(--ls-primary-background-color) !important;
-  }
-
-  .tl-menu-icon {
-    @apply absolute left-4 text-base opacity-50;
-  }
-
-  &[data-disabled] {
-    @apply opacity-50 pointer-events-none;
-  }
-}
-
 #tl-zoom {
   @apply w-auto !important;
 }
@@ -134,19 +107,23 @@ html[data-theme='light'] {
 }
 
 .tl-menu-button-row {
-  @apply flex justify-between px-4 py-1;
+  @apply flex justify-between py-1;
 }
 
 .tl-menu {
-  @apply relative py-2 flex bottom-0 flex border-0 rounded shadow-lg;
+  @apply relative flex flex-col opacity-100 select-none;
 
-  opacity: 100%;
-  user-select: none;
-  flex-direction: column;
   z-index: 180;
   min-width: 220px;
   pointer-events: 'all';
-  background: var(--ls-secondary-background-color);
+}
+
+.tl-menu-icon {
+  @apply text-lg leading-none opacity-70 mr-1;
+}
+
+.tl-menu-icon.ti-circle-dotted {
+  @apply invisible;
 }
 
 .tl-menu-right-slot {

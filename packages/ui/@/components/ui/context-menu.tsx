@@ -111,7 +111,10 @@ const ContextMenuCheckboxItem = React.forwardRef<
   <ContextMenuPrimitive.CheckboxItem
     ref={ref}
     className={cn(
-      'relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm ' +
+      'text-popover-foreground/75 hover:text-popover-foreground/100 ' +
+      'outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none ' +
+      'data-[disabled]:opacity-50',
       className
     )}
     checked={checked}
@@ -135,7 +138,10 @@ const ContextMenuRadioItem = React.forwardRef<
   <ContextMenuPrimitive.RadioItem
     ref={ref}
     className={cn(
-      'relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 ' +
+      'text-popover-foreground/75 hover:text-popover-foreground/100 ' +
+      'pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground ' +
+      'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className
     )}
     {...props}
