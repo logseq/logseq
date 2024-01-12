@@ -3,6 +3,7 @@
   by the graph-parser soon but if not, it should be in its own library"
   (:require [cljs-time.core :as t]
             [logseq.graph-parser.date-time-util :as date-time-util]
+            [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [datascript.core :as d]
             [clojure.string :as string]))
@@ -113,7 +114,7 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
   (date->int (t/plus (t/today) (t/days 1))))
 
 (defmethod resolve-keyword-input :right-now-ms [_ _ _]
-  (date-time-util/time-ms))
+  (common-util/time-ms))
 
 ;; today-time returns an epoch int
 (defmethod resolve-keyword-input :today-time [_db input _opts]

@@ -332,6 +332,7 @@
        (remove nil?)))
 
 (defn time-ms
+  "Current time in milliseconds"
   []
   (tc/to-long (t/now)))
 

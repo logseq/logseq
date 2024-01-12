@@ -309,7 +309,7 @@
            (when-not (string/blank? namespace)
              {:block/namespace {:block/name (common-util/page-name-sanity-lc namespace)}})))
        (when (and with-timestamp? (not page-entity)) ;; Only assign timestamp on creating new entity
-         (let [current-ms (date-time-util/time-ms)]
+         (let [current-ms (common-util/time-ms)]
            {:block/created-at current-ms
             :block/updated-at current-ms}))
        (if journal-day

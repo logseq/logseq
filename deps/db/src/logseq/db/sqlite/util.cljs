@@ -1,8 +1,6 @@
 (ns logseq.db.sqlite.util
   "Utils fns for backend sqlite db"
-  (:require [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.common.util :as common-util]))
 
@@ -25,15 +23,10 @@
     db-schema/schema-for-db-based-graph
     db-schema/schema))
 
-(defn time-ms
-  "Copy of util/time-ms. Too basic to couple this to main app"
-  []
-  (tc/to-long (t/now)))
-
 (defn block-with-timestamps
   "Adds updated-at timestamp and created-at if it doesn't exist"
   [block]
-  (let [updated-at (time-ms)
+  (let [updated-at (common-util/time-ms)
         block (cond->
                (assoc block :block/updated-at updated-at)
                 (nil? (:block/created-at block))

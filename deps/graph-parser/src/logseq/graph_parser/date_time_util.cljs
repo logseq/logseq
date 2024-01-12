@@ -1,15 +1,8 @@
 (ns logseq.graph-parser.date-time-util
   "cljs-time util fns for graph-parser"
-  (:require [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]
-            [cljs-time.format :as tf]
+  (:require [cljs-time.format :as tf]
             [clojure.string :as string]
             [logseq.common.util :as common-util]))
-
-(defn time-ms
-  "Copy of util/time-ms. Too basic to couple this to main app"
-  []
-  (tc/to-long (t/now)))
 
 ;; (tf/parse (tf/formatter "dd.MM.yyyy") "2021Q4") => 20040120T000000
 (defn safe-journal-title-formatters

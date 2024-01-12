@@ -3,8 +3,6 @@
   (:require [logseq.db.frontend.default :as default-db]
             [logseq.db.frontend.schema :as db-schema]
             [datascript.core :as d]
-            [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]
             [clojure.string :as string]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
@@ -88,7 +86,7 @@
 
 (defn build-default-pages-tx
   []
-  (let [time (tc/to-long (t/now))]
+  (let [time (common-util/time-ms)]
     (map
      (fn [m]
        (-> m

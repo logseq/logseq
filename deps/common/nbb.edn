@@ -1,7 +1,4 @@
 {:paths ["src" "resources"]
  :deps
- {com.andrewmcveigh/cljs-time
-  {:git/url "https://github.com/logseq/cljs-time" ;; fork
-   :sha     "5704fbf48d3478eedcf24d458c8964b3c2fd59a9"}
-  io.github.nextjournal/nbb-test-runner
+ {io.github.nextjournal/nbb-test-runner
   {:git/sha "60ed57aa04bca8d604f5ba6b28848bd887109347"}}}
