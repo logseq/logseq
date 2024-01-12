@@ -5,6 +5,7 @@
             [logseq.outliner.pipeline :as outliner-pipeline]
             [frontend.worker.react :as worker-react]
             [frontend.worker.file :as file]
+            [frontend.worker.util :as worker-util]
             [logseq.db.frontend.validate :as validate]
             [logseq.db.sqlite.util :as sqlite-util]
             [frontend.worker.db.fix :as db-fix]
@@ -62,7 +63,10 @@
 (defn validate-and-fix-db!
   [repo conn tx-report context]
   (when (and (:dev? context) (sqlite-util/db-based-graph? repo))
-    (validate/validate-db! tx-report (:validate-db-options context)))
+    (let [valid? (validate/validate-db! tx-report (:validate-db-options context))]
+      (when (and (get-in context [:validate-db-options :fail-invalid?]) (not valid?))
+        (worker-util/post-message :notification
+                                  (pr-str [["Invalid DB!"] :error])))))
   (when (and (:dev? context)
              (not (:node-test? context)))
     (fix-db! conn tx-report)))
