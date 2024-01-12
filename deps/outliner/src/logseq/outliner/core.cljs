@@ -1,4 +1,5 @@
 (ns logseq.outliner.core
+  "Provides the primary outliner operations and fns"
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.impl.entity :as de]
@@ -713,7 +714,7 @@
               m' (vec (conj m block))]
           (recur m' (rest blocks)))))))
 
-(defn insert-blocks
+(defn ^:large-vars/cleanup-todo insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   Args:
     `conn`: db connection.
@@ -851,7 +852,7 @@
           (otree/-save new-right-node txs-state conn repo date-formatter)))
       @txs-state)))
 
-(defn- delete-blocks
+(defn- ^:large-vars/cleanup-todo delete-blocks
   "Delete blocks from the tree.
    Args:
     `children?`: whether to replace `blocks'` children too. "
@@ -1003,7 +1004,7 @@
           (move-blocks repo conn blocks right (merge opts {:sibling? sibling?
                                                            :up? up?})))))))
 
-(defn indent-outdent-blocks
+(defn ^:large-vars/cleanup-todo indent-outdent-blocks
   "Indent or outdent `blocks`."
   [repo conn blocks indent? & {:keys [get-first-block-original logical-outdenting?]}]
   {:pre [(seq blocks) (boolean? indent?)]}

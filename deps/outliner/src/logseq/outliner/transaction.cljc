@@ -1,4 +1,6 @@
 (ns logseq.outliner.transaction
+  "Provides a wrapper around logseq.outliner.datascript/transact! using
+   transient state from logseq.outliner.core"
   #?(:cljs (:require-macros [logseq.outliner.transaction]))
   #?(:cljs (:require [malli.core :as m])))
 

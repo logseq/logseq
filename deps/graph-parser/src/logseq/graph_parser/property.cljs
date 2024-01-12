@@ -183,6 +183,41 @@
    (and (string? line)
         (common-util/safe-re-find #"^\s*[^ ]+:" line))))
 
+(defn- insert-property-not-org
+  [key* value lines {:keys [front-matter? has-properties? title?]}]
+  (let [exists? (atom false)
+        sym (if front-matter? ": " (str colons " "))
+        new-property-s (str key* sym value)
+        property-f (if front-matter? front-matter-property? simplified-property?)
+        groups (partition-by property-f lines)
+        compose-lines (fn []
+                        (mapcat (fn [lines]
+                                  (if (property-f (first lines))
+                                    (let [lines (doall
+                                                 (mapv (fn [text]
+                                                         (let [[k v] (common-util/split-first sym text)]
+                                                           (if (and k v)
+                                                             (let [key-exists? (= k key)
+                                                                   _ (when key-exists? (reset! exists? true))
+                                                                   v (if key-exists? value v)]
+                                                               (str k sym  (string/trim v)))
+                                                             text)))
+                                                       lines))
+                                          lines (if @exists? lines (conj lines new-property-s))]
+                                      lines)
+                                    lines))
+                                groups))
+        lines (cond
+                has-properties?
+                (compose-lines)
+
+                title?
+                (cons (first lines) (cons new-property-s (rest lines)))
+
+                :else
+                (cons new-property-s lines))]
+    (string/join "\n" lines)))
+
 (defn insert-property
   "Only accept nake content (without any indentation)"
   ([repo format content key value]
@@ -194,10 +229,10 @@
            has-properties? (or (and title?
                                     (or (gp-mldoc/properties? (second ast))
                                         (gp-mldoc/properties? (second
-                                                            (remove
-                                                             (fn [[x _]]
-                                                               (contains? #{"Hiccup" "Raw_Html"} (first x)))
-                                                             ast)))))
+                                                               (remove
+                                                                (fn [[x _]]
+                                                                  (contains? #{"Hiccup" "Raw_Html"} (first x)))
+                                                                ast)))))
                                (gp-mldoc/properties? (first ast)))
            lines (string/split-lines content)
            [title body] (gp-mldoc/get-title&body repo content format)
@@ -238,38 +273,9 @@
                       (string/join "\n" lines))
 
                     (not org?)
-                    (let [exists? (atom false)
-                          sym (if front-matter? ": " (str colons " "))
-                          new-property-s (str key sym value)
-                          property-f (if front-matter? front-matter-property? simplified-property?)
-                          groups (partition-by property-f lines)
-                          compose-lines (fn []
-                                          (mapcat (fn [lines]
-                                                    (if (property-f (first lines))
-                                                      (let [lines (doall
-                                                                   (mapv (fn [text]
-                                                                           (let [[k v] (common-util/split-first sym text)]
-                                                                             (if (and k v)
-                                                                               (let [key-exists? (= k key)
-                                                                                     _ (when key-exists? (reset! exists? true))
-                                                                                     v (if key-exists? value v)]
-                                                                                 (str k sym  (string/trim v)))
-                                                                               text)))
-                                                                         lines))
-                                                            lines (if @exists? lines (conj lines new-property-s))]
-                                                        lines)
-                                                      lines))
-                                                  groups))
-                          lines (cond
-                                  has-properties?
-                                  (compose-lines)
-
-                                  title?
-                                  (cons (first lines) (cons new-property-s (rest lines)))
-
-                                  :else
-                                  (cons new-property-s lines))]
-                      (string/join "\n" lines))
+                    (insert-property-not-org key value lines {:has-properties? has-properties?
+                                                              :title? title?
+                                                              :front-matter? front-matter?})
 
                     :else
                     content)]

@@ -1,4 +1,5 @@
 (ns logseq.outliner.datascript
+  "Provides fns related to wrapping datascript's transact!"
   (:require [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.db.sqlite.util :as sqlite-util]
