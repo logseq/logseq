@@ -808,10 +808,10 @@
  :handbook/title "Hjelp"
  :handbook/topics "Emner"
  :help/search "Søk sider/blokker/kommandoer"
- :linked-references/filter-directions "KLikk for å inkludere og shift-klikk for å ekskludere. Klikk igjen for å fjerne."
- :linked-references/filter-excludes "Excludes: "
+ :linked-references/filter-directions "Klikk for å inkludere og shift-klikk for å ekskludere. Klikk igjen for å fjerne."
+ :linked-references/filter-excludes "Ekskluderer: "
  :linked-references/filter-heading "Filter"
- :linked-references/filter-includes "Includes: "
+ :linked-references/filter-includes "Inkluderer: "
  :linked-references/reference-count (fn [filtered-count total] (str (when filtered-count (str filtered-count " av ")) total (if (= total 1) " Lenket Referanse" " Lenkede Referanser")))
  :linked-references/unexpected-error "Lenkede Referanser: Uventet feil. Vennligst re-indekser din graf først."
  :pdf/auto-open-context-menu "Auto-åpne kontekstmeny for valg"
