@@ -253,12 +253,12 @@
                        (db/page-exists? @*title-value))
         rename-fn (fn [old-name new-name]
                     (if (and whiteboard-page? (config/db-based-graph? (state/get-current-repo)))
-                      (do
-                        (db/transact! [{:db/id (:db/id page)
-                                        :block/original-name new-name
-                                        :block/name (util/page-name-sanity-lc new-name)
-                                        :block/updated-at (util/time-ms)}])
-                        (route-handler/redirect-to-whiteboard! new-name))
+                      (p/do!
+                       (db/transact! [{:db/id (:db/id page)
+                                       :block/original-name new-name
+                                       :block/name (util/page-name-sanity-lc new-name)
+                                       :block/updated-at (util/time-ms)}])
+                       (route-handler/redirect-to-whiteboard! new-name))
                       (page-handler/rename! old-name new-name)))
         rollback-fn #(let [old-name (if untitled? "" old-name)]
                        (reset! *title-value old-name)
@@ -286,9 +286,9 @@
                         (rollback-fn))
 
                     :else
-                    (do
-                      (rename-fn (or title page-name) @*title-value)
-                      (reset! *edit? false)))
+                    (p/do!
+                     (rename-fn (or title page-name) @*title-value)
+                     (js/setTimeout #(reset! *edit? false) 100)))
                   (util/stop e))]
     [:input.edit-input.p-0.focus:outline-none.ring-none
      {:type          "text"

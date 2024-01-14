@@ -14,7 +14,6 @@
 (defn save-code-editor!
   []
   (let [{:keys [config state editor]} (get @state/state :editor/code-block-context)]
-    (state/set-state! :editor/skip-saving-current-block? true)
     (state/set-block-component-editing-mode! false)
     (when editor
       (.save editor)

@@ -1315,8 +1315,7 @@
    (save-current-block! {}))
   ([{:keys [force? skip-properties? current-block] :as opts}]
    ;; non English input method
-   (let [result (when-not (or (state/editor-in-composition?)
-                              @(:editor/skip-saving-current-block? @state/state))
+   (let [result (when-not (state/editor-in-composition?)
                   (when (state/get-current-repo)
                     (when-not (state/get-editor-action)
                       (try
@@ -1347,7 +1346,6 @@
                               (save-block-aux! db-block value opts))))
                         (catch :default error
                           (log/error :save-block-failed error))))))]
-     (state/set-state! :editor/skip-saving-current-block? false)
      result)))
 
 (defn- clean-content!

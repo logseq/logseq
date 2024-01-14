@@ -58,12 +58,6 @@
       (when (seq pages)
         (mark-pages-as-loaded! repo pages)))
 
-    (when (= (:outliner-op tx-meta) :delete-page)
-      (state/pub-event! [:page/deleted repo (:deleted-page tx-meta) (:file-path tx-meta)]))
-
-    (when (= (:outliner-op tx-meta) :rename-page)
-      (state/pub-event! [:page/renamed repo (:data tx-meta)]))
-
     (if (or from-disk? new-graph?)
       (do
         (react/clear-query-state!)
@@ -86,6 +80,12 @@
                               :deleted-block-uuids deleted-block-uuids
                               :tx-data (:tx-data tx-report)
                               :tx-meta (:tx-meta tx-report)}]))))
+
+    (when (= (:outliner-op tx-meta) :delete-page)
+      (state/pub-event! [:page/deleted repo (:deleted-page tx-meta) (:file-path tx-meta)]))
+
+    (when (= (:outliner-op tx-meta) :rename-page)
+      (state/pub-event! [:page/renamed repo (:data tx-meta)]))
 
     (when-let [deleting-block-id (:ui/deleting-block @state/state)]
       (when (some (fn [datom] (and
