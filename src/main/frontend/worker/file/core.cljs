@@ -154,24 +154,27 @@
   [repo db page-block tree blocks-just-deleted? context request-id]
   (let [page-block (d/pull db '[*] (:db/id page-block))
         file-db-id (-> page-block :block/file :db/id)
-        file-path (-> (d/entity db file-db-id) :file/path)]
-    (if (and (string? file-path) (not-empty file-path))
-      (let [new-content (if (contains? (set (:block/type page-block)) "whiteboard")
-                          (->
-                           (wfu/ugly-pr-str {:blocks tree
-                                             :pages (list (remove-transit-ids page-block))})
-                           (string/triml))
-                          (tree->file-content repo db tree {:init-level init-level} context))]
-        (when-not (and (string/blank? new-content) (not blocks-just-deleted?))
-          (let [files [[file-path new-content]]]
-            (when (seq files)
-              (let [page-id (:db/id page-block)]
-                (util/post-message :write-files (pr-str {:request-id request-id
-                                                         :page-id page-id
-                                                         :repo repo
-                                                         :files files})))))))
-      ;; In e2e tests, "card" page in db has no :file/path
-      (js/console.error "File path from page-block is not valid" page-block tree))))
+        file-path (-> (d/entity db file-db-id) :file/path)
+        result (if (and (string? file-path) (not-empty file-path))
+                 (let [new-content (if (contains? (set (:block/type page-block)) "whiteboard")
+                                     (->
+                                      (wfu/ugly-pr-str {:blocks tree
+                                                        :pages (list (remove-transit-ids page-block))})
+                                      (string/triml))
+                                     (tree->file-content repo db tree {:init-level init-level} context))]
+                   (when-not (and (string/blank? new-content) (not blocks-just-deleted?))
+                     (let [files [[file-path new-content]]]
+                       (when (seq files)
+                         (let [page-id (:db/id page-block)]
+                           (util/post-message :write-files (pr-str {:request-id request-id
+                                                                    :page-id page-id
+                                                                    :repo repo
+                                                                    :files files}))
+                           :sent)))))
+                 ;; In e2e tests, "card" page in db has no :file/path
+                 (js/console.error "File path from page-block is not valid" page-block tree))]
+    (when-not (= :sent result)          ; page may not exists now
+      (dissoc-request! request-id))))
 
 (defn save-tree!
   [repo conn page-block tree blocks-just-deleted? context request-id]

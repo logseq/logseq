@@ -101,7 +101,8 @@
                                             [:p "Write file failed, please copy the changes to other editors in case of losing data."]
                                             "Error: " (str (gobj/get e "stack"))]
                                            :error]))
-               (log/error :file/write-file-error {:error e})))))))
+               (log/error :file/write-file-error {:error e})
+               (dissoc-request! request-id)))))))
 
 (defn sync-to-file
   [repo page-id tx-meta]
