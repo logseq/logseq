@@ -4,7 +4,9 @@
             [frontend.util.page :as page-util]
             [frontend.state :as state]
             [clojure.set :as set]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.handler.route :as route-handler]
+            [promesa.core :as p]))
 
 ;;;; APIs
 
@@ -141,10 +143,14 @@
           current-editor-cursor (get @(get @state/state :history/tx->editor-cursor) tx-id)
           editor-cursor current-editor-cursor]
       (push-redo e)
-      (transact! new-txs (merge {:undo? true}
-                                tx-meta))
-      (when (:whiteboard/transact? tx-meta)
-        (state/pub-event! [:whiteboard/undo e]))
+      (p/do!
+       (transact! new-txs (merge {:undo? true}
+                                 tx-meta))
+       (when (:whiteboard/transact? tx-meta)
+         (state/pub-event! [:whiteboard/undo e]))
+       (when (= :rename-page (:outliner-op tx-meta))
+         (when-let [old-page (:old-name (:data tx-meta))]
+           (route-handler/redirect-to-page! old-page))))
       (assoc e
              :txs-op new-txs
              :editor-cursor editor-cursor))))
@@ -155,10 +161,16 @@
     (let [new-txs (get-txs true txs)
           current-editor-cursor (get @(get @state/state :history/tx->editor-cursor) tx-id)]
       (push-undo e)
-      (transact! new-txs (merge {:redo? true}
-                                tx-meta))
-      (when (:whiteboard/transact? tx-meta)
+      (p/do!
+       (transact! new-txs (merge {:redo? true}
+                                 tx-meta))
+       (when (:whiteboard/transact? tx-meta)
         (state/pub-event! [:whiteboard/redo e]))
+
+       (when (= :rename-page (:outliner-op tx-meta))
+         (when-let [new-page (:new-name (:data tx-meta))]
+           (route-handler/redirect-to-page! new-page))))
+
       (assoc e
              :txs-op new-txs
              :editor-cursor current-editor-cursor))))
