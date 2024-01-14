@@ -2226,9 +2226,11 @@
                               {:ref ref
                                :move-cursor? false}))]
                    ;; wait a while for the value of the caret range
-                    (if (util/ios?)
-                      (f)
-                      (js/setTimeout f 5))
+                    (p/do!
+                     (state/pub-event! [:editor/save-code-editor])
+                     (if (util/ios?)
+                       (f)
+                       (js/setTimeout f 5)))
 
                     (when block-id (state/set-selection-start-block! block-id))))))))))))
 
@@ -2492,12 +2494,12 @@
                                       :block-parent-id block-id
                                       :format format
                                       :on-hide (fn [value event]
-                                                 (when (= event :esc)
-                                                   (p/let [_ (editor-handler/save-block! (editor-handler/get-state) value)]
-                                                     (let [select? (not (string/includes? value "```"))]
-                                                       (editor-handler/escape-editing select?)
-                                                       (when (contains? #{:esc :visibilitychange :click} event)
-                                                         (state/clear-edit!))))))}
+                                                 (p/let [_ (editor-handler/save-block! (editor-handler/get-state) value)]
+                                                   (let [select? (and (= event :esc)
+                                                                      (not (string/includes? value "```")))]
+                                                     (editor-handler/escape-editing select?)
+                                                     (when (contains? #{:esc :visibilitychange :click} event)
+                                                       (state/clear-edit!)))))}
                                      edit-input-id
                                      config))]
           (if (and named? (seq (:block/tags block)) db-based?)
