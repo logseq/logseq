@@ -456,7 +456,6 @@
    (insert-new-block! state nil))
   ([_state block-value]
    (when (not config/publishing?)
-     (state/set-editor-op! :insert)
      (when-let [state (get-state)]
        (let [{:keys [block value config]} state
              value (if (string? block-value) block-value value)
@@ -493,8 +492,7 @@
                     {:ok-handler
                      (fn insert-new-block!-ok-handler [last-block]
                        (clear-when-saved!)
-                       (edit-block! last-block 0 (when-not original-block block-node)))}))))
-   (state/set-editor-op! nil)))
+                       (edit-block! last-block 0 (when-not original-block block-node)))}))))))
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid sibling? before? properties
@@ -1896,10 +1894,8 @@
             (js/setTimeout
              (fn []
                (when (state/input-idle? repo :diff 500)
-                 (state/set-editor-op! :auto-save)
                  ; don't auto-save for page's properties block
-                 (save-current-block! {:skip-properties? true})
-                 (state/set-editor-op! nil)))
+                 (save-current-block! {:skip-properties? true})))
              500))))
 
 (defn- start-of-new-word?
@@ -2062,7 +2058,6 @@
                   keep-uuid?
                   revert-cut-txs]
            :or {exclude-properties []}}]
-  (state/set-editor-op! :paste-blocks)
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (some-> (db/pull [:block/uuid (:block/uuid editing-block)])
                                 (assoc :block/content (state/get-edit-content))))
@@ -2117,8 +2112,7 @@
                                                                                                           :keep-uuid? keep-uuid?})]
                    (reset! *insert-result result))))]
       (state/set-block-op-type! nil)
-      (when-let [result @*insert-result] (edit-last-block-after-inserted! result))
-      (state/set-editor-op! nil))))
+      (when-let [result @*insert-result] (edit-last-block-after-inserted! result)))))
 
 (defn- block-tree->blocks
   "keep-uuid? - maintain the existing :uuid in tree vec"
@@ -2828,7 +2822,7 @@
              (save-current-block!)
              (remove-block-own-order-list-type! block))
             (p/let [*edit-block-fn (atom nil)
-                    result (delete-block! repo false :*edit-block-fn *edit-block-fn)]
+                    _result (delete-block! repo false :*edit-block-fn *edit-block-fn)]
               (when-let [f @*edit-block-fn]
                 (f))))))
 
@@ -2884,7 +2878,6 @@
 
 (defn indent-outdent
   [indent?]
-  (state/set-editor-op! :indent-outdent)
   (let [editor (state/get-input)
         pos (some-> editor cursor/pos)
         {:keys [block]} (get-state)]
@@ -2900,9 +2893,7 @@
                                               (block-handler/get-top-level-blocks [block])
                                               indent?
                                               {:get-first-block-original block-handler/get-first-block-original
-                                               :logical-outdenting? (state/logical-outdenting?)})))
-
-     (state/set-editor-op! :nil))))
+                                               :logical-outdenting? (state/logical-outdenting?)}))))))
 
 (defn keydown-tab-handler
   [direction]
