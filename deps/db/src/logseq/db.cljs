@@ -59,30 +59,47 @@
 
 (defn get-deferred-response
   [request-id]
-  (get @*request-id->response request-id))
+  (:response (get @*request-id->response request-id)))
+
+;; run the next request
+(add-watch *request-id->response :loop-execute-requests
+           (fn [_ _ _ new]
+             (when-let [request-id (some->> (keys new)
+                                            sort
+                                            first)]
+               (when-let [callback (:callback (get new request-id))]
+                 (callback)))))
 
 (defn transact!
   ([conn tx-data]
    (transact! conn tx-data nil))
   ([conn tx-data tx-meta]
-   (let [tx-data (common-util/fast-remove-nils tx-data)]
+   (let [tx-data (common-util/fast-remove-nils tx-data)
+         request-finished? (request-finished?)]
      ;; Ensure worker can handle the request sequentially (one by one)
      ;; Because UI assumes that the in-memory db has all the data except the last one transaction
-     (when (and (seq tx-data) (request-finished?))
+     (when (seq tx-data)
 
        ;; (prn :debug :transact)
        ;; (cljs.pprint/pprint tx-data)
 
        (let [f (or @*transact-fn d/transact!)
              sync? (= f d/transact!)
-             request-id (swap! *request-id inc)
-             tx-meta' (if sync? tx-meta
-                          (assoc tx-meta :request-id request-id))
-             result (f conn tx-data tx-meta')]
-         (if sync? result
-             (let [resp (p/deferred)]
-               (swap! *request-id->response assoc request-id resp)
-               resp)))))))
+             request-id (when-not sync? (swap! *request-id inc))
+             tx-meta' (cond-> tx-meta
+                        (not sync?)
+                        (assoc :request-id request-id))]
+         (if sync?
+           (f conn tx-data tx-meta')
+           (let [resp (p/deferred)]
+             (when request-finished?
+               (f conn tx-data tx-meta'))
+             (let [value (if request-finished?
+                           {:response resp}
+                           {:response resp
+                            :callback #(f conn tx-data tx-meta')})]
+               (swap! *request-id->response assoc request-id value))
+             resp)))))))
 
 (defn build-default-pages-tx
   []
