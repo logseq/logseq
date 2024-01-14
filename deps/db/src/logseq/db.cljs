@@ -74,7 +74,8 @@
   ([conn tx-data]
    (transact! conn tx-data nil))
   ([conn tx-data tx-meta]
-   (let [tx-data (common-util/fast-remove-nils tx-data)
+   (let [tx-data (->> (common-util/fast-remove-nils tx-data)
+                      (remove empty?))
          request-finished? (request-finished?)]
      ;; Ensure worker can handle the request sequentially (one by one)
      ;; Because UI assumes that the in-memory db has all the data except the last one transaction
