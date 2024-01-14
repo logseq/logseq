@@ -951,7 +951,7 @@
   (swap! rtc-debug-ui/debug-state (fn [old] (merge old state))))
 
 ;; db-worker -> UI
-(defmethod handle :db/sync-changes [[_ {:keys [request-id] :as data}]]
+(defmethod handle :db/sync-changes [[_ data]]
   (let [repo (state/get-current-repo)]
     (pipeline/invoke-hooks data)
 
