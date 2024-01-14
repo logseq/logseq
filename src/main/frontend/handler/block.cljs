@@ -18,7 +18,8 @@
    [frontend.handler.file-based.property.util :as property-util]
    [frontend.handler.property.util :as pu]
    [dommy.core :as dom]
-   [goog.object :as gobj]))
+   [goog.object :as gobj]
+   [promesa.core :as p]))
 
 ;;  Fns
 
@@ -228,36 +229,38 @@
                            :or {tail-len 0}
                            :as opts}]
   (when-not config/publishing?
-    (when-let [block-id (:block/uuid block)]
-      (let [repo (state/get-current-repo)
-            block-node (cond
-                         (uuid? block-node)
-                         nil
-                         (string? block-node)
-                         (gdom/getElement (string/replace block-node "edit-block" "ls-block"))
-                         :else
-                         block-node)
-            db-graph? (config/db-based-graph? repo)
-            block (or (db/entity [:block/uuid block-id]) block)
-            content (if (and db-graph? (:block/name block))
-                      (:block/original-name block)
-                      (or custom-content (:block/content block) ""))
-            content-length (count content)
-            text-range (cond
-                         (vector? pos)
-                         (text-range-by-lst-fst-line content pos)
+    (p/do!
+     (state/pub-event! [:editor/save-code-editor])
+     (when-let [block-id (:block/uuid block)]
+       (let [repo (state/get-current-repo)
+             block-node (cond
+                          (uuid? block-node)
+                          nil
+                          (string? block-node)
+                          (gdom/getElement (string/replace block-node "edit-block" "ls-block"))
+                          :else
+                          block-node)
+             db-graph? (config/db-based-graph? repo)
+             block (or (db/entity [:block/uuid block-id]) block)
+             content (if (and db-graph? (:block/name block))
+                       (:block/original-name block)
+                       (or custom-content (:block/content block) ""))
+             content-length (count content)
+             text-range (cond
+                          (vector? pos)
+                          (text-range-by-lst-fst-line content pos)
 
-                         (and (> tail-len 0) (>= (count content) tail-len))
-                         (subs content 0 (- (count content) tail-len))
+                          (and (> tail-len 0) (>= (count content) tail-len))
+                          (subs content 0 (- (count content) tail-len))
 
-                         (or (= :max pos) (<= content-length pos))
-                         content
+                          (or (= :max pos) (<= content-length pos))
+                          content
 
-                         :else
-                         (subs content 0 pos))
-            content (sanity-block-content repo (:block/format block) content)]
-        (state/clear-selection!)
-        (edit-block-aux repo block content block-node text-range opts)))))
+                          :else
+                          (subs content 0 pos))
+             content (sanity-block-content repo (:block/format block) content)]
+         (state/clear-selection!)
+         (edit-block-aux repo block content block-node text-range opts))))))
 
 (defn- get-original-block-by-dom
   [node]

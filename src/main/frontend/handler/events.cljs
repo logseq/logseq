@@ -56,6 +56,7 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.handler.code :as code-handler]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.graph-picker :as graph-picker]
             [frontend.mobile.util :as mobile-util]
@@ -914,6 +915,9 @@
 (defmethod handle :editor/remove-own-number-list [[_ block]]
   (when (some-> block (editor-handler/own-order-number-list?))
     (editor-handler/remove-block-own-order-list-type! block)))
+
+(defmethod handle :editor/save-code-editor [_]
+  (code-handler/save-code-editor!))
 
 (defmethod handle :editor/toggle-children-number-list [[_ block]]
   (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]

@@ -140,7 +140,8 @@
             [frontend.schema.handler.common-config :refer [Config-edn]]
             [malli.util :as mu]
             [malli.core :as m]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [promesa.core :as p]))
 
 ;; codemirror
 
@@ -373,6 +374,14 @@
          (.-mime cm-mode)
          mode)))))
 
+(defn- save-editor!
+  [config]
+  (p/do!
+   (code-handler/save-code-editor!)
+   (when-let [block-id (:block/uuid config)]
+     (let [block (db/pull [:block/uuid block-id])]
+       (editor-handler/edit-block! block :max block-id)))))
+
 (defn render!
   [state]
   (let [[config id attr _code theme user-options] (:rum/args state)
@@ -388,7 +397,7 @@
         config-edit? (and (:file? config) (string/ends-with? (:file-path config) "config.edn"))
         textarea (gdom/getElement id)
         radix-color (state/sub :ui/radix-color)
-        default-cm-options {:theme (if radix-color 
+        default-cm-options {:theme (if radix-color
                                      (str "lsradix " theme)
                                      (str "solarized " theme))
                             :autoCloseBrackets true
@@ -400,12 +409,9 @@
                           {:mode mode
                            :tabIndex -1 ;; do not accept TAB-in, since TAB is bind globally
                            :extraKeys (merge {"Esc" (fn [cm]
-                                                   ;; Avoid reentrancy
+                                                      ;; Avoid reentrancy
                                                       (gobj/set cm "escPressed" true)
-                                                      (code-handler/save-code-editor!)
-                                                      (when-let [block-id (:block/uuid config)]
-                                                        (let [block (db/pull [:block/uuid block-id])]
-                                                          (editor-handler/edit-block! block :max block-id))))}
+                                                      (save-editor! config))}
                                              (when config-edit?
                                                {"':'" complete-after
                                                 "Ctrl-Space" "autocomplete"}))}
@@ -493,7 +499,7 @@
                  (let [next-theme (get-theme!)
                        last-theme @(:last-theme state)
                        editor (some-> state :editor-atom deref)]
-                   (when (and editor (not= next-theme last-theme)) 
+                   (when (and editor (not= next-theme last-theme))
                      (reset! (:last-theme state) next-theme)
                      (.setOption editor "theme" next-theme)))
                  (reset! (:code-options state) (last (:rum/args state)))
