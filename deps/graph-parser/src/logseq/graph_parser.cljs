@@ -99,12 +99,12 @@ Options available:
                        blocks []
                        ast []}}
                (cond (contains? common-config/mldoc-support-formats format)
-                 (extract/extract file content extract-options')
+                     (extract/extract file content extract-options')
 
-                 (common-config/whiteboard? file)
-                 (extract/extract-whiteboard-edn file content extract-options')
+                     (common-config/whiteboard? file)
+                     (extract/extract-whiteboard-edn file content extract-options')
 
-                 :else nil)
+                     :else nil)
                block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
                delete-blocks (delete-blocks-fn @conn (first pages) file block-ids)
                block-refs-ids (->> (mapcat :block/refs blocks)
@@ -121,13 +121,12 @@ Options available:
             :ast ast})
          tx (concat tx [(cond-> {:file/path file
                                  :file/content content}
-                                new?
+                          new?
                                 ;; TODO: use file system timestamp?
-                                (assoc :file/created-at (common-util/time-ms)))])
-         tx' (common-util/fast-remove-nils tx)
+                          (assoc :file/created-at (common-util/time-ms)))])
          result (if skip-db-transact?
-                  tx'
-                  (ldb/transact! conn tx' (select-keys options [:new-graph? :from-disk?])))]
+                  tx
+                  (ldb/transact! conn tx (select-keys options [:new-graph? :from-disk?])))]
      {:tx result
       :ast ast})))
 

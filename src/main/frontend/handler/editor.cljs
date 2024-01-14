@@ -2828,7 +2828,7 @@
              (save-current-block!)
              (remove-block-own-order-list-type! block))
             (p/let [*edit-block-fn (atom nil)
-                    _ (delete-block! repo false :*edit-block-fn *edit-block-fn)]
+                    result (delete-block! repo false :*edit-block-fn *edit-block-fn)]
               (when-let [f @*edit-block-fn]
                 (f))))))
 

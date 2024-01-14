@@ -952,13 +952,12 @@
 
 ;; db-worker -> UI
 (defmethod handle :db/sync-changes [[_ {:keys [request-id] :as data}]]
-  (when request-id                      ; request-id could be nil sometimes
-    (let [repo (state/get-current-repo)]
-      (pipeline/invoke-hooks data)
+  (let [repo (state/get-current-repo)]
+    (pipeline/invoke-hooks data)
 
-      (ipc/ipc :db-transact repo (pr-str (:tx-data data)) (pr-str (:tx-meta data)))
-      (state/pub-event! [:search/transact-data repo (:search-indice data)])
-      nil)))
+    (ipc/ipc :db-transact repo (pr-str (:tx-data data)) (pr-str (:tx-meta data)))
+    (state/pub-event! [:search/transact-data repo (:search-indice data)])
+    nil))
 
 (defn run!
   []
