@@ -8,7 +8,7 @@
             [frontend.format.mldoc :as mldoc]
             [logseq.outliner.core :as outliner-core]
             [frontend.state :as state]
-            [logseq.outliner.transaction :as outliner-tx]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.util :as util]
             [frontend.util.clock :as clock]
             [frontend.util.drawer :as drawer]
@@ -191,7 +191,7 @@
       (set-block-property-aux! block :heading heading))))
 
 (defn batch-set-heading! [block-ids heading]
-  (outliner-tx/transact!
+  (ui-outliner-tx/transact!
    {:outliner-op :save-block}
    (doseq [block-id block-ids]
      (when-let [block (set-heading-aux! block-id heading)]
