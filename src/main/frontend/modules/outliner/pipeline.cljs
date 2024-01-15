@@ -29,10 +29,10 @@
 (defn- update-current-tx-editor-cursor!
   [tx-report]
   (let [tx-id (get-tx-id tx-report)
-        editor-cursor (:ui/before-editor-cursor @state/state)]
+        editor-cursor @(:history/tx-before-editor-cursor @state/state)]
     (state/update-state! :history/tx->editor-cursor
                          (fn [m] (assoc-in m [tx-id :before] editor-cursor)))
-    (state/set-state! :ui/before-editor-cursor nil)))
+    (state/set-state! :history/tx-before-editor-cursor nil)))
 
 (defn restore-cursor-and-app-state!
   [{:keys [editor-cursor app-state]} undo?]
@@ -46,10 +46,6 @@
         repo (state/get-current-repo)
         tx-report {:tx-meta tx-meta
                    :tx-data tx-data}]
-
-    (when-let [edit-block-f (:editor/cached-edit-block-fn @state/state)]
-      (edit-block-f)
-      (state/set-state! :editor/cached-edit-block-fn nil))
 
     (let [conn (db/get-db repo false)
           tx-report (d/transact! conn tx-data tx-meta)]

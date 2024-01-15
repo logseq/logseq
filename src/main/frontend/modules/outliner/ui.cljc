@@ -22,7 +22,7 @@
                            :conn (db/get-db false)
                            :unlinked-graph? frontend.modules.outliner.ui/unlinked-graph?
                            :set-state-fn frontend.modules.outliner.ui/set-state-fn}]
-       (when-not (:ui/before-editor-cursor @state/state)
-         (state/set-state! :ui/before-editor-cursor (state/get-current-edit-block-and-position)))
+       (when (nil? @(:history/tx-before-editor-cursor @state/state))
+         (state/set-state! :history/tx-before-editor-cursor (state/get-current-edit-block-and-position)))
        (logseq.outliner.transaction/transact! (assoc ~opts :transact-opts transact-opts#)
                                               ~@body))))

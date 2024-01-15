@@ -300,6 +300,7 @@
       :whiteboard/last-persisted-at          {}
       :whiteboard/pending-tx-data            {}
       :history/page-only-mode?               false
+      :history/tx-before-editor-cursor       (atom nil)
       ;; db tx-id -> editor cursor
       :history/tx->editor-cursor             (atom {})
       :system/info                           {}
