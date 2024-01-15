@@ -425,12 +425,13 @@
       {:asset-uuid asset-uuid
        :ops (asset-uuid->ops asset-uuid)})))
 
-(defn get-asset-ops
-  [repo asset-uuid]
-  (let [repo-ops-store (get @*ops-store repo)
-        {:keys [asset-uuid->ops]} (:current-branch repo-ops-store)]
-    (assert (contains? repo-ops-store :current-branch) repo)
-    (asset-uuid->ops asset-uuid)))
+(comment
+  (defn get-asset-ops
+    [repo asset-uuid]
+    (let [repo-ops-store (get @*ops-store repo)
+          {:keys [asset-uuid->ops]} (:current-branch repo-ops-store)]
+      (assert (contains? repo-ops-store :current-branch) repo)
+      (asset-uuid->ops asset-uuid))))
 
 
 (defn get-graph-uuid
