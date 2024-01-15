@@ -5,7 +5,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.handler.route :as route-handler]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [promesa.core :as p]))
 
 (defn restore-cursor!
   [{:keys [last-edit-block container pos end-pos]} undo?]
@@ -14,7 +15,7 @@
     (when-let [container (gdom/getElement container)]
       (when-let [block-uuid (:block/uuid last-edit-block)]
         (when-let [block (db/pull [:block/uuid block-uuid])]
-          (editor/edit-block! block (if undo? pos end-pos)
+          (editor/edit-block! block (or (when undo? pos) end-pos)
                               (:block/uuid block)
                               {:custom-content (:block/content block)}))))))
 
@@ -40,12 +41,13 @@
 (defn undo!
   [e]
   (util/stop e)
-  (state/clear-editor-action!)
-  (state/set-block-op-type! nil)
-  (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)] nil)
-  (editor/save-current-block!)
-  (let [cursor-state (undo-redo/undo)]
-    (state/set-state! :ui/restore-cursor-state (select-keys cursor-state [:editor-cursor :app-state]))))
+  (p/do!
+   (state/clear-editor-action!)
+   (state/set-block-op-type! nil)
+   (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)] nil)
+   (editor/save-current-block!)
+   (let [cursor-state (undo-redo/undo)]
+     (state/set-state! :ui/restore-cursor-state (select-keys cursor-state [:editor-cursor :app-state])))))
 
 (defn redo!
   [e]

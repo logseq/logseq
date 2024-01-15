@@ -351,7 +351,7 @@
 (defmethod handle :page/create [[_ page-name opts]]
   (if (= page-name (date/today))
     (page-handler/create-today-journal!)
-    (page-handler/create! page-name opts)))
+    (page-handler/<create! page-name opts)))
 
 (defmethod handle :page/deleted [[_ repo page-name file-path]]
   (page-common-handler/after-page-deleted! repo page-name file-path))

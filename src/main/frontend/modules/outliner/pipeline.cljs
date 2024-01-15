@@ -31,7 +31,8 @@
   (let [tx-id (get-tx-id tx-report)
         editor-cursor (:ui/before-editor-cursor @state/state)]
     (state/update-state! :history/tx->editor-cursor
-                         (fn [m] (assoc m tx-id editor-cursor)))))
+                         (fn [m] (assoc-in m [tx-id :before] editor-cursor)))
+    (state/set-state! :ui/before-editor-cursor nil)))
 
 (defn restore-cursor-and-app-state!
   [{:keys [editor-cursor app-state]} undo?]

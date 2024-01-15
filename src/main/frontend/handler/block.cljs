@@ -214,7 +214,9 @@
                            (gdom/getElement (str "ls-block-" (:block/uuid block))))]
       (state/set-editing! "" content block text-range {:ref next-edit-node})
       (if next-edit-node
-        (mark-last-input-time! repo)
+        (do
+          (state/update-tx-after-cursor-state!)
+          (mark-last-input-time! repo))
         (util/schedule (fn [] (edit-block-aux repo block content block-node text-range (update opts :retry-times inc))))))))
 
 (defn sanity-block-content
