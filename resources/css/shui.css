@@ -78,6 +78,8 @@ html[data-theme=dark] {
   --popover-foreground: 0 0 95%;
   --input: 0 0% 25%;
 
+  background-color: #161616;
+
   &[data-color=logseq] {
     --background: 192 100% 11%;
     --foreground: 0 0% 95%;
@@ -94,6 +96,8 @@ html[data-theme=dark] {
     --card-foreground: 0 0% 95%;
     --popover: 192 100% 11%;
     --input: 203 35% 25%;
+
+    background-color: #002b36;
 
     .ui__button {
       &.as-outline {
