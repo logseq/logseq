@@ -4,10 +4,12 @@
   (:require [malli.core :as m]
             [malli.util :as mu]
             [cljs.core.async :as async :refer [<! >! chan go go-loop]]
-            [frontend.db.rtc.const :as rtc-const]
-            [frontend.db.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.worker.rtc.const :as rtc-const]
+            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.handler.user :as user]
-            [frontend.db.rtc.ws :as ws]))
+            [frontend.worker.rtc.ws :as ws]
+            [frontend.worker.async-util :include-macros true :refer [<?]]
+            [datascript.core :as d]))
 
 (def state-schema
   [:map {:closed true}
@@ -33,13 +35,37 @@
   ;; TODO
   )
 
+(defn <upload-client-op-loop
+  [state graph-uuid repo conn]
+  (go-loop []
+    (when-let [{min-epoch-asset-ops :ops asset-uuid :asset-uuid} (op-mem-layer/get-min-epoch-asset-ops repo)]
+      (try
+        (doseq [[tp _op] min-epoch-asset-ops]
+          (case tp
+            :update-asset
+            (let [asset-entity (d/pull @conn '[*] [:asset/uuid asset-uuid])]
+              (<? (ws/<send&receive state {:action "update-assets" :graph-uuid graph-uuid
+                                           :create [{:asset-uuid asset-uuid
+                                                     :asset-name (or (some-> asset-entity :asset/meta :name)
+                                                                     "default-name")}]})))
+            :remove-asset
+            (<? (ws/<send&receive state {:action "update-assets" :graph-uuid graph-uuid
+                                         :delete [asset-uuid]}))))
+        (op-mem-layer/remove-asset-ops! repo asset-uuid)
+        (recur)
+        (catch :default e
+          (prn ::unknown-ex e))))))
+
+
 (defn- <client-op-update-handler
   [state]
   {:pre [(some? @(:*graph-uuid state))
          (some? @(:*repo state))]}
-  (go nil
-    ;; TODO
-    ))
+  (go
+    (let [repo @(:*repo state)
+          conn @(:*db-conn state)
+          graph-uuid @(:*graph-uuid state)]
+      (<! (<upload-client-op-loop state graph-uuid repo conn)))))
 
 
 (defn- make-push-assets-update-ops-timeout-ch

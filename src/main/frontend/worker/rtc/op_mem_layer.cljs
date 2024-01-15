@@ -415,6 +415,24 @@
            vals
            (mapcat vals)))
 
+(defn get-min-epoch-asset-ops
+  [repo]
+  (let [repo-ops-store (get @*ops-store repo)
+        {:keys [epoch->asset-uuid-sorted-map asset-uuid->ops]} (:current-branch repo-ops-store)]
+    (assert (contains? repo-ops-store :current-branch) repo)
+    (when-let [[_epoch asset-uuid] (first epoch->asset-uuid-sorted-map)]
+      (assert (contains? asset-uuid->ops asset-uuid))
+      {:asset-uuid asset-uuid
+       :ops (asset-uuid->ops asset-uuid)})))
+
+(defn get-asset-ops
+  [repo asset-uuid]
+  (let [repo-ops-store (get @*ops-store repo)
+        {:keys [asset-uuid->ops]} (:current-branch repo-ops-store)]
+    (assert (contains? repo-ops-store :current-branch) repo)
+    (asset-uuid->ops asset-uuid)))
+
+
 (defn get-graph-uuid
   [repo]
   (some-> (get @*ops-store repo)
@@ -456,17 +474,16 @@
              :block-uuid->ops (dissoc block-uuid->ops block-uuid)
              :epoch->block-uuid-sorted-map (dissoc epoch->block-uuid-sorted-map min-epoch)))))
 
-(comment
-  (defn remove-asset-ops!
-   [repo asset-uuid]
-   {:pre [(uuid? asset-uuid)]}
-   (let [repo-ops-store (get @*ops-store repo)
-         {:keys [epoch->asset-uuid-sorted-map asset-uuid->ops]} (:current-branch repo-ops-store)]
-     (assert (contains? repo-ops-store :current-branch) repo)
-     (let [min-epoch (asset-uuid->min-epoch asset-uuid->ops asset-uuid)]
-       (swap! *ops-store update-in [repo :current-branch] assoc
-              :asset-uuid->ops (dissoc asset-uuid->ops asset-uuid)
-              :epoch->asset-uuid-sorted-map (dissoc epoch->asset-uuid-sorted-map min-epoch))))))
+(defn remove-asset-ops!
+  [repo asset-uuid]
+  {:pre [(uuid? asset-uuid)]}
+  (let [repo-ops-store (get @*ops-store repo)
+        {:keys [epoch->asset-uuid-sorted-map asset-uuid->ops]} (:current-branch repo-ops-store)]
+    (assert (contains? repo-ops-store :current-branch) repo)
+    (let [min-epoch (asset-uuid->min-epoch asset-uuid->ops asset-uuid)]
+      (swap! *ops-store update-in [repo :current-branch] assoc
+             :asset-uuid->ops (dissoc asset-uuid->ops asset-uuid)
+             :epoch->asset-uuid-sorted-map (dissoc epoch->asset-uuid-sorted-map min-epoch)))))
 
 
 (defn <init-load-from-indexeddb!
