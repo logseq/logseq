@@ -1065,7 +1065,7 @@
 
          (when badge-updates?
            {:title   [:div.flex.items-center.space-x-5.leading-none
-                      [:span (t :plugin/found-updates)] (ui/point "bg-red-600" 5 {:style {:margin-top 2}})]
+                      [:span (t :plugin/found-updates)] (ui/point "bg-red-700" 5 {:style {:margin-top 2}})]
             :options {:on-click #(open-waiting-updates-modal!)
                       :class    "extra-item"}
             :icon    (ui/icon "download")})]

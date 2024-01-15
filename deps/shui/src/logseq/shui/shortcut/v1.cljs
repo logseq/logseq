@@ -66,10 +66,10 @@
   (let [tiles (map print-shortcut-key ks)
         interactive? (true? interactive?)]
     (ui/button {:variant (if interactive? :default :text)
-                :class   (str "bg-gray-03 text-gray-10 px-1.5 py-0 leading-4 h-5 rounded "
+                :class   (str "bg-gray-03 text-gray-10 px-1.5 py-0 leading-4 h-5 rounded font-normal "
                            (if interactive?
                              "hover:bg-gray-04 active:bg-gray-03 hover:text-gray-12"
-                             "bg-transparent cursor-default active:bg-gray-03 hover:text-gray-11"))
+                             "bg-transparent cursor-default active:bg-gray-03 hover:text-gray-11 opacity-80"))
                 :size    size}
       (for [[index tile] (map-indexed vector tiles)]
         [:<>
