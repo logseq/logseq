@@ -171,12 +171,14 @@
             {:keys [old-path new-path tx-data]} (update-file-tx db old-page-name new-name)
             txs (concat page-txs
                         (when-not db-based?
-                          (->> [;;  update page refes in block content when ref name changes
-                                (page-rename/replace-page-ref db config old-name new-name)
+                          (->>
+                           (concat
+                            ;;  update page refes in block content when ref name changes
+                            (page-rename/replace-page-ref db config old-name new-name)
+                            ;; update file path
+                            tx-data)
 
-                                ;; update file path
-                                tx-data]
-                               (remove nil?))))]
+                           (remove nil?))))]
 
         (ldb/transact! conn txs {:outliner-op :rename-page
                                  :data (cond->
