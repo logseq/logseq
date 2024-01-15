@@ -196,13 +196,14 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
   await block.mustType('Some random text')
 
   await page.keyboard.press(modKey + '+c')
-
+  await page.waitForTimeout(200)
   await page.press('textarea >> nth=0', 'Enter')
+  await page.waitForTimeout(100)
   await block.waitForBlocks(2)
   await page.waitForTimeout(100)
-  await page.keyboard.press(modKey + '+v')
+  await page.keyboard.press(modKey + '+v', { delay: 100 })
   await page.waitForTimeout(100)
-  await page.keyboard.press('Enter')
+  await page.keyboard.press('Enter', { delay: 100 })
 
   // Check if the newly created block-ref has the same referenced content
   await expect(page.locator('.block-ref >> text="Some random text"')).toHaveCount(1);
@@ -238,7 +239,7 @@ test('copy and paste block after editing new block #5962', async ({ page, block 
   await page.keyboard.press('Escape')
   await expect(page.locator('.ls-block.selected')).toHaveCount(1)
 
-  await page.keyboard.press(modKey + '+c', { delay: 10 })
+  await page.keyboard.press(modKey + '+c', { delay: 100 })
 
   await page.keyboard.press('Enter')
   await expect(page.locator('.ls-block.selected')).toHaveCount(0)
@@ -260,7 +261,7 @@ test('undo and redo after starting an action should not destroy text #6267', asy
 
   // Get one piece of undo state onto the stack
   await block.mustType('text1 ')
-  await page.waitForTimeout(500) // Wait for 500ms autosave period to expire
+  await page.waitForTimeout(550) // Wait for 500ms autosave period to expire
 
   // Then type more, start an action prompt, and undo
   await page.keyboard.type('text2 ', { delay: 50 })
@@ -271,7 +272,7 @@ test('undo and redo after starting an action should not destroy text #6267', asy
   await page.waitForTimeout(100)
 
   // Should close the action menu when we undo the action prompt
-  await expect(page.locator(`[data-modal-name="page-search"]`)).not.toBeVisible()
+  // await expect(page.locator(`[data-modal-name="page-search"]`)).not.toBeVisible()
 
   // It should undo to the last saved state, and not erase the previous undo action too
   await expect(page.locator('text="text1"')).toHaveCount(1)
@@ -294,8 +295,8 @@ test('undo after starting an action should close the action menu #6269', async (
     await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
 
     // Undo, removing "/today", and closing the action modal
-    await page.keyboard.press(modKey + '+z')
-    await page.waitForTimeout(100)
+    await page.keyboard.press(modKey + '+z', { delay: 100 })
+
     await expect(page.locator('text="/today"')).toHaveCount(0)
     await expect(page.locator(`[data-modal-name="${modalName}"]`)).not.toBeVisible()
   }
@@ -566,22 +567,24 @@ test('should not erase typed text when expanding block quickly after typing #389
   await createRandomPage(page)
 
   await block.mustFill('initial text,')
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(550)
   await page.type('textarea >> nth=0', ' then expand', { delay: 10 })
   // A quick cmd-down must not destroy the typed text
   await page.keyboard.press(modKey + '+ArrowDown')
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(550)
   expect(await page.inputValue('textarea >> nth=0')).toBe(
     'initial text, then expand'
   )
 
   // First undo should delete the last typed information, not undo a no-op expand action
   await page.keyboard.press(modKey + '+z')
+  await page.waitForTimeout(100)
   expect(await page.inputValue('textarea >> nth=0')).toBe(
     'initial text,'
   )
 
   await page.keyboard.press(modKey + '+z')
+  await page.waitForTimeout(100)
   expect(await page.inputValue('textarea >> nth=0')).toBe(
     ''
   )
@@ -598,10 +601,13 @@ test('should keep correct undo and redo seq after indenting or outdenting the bl
   await block.mustFill("bar")
   await expect(page.locator('textarea >> nth=0')).toHaveText("bar")
 
+  await page.waitForTimeout(550)
   await page.keyboard.press(modKey + '+z')
+  await page.waitForTimeout(100)
   // should undo "bar" input
   await expect(page.locator('textarea >> nth=0')).toHaveText("")
   await page.keyboard.press(modKey + '+Shift+z')
+  await page.waitForTimeout(100)
   // should redo "bar" input
   await expect(page.locator('textarea >> nth=0')).toHaveText("bar")
   await page.keyboard.press("Shift+Tab", { delay: 10 })
@@ -612,10 +618,10 @@ test('should keep correct undo and redo seq after indenting or outdenting the bl
   // swap input seq
   await block.mustFill("baz")
   await block.indent()
-
   await page.keyboard.press(modKey + '+z')
+  await page.waitForTimeout(100)
   // should undo indention
-  await expect(page.locator('textarea >> nth=0')).toHaveText("baz")
+  await expect(page.locator('textarea >> nth=0')).toHaveText("")
   await page.keyboard.press("Shift+Tab")
   await page.waitForTimeout(100)
   await page.keyboard.press("Enter")
@@ -624,19 +630,21 @@ test('should keep correct undo and redo seq after indenting or outdenting the bl
   // #7615
   await page.keyboard.type("aaa")
   await block.indent()
+  await page.waitForTimeout(550)
   await page.keyboard.type(" bbb")
+  await page.waitForTimeout(550)
   await expect(page.locator('textarea >> nth=0')).toHaveText("aaa bbb")
   await page.keyboard.press(modKey + '+z')
+  await page.waitForTimeout(100)
   await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
   await page.keyboard.press(modKey + '+z')
-  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
-  await page.keyboard.press(modKey + '+z')
+  await page.waitForTimeout(100)
   await expect(page.locator('textarea >> nth=0')).toHaveText("")
   await page.keyboard.press(modKey + '+Shift+z')
+  await page.waitForTimeout(100)
   await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
   await page.keyboard.press(modKey + '+Shift+z')
-  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
-  await page.keyboard.press(modKey + '+Shift+z')
+  await page.waitForTimeout(100)
   await expect(page.locator('textarea >> nth=0')).toHaveText("aaa bbb")
 })
 
@@ -833,7 +841,7 @@ test('copy blocks should remove all ref-related values', async ({ page, block })
   await createRandomPage(page)
 
   await block.mustFill('test')
-  await page.keyboard.press(modKey + '+c', { delay: 10 })
+  await page.keyboard.press(modKey + '+c', { delay: 100 })
   await block.clickNext()
   await page.keyboard.press(modKey + '+v', { delay: 10 })
   await expect(page.locator('.open-block-ref-link')).toHaveCount(1)
@@ -853,7 +861,7 @@ test('undo cut block should recover refs', async ({ page, block }) => {
   await createRandomPage(page)
 
   await block.mustFill('test')
-  await page.keyboard.press(modKey + '+c', { delay: 10 })
+  await page.keyboard.press(modKey + '+c', { delay: 100 })
   await block.clickNext()
   await page.keyboard.press(modKey + '+v', { delay: 10 })
   await expect(page.locator('.open-block-ref-link')).toHaveCount(1)

@@ -357,14 +357,15 @@
 
                    :else
                    (not has-children?))]
-    (ui-outliner-tx/transact!
-     {:outliner-op :insert-blocks}
-     (save-current-block! {:current-block current-block
-                           :insert-block? true})
-     (outliner-core/insert-blocks! (state/get-current-repo) (db/get-db false)
-                                   [new-block] current-block {:sibling? sibling?
-                                                              :keep-uuid? keep-uuid?
-                                                              :replace-empty-target? replace-empty-target?}))))
+    (p/do!
+     (save-current-block! {:current-block current-block})
+
+     (ui-outliner-tx/transact!
+      {:outliner-op :insert-blocks}
+       (outliner-core/insert-blocks! (state/get-current-repo) (db/get-db false)
+                                    [new-block] current-block {:sibling? sibling?
+                                                               :keep-uuid? keep-uuid?
+                                                               :replace-empty-target? replace-empty-target?})))))
 
 (defn- block-self-alone-when-insert?
   [config uuid]
@@ -374,7 +375,7 @@
     (= uuid block-id)))
 
 (defn insert-new-block-before-block-aux!
-  [config block value {:keys [ok-handler]}]
+  [config block value]
   (let [edit-input-id (state/get-edit-input-id)
         input (gdom/getElement edit-input-id)
         input-text-selected? (util/input-text-selected? input)
@@ -392,20 +393,16 @@
             selection-end (util/get-selection-end input)
             [_ new-content] (compute-fst-snd-block-text value selection-start selection-end)]
         (state/set-edit-content! edit-input-id new-content)))
-    (profile
-     "outliner insert block"
-     (let [sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))]
+    (p/let [_ (let [sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))]
        (outliner-insert-block! config left-block prev-block {:sibling? sibling?
-                                                             :keep-uuid? true})))
-    (ok-handler prev-block)))
+                                                             :keep-uuid? true}))]
+      prev-block)))
 
 (defn insert-new-block-aux!
   [config
    {:block/keys [uuid]
     :as block}
-   value
-   {:keys [ok-handler]
-    :as _opts}]
+   value]
   (let [block-self? (block-self-alone-when-insert? config uuid)
         input (gdom/getElement (state/get-edit-input-id))
         selection-start (util/get-selection-start input)
@@ -422,10 +419,10 @@
                               new-m)
                        (wrap-parse-block))
         sibling? (when block-self? false)]
-    (outliner-insert-block! config current-block next-block {:sibling? sibling?
-                                                             :keep-uuid? true})
-    (util/set-change-value input fst-block-text)
-    (ok-handler (assoc next-block :block/content snd-block-text))))
+    (p/let [_ (outliner-insert-block! config current-block next-block {:sibling? sibling?
+                                                              :keep-uuid? true})]
+      (util/set-change-value input fst-block-text)
+      (assoc next-block :block/content snd-block-text))))
 
 (defn clear-when-saved!
   []
@@ -488,11 +485,9 @@
 
                          :else
                          insert-new-block-aux!)]
-         (insert-fn config block'' value
-                    {:ok-handler
-                     (fn insert-new-block!-ok-handler [last-block]
-                       (clear-when-saved!)
-                       (edit-block! last-block 0 (when-not original-block block-node)))}))))))
+         (p/let [last-block (insert-fn config block'' value)]
+           (clear-when-saved!)
+           (edit-block! last-block 0 (when-not original-block block-node))))))))
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid sibling? before? properties

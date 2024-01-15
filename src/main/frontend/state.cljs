@@ -118,6 +118,7 @@
       :config                                {}
       :block/component-editing-mode?         false
       :editor/start-pos                      (atom nil)
+      :editor/op                             (atom nil)
       :editor/hidden-editors                 #{} ;; page names
       :editor/draw-mode?                     false
       :editor/action                         (atom nil)
@@ -1833,6 +1834,14 @@ Similar to re-frame subscriptions"
   ([] (open-settings! true))
   ([active-tab] (set-state! :ui/settings-open? active-tab)))
 
+(defn set-editor-op!
+  [value]
+  (set-state! :editor/op value))
+
+(defn get-editor-op
+  []
+  @(:editor/op @state))
+
 (defn get-events-chan
   []
   (:system/events @state))
@@ -2335,3 +2344,11 @@ Similar to re-frame subscriptions"
   [page-name]
   (when-not (string/blank? page-name)
     (sub [:db/properties-changed-pages page-name])))
+
+(defn update-tx-after-cursor-state!
+  []
+  (let [editor-cursor (get-current-edit-block-and-position)
+        max-tx-id (apply max (keys @(:history/tx->editor-cursor @state)))]
+    (when (and max-tx-id (nil? (:after (get @(:history/tx->editor-cursor @state) max-tx-id))))
+      (update-state! :history/tx->editor-cursor
+                     (fn [m] (assoc-in m [max-tx-id :after] editor-cursor))))))

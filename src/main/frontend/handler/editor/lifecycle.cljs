@@ -45,7 +45,8 @@
         new-value (or (and node (.-new-value node)) value)]
     (editor-handler/clear-when-saved!)
     (when (db/entity [:block/uuid (:block/uuid block)]) ; block still exists
-      (editor-handler/save-block! state new-value)))
+      (when-not (contains? #{:undo :redo} (state/get-editor-op))
+        (editor-handler/save-block! state new-value))))
   state)
 
 (def lifecycle

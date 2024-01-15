@@ -6,7 +6,8 @@
             [clojure.set :as set]
             [medley.core :as medley]
             [frontend.handler.route :as route-handler]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.util :as util]))
 
 ;;;; APIs
 
@@ -138,19 +139,19 @@
 (defn undo
   []
   (when-let [e (smart-pop-undo)]
+    (state/set-editor-op! :undo)
     (let [{:keys [txs tx-meta tx-id]} e
           new-txs (get-txs false txs)
-          current-editor-cursor (get @(get @state/state :history/tx->editor-cursor) tx-id)
-          editor-cursor current-editor-cursor]
+          editor-cursor (:before (get @(get @state/state :history/tx->editor-cursor) tx-id))]
       (push-redo e)
       (p/do!
-       (transact! new-txs (merge {:undo? true}
-                                 tx-meta))
+       (transact! new-txs (assoc tx-meta :undo? true))
        (when (:whiteboard/transact? tx-meta)
          (state/pub-event! [:whiteboard/undo e]))
        (when (= :rename-page (:outliner-op tx-meta))
          (when-let [old-page (:old-name (:data tx-meta))]
-           (route-handler/redirect-to-page! old-page))))
+           (route-handler/redirect-to-page! old-page)))
+       (util/schedule #(state/set-editor-op! nil)))
       (assoc e
              :txs-op new-txs
              :editor-cursor editor-cursor))))
@@ -158,22 +159,27 @@
 (defn redo
   []
   (when-let [{:keys [txs tx-meta tx-id] :as e} (smart-pop-redo)]
+    (state/set-editor-op! :redo)
     (let [new-txs (get-txs true txs)
-          current-editor-cursor (get @(get @state/state :history/tx->editor-cursor) tx-id)]
+          editor-cursor (let [s (get @(get @state/state :history/tx->editor-cursor) tx-id)]
+                          (if (= (:outliner-op tx-meta) :save-block)
+                            (:before s)
+                            (or (:after s) (:before s))))]
       (push-undo e)
       (p/do!
-       (transact! new-txs (merge {:redo? true}
-                                 tx-meta))
+       (transact! new-txs (assoc tx-meta :redo? true))
        (when (:whiteboard/transact? tx-meta)
-        (state/pub-event! [:whiteboard/redo e]))
+         (state/pub-event! [:whiteboard/redo e]))
 
        (when (= :rename-page (:outliner-op tx-meta))
          (when-let [new-page (:new-name (:data tx-meta))]
-           (route-handler/redirect-to-page! new-page))))
+           (route-handler/redirect-to-page! new-page)))
+
+       (util/schedule #(state/set-editor-op! :nil)))
 
       (assoc e
              :txs-op new-txs
-             :editor-cursor current-editor-cursor))))
+             :editor-cursor editor-cursor))))
 
 (defn toggle-undo-redo-mode!
   []
