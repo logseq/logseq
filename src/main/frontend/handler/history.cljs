@@ -42,10 +42,10 @@
   [e]
   (util/stop e)
   (p/do!
-   (state/clear-editor-action!)
-   (state/set-block-op-type! nil)
    (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)] nil)
    (editor/save-current-block!)
+   (state/clear-editor-action!)
+   (state/set-block-op-type! nil)
    (let [cursor-state (undo-redo/undo)]
      (state/set-state! :ui/restore-cursor-state (select-keys cursor-state [:editor-cursor :app-state])))))
 
