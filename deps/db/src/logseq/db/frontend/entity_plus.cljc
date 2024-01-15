@@ -6,6 +6,7 @@
   #?(:clj {:clj-kondo/config {:linters {:unresolved-namespace {:level :off}
                                         :unresolved-symbol {:level :off}}}})
   (:require [cljs.core]
+            #?(:org.babashka/nbb [datascript.db])
             [datascript.impl.entity :as entity :refer [Entity]]
             [logseq.db.frontend.content :as db-content]))
 

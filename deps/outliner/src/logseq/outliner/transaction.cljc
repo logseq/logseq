@@ -6,7 +6,8 @@
 
 (def transact-opts [:or :symbol :map])
 
-#?(:cljs (m/=> transact! [:=> [:cat transact-opts :any] :any]))
+#?(:org.babashka/nbb nil
+   :cljs (m/=> transact! [:=> [:cat transact-opts :any] :any]))
 
 (defmacro transact!
   "Batch all the transactions in `body` to a single transaction, Support nested transact! calls.
