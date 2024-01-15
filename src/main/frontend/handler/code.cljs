@@ -14,8 +14,8 @@
 (defn save-code-editor!
   []
   (let [{:keys [config state editor]} (get @state/state :editor/code-block-context)]
-    (state/set-block-component-editing-mode! false)
     (when editor
+      (state/set-block-component-editing-mode! false)
       (.save editor)
       (let [textarea (.getTextArea editor)
             ds (.-dataset textarea)
