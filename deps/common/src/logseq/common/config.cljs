@@ -1,5 +1,5 @@
 (ns logseq.common.config
-  "App config that is shared between the app"
+  "Common config that is shared between deps and app"
   (:require [clojure.string :as string]
             [goog.object :as gobj]))
 
@@ -25,9 +25,7 @@
                 (hidden? path patterns))) files)
     files))
 
-(def app-name
-  "Copy of frontend.config/app-name. Too small to couple to main app"
-  "logseq")
+(def app-name "logseq")
 
 (defonce asset-protocol "assets://")
 (defonce capacitor-protocol "capacitor://")

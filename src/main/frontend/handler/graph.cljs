@@ -95,7 +95,7 @@
             tags (set (map second tagged-pages))
             full-pages (db/get-all-pages repo)
             full-pages-map (into {} (map (juxt :block/name identity) full-pages))
-            all-pages (map db/get-original-name full-pages)
+            all-pages (map common-util/get-page-original-name full-pages)
             page-name->original-name (zipmap (map :block/name full-pages) all-pages)
             created-ats (map :block/created-at full-pages)
 
@@ -183,7 +183,7 @@
                        (distinct))
             nodes (build-nodes dark? page links (set tags) nodes namespaces)
             full-pages (db/get-all-pages repo)
-            all-pages (map db/get-original-name full-pages)
+            all-pages (map common-util/get-page-original-name full-pages)
             page-name->original-name (zipmap (map :block/name full-pages) all-pages)]
         (normalize-page-name
          {:nodes nodes

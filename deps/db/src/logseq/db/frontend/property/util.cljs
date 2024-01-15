@@ -1,6 +1,7 @@
 (ns logseq.db.frontend.property.util
   "Util fns for building core property concepts"
   (:require [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.common.util :as common-util]
             [datascript.core :as d]))
 
 (defonce hidden-page-name-prefix "$$$")
@@ -33,7 +34,7 @@
   "Builds a basic page to be transacted. A minimal version of gp-block/page-name->map"
   [page-name]
   (sqlite-util/block-with-timestamps
-   {:block/name (sqlite-util/sanitize-page-name page-name)
+   {:block/name (common-util/page-name-sanity-lc page-name)
     :block/original-name page-name
     :block/journal? false
     :block/uuid (d/squuid)}))
@@ -54,7 +55,7 @@
   {:block/uuid prop-uuid
    :block/schema (merge {:type :default} prop-schema)
    :block/original-name (name prop-name)
-   :block/name (sqlite-util/sanitize-page-name (name prop-name))})
+   :block/name (common-util/page-name-sanity-lc (name prop-name))})
 
 (defn build-closed-values
   "Builds all the tx needed for property with closed values including

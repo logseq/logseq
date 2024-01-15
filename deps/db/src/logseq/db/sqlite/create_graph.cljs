@@ -4,6 +4,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.util :as db-property-util]
+            [logseq.common.util :as common-util]
             [datascript.core :as d]
             [logseq.db :as ldb]))
 
@@ -35,7 +36,7 @@
                                   [(sqlite-util/build-new-property
                                     {:block/schema schema
                                      :block/original-name (or original-name k-name)
-                                     :block/name (sqlite-util/sanitize-page-name k-name)
+                                     :block/name (common-util/page-name-sanity-lc k-name)
                                      :block/uuid (d/squuid)})])))
                             db-property/built-in-properties)
         ]

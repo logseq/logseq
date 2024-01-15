@@ -1,5 +1,5 @@
 (ns logseq.db.frontend.content
-  "fns to handle special ids"
+  "Fns to handle block content e.g. special ids"
   (:require [clojure.string :as string]
             [logseq.common.util.page-ref :as page-ref]
             [datascript.core :as d]

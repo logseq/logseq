@@ -3,7 +3,7 @@
    Also creates a page of queries that exercises most properties
    NOTE: This script is also used in CI to confirm graph creation works"
   (:require [logseq.tasks.db-graph.create-graph :as create-graph]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.common.util :as common-util]
             [logseq.db.frontend.property.type :as db-property-type]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -14,7 +14,7 @@
 (defn- date-journal-title [date]
   (let [title (.toLocaleString date "en-US" #js {:month "short" :day "numeric" :year "numeric"})
         suffixes {1 "st" 21 "st" 31 "st" 2 "nd" 22 "nd" 3 "rd" 23 "rd" 33 "rd"}]
-    (sqlite-util/sanitize-page-name
+    (common-util/page-name-sanity-lc
      (string/replace-first title #"(\d+)" (str "$1" (suffixes (.getDate date) "th"))))))
 
 (defn- date-journal-day [date]

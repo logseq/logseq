@@ -33,17 +33,6 @@
     db
     file-path)))
 
-(defn- get-page-blocks-no-cache
-  "Copy of db/get-page-blocks-no-cache. Too basic to couple to main app"
-  [db page {:keys [pull-keys]
-            :or {pull-keys '[*]}}]
-  (let [sanitized-page (common-util/page-name-sanity-lc page)
-        page-id (:db/id (d/entity db [:block/name sanitized-page]))]
-    (when page-id
-      (let [datoms (d/datoms db :avet :block/page page-id)
-            block-eids (mapv :e datoms)]
-        (d/pull-many db pull-keys block-eids)))))
-
 (defn get-blocks-to-delete
   "Returns the transactional operations to retract blocks belonging to the
   given page name and file path. This function is required when a file is being
@@ -64,7 +53,7 @@
   (let [existing-file-page (get-file-page db file-path)
         pages-to-clear (distinct (filter some? [existing-file-page (:block/name file-page)]))
         blocks (mapcat (fn [page]
-                         (get-page-blocks-no-cache db page {:pull-keys [:db/id :block/uuid]}))
+                         (ldb/get-page-blocks db page {:pull-keys [:db/id :block/uuid]}))
                        pages-to-clear)
         retain-uuids (set (keep :block/uuid retain-uuid-blocks))]
     (retract-blocks-tx (distinct blocks) retain-uuids)))

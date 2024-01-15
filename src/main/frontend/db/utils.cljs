@@ -57,10 +57,6 @@
                    repo-or-db)]
      (d/entity db id-or-lookup-ref))))
 
-(def special-id->page db-content/special-id->page)
-
-(def special-id-ref->page db-content/special-id-ref->page)
-
 (defn update-block-content
   "Replace `[[internal-id]]` with `[[page name]]`"
   [item eid]
