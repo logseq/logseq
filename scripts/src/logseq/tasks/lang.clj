@@ -176,7 +176,7 @@
    :nb-NO #{:port :type :whiteboard :right-side-bar/flashcards :right-side-bar/whiteboards
             :search-item/whiteboard :settings-page/enable-flashcards :settings-page/enable-whiteboards
             :settings-page/tab-editor :shortcut.category/whiteboard :whiteboard/medium
-            :whiteboard/twitter-url :whiteboard/youtube-url :right-side-bar/history-global}
+            :whiteboard/twitter-url :whiteboard/youtube-url :right-side-bar/history-global :linked-references/filter-heading}
    :tr #{:help/awesome-logseq}
    :id #{:host :port :on-boarding/section-app :right-side-bar/history-global}})
 
