@@ -2494,12 +2494,10 @@
                                       :block-parent-id block-id
                                       :format format
                                       :on-hide (fn [value event]
-                                                 (p/let [_ (editor-handler/save-block! (editor-handler/get-state) value)]
-                                                   (let [select? (and (= event :esc)
+                                                 (let [select? (and (= event :esc)
                                                                       (not (string/includes? value "```")))]
                                                      (editor-handler/escape-editing select?)
-                                                     (when (contains? #{:esc :visibilitychange :click} event)
-                                                       (state/clear-edit!)))))}
+                                                     (editor-handler/save-block! (editor-handler/get-state) value)))}
                                      edit-input-id
                                      config))]
           (if (and named? (seq (:block/tags block)) db-based?)
