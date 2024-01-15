@@ -110,8 +110,16 @@ html[data-theme='light'] {
   @apply pl-4 !important;
 }
 
+.tl-menu-button-row-wrap {
+  @apply flex flex-col;
+}
+
 .tl-menu-button-row {
-  @apply flex justify-between py-1;
+  @apply flex justify-between py-1 gap-[26px] opacity-80 hover:opacity-100;
+
+  .ti {
+    @apply text-lg;
+  }
 }
 
 .tl-menu {

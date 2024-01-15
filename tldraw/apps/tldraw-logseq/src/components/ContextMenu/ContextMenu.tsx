@@ -70,7 +70,7 @@ export const ContextMenu = observer(function ContextMenu({
             !app.readOnly &&
             app.selectedShapesArray?.some(s => !s.props.isLocked) && (
               <>
-                <LSUI.ContextMenuItem>
+                <LSUI.ContextMenuItem className={'tl-menu-button-row-wrap'}>
                   <div className="tl-menu-button-row pb-0">
                     <Button
                       tooltip={t('whiteboard/align-left')}
