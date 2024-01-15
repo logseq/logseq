@@ -9,7 +9,9 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.pipeline :as pipeline]
             [frontend.worker.search :as search]
-            [frontend.worker.util :as worker-util]))
+            [frontend.worker.util :as worker-util]
+            [promesa.core :as p]
+            [cljs-bean.core :as bean]))
 
 
 (defn- entity-datoms=>attr->datom
@@ -207,19 +209,25 @@
              (fn [{:keys [tx-meta] :as tx-report}]
                (let [{:keys [pipeline-replace?]} tx-meta
                      result (pipeline/invoke-hooks repo conn tx-report (worker-state/get-context))
-                     tx-report' (or (:tx-report result) tx-report)
-                     ;; TODO: delay search indice so that UI can be refreshed earlier
-                     search-indice (search/sync-search-indice repo tx-report')]
+                     tx-report' (or (:tx-report result) tx-report)]
                  (when-not pipeline-replace?
                    (let [data (pr-str
                                (merge
                                 {:request-id (:request-id tx-meta)
                                  :repo repo
-                                 :search-indice search-indice
                                  :tx-data (:tx-data tx-report')
                                  :tx-meta tx-meta}
                                 (dissoc result :tx-report)))]
-                     (worker-util/post-message :sync-db-changes data)))))))
+                     (worker-util/post-message :sync-db-changes data))
+
+                   (p/do!
+                    (let [{:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice repo tx-report')
+                          ^js wo (worker-state/get-worker-object)]
+                      (when wo
+                        (when (seq blocks-to-remove-set)
+                          (.search-delete-blocks wo repo (bean/->js blocks-to-remove-set)))
+                        (when (seq blocks-to-add)
+                          (.search-upsert-blocks wo repo (bean/->js blocks-to-add)))))))))))
 
 (defn listen-to-db-changes!
   [repo conn]
