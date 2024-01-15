@@ -75,3 +75,7 @@
 (defn set-worker-object!
   [worker]
   (swap! *state assoc :worker/object worker))
+
+(defn get-worker-object
+  []
+  (:worker/object @*state))

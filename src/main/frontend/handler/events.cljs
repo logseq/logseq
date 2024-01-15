@@ -959,8 +959,9 @@
   (let [repo (state/get-current-repo)]
     (pipeline/invoke-hooks data)
 
-    (ipc/ipc :db-transact repo (pr-str (:tx-data data)) (pr-str (:tx-meta data)))
-    (state/pub-event! [:search/transact-data repo (:search-indice data)])
+    (when (util/electron?)
+      (ipc/ipc :db-transact repo (pr-str (:tx-data data)) (pr-str (:tx-meta data))))
+
     nil))
 
 (defn run!
