@@ -733,21 +733,16 @@
                      0)
                 edit-target (if edit-block-has-refs?
                               (db/pull (:db/id edit-block))
-                              (db/pull (:db/id block)))
-                input (state/get-input)
-                edit-block-fn #(edit-block! (assoc edit-target :block/content new-value)
-                                            pos
-                                            (state/get-edit-block-node)
-                                            {:custom-content new-value
-                                             :tail-len tail-len})]
-            (when (and edit-block-has-refs? input)
-              (state/set-edit-content! (state/get-edit-input-id) new-value)
-              (cursor/move-cursor-to input pos))
+                              (db/pull (:db/id block)))]
+            (edit-block! edit-target
+                         pos
+                         (state/get-edit-block-node)
+                         {:custom-content new-value
+                          :tail-len tail-len})
 
             {:prev-block block
              :new-content new-value
-             :pos pos
-             :edit-block-fn edit-block-fn}))))))
+             :pos pos}))))))
 
 (declare save-block!)
 
@@ -757,7 +752,7 @@
 
 (declare expand-block!)
 (defn delete-block!
-  [repo delete-children? & {:keys [*edit-block-fn]}]
+  [repo delete-children?]
   (let [{:keys [id block-id block-parent-id value format config]} (get-state)]
     (when block-id
       (when-let [block-e (db/entity [:block/uuid block-id])]
@@ -784,8 +779,7 @@
                                          block-parent
                                          {:container (util/rec-get-blocks-container block-parent)})
                                         (util/get-prev-block-non-collapsed-non-embed block-parent))
-                        {:keys [prev-block new-content edit-block-fn]} (move-to-prev-block repo sibling-block format id value)
-                        _ (when *edit-block-fn (reset! *edit-block-fn edit-block-fn))
+                        {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)
                         concat-prev-block? (boolean (and prev-block new-content))
                         transact-opts {:outliner-op :delete-blocks}
                         db-based? (config/db-based-graph? repo)]
@@ -860,11 +854,10 @@
                                       (state/get-date-formatter)
                                       blocks' {}))
        (when sibling-block
-         (let [{:keys [edit-block-fn]} (move-to-prev-block repo sibling-block
-                                                           (:block/format block)
-                                                           (dom/attr sibling-block "id")
-                                                           "")]
-           (when edit-block-fn (edit-block-fn))))))))
+         (move-to-prev-block repo sibling-block
+                             (:block/format block)
+                             (dom/attr sibling-block "id")
+                             ""))))))
 
 (defn set-block-query-properties!
   [block-id all-properties key add?]
@@ -2812,11 +2805,7 @@
             (p/do!
              (save-current-block!)
              (remove-block-own-order-list-type! block))
-            (let [*edit-block-fn (atom nil)
-                  result (delete-block! repo false :*edit-block-fn *edit-block-fn)]
-              (when-let [f @*edit-block-fn]
-                (state/set-state! :editor/cached-edit-block-fn f))
-              result))))
+            (delete-block! repo false))))
 
       (and (> current-pos 1)
            (= (util/nth-safe value (dec current-pos)) commands/command-trigger))
