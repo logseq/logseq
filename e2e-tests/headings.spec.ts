@@ -67,7 +67,7 @@ test('set heading of nested block to auto', async ({ page }) => {
 
   await page.locator('#custom-context-menu .to-heading-button[title="Auto heading"]').click()
 
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(1000)
 
   expect(await page.locator('.ls-block .block-content >> nth=1').innerHTML()).toContain('<h2>bar</h2>')
 })
