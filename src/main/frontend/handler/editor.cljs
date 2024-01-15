@@ -1312,35 +1312,34 @@
    ;; non English input method
    (let [result (when-not (state/editor-in-composition?)
                   (when (state/get-current-repo)
-                    (when-not (state/get-editor-action)
-                      (try
-                        (let [input-id (state/get-edit-input-id)
-                              block (state/get-edit-block)
-                              db-block (when-let [block-id (:block/uuid block)]
-                                         (db/pull [:block/uuid block-id]))
-                              elem (and input-id (gdom/getElement input-id))
-                              db-content (:block/content db-block)
-                              db-content-without-heading (and db-content
-                                                              (common-util/safe-subs db-content (:block/level db-block)))
-                              value (if (= (:block/uuid current-block) (:block/uuid block))
-                                      (:block/content current-block)
-                                      (and elem (gobj/get elem "value")))]
-                          (when value
-                            (cond
-                              force?
-                              (save-block-aux! db-block value opts)
+                    (try
+                      (let [input-id (state/get-edit-input-id)
+                            block (state/get-edit-block)
+                            db-block (when-let [block-id (:block/uuid block)]
+                                       (db/pull [:block/uuid block-id]))
+                            elem (and input-id (gdom/getElement input-id))
+                            db-content (:block/content db-block)
+                            db-content-without-heading (and db-content
+                                                            (common-util/safe-subs db-content (:block/level db-block)))
+                            value (if (= (:block/uuid current-block) (:block/uuid block))
+                                    (:block/content current-block)
+                                    (and elem (gobj/get elem "value")))]
+                        (when value
+                          (cond
+                            force?
+                            (save-block-aux! db-block value opts)
 
-                              (and skip-properties?
-                                   (db-model/top-block? block)
-                                   (when elem (thingatpt/properties-at-point elem)))
-                              nil
+                            (and skip-properties?
+                                 (db-model/top-block? block)
+                                 (when elem (thingatpt/properties-at-point elem)))
+                            nil
 
-                              (and block value db-content-without-heading
-                                   (not= (string/trim db-content-without-heading)
-                                         (string/trim value)))
-                              (save-block-aux! db-block value opts))))
-                        (catch :default error
-                          (log/error :save-block-failed error))))))]
+                            (and block value db-content-without-heading
+                                 (not= (string/trim db-content-without-heading)
+                                       (string/trim value)))
+                            (save-block-aux! db-block value opts))))
+                      (catch :default error
+                        (log/error :save-block-failed error)))))]
      result)))
 
 (defn- clean-content!
@@ -1886,10 +1885,10 @@
     (reset! *auto-save-timeout
             (js/setTimeout
              (fn []
-               (when (state/input-idle? repo :diff 500)
+               (when (state/input-idle? repo :diff 450)
                  ; don't auto-save for page's properties block
                  (save-current-block! {:skip-properties? true})))
-             500))))
+             450))))
 
 (defn- start-of-new-word?
   [input pos]
