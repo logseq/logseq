@@ -3,7 +3,9 @@
  {datascript/datascript {:git/url "https://github.com/logseq/datascript" ;; fork
                          :sha     "21fc7880c7042fb1d9086135d162ea7a91681f89"}
   logseq/db             {:local/root "../db"}
-  com.cognitect/transit-cljs {:mvn/version "0.8.280"}}
+  logseq/graph-parser   {:local/root "../db"}
+  com.cognitect/transit-cljs {:mvn/version "0.8.280"}
+  metosin/malli {:mvn/version "0.10.0"}}
  :aliases
  {:clj-kondo
   {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2023.05.26"}}

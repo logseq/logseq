@@ -2,14 +2,15 @@
   "Provides the primary outliner operations and fns"
   (:require [clojure.set :as set]
             [clojure.string :as string]
-            [datascript.impl.entity :as de]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.outliner.datascript :as ds]
             [logseq.outliner.tree :as otree]
             [logseq.outliner.util :as outliner-u]
             [logseq.common.util :as common-util]
-            [cljs.spec.alpha :as s]
+            [malli.core :as m]
+            [malli.util :as mu]
             [logseq.db :as ldb]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
@@ -17,10 +18,18 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [cljs.pprint :as pprint]))
 
-(s/def ::block-map (s/keys :opt [:db/id :block/uuid :block/page :block/left :block/parent]))
+(def block-map
+  (mu/optional-keys
+   [:map
+    [:db/id :int]
+    ;; FIXME: tests use ints when they should use uuids
+    [:block/uuid [:or :uuid :int]]
+    [:block/left :map]
+    [:block/parent :map]
+    [:block/page :map]]))
 
-(s/def ::block-map-or-entity (s/or :entity de/entity?
-                                   :map ::block-map))
+(def block-map-or-entity
+  [:or [:fn de/entity?] block-map])
 
 (defrecord Block [data])
 
@@ -733,7 +742,7 @@
   [repo conn blocks target-block {:keys [_sibling? keep-uuid? outliner-op replace-empty-target? update-timestamps?] :as opts
                                   :or {update-timestamps? true}}]
   {:pre [(seq blocks)
-         (s/valid? ::block-map-or-entity target-block)]}
+         (m/validate block-map-or-entity target-block)]}
   (let [[target-block' sibling?] (get-target-block @conn blocks target-block opts)
         _ (assert (some? target-block') (str "Invalid target: " target-block))
         sibling? (if (page-block? target-block') false sibling?)
@@ -928,8 +937,8 @@
   "Move `blocks` to `target-block` as siblings or children."
   [repo conn blocks target-block {:keys [_sibling? _up? outliner-op _indent?]
                                   :as opts}]
-  [:pre [(seq blocks)
-         (s/valid? ::block-map-or-entity target-block)]]
+  {:pre [(seq blocks)
+         (m/validate block-map-or-entity target-block)]}
   (let [db @conn
         [target-block sibling?] (get-target-block db blocks target-block opts)
         non-consecutive-blocks? (seq (ldb/get-non-consecutive-blocks db blocks))

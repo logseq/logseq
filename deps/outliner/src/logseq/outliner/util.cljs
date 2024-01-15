@@ -1,7 +1,11 @@
 (ns logseq.outliner.util
   "Util fns for outliner"
-  (:require [datascript.impl.entity :as e]
-            [logseq.common.util :as common-util]))
+  (:require
+   #_:clj-kondo/ignore
+   ;; db needs to load before entity for nbb
+   [datascript.db]
+   [datascript.impl.entity :as e]
+   [logseq.common.util :as common-util]))
 
 (defn block-id?
   [id]
