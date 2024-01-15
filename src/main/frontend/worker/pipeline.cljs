@@ -109,7 +109,9 @@
                           tx-report)
               fix-tx-data (validate-and-fix-db! repo conn tx-report context)
               full-tx-data (concat (:tx-data tx-report) fix-tx-data (:tx-data tx-report'))
-              final-tx-report (assoc tx-report' :tx-data full-tx-data)
+              final-tx-report (assoc tx-report'
+                                     :tx-data full-tx-data
+                                     :db-before (:db-before tx-report))
               affected-query-keys (when-not (:importing? context)
                                     (worker-react/get-affected-queries-keys final-tx-report))]
           {:tx-report final-tx-report

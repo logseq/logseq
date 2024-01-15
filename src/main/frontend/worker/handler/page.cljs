@@ -12,7 +12,8 @@
             [logseq.common.config :as common-config]
             [logseq.db.frontend.content :as db-content]
             [medley.core :as medley]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.frontend.schema :as db-schema]
+            [frontend.handler.db-based.recent :as db-based]))
 
 (defn properties-block
   [repo conn config date-formatter properties format page]
@@ -221,8 +222,9 @@
               ;; if other page alias this pagename,
               ;; then just remove some attrs of this entity instead of retractEntity
               delete-page-tx (cond
-                               (not (:block/_namespace page))
-                               (if (ldb/get-alias-source-page @conn page-name)
+                               (or (and db-based? (not (:block/_namespace page)))
+                                   (not db-based?))
+                               (if (and db-based? (ldb/get-alias-source-page @conn page-name))
                                  (when-let [id (:db/id (d/entity @conn [:block/name page-name]))]
                                    (mapv (fn [attribute]
                                            [:db/retract id attribute])

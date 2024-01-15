@@ -296,8 +296,9 @@
 (defn original-page-name->index
   [p]
   (when p
-    {:name (util/search-normalize p true)
-     :original-name p}))
+    {:id (str (:block/uuid p))
+     :name (:block/name p)
+     :original-name (:block/original-name p)}))
 
 (defn- safe-subs
   ([s start]
@@ -317,14 +318,9 @@
 
 (defn get-all-pages
   [db]
-  (->>
-   (d/q
-    '[:find [?page-original-name ...]
-      :where
-      [?page :block/name ?page-name]
-      [(get-else $ ?page :block/original-name ?page-name) ?page-original-name]]
-    db)
-   (remove hidden-page?)))
+  (let [page-datoms (d/datoms db :avet :block/name)
+        pages (map (fn [d] (d/entity db (:e d))) page-datoms)]
+    (remove (fn [p] (hidden-page? (:block/name p))) pages)))
 
 (defn build-page-indice
   "Build a page title indice from scratch.
@@ -333,7 +329,6 @@
    From now on, page indice is talking about page content search."
   [repo db]
   (let [pages (->> (get-all-pages db)
-                   (remove string/blank?)
                    (map original-page-name->index)
                    (bean/->js))
         indice (fuse. pages
@@ -391,14 +386,10 @@
                (fn [indice]
                  (when indice
                    (doseq [page-entity pages-to-remove]
-                     (.remove indice
-                              (fn [page]
-                                (= (:block/name page-entity)
-                                   (common-util/safe-page-name-sanity-lc (gobj/get page "original-name"))))))
+                     (.remove indice (fn [page] (= (:block/name page-entity) (gobj/get page "name")))))
                    (doseq [page pages-to-add]
-                     (.add indice (bean/->js (original-page-name->index
-                                              (or (:block/original-name page)
-                                                  (:block/name page))))))
+                     (.remove indice (fn [p] (= (str (:block/uuid page)) (gobj/get p "id"))))
+                     (.add indice (bean/->js (original-page-name->index page))))
                    indice)))))
 
     ;; update block indice
