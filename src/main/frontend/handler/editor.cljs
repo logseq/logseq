@@ -2813,10 +2813,11 @@
             (p/do!
              (save-current-block!)
              (remove-block-own-order-list-type! block))
-            (p/let [*edit-block-fn (atom nil)
-                    _result (delete-block! repo false :*edit-block-fn *edit-block-fn)]
+            (let [*edit-block-fn (atom nil)
+                  result (delete-block! repo false :*edit-block-fn *edit-block-fn)]
               (when-let [f @*edit-block-fn]
-                (f))))))
+                (state/set-state! :editor/cached-edit-block-fn f))
+              result))))
 
       (and (> current-pos 1)
            (= (util/nth-safe value (dec current-pos)) commands/command-trigger))

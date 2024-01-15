@@ -47,6 +47,10 @@
         tx-report {:tx-meta tx-meta
                    :tx-data tx-data}]
 
+    (when-let [edit-block-f (:editor/cached-edit-block-fn @state/state)]
+      (edit-block-f)
+      (state/set-state! :editor/cached-edit-block-fn nil))
+
     (let [conn (db/get-db repo false)
           tx-report (d/transact! conn tx-data tx-meta)]
       (when local-tx?
