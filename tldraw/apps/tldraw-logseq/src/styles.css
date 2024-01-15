@@ -260,22 +260,11 @@ html[data-theme='light'] {
 }
 
 .tl-button {
-  @apply relative flex items-center justify-center rounded border-0 gap-1;
-
-  height: 32px;
-  min-width: 32px;
-  font-family: var(--ls-font-family);
-  background: none;
-  cursor: pointer;
-  color: var(--ls-primary-text-color);
-
-  &:hover {
-    background-color: or(--ls-whiteboard-button-background-hover, --lx-gray-06, --ls-primary-background-color);
-  }
+  @apply relative flex items-center justify-center rounded border-0 gap-1 bg-none cursor-pointer;
+  @apply w-[32px] h-[32px] hover:bg-gray-06;
 
   &[data-selected='true'] {
-    background-color: or(--ls-whiteboard-button-background-selected, --lx-accent-09, --color-selectedFill);
-    color: or(--ls-whiteboard-button-text-selected, --lx-gray-12, --color-selectedContrast);
+    @apply bg-accent text-accent-foreground;
   }
 }
 
@@ -862,7 +851,7 @@ html[data-theme='dark'] {
 .tl-toolbar-separator {
   background-color: var(--ls-border-color);
   width: 1px;
-  opacity: 0.5;
+  opacity: 0.9;
 
   &[data-orientation='horizontal'] {
     height: 1px;
