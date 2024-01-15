@@ -9,12 +9,14 @@
             [frontend.handler.user :as user]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.async-util :include-macros true :refer [<?]]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [frontend.worker.state :as state]))
 
 (def state-schema
   [:map {:closed true}
    [:*graph-uuid :any]
    [:*repo :any]
+   [:*db-conn :any]
    [:*assets-update-state :any]
    [:data-from-ws-pub :any]
    [:*auto-push-assets-update-ops? :any]
@@ -43,14 +45,19 @@
         (doseq [[tp _op] min-epoch-asset-ops]
           (case tp
             :update-asset
-            (let [asset-entity (d/pull @conn '[*] [:asset/uuid asset-uuid])]
-              (<? (ws/<send&receive state {:action "update-assets" :graph-uuid graph-uuid
-                                           :create [{:asset-uuid asset-uuid
-                                                     :asset-name (or (some-> asset-entity :asset/meta :name)
-                                                                     "default-name")}]})))
+            (let [asset-entity (d/pull @conn '[*] [:asset/uuid asset-uuid])
+                  r (<? (ws/<send&receive state {:action "update-assets" :graph-uuid graph-uuid
+                                                 :create [{:asset-uuid asset-uuid
+                                                           :asset-name (or (some-> asset-entity :asset/meta :name)
+                                                                           "default-name")}]}))]
+              (when (:ex-data r)
+                (throw (ex-info (:ex-message r) (:ex-data r)))))
+
             :remove-asset
-            (<? (ws/<send&receive state {:action "update-assets" :graph-uuid graph-uuid
-                                         :delete [asset-uuid]}))))
+            (let [r (<? (ws/<send&receive state {:action "update-assets" :graph-uuid graph-uuid
+                                                 :delete [asset-uuid]}))]
+              (when (:ex-data r)
+                (throw (ex-info (:ex-message r) (:ex-data r)))))))
         (op-mem-layer/remove-asset-ops! repo asset-uuid)
         (recur)
         (catch :default e
