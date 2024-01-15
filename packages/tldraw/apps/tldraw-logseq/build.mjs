@@ -23,7 +23,7 @@ Object.assign(glob, {
 
 fs.writeFileSync('dist/package.json', JSON.stringify(glob, null, 2))
 
-const dest = path.join(__dirname, '/../../../src/main/frontend/tldraw-logseq.js')
+const dest = path.join(__dirname, '/../../../../src/main/frontend/tldraw-logseq.js')
 
 if (fs.existsSync(dest)) fs.unlinkSync(dest)
 fs.linkSync(path.join(__dirname, '/dist/index.js'), dest)
