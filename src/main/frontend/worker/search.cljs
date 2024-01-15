@@ -17,7 +17,7 @@
 (defn- add-blocks-fts-triggers!
   "Table bindings of blocks tables and the blocks FTS virtual tables"
   [db]
-  (let [triggers [;; add
+  (let [triggers [;; delete
                   "CREATE TRIGGER IF NOT EXISTS blocks_ad AFTER DELETE ON blocks
                   BEGIN
                       DELETE from blocks_fts where id = old.id;
@@ -157,7 +157,7 @@
             matched-result (search-blocks-aux db match-sql match-input page limit)
             non-match-result (search-blocks-aux db non-match-sql non-match-input page limit)
             all-result (->> (concat matched-result non-match-result)
-                            (map (fn [[id _content page snippet]]
+                            (map (fn [[id page _content snippet]]
                                    {:uuid id
                                     :content snippet
                                     :page page})))]

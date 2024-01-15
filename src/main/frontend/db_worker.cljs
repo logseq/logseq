@@ -138,7 +138,7 @@
             _ (when (zero? capacity)   ; file handle already releases since pool will be initialized only once
                 (.acquireAccessHandles pool))
             db (new (.-OpfsSAHPoolDb pool) repo-path)
-            search-db (new (.-OpfsSAHPoolDb pool) (str "search-" repo-path))
+            search-db (new (.-OpfsSAHPoolDb pool) (str "search" repo-path))
             storage (new-sqlite-storage repo {})]
       (swap! *sqlite-conns assoc repo {:db db
                                        :search search-db})
