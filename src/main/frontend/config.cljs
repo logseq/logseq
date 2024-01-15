@@ -95,7 +95,7 @@
 
 ;; ============
 
-(def app-name "logseq")
+(def app-name common-config/app-name)
 (def website
   (if dev?
     "http://localhost:3000"

@@ -33,8 +33,6 @@
                 (assoc :block/created-at updated-at))]
     block))
 
-(def sanitize-page-name common-util/page-name-sanity-lc)
-
 (defn build-new-property
   "Build a standard new property so that it is is consistent across contexts"
   [block]

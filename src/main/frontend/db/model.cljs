@@ -14,6 +14,7 @@
             [frontend.util :as util :refer [react]]
             [frontend.util.drawer :as drawer]
             [logseq.db.frontend.rules :as rules]
+            [logseq.db.frontend.content :as db-content]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util.db :as db-util]
             [logseq.common.util :as common-util]
@@ -26,8 +27,6 @@
 ;; corresponding handlers.
 
 (def block-attrs ldb/block-attrs)
-
-(def get-original-name util/get-page-original-name)
 
 (defn get-tag-pages
   [repo tag-name]
@@ -234,8 +233,8 @@ independent of format as format specific heading characters are stripped"
                   (let [block (db-utils/entity repo block-id)
                         ref-tags (distinct (concat (:block/tags block) (:block/refs block)))]
                     (= (-> block-content
-                           (db-utils/special-id->page ref-tags)
-                           (db-utils/special-id-ref->page ref-tags)
+                           (db-content/special-id->page ref-tags)
+                           (db-content/special-id-ref->page ref-tags)
                            heading-content->route-name)
                        (string/lower-case external-content)))))
            ffirst)
