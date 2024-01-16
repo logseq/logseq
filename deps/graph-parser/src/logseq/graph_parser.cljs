@@ -126,7 +126,7 @@ Options available:
 (defn add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
   [block]
-  (let [updated-at (date-time-util/time-ms)
+  (let [updated-at (common-util/time-ms)
         block (cond-> block
                 (nil? (:block/updated-at block))
                 (assoc :block/updated-at updated-at)
