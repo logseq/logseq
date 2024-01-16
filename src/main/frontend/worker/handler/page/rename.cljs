@@ -89,8 +89,10 @@
        (distinct)
        (vec)))
 
+(declare rename-page-aux)
+
 (defn- based-merge-pages!
-  [repo conn config from-page-name to-page-name persist-op?]
+  [repo conn config from-page-name to-page-name {:keys [old-name new-name persist-op?]}]
   (when (and (ldb/page-exists? @conn from-page-name)
              (ldb/page-exists? @conn to-page-name)
              (not= from-page-name to-page-name))
@@ -124,12 +126,12 @@
                                 (replace-page-ref from-page to-page)
                                 (page-rename/replace-page-ref db config from-page-name to-page-name))
           tx-data (concat blocks-tx-data replace-ref-tx-data)]
-      (ldb/transact! conn tx-data {:persist-op? persist-op?})
-      (rename-update-namespace! repo conn config from-page
-                                (common-util/get-page-original-name from-page)
-                                (common-util/get-page-original-name to-page)))
 
-    (worker-page/delete! repo conn from-page-name (fn [_]))))
+      (rename-page-aux repo conn config old-name new-name
+                       :merge? true
+                       :other-tx tx-data))
+
+    (worker-page/delete! repo conn from-page-name (fn [_]) {:rename? true})))
 
 (defn- compute-new-file-path
   "Construct the full path given old full path and the file sanitized body.
@@ -156,7 +158,7 @@
 
 (defn- rename-page-aux
   "Only accepts unsanitized page names"
-  [repo conn config old-name new-name]
+  [repo conn config old-name new-name & {:keys [merge? other-tx]}]
   (let [db                  @conn
         old-page-name       (common-util/page-name-sanity-lc old-name)
         new-page-name       (common-util/page-name-sanity-lc new-name)
@@ -164,12 +166,14 @@
         page                (d/pull @conn '[*] [:block/name old-page-name])]
     (when (and repo page)
       (let [old-original-name   (:block/original-name page)
-            page-txs            [{:db/id               (:db/id page)
-                                  :block/uuid          (:block/uuid page)
-                                  :block/name          new-page-name
-                                  :block/original-name new-name}]
+            page-txs            (when-not merge?
+                                  [{:db/id               (:db/id page)
+                                    :block/uuid          (:block/uuid page)
+                                    :block/name          new-page-name
+                                    :block/original-name new-name}])
             {:keys [old-path new-path tx-data]} (update-file-tx db old-page-name new-name)
             txs (concat page-txs
+                        other-tx
                         (when-not db-based?
                           (->>
                            (concat
@@ -265,11 +269,14 @@
           (ldb/transact! conn
                          [{:db/id (:db/id page-e)
                            :block/original-name new-name}]
-                         {:persist-op? persist-op?})
+                         {:persist-op? persist-op?
+                          :outliner-op :rename-page})
 
           (and (not= old-page-name new-page-name)
                (d/entity @conn [:block/name new-page-name])) ; merge page
-          (based-merge-pages! repo conn config old-page-name new-page-name persist-op?)
+          (based-merge-pages! repo conn config old-page-name new-page-name {:old-name old-name
+                                                                            :new-name new-name
+                                                                            :persist-op? persist-op?})
 
           :else                          ; rename
           (rename-namespace-pages! repo conn config old-name new-name))

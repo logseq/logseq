@@ -18,7 +18,6 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as web-nfs]
-            [frontend.worker.handler.page.rename :as worker-page-rename]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -36,7 +35,9 @@
             [logseq.common.path :as path]
             [frontend.handler.property.util :as pu]
             [electron.ipc :as ipc]
-            [frontend.context.i18n :refer [t]]))
+            [frontend.context.i18n :refer [t]]
+            [frontend.persist-db.browser :as db-browser]
+            [cljs-bean.core :as bean]))
 
 (def create! page-common-handler/create!)
 (def <create! page-common-handler/<create!)
@@ -71,18 +72,17 @@
         (favorite-page! page-name)))))
 
 (defn rename!
-  [old-name new-name & {:as opts}]
-  (let [repo (state/get-current-repo)
-        conn (db/get-db repo false)
-        config (state/get-config repo)
-        result (worker-page-rename/rename! repo conn config old-name new-name opts)]
-    (case result
-      :invalid-empty-name
-      (notification/show! "Please use a valid name, empty name is not allowed!" :error)
-      :merge-whiteboard-pages
-      (notification/show! "Can't merge whiteboard pages" :error)
-      nil)
-    result))
+  [old-name new-name & {:as _opts}]
+  (when-let [^js worker @db-browser/*worker]
+    (p/let [repo (state/get-current-repo)
+            result (.page-rename worker repo old-name new-name)
+            result' (:result (bean/->clj result))]
+      (case result'
+        :invalid-empty-name
+        (notification/show! "Please use a valid name, empty name is not allowed!" :error)
+        :merge-whiteboard-pages
+        (notification/show! "Can't merge whiteboard pages" :error)
+        nil))))
 
 (defn reorder-favorites!
   [favorites]

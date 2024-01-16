@@ -270,28 +270,15 @@
                       (assoc :block/uuid (:block/uuid block)))
            opts' (assoc opts :outliner-op :save-block)
            original-block (db/entity (:db/id block))
-           original-props (:block/properties original-block)
-           result (ui-outliner-tx/transact!
+           original-props (:block/properties original-block)]
+       (ui-outliner-tx/transact!
                    opts'
                    (outliner-save-block! block')
                    ;; page properties changed
                    (when-let [page-name (and (:block/pre-block? block')
                                              (not= original-props (:block/properties block'))
                                              (some-> (:block/page block') :db/id (db-utils/pull) :block/name))]
-                     (state/set-page-properties-changed! page-name)))]
-
-       ;; file based graph only
-       ;; sanitized page name changed
-       (when-let [title (get-in block' [:block/properties :title])]
-         (if (string? title)
-           (when-let [old-page-name (:block/name (db/entity (:db/id (:block/page block'))))]
-             (when (and (:block/pre-block? block')
-                        (not (string/blank? title))
-                        (not= (util/page-name-sanity-lc title) old-page-name))
-               (state/pub-event! [:page/title-property-changed old-page-name title true])))
-           (js/console.error (str "Title is not a string: " title))))
-
-       result))))
+                     (state/set-page-properties-changed! page-name)))))))
 
 ;; id: block dom id, "ls-block-counter-uuid"
 (defn- another-block-with-same-id-exists?
