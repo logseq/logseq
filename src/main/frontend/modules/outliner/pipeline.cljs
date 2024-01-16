@@ -55,6 +55,13 @@
       (when-not (or undo? redo?)
         (update-current-tx-editor-cursor! tx-report)))
 
+    (let [new-datoms (filter (fn [datom]
+                               (and
+                                (= :block/uuid (:a datom))
+                                (true? (:added datom)))) tx-data)]
+      (when (seq new-datoms)
+        (state/set-state! :editor/new-created-blocks (set (map :v new-datoms)))))
+
     (let [pages (set (keep #(when (= :block/name (:a %)) (:v %)) tx-data))]
       (when (seq pages)
         (mark-pages-as-loaded! repo pages)))
