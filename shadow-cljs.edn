@@ -5,7 +5,7 @@
  ;; "." for /static
  :dev-http {3001 ["static" "."]}
 
- :js-options {:js-package-dirs ["node_modules" "tldraw/apps"]}
+ :js-options {:js-package-dirs ["node_modules" "packages/tldraw/apps"]}
 
  :builds
  {:app {:target        :browser
