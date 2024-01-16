@@ -22,7 +22,8 @@
             [frontend.worker.rtc.core :as rtc-core]
             [clojure.core.async :as async]
             [frontend.worker.async-util :include-macros true :refer [<?]]
-            [frontend.worker.util :as worker-util]))
+            [frontend.worker.util :as worker-util]
+            [frontend.worker.handler.page.rename :as worker-page-rename]))
 
 (defonce *sqlite state/*sqlite)
 (defonce *sqlite-conns state/*sqlite-conns)
@@ -363,6 +364,13 @@
    [this repo q limit]
    (when-let [conn (state/get-datascript-conn repo)]
      (search/page-search repo @conn q limit)))
+
+  (page-rename
+   [this repo old-name new-name]
+   (when-let [conn (state/get-datascript-conn repo)]
+     (let [config (state/get-config repo)
+           result (worker-page-rename/rename! repo conn config old-name new-name)]
+       (bean/->js {:result result}))))
 
   (file-writes-finished?
    [this]

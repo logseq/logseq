@@ -345,16 +345,13 @@
 (defmethod handle :modal/set-git-username-and-email [[_ _content]]
   (state/set-modal! git-component/set-git-username-and-email))
 
-(defmethod handle :page/title-property-changed [[_ old-title new-title]]
-  (page-handler/rename! old-title new-title))
-
 (defmethod handle :page/create [[_ page-name opts]]
   (if (= page-name (date/today))
     (page-handler/create-today-journal!)
     (page-handler/<create! page-name opts)))
 
-(defmethod handle :page/deleted [[_ repo page-name file-path]]
-  (page-common-handler/after-page-deleted! repo page-name file-path))
+(defmethod handle :page/deleted [[_ repo page-name file-path tx-meta]]
+  (page-common-handler/after-page-deleted! repo page-name file-path tx-meta))
 
 (defmethod handle :page/renamed [[_ repo data]]
   (page-common-handler/after-page-renamed! repo data))

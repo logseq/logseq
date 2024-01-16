@@ -108,13 +108,14 @@
 
 
 (defn after-page-deleted!
-  [repo page-name file-path]
+  [repo page-name file-path tx-meta]
   (let [repo-dir (config/get-repo-dir repo)]
       ;; TODO: move favorite && unfavorite to worker too
     (unfavorite-page! page-name)
 
-    (when (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
-             (common-util/page-name-sanity-lc page-name))
+    (when (and (not= :rename-page (:real-outliner-op tx-meta))
+               (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
+                  (common-util/page-name-sanity-lc page-name)))
       (route-handler/redirect-to-home!))
 
     ;; TODO: why need this?
@@ -146,6 +147,7 @@
         page (db/entity [:block/name new-page-name])
         redirect? (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
                      (common-util/page-name-sanity-lc old-page-name))]
+
     ;; Redirect to the newly renamed page
     (when redirect?
       (route-handler/redirect! {:to          (if (model/whiteboard-page? page) :whiteboard :page)

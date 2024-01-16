@@ -197,7 +197,7 @@
 
 (defn delete!
   "Deletes a page and then either calls the ok-handler or the error-handler if unable to delete"
-  [repo conn page-name ok-handler & {:keys [persist-op? error-handler]
+  [repo conn page-name ok-handler & {:keys [persist-op? rename? error-handler]
                                      :or {persist-op? true
                                           error-handler (fn [{:keys [msg]}] (js/console.error msg))}}]
   (when (and repo page-name)
@@ -239,6 +239,8 @@
                          (cond-> {:outliner-op :delete-page
                                   :deleted-page page-name
                                   :persist-op? persist-op?}
+                           rename?
+                           (assoc :real-outliner-op :rename-page)
                            file-path
                            (assoc :file-path file-path)))
 
