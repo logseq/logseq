@@ -1,7 +1,7 @@
 (ns frontend.handler.query.builder
   "DSL query builder handler"
   (:require [clojure.walk :as walk]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [lambdaisland.glogi :as log]
             [frontend.db.query-dsl :as query-dsl]))
 

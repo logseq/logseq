@@ -2,7 +2,7 @@
   (:require [cljs.test :refer [deftest is use-fixtures testing]]
             [datascript.core :as d]
             [frontend.db :as db]
-            [frontend.modules.outliner.pipeline :as pipeline]
+            [frontend.worker.pipeline :as pipeline]
             [frontend.test.helper :as test-helper :refer [load-test-files]]))
 
 (use-fixtures :each test-helper/start-and-destroy-db)

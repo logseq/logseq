@@ -25,7 +25,7 @@
 (deftest get-initial-data
   (testing "Fetches a defined block"
     (create-graph-dir "tmp/graphs" "test-db")
-    
+
     (let [conn* (sqlite-db/open-db! "tmp/graphs" "test-db")
           blocks [{:block/uuid (random-uuid)
                    :file/path "logseq/config.edn"

@@ -1,11 +1,10 @@
 (ns frontend.handler.db-based.page-test
-  (:require [frontend.handler.db-based.page :as db-page-handler]
-            [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
             [frontend.handler.page :as page-handler]
             [frontend.db :as db]
-            [frontend.db.fix :as db-fix]
+            [frontend.worker.db.fix :as db-fix]
             [frontend.handler.editor :as editor-handler]
             [goog.dom :as gdom]))
 
@@ -28,7 +27,7 @@
 (deftest rename-test
   (testing "Case change"
     (let [page (db/entity [:block/name "test"])]
-      (db-page-handler/rename! "test" "Test" false false)
+      (page-handler/rename! "test" "Test")
       (let [entity (db/entity [:block/name "test"])]
         (is (= "Test" (:block/original-name entity)))
         ;; db id not changed
@@ -36,7 +35,7 @@
 
   (testing "Name changed"
     (let [page (db/entity [:block/name "test"])]
-      (db-page-handler/rename! "Test" "New name" false false)
+      (page-handler/rename! "Test" "New name")
       (let [entity (db/entity [:block/name "new name"])]
         (is (= "New name" (:block/original-name entity)))
         (is (= (:db/id page) (:db/id entity))))))
@@ -45,7 +44,7 @@
     (with-redefs [gdom/getElement (constantly #js {:id nil})
                   editor-handler/edit-block! (constantly nil)]
       (page-handler/create! "Existing page" {:redirect? false :create-first-block? true})
-      (db-page-handler/rename! "New name" "Existing page" false false)
+      (page-handler/rename! "New name" "Existing page")
       (let [e1 (db/entity [:block/name "new name"])
             e2 (db/entity [:block/name "existing page"])]
       ;; Old page deleted
@@ -57,7 +56,7 @@
 
 (deftest merge-with-empty-page
   (page-handler/create! "Existing page" {:redirect? false :create-first-block? false})
-  (db-page-handler/rename! "Test" "Existing page" false false)
+  (page-handler/rename! "Test" "Existing page")
   (let [e1 (db/entity [:block/name "test"])
         e2 (db/entity [:block/name "existing page"])]
       ;; Old page deleted
@@ -71,8 +70,8 @@
   (testing "Renaming a page to an existing whiteboard page"
     (page-handler/create! "Whiteboard page" {:redirect? false
                                              :whiteboard? true})
-    (is (= :merge-whiteboard-pages (db-page-handler/rename! "Test" "Whiteboard page" false false)))
-    (is (= :merge-whiteboard-pages (db-page-handler/rename! "Whiteboard page" "Test" false false)))))
+    (is (= :merge-whiteboard-pages (page-handler/rename! "Test" "Whiteboard page" false false)))
+    (is (= :merge-whiteboard-pages (page-handler/rename! "Whiteboard page" "Test" false false)))))
 
 (deftest merge-existing-pages-should-update-ref-ids
   (testing "Merge existing page"
@@ -80,7 +79,7 @@
                   editor-handler/edit-block! (constantly nil)]
       (editor-handler/save-block! repo fbid "Block 1 [[Test]]")
       (page-handler/create! "Existing page" {:redirect? false :create-first-block? true})
-      (db-page-handler/rename! "Test" "Existing page" false false)
+      (page-handler/rename! "Test" "Existing page" false false)
       (let [e1 (db/entity [:block/name "test"])
             e2 (db/entity [:block/name "existing page"])]
       ;; Old page deleted
@@ -95,7 +94,7 @@
 ;; TODO: full coverage
 (deftest rename-namespace-pages
   (testing "Rename a page to a namespaced one"
-    (db-page-handler/rename! "Test" "Abc/Def Ghi/Jk" false false)
+    (page-handler/rename! "Test" "Abc/Def Ghi/Jk" {})
     (let [e1 (db/entity [:block/name "test"])
           e2 (db/entity [:block/name "abc/def ghi/jk"])
           e3 (db/entity [:block/name "abc/def ghi"])

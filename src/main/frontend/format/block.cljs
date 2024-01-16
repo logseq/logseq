@@ -10,10 +10,8 @@
             [frontend.state :as state]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
             [frontend.handler.db-based.property.util :as db-pu]
             [lambdaisland.glogi :as log]
-            [frontend.util :as util]
             [datascript.core :as d]
             [logseq.db.frontend.property :as db-property]
             [frontend.format.mldoc :as mldoc]))
@@ -71,20 +69,6 @@ and handles unexpected failure."
    (page-name->map original-page-name with-id? true))
   ([original-page-name with-id? with-timestamp?]
    (gp-block/page-name->map original-page-name with-id? (db/get-db (state/get-current-repo)) with-timestamp? (state/get-date-formatter))))
-
-(defn extract-refs-from-text
-  [text]
-  (when (string? text)
-    (let [ast-refs (gp-mldoc/get-references text (mldoc/get-default-config :markdown))
-          page-refs (map #(gp-block/get-page-reference % :markdown) ast-refs)
-          block-refs (map #(gp-block/get-block-reference %) ast-refs)
-          refs' (->> (concat page-refs block-refs)
-                     (remove string/blank?)
-                     distinct)]
-      (-> (map #(if (util/uuid-string? %)
-                  {:block/uuid (uuid %)}
-                  (page-name->map % true)) refs')
-          set))))
 
 (defn- normalize-as-percentage
   [block]

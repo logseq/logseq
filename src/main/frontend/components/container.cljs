@@ -220,7 +220,7 @@
      {:title (t :left-side-bar/new-whiteboard)
       :class "new-whiteboard-link"
       :options {:on-click #(do (close-sidebar-on-mobile!)
-                               (whiteboard-handler/create-new-whiteboard-and-redirect!))
+                               (whiteboard-handler/<create-new-whiteboard-and-redirect!))
                 :shortcut (ui/keyboard-shortcut-from-config :editor/new-whiteboard)}
       :icon (ui/type-icon {:name "new-whiteboard"
                            :class "highlight"

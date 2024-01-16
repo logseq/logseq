@@ -22,8 +22,8 @@
    [promesa.core :as p]
    [rum.core :as rum]
    [frontend.mixins :as mixins]
-   [logseq.graph-parser.util.block-ref :as block-ref]
-   [logseq.graph-parser.util :as gp-util]
+   [logseq.common.util.block-ref :as block-ref]
+   [logseq.common.util :as common-util]
    [logseq.shui.button.v2 :as button]
    [frontend.modules.shortcut.utils :as shortcut-utils]
    [frontend.config :as config]
@@ -341,7 +341,7 @@
   [input]
   (or (when (string/starts-with? input "/")
         (subs input 1))
-      (last (gp-util/split-last "/" input))))
+      (last (common-util/split-last "/" input))))
 
 (defmethod load-results :filters [group state]
   (let [!results (::results state)
@@ -498,22 +498,23 @@
         create-whiteboard? (= :whiteboard (:source-create item))
         create-page? (= :page (:source-create item))
         class (when create-class? (get-class-from-input @!input))]
-    (cond
-      create-class? (page-handler/create! class
-                                          {:redirect? false
-                                           :create-first-block? false
-                                           :class? true})
-      create-whiteboard? (whiteboard-handler/create-new-whiteboard-and-redirect! @!input)
-      create-page? (page-handler/create! @!input {:redirect? true}))
-    (if create-class?
-      (state/pub-event! [:class/configure (db/entity [:block/name (util/page-name-sanity-lc class)])])
-      (state/close-modal!))))
+    (p/do!
+     (cond
+       create-class? (page-handler/<create! class
+                                            {:redirect? false
+                                             :create-first-block? false
+                                             :class? true})
+       create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
+       create-page? (page-handler/<create! @!input {:redirect? true}))
+     (if create-class?
+       (state/pub-event! [:class/configure (db/entity [:block/name (util/page-name-sanity-lc class)])])
+       (state/close-modal!)))))
 
 (defn- get-filter-user-input
   [input]
   (cond
     (string/includes? input "/")
-    (first (gp-util/split-last "/" input))
+    (first (common-util/split-last "/" input))
     (string/starts-with? input "/")
     ""
     :else

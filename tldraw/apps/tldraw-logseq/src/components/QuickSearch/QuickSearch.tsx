@@ -113,8 +113,8 @@ export const LogseqQuickSearch = observer(
     }, [])
 
     const handleAddBlock = React.useCallback(
-      (content: string) => {
-        const uuid = handlers?.addNewBlock(content)
+      async (content: string) => {
+        const uuid = await handlers?.addNewBlock(content)
         if (uuid) {
           finishSearching(uuid)
           onAddBlock?.(uuid)
@@ -203,8 +203,8 @@ export const LogseqQuickSearch = observer(
           },
           {
             actionIcon: 'circle-plus',
-            onChosen: () => {
-              handlers?.addNewWhiteboard(q)
+            onChosen: async () => {
+              await handlers?.addNewWhiteboard(q)
               finishSearching(q)
               return true
             },

@@ -1,4 +1,6 @@
 {:paths ["src"]
  :api-namespaces [logseq.outliner.datascript-report
-                  logseq.outliner.pipeline]
+                  logseq.outliner.pipeline
+                  logseq.outliner.core
+                  logseq.outliner.tree]
  :report {:format :ignore}}

@@ -17,7 +17,7 @@
             [frontend.state :as state]
             [frontend.handler.notification :as notification]
             ["/frontend/utils" :as utils]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.common.path :as path]))
 
 ;; Cache the file handles in the memory so that
@@ -124,7 +124,7 @@
                            (not (contains? #{"md" "org" "excalidraw" "edn" "css"} ext))))))
          (map (fn [file]
                 (-> (.-webkitRelativePath file)
-                    gp-util/path-normalize))))))
+                    common-util/path-normalize))))))
 
 
 (defn- get-files-and-reload-all-handles
@@ -152,7 +152,7 @@
                        (p/let [content (.text file)]
                          {:name        (.-name file)
                           :path        (-> (.-webkitRelativePath file)
-                                           gp-util/path-normalize)
+                                           common-util/path-normalize)
                           :mtime       (.-lastModified file)
                           :size        (.-size file)
                           :type        (.-kind (.-handle file))
@@ -339,7 +339,7 @@
                                 ;; path content size mtime
                                 {:name        (.-name file)
                                  :path        (-> (.-webkitRelativePath file)
-                                                  gp-util/path-normalize)
+                                                  common-util/path-normalize)
                                  :mtime       (.-lastModified file)
                                  :size        (.-size file)
                                  :type        (.-kind (.-handle file))

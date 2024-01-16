@@ -2,16 +2,18 @@
   "Provides fns for drag and drop"
   (:require [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
-            [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.tree :as tree]
-            [frontend.modules.outliner.transaction :as outliner-tx]
-            [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.tree :as otree]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [logseq.common.util.block-ref :as block-ref]
             [frontend.state :as state]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.handler.block :as block-handler]))
 
 (defn move-blocks
   [^js event blocks target-block original-block move-to]
-  (let [blocks' (map #(db/pull (:db/id %)) blocks)
+  (let [repo (state/get-current-repo)
+        blocks' (map #(db/pull (:db/id %)) blocks)
         first-block (first blocks')
         top? (= move-to :top)
         nested? (= move-to :nested)
@@ -39,20 +41,22 @@
                           :clear? true}])
 
       (every? map? (conj blocks' target-block))
-      (let [target-node (outliner-core/block target-block)]
-        (outliner-tx/transact!
+      (let [target-node (outliner-core/block (db/get-db) target-block)
+            conn (db/get-db false)
+            blocks' (block-handler/get-top-level-blocks blocks')]
+        (ui-outliner-tx/transact!
          {:outliner-op :move-blocks}
          (editor-handler/save-current-block!)
          (if top?
            (let [first-child?
-                 (= (tree/-get-parent-id target-node)
-                    (tree/-get-left-id target-node))]
+                 (= (otree/-get-parent-id target-node conn)
+                    (otree/-get-left-id target-node conn))]
              (if first-child?
-               (when-let [parent (tree/-get-parent target-node)]
-                 (outliner-core/move-blocks! blocks' (:data parent) false))
-               (when-let [before-node (tree/-get-left target-node)]
-                 (outliner-core/move-blocks! blocks' (:data before-node) true))))
-           (outliner-core/move-blocks! blocks' target-block (not nested?)))))
+               (when-let [parent (otree/-get-parent target-node conn)]
+                 (outliner-core/move-blocks! repo conn blocks' (:data parent) false))
+               (when-let [before-node (otree/-get-left target-node conn)]
+                 (outliner-core/move-blocks! repo conn blocks' (:data before-node) true))))
+           (outliner-core/move-blocks! repo conn blocks' target-block (not nested?)))))
 
       :else
       nil)))

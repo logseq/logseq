@@ -26,7 +26,7 @@
             [goog.dom :as gdom]
             [goog.string :as gstring]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [promesa.core :as p]
             [react-draggable]
             [rum.core :as rum]
@@ -105,15 +105,15 @@
   (if embed?
     (fn [chosen-item _e]
       (let [value (.-value input)
-            value' (str (gp-util/safe-subs value 0 q)
-                        (gp-util/safe-subs value (+ (count q) 4 pos)))]
+            value' (str (common-util/safe-subs value 0 q)
+                        (common-util/safe-subs value (+ (count q) 4 pos)))]
         (state/set-edit-content! (.-id input) value')
         (state/clear-editor-action!)
-        (let [page-name (util/page-name-sanity-lc chosen-item)
-              page (db/entity [:block/name page-name])
-              _ (when-not page (page-handler/create! chosen-item {:redirect? false
-                                                                  :create-first-block? false}))
-              current-block (state/get-edit-block)]
+        (p/let [page-name (util/page-name-sanity-lc chosen-item)
+                page (db/entity [:block/name page-name])
+                _ (when-not page (page-handler/<create! chosen-item {:redirect? false
+                                                                     :create-first-block? false}))
+                current-block (state/get-edit-block)]
           (editor-handler/api-insert-new-block! chosen-item
                                                 {:block-uuid (:block/uuid current-block)
                                                  :sibling? true
@@ -122,7 +122,7 @@
     (page-handler/on-chosen-handler input id q pos format)))
 
 (rum/defc page-search-aux
-  [id format embed? db-tag? create-page? q current-pos edit-content input pos]
+  [id format embed? db-tag? q current-pos input pos]
   (let [[matched-pages set-matched-pages!] (rum/use-state nil)]
     (rum/use-effect! (fn []
                        (when-not (string/blank? q)
@@ -158,29 +158,19 @@
                               (cons (first matched-pages)
                                     (cons q (rest matched-pages)))
                               (cons q matched-pages))))]
-      [:div
-       (when (and db-tag?
-                        ;; Don't display in heading
-                  (not (some->> edit-content (re-find #"^\s*#"))))
-         [:div.flex.flex-row.items-center.px-4.py-1.text-sm.opacity-70.gap-2
-          "Turn this block into a page:"
-          (ui/toggle create-page?
-                     (fn [_e]
-                       (swap! (:editor/create-page? @state/state) not))
-                     true)])
-       (ui/auto-complete
-        matched-pages
-        {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
-         :on-enter    (fn []
-                        (page-handler/page-not-exists-handler input id q current-pos))
-         :item-render (fn [page-name _chosen?]
-                        [:div.flex
-                         (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
-                         (search-handler/highlight-exact-query page-name q)])
-         :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
-                                                                    "Search for a page or a class"
-                                                                    "Search for a page")]
-         :class       "black"})])))
+      (ui/auto-complete
+       matched-pages
+       {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
+        :on-enter    (fn []
+                       (page-handler/page-not-exists-handler input id q current-pos))
+        :item-render (fn [page-name _chosen?]
+                       [:div.flex
+                        (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
+                        (search-handler/highlight-exact-query page-name q)])
+        :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
+                                                                   "Search for a page or a class"
+                                                                   "Search for a page")]
+        :class       "black"}))))
 
 (rum/defc page-search < rum/reactive
   {:will-unmount (fn [state]
@@ -192,8 +182,7 @@
         db? (config/db-based-graph? (state/get-current-repo))
         embed? (and db? (= @commands/*current-command "Page embed"))
         tag? (= action :page-search-hashtag)
-        db-tag? (and db? tag?)
-        create-page? (state/sub :editor/create-page?)]
+        db-tag? (and db? tag?)]
     (when (contains? #{:page-search :page-search-hashtag} action)
       (let [pos (state/get-editor-last-pos)
             input (gdom/getElement id)]
@@ -203,11 +192,11 @@
                 q (or
                    (editor-handler/get-selected-text)
                    (when (= action :page-search-hashtag)
-                     (gp-util/safe-subs edit-content pos current-pos))
+                     (common-util/safe-subs edit-content pos current-pos))
                    (when (> (count edit-content) current-pos)
-                     (gp-util/safe-subs edit-content pos current-pos))
+                     (common-util/safe-subs edit-content pos current-pos))
                    "")]
-            (page-search-aux id format embed? db-tag? create-page? q current-pos edit-content input pos)))))))
+            (page-search-aux id format embed? db-tag? q current-pos input pos)))))))
 
 (defn- search-blocks!
   [state result]
@@ -222,19 +211,20 @@
     (fn [chosen-item]
       (let [pos (state/get-editor-last-pos)
             value (.-value input)
-            value' (str (gp-util/safe-subs value 0 q)
-                        (gp-util/safe-subs value (+ (count q) 4 pos)))]
+            value' (str (common-util/safe-subs value 0 q)
+                        (common-util/safe-subs value (+ (count q) 4 pos)))]
         (state/set-edit-content! (.-id input) value')
         (state/clear-editor-action!)
         (let [current-block (state/get-edit-block)
               id (:block/uuid chosen-item)
               id (if (string? id) (uuid id) id)]
-          (editor-handler/api-insert-new-block! ""
-                                                {:block-uuid (:block/uuid current-block)
-                                                 :sibling? true
-                                                 :replace-empty-target? true
-                                                 :other-attrs {:block/link (:db/id (db/entity [:block/uuid id]))}})
-          (state/clear-edit!))))
+          (p/do!
+           (editor-handler/api-insert-new-block! ""
+                                                 {:block-uuid (:block/uuid current-block)
+                                                  :sibling? true
+                                                  :replace-empty-target? true
+                                                  :other-attrs {:block/link (:db/id (db/entity [:block/uuid id]))}})
+           (state/clear-edit!)))))
     (editor-handler/block-on-chosen-handler id q format selected-text)))
 
 ;; TODO: use rum/use-effect instead
@@ -395,7 +385,7 @@
             current-pos  (cursor/pos input)
             edit-content (or (state/sub-edit-content) "")
             q            (or (editor-handler/get-selected-text)
-                             (gp-util/safe-subs edit-content pos current-pos)
+                             (common-util/safe-subs edit-content pos current-pos)
                              "")
             matched      (seq (fuzzy-search modes q))
             matched      (or matched (if (string/blank? q) modes [q]))]
@@ -728,11 +718,7 @@
 
 (rum/defcs box < rum/reactive
   {:init (fn [state]
-           (assoc state
-                  ::id (str (random-uuid))))
-   :will-unmount (fn [state]
-                   (reset! (:editor/create-page? @state/state) false)
-                   state)
+           (assoc state ::id (str (random-uuid))))
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))
                 state)}

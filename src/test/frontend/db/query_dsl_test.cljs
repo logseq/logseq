@@ -1,7 +1,7 @@
 (ns frontend.db.query-dsl-test
   (:require [cljs.test :refer [are deftest testing use-fixtures is]]
             [clojure.string :as str]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [frontend.db :as db]
             [frontend.util :as util]
             [frontend.db.query-dsl :as query-dsl]

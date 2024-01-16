@@ -8,9 +8,7 @@
             [frontend.util.text :as text-util]
             [logseq.graph-parser.text :as text]
             [logseq.db :as ldb]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.graph-parser.util :as gp-util]
-            [datascript.core :as d]
+            [logseq.common.util :as common-util]
             [logseq.db.sqlite.util :as sqlite-util]))
 
 (defonce conns (atom {}))
@@ -40,7 +38,7 @@
                      (text/get-file-basename repo-name)
 
                      (mobile-util/native-platform?)
-                     (gp-util/safe-decode-uri-component (text/get-file-basename repo-name))
+                     (common-util/safe-decode-uri-component (text/get-file-basename repo-name))
 
                      :else
                      repo-name)]
@@ -86,26 +84,19 @@
    (transact! repo tx-data nil))
   ([repo tx-data tx-meta]
    (when-let [conn (get-db repo false)]
-     ;; (prn :debug "DB transact:")
-     ;; (frontend.util/pprint {:tx-data tx-data
-     ;;                        :tx-meta tx-meta})
-     (if tx-meta
-       (d/transact! conn (vec tx-data) tx-meta)
-       (d/transact! conn (vec tx-data))))))
+     (ldb/transact! conn tx-data tx-meta))))
 
 (defn start!
   ([repo]
    (start! repo {}))
-  ([repo {:keys [listen-handler db-graph?]}]
+  ([repo {:keys [listen-handler create-default-pages?]
+          :or {create-default-pages? false}}]
    (let [db-name (datascript-db repo)
-         db-conn (ldb/start-conn :schema (get-schema repo) :create-default-pages? false)]
+         db-conn (ldb/start-conn :schema (get-schema repo)
+                                 :create-default-pages? create-default-pages?)]
      (swap! conns assoc db-name db-conn)
      (when listen-handler
-       (listen-handler repo))
-     (when db-graph?
-       (transact! db-name [(kv :db/type "db")])
-       (transact! db-name [(kv :schema/version db-schema/version)]))
-     (ldb/create-default-pages! db-conn {:db-graph? db-graph?}))))
+       (listen-handler repo)))))
 
 (defn destroy-all!
   []

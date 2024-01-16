@@ -3,7 +3,7 @@
   (:require [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [logseq.db.frontend.property :as db-property]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [clojure.set :as set]))
 
 (defn get-property-name
@@ -21,7 +21,7 @@
   "Get a user property's uuid given its unsanitized name"
   ([property-name] (get-user-property-uuid (state/get-current-repo) property-name))
   ([repo property-name]
-   (:block/uuid (db-utils/entity repo [:block/name (gp-util/page-name-sanity-lc (name property-name))]))))
+   (:block/uuid (db-utils/entity repo [:block/name (common-util/page-name-sanity-lc (name property-name))]))))
 
 (defonce *hidden-built-in-properties (atom #{}))
 

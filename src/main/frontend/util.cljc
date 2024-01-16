@@ -18,7 +18,7 @@
             [clojure.pprint]
             [dommy.core :as d]
             [frontend.mobile.util :as mobile-util]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [goog.string :as gstring]
@@ -26,7 +26,6 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [clojure.core.async :as async]
-            [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
             [frontend.pubsub :as pubsub]
             [frontend.worker.util :as worker-util]))
   #?(:cljs (:import [goog.async Debouncer]))
@@ -67,19 +66,14 @@
 #?(:cljs (defonce convert-to-letters utils/convertToLetters))
 #?(:cljs (defonce hsl2hex utils/hsl2hex))
 
-(defn string-join-path
-  #_:clj-kondo/ignore
-  "Replace all `strings/join` used to construct paths with this function to reduce lint output.
-  https://github.com/logseq/logseq/pull/8679"
-  [parts]
-  (string/join "/" parts))
+#?(:cljs (def string-join-path common-util/string-join-path))
 
 #?(:cljs
-   (def safe-re-find worker-util/safe-re-find))
+   (def safe-re-find common-util/safe-re-find))
 
 #?(:cljs
    (do
-     (def uuid-string? worker-util/uuid-string?)
+     (def uuid-string? common-util/uuid-string?)
      (defn check-password-strength
        {:malli/schema [:=> [:cat :string] [:maybe
                                            [:map
@@ -156,10 +150,13 @@
      []
      (string/starts-with? js/window.location.href "file://")))
 
-(defn format
-  [fmt & args]
-  #?(:cljs (apply gstring/format fmt args)
-     :clj (apply clojure.core/format fmt args)))
+#?(:cljs
+   (def format common-util/format))
+
+#?(:clj
+   (defn format
+     [fmt & args]
+     (apply clojure.core/format fmt args)))
 
 #?(:cljs
    (defn evalue
@@ -256,14 +253,6 @@
   (let [pred (if (fn? pred-or-val) pred-or-val #(= pred-or-val %))]
     (reduce-kv #(if (pred %3) (reduced %2) %1) -1
                (cond-> coll (list? coll) (vec)))))
-
-;; (defn format
-;;   [fmt & args]
-;;   (apply gstring/format fmt args))
-
-(defn remove-nils-non-nested
-  [nm]
-  (into {} (remove (comp nil? second)) nm))
 
 ;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
 (defn hiccup->class
@@ -618,7 +607,7 @@
 
 
 #?(:cljs
-   (def distinct-by worker-util/distinct-by))
+   (def distinct-by common-util/distinct-by))
 
 #?(:cljs
    (defn distinct-by-last-wins
@@ -681,18 +670,11 @@
          (str prefix new-value)))
      s)))
 
-(def escape-chars "[]{}().+*?|$")
+#?(:cljs
+   (def escape-regex-chars common-util/escape-regex-chars))
 
-(defn escape-regex-chars
-  "Escapes characters in string `old-value"
-  [old-value]
-  (reduce (fn [acc escape-char]
-            (string/replace acc escape-char (str "\\" escape-char)))
-          old-value escape-chars))
-
-(defn replace-ignore-case
-  [s old-value new-value]
-  (string/replace s (re-pattern (str "(?i)" (escape-regex-chars old-value))) new-value))
+#?(:cljs
+   (def replace-ignore-case common-util/replace-ignore-case))
 
 ;; copy from https://stackoverflow.com/questions/18735665/how-can-i-get-the-positions-of-regex-matches-in-clojurescript
 #?(:cljs
@@ -873,7 +855,7 @@
    (defn copy-to-clipboard!
      [text & {:keys [html blocks owner-window]}]
      (let [data (clj->js
-                 (gp-util/remove-nils-non-nested
+                 (common-util/remove-nils-non-nested
                   {:text text
                    :html html
                    :blocks (when (seq blocks) (pr-str blocks))}))]
@@ -891,9 +873,8 @@
        (rum/react ref)
        @ref)))
 
-(defn time-ms
-  []
-  #?(:cljs (tc/to-long (t/now))))
+#?(:cljs
+   (def time-ms common-util/time-ms))
 
 (defn d
   [k f]
@@ -902,10 +883,8 @@
     (time (reset! result (doall (f))))
     @result))
 
-(defn concat-without-nil
-  [& cols]
-  (->> (apply concat cols)
-       (remove nil?)))
+#?(:cljs
+   (def concat-without-nil common-util/concat-without-nil))
 
 #?(:cljs
    (defn set-title!
@@ -1062,16 +1041,14 @@
 
 #?(:cljs
    (def page-name-sanity-lc
-     "Delegate to gp-util to loosely couple app usages to graph-parser"
-     gp-util/page-name-sanity-lc))
+     "Delegate to common-util to loosely couple app usages to graph-parser"
+     common-util/page-name-sanity-lc))
 
 #?(:cljs
-   (def safe-page-name-sanity-lc worker-util/safe-page-name-sanity-lc))
+   (def safe-page-name-sanity-lc common-util/safe-page-name-sanity-lc))
 
-(defn get-page-original-name
-  [page]
-  (or (:block/original-name page)
-      (:block/name page)))
+#?(:cljs
+   (def get-page-original-name common-util/get-page-original-name))
 
 #?(:cljs
    (defn add-style!
@@ -1109,32 +1086,33 @@
      (and
       (string? file)
       (string/includes? file ".")
-      (some-> (gp-util/path->file-ext file) string/lower-case))))
+      (some-> (common-util/path->file-ext file) string/lower-case))))
 
-(defn get-dir-and-basename
-  [path]
-  (let [parts (string/split path "/")
-        basename (last parts)
-        dir (->> (butlast parts)
-                 string-join-path)]
-    [dir basename]))
+#?(:cljs
+   (defn get-dir-and-basename
+     [path]
+     (let [parts (string/split path "/")
+           basename (last parts)
+           dir (->> (butlast parts)
+                    string-join-path)]
+       [dir basename])))
 
-(defn get-relative-path
-  [current-file-path another-file-path]
-  (let [directories-f #(butlast (string/split % "/"))
-        parts-1 (directories-f current-file-path)
-        parts-2 (directories-f another-file-path)
-        [parts-1 parts-2] (remove-common-preceding parts-1 parts-2)
-        another-file-name (last (string/split another-file-path "/"))]
-    (->> (concat
-          (if (seq parts-1)
-            (repeat (count parts-1) "..")
-            ["."])
-          parts-2
-          [another-file-name])
-         string-join-path)))
+#?(:cljs
+   (defn get-relative-path
+     [current-file-path another-file-path]
+     (let [directories-f #(butlast (string/split % "/"))
+           parts-1 (directories-f current-file-path)
+           parts-2 (directories-f another-file-path)
+           [parts-1 parts-2] (remove-common-preceding parts-1 parts-2)
+           another-file-name (last (string/split another-file-path "/"))]
+       (->> (concat
+             (if (seq parts-1)
+               (repeat (count parts-1) "..")
+               ["."])
+             parts-2
+             [another-file-name])
+            string-join-path))))
 
-;; Copied from https://github.com/tonsky/datascript-todo
 #?(:clj
    (defmacro profile
      [k & body]
@@ -1170,6 +1148,7 @@
 
 (defn keyname [key] (str (namespace key) "/" (name key)))
 
+;; FIXME: drain-chan was copied from frontend.worker.util due to shadow-cljs compile bug
 #?(:cljs
    (defn drain-chan
      "drop all stuffs in CH, and return all of them"
@@ -1178,74 +1157,15 @@
           (take-while identity))))
 
 #?(:cljs
-   (defn <ratelimit
-     "return a channel CH,
-  ratelimit flush items in in-ch every max-duration(ms),
-  opts:
-  - :filter-fn filter item before putting items into returned CH, (filter-fn item)
-               will poll it when its return value is channel,
-  - :flush-fn exec flush-fn when time to flush, (flush-fn item-coll)
-  - :stop-ch stop go-loop when stop-ch closed
-  - :distinct-key-fn distinct coll when put into CH
-  - :chan-buffer buffer of return CH, default use (async/chan 1000)
-  - :flush-now-ch flush the content in the queue immediately
-  - :refresh-timeout-ch refresh (timeout max-duration)"
-     [in-ch max-duration & {:keys [filter-fn flush-fn stop-ch distinct-key-fn chan-buffer flush-now-ch refresh-timeout-ch]}]
-     (let [ch (if chan-buffer (async/chan chan-buffer) (async/chan 1000))
-           stop-ch* (or stop-ch (async/chan))
-           flush-now-ch* (or flush-now-ch (async/chan))
-           refresh-timeout-ch* (or refresh-timeout-ch (async/chan))]
-       (async/go-loop [timeout-ch (async/timeout max-duration) coll []]
-         (let [{:keys [refresh-timeout timeout e stop flush-now]}
-               (async/alt! refresh-timeout-ch* {:refresh-timeout true}
-                           timeout-ch {:timeout true}
-                           in-ch ([e] {:e e})
-                           stop-ch* {:stop true}
-                           flush-now-ch* {:flush-now true})]
-           (cond
-             refresh-timeout
-             (recur (async/timeout max-duration) coll)
-
-             (or flush-now timeout)
-             (do (async/onto-chan! ch coll false)
-                 (flush-fn coll)
-                 (drain-chan flush-now-ch*)
-                 (recur (async/timeout max-duration) []))
-
-             (some? e)
-             (let [filter-v (filter-fn e)
-                   filter-v* (if (instance? ManyToManyChannel filter-v)
-                               (async/<! filter-v)
-                               filter-v)]
-               (if filter-v*
-                 (recur timeout-ch (cond->> (conj coll e)
-                                     distinct-key-fn (distinct-by distinct-key-fn)
-                                     true vec))
-                 (recur timeout-ch coll)))
-
-             (or stop
-                 ;; got nil from in-ch, means in-ch is closed
-                 ;; so we stop the whole go-loop
-                 (nil? e))
-             (async/close! ch))))
-       ch)))
-
+   (def <ratelimit worker-util/<ratelimit))
 
 #?(:cljs
    (defn trace!
      []
      (js/console.trace)))
 
-(defn remove-first [pred coll]
-  ((fn inner [coll]
-     (lazy-seq
-      (when-let [[x & xs] (seq coll)]
-        (if (pred x)
-          xs
-          (cons x (inner xs))))))
-   coll))
-
-(def pprint clojure.pprint/pprint)
+#?(:cljs
+   (def remove-first common-util/remove-first))
 
 #?(:cljs
    (defn backward-kill-word

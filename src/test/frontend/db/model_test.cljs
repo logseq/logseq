@@ -128,6 +128,7 @@
   (is (nil? (db/entity 1000000))))
 
 (deftest entity-query-should-support-both-graph-string-and-db
+  (db/transact! test-helper/test-db [{:db/id 1 :value "test"}])
   (is (= 1 (:db/id (db/entity test-helper/test-db 1))))
   (is (= 1 (:db/id (db/entity (conn/get-db test-helper/test-db) 1)))))
 

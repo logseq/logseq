@@ -15,7 +15,7 @@
             [logseq.common.path :as path]
             [clojure.string :as string]
             [frontend.state :as state]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [electron.ipc :as ipc]))
 
 (defonce nfs-backend (nfs/->Nfs))
@@ -83,7 +83,7 @@
     (js/console.error "BUG: (deprecation) path-only? is always true"))
   (p/let [result (protocol/readdir (get-fs dir) dir)
           result (bean/->clj result)]
-    (map gp-util/path-normalize result)))
+    (map common-util/path-normalize result)))
 
 (defn unlink!
   "Should move the path to logseq/recycle instead of deleting it."
@@ -103,7 +103,7 @@
 (defn write-file!
   [repo dir rpath content opts]
   (when content
-    (let [path (gp-util/path-normalize rpath)
+    (let [path (common-util/path-normalize rpath)
           fs-record (get-fs dir {:repo repo
                                  :rpath rpath})]
       (->
@@ -137,7 +137,7 @@
 (defn rename!
   "Rename files, incoming relative path, converted to absolute path"
   [repo old-path new-path]
-  (let [new-path (gp-util/path-normalize new-path)]
+  (let [new-path (common-util/path-normalize new-path)]
     (cond
       ; See https://github.com/isomorphic-git/lightning-fs/issues/41
       (= old-path new-path)

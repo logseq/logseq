@@ -6,7 +6,6 @@
             [datascript.core :as d]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
-            [frontend.db.listener :as db-listener]
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
             [frontend.page :as page]
@@ -103,8 +102,6 @@
   (restore-from-transit-str!)
   (shortcut/refresh!)
   (events/run!)
-  ;; actually, there's no persist for publishing
-  (db-listener/listen-and-persist! (state/get-current-repo))
   (start))
 
 (defn stop []
