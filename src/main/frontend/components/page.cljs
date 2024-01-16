@@ -252,14 +252,7 @@
                        (db/page-exists? page-name)
                        (db/page-exists? @*title-value))
         rename-fn (fn [old-name new-name]
-                    (if (and whiteboard-page? (config/db-based-graph? (state/get-current-repo)))
-                      (p/do!
-                       (db/transact! [{:db/id (:db/id page)
-                                       :block/original-name new-name
-                                       :block/name (util/page-name-sanity-lc new-name)
-                                       :block/updated-at (util/time-ms)}])
-                       (route-handler/redirect-to-whiteboard! new-name))
-                      (page-handler/rename! old-name new-name)))
+                    (page-handler/rename! old-name new-name))
         rollback-fn #(let [old-name (if untitled? "" old-name)]
                        (reset! *title-value old-name)
                        (gobj/set (rum/deref input-ref) "value" old-name)

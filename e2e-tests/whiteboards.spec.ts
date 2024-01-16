@@ -67,7 +67,7 @@ test('update whiteboard title', async ({ page }) => {
   await page.click('.whiteboard-page-title')
   await page.fill('.whiteboard-page-title input', title + '-2')
   await page.keyboard.press('Enter')
-  await page.click('.ui__modal-enter')
+
   await expect(page.locator('.whiteboard-page-title .title')).toContainText(
     title + '-2'
   )
@@ -91,7 +91,6 @@ test('draw a rectangle', async ({ page }) => {
 
 test('undo the rectangle action', async ({ page }) => {
   await page.keyboard.press(modKey + '+z')
-
   await expect(page.locator('.logseq-tldraw .tl-positioned-svg rect')).toHaveCount(0)
 })
 
