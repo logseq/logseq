@@ -3028,7 +3028,9 @@
                            (block-mouse-leave e *control-show? block-id doc-mode?))}
         (when (and (not slide?) (not in-whiteboard?) (not hidden?))
           (block-control config block uuid block-id collapsed? *control-show?
-                         (or edit? (= uuid (:block/uuid (state/get-edit-block))))))
+                         (or edit?
+                             (= uuid (:block/uuid (state/get-edit-block)))
+                             (contains? @(:editor/new-created-blocks @state/state) uuid))))
         (when (and @*show-left-menu? (not in-whiteboard?) (not hidden?))
           (block-left-menu config block))
 
