@@ -789,4 +789,31 @@
  :settings-page/auto-chmod "Automatisk endre filtillatelser"
  :settings-page/auto-chmod-desc "Deaktiver for å tillate redigering av flere brukere med tillatelser gitt av gruppemedlemskap."
  :settings-page/tab-keymap "Tastatur"
- :whiteboard/toggle-pen-mode "Veksle pen-modus"}
+ :whiteboard/toggle-pen-mode "Veksle pen-modus"
+ 
+ :command.command-palette/toggle "Søk kommandoer"
+ :command.go/search-in-page "Søk blokker på side"
+ :command.ui/cycle-color "Veksle farge"
+ :command.ui/cycle-color-off "Veksle farge av"
+ :command.whiteboard/clone-down "Klon ned"
+ :command.whiteboard/clone-left "Klon venstre"
+ :command.whiteboard/clone-right "Klon høyre"
+ :command.whiteboard/clone-up "Klon opp"
+ :handbook/close "Lukk"
+ :handbook/help-categories "Hjelp kategorier"
+ :handbook/home "Hjem"
+ :handbook/popular-topics "Populære emner"
+ :handbook/search "Søk"
+ :handbook/settings "Innstillinger"
+ :handbook/title "Hjelp"
+ :handbook/topics "Emner"
+ :help/search "Søk sider/blokker/kommandoer"
+ :linked-references/filter-directions "Klikk for å inkludere og shift-klikk for å ekskludere. Klikk igjen for å fjerne."
+ :linked-references/filter-excludes "Ekskluderer: "
+ :linked-references/filter-heading "Filter"
+ :linked-references/filter-includes "Inkluderer: "
+ :linked-references/reference-count (fn [filtered-count total] (str (when filtered-count (str filtered-count " av ")) total (if (= total 1) " Lenket Referanse" " Lenkede Referanser")))
+ :linked-references/unexpected-error "Lenkede Referanser: Uventet feil. Vennligst re-indekser din graf først."
+ :pdf/auto-open-context-menu "Auto-åpne kontekstmeny for valg"
+ :unlinked-references/reference-count (fn [total] (str total (if (= total 1) " Ulenket Referanse" " Ulenkede Referanser")))
+ :whiteboard/reference-count (fn [refs-count] (if (= refs-count 1) "Referanse" "Referanser"))}

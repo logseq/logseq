@@ -124,7 +124,7 @@
 (def video-formats
   #{:mp4 :webm :mov :flv :avi :mkv})
 
-(def media-formats (set/union (gp-config/img-formats) audio-formats))
+(def media-formats (set/union (gp-config/img-formats) audio-formats video-formats))
 
 (defn extname-of-supported?
   ([input] (extname-of-supported?

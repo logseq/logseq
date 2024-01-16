@@ -377,7 +377,7 @@
   }
 
   .bullet-container .selected {
-    border: 1px solid;
+    border: 3px solid;
   }
 }
 
