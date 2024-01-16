@@ -161,7 +161,7 @@ Options available:
                                (-> m
                                    (update :block/properties
                                            (fn [props]
-                                             (update-keys #(get-pid @conn %) props)))
+                                             (update-keys props #(get-pid @conn %))))
                                    (assoc :block/uuid (d/squuid))))
                              macros)))
 
@@ -182,7 +182,11 @@ Options available:
            (if (seq (:block/refs block'))
              (update block' :block/refs
                      (fn [refs]
-                       (mapv #(assoc % :block/format :markdown) refs)))
+                       (mapv (fn [ref]
+                               (if (and (vector? ref) (= :block/uuid (first ref)))
+                                 ref
+                                 (assoc ref :block/format :markdown)))
+                             refs)))
              block')))
         add-missing-timestamps
         ;; FIXME: Remove when properties are supported
