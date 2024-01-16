@@ -24,7 +24,7 @@
         ["frontend.handler.file-based" "frontend.handler.file-sync"
          "frontend.db.file-based"
          "frontend.fs"
-         "frontend.components.conversion" "frontend.components.file-sync"
+         "frontend.components.file-sync"
          "frontend.util.fs"]))
 
 (def db-graph-paths
