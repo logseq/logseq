@@ -645,7 +645,7 @@
    (let [content (str content "0")
          graphemes (util/split-graphemes content)
          graphemes-char-index (reductions #(+ %1 (count %2)) 0 graphemes)]
-     (for [[idx c] (zipmap graphemes-char-index graphemes)]
+     (for [[idx c] (into (sorted-map) (zipmap graphemes-char-index graphemes))]
        (if (= c "\n")
          [:span {:id (str "mock-text_" idx)
                  :key idx} "0" [:br]]
