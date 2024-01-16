@@ -63,7 +63,7 @@ body {
   background-color: or(--lx-gray-01, --ls-primary-background-color, #fff);
 }
 
-html[data-theme='light'] #app-container {
+html[data-theme='light'] .theme-container {
   .form-checkbox {
     &:focus {
       border-color: var(--ls-page-checkbox-border-color);
@@ -79,11 +79,7 @@ html[data-theme='light'] #app-container {
   }
 }
 
-html[data-theme='dark'] #app-container {
-  input.form-input {
-    background: none;
-  }
-}
+html[data-theme='dark'] .theme-container {}
 
 html.locked-scroll {
   overflow: hidden !important;

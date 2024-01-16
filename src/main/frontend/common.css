@@ -122,14 +122,6 @@ body {
     font-size: 1rem;
   }
 
-
-  input[type='text'],
-  input[type='password'] {
-    color: var(--ls-primary-text-color);
-    background: transparent;
-    font-size: inherit;
-  }
-
   summary {
     outline: none;
   }
