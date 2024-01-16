@@ -5,7 +5,7 @@
             [frontend.state :as state]
             [frontend.db.utils :as db-utils]
             [frontend.util :as util]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [logseq.common.util.page-ref :as page-ref]))
 
 (defn- variable-rules
   []

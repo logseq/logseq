@@ -8,6 +8,7 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.outliner.cli.pipeline :as cli-pipeline]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -83,7 +84,7 @@
                             (into {}))
         page-uuids (->> pages-and-blocks
                         (map :page)
-                        (map (juxt #(or (:block/name %) (sqlite-util/sanitize-page-name (:block/original-name %)))
+                        (map (juxt #(or (:block/name %) (common-util/page-name-sanity-lc (:block/original-name %)))
                                    :block/uuid))
                         (into {}))
         block-uuids (->> pages-and-blocks
@@ -194,7 +195,7 @@
                  (merge
                   {:db/id page-id
                    :block/original-name (or (:block/original-name page) (string/capitalize (:block/name page)))
-                   :block/name (or (:block/name page) (sqlite-util/sanitize-page-name (:block/original-name page)))
+                   :block/name (or (:block/name page) (common-util/page-name-sanity-lc (:block/original-name page)))
                    :block/journal? false
                    :block/format :markdown}
                   (dissoc page :properties)

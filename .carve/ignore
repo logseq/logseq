@@ -88,13 +88,11 @@ frontend.fs.sync/stop-debug-print-sync-events-loop
 frontend.state/get-current-edit-block-and-position
 ;; For debugging
 frontend.db.model/get-all-classes
-;; Repl fn
-frontend.db.sync/export-as-blocks
 ;; Initial loaded
 frontend.ui/_emoji-init-data
 ;; placeholder var for defonce
-frontend.db.rtc.op-mem-layer/_sync-loop
+frontend.worker.rtc.op-mem-layer/_sync-loop
 ;; Used by shadow.cljs
 frontend.db-worker/init
 ;; WIP fn, remove when it's ready
-frontend.db.rtc.asset-sync/<loop-for-assets-sync
+frontend.worker.rtc.asset-sync/<loop-for-assets-sync

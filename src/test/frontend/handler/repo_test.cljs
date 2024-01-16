@@ -4,7 +4,7 @@
             [frontend.test.helper :as test-helper :refer [load-test-files]]
             [logseq.graph-parser.cli :as gp-cli]
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
-            [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.common.util.block-ref :as block-ref]
             [frontend.db.model :as model]
             [frontend.db.conn :as conn]
             [clojure.edn :as edn]

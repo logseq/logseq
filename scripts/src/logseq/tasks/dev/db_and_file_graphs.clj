@@ -21,12 +21,11 @@
 (def file-graph-ns
   "Namespaces or parent namespaces _only_ for file graphs"
   (mapv escape-shell-regex
-        ["frontend.handler.file-based" "frontend.handler.conversion" "frontend.handler.file-sync"
+        ["frontend.handler.file-based" "frontend.handler.file-sync"
          "frontend.db.file-based"
          "frontend.fs"
          "frontend.components.conversion" "frontend.components.file-sync"
-         "frontend.util.fs"
-         "frontend.modules.outliner.file"]))
+         "frontend.util.fs"]))
 
 (def db-graph-paths
   "Paths _only_ for DB graphs"
@@ -41,12 +40,10 @@
 
 (def file-graph-paths
   "Paths _only_ for file graphs"
-  ["src/main/frontend/handler/file_based" "src/main/frontend/handler/conversion.cljs" "src/main/frontend/handler/file_sync.cljs"
-   "src/main/frontend/db/file_based"
+  ["src/main/frontend/handler/file_based" "src/main/frontend/handler/file_sync.cljs" "src/main/frontend/db/file_based"
    "src/main/frontend/fs"
-   "src/main/frontend/components/conversion.cljs" "src/main/frontend/components/file_sync.cljs"
-   "src/main/frontend/util/fs.cljs"
-   "src/main/frontend/modules/outliner/file.cljs"])
+   "src/main/frontend/components/file_sync.cljs"
+   "src/main/frontend/util/fs.cljs"])
 
 (defn- validate-db-ns-not-in-file
   []
@@ -70,12 +67,12 @@
 
 (defn- validate-multi-graph-fns-not-in-file-or-db
   []
-  (let [multi-graph-fns ["config/db-based-graph\\?"]
+  (let [multi-graph-fns ["config/db-based-graph\\?" "sqlite-util/db-based-graph\\?"]
         res (apply shell {:out :string :continue true}
                    "git grep -E" (str "(" (string/join "|" multi-graph-fns) ")")
                    (into file-graph-paths db-graph-paths))]
     (when-not (and (= 1 (:exit res)) (= "" (:out res)))
-      (println "The following files should not have contained config/db-based-graph:")
+      (println "The following files should not have fns meant to be used in multi-graph contexts:")
       (println (:out res))
       (System/exit 1))))
 

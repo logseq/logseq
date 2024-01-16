@@ -10,9 +10,12 @@
             [frontend.handler.notification :as notification]
             [cljs-bean.core :as bean]
             [frontend.state :as state]
-            [electron.ipc :as ipc]))
+            [electron.ipc :as ipc]
+            [frontend.handler.worker :as worker-handler]
+            [logseq.db :as ldb]
+            [frontend.date :as date]))
 
-(defonce *sqlite (atom nil))
+(defonce *worker (atom nil))
 
 (defn- ask-persist-permission!
   []
@@ -21,6 +24,42 @@
       (js/console.log "Storage will not be cleared unless from explicit user action")
       (js/console.warn "OPFS storage may be cleared by the browser under storage pressure."))))
 
+(defn- sync-app-state!
+  [^js worker]
+  (add-watch state/state
+             :sync-worker-state
+             (fn [_ _ prev current]
+               (let [new-state (cond-> {}
+                                 (not= (:git/current-repo prev)
+                                       (:git/current-repo current))
+                                 (assoc :git/current-repo (:git/current-repo current))
+                                 (not= (:config prev) (:config current))
+                                 (assoc :config (:config current)))]
+                 (when (seq new-state)
+                   (.sync-app-state worker (pr-str new-state)))))))
+
+(defn- transact!
+  [^js worker repo tx-data tx-meta]
+  (let [tx-meta' (pr-str tx-meta)
+        tx-data' (pr-str tx-data)
+        ;; TODO: a better way to share those information with worker, maybe using the state watcher to notify the worker?
+        context {:dev? config/dev?
+                 :node-test? util/node-test?
+                 :validate-db-options (:dev/validate-db-options (state/get-config))
+                 :importing? (:graph/importing @state/state)
+                 :date-formatter (state/get-date-formatter)
+                 :journal-file-name-format (or (state/get-journal-file-name-format)
+                                               date/default-journal-filename-formatter)
+                 :export-bullet-indentation (state/get-export-bullet-indentation)
+                 :preferred-format (state/get-preferred-format)
+                 :journals-directory (config/get-journals-directory)
+                 :whiteboards-directory (config/get-whiteboards-directory)
+                 :pages-directory (config/get-pages-directory)}]
+    (if worker
+      (.transact worker repo tx-data' tx-meta'
+                 (pr-str context))
+      (notification/show! "Latest change was not saved! Please restart the application." :error))))
+
 (defn start-db-worker!
   []
   (when-not (or config/publishing? util/node-test?)
@@ -28,10 +67,22 @@
                        "js/db-worker.js"
                        "/static/js/db-worker.js")
           worker (js/Worker. (str worker-url "?electron=" (util/electron?)))
-          sqlite (Comlink/wrap worker)]
-      (reset! *sqlite sqlite)
-      (-> (p/let [_ (.init sqlite)]
-            (ask-persist-permission!))
+          wrapped-worker (Comlink/wrap worker)]
+      (worker-handler/handle-message! worker wrapped-worker)
+      (reset! *worker wrapped-worker)
+      (-> (p/let [_ (.init wrapped-worker config/RTC-WS-URL)
+                  _ (.sync-app-state wrapped-worker
+                                     (pr-str
+                                      {:git/current-repo (state/get-current-repo)
+                                       :config (:config @state/state)}))
+                  _ (sync-app-state! wrapped-worker)
+                  _ (ask-persist-permission!)]
+            (ldb/register-transact-fn!
+             (fn worker-transact!
+               [_conn tx-data tx-meta]
+               (transact! wrapped-worker (state/get-current-repo) tx-data
+                 ;; not from remote(rtc)
+                 (assoc tx-meta :local-tx? true)))))
           (p/catch (fn [error]
                      (prn :debug "Can't init SQLite wasm")
                      (js/console.error error)
@@ -58,40 +109,26 @@
 (defrecord InBrowser []
   protocol/PersistentDB
   (<new [_this repo]
-    (when-let [^js sqlite @*sqlite]
+    (when-let [^js sqlite @*worker]
       (.createOrOpenDB sqlite repo)))
 
   (<list-db [_this]
-    (when-let [^js sqlite @*sqlite]
+    (when-let [^js sqlite @*worker]
       (-> (.listDB sqlite)
           (p/then (fn [result]
                     (bean/->clj result)))
           (p/catch sqlite-error-handler))))
 
   (<unsafe-delete [_this repo]
-    (when-let [^js sqlite @*sqlite]
+    (when-let [^js sqlite @*worker]
       (.unsafeUnlinkDB sqlite repo)))
 
   (<release-access-handles [_this repo]
-    (when-let [^js sqlite @*sqlite]
+    (when-let [^js sqlite @*worker]
       (.releaseAccessHandles sqlite repo)))
 
-  (<transact-data [_this repo tx-data tx-meta]
-    (let [^js sqlite @*sqlite
-          tx-data' (pr-str tx-data)
-          tx-meta' (pr-str tx-meta)]
-      (p/do!
-       (ipc/ipc :db-transact repo tx-data' tx-meta')
-       (if sqlite
-         (p/let [result (.transact sqlite repo tx-data' tx-meta')
-                 data (bean/->clj result)]
-           (state/pub-event! [:search/transact-data repo data])
-           nil)
-         (notification/show! "Latest change was not saved! Please restart the application." :error))
-       nil)))
-
   (<fetch-initial-data [_this repo _opts]
-    (when-let [^js sqlite @*sqlite]
+    (when-let [^js sqlite @*worker]
       (-> (p/let [db-exists? (.dbExists sqlite repo)
                   disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
                   _ (when disk-db-data
@@ -101,7 +138,7 @@
           (p/catch sqlite-error-handler))))
 
   (<export-db [_this repo opts]
-    (when-let [^js sqlite @*sqlite]
+    (when-let [^js sqlite @*worker]
       (-> (p/let [data (.exportDB sqlite repo)]
             (when data
               (if (:return-data? opts)
@@ -113,7 +150,7 @@
                      (notification/show! [:div (str "SQLiteDB save error: " error)] :error) {})))))
 
   (<import-db [_this repo data]
-    (when-let [^js sqlite @*sqlite]
+    (when-let [^js sqlite @*worker]
       (-> (.importDb sqlite repo data)
           (p/catch (fn [error]
                      (prn :debug :import-db-error repo)

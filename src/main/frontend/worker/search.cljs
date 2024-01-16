@@ -7,14 +7,9 @@
             [goog.object :as gobj]
             [datascript.core :as d]
             [frontend.search.fuzzy :as fuzzy]
-            [frontend.worker.util :as util]))
-
-(defonce db-version-prefix "logseq_db_")
-(defn db-based-graph?
-  [s]
-  (boolean
-   (and (string? s)
-        (string/starts-with? s db-version-prefix))))
+            [frontend.worker.util :as util]
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.common.util :as common-util]))
 
 ;; TODO: use sqlite for fuzzy search
 (defonce indices (atom nil))
@@ -22,7 +17,7 @@
 (defn- add-blocks-fts-triggers!
   "Table bindings of blocks tables and the blocks FTS virtual tables"
   [db]
-  (let [triggers [;; add
+  (let [triggers [;; delete
                   "CREATE TRIGGER IF NOT EXISTS blocks_ad AFTER DELETE ON blocks
                   BEGIN
                       DELETE from blocks_fts where id = old.id;
@@ -162,13 +157,13 @@
             matched-result (search-blocks-aux db match-sql match-input page limit)
             non-match-result (search-blocks-aux db non-match-sql non-match-input page limit)
             all-result (->> (concat matched-result non-match-result)
-                            (map (fn [[id _content page snippet]]
+                            (map (fn [[id page _content snippet]]
                                    {:uuid id
                                     :content snippet
                                     :page page})))]
       (->>
        all-result
-       (util/distinct-by :uuid)
+       (common-util/distinct-by :uuid)
        (take limit)))))
 
 (defn truncate-table!
@@ -249,7 +244,7 @@
             :as block}]
   (let [page? (some? name)
         block? (nil? name)
-        db-based? (db-based-graph? repo)]
+        db-based? (sqlite-util/db-based-graph? repo)]
     (when-not (or
                (and page? name (whiteboard-page? db name))
                (and block? (> (count content) 10000))
@@ -301,8 +296,9 @@
 (defn original-page-name->index
   [p]
   (when p
-    {:name (util/search-normalize p true)
-     :original-name p}))
+    {:id (str (:block/uuid p))
+     :name (:block/name p)
+     :original-name (:block/original-name p)}))
 
 (defn- safe-subs
   ([s start]
@@ -317,19 +313,14 @@
   (when page
     (if (string? page)
       (and (string/starts-with? page "$$$")
-           (util/uuid-string? (safe-subs page 3)))
+           (common-util/uuid-string? (safe-subs page 3)))
       (contains? (set (:block/type page)) "hidden"))))
 
 (defn get-all-pages
   [db]
-  (->>
-   (d/q
-    '[:find [?page-original-name ...]
-      :where
-      [?page :block/name ?page-name]
-      [(get-else $ ?page :block/original-name ?page-name) ?page-original-name]]
-    db)
-   (remove hidden-page?)))
+  (let [page-datoms (d/datoms db :avet :block/name)
+        pages (map (fn [d] (d/entity db (:e d))) page-datoms)]
+    (remove (fn [p] (hidden-page? (:block/name p))) pages)))
 
 (defn build-page-indice
   "Build a page title indice from scratch.
@@ -338,7 +329,6 @@
    From now on, page indice is talking about page content search."
   [repo db]
   (let [pages (->> (get-all-pages db)
-                   (remove string/blank?)
                    (map original-page-name->index)
                    (bean/->js))
         indice (fuse. pages
@@ -359,7 +349,7 @@
                                     (filter #(= :block/uuid (:a %)))
                                     (map :e)
                                     (set))
-          blocks-to-add-set' (if (and (db-based-graph? repo) (seq blocks-to-add-set))
+          blocks-to-add-set' (if (and (sqlite-util/db-based-graph? repo) (seq blocks-to-add-set))
                                (->> blocks-to-add-set
                                     (mapcat (fn [id] (map :db/id (:block/_refs (d/entity db-after id)))))
                                     (concat blocks-to-add-set)
@@ -396,23 +386,18 @@
                (fn [indice]
                  (when indice
                    (doseq [page-entity pages-to-remove]
-                     (.remove indice
-                              (fn [page]
-                                (= (:block/name page-entity)
-                                   (util/safe-page-name-sanity-lc (gobj/get page "original-name"))))))
+                     (.remove indice (fn [page] (= (:block/name page-entity) (gobj/get page "name")))))
                    (doseq [page pages-to-add]
-                     (.add indice (bean/->js (original-page-name->index
-                                              (or (:block/original-name page)
-                                                  (:block/name page))))))
+                     (.remove indice (fn [p] (= (str (:block/uuid page)) (gobj/get p "id"))))
+                     (.add indice (bean/->js (original-page-name->index page))))
                    indice)))))
 
     ;; update block indice
     (when (or (seq blocks-to-add) (seq blocks-to-remove))
       (let [blocks-to-add (remove nil? (map #(block->index repo (:db-after tx-report) %) blocks-to-add))
             blocks-to-remove (set (map (comp str :block/uuid) blocks-to-remove))]
-        (bean/->js
-         {:blocks-to-remove-set blocks-to-remove
-          :blocks-to-add        blocks-to-add})))))
+        {:blocks-to-remove-set blocks-to-remove
+         :blocks-to-add        blocks-to-add}))))
 
 (defn exact-matched?
   "Check if two strings points toward same search result"
@@ -441,7 +426,7 @@
               result (->> (.search indice q (clj->js {:limit limit}))
                           (bean/->clj))]
           (->> result
-               (util/distinct-by (fn [i] (string/trim (get-in i [:item :name]))))
+               (common-util/distinct-by (fn [i] (string/trim (get-in i [:item :name]))))
                (map
                 (fn [{:keys [item]}]
                   (:original-name item)))

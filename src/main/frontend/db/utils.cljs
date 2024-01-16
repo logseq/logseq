@@ -5,9 +5,7 @@
             [datascript.transit :as dt]
             [frontend.db.conn :as conn]
             [frontend.config :as config]
-            [logseq.graph-parser.util :as gp-util]
-            [clojure.string :as string]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [logseq.db.frontend.content :as db-content]))
 
 ;; transit serialization
 
@@ -59,42 +57,12 @@
                    repo-or-db)]
      (d/entity db id-or-lookup-ref))))
 
-(defn special-id->page
-  "Convert special id backs to page name."
-  [content refs]
-  (reduce
-   (fn [content ref]
-     (if (:block/name ref)
-       (string/replace content (str config/page-ref-special-chars (:block/uuid ref)) (:block/original-name ref))
-       content))
-   content
-   refs))
-
-(defn special-id-ref->page
-  "Convert special id ref backs to page name."
-  [content refs]
-  (reduce
-   (fn [content ref]
-     (if (:block/name ref)
-       (string/replace content
-                       (str page-ref/left-brackets
-                            config/page-ref-special-chars
-                            (:block/uuid ref)
-                            page-ref/right-brackets)
-                       (:block/original-name ref))
-       content))
-   content
-   refs))
-
 (defn update-block-content
   "Replace `[[internal-id]]` with `[[page name]]`"
   [item eid]
-  (if (config/db-based-graph? (state/get-current-repo))
-    (if-let [content (:block/content item)]
-      (let [refs (:block/refs (entity eid))]
-        (assoc item :block/content (special-id->page content refs)))
-      item)
-    item))
+  (let [repo (state/get-current-repo)
+        db (conn/get-db repo)]
+    (db-content/update-block-content repo db item eid)))
 
 (defn pull
   ([eid]
@@ -117,19 +85,13 @@
        (->> (d/pull-many db selector eids)
             (map #(update-block-content % (:db/id %))))))))
 
-(defn- actual-transact!
-  [repo-url tx-data tx-meta]
-  (let [tx-data (gp-util/fast-remove-nils tx-data)]
-    (when (seq tx-data)
-      (conn/transact! repo-url tx-data tx-meta))))
-
 (if config/publishing?
   (defn- transact!*
     [repo-url tx-data tx-meta]
     ;; :save-block is for query-table actions like sorting and choosing columns
     (when (#{:collapse-expand-blocks :save-block} (:outliner-op tx-meta))
-      (actual-transact! repo-url tx-data tx-meta)))
-  (def transact!* actual-transact!))
+      (conn/transact! repo-url tx-data tx-meta)))
+  (def transact!* conn/transact!))
 
 (defn transact!
   ([tx-data]

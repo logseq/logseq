@@ -1,14 +1,14 @@
 (ns frontend.db
   "Main entry ns for db related fns"
-  (:require [datascript.core :as d]
-            [frontend.db.conn :as conn]
+  (:require [frontend.db.conn :as conn]
             [frontend.db.model]
             [frontend.db.query-custom]
             [frontend.db.query-react]
             [frontend.db.react :as react]
             [frontend.db.utils]
             [frontend.namespaces :refer [import-vars]]
-            [logseq.db.frontend.default :as default-db]))
+            [logseq.db.frontend.default :as default-db]
+            [logseq.db :as ldb]))
 
 (import-vars
  [frontend.db.conn
@@ -43,14 +43,13 @@
   get-all-pages get-pages-relation get-pages-that-mentioned-page get-tag-pages
   journal-page? page-alias-set sub-block
   set-file-last-modified-at! page-empty? page-exists? page-empty-or-dummy? get-alias-source-page
-  set-file-content! has-children? get-namespace-pages get-all-namespace-relation get-pages-by-name-partition
-  get-original-name]
+  set-file-content! has-children? get-namespace-pages get-all-namespace-relation]
 
  [frontend.db.react
   get-current-page set-key-value
   remove-key! remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
   kv q
-  query-state query-components remove-custom-query! set-new-result! sub-key-value refresh!]
+  query-state query-components remove-custom-query! set-new-result! sub-key-value]
 
  [frontend.db.query-custom
   custom-query]
@@ -66,6 +65,6 @@
   ([repo option]
    (conn/start! repo option)))
 
-(defn new-block-id
-  []
-  (d/squuid))
+(def new-block-id ldb/new-block-id)
+
+(def request-finished? ldb/request-finished?)

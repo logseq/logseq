@@ -11,7 +11,7 @@
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [rum.core :as rum]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [logseq.common.util.page-ref :as page-ref]))
 
 (defonce default-timestamp-value {:time ""
                                   :repeater {}})

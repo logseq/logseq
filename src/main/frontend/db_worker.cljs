@@ -12,30 +12,22 @@
             [clojure.string :as string]
             [cljs-bean.core :as bean]
             [frontend.worker.search :as search]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [frontend.worker.state :as state]
+            [frontend.worker.file :as file]
+            [logseq.db :as ldb]
+            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.worker.rtc.db-listener :as rtc-db-listener]
+            [frontend.worker.rtc.full-upload-download-graph :as rtc-updown]
+            [frontend.worker.rtc.core :as rtc-core]
+            [clojure.core.async :as async]
+            [frontend.worker.async-util :include-macros true :refer [<?]]
+            [frontend.worker.util :as worker-util]))
 
-(defonce *sqlite (atom nil))
-;; repo -> {:db conn :search conn}
-(defonce *sqlite-conns (atom nil))
-;; repo -> conn
-(defonce *datascript-conns (atom nil))
-;; repo -> pool
-(defonce *opfs-pools (atom nil))
-
-(defn- get-sqlite-conn
-  [repo & {:keys [search?]
-           :or {search? false}
-           :as _opts}]
-  (let [k (if search? :search :db)]
-    (get-in @*sqlite-conns [repo k])))
-
-(defn get-datascript-conn
-  [repo]
-  (get @*datascript-conns repo))
-
-(defn get-opfs-pool
-  [repo]
-  (get @*opfs-pools repo))
+(defonce *sqlite state/*sqlite)
+(defonce *sqlite-conns state/*sqlite-conns)
+(defonce *datascript-conns state/*datascript-conns)
+(defonce *opfs-pools state/*opfs-pools)
 
 (defn- get-pool-name
   [graph-name]
@@ -43,7 +35,7 @@
 
 (defn- <get-opfs-pool
   [graph]
-  (or (get-opfs-pool graph)
+  (or (state/get-opfs-pool graph)
       (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (get-pool-name graph)
                                                              :initialCapacity 20})]
         (swap! *opfs-pools assoc graph pool)
@@ -79,7 +71,7 @@
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
   [repo data delete-addrs]
-  (let [^Object db (get-sqlite-conn repo)]
+  (let [^Object db (state/get-sqlite-conn repo)]
     (assert (some? db) "sqlite db not exists")
     (.transaction db (fn [tx]
                        (doseq [item data]
@@ -92,7 +84,7 @@
 
 (defn restore-data-from-addr
   [repo addr]
-  (let [^Object db (get-sqlite-conn repo)]
+  (let [^Object db (state/get-sqlite-conn repo)]
     (assert (some? db) "sqlite db not exists")
     (when-let [content (-> (.exec db #js {:sql "select content from kvs where addr = ?"
                                           :bind #js [addr]
@@ -110,7 +102,9 @@
                     #js {:$addr addr
                          :$content (pr-str data)})
                   addr+data-seq)]
-        (upsert-addr-content! repo data delete-addrs)))
+        ;; async write so that UI can be refreshed earlier
+        (async/go
+          (upsert-addr-content! repo data delete-addrs))))
 
     (-restore [_ addr]
       (restore-data-from-addr repo addr))))
@@ -121,7 +115,7 @@
   (swap! *datascript-conns dissoc repo)
   (when db (.close db))
   (when search (.close search))
-  (when-let [^js pool (get-opfs-pool repo)]
+  (when-let [^js pool (state/get-opfs-pool repo)]
     (.releaseAccessHandles pool))
   (swap! *opfs-pools dissoc repo))
 
@@ -138,13 +132,13 @@
 
 (defn- create-or-open-db!
   [repo]
-  (when-not (get-sqlite-conn repo)
+  (when-not (state/get-sqlite-conn repo)
     (p/let [^js pool (<get-opfs-pool repo)
             capacity (.getCapacity pool)
             _ (when (zero? capacity)   ; file handle already releases since pool will be initialized only once
                 (.acquireAccessHandles pool))
             db (new (.-OpfsSAHPoolDb pool) repo-path)
-            search-db (new (.-OpfsSAHPoolDb pool) (str "search-" repo-path))
+            search-db (new (.-OpfsSAHPoolDb pool) (str "search" repo-path))
             storage (new-sqlite-storage repo {})]
       (swap! *sqlite-conns assoc repo {:db db
                                        :search search-db})
@@ -154,6 +148,8 @@
       (let [schema (sqlite-util/get-schema repo)
             conn (sqlite-common-db/get-storage-conn storage schema)]
         (swap! *datascript-conns assoc repo conn)
+        (p/let [_ (op-mem-layer/<init-load-from-indexeddb! repo)]
+          (rtc-db-listener/listen-to-db-changes! repo conn))
         nil))))
 
 (defn- iter->vec [iter]
@@ -200,11 +196,11 @@
 
 (defn- get-search-db
   [repo]
-  (get-sqlite-conn repo {:search? true}))
+  (state/get-sqlite-conn repo {:search? true}))
 
 
 #_:clj-kondo/ignore
-(defclass SQLiteDB
+(defclass DBWorker
   (extends js/Object)
 
   (constructor
@@ -219,7 +215,8 @@
      (.-version sqlite)))
 
   (init
-   [_this]
+   [_this rtc-ws-url]
+   (reset! state/*rtc-ws-url rtc-ws-url)
    (init-sqlite-module!))
 
   (listDB
@@ -251,31 +248,53 @@
 
   (getMaxTx
    [_this repo]
-   (when-let [conn (get-datascript-conn repo)]
+   (when-let [conn (state/get-datascript-conn repo)]
      (:max-tx @conn)))
 
   (q [_this repo inputs-str]
      "Datascript q"
-     (when-let [conn (get-datascript-conn repo)]
+     (when-let [conn (state/get-datascript-conn repo)]
        (let [inputs (edn/read-string inputs-str)]
          (let [result (apply d/q (first inputs) @conn (rest inputs))]
            (bean/->js result)))))
 
   (transact
-   [_this repo tx-data tx-meta]
-   (when-let [conn (get-datascript-conn repo)]
+   [_this repo tx-data tx-meta context]
+   (when repo (state/set-db-latest-tx-time! repo))
+   (when-let [conn (state/get-datascript-conn repo)]
      (try
-       (let [tx-data (edn/read-string tx-data)
-             tx-meta (edn/read-string tx-meta)
-             tx-report (d/transact! conn tx-data tx-meta)]
-         (search/sync-search-indice repo tx-report))
+       (let [tx-data (if (string? tx-data)
+                       (edn/read-string tx-data)
+                       tx-data)
+             tx-meta (if (string? tx-meta)
+                       (edn/read-string tx-meta)
+                       tx-meta)
+             context (if (string? context)
+                       (edn/read-string context)
+                       context)
+             _ (when context (state/set-context! context))
+             tx-meta' (if (:new-graph? tx-meta)
+                        tx-meta
+                        (-> tx-meta
+                            (assoc :skip-store? true) ; delay writes to the disk
+                            (dissoc :insert-blocks?)))]
+         (when-not (and (:create-today-journal? tx-meta)
+                        (:today-journal-name tx-meta)
+                        (seq tx-data)
+                        (d/entity @conn [:block/name (:today-journal-name tx-meta)])) ; today journal created already
+
+           ;; (prn :debug :transact :tx-data tx-data :tx-meta tx-meta')
+
+           (worker-util/profile "Worker db transact"
+                                (ldb/transact! conn tx-data tx-meta')))
+         nil)
        (catch :default e
          (prn :debug :error)
          (js/console.error e)))))
 
   (getInitialData
    [_this repo]
-   (when-let [conn (get-datascript-conn repo)]
+   (when-let [conn (state/get-datascript-conn repo)]
      (->> (sqlite-common-db/get-initial-data @conn)
           dt/write-transit-str)))
 
@@ -288,7 +307,7 @@
 
   (releaseAccessHandles
    [_this repo]
-   (when-let [^js pool (get-opfs-pool repo)]
+   (when-let [^js pool (state/get-opfs-pool repo)]
      (.releaseAccessHandles pool)))
 
   (dbExists
@@ -332,18 +351,119 @@
 
   (search-build-blocks-indice
    [this repo]
-   (when-let [conn (get-datascript-conn repo)]
+   (when-let [conn (state/get-datascript-conn repo)]
      (search/build-blocks-indice repo @conn)))
 
   (search-build-pages-indice
    [this repo]
-   (when-let [conn (get-datascript-conn repo)]
+   (when-let [conn (state/get-datascript-conn repo)]
      (search/build-blocks-indice repo @conn)))
 
   (page-search
    [this repo q limit]
-   (when-let [conn (get-datascript-conn repo)]
+   (when-let [conn (state/get-datascript-conn repo)]
      (search/page-search repo @conn q limit)))
+
+  (file-writes-finished?
+   [this]
+   (empty? @file/*writes))
+
+  (page-file-saved
+   [this request-id page-id]
+   (file/dissoc-request! request-id)
+   nil)
+
+  (sync-app-state
+   [this new-state-str]
+   (let [new-state (edn/read-string new-state-str)]
+     (state/set-new-state! new-state)
+     nil))
+
+  ;; RTC
+  (rtc-start
+   [this repo token]
+   (when-let [conn (state/get-datascript-conn repo)]
+     (rtc-core/<start-rtc repo conn token)
+     nil))
+
+  (rtc-stop
+   [this]
+   (rtc-core/<stop-rtc)
+   nil)
+
+  (rtc-toggle-sync
+   [this repo]
+   (let [d (p/deferred)]
+     (async/go
+       (let [result (<! (rtc-core/<toggle-sync))]
+         (p/resolve! d result)))
+     d))
+
+  (rtc-grant-graph-access
+   [this graph-uuid target-user-uuids target-user-emails]
+   (when-let [state @rtc-core/*state]
+     (rtc-core/<grant-graph-access-to-others
+      state graph-uuid
+      :target-user-uuids target-user-uuids
+      :target-user-emails target-user-emails))
+   nil)
+
+  (rtc-upload-graph
+   [this repo token]
+   (when-let [conn (state/get-datascript-conn repo)]
+     (async/go
+       (try
+         (let [state (<! (rtc-core/<init-state repo token))]
+           (<! (rtc-updown/<upload-graph state repo conn))
+           (rtc-db-listener/listen-db-to-generate-ops repo conn))
+         (worker-util/post-message :notification
+                                   (pr-str
+                                    [[:div
+                                      [:p "Upload graph successfully"]]]))
+         (catch :default e
+           (worker-util/post-message :notification
+                                     (pr-str
+                                      [[:div
+                                        [:p "upload graph failed"]]
+                                       :error]))
+           (prn ::download-graph-failed e))))
+     nil))
+
+  (rtc-download-graph
+   [this repo token graph-uuid]
+   (async/go
+     (let [state (<! (rtc-core/<init-state repo token))]
+       (try
+         (<? (rtc-updown/<download-graph state repo graph-uuid))
+         (worker-util/post-message :notification
+                                   (pr-str
+                                    [[:div
+                                      [:p "download graph successfully"]]]))
+         (catch :default e
+           (worker-util/post-message :notification
+                                     (pr-str
+                                      [[:div
+                                        [:p "download graph failed"]]
+                                       :error]))
+           (prn ::download-graph-failed e)))))
+   nil)
+
+  (rtc-push-pending-ops
+   [_this]
+   (async/put! (:force-push-client-ops-chan @rtc-core/*state) true)
+   nil)
+
+  (rtc-get-graphs
+   [_this repo token]
+   (rtc-core/<get-graphs repo token))
+
+  (rtc-get-block-content-versions
+   [_this block-id]
+   (rtc-core/<get-block-content-versions @rtc-core/*state block-id))
+
+  (rtc-get-debug-state
+   [_this repo]
+   (bean/->js (rtc-core/get-debug-state repo)))
 
   (dangerousRemoveAllDbs
    [this repo]
@@ -353,7 +473,9 @@
 (defn init
   "web worker entry"
   []
-  (let [^js obj (SQLiteDB.)]
+  (let [^js obj (DBWorker.)]
+    (state/set-worker-object! obj)
+    (file/<ratelimit-file-writes!)
     (Comlink/expose obj)))
 
 (comment

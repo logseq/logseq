@@ -15,13 +15,13 @@
             [frontend.schema.handler.repo-config :as repo-config-schema]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [electron.ipc :as ipc]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile-util]
             [logseq.common.path :as path]
-            [logseq.graph-parser.config :as gp-config]))
+            [logseq.common.config :as common-config]))
 
 ;; TODO: extract all git ops using a channel
 
@@ -44,17 +44,17 @@
   [files formats]
   (filter
    (fn [file]
-     (let [format (gp-util/get-format file)]
+     (let [format (common-util/get-format file)]
        (contains? formats format)))
    files))
 
 (defn- only-text-formats
   [files]
-  (keep-formats files (gp-config/text-formats)))
+  (keep-formats files (common-config/text-formats)))
 
 (defn- only-image-formats
   [files]
-  (keep-formats files (gp-config/img-formats)))
+  (keep-formats files (common-config/img-formats)))
 
 (defn load-files-contents!
   [repo-url files ok-handler]
@@ -68,7 +68,7 @@
                                         (seq images)
                                         (merge (zipmap images (repeat (count images) ""))))
                         file-contents (for [[file content] file-contents]
-                                        {:file/path (gp-util/path-normalize file)
+                                        {:file/path (common-util/path-normalize file)
                                          :file/content content})]
                     (ok-handler file-contents))))
         (p/catch (fn [error]
@@ -148,7 +148,7 @@
                            re-render-root? false
                            from-disk? false
                            skip-compare? false}}]
-  (let [path (gp-util/path-normalize path)
+  (let [path (common-util/path-normalize path)
         config-file? (= path "logseq/config.edn")
         _ (when config-file?
             (detect-deprecations path content))
@@ -204,7 +204,7 @@
   [repo files {:keys [finish-handler]} file->content]
   (let [write-file-f (fn [[path content]]
                        (when path
-                         (let [path (gp-util/path-normalize path)
+                         (let [path (common-util/path-normalize path)
                                original-content (get file->content path)]
                           (-> (p/let [_ (or
                                          (util/electron?)

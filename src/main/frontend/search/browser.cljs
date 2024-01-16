@@ -8,7 +8,7 @@
             [frontend.config :as config]
             [frontend.handler.file-based.property.util :as property-util]))
 
-(defonce *sqlite browser/*sqlite)
+(defonce *sqlite browser/*worker)
 
 (defrecord Browser [repo]
   protocol/Engine

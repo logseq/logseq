@@ -4,7 +4,7 @@
   (:require [cljs.test :refer [deftest are]]
             [clojure.string :as string]
             [frontend.util :as util]
-            [frontend.handler.file-based.page :as file-page-handler]))
+            [frontend.worker.file.page-rename :as page-rename]))
 
 (defn- replace-page-ref!
   [content old-name new-name]
@@ -36,7 +36,7 @@
   (when (and (string? content) (string? old-name) (string? new-name))
     (-> content
         (replace-page-ref! old-name new-name)
-        (file-page-handler/replace-tag-ref! old-name new-name))))
+        (page-rename/replace-tag-ref! old-name new-name))))
 
 (deftest test-replace-page-ref!
   (are [x y] (= (let [[content old-name new-name] x]
@@ -48,7 +48,7 @@
 
     ["bla [[file:./foo.org][foo]] bla" "foo" "bar"]
     "bla [[file:./bar.org][bar]] bla"
-    
+
     ["bla [[file:./logseq.foo.org][logseq/foo]] bla" "logseq/foo" "logseq/bar"]
     "bla [[file:./logseq.bar.org][logseq/bar]] bla"
 
@@ -66,7 +66,7 @@
 
 (deftest test-replace-tag-ref!
   (are [x y] (= (let [[content old-name new-name] x]
-                  (file-page-handler/replace-tag-ref! content old-name new-name))
+                  (page-rename/replace-tag-ref! content old-name new-name))
                 y)
     ["#foo" "foo" "bar"] "#bar"
     ["#foo" "foo" "new bar"] "#[[new bar]]"

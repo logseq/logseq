@@ -179,8 +179,6 @@
 
    :auto-complete/meta-complete             {:binding "mod+enter"
                                              :fn      (fn [state e]
-                                                        (when (= :page-search-hashtag (state/get-editor-action))
-                                                          (reset! (:editor/create-page? @state/state) true))
                                                         (ui-handler/auto-complete-complete state e))}
 
    :auto-complete/open-link                 {:binding "mod+o"
@@ -218,7 +216,7 @@
                                              :fn      editor-handler/keydown-new-line-handler}
 
    :editor/new-whiteboard                   {:binding "n w"
-                                             :fn      #(whiteboard-handler/create-new-whiteboard-and-redirect!)}
+                                             :fn      #(whiteboard-handler/<create-new-whiteboard-and-redirect!)}
 
    :editor/follow-link                      {:binding "mod+o"
                                              :fn      editor-handler/follow-link-under-cursor!}

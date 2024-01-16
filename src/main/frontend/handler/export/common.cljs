@@ -12,7 +12,7 @@
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [frontend.handler.property.util :as pu]
             [malli.core :as m]
             [malli.util :as mu]))
@@ -210,7 +210,7 @@
                                                [?e2 :block/file ?e]
                                                [?e2 :block/name ?n]
                                                [?e2 :block/original-name ?n2]] db path)
-                                 :format (gp-util/get-format path)})))))
+                                 :format (common-util/get-format path)})))))
 
 ;;; utils (ends)
 

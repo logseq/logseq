@@ -3,7 +3,7 @@
   (:require [promesa.core :as p]
             [frontend.db.async.util :as db-async-util]
             [clojure.string :as string]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [logseq.common.util.page-ref :as page-ref]))
 
 (def <q db-async-util/<q)
 

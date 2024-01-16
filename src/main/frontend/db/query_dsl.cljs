@@ -16,8 +16,8 @@
             [logseq.db.frontend.rules :as rules]
             [frontend.template :as template]
             [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.util.page-ref :as page-ref]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.common.util :as common-util]
             [frontend.util.text :as text-util]
             [frontend.util :as util]
             [frontend.config :as config]))
@@ -455,7 +455,7 @@ Some bindings in this fn:
 (defonce tag-placeholder "~~~tag-placeholder~~~")
 (defn pre-transform
   [s]
-  (if (gp-util/wrapped-by-quotes? s)
+  (if (common-util/wrapped-by-quotes? s)
     s
     (let [quoted-page-ref (fn [matches]
                             (let [match' (string/replace (second matches) "#" tag-placeholder)]

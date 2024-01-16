@@ -5,16 +5,17 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.handler.route :as route-handler]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [promesa.core :as p]))
 
 (defn restore-cursor!
-  [{:keys [last-edit-block container pos]}]
+  [{:keys [last-edit-block container pos end-pos]} undo?]
   (when (and container last-edit-block)
     #_:clj-kondo/ignore
     (when-let [container (gdom/getElement container)]
       (when-let [block-uuid (:block/uuid last-edit-block)]
         (when-let [block (db/pull [:block/uuid block-uuid])]
-          (editor/edit-block! block pos
+          (editor/edit-block! block (or (when undo? pos) end-pos)
                               (:block/uuid block)
                               {:custom-content (:block/content block)}))))))
 
@@ -40,22 +41,17 @@
 (defn undo!
   [e]
   (util/stop e)
-  (state/set-editor-op! :undo)
-  (state/clear-editor-action!)
-  (state/set-block-op-type! nil)
-  (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)] nil)
-  (editor/save-current-block!)
-  (let [{:keys [editor-cursor app-state]} (undo-redo/undo)]
-    (restore-cursor! editor-cursor)
-    (restore-app-state! app-state))
-  (state/set-editor-op! nil))
+  (p/do!
+   (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)] nil)
+   (editor/save-current-block!)
+   (state/clear-editor-action!)
+   (state/set-block-op-type! nil)
+   (let [cursor-state (undo-redo/undo)]
+     (state/set-state! :ui/restore-cursor-state (select-keys cursor-state [:editor-cursor :app-state])))))
 
 (defn redo!
   [e]
   (util/stop e)
-  (state/set-editor-op! :redo)
   (state/clear-editor-action!)
-  (let [{:keys [editor-cursor app-state]} (undo-redo/redo)]
-    (restore-cursor! editor-cursor)
-    (restore-app-state! app-state))
-  (state/set-editor-op! nil))
+  (let [cursor-state (undo-redo/redo)]
+    (state/set-state! :ui/restore-cursor-state (select-keys cursor-state [:editor-cursor :app-state]))))

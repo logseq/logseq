@@ -22,8 +22,8 @@
    [goog.dom :as gdom]
    [lambdaisland.glogi :as log]
    [logseq.graph-parser.property :as gp-property]
-   [logseq.graph-parser.util.block-ref :as block-ref]
-   [logseq.graph-parser.util.page-ref :as page-ref]
+   [logseq.common.util.block-ref :as block-ref]
+   [logseq.common.util.page-ref :as page-ref]
    [promesa.core :as p]
    [frontend.persist-db :as persist-db])
   (:import

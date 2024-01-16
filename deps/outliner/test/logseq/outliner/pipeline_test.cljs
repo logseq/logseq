@@ -2,7 +2,7 @@
   (:require [cljs.test :refer [deftest is]]
             [logseq.db.frontend.schema :as db-schema]
             [datascript.core :as d]
-            [logseq.outliner.pipeline :as outliner-pipeline]))
+            [logseq.db :as ldb]))
 
 
 ;;; datoms
@@ -24,6 +24,6 @@
   (let [db (d/db-with (d/empty-db db-schema/schema)
                       broken-outliner-data-with-cycle)]
     (is (= "bad outliner data, need to re-index to fix"
-           (try (outliner-pipeline/get-block-children-ids db #uuid "e538d319-48d4-4a6d-ae70-c03bb55b6fe4")
+           (try (ldb/get-block-children-ids db #uuid "e538d319-48d4-4a6d-ae70-c03bb55b6fe4")
                 (catch :default e
                   (ex-message e)))))))

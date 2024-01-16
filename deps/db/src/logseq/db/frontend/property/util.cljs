@@ -1,6 +1,7 @@
 (ns logseq.db.frontend.property.util
   "Util fns for building core property concepts"
   (:require [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.common.util :as common-util]
             [datascript.core :as d]))
 
 (defonce hidden-page-name-prefix "$$$")
@@ -19,7 +20,7 @@
   "Builds a closed value block to be transacted"
   [block-uuid block-value page-id property {:keys [icon-id icon description]}]
   (cond->
-   (closed-value-new-block page-id (or block-uuid (d/squuid)) block-value property)
+    (closed-value-new-block page-id (or block-uuid (d/squuid)) block-value property)
     icon
     (assoc :block/properties {icon-id icon})
 
@@ -33,7 +34,7 @@
   "Builds a basic page to be transacted. A minimal version of gp-block/page-name->map"
   [page-name]
   (sqlite-util/block-with-timestamps
-   {:block/name (sqlite-util/sanitize-page-name page-name)
+   {:block/name (common-util/page-name-sanity-lc page-name)
     :block/original-name page-name
     :block/journal? false
     :block/uuid (d/squuid)}))
@@ -48,13 +49,13 @@
 
 (defn new-property-tx
   "Provide attributes for a new built-in property given name, schema and uuid.
-   TODO: Merge this with sqlite-util/build-new-property once gp-util/page-name-sanity-lc
+   TODO: Merge this with sqlite-util/build-new-property once common-util/page-name-sanity-lc
    is available to deps/db"
   [prop-name prop-schema prop-uuid]
   {:block/uuid prop-uuid
    :block/schema (merge {:type :default} prop-schema)
    :block/original-name (name prop-name)
-   :block/name (sqlite-util/sanitize-page-name (name prop-name))})
+   :block/name (common-util/page-name-sanity-lc (name prop-name))})
 
 (defn build-closed-values
   "Builds all the tx needed for property with closed values including

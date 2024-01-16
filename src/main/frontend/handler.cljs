@@ -32,8 +32,6 @@
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
-            [frontend.modules.outliner.datascript :as outliner-db]
-            [frontend.modules.outliner.file :as file]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -42,10 +40,8 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.core :as mobile]
-            [frontend.db.listener :as db-listener]
             [cljs-bean.core :as bean]
             [frontend.handler.test :as test]
-            [frontend.db.rtc.op-mem-layer :as op-mem-layer]
             [frontend.persist-db.browser :as db-browser]))
 
 (defn- set-global-error-notification!
@@ -74,12 +70,10 @@
 (defn restore-and-setup!
   [repo repos]
   (when repo
-    (-> (p/let [_ (db-restore/restore-graph! repo)
-                _ (repo-config-handler/start {:repo repo})]
-          (op-mem-layer/<init-load-from-indexeddb! repo))
+    (-> (p/let [_ (db-restore/restore-graph! repo)]
+          (repo-config-handler/start {:repo repo}))
         (p/then
          (fn []
-           (db-listener/listen-and-persist! repo)
            ;; try to load custom css only for current repo
            (ui-handler/add-style-if-exists!)
 
@@ -168,8 +162,6 @@
   (state/set-component! :editor/box editor/box)
   (command-palette/register-global-shortcut-commands))
 
-(reset! db-listener/*db-listener outliner-db/after-transact-pipelines)
-
 (defn- get-system-info
   []
   (when (util/electron?)
@@ -222,7 +214,6 @@
        (p/finally (fn []
                     (state/set-db-restoring! false))))
 
-   (file/<ratelimit-file-writes!)
    (util/<app-wake-up-from-sleep-loop (atom false))
 
    (when config/dev?
