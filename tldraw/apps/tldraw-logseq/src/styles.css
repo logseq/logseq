@@ -141,6 +141,7 @@ html[data-theme='light'] {
 .tl-menu-right-slot {
   margin-left: auto;
   padding-left: 20px;
+  line-height: 1;
 
   .keyboard-shortcut > code {
     padding: 4px !important;
