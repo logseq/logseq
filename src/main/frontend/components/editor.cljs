@@ -642,10 +642,10 @@
             :visibility "hidden"
             :top 0
             :left 0}}
-   (let [content (str content "0")]
-     (for [[idx c] (map-indexed
-                    vector
-                    (string/split content ""))]
+   (let [content (str content "0")
+         graphemes (util/split-graphemes content)
+         graphemes-char-index (reductions #(+ %1 (count %2)) 0 graphemes)]
+     (for [[idx c] (zipmap graphemes-char-index graphemes)]
        (if (= c "\n")
          [:span {:id (str "mock-text_" idx)
                  :key idx} "0" [:br]]
