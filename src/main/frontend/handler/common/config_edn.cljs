@@ -86,6 +86,29 @@ nested keys or positional errors e.g. tuples"
       :else
       (validate-config-map parsed-body schema path))))
 
+(def file-only-config
+  "File only config that is deprecated in DB graphs"
+  {:preferred-format
+   "is not used in DB graphs as there is only markdown mode."
+   :property/separated-by-commas
+   "is not used in DB graphs"
+   :property-pages/enabled?
+   "is not used in DB graphs as all properties have pages"
+   :property-pages/excludelist
+   "is not used in DB graphs"
+   :hidden
+   "is not used in DB graphs"
+   :org-mode/insert-file-link?
+   "is not used in DB graphs"
+   :block-hidden-properties
+   "is not used in DB graphs as hiding a property is done in its configuration"
+   :ignored-page-references-keywords
+   "is not used in DB graphs"
+   :file/name-format
+   "is not used in DB graphs"
+   :feature/enable-block-timestamps?
+   "is not used in DB graphs as it is always enabled"})
+
 (defn detect-deprecations
   "Detects config keys that will or have been deprecated"
   [path content {:keys [db-graph?]}]
@@ -96,10 +119,7 @@ nested keys or positional errors e.g. tuples"
                    "is no longer supported. Please use '/' and report bugs on it."}
                    db-graph?
                    (merge
-                    {:preferred-format
-                     "is not used in DB graphs as there is only markdown mode."
-                     :property/separated-by-commas
-                     "is not used in DB graphs"}))]
+                    file-only-config))]
     (cond
       (= body ::failed-to-detect)
       (log/info :msg "Skip deprecation check since config is not valid edn")

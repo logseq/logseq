@@ -8,8 +8,7 @@
             [logseq.graph-parser.extract :as extract]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
-            [logseq.db :as ldb]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db :as ldb]))
 
 (defn- retract-blocks-tx
   [blocks retain-uuids]
@@ -124,13 +123,24 @@ Options available:
   [db property-name]
   (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc (name property-name))])))
 
+(defn add-missing-timestamps
+  "Add updated-at or created-at timestamps if they doesn't exist"
+  [block]
+  (let [updated-at (date-time-util/time-ms)
+        block (cond-> block
+                (nil? (:block/updated-at block))
+                (assoc :block/updated-at updated-at)
+                (nil? (:block/created-at block))
+                (assoc :block/created-at updated-at))]
+    block))
+
 (defn- update-block-with-invalid-tags
   [block]
   (if (seq (:block/tags block))
     (update block :block/tags
             (fn [tags]
               (mapv #(-> %
-                         sqlite-util/block-with-timestamps
+                         add-missing-timestamps
                          (merge {:block/journal? false
                                  :block/format :markdown
                                  :block/uuid (d/squuid)}))
@@ -174,7 +184,7 @@ Options available:
                      (fn [refs]
                        (mapv #(assoc % :block/format :markdown) refs)))
              block')))
-        sqlite-util/block-with-timestamps
+        add-missing-timestamps
         ;; FIXME: Remove when properties are supported
         (assoc :block/properties {})
         ;; TODO: org-mode content needs to be handled
@@ -226,7 +236,7 @@ Options available:
                                  (if-not (:block/original-name m)
                                    (assoc m :block/original-name (:block/name m))
                                    m)))
-                              sqlite-util/block-with-timestamps
+                              add-missing-timestamps
                               ;; TODO: org-mode content needs to be handled
                               (assoc :block/format :markdown)
                               (dissoc :block/properties-text-values :block/properties-order :block/invalid-properties

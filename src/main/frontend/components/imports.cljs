@@ -28,7 +28,8 @@
             [promesa.core :as p]
             [borkdude.rewrite-edn :as rewrite]
             [rum.core :as rum]
-            [frontend.handler.repo :as repo-handler]))
+            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.common.config-edn :as config-edn-common-handler]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
@@ -211,7 +212,7 @@
       (p/then (fn [content]
                 (let [migrated-content (-> (reduce rewrite/dissoc
                                                    (rewrite/parse-string (str content))
-                                                   [:preferred-format :property/separated-by-commas])
+                                                   (keys config-edn-common-handler/file-only-config))
                                            str)]
                   (p/do!
                    (db-editor-handler/save-file! "logseq/config.edn" migrated-content))

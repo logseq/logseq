@@ -403,12 +403,49 @@
   (when input
     (.-selectionDirection input)))
 
-(defn get-first-or-last-line-pos
-  [input]
-  (let [pos (get-selection-start input)
-        value (.-value input)
-        last-newline-pos (or (string/last-index-of value \newline (dec pos)) -1)]
-    (- pos last-newline-pos 1)))
+#?(:cljs
+   (defn split-graphemes
+     [s]
+     (let [^js splitter (GraphemeSplitter.)]
+       (.splitGraphemes splitter s))))
+
+#?(:cljs
+   (defn get-graphemes-pos
+     "Return the length of the substrings in s between start and from-index.
+
+      multi-char count as 1, like emoji characters"
+     [s from-index]
+     (let [^js splitter (GraphemeSplitter.)]
+       (.countGraphemes splitter (subs s 0 from-index)))))
+
+#?(:cljs
+   (defn get-line-pos
+     "Return the length of the substrings in s between the last index of newline
+      in s searching backward from from-newline-index and from-newline-index.
+
+      multi-char count as 1, like emoji characters"
+     [s from-newline-index]
+     (let [^js splitter (GraphemeSplitter.)
+           last-newline-pos (string/last-index-of s \newline (dec from-newline-index))
+           before-last-newline-length (or last-newline-pos -1)
+           last-newline-content (subs s (inc before-last-newline-length) from-newline-index)]
+       (.countGraphemes splitter last-newline-content))))
+
+#?(:cljs
+   (defn get-text-range
+     "Return the substring of the first grapheme-num characters of s if first-line? is true,
+      otherwise return the substring of s before the last \n and the first grapheme-num characters.
+
+      grapheme-num treats multi-char as 1, like emoji characters"
+     [s grapheme-num first-line?]
+     (let [newline-pos (if first-line?
+                         0
+                         (inc (or (string/last-index-of s \newline) -1)))
+           ^js splitter (GraphemeSplitter.)
+           ^js newline-graphemes (.splitGraphemes splitter (subs s newline-pos))
+           ^js newline-graphemes (.slice newline-graphemes 0 grapheme-num)
+           content (.join newline-graphemes "")]
+       (subs s 0 (+ newline-pos (count content))))))
 
 #?(:cljs
    (defn stop [e]
@@ -666,7 +703,7 @@
    (defn safe-dec-current-pos-from-end
      [input current-pos]
      (if-let [len (and (string? input) (.-length input))]
-       (when-let [input (and (>= len 2) (<= current-pos len)
+       (if-let [input (and (>= len 2) (<= current-pos len)
                              (.substring input (max (- current-pos 20) 0) current-pos))]
          (try
            (let [^js splitter (GraphemeSplitter.)
@@ -674,7 +711,8 @@
              (- current-pos (.-length (.pop input))))
            (catch :default e
              (js/console.error e)
-             (dec current-pos))))
+             (dec current-pos)))
+         (dec current-pos))
        (dec current-pos))))
 
 #?(:cljs
@@ -682,7 +720,7 @@
    (defn safe-inc-current-pos-from-start
      [input current-pos]
      (if-let [len (and (string? input) (.-length input))]
-       (when-let [input (and (>= len 2) (<= current-pos len)
+       (if-let [input (and (>= len 2) (<= current-pos len)
                              (.substr input current-pos 20))]
          (try
            (let [^js splitter (GraphemeSplitter.)
@@ -690,7 +728,8 @@
              (+ current-pos (.-length (.shift input))))
            (catch :default e
              (js/console.error e)
-             (inc current-pos))))
+             (inc current-pos)))
+         (inc current-pos))
        (inc current-pos))))
 
 #?(:cljs
@@ -1254,10 +1293,11 @@
              scroll-top  (.-scrollTop main-node)
 
              current-pos (get-selection-start el)
+             grapheme-pos (get-graphemes-pos (.-value (.textContent el)) current-pos)
              mock-text   (some-> (gdom/getElement "mock-text")
                                  gdom/getChildren
                                  array-seq
-                                 (nth-safe current-pos))
+                                 (nth-safe grapheme-pos))
              offset-top   (and mock-text (.-offsetTop mock-text))
              offset-height (and mock-text (.-offsetHeight mock-text))
 
