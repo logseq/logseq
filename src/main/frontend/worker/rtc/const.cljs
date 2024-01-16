@@ -171,6 +171,16 @@
       [:req-id :string]
       [:action :string]
       [:graph-uuid :uuid]
-      [:block-uuids [:sequential :uuid]]]]]))
+      [:block-uuids [:sequential :uuid]]]]
+    ["update-assets"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:graph-uuid :uuid]
+      [:create {:optional true} [:sequential
+                                 [:map
+                                  [:asset-uuid :uuid]
+                                  [:asset-name :string]]]]
+      [:delete {:optional true} [:sequential :uuid]]]]]))
 (def data-to-ws-encoder (m/encoder data-to-ws-schema mt/string-transformer))
 (def data-to-ws-coercer (m/coercer data-to-ws-schema mt/string-transformer))
