@@ -181,7 +181,7 @@
           result-as-text (for [row sort-result]
                            (for [column columns]
                              (build-column-text row column)))
-          render-column-value (fn [row-format cell-format value]
+          render-column-value (fn [row-block row-format cell-format value]
                                 (cond
                                   ;; elements should be rendered as they are provided
                                   (= :element cell-format) value
@@ -194,7 +194,7 @@
                                   ;; inline-text when no page entity is found
                                   (string? value) (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
                                                     (page-cp {} page)
-                                                    (inline-text row-format value))
+                                                    (inline-text row-block row-format value))
                                   ;; anything else should just be rendered as provided
                                   :else value))]
 
@@ -237,4 +237,4 @@
                                                                 :block-ref)
                                                                (reset! *mouse-down? false)))}
                        (when value
-                         (apply render-column-value format value))]))]))]]]))))
+                         (apply render-column-value row format value))]))]))]]]))))
