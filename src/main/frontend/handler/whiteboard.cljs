@@ -106,19 +106,29 @@
         changed-shapes (set/difference upsert-shapes created-shapes)
         prev-changed-blocks (when (seq changed-shapes)
                               (db/pull-many repo '[*] (mapv (fn [shape]
-                                                              [:block/uuid (uuid (:id shape))]) changed-shapes)))]
-    {:page-block (build-page-block page-name tl-page assets shapes-index)
-     :upserted-blocks (->> upsert-shapes
-                           (map #(shape->block % page-name))
-                           (map sqlite-util/block-with-timestamps))
-     :delete-blocks deleted-shapes-tx
-     :metadata {:whiteboard/transact? (not replace?)
-                :replace? replace?
-                :data {:page-name page-name
-                       :deleted-shapes deleted-shapes
-                       :new-shapes created-shapes
-                       :changed-shapes changed-shapes
-                       :prev-changed-blocks prev-changed-blocks}}}))
+                                                              [:block/uuid (uuid (:id shape))]) changed-shapes)))
+        upserted-blocks (->> (map #(shape->block % page-name) upsert-shapes)
+                             (remove (fn [b]
+                                       (= (:nonce
+                                           (pu/get-property
+                                            (db/entity [:block/uuid (:block/uuid b)])
+                                            :logseq.tldraw.shape))
+                                          (:nonce
+                                           (pu/get-property
+                                            b
+                                            :logseq.tldraw.shape))))))]
+    (when (or (seq upserted-blocks)
+              (seq deleted-shapes-tx))
+      {:page-block (build-page-block page-name tl-page assets shapes-index)
+       :upserted-blocks (map sqlite-util/block-with-timestamps upserted-blocks)
+       :delete-blocks deleted-shapes-tx
+       :metadata {:whiteboard/transact? (not replace?)
+                  :replace? replace?
+                  :data {:page-name page-name
+                         :deleted-shapes deleted-shapes
+                         :new-shapes created-shapes
+                         :changed-shapes changed-shapes
+                         :prev-changed-blocks prev-changed-blocks}}})))
 
 (defonce *last-shapes-nonce (atom {}))
 (defn <transact-tldr-delta!
@@ -130,50 +140,51 @@
         prev-shapes-index (:shapes-index prev-page-metadata)
         shape-id->prev-index (zipmap prev-shapes-index (range (count prev-shapes-index)))
         new-id-nonces (set (map-indexed (fn [idx shape]
-                                  (let [id (.-id shape)]
-                                    {:id id
-                                     :nonce (if (= idx (get shape-id->prev-index id))
-                                              (.-nonce shape)
-                                              (js/Date.now))})) shapes))
+                                          (let [id (.-id shape)]
+                                            {:id id
+                                             :nonce (if (= idx (get shape-id->prev-index id))
+                                                      (.-nonce shape)
+                                                      (js/Date.now))})) shapes))
         repo (state/get-current-repo)
         db-id-nonces (or
                       (get-in @*last-shapes-nonce [repo page-name])
                       (set (->> (model/get-whiteboard-id-nonces repo page-name)
                                 (map #(update % :id str)))))
-        {:keys [page-block upserted-blocks delete-blocks metadata]}
-        (compute-tx app tl-page new-id-nonces db-id-nonces page-name replace?)
-        tx-data (concat delete-blocks [page-block] upserted-blocks)
-        new-shapes (get-in metadata [:data :new-shapes])
-        deleted-shapes (get-in metadata [:data :deleted-shapes])
-        metadata' (cond
+        {:keys [page-block upserted-blocks delete-blocks metadata] :as result}
+        (compute-tx app tl-page new-id-nonces db-id-nonces page-name replace?)]
+    (when (seq result)
+      (let [tx-data (concat delete-blocks [page-block] upserted-blocks)
+            new-shapes (get-in metadata [:data :new-shapes])
+            deleted-shapes (get-in metadata [:data :deleted-shapes])
+            metadata' (cond
                     ;; group
-                    (some #(= "group" (:type %)) new-shapes)
-                    (assoc metadata :whiteboard/op :group)
+                        (some #(= "group" (:type %)) new-shapes)
+                        (assoc metadata :whiteboard/op :group)
 
                     ;; ungroup
-                    (and (not-empty deleted-shapes) (every? #(= "group" (:type %)) deleted-shapes))
-                    (assoc metadata :whiteboard/op :un-group)
+                        (and (not-empty deleted-shapes) (every? #(= "group" (:type %)) deleted-shapes))
+                        (assoc metadata :whiteboard/op :un-group)
 
                     ;; arrow
-                    (some #(and (= "line" (:type %))
-                                (= "arrow " (:end (:decorations %)))) new-shapes)
+                        (some #(and (= "line" (:type %))
+                                    (= "arrow " (:end (:decorations %)))) new-shapes)
 
-                    (assoc metadata :whiteboard/op :new-arrow)
-                    :else
-                    metadata)
-        metadata' (if (seq (concat upserted-blocks delete-blocks))
-                    metadata'
-                    (assoc metadata :undo? true))]
-    (swap! *last-shapes-nonce assoc-in [repo page-name] new-id-nonces)
-    (if (contains? #{:new-arrow} (:whiteboard/op metadata'))
-      (state/set-state! :whiteboard/pending-tx-data
-                        {:tx-data tx-data
-                         :metadata metadata'})
-      (let [pending-tx-data (:whiteboard/pending-tx-data @state/state)
-            tx-data' (concat (:tx-data pending-tx-data) tx-data)
-            metadata'' (merge metadata' (:metadata pending-tx-data))]
-        (state/set-state! :whiteboard/pending-tx-data {})
-        (db/transact! repo tx-data' metadata'')))))
+                        (assoc metadata :whiteboard/op :new-arrow)
+                        :else
+                        metadata)
+            metadata' (if (seq (concat upserted-blocks delete-blocks))
+                        metadata'
+                        (assoc metadata :undo? true))]
+        (swap! *last-shapes-nonce assoc-in [repo page-name] new-id-nonces)
+        (if (contains? #{:new-arrow} (:whiteboard/op metadata'))
+          (state/set-state! :whiteboard/pending-tx-data
+                            {:tx-data tx-data
+                             :metadata metadata'})
+          (let [pending-tx-data (:whiteboard/pending-tx-data @state/state)
+                tx-data' (concat (:tx-data pending-tx-data) tx-data)
+                metadata'' (merge metadata' (:metadata pending-tx-data))]
+            (state/set-state! :whiteboard/pending-tx-data {})
+            (db/transact! repo tx-data' metadata'')))))))
 
 (defn get-default-new-whiteboard-tx
   [page-name id]
