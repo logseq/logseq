@@ -160,28 +160,3 @@
 
                 :else nil))))
       (async/unsub data-from-ws-pub "push-assets-update" push-data-from-ws-ch))))
-
-(comment
-  (go-loop []
-    (when-let [{min-epoch-asset-ops :ops asset-uuid :asset-uuid} (op-mem-layer/get-min-epoch-asset-ops repo)]
-      (try
-        (doseq [[tp _op] min-epoch-asset-ops]
-          (case tp
-            :update-asset
-            (let [asset-entity (d/pull @conn '[*] [:asset/uuid asset-uuid])
-                  r (<? (ws/<send&receive state {:action "update-assets" :graph-uuid graph-uuid
-                                                 :create [{:asset-uuid asset-uuid
-                                                           :asset-name (or (some-> asset-entity :asset/meta :name)
-                                                                           "default-name")}]}))]
-              (when (:ex-data r)
-                (throw (ex-info (:ex-message r) (:ex-data r)))))
-
-            :remove-asset
-            (let [r (<? (ws/<send&receive state {:action "update-assets" :graph-uuid graph-uuid
-                                                 :delete [asset-uuid]}))]
-              (when (:ex-data r)
-                (throw (ex-info (:ex-message r) (:ex-data r)))))))
-        (op-mem-layer/remove-asset-ops! repo asset-uuid)
-        (recur)
-        (catch :default e
-          (prn ::unknown-ex e))))))
