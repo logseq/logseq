@@ -78,7 +78,6 @@
  :content/copy-block-emebed "블록 임베드 복사"
  :content/open-in-sidebar "사이드바에서 열기"
  :content/click-to-edit "클릭하여 수정"
- :settings-page/git-confirm "Git 설정을 변경한 뒤 앱을 재시작해야 합니다."
  :settings-page/git-switcher-label "Git 자동 커밋 설정"
  :settings-page/git-commit-delay "Git 자동 커밋 간격 (초)"
  :settings-page/edit-config-edn "config.edn 수정"

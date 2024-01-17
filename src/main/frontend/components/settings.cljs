@@ -250,22 +250,24 @@
          enabled?
          (fn []
            (state/set-state! [:electron/user-cfgs :git/disable-auto-commit?] enabled?)
-           (ipc/ipc :userAppCfgs :git/disable-auto-commit? enabled?))
+           (p/do!
+            (ipc/ipc :userAppCfgs :git/disable-auto-commit? enabled?)
+            (ipc/ipc :setGitAutoCommit)))
          true)]]]))
 
-(rum/defcs switch-git-commit-on-close < rum/reactive
+(rum/defcs switch-git-commit-on-close-row < rum/reactive
   [state t]
   (let [enabled? (state/get-git-commit-on-close-enabled?)]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
-      (t :settings-page/git-commit-on-close-switcher-label)]
+      (t :settings-page/git-commit-on-close)]
      [:div
       [:div.rounded-md.sm:max-w-xs
        (ui/toggle
          enabled?
          (fn []
-           (state/set-state! [:electron/user-cfgs :git/disable-commit-on-close?] enabled?)
-           (ipc/ipc :userAppCfgs :git/disable-commit-on-close? enabled?))
+           (state/set-state! [:electron/user-cfgs :git/commit-on-close?] (not enabled?))
+           (ipc/ipc :userAppCfgs :git/commit-on-close? (not enabled?)))
          true)]]]))
 
 (rum/defcs git-auto-commit-seconds < rum/reactive
@@ -283,9 +285,10 @@
                                           util/safe-parse-int)]
                             (if (and (number? value)
                                      (< 0 value (inc 86400)))
-                              (do
+                              (p/do!
                                 (state/set-state! [:electron/user-cfgs :git/auto-commit-seconds] value)
-                                (ipc/ipc :userAppCfgs :git/auto-commit-seconds value))
+                                (ipc/ipc :userAppCfgs :git/auto-commit-seconds value)
+                                (ipc/ipc :setGitAutoCommit))
                               (when-let [elem (gobj/get event "target")]
                                 (notification/show!
                                  [:div "Invalid value! Must be a number between 1 and 86400"]
@@ -752,7 +755,7 @@
      [:p (t :settings-page/git-tip)])
     [:span.text-sm.opacity-50.my-4
      (t :settings-page/git-desc-1)]
-    [:br][:br]
+    [:br] [:br]
     [:span.text-sm.opacity-50.my-4
      (t :settings-page/git-desc-2)]
     [:a {:href "https://git-scm.com/" :target "_blank"}
@@ -761,12 +764,8 @@
      (t :settings-page/git-desc-3)]]
    [:br]
    (switch-git-auto-commit-row t)
-   (switch-git-commit-on-close t)
-   (git-auto-commit-seconds t)
-
-   (ui/admonition
-     :warning
-     [:p (t :settings-page/git-confirm)])])
+   (switch-git-commit-on-close-row t)
+   (git-auto-commit-seconds t)])
 
 (rum/defc settings-advanced < rum/reactive
   [current-repo]

@@ -269,7 +269,6 @@
     :settings-page/export-theme "Exporter le thème"
     :settings-page/filename-format "Format de nom de fichier"
     :settings-page/git-commit-delay "Délai (secondes) des commits Git automatiques"
-    :settings-page/git-confirm "Vous devez redémarrer l'application après avoir mis à jour le dossier Git"
     :settings-page/git-switcher-label "Activer les commits Git automatiques"
     :settings-page/home-default-page "Régler la page d'accueil par défaut"
     :settings-page/login-prompt "Pour accéder aux nouvelles fonctionnalités avant tout le monde, vous devez être sponsor ou \"backer\" (contributeur) sur Open Collective, puis vous connecter."

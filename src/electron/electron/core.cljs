@@ -291,7 +291,7 @@
 
                (search/open-dbs!)
 
-               (git/auto-commit-current-graph!)
+               (git/configure-auto-commit!)
 
                (vreset! *setup-fn
                         (fn []
@@ -310,6 +310,7 @@
 
                ;; main window events
                (.on win "close" (fn [e]
+                                  (git/before-graph-close-hook!)
                                   (when @*quit-dirty? ;; when not updating
                                     (.preventDefault e)
 
@@ -330,9 +331,7 @@
                                                   (.setFullScreen win false))
                                               (.hide win)))
                                         :else
-                                        nil)))
-                                  (git/commit-current-graph!)
-                                ))
+                                        nil)))))
                (.on app "before-quit" (fn [_e]
                                         (reset! win/*quitting? true)))
 
