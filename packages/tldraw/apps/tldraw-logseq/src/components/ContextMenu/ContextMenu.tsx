@@ -202,11 +202,7 @@ export const ContextMenu = observer(function ContextMenu({
             >
               <TablerIcon className="tl-menu-icon" name="clipboard" />
               {t('whiteboard/paste')}
-              <div className="tl-menu-right-slot">
-                <span className="keyboard-shortcut">
-                  <code>{MOD_KEY}+v</code>
-                </span>
-              </div>
+              <KeyboardShortcut sequence={MOD_KEY+"+v"} />
             </ReactContextMenu.Item>
           )}
           {app.selectedShapes?.size === 1 && !app.readOnly && (
@@ -215,11 +211,7 @@ export const ContextMenu = observer(function ContextMenu({
               onClick={() => runAndTransition(() => app.paste(undefined, true))}
             >
               {t('whiteboard/paste-as-link')}
-              <div className="tl-menu-right-slot">
-                <span className="keyboard-shortcut">
-                  <code>{MOD_KEY}+⇧+v</code>
-                </span>
-              </div>
+              <KeyboardShortcut sequence={MOD_KEY+"+⇧+v"} />
             </ReactContextMenu.Item>
           )}
           {app.selectedShapes?.size > 0 && (
