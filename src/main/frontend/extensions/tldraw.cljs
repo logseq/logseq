@@ -196,6 +196,7 @@
             :handlers (get-tldraw-handlers page-name)
             :onMount on-mount
             :readOnly config/publishing?
+            ;; :onPersist (debounce #(on-persist page-name %1 %2) 200)
             :onPersist #(on-persist page-name %1 %2)
             :model data})])
 

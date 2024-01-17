@@ -206,15 +206,19 @@
                    (set (map :a tx-data))
                    #{:block/created-at :block/updated-at})))
     (reset-redo)
-    (let [updated-blocks (concat blocks pages)
-          entity {:blocks updated-blocks
-                  :tx-id tx-id
-                  :txs tx-data
-                  :tx-meta tx-meta
-                  :app-state (select-keys @state/state
-                                          [:route-match
-                                           :ui/sidebar-open?
-                                           :ui/sidebar-collapsed-blocks
-                                           :sidebar/blocks])}]
-      (push-undo entity)))
+    (if (:replace? tx-meta)
+      (let [removed-e (pop-undo)
+            entity (update removed-e :txs concat tx-data)]
+        (push-undo entity))
+      (let [updated-blocks (concat blocks pages)
+           entity {:blocks updated-blocks
+                   :tx-id tx-id
+                   :txs tx-data
+                   :tx-meta tx-meta
+                   :app-state (select-keys @state/state
+                                           [:route-match
+                                            :ui/sidebar-open?
+                                            :ui/sidebar-collapsed-blocks
+                                            :sidebar/blocks])}]
+       (push-undo entity))))
   (resume-listener!))

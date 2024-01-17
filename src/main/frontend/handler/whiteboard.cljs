@@ -18,7 +18,8 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [cljs-bean.core :as bean]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [clojure.data :as data]))
 
 (defn js->clj-keywordize
   [obj]
@@ -122,10 +123,12 @@
        :delete-blocks deleted-shapes-tx
        :deleted-shapes deleted-shapes
        :new-shapes created-shapes
-       :metadata {:whiteboard/transact? (not replace?)
+       :metadata {:whiteboard/transact? true
                   :replace? replace?}})))
 
 (defonce *last-shapes-nonce (atom {}))
+
+;; FIXME: it seems that nonce for the page block will not be updated with new updates for the whiteboard
 (defn <transact-tldr-delta!
   [page-name ^js app replace?]
   (let [tl-page ^js (second (first (.-pages app)))
