@@ -175,7 +175,6 @@
 (defn- auto-commit-tick-fn
   []
   (when (state/git-auto-commit-enabled?)
-    (logger/debug ::auto-commit)
     (add-all-and-commit!)))
 
 (defn configure-auto-commit!
@@ -188,9 +187,8 @@
           millis (if (int? seconds)
                    (* seconds 1000)
                    6000)]
-      (logger/info ::auto-commit-interval seconds)
-      ;; each time we change the auto-commit settings, we will commit the current graph in 5 seconds
-      (js/setTimeout add-all-and-commit! 5000)
+      (logger/info ::set-auto-commit-interval seconds)
+      (js/setTimeout add-all-and-commit! 100)
       (reset! auto-commit-interval (js/setInterval auto-commit-tick-fn millis)))))
 
 (defn before-graph-close-hook!
