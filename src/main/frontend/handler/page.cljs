@@ -15,8 +15,6 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.db-based.page :as db-page-handler]
-            [frontend.handler.file-based.page :as file-page-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as web-nfs]
@@ -30,16 +28,19 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.db.frontend.property :as db-property]
-            [logseq.graph-parser.config :as gp-config]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]
             [logseq.common.path :as path]
             [frontend.handler.property.util :as pu]
             [electron.ipc :as ipc]
-            [frontend.context.i18n :refer [t]]))
+            [frontend.context.i18n :refer [t]]
+            [frontend.persist-db.browser :as db-browser]
+            [cljs-bean.core :as bean]))
 
 (def create! page-common-handler/create!)
+(def <create! page-common-handler/<create!)
 (def delete! page-common-handler/delete!)
 (def unfavorite-page! page-common-handler/unfavorite-page!)
 (def favorite-page! page-common-handler/favorite-page!)
@@ -56,9 +57,9 @@
   (when-let [s (if journal?
                  (date/journal-title->default title)
                  ;; legacy in org-mode format, don't escape slashes except bug reported
-                 (gp-util/page-name-sanity (string/lower-case title)))]
+                 (common-util/page-name-sanity (string/lower-case title)))]
     ;; Win10 file path has a length limit of 260 chars
-    (gp-util/safe-subs s 0 200)))
+    (common-util/safe-subs s 0 200)))
 
 (defn toggle-favorite! []
   ;; NOTE: in journals or settings, current-page is nil
@@ -71,12 +72,17 @@
         (favorite-page! page-name)))))
 
 (defn rename!
-  ([old-name new-name] (rename! old-name new-name true))
-  ([old-name new-name redirect?] (rename! old-name new-name redirect? true))
-  ([old-name new-name redirect? persist-op?]
-   (if (config/db-based-graph? (state/get-current-repo))
-     (db-page-handler/rename! old-name new-name redirect? persist-op?)
-     (file-page-handler/rename! old-name new-name redirect?))))
+  [old-name new-name & {:as _opts}]
+  (when-let [^js worker @db-browser/*worker]
+    (p/let [repo (state/get-current-repo)
+            result (.page-rename worker repo old-name new-name)
+            result' (:result (bean/->clj result))]
+      (case result'
+        :invalid-empty-name
+        (notification/show! "Please use a valid name, empty name is not allowed!" :error)
+        :merge-whiteboard-pages
+        (notification/show! "Can't merge whiteboard pages" :error)
+        nil))))
 
 (defn reorder-favorites!
   [favorites]
@@ -156,7 +162,7 @@
        (remove (fn [p]
                  (let [name (:block/name p)]
                    (or (util/uuid-string? name)
-                       (gp-config/draw? name)
+                       (common-config/draw? name)
                        (db/built-in-pages-names (string/upper-case name))
                        (db-property/built-in-properties-keys-str name)))))
        (common-handler/fix-pages-timestamps)))
@@ -204,9 +210,9 @@
         q (or
            (editor-handler/get-selected-text)
            (when hashtag?
-             (gp-util/safe-subs edit-content pos current-pos))
+             (common-util/safe-subs edit-content pos current-pos))
            (when (> (count edit-content) current-pos)
-             (gp-util/safe-subs edit-content pos current-pos)))
+             (common-util/safe-subs edit-content pos current-pos)))
         db-based? (config/db-based-graph? (state/get-current-repo))]
     (if hashtag?
       (fn [chosen e]
@@ -216,7 +222,7 @@
               chosen (-> chosen
                          (string/replace-first (str (t :new-class) " ") "")
                          (string/replace-first (str (t :new-page) " ") ""))
-              wrapped? (= page-ref/left-brackets (gp-util/safe-subs edit-content (- pos 2) pos))
+              wrapped? (= page-ref/left-brackets (common-util/safe-subs edit-content (- pos 2) pos))
               wrapped-tag (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
                             (page-ref/->page-ref chosen)
                             chosen)
@@ -227,30 +233,30 @@
                                (subs q 1)
                                q))
               last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)]
-          (when db-based?
-            (let [tag (string/trim chosen)
-                  edit-block (state/get-edit-block)]
-              (when (and (not (string/blank? tag)) (:block/uuid edit-block))
-                (let [tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)])]
-                  (when-not tag-entity
-                    (create! tag {:redirect? false
-                                  :create-first-block? false
-                                  :class? class?}))
-                  (when class?
-                    (let [repo (state/get-current-repo)
-                          tag-entity (or tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)]))
-                          tx-data [[:db/add [:block/uuid (:block/uuid edit-block)] :block/tags (:db/id tag-entity)]
-                                   [:db/add [:block/uuid (:block/uuid edit-block)] :block/refs (:db/id tag-entity)]]]
-                      (db/transact! repo tx-data {:outliner-op :save-block})))))))
+          (p/do!
+           (when db-based?
+             (let [tag (string/trim chosen)
+                   edit-block (state/get-edit-block)]
+               (when (and (not (string/blank? tag)) (:block/uuid edit-block))
+                 (p/let [tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)])
+                         _ (when-not tag-entity
+                             (<create! tag {:redirect? false
+                                            :create-first-block? false
+                                            :class? class?}))]
+                   (when class?
+                     (let [repo (state/get-current-repo)
+                           tag-entity (or tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)]))
+                           tx-data [[:db/add [:block/uuid (:block/uuid edit-block)] :block/tags (:db/id tag-entity)]
+                                    [:db/add [:block/uuid (:block/uuid edit-block)] :block/refs (:db/id tag-entity)]]]
+                       (db/transact! repo tx-data {:outliner-op :save-block})))))))
+           (editor-handler/insert-command! id
+                                           (str "#" wrapped-tag)
+                                           format
+                                           {:last-pattern last-pattern
+                                            :end-pattern (when wrapped? page-ref/right-brackets)
+                                            :command :page-ref})
 
-          (editor-handler/insert-command! id
-                                          (str "#" wrapped-tag)
-                                          format
-                                          {:last-pattern last-pattern
-                                           :end-pattern (when wrapped? page-ref/right-brackets)
-                                           :command :page-ref})
-
-          (when input (.focus input))))
+           (when input (.focus input)))))
       (fn [chosen e]
         (util/stop e)
         (state/clear-editor-action!)
@@ -279,13 +285,15 @@
               format (state/get-preferred-format repo)
               template (state/get-default-journal-template)
               create-f (fn []
-                         (create! title {:redirect? false
-                                         :split-namespace? false
-                                         :create-first-block? (not template)
-                                         :journal? true})
-                         (state/pub-event! [:journal/insert-template today-page])
-                         (ui-handler/re-render-root!)
-                         (plugin-handler/hook-plugin-app :today-journal-created {:title today-page}))]
+                         (p/do!
+                           (<create! title {:redirect? false
+                                          :split-namespace? false
+                                          :create-first-block? (not template)
+                                          :journal? true
+                                          :today-journal? true})
+                           (state/pub-event! [:journal/insert-template today-page])
+                           (ui-handler/re-render-root!)
+                           (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})))]
           (when (db/page-empty? repo today-page)
             (if (config/db-based-graph? repo)
               (let [page-exists (db/get-page today-page)]

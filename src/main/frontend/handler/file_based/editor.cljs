@@ -6,9 +6,9 @@
             [frontend.format.block :as block]
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
-            [frontend.modules.outliner.core :as outliner-core]
+            [logseq.outliner.core :as outliner-core]
             [frontend.state :as state]
-            [frontend.modules.outliner.transaction :as outliner-tx]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.util :as util]
             [frontend.util.clock :as clock]
             [frontend.util.drawer :as drawer]
@@ -17,8 +17,7 @@
             [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.file-based.property.util :as property-util]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.util.block-ref :as block-ref]))
+            [logseq.common.util.block-ref :as block-ref]))
 
 (defn- remove-non-existed-refs!
   [refs]
@@ -129,24 +128,6 @@
                :block/properties new-properties)
         (merge (if level {:block/level level} {})))))
 
-(defn properties-block
-  [repo properties format page]
-  (let [content (property-file/insert-properties-when-file-based repo format "" properties)
-        refs (gp-block/get-page-refs-from-properties properties
-                                                     (db/get-db (state/get-current-repo))
-                                                     (state/get-date-formatter)
-                                                     (state/get-config))]
-    {:block/pre-block? true
-     :block/uuid (db/new-block-id)
-     :block/properties properties
-     :block/properties-order (keys properties)
-     :block/refs refs
-     :block/left page
-     :block/format format
-     :block/content content
-     :block/parent page
-     :block/page page}))
-
 (defn- set-block-property-aux!
   [block-or-id key value]
   (when-let [block (cond (string? block-or-id) (db/entity [:block/uuid (uuid block-or-id)])
@@ -210,11 +191,13 @@
       (set-block-property-aux! block :heading heading))))
 
 (defn batch-set-heading! [block-ids heading]
-  (outliner-tx/transact!
+  (ui-outliner-tx/transact!
    {:outliner-op :save-block}
    (doseq [block-id block-ids]
      (when-let [block (set-heading-aux! block-id heading)]
-       (outliner-core/save-block! block)))))
+       (outliner-core/save-block! (state/get-current-repo) (db/get-db false)
+                                  (state/get-date-formatter)
+                                  block)))))
 
 (defn set-blocks-id!
   "Persist block uuid to file if the uuid is valid, and it's not persisted in file.

@@ -39,7 +39,7 @@
                             ;; edn files don't have ast
                             (string/ends-with? (:file %) ".edn")
                             ;; logseq files don't have ast
-                            ;; could also used gp-config but API isn't public yet
+                            ;; could also used common-config but API isn't public yet
                             (string/includes? (:file %) (str graph-dir "/logseq/")))
                           asts))
           "Parsed files shouldn't have empty asts"))))

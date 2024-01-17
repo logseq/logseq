@@ -8,16 +8,17 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.util :as util]
             [frontend.state :as state]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.common.config-edn :as config-edn-common-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.repo-config :as repo-config-handler]
-            [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.transaction :as outliner-tx]
+            [logseq.outliner.core :as outliner-core]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.schema.handler.repo-config :as repo-config-schema]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db.frontend.content :as db-content]))
 
 (defn- remove-non-existed-refs!
   [refs]
@@ -29,7 +30,7 @@
 
 (defn- replace-tag-ref
   [content page-name id]
-  (let [id' (str config/page-ref-special-chars id)
+  (let [id' (str db-content/page-ref-special-chars id)
         [page wrapped-id] (if (string/includes? page-name " ")
                             (map page-ref/->page-ref [page-name id'])
                             [page-name id'])
@@ -46,7 +47,7 @@
 
 (defn- replace-page-ref
   [content page-name id]
-  (let [id' (str config/page-ref-special-chars id)
+  (let [id' (str db-content/page-ref-special-chars id)
         [page wrapped-id] (map page-ref/->page-ref [page-name id'])]
         (util/replace-ignore-case content page wrapped-id)))
 
@@ -149,8 +150,8 @@
 
 (defn batch-set-heading!
   [repo block-ids heading]
-  (outliner-tx/transact!
+  (ui-outliner-tx/transact!
    {:outliner-op :save-block}
    (doseq [block-tx (keep #(set-heading-aux! % heading) block-ids)]
-     (outliner-core/save-block! block-tx))
+     (outliner-core/save-block! repo (db/get-db false) (state/get-date-formatter) block-tx))
    (property-handler/batch-set-block-property! repo block-ids :heading heading)))

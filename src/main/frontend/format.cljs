@@ -4,14 +4,14 @@ and edn. Can handle org-mode and markdown formats"
   (:require [frontend.format.mldoc :refer [->MldocMode] :as mldoc]
             [frontend.format.protocol :as protocol]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [clojure.string :as string]))
 
 (defonce mldoc-record (->MldocMode))
 
 (defn get-format-record
   [format]
-  (case (gp-util/normalize-format format)
+  (case (common-util/normalize-format format)
     :org
     mldoc-record
     :markdown

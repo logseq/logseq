@@ -2,9 +2,8 @@
   "Page property fns for file graphs"
   (:require [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.file :as outliner-file]
-            [frontend.modules.outliner.transaction :as outliner-tx]
+            [logseq.outliner.core :as outliner-core]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]))
 
@@ -71,7 +70,6 @@
                        :block/page page-id}
                 tx [(assoc page-id :block/properties new-properties)
                     block]]
-              ;; (util/pprint tx)
             (db/transact! tx))
           (let [block {:block/uuid (db/new-block-id)
                        :block/left page-id
@@ -84,8 +82,7 @@
                        :block/properties {key value}
                        :block/pre-block? true}
                 page-properties-tx [(assoc page-id :block/properties {key value})]]
-            (outliner-tx/transact!
+            (ui-outliner-tx/transact!
              {:outliner-op :insert-blocks
               :additional-tx page-properties-tx}
-             (outliner-core/insert-blocks! block page {:sibling? false}))))
-        (outliner-file/sync-to-file page-id)))))
+             (outliner-core/insert-blocks! repo (db/get-db false) block page {:sibling? false}))))))))

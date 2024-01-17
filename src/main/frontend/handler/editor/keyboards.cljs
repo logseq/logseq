@@ -32,9 +32,7 @@
          :else
          (let [{:keys [on-hide value]} (editor-handler/get-state)]
            (when on-hide
-             (on-hide value event))
-           (when (contains? #{:esc :visibilitychange :click} event)
-             (state/clear-edit!)))))
+             (on-hide value event)))))
      :node (gdom/getElement id)
     ;; :visibilitychange? true
-)))
+     )))

@@ -59,15 +59,15 @@ test('set heading of nested block to auto', async ({ page }) => {
 
   await page.type('textarea >> nth=0', 'bar')
 
-  await page.keyboard.press("Tab")
+  await page.keyboard.press("Tab", { delay: 100 })
 
-  await page.keyboard.press('Escape', { delay: 50 })
+  await page.keyboard.press('Escape', { delay: 100 })
 
   await page.locator('span.bullet-container >> nth=1').click({button: "right"})
 
   await page.locator('#custom-context-menu .to-heading-button[title="Auto heading"]').click()
 
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(100)
 
   expect(await page.locator('.ls-block .block-content >> nth=1').innerHTML()).toContain('<h2>bar</h2>')
 })

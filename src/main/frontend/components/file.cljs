@@ -16,8 +16,8 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [goog.string :as gstring]
-            [logseq.graph-parser.config :as gp-config]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
@@ -47,8 +47,8 @@
           (let [file-id file]
             [:tr {:key file-id}
              [:td
-              (let [href (if (gp-config/draw? file)
-                           (rfe/href :draw nil {:file (string/replace file (str gp-config/default-draw-directory "/") "")})
+              (let [href (if (common-config/draw? file)
+                           (rfe/href :draw nil {:file (string/replace file (str common-config/default-draw-directory "/") "")})
                            (rfe/href :file {:path file-id}))]
                 [:a {:href href}
                  file])]
@@ -87,7 +87,7 @@
                                     ;; assume local file, relative path
                                     :else
                                     [repo-dir path])]
-                   (when (and format (contains? (gp-config/text-formats) format))
+                   (when (and format (contains? (common-config/text-formats) format))
                      (p/let [content (if (and (config/db-based-graph? repo)
                                               ;; not global
                                               (not (string/starts-with? path "/")))
@@ -145,11 +145,11 @@
 
      (cond
        ;; image type
-       (and format (contains? (gp-config/img-formats) format))
+       (and format (contains? (common-config/img-formats) format))
        [:img {:src (path/path-join "file://" path)}]
 
        (and format
-            (contains? (gp-config/text-formats) format)
+            (contains? (common-config/text-formats) format)
             content)
        (let [content' (string/trim content)
              mode (util/get-file-ext path)]
@@ -162,7 +162,7 @@
 
        ;; wait for content load
        (and format
-            (contains? (gp-config/text-formats) format))
+            (contains? (common-config/text-formats) format))
        (ui/loading)
 
        :else
@@ -171,5 +171,5 @@
 (rum/defcs file
   [state]
   (let [path (get-path state)
-        format (gp-util/get-format path)]
+        format (common-util/get-format path)]
     (rum/with-key (file-inner path format) path)))

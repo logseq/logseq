@@ -28,17 +28,14 @@
             [shadow.resource :as rc]
             [frontend.db.persist :as db-persist]
             [logseq.graph-parser :as graph-parser]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.config :as common-config]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [electron.ipc :as ipc]
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
             [frontend.mobile.util :as mobile-util]
             [medley.core :as medley]
-            [logseq.common.path :as path]
-            [logseq.common.config :as common-config]
-            [frontend.db.listener :as db-listener]
-            [frontend.db.rtc.op-mem-layer :as op-mem-layer]))
+            [logseq.common.path :as path]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -204,7 +201,7 @@
       (async/go-loop [tx []]
         (if-let [item (async/<! chan)]
           (let [[idx file] item
-                whiteboard? (gp-config/whiteboard? (:file/path file))
+                whiteboard? (common-config/whiteboard? (:file/path file))
                 yield-for-ui? (or (not large-graph?)
                                   (zero? (rem idx 10))
                                   (<= (- total idx) 10)
@@ -221,9 +218,12 @@
                           (assoc opts' :skip-db-transact? false)
                           opts')
                   result (parse-and-load-file! repo-url file opts')
-                  page-name (some (fn [x] (when (and (map? x) (:block/original-name x)
-                                                     (= (:file/path file) (:file/path (:block/file x))))
-                                            (:block/name x))) result)
+                  page-name (when (coll? result) ; result could be a promise
+                              (some (fn [x] (when (and (map? x)
+                                                       (:block/original-name x)
+                                                       (= (:file/path file) (:file/path (:block/file x))))
+                                              (:block/name x)))
+                                    result))
                   page-exists? (and page-name (get @*page-names page-name))
                   tx' (cond
                         whiteboard? tx
@@ -369,8 +369,7 @@
   (state/set-current-repo! repo)
   (db/start-db-conn! repo (merge
                            opts
-                           {:listen-handler db-listener/listen-and-persist!
-                            :db-graph? (config/db-based-graph? repo)})))
+                           {:db-graph? (config/db-based-graph? repo)})))
 
 (defn- setup-demo-repo-if-not-exists-impl!
   []
@@ -380,7 +379,7 @@
           repo-dir (config/get-repo-dir repo)]
       (p/do! (fs/mkdir-if-not-exists repo-dir) ;; create memory://local
              (state/set-current-repo! repo)
-             (db/start-db-conn! repo {:listen-handler db-listener/listen-and-persist!})
+             (db/start-db-conn! repo {})
              (when-not config/publishing?
                (let [dummy-notes (t :tutorial/dummy-notes)]
                  (create-dummy-notes-page repo dummy-notes)))
@@ -415,11 +414,9 @@
    (state/set-db-restoring! true)
    (db-restore/restore-graph! repo)
    (repo-config-handler/restore-repo-config! repo)
-   (op-mem-layer/<init-load-from-indexeddb! repo)
    (when (config/global-config-enabled?)
      (global-config-handler/restore-global-config!))
     ;; Don't have to unlisten the old listener, as it will be destroyed with the conn
-   (db-listener/listen-and-persist! repo)
    (ui-handler/add-style-if-exists!)
    (state/set-db-restoring! false)))
 
@@ -518,12 +515,11 @@
   "Checks to see if given db graph name already exists"
   [graph-name]
   (let [full-graph-name (string/lower-case (str config/db-version-prefix graph-name))]
-    (some #(= (string/lower-case (:url %)) full-graph-name) (state/get-repos))))
+    (some #(= (some-> (:url %) string/lower-case) full-graph-name) (state/get-repos))))
 
 (defn- create-db [full-graph-name {:keys [file-graph-import?]}]
   (->
    (p/let [_ (persist-db/<new full-graph-name)
-           _ (op-mem-layer/<init-load-from-indexeddb! full-graph-name)
            _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name})
            _ (when-not file-graph-import? (route-handler/redirect-to-home!))

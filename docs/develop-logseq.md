@@ -39,6 +39,19 @@ Open a dev environment (Browser dev app on ``localhost:3000`` or Desktop dev app
 
 ``cmd + shift + p`` -> ``Calva: Load/Evaluate Current File and its Requires/Dependencies``
 
+#### Connect to the web-worker context
+Notice: this works only for the `feat/db` branch for now.
+
+##### Emacs + Cider
+When connecting to a CLJ nrepl (NOTE: if you are already in a CLJS nrepl, use `:cljs/quit` to go back to CLJ nrepl),
+you may run `(shadow.user/worker-repl)`, or  use `(shadow/nrepl-select :app {:runtime-id <id-num>})` to connect to a web-worker context.
+
+> [!TIP]
+> you can find the `<id-num>` in http://localhost:9630/runtimes
+
+##### VSCode
+;; TODO
+
 ### Production Build
 
 ```bash

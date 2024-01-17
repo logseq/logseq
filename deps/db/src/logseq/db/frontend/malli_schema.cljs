@@ -273,6 +273,11 @@
    [:file/path :string]
    [:file/last-modified-at inst?]])
 
+(def asset-block
+  [:map
+   [:asset/uuid :uuid]
+   [:asset/meta :map]])
+
 (def schema-version
   [:map
    [:db/ident :keyword]
@@ -306,7 +311,8 @@
     file-block
     schema-version
     db-ident
-    macro]])
+    macro
+    asset-block]])
 
 ;; Keep malli schema in sync with db schema
 ;; ========================================
@@ -330,7 +336,8 @@
                     {}))))
 
 (let [malli-non-ref-attrs (->> (concat page-attrs block-attrs page-or-block-attrs (rest normal-page))
-                               (concat (rest file-block) (rest db-ident) (rest schema-version) (rest class-page))
+                               (concat (rest file-block) (rest asset-block)
+                                       (rest db-ident) (rest schema-version) (rest class-page))
                                (remove #(= (last %) [:set :int]))
                                (map first)
                                set)

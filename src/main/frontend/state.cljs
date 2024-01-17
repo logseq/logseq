@@ -15,8 +15,7 @@
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [logseq.graph-parser.config :as gp-config]
-            [malli.core :as m]
+            [logseq.common.config :as common-config]
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -37,12 +36,6 @@
      {:route-match                           nil
       :today                                 nil
       :system/events                         (async/chan 1000)
-      :file/writes                           (let [coercer (m/coercer [:catn
-                                                                       [:repo :string]
-                                                                       [:page-id :any]
-                                                                       [:outliner-op :any]
-                                                                       [:epoch :int]])]
-                                               (async/chan 10000 (map coercer)))
       :file/unlinked-dirs                    #{}
       :reactive/custom-queries               (async/chan 1000)
       :notification/show?                    false
@@ -124,8 +117,8 @@
 
       :config                                {}
       :block/component-editing-mode?         false
+      :editor/start-pos                      (atom nil)
       :editor/op                             (atom nil)
-      :editor/latest-op                      (atom nil)
       :editor/hidden-editors                 #{} ;; page names
       :editor/draw-mode?                     false
       :editor/action                         (atom nil)
@@ -153,15 +146,11 @@
       ;; for audio record
       :editor/record-status                  "NONE"
 
-      ;; Whether to skip saving the current block
-      :editor/skip-saving-current-block?     (atom false)
-
       :editor/code-block-context             {}
-
-      :editor/create-page?                   (atom false)
 
       :db/properties-changed-pages           {}
       :editor/cursor-range                   (atom nil)
+      :editor/new-created-blocks             (atom #{})
 
       :selection/mode                        (atom false)
       ;; Warning: blocks order is determined when setting this attribute
@@ -312,6 +301,7 @@
       :whiteboard/last-persisted-at          {}
       :whiteboard/pending-tx-data            {}
       :history/page-only-mode?               false
+      :history/tx-before-editor-cursor       (atom nil)
       ;; db tx-id -> editor cursor
       :history/tx->editor-cursor             (atom {})
       :system/info                           {}
@@ -463,10 +453,8 @@ should be done through this fn in order to get global config and config defaults
   ([repo-url]
    (keyword
      (or
-       (when-let [fmt (:preferred-format (get-config repo-url))]
-         (string/lower-case (name fmt)))
-
-       (get-in @state [:me :preferred_format] "markdown")))))
+      (common-config/get-preferred-format (get-config repo-url))
+      (get-in @state [:me :preferred_format] "markdown")))))
 
 (defn markdown?
   []
@@ -527,7 +515,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-date-formatter
   []
-  (gp-config/get-date-formatter (get-config)))
+  (common-config/get-date-formatter (get-config)))
 
 (defn shortcuts []
   (:shortcuts (get-config)))
@@ -833,7 +821,7 @@ Similar to re-frame subscriptions"
 
 (defn get-current-page
   []
-  (when (= :page (get-current-route))
+  (when (contains? #{:whiteboard :page} (get-current-route)) ; TODO: move /whiteboard to /page
     (get-in (get-route-match)
             [:path-params :name])))
 
@@ -966,17 +954,18 @@ Similar to re-frame subscriptions"
 
 (defn get-edit-input-id
   []
-  (or
-   (when-let [node @*editor-editing-ref]
-     (some-> (dom/sel1 node "textarea")
-             (gobj/get "id")))
-   (try
-     (when-let [elem js/document.activeElement]
-      (when (util/input? elem)
-        (let [id (gobj/get elem "id")]
-          (when (string/starts-with? id "edit-block-")
-            id))))
-     (catch :default _e))))
+  (when-not (exists? js/process)
+    (or
+     (when-let [node @*editor-editing-ref]
+       (some-> (dom/sel1 node "textarea")
+               (gobj/get "id")))
+     (try
+       (when-let [elem js/document.activeElement]
+         (when (util/input? elem)
+           (let [id (gobj/get elem "id")]
+             (when (string/starts-with? id "edit-block-")
+               id))))
+       (catch :default _e)))))
 
 (defn get-input
   []
@@ -1271,7 +1260,8 @@ Similar to re-frame subscriptions"
     (when container
       {:last-edit-block edit-block
        :container       (gobj/get container "id")
-       :pos             (or (cursor/pos (gdom/getElement edit-input-id))
+       :pos             @(:editor/start-pos @state)
+       :end-pos         (or (cursor/pos (gdom/getElement edit-input-id))
                             (count (:block/content edit-block)))})))
 
 (defn clear-edit!
@@ -1551,10 +1541,6 @@ Similar to re-frame subscriptions"
              :modal/dropdowns {}
              :ui/open-select nil))))
 
-(defn get-file-write-chan
-  []
-  (:file/writes @state))
-
 (defn get-reactive-custom-queries-chan
   []
   (:reactive/custom-queries @state))
@@ -1792,14 +1778,6 @@ Similar to re-frame subscriptions"
        ;; Is this a good idea to put whiteboard check here?
        (not (get-edit-input-id))))))
 
-(defn whiteboard-idle?
-  "Check if whiteboard is idle."
-  [repo]
-  (when repo
-    (>= (- (util/time-ms) (or (get-in @state [:whiteboard/last-persisted-at repo])
-                              (- (util/time-ms) 10000)))
-        3000)))
-
 (defn set-nfs-refreshing!
   [value]
   (set-state! :nfs/refreshing? value))
@@ -1858,20 +1836,13 @@ Similar to re-frame subscriptions"
   ([] (open-settings! true))
   ([active-tab] (set-state! :ui/settings-open? active-tab)))
 
-;; TODO: Move those to the uni `state`
-
 (defn set-editor-op!
   [value]
-  (set-state! :editor/op value)
-  (when value (set-state! :editor/latest-op value)))
+  (set-state! :editor/op value))
 
 (defn get-editor-op
   []
   @(:editor/op @state))
-
-(defn get-editor-latest-op
-  []
-  @(:editor/latest-op @state))
 
 (defn get-events-chan
   []
@@ -1983,40 +1954,45 @@ Similar to re-frame subscriptions"
 (defn set-editing!
   [edit-input-id content block cursor-range & {:keys [move-cursor? ref]
                                                :or {move-cursor? true}}]
-  (if (> (count content)
-         (block-content-max-length (get-current-repo)))
-    (let [elements (array-seq (js/document.getElementsByClassName (str "id" (:block/uuid block))))]
-      (when (first elements)
-        (util/scroll-to-element (gobj/get (first elements) "id")))
-      (exit-editing-and-set-selected-blocks! elements))
-    (when (and edit-input-id block
-               (or
-                (publishing-enable-editing?)
-                (not @publishing?)))
-      (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
-            container (util/get-block-container block-element)
-            block (if container
-                    (assoc block
-                           :block.temp/container (gobj/get container "id"))
-                    block)
-            content (string/trim (or content ""))]
-        (when ref (set-editing-ref! ref))
-        (set-state! :editor/block block)
-        (set-state! :editor/content content :path-in-sub-atom (:block/uuid block))
-        (set-state! :editor/last-key-code nil)
-        (set-state! :editor/set-timestamp-block nil)
-        (set-state! :editor/cursor-range cursor-range)
+  (when-not (exists? js/process)
+    (if (> (count content)
+           (block-content-max-length (get-current-repo)))
+      (let [elements (array-seq (js/document.getElementsByClassName (str "id" (:block/uuid block))))]
+        (when (first elements)
+          (util/scroll-to-element (gobj/get (first elements) "id")))
+        (exit-editing-and-set-selected-blocks! elements))
+      (let [edit-input-id (if ref
+                            (or (some-> (gobj/get ref "id") (string/replace "ls-block" "edit-block"))
+                                edit-input-id)
+                            edit-input-id)]
+        (when (and edit-input-id block
+                   (or
+                    (publishing-enable-editing?)
+                    (not @publishing?)))
+          (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
+                container (util/get-block-container block-element)
+                block (if container
+                        (assoc block
+                               :block.temp/container (gobj/get container "id"))
+                        block)
+                content (string/trim (or content ""))]
+            (when ref (set-editing-ref! ref))
+            (set-state! :editor/block block)
+            (set-state! :editor/content content :path-in-sub-atom (:block/uuid block))
+            (set-state! :editor/last-key-code nil)
+            (set-state! :editor/set-timestamp-block nil)
+            (set-state! :editor/cursor-range cursor-range)
 
-        (when-let [input (gdom/getElement edit-input-id)]
-          (let [pos (count cursor-range)]
-            (when content
-              (util/set-change-value input content))
+            (when-let [input (gdom/getElement edit-input-id)]
+              (let [pos (count cursor-range)]
+                (when content
+                  (util/set-change-value input content))
 
-            (when move-cursor?
-              (cursor/move-cursor-to input pos))
+                (when move-cursor?
+                  (cursor/move-cursor-to input pos))
 
-            (when (or (util/mobile?) (mobile-util/native-platform?))
-              (set-state! :mobile/show-action-bar? false))))))))
+                (when (or (util/mobile?) (mobile-util/native-platform?))
+                  (set-state! :mobile/show-action-bar? false))))))))))
 
 (defn action-bar-open?
   []
@@ -2315,6 +2291,13 @@ Similar to re-frame subscriptions"
      (fn [s]
        (contains? s (str block-uuid))))))
 
+(defn sub-page-unloaded?
+  [repo page-name]
+  (rum/react
+   (rum/derived-atom [(rum/cursor-in state [repo :unloaded-pages])] [::page-unloaded repo page-name]
+                     (fn [s]
+                       (contains? s page-name)))))
+
 (defn get-color-accent []
   (get @state :ui/radix-color))
 
@@ -2363,3 +2346,11 @@ Similar to re-frame subscriptions"
   [page-name]
   (when-not (string/blank? page-name)
     (sub [:db/properties-changed-pages page-name])))
+
+(defn update-tx-after-cursor-state!
+  []
+  (let [editor-cursor (get-current-edit-block-and-position)
+        max-tx-id (apply max (keys @(:history/tx->editor-cursor @state)))]
+    (when (and max-tx-id (nil? (:after (get @(:history/tx->editor-cursor @state) max-tx-id))))
+      (update-state! :history/tx->editor-cursor
+                     (fn [m] (assoc-in m [max-tx-id :after] editor-cursor))))))

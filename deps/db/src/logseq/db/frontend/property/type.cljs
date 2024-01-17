@@ -46,7 +46,7 @@
 
 (defn url?
   "Test if it is a `protocol://`-style URL.
-   Originally from gp-util/url? but does not need to be the same"
+   Originally from common-util/url? but does not need to be the same"
   [s]
   (and (string? s)
        (try
