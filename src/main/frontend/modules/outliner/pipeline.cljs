@@ -1,134 +1,109 @@
 (ns frontend.modules.outliner.pipeline
-  (:require [clojure.string :as string]
-            [datascript.core :as d]
-            [frontend.config :as config]
+  (:require [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.react :as react]
-            [frontend.handler.file-based.property.util :as property-util]
-            [frontend.modules.outliner.file :as file]
-            [frontend.persist-db :as persist-db]
             [frontend.state :as state]
-            [frontend.util :as util]
-            [frontend.util.cursor :as cursor]
-            [frontend.util.drawer :as drawer]
-            [logseq.outliner.datascript-report :as ds-report]
-            [logseq.outliner.pipeline :as outliner-pipeline]))
+            [frontend.modules.editor.undo-redo :as undo-redo]
+            [datascript.core :as d]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.handler.history :as history]
+            [logseq.db :as ldb]
+            [promesa.core :as p]))
 
-(defn updated-page-hook
-  [tx-report page]
-  (when (and
-         (not (config/db-based-graph? (state/get-current-repo)))
-         (not (get-in tx-report [:tx-meta :created-from-journal-template?])))
-    (file/sync-to-file page (:outliner-op (:tx-meta tx-report)))))
+(defn store-undo-data!
+  [{:keys [tx-meta] :as opts}]
+  (when-not config/test?
+    (when (or (:outliner/transact? tx-meta)
+              (:outliner-op tx-meta)
+              (:whiteboard/transact? tx-meta))
+      (undo-redo/listen-db-changes! opts))))
 
-(defn compute-block-path-refs-tx
-  [{:keys [tx-meta] :as tx-report} blocks]
-  (when (and (:outliner-op tx-meta) (react/path-refs-need-recalculated? tx-meta))
-    (outliner-pipeline/compute-block-path-refs-tx tx-report blocks)))
+(defn- mark-pages-as-loaded!
+  [repo page-names]
+  (state/update-state! [repo :unloaded-pages] #(remove page-names %)))
 
-(defn- reset-editing-block-content!
-  [tx-data tx-meta]
-  (let [repo (state/get-current-repo)
-        db? (config/db-based-graph? repo)]
-    (when-not (or (:undo? tx-meta) (:redo? tx-meta))
-      (when-let [edit-block (state/get-edit-block)]
-        (when-let [last-datom (-> (filter (fn [datom]
-                                            (and (= :block/content (:a datom))
-                                                 (= (:e datom) (:db/id edit-block)))) tx-data)
-                                  last)]
-          (when-let [input (state/get-input)]
-            (when (:added last-datom)
-              (let [entity (db/entity (:e last-datom))
-                    db-content (:block/content entity)
-                    content (if db? db-content
-                                (->> db-content
-                                     (property-util/remove-built-in-properties (or (:block/format entity) :markdown))
-                                     drawer/remove-logbook))
-                    pos (cursor/pos input)]
-                (when (not= (string/trim content)
-                            (string/trim (.-value input)))
-                  (state/set-edit-content! input content)
-                  (when pos (cursor/move-cursor-to input pos)))))))))))
+(defn- get-tx-id
+  [tx-report]
+  (get-in tx-report [:tempids :db/current-tx]))
 
-(defn- delete-property-parent-block-if-empty
-  [tx-report deleted-block-uuids]
-  (let [empty-property-parents (->> (keep (fn [child-id]
-                                            (let [e (d/entity (:db-before tx-report) [:block/uuid child-id])]
-                                              (when (:created-from-property (:block/metadata (:block/parent e)))
-                                                (let [parent-now (db/entity (:db/id (:block/parent e)))]
-                                                  (when (empty? (:block/_parent parent-now))
-                                                    parent-now))))) deleted-block-uuids)
-                                    distinct)]
-    (when (seq empty-property-parents)
-      (->>
-       (mapcat (fn [b]
-                 (let [{:keys [created-from-block created-from-property]} (:block/metadata b)
-                       created-block (db/entity [:block/uuid created-from-block])
-                       properties (assoc (:block/properties created-block) created-from-property "")]
-                   (when (and created-block created-from-property)
-                     [[:db/retractEntity (:db/id b)]
-                      [:db/add (:db/id created-block) :block/properties properties]])))
-               empty-property-parents)
-       (remove nil?)))))
+(defn- update-current-tx-editor-cursor!
+  [tx-report]
+  (let [tx-id (get-tx-id tx-report)
+        editor-cursor @(:history/tx-before-editor-cursor @state/state)]
+    (state/update-state! :history/tx->editor-cursor
+                         (fn [m] (assoc-in m [tx-id :before] editor-cursor)))
+    (state/set-state! :history/tx-before-editor-cursor nil)))
+
+(defn restore-cursor-and-app-state!
+  [{:keys [editor-cursor app-state]} undo?]
+  (history/restore-cursor! editor-cursor undo?)
+  (history/restore-app-state! app-state))
 
 (defn invoke-hooks
-  [tx-report]
-  (let [tx-meta (:tx-meta tx-report)
-        {:keys [from-disk? new-graph? pipeline-replace?]} tx-meta
-        repo (state/get-current-repo)]
+  [{:keys [request-id tx-meta tx-data deleted-block-uuids affected-keys blocks] :as opts}]
+  ;; (prn :debug :request-id request-id)
+  (let [{:keys [from-disk? new-graph? local-tx? undo? redo?]} tx-meta
+        repo (state/get-current-repo)
+        tx-report {:tx-meta tx-meta
+                   :tx-data tx-data}]
+
+    (let [conn (db/get-db repo false)
+          tx-report (d/transact! conn tx-data tx-meta)]
+      (when local-tx?
+        (let [tx-id (get-tx-id tx-report)]
+          (store-undo-data! (assoc opts :tx-id tx-id))))
+      (when-not (or undo? redo?)
+        (update-current-tx-editor-cursor! tx-report)))
+
+    (let [new-datoms (filter (fn [datom]
+                               (and
+                                (= :block/uuid (:a datom))
+                                (true? (:added datom)))) tx-data)]
+      (when (seq new-datoms)
+        (state/set-state! :editor/new-created-blocks (set (map :v new-datoms)))))
+
+    (let [pages (set (keep #(when (= :block/name (:a %)) (:v %)) tx-data))]
+      (when (seq pages)
+        (mark-pages-as-loaded! repo pages)))
+
     (if (or from-disk? new-graph?)
-      (when (config/local-file-based-graph? repo)
-        (persist-db/<transact-data repo (:tx-data tx-report) (:tx-meta tx-report)))
       (do
-        (try
-          (reset-editing-block-content! (:tx-data tx-report) tx-meta)
-          (catch :default e
-            (prn :reset-editing-block-content)
-            (js/console.error e)))
-        (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
-              importing? (:graph/importing @state/state)
-              deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))
-              replace-full-tx (when-not pipeline-replace?
-                                (concat
-                                 ;; block path refs
-                                 (util/profile
-                                  "Compute path refs: "
-                                  (set (compute-block-path-refs-tx tx-report blocks)))
+        (react/clear-query-state!)
+        (ui-handler/re-render-root!))
+      (when-not (:graph/importing @state/state)
+        (react/refresh! repo tx-report affected-keys)
 
-                                 ;; delete empty property parent block
-                                 (when (seq deleted-block-uuids)
-                                   (delete-property-parent-block-if-empty tx-report deleted-block-uuids))
+        (when-let [state (:ui/restore-cursor-state @state/state)]
+          (when (or undo? redo?)
+            (restore-cursor-and-app-state! state undo?)
+            (state/set-state! :ui/restore-cursor-state nil)))
 
-                                 ;; update block/tx-id
-                                 (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids)  (:block/uuid b))) blocks)
-                                       tx-id (get-in tx-report [:tempids :db/current-tx])]
-                                   (->>
-                                    (map (fn [b]
-                                           (when-let [db-id (:db/id b)]
-                                             {:db/id db-id
-                                              :block/tx-id tx-id})) updated-blocks)
-                                    (remove nil?)))))]
+        (state/set-state! :editor/start-pos nil)
 
-          (when (not pipeline-replace?)
-            (let [tx-report' (db/transact! repo replace-full-tx {:replace? true
-                                                                 :pipeline-replace? true})
-                  full-tx-data (concat (:tx-data tx-report) (:tx-data tx-report'))]
-              (when-not config/publishing? (persist-db/<transact-data repo full-tx-data (:tx-meta tx-report)))
-              (when-not importing?
-                (react/refresh! repo (assoc tx-report :tx-data full-tx-data)))))
+        (when (and state/lsp-enabled?
+                   (seq blocks)
+                   (<= (count blocks) 1000))
+          (state/pub-event! [:plugin/hook-db-tx
+                             {:blocks  blocks
+                              :deleted-block-uuids deleted-block-uuids
+                              :tx-data (:tx-data tx-report)
+                              :tx-meta (:tx-meta tx-report)}]))))
 
-          (when (and (not (:delete-files? tx-meta))
-                     (not pipeline-replace?))
-            (doseq [p (seq pages)]
-              (updated-page-hook tx-report p)))
+    (when (= (:outliner-op tx-meta) :delete-page)
+      (state/pub-event! [:page/deleted repo (:deleted-page tx-meta) (:file-path tx-meta) tx-meta]))
 
-          (when (and state/lsp-enabled?
-                     (seq blocks)
-                     (not importing?)
-                     (not pipeline-replace?)
-                     (<= (count blocks) 1000))
-            (state/pub-event! [:plugin/hook-db-tx
-                               {:blocks  blocks
-                                :deleted-block-uuids deleted-block-uuids
-                                :tx-data (:tx-data tx-report)
-                                :tx-meta (:tx-meta tx-report)}])))))))
+    (when (= (:outliner-op tx-meta) :rename-page)
+      (state/pub-event! [:page/renamed repo (:data tx-meta)]))
+
+    (when-let [deleting-block-id (:ui/deleting-block @state/state)]
+      (when (some (fn [datom] (and
+                               (= :block/uuid (:a datom))
+                               (= (:v datom) deleting-block-id)
+                               (true? (:added datom)))) tx-data) ; editing-block was added back (could be undo or from remote sync)
+        (state/set-state! :ui/deleting-block nil)))
+
+    (when request-id
+      (when-let [deferred (ldb/get-deferred-response request-id)]
+        (p/resolve! deferred {:tx-meta tx-meta
+                              :tx-data tx-data})
+        (swap! ldb/*request-id->response dissoc request-id)))))

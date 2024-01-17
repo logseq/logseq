@@ -15,9 +15,10 @@
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.handler.property.util :as pu]
-            [frontend.db.model :as model]))
+            [frontend.db.model :as model]
+            [promesa.core :as p]))
 
-(defn- upsert-closed-value!
+(defn- <upsert-closed-value!
   "Create new closed value and returns its block UUID."
   [property item]
   (let [{:keys [block-id tx-data]} (db-property-handler/upsert-closed-value property item)]
@@ -56,12 +57,13 @@
         save-handler (fn [e]
                        (util/stop e)
                        (when-not (string/blank? @*value)
-                         (when on-save
-                           (let [value (if (string? @*value)
-                                         (string/trim @*value)
-                                         @*value)]
-                             (on-save value @*icon @*description)))
-                         (when toggle-fn (toggle-fn))))
+                         (p/do!
+                          (when on-save
+                            (let [value (if (string? @*value)
+                                          (string/trim @*value)
+                                          @*value)]
+                              (on-save value @*icon @*description)))
+                          (when toggle-fn (toggle-fn)))))
         property-type (get-in property [:block/schema :type])]
     [:div.flex.flex-col.gap-4.p-4.whitespace-nowrap.w-96
      {:on-key-down (fn [e]
@@ -77,10 +79,10 @@
                                    {:on-chosen (fn [_e icon]
                                                  (reset! *icon icon))})
        (when (rum/react *icon)
-        [:a.fade-link.flex {:on-click (fn [_e]
-                                        (reset! *icon nil))
-                            :title "Delete this icon"}
-        (ui/icon "X")])]]
+         [:a.fade-link.flex {:on-click (fn [_e]
+                                         (reset! *icon nil))
+                             :title "Delete this icon"}
+          (ui/icon "X")])]]
      ;; Disable description for types that can't edit them
      (when-not (#{:page :date} property-type)
        [:div.grid.grid-cols-5.gap-1.items-start.leading-8
@@ -141,7 +143,7 @@
           block
           (assoc opts :on-save
                  (fn [value icon description]
-                   (upsert-closed-value! property {:id uuid
+                   (<upsert-closed-value! property {:id uuid
                                                    :value value
                                                    :description description
                                                    :icon icon}))))))
@@ -196,7 +198,7 @@
                                        :dropdown? false
                                        :close-modal? false
                                        :on-chosen (fn [chosen]
-                                                    (let [closed-value (upsert-closed-value! property {:value chosen})]
+                                                    (p/let [closed-value (<upsert-closed-value! property {:value chosen})]
                                                       (swap! *property-schema update :values (fnil conj []) closed-value)))})
           (let [values (->> (model/get-block-property-values (:block/uuid property))
                             (map second)
@@ -211,8 +213,8 @@
                nil
                (assoc opts :on-save
                       (fn [value icon description]
-                        (let [closed-value (upsert-closed-value! property {:value value
-                                                                           :description description
-                                                                           :icon icon})]
+                        (p/let [closed-value (<upsert-closed-value! property {:value value
+                                                                              :description description
+                                                                              :icon icon})]
                           (swap! *property-schema update :values (fnil conj []) closed-value)))))))))
       dropdown-opts)]))

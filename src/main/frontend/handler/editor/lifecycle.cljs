@@ -1,10 +1,11 @@
 (ns ^:no-doc frontend.handler.editor.lifecycle
-  (:require [frontend.handler.editor :as editor-handler :refer [get-state]]
+  (:require [frontend.handler.editor :as editor-handler]
             [frontend.handler.editor.keyboards :as keyboards-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [frontend.db :as db]))
 
 (defn did-mount!
   [state]
@@ -21,9 +22,7 @@
       (when content
         (editor-handler/restore-cursor-pos! id content)))
 
-    ;; Here we delay this listener, otherwise the click to edit event will trigger a outside click event,
-    ;; which will hide the editor so no way for editing.
-    (js/setTimeout #(keyboards-handler/esc-save! state) 100)
+    (keyboards-handler/esc-save! state)
 
     (when-let [element (gdom/getElement id)]
       (.focus element)
@@ -31,19 +30,24 @@
   state)
 
 (defn will-remount!
-  [_old-state state]
+  [old-state state]
   (keyboards-handler/esc-save! state)
-  state)
+  (let [old-content (:block/content (:block (first (:rum/args old-state))))
+        new-content (:block/content (:block (first (:rum/args state))))
+        input (state/get-input)]
+    (when (and input (not= old-content new-content))
+      (set! (.-new-value input) new-content))
+    state))
 
 (defn will-unmount
   [state]
-  (let [{:keys [value]} (get-state)]
+  (let [{:keys [value block node] :as state} (editor-handler/get-state)
+        new-value (or (and node (.-new-value node)) value)]
     (editor-handler/clear-when-saved!)
-    (when (and
-           (not (contains? #{:insert :indent-outdent :auto-save :undo :redo :delete} (state/get-editor-op)))
-           ;; Don't trigger auto-save if the latest op is undo or redo
-           (not (contains? #{:undo :redo :paste-blocks} (state/get-editor-latest-op))))
-      (editor-handler/save-block! (get-state) value)))
+    (when (db/entity [:block/uuid (:block/uuid block)]) ; block still exists
+      (when-not (or (contains? #{:undo :redo} (state/get-editor-op))
+                    (state/editor-in-composition?))
+        (editor-handler/save-block! state new-value))))
   state)
 
 (def lifecycle

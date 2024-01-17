@@ -13,6 +13,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.history :as history]
+            [frontend.handler.notification :as notification]
             [frontend.rum :as r]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -61,6 +62,7 @@
         repo (state/get-current-repo)
         limit 100]
     (p/let [blocks (when blocks? (search/block-search repo q {:limit limit}))
+            blocks (map (fn [b] (update b :block/uuid str)) blocks)
             pages (when pages? (search/page-search q))
             files (when files? (search/file-search q limit))]
       (clj->js {:pages pages :blocks blocks :files files}))))
@@ -101,7 +103,7 @@
    :search search-handler
    :queryBlockByUUID (fn [block-uuid]
                        (clj->js
-                        (model/query-block-by-uuid (parse-uuid block-uuid))))
+                        (model/query-block-by-uuid block-uuid)))
    :getBlockPageName #(let [block-id-str %]
                         (if (util/uuid-string? block-id-str)
                           (:block/name (model/get-block-page (state/get-current-repo) (parse-uuid block-id-str)))
@@ -117,9 +119,10 @@
    :getRedirectPageName (fn [page-name-or-uuid] (model/get-redirect-page-name page-name-or-uuid))
    :insertFirstPageBlock (fn [page-name] (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false}))
    :addNewWhiteboard (fn [page-name]
-                       (whiteboard-handler/create-new-whiteboard-page! page-name))
+                       (whiteboard-handler/<create-new-whiteboard-page! page-name))
    :addNewBlock (fn [content]
-                  (str (whiteboard-handler/add-new-block! current-whiteboard-name content)))
+                  (p/let [new-block-id (whiteboard-handler/<add-new-block! current-whiteboard-name content)]
+                    (str new-block-id)))
    :sidebarAddBlock (fn [uuid type]
                       (state/sidebar-add-block! (state/get-current-repo)
                                                 (:db/id (model/get-page uuid))
@@ -135,6 +138,8 @@
                          (if whiteboard?
                            (route-handler/redirect-to-whiteboard! page-name {:block-id page-name-or-uuid})
                            (route-handler/redirect-to-page! (model/get-redirect-page-name page-name-or-uuid))))))})
+
+(defonce *transact-result (atom nil))
 
 (rum/defc tldraw-app-inner < rum/reactive
   [page-name block-id loaded-app set-loaded-app]
@@ -169,9 +174,16 @@
                 :onMount on-mount
                 :readOnly config/publishing?
                 :onPersist (fn [app info]
-                             (state/set-state! [:whiteboard/last-persisted-at (state/get-current-repo)] (util/time-ms))
-                             (util/profile "tldraw persist"
-                                           (whiteboard-handler/transact-tldr-delta! page-name app (.-replace info))))
+                             (->
+                              (p/let [_ @*transact-result
+                                      result (p/do!
+                                              (state/set-state! [:whiteboard/last-persisted-at (state/get-current-repo)] (util/time-ms))
+                                              (whiteboard-handler/<transact-tldr-delta! page-name app (.-replace info)))]
+                                (reset! *transact-result result))
+                              (p/catch (fn [^js error]
+                                         (js/console.error error)
+                                         (notification/show! [:div
+                                                              (str "Save whiteboard failed, error:" (.-cause error))])))))
                 :model data})])))
 
 (rum/defc tldraw-app

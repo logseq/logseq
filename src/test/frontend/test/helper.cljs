@@ -23,7 +23,8 @@
   (let [test-db (if (or (:db-graph? opts) (some? js/process.env.DB_GRAPH))
                   test-db-name-db-version
                   test-db-name)]
-    (conn/start! test-db opts)))
+    (conn/start! test-db (assoc opts :create-default-pages?
+                                (get :create-default-pages? opts true)))))
 
 (defn destroy-test-db!
   []

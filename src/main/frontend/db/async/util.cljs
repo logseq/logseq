@@ -7,6 +7,6 @@
 (defn <q
   [graph & inputs]
   (assert (not-any? fn? inputs) "Async query inputs can't include fns because fn can't be serialized")
-  (when-let [sqlite @db-browser/*sqlite]
+  (when-let [sqlite @db-browser/*worker]
     (p/let [result (.q sqlite graph (pr-str inputs))]
       (bean/->clj result))))

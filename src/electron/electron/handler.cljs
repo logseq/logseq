@@ -220,9 +220,7 @@
 
 (defn- get-db-based-graphs-dir
   []
-  (let [dir (if utils/ci?
-              (.resolve node-path js/__dirname "../tmp/graphs")
-              (.join node-path (.homedir os) "logseq" "graphs"))]
+  (let [dir (.join node-path (.homedir os) "logseq" "graphs")]
     (fs-extra/ensureDirSync dir)
     dir))
 

@@ -20,19 +20,18 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.modules.shortcut.core :as shortcut]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.block-ref :as block-ref]
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]
             [frontend.config :as config]
-            [frontend.db.rtc.core :as rtc-core]
-            [frontend.db.rtc.debug-ui :as rtc-debug-ui]
-            [cljs.core.async :as async]
             [cljs.pprint :as pp]
             [cljs-time.coerce :as tc]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [cljs-bean.core :as bean]
+            [frontend.persist-db.browser :as db-browser]))
 
 ;; TODO i18n support
 
@@ -162,7 +161,7 @@
                                          (notification/show!
                                           [:p (t :context-menu/template-exists-warning)]
                                           :error)
-                                         (do
+                                         (p/do!
                                            (property-handler/set-block-property! repo block-id :template title)
                                            (when (false? template-including-parent?)
                                              (property-handler/set-block-property! repo block-id :template-including-parent false))
@@ -314,9 +313,9 @@
             {:key "(Dev) Show block content history"
              :on-click
              (fn []
-               (async/go
-                 (let [blocks-versions
-                       (async/<! (rtc-core/<get-block-content-versions @rtc-debug-ui/debug-state block-id))]
+               (let [^object worker @db-browser/*worker]
+                 (p/let [result (.rtc-get-block-content-versions worker block-id)
+                         blocks-versions (bean/->clj result)]
                    (prn :Dev-show-block-content-history)
                    (doseq [[block-uuid versions] blocks-versions]
                      (prn :block-uuid block-uuid)
@@ -472,5 +471,5 @@
     [:div
      (hiccup-content id option)]
     ;; TODO: remove this
-    (let [format (gp-util/normalize-format format)]
+    (let [format (common-util/normalize-format format)]
       (non-hiccup-content id content on-click on-hide config format))))

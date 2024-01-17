@@ -4,17 +4,15 @@
             [dommy.core :as dom]
             [frontend.db :as db]
             [frontend.db.model :as model]
-            [frontend.db.utils :as db-utils]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.property.util :as pu]
             [frontend.modules.editor.undo-redo :as history]
-            [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
             [frontend.config :as config]
             [frontend.storage :as storage]
             [frontend.util :as util]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [promesa.core :as p]
             [goog.object :as gobj]
@@ -28,16 +26,9 @@
   (js->clj obj :keywordize-keys true))
 
 (defn shape->block [shape page-name]
-  (let [properties {(pu/get-pid :ls-type) :whiteboard-shape
-                    (pu/get-pid :logseq.tldraw.shape) shape}
-        block {:block/uuid (if (uuid? (:id shape)) (:id shape) (uuid (:id shape)))
-               :block/page {:block/name (util/page-name-sanity-lc page-name)}
-               :block/parent {:block/name page-name}
-               :block/properties properties}
-        additional-props (gp-whiteboard/with-whiteboard-block-props
-                           (assoc block :block/properties {:ls-type :whiteboard-shape :logseq.tldraw.shape shape})
-                           page-name)]
-    (merge block additional-props)))
+  (let [repo (state/get-current-repo)
+        db (db/get-db repo)]
+    (gp-whiteboard/shape->block repo db shape page-name)))
 
 (defn- build-shapes
   [page-block blocks]
@@ -69,7 +60,8 @@
   [page-name tldraw-page assets shapes-index]
   (let [page-entity (model/get-page page-name)
         get-k #(gobj/get tldraw-page %)]
-    {:block/name page-name
+    {:block/original-name page-name
+     :block/name (util/page-name-sanity-lc page-name)
      :block/type "whiteboard"
      :block/properties {(pu/get-pid :ls-type)
                         :whiteboard-page
@@ -114,22 +106,33 @@
         changed-shapes (set/difference upsert-shapes created-shapes)
         prev-changed-blocks (when (seq changed-shapes)
                               (db/pull-many repo '[*] (mapv (fn [shape]
-                                                              [:block/uuid (uuid (:id shape))]) changed-shapes)))]
-    {:page-block (build-page-block page-name tl-page assets shapes-index)
-     :upserted-blocks (->> upsert-shapes
-                           (map #(shape->block % page-name))
-                           (map sqlite-util/block-with-timestamps))
-     :delete-blocks deleted-shapes-tx
-     :metadata {:whiteboard/transact? (not replace?)
-                :replace? replace?
-                :data {:page-name page-name
-                       :deleted-shapes deleted-shapes
-                       :new-shapes created-shapes
-                       :changed-shapes changed-shapes
-                       :prev-changed-blocks prev-changed-blocks}}}))
+                                                              [:block/uuid (uuid (:id shape))]) changed-shapes)))
+        upserted-blocks (->> (map #(shape->block % page-name) upsert-shapes)
+                             (remove (fn [b]
+                                       (= (:nonce
+                                           (pu/get-property
+                                            (db/entity [:block/uuid (:block/uuid b)])
+                                            :logseq.tldraw.shape))
+                                          (:nonce
+                                           (pu/get-property
+                                            b
+                                            :logseq.tldraw.shape))))))]
+    (when (or (seq upserted-blocks)
+              (seq deleted-shapes-tx))
+      {:page-block (build-page-block page-name tl-page assets shapes-index)
+       :upserted-blocks (map sqlite-util/block-with-timestamps upserted-blocks)
+       :delete-blocks deleted-shapes-tx
+       :metadata {:whiteboard/transact? (not replace?)
+                  :replace? replace?
+                  :data {:page-name page-name
+                         :deleted-shapes deleted-shapes
+                         :new-shapes created-shapes
+                         :changed-shapes changed-shapes
+                         :prev-changed-blocks prev-changed-blocks}}})))
 
 (defonce *last-shapes-nonce (atom {}))
-(defn transact-tldr-delta! [page-name ^js app replace?]
+(defn <transact-tldr-delta!
+  [page-name ^js app replace?]
   (let [tl-page ^js (second (first (.-pages app)))
         shapes (.-shapes ^js tl-page)
         page-block (model/get-page page-name)
@@ -137,50 +140,51 @@
         prev-shapes-index (:shapes-index prev-page-metadata)
         shape-id->prev-index (zipmap prev-shapes-index (range (count prev-shapes-index)))
         new-id-nonces (set (map-indexed (fn [idx shape]
-                                  (let [id (.-id shape)]
-                                    {:id id
-                                     :nonce (if (= idx (get shape-id->prev-index id))
-                                              (.-nonce shape)
-                                              (js/Date.now))})) shapes))
+                                          (let [id (.-id shape)]
+                                            {:id id
+                                             :nonce (if (= idx (get shape-id->prev-index id))
+                                                      (.-nonce shape)
+                                                      (js/Date.now))})) shapes))
         repo (state/get-current-repo)
         db-id-nonces (or
                       (get-in @*last-shapes-nonce [repo page-name])
                       (set (->> (model/get-whiteboard-id-nonces repo page-name)
                                 (map #(update % :id str)))))
-        {:keys [page-block upserted-blocks delete-blocks metadata]}
-        (compute-tx app tl-page new-id-nonces db-id-nonces page-name replace?)
-        tx-data (concat delete-blocks [page-block] upserted-blocks)
-        new-shapes (get-in metadata [:data :new-shapes])
-        deleted-shapes (get-in metadata [:data :deleted-shapes])
-        metadata' (cond
+        {:keys [page-block upserted-blocks delete-blocks metadata] :as result}
+        (compute-tx app tl-page new-id-nonces db-id-nonces page-name replace?)]
+    (when (seq result)
+      (let [tx-data (concat delete-blocks [page-block] upserted-blocks)
+            new-shapes (get-in metadata [:data :new-shapes])
+            deleted-shapes (get-in metadata [:data :deleted-shapes])
+            metadata' (cond
                     ;; group
-                    (some #(= "group" (:type %)) new-shapes)
-                    (assoc metadata :whiteboard/op :group)
+                        (some #(= "group" (:type %)) new-shapes)
+                        (assoc metadata :whiteboard/op :group)
 
                     ;; ungroup
-                    (and (not-empty deleted-shapes) (every? #(= "group" (:type %)) deleted-shapes))
-                    (assoc metadata :whiteboard/op :un-group)
+                        (and (not-empty deleted-shapes) (every? #(= "group" (:type %)) deleted-shapes))
+                        (assoc metadata :whiteboard/op :un-group)
 
                     ;; arrow
-                    (some #(and (= "line" (:type %))
-                                (= "arrow " (:end (:decorations %)))) new-shapes)
+                        (some #(and (= "line" (:type %))
+                                    (= "arrow " (:end (:decorations %)))) new-shapes)
 
-                    (assoc metadata :whiteboard/op :new-arrow)
-                    :else
-                    metadata)
-        metadata' (if (seq (concat upserted-blocks delete-blocks))
-                    metadata'
-                    (assoc metadata :undo? true))]
-    (swap! *last-shapes-nonce assoc-in [repo page-name] new-id-nonces)
-    (if (contains? #{:new-arrow} (:whiteboard/op metadata'))
-      (state/set-state! :whiteboard/pending-tx-data
-                        {:tx-data tx-data
-                         :metadata metadata'})
-      (let [pending-tx-data (:whiteboard/pending-tx-data @state/state)
-            tx-data' (concat (:tx-data pending-tx-data) tx-data)
-            metadata'' (merge metadata' (:metadata pending-tx-data))]
-        (state/set-state! :whiteboard/pending-tx-data {})
-        (db-utils/transact! repo tx-data' metadata'')))))
+                        (assoc metadata :whiteboard/op :new-arrow)
+                        :else
+                        metadata)
+            metadata' (if (seq (concat upserted-blocks delete-blocks))
+                        metadata'
+                        (assoc metadata :undo? true))]
+        (swap! *last-shapes-nonce assoc-in [repo page-name] new-id-nonces)
+        (if (contains? #{:new-arrow} (:whiteboard/op metadata'))
+          (state/set-state! :whiteboard/pending-tx-data
+                            {:tx-data tx-data
+                             :metadata metadata'})
+          (let [pending-tx-data (:whiteboard/pending-tx-data @state/state)
+                tx-data' (concat (:tx-data pending-tx-data) tx-data)
+                metadata'' (merge metadata' (:metadata pending-tx-data))]
+            (state/set-state! :whiteboard/pending-tx-data {})
+            (db/transact! repo tx-data' metadata'')))))))
 
 (defn get-default-new-whiteboard-tx
   [page-name id]
@@ -202,30 +206,27 @@
              :updated-at (util/time-ms),
              :created-at (util/time-ms)}]))
 
-(defn get-whiteboard-entity [page-name]
-  (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)]))
-
-(defn create-new-whiteboard-page!
+(defn <create-new-whiteboard-page!
   ([]
-   (create-new-whiteboard-page! nil))
+   (<create-new-whiteboard-page! nil))
   ([name]
-   (let [uuid (or (and name (parse-uuid name)) (d/squuid))
-         name (or name (str uuid))]
-     (db/transact! (get-default-new-whiteboard-tx name uuid))
-     (let [page-entity (get-whiteboard-entity name)]
-       (when (and page-entity
-                  (nil? (:block/file page-entity))
-                  (not (config/db-based-graph? (state/get-current-repo))))
-         (outliner-file/sync-to-file page-entity)))
+   (p/let [uuid (or (and name (parse-uuid name)) (d/squuid))
+           name (or name (str uuid))
+           repo (state/get-current-repo)
+           _ (db/transact! (get-default-new-whiteboard-tx name uuid))]
+     ;; TODO: check to remove this
+     (state/update-state! [repo :unloaded-pages] (fn [pages] (conj (set pages)
+                                                                   (util/page-name-sanity-lc name))))
      name)))
 
-(defn create-new-whiteboard-and-redirect!
+(defn <create-new-whiteboard-and-redirect!
   ([]
-   (create-new-whiteboard-and-redirect! (str (d/squuid))))
+   (<create-new-whiteboard-and-redirect! (str (d/squuid))))
   ([name]
    (when-not config/publishing?
-     (create-new-whiteboard-page! name)
-     (route-handler/redirect-to-whiteboard! name {:new-whiteboard? true}))))
+     (p/do!
+       (<create-new-whiteboard-page! name)
+       (route-handler/redirect-to-whiteboard! name {:new-whiteboard? true})))))
 
 (defn ->logseq-portal-shape
   [block-id point]
@@ -255,14 +256,11 @@
         (.createNewLineBinding api source-shape (:id shape))))))
 
 (defn page-name->tldr!
-  ([page-name]
-   (let [page (if (model/page-exists? page-name)
-                (model/get-page page-name)
-                (let [name (create-new-whiteboard-page! page-name)]
-                  (model/get-page name)))
-         react-page (db/sub-block (:db/id page))
-         blocks (:block/_page react-page)]
-     (whiteboard-clj->tldr react-page blocks))))
+  [page-name]
+  (let [page (model/get-page page-name)
+        react-page (db/sub-block (:db/id page))
+        blocks (:block/_page react-page)]
+    (whiteboard-clj->tldr react-page blocks)))
 
 (defn- get-whiteboard-blocks
   "Given a page, return all the logseq blocks (exclude all shapes)"
@@ -283,21 +281,22 @@
         blocks-with-no-next (remove #(root-block-left-ids (:db/id %)) root-blocks)]
     (when (seq blocks-with-no-next) (first blocks-with-no-next))))
 
-(defn add-new-block!
+(defn <add-new-block!
   [page-name content]
-  (let [uuid (d/squuid)
-        page-entity (model/get-page page-name)
-        last-root-block (or (get-last-root-block page-name) page-entity)
-        tx (sqlite-util/block-with-timestamps
-            {:block/left (select-keys last-root-block [:db/id])
-             :block/uuid uuid
-             :block/content (or content "")
-             :block/format :markdown
-             :block/page {:block/name (util/page-name-sanity-lc page-name)
-                          :block/original-name page-name}
-             :block/parent {:block/name page-name}})]
-    (db-utils/transact! [tx])
-    uuid))
+  (p/let [repo (state/get-current-repo)
+          new-block-id (db/new-block-id)
+          page-entity (model/get-page page-name)
+          last-root-block (or (get-last-root-block page-name) page-entity)
+          tx (sqlite-util/block-with-timestamps
+              {:block/left (select-keys last-root-block [:db/id])
+               :block/uuid new-block-id
+               :block/content (or content "")
+               :block/format :markdown
+               :block/page {:block/name (util/page-name-sanity-lc page-name)
+                            :block/original-name page-name}
+               :block/parent {:block/name page-name}})
+          _ (db/transact! repo [tx] {:whiteboard/transact? true})]
+    new-block-id))
 
 (defn inside-portal?
   [target]
@@ -312,7 +311,7 @@
   []
   (p/let [^js res (js/fetch "./whiteboard/onboarding.edn") ;; do we need to cache it?
           text (.text res)
-          edn (gp-util/safe-read-string text)]
+          edn (common-util/safe-read-string text)]
     edn))
 
 (defn clone-whiteboard-from-edn

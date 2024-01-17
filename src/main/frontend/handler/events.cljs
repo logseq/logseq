@@ -13,7 +13,6 @@
             [frontend.commands :as commands]
             [frontend.components.class :as class-component]
             [frontend.components.cmdk :as cmdk]
-            [frontend.components.conversion :as conversion-component]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
             [frontend.components.file-sync :as file-sync]
@@ -42,6 +41,7 @@
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
@@ -56,12 +56,12 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.handler.code :as code-handler]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.graph-picker :as graph-picker]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.instrumentation.sentry :as sentry-event]
-            [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.shortcut.core :as st]
             [frontend.quick-capture :as quick-capture]
             [frontend.search :as search]
@@ -71,10 +71,15 @@
             [frontend.util.persist-var :as persist-var]
             [goog.dom :as gdom]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.config :as common-config]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.db.listener :as db-listener]))
+            [frontend.persist-db.browser :as db-browser]
+            [frontend.db.rtc.debug-ui :as rtc-debug-ui]
+            [frontend.modules.outliner.pipeline :as pipeline]
+            [electron.ipc :as ipc]
+            [frontend.date :as date]
+            [logseq.db :as ldb]))
 
 ;; TODO: should we move all events here?
 
@@ -183,12 +188,14 @@
    state/set-state! :sync-graph/init? false))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (if (or (not (false? (get @outliner-file/*writes-finished? graph)))
-          (:sync-graph/init? @state/state))
-    (graph-switch-on-persisted graph opts)
-    (notification/show!
-     "Please wait seconds until all changes are saved for the current graph."
-     :warning)))
+  (let [^js sqlite @db-browser/*worker]
+    (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite))
+            request-finished? (ldb/request-finished?)]
+      (if (or (not request-finished?) (not writes-finished?)) ; TODO: test (:sync-graph/init? @state/state)
+        (notification/show!
+         "Please wait seconds until all changes are saved for the current graph."
+         :warning)
+        (graph-switch-on-persisted graph opts)))))
 
 (defmethod handle :graph/pull-down-remote-graph [[_ graph dir-name]]
   (if (mobile-util/native-ios?)
@@ -338,23 +345,32 @@
 (defmethod handle :modal/set-git-username-and-email [[_ _content]]
   (state/set-modal! git-component/set-git-username-and-email))
 
-(defmethod handle :page/title-property-changed [[_ old-title new-title]]
-  (page-handler/rename! old-title new-title))
-
 (defmethod handle :page/create [[_ page-name opts]]
-  (page-handler/create! page-name opts))
+  (if (= page-name (date/today))
+    (page-handler/create-today-journal!)
+    (page-handler/<create! page-name opts)))
+
+(defmethod handle :page/deleted [[_ repo page-name file-path tx-meta]]
+  (page-common-handler/after-page-deleted! repo page-name file-path tx-meta))
+
+(defmethod handle :page/renamed [[_ repo data]]
+  (page-common-handler/after-page-renamed! repo data))
 
 (defmethod handle :page/create-today-journal [[_ _repo]]
   (p/let [_ (page-handler/create-today-journal!)]
     (ui-handler/re-render-root!)))
 
 (defmethod handle :file/not-matched-from-disk [[_ path disk-content db-content]]
-  (state/clear-edit!)
   (when-let [repo (state/get-current-repo)]
-    (when (and disk-content db-content
-               (not= (util/trim-safe disk-content) (util/trim-safe db-content)))
-      (state/set-modal! #(diff/local-file repo path disk-content db-content)
-                        {:label "diff__cp"}))))
+    (let [^js sqlite @db-browser/*worker]
+      (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite))
+              request-finished? (ldb/request-finished?)]
+        (prn :debug :writes-finished? writes-finished?
+             :request-finished? request-finished?)
+        (when (and request-finished? writes-finished? disk-content db-content
+                   (not= (util/trim-safe disk-content) (util/trim-safe db-content)))
+          (state/set-modal! #(diff/local-file repo path disk-content db-content)
+                            {:label "diff__cp"}))))))
 
 (defmethod handle :modal/display-file-version [[_ path content hash]]
   (state/set-modal! #(git-component/file-specific-version path hash content)))
@@ -536,7 +552,6 @@
                 (catch :default e
                   (js/console.error e)))
               (state/set-current-repo! current-repo)
-              (db-listener/listen-and-persist! current-repo)
               (repo-config-handler/restore-repo-config! current-repo)
               (when graph-switch-f (graph-switch-f current-repo true))
               (.watch mobile-util/fs-watcher #js {:path current-repo-dir})
@@ -739,34 +754,6 @@
     (when (= dir (config/get-repo-dir repo))
       (fs/watch-dir! dir))))
 
-(defmethod handle :ui/notify-outdated-filename-format [[_ paths]]
-  ;; paths - the affected paths that contains reserved characters
-  (notification/show!
-   [:div
-    [:div.mb-4
-     [:div.font-semibold.mb-4.text-xl "It seems that some of your filenames are in the outdated format."]
-
-     [:div
-      [:p
-       "We suggest you upgrade now to avoid potential bugs."]
-      (when (seq paths)
-        [:p
-         "For example, the files below have reserved characters that can't be synced on some platforms."])]]
-    (ui/button
-     "Update filename format"
-     :aria-label "Update filename format"
-     :on-click (fn []
-                 (notification/clear-all!)
-                 (state/set-modal!
-                  (fn [_] (conversion-component/files-breaking-changed))
-                  {:id :filename-format-panel :center? true})))
-    (when (seq paths)
-      [:ol.my-2
-       (for [path paths]
-         [:li path])])]
-   :warning
-   false))
-
 (defmethod handle :ui/notify-skipped-downloading-files [[_ paths]]
   (notification/show!
    [:div
@@ -879,7 +866,7 @@
                         (for [[file error] parse-errors]
                           (let [data (ex-data error)]
                             (cond
-                             (and (gp-config/whiteboard? file)
+                             (and (common-config/whiteboard? file)
                                   (= :transact/upsert (:error data))
                                   (uuid? (last (:assertion data))))
                              (rum/with-key (file-id-conflict-item repo file data) file)
@@ -926,6 +913,9 @@
   (when (some-> block (editor-handler/own-order-number-list?))
     (editor-handler/remove-block-own-order-list-type! block)))
 
+(defmethod handle :editor/save-code-editor [_]
+  (code-handler/save-code-editor!))
+
 (defmethod handle :editor/toggle-children-number-list [[_ block]]
   (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
@@ -939,9 +929,6 @@
         (when collapsed?
           (editor-handler/set-blocks-collapsed! [block-id] false)))))
   (property-handler/editing-new-property!))
-
-(defmethod handle :editor/edit-block [[_ block pos id opts]]
-  (editor-handler/edit-block! block pos id opts))
 
 (rum/defc multi-tabs-dialog
   []
@@ -960,6 +947,19 @@
 (defmethod handle :show/multiple-tabs-error-dialog [_]
   (state/set-state! :error/multiple-tabs-access-opfs? true)
   (state/set-modal! multi-tabs-dialog {:container-overflow-visible? true}))
+
+(defmethod handle :rtc/sync-state [[_ state]]
+  (swap! rtc-debug-ui/debug-state (fn [old] (merge old state))))
+
+;; db-worker -> UI
+(defmethod handle :db/sync-changes [[_ data]]
+  (let [repo (state/get-current-repo)]
+    (pipeline/invoke-hooks data)
+
+    (when (util/electron?)
+      (ipc/ipc :db-transact repo (pr-str (:tx-data data)) (pr-str (:tx-meta data))))
+
+    nil))
 
 (defn run!
   []

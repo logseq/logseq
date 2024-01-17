@@ -1,8 +1,9 @@
 (ns logseq.graph-parser.whiteboard
   "Whiteboard related parser utilities"
-  (:require [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.util.block-ref :as block-ref]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+  (:require [logseq.common.util :as common-util]
+            [logseq.common.util.block-ref :as block-ref]
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn block->shape [block]
   (get-in block [:block/properties :logseq.tldraw.shape]))
@@ -42,13 +43,13 @@
 (defn- get-shape-refs [shape]
   (let [portal-refs (when (= "logseq-portal" (:type shape))
                       [(if (= (:blockType shape) "P")
-                         {:block/name (gp-util/page-name-sanity-lc (:pageId shape))}
+                         {:block/name (common-util/page-name-sanity-lc (:pageId shape))}
                          {:block/uuid (uuid (:pageId shape))})])
         shape-link-refs (->> (:refs shape)
                              (filter (complement empty?))
                              (map (fn [ref] (if (parse-uuid ref)
                                               {:block/uuid (parse-uuid ref)}
-                                              {:block/name (gp-util/page-name-sanity-lc ref)}))))]
+                                              {:block/name (common-util/page-name-sanity-lc ref)}))))]
     (concat portal-refs shape-link-refs)))
 
 (defn- with-whiteboard-block-refs
@@ -76,7 +77,7 @@
   [block page-name]
   (let [shape? (shape-block? block)
         shape (block->shape block)
-        default-page-ref {:block/name (gp-util/page-name-sanity-lc page-name)}]
+        default-page-ref {:block/name page-name}]
     (merge (when shape?
              (merge
               {:block/uuid (uuid (:id shape))}
@@ -85,3 +86,16 @@
            (when (nil? (:block/parent block)) {:block/parent default-page-ref})
            (when (nil? (:block/format block)) {:block/format :markdown}) ;; TODO: read from config
            {:block/page default-page-ref})))
+
+(defn shape->block [repo db shape page-name]
+  (let [properties {(db-property/get-pid repo db :ls-type) :whiteboard-shape
+                    (db-property/get-pid repo db :logseq.tldraw.shape) shape}
+        page-name (common-util/page-name-sanity-lc page-name)
+        block {:block/uuid (if (uuid? (:id shape)) (:id shape) (uuid (:id shape)))
+               :block/page {:block/name page-name}
+               :block/parent {:block/name page-name}
+               :block/properties properties}
+        additional-props (with-whiteboard-block-props
+                           (assoc block :block/properties {:ls-type :whiteboard-shape :logseq.tldraw.shape shape})
+                           page-name)]
+    (merge block additional-props)))

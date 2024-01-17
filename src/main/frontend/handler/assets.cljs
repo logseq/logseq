@@ -4,10 +4,10 @@
             [frontend.util :as util]
             [frontend.config :as config]
             [frontend.mobile.util :as mobile-util]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.config :as common-config]
             [clojure.string :as string]
             [logseq.common.path :as path]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.common.util :as common-util]))
 
 (defn alias-enabled?
   []
@@ -49,7 +49,7 @@
     (and (string? full-path)
          (mobile-util/native-platform?))
     (string/replace-first
-     #"^(file://|assets://)" gp-config/capacitor-protocol-with-prefix)))
+     #"^(file://|assets://)" common-config/capacitor-protocol-with-prefix)))
 
 (defn resolve-asset-real-path-url
   [repo rpath]
@@ -57,8 +57,8 @@
                         (string/replace rpath #"^[.\/\\]+" ""))]
     (if config/publishing?
       (str "./" rpath)
-      (let [ret (let [rpath          (if-not (string/starts-with? rpath gp-config/local-assets-dir)
-                                       (path/path-join gp-config/local-assets-dir rpath)
+      (let [ret (let [rpath          (if-not (string/starts-with? rpath common-config/local-assets-dir)
+                                       (path/path-join common-config/local-assets-dir rpath)
                                        rpath)
                       encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" rpath))
                       rpath          (if encoded-chars? (js/decodeURI rpath) rpath)
@@ -67,7 +67,7 @@
 
                   (if-let [[rpath' alias]
                            (and (alias-enabled?)
-                                (let [rpath' (string/replace rpath (re-pattern (str "^" gp-config/local-assets-dir "[\\/\\\\]+")) "")]
+                                (let [rpath' (string/replace rpath (re-pattern (str "^" common-config/local-assets-dir "[\\/\\\\]+")) "")]
                                   (and
                                    (string/starts-with? rpath' "@")
                                    (some->> (and (seq (get-alias-dirs))
@@ -94,7 +94,7 @@
       (path/absolute? path)
       (if (boolean (re-find #"(?i)%[0-9a-f]{2}" path)) ;; has encoded chars?
         ;; Incoming path might be already URL encoded. from PDF assets
-        (path/path-join "file://" (gp-util/safe-decode-uri-component path))
+        (path/path-join "file://" (common-util/safe-decode-uri-component path))
         (path/path-join "file://" path))
 
 
