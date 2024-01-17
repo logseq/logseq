@@ -54,7 +54,6 @@
             [frontend.handler.db-based.property.util :as db-pu]
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.handler.code :as code-handler]
             [frontend.mobile.core :as mobile]

@@ -7,7 +7,7 @@
             [goog.object :as gobj]
             [datascript.core :as d]
             [frontend.search.fuzzy :as fuzzy]
-            [frontend.worker.util :as util]
+            [frontend.worker.util :as worker-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.util :as common-util]))
 
@@ -174,7 +174,7 @@
 (defn- sanitize
   [content]
   (some-> content
-          (util/search-normalize true)))
+          (worker-util/search-normalize true)))
 
 (defn- property-value-when-closed
   "Returns property value if the given entity is type 'closed value' or nil"
@@ -410,14 +410,14 @@
           (if (seq coll')
             (rest coll')
             (reduced false))))
-      (seq (util/search-normalize match true))
-      (seq (util/search-normalize q true))))))
+      (seq (worker-util/search-normalize match true))
+      (seq (worker-util/search-normalize q true))))))
 
 (defn page-search
   "Return a list of page names that match the query"
   [repo db q limit]
   (when repo
-    (let [q (util/search-normalize q true)
+    (let [q (worker-util/search-normalize q true)
           q (fuzzy/clean-str q)
           q (if (= \# (first q)) (subs q 1) q)]
       (when-not (string/blank? q)

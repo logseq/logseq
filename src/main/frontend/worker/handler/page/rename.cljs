@@ -92,7 +92,7 @@
 (declare rename-page-aux)
 
 (defn- based-merge-pages!
-  [repo conn config from-page-name to-page-name {:keys [old-name new-name persist-op?]}]
+  [repo conn config from-page-name to-page-name {:keys [old-name new-name]}]
   (when (and (ldb/page-exists? @conn from-page-name)
              (ldb/page-exists? @conn to-page-name)
              (not= from-page-name to-page-name))

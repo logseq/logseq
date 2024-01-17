@@ -119,10 +119,17 @@
              frontend.util.text text-util
              frontend.util.url url-util
              frontend.util.thingatpt thingatpt
+             frontend.worker.pipeline worker-pipeline
+             frontend.worker.util worker-util
+             frontend.worker.state worker-state
+             frontend.worker.handler.page worker-page
+             frontend.worker.handler.page.rename worker-page-rename
+             frontend.worker.handler.file.util wfu
              lambdaisland.glogi log
              logseq.common.path path
              logseq.common.graph common-graph
              logseq.common.config common-config
+             logseq.db ldb
              logseq.db.frontend.property db-property
              logseq.db.frontend.property.type db-property-type
              logseq.db.frontend.property.util db-property-util

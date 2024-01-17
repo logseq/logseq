@@ -6,7 +6,7 @@
             [cljs.core.async :as async :refer [<! chan offer!]]
             [frontend.worker.async-util :include-macros true :refer [<? go-try]]
             [frontend.worker.rtc.const :as rtc-const]
-            [frontend.worker.state :as state]
+            [frontend.worker.state :as worker-state]
             [goog.string :as gstring]))
 
 (def WebSocketOPEN (if (= *target* "nodejs")
@@ -15,7 +15,7 @@
 
 (defn ws-listen
   [token data-from-ws-chan ws-opened-ch]
-  (let [ws (js/WebSocket. (gstring/format @state/*rtc-ws-url token))]
+  (let [ws (js/WebSocket. (gstring/format @worker-state/*rtc-ws-url token))]
     (set! (.-onopen ws) (fn [_e] (async/close! ws-opened-ch)))
     (set! (.-onmessage ws) (fn [e]
                              (let [data (js->clj (js/JSON.parse (.-data e)) :keywordize-keys true)]
