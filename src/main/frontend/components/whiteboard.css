@@ -172,19 +172,15 @@ input.tl-text-input {
   }
 
   .ls-page-title {
-      padding: 0;
-      margin: 0;
-
-      h1.page-title {
+     @apply p-0 m-0;
+     
+      .page-title {
         font-size: 16px;
       }
   }
 
   .edit-input {
-    width: 100%;
-    border: none;
-    box-shadow: none;
-    padding: 0;
+    @apply h-full w-full p-0 border-none shadow-none;
   }
 }
 
