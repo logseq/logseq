@@ -11,6 +11,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.fs :as fs]
+            [frontend.persist-db.browser :as db-browser]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.import :as import-handler]
             [frontend.handler.notification :as notification]
@@ -161,7 +162,7 @@
 
 
 (defn- import-from-doc-files!
-  [db-conn doc-files]
+  [db-conn repo doc-files]
   (let [imported-chan (async/promise-chan)]
     (try
       (let [docs-chan (async/to-chan! (medley/indexed doc-files))]
@@ -178,7 +179,10 @@
                                             {:file/path (.-rpath file)
                                              :file/content content}))
                                   (p/then (fn [file]
-                                            (graph-parser/import-file-to-db-graph db-conn (:file/path file) (:file/content file) {})
+                                            ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
+                                            (let [{:keys [tx-report]}
+                                                  (graph-parser/import-file-to-db-graph db-conn (:file/path file) (:file/content file) {})]
+                                              (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report)))
                                             file)))))
               (recur))
             (async/offer! imported-chan true))))
@@ -272,7 +276,7 @@
                                     db-conn (db/get-db repo false)]
                                 (async/<! (p->c (import-config-file! config-file)))
                                 (async/<! (import-from-asset-files! asset-files))
-                                (async/<! (import-from-doc-files! db-conn doc-files))
+                                (async/<! (import-from-doc-files! db-conn repo doc-files))
                                 (state/set-state! :graph/importing nil)
                                 (finished-cb)))))]
     (state/set-modal!
