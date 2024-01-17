@@ -108,11 +108,10 @@
     (chan)
     (go
       (<! (async/timeout 2000))
-      ;; TODO: get-unpushed-assets-update-count
       (pos? (op-mem-layer/get-unpushed-asset-update-count repo)))))
 
 (defn <loop-for-assets-sync
-  [state graph-uuid repo conn]
+  [state graph-uuid repo conn & {:keys [loop-started-ch]}]
   {:pre [(state-validator state)]}
   (go
     (reset! (:*repo state) repo)
@@ -125,6 +124,7 @@
           stop-assets-sync-loop-chan (chan)]
       (reset! (:*stop-asset-sync-loop-chan state) stop-assets-sync-loop-chan)
       (async/sub data-from-ws-pub "push-assets-updates" push-data-from-ws-ch)
+      (when loop-started-ch (async/close! loop-started-ch))
       (<! (go-loop [push-assets-update-ops-ch
                     (make-push-assets-update-ops-timeout-ch repo (not @*auto-push-assets-update-ops?))]
             (let [{:keys [continue push-data-from-ws client-assets-update stop]}
