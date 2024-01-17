@@ -103,19 +103,36 @@
         (newline* 1)])
      l)))
 
-(defn- block-src
-  [{:keys [lines language full_content]}]
-  (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
-    ;; when "no-indent", just use :full_content in 'Src' ast
-    [(raw-text full_content) (newline* 1)]
+(defn- remove-max-prefix-spaces
+  [lines]
+  (let [common-prefix-spaces
+        (reduce
+         (fn [r line]
+           (if (string/blank? line)
+             r
+             (let [leading-spaces (re-find #"^\s+" line)]
+               (if (nil? r)
+                 leading-spaces
+                 (if (string/starts-with? r leading-spaces)
+                   leading-spaces
+                   r)))))
+         nil
+         lines)
+        pattern (re-pattern (str "^" common-prefix-spaces))]
+    (mapv (fn [line] (string/replace-first line pattern "")) lines)))
 
-    (let [level (dec (get *state* :current-level 1))]
-      (concatv
-       [(indent-with-2-spaces level) (raw-text "```")]
-       (when language [(raw-text language)])
-       [(newline* 1)]
-       (mapv raw-text lines)
-       [(indent-with-2-spaces level) (raw-text "```") (newline* 1)]))))
+(defn- block-src
+  [{:keys [lines language]}]
+  (let [level (dec (get *state* :current-level 1))
+        lines* (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
+                 (remove-max-prefix-spaces lines)
+                 lines)]
+    (concatv
+     [(indent-with-2-spaces level) (raw-text "```")]
+     (when language [(raw-text language)])
+     [(newline* 1)]
+     (mapv raw-text lines*)
+     [(indent-with-2-spaces level) (raw-text "```") (newline* 1)])))
 
 (defn- block-quote
   [block-coll]
