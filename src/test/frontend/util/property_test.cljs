@@ -124,9 +124,9 @@
   (testing "hidden editable properties"
     (are [x y z expected] (= expected (property-util/get-visible-ordered-properties x y z))
       ;; page block
-      {:title "foo"} [:title] {:pre-block? true}
+      {:title "foo"} [:title] {:pre-block? true :page-id 1}
       '()
-      {:title "foo" :foo "bar"} [:title :foo] {:pre-block? true}
+      {:title "foo" :foo "bar"} [:title :foo] {:pre-block? true :page-id 1}
       [[:foo "bar"]]
       ;; normal block
       {:logseq.table.version 2} [:logseq.table.version] {:pre-block? false}
