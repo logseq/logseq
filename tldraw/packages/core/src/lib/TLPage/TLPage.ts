@@ -50,6 +50,9 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
         const changedShapeIds = [...allIds].filter(s => {
           return lastShapesNounces[s] !== newShapesNouncesMap[s]
         })
+
+        // const changedShapes = changedShapeIds.map((id) => this.getShapeById(id))
+
         requestAnimationFrame(() => {
           this.cleanup(changedShapeIds)
         })
@@ -133,7 +136,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     return shapeInstances
   }
 
-  @action bringForward = (shapes: S[] | string[]): this => {
+  @action bringForward = (shapes: S[] | string[], skipPersist: boolean): this => {
     const shapesToMove = this.parseShapesArg(shapes)
     shapesToMove
       .sort((a, b) => this.shapes.indexOf(b) - this.shapes.indexOf(a))
@@ -146,7 +149,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
         this.shapes[index] = this.shapes[index + 1]
         this.shapes[index + 1] = t
       })
-    this.app.persist()
+    if (!skipPersist) this.app.persist()
     return this
   }
 
@@ -285,10 +288,6 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
       this.update({
         bindings: newBindings,
       })
-    }
-
-    if (shapeChanged || bindingChanged) {
-      this.app.persist(true)
     }
   }
 

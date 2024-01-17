@@ -278,9 +278,9 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     this.app.createNewLineBinding(shape, clone)
     this.app.history.resume()
     this.app.persist();
-    setTimeout(() => this.editShape(clone)) 
+    setTimeout(() => this.editShape(clone))
   }
-  
+
   /** Clone shapes with given context */
   cloneShapes = ({
     shapes,
@@ -460,7 +460,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
       this.app.currentPage.addShapes(group)
       this.app.setSelectedShapes([group])
       // the shapes in the group should also be moved to the bottom of the array (to be on top on the canvas)
-      this.app.bringForward(selectedShapes)
+      this.app.bringForward(selectedShapes, true)
     }
     this.app.persist()
   }

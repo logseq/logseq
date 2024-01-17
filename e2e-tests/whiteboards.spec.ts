@@ -90,15 +90,15 @@ test('draw a rectangle', async ({ page }) => {
 })
 
 test('undo the rectangle action', async ({ page }) => {
-  await page.keyboard.press(modKey + '+z')
+  await page.keyboard.press(modKey + '+z', { delay: 100 })
   await expect(page.locator('.logseq-tldraw .tl-positioned-svg rect')).toHaveCount(0)
 })
 
 test('redo the rectangle action', async ({ page }) => {
-  await page.keyboard.press(modKey + '+Shift+z')
+  await page.waitForTimeout(100)
+  await page.keyboard.press(modKey + '+Shift+z', { delay: 100 })
 
   await page.keyboard.press('Escape')
-  await page.waitForTimeout(100)
 
   await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(1)
 })
@@ -118,6 +118,7 @@ test('clone the rectangle', async ({ page }) => {
   await page.mouse.up()
   await page.keyboard.up('Alt')
 
+  await page.waitForTimeout(100)
   await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
 })
 
@@ -169,11 +170,13 @@ test('connect rectangles with an arrow', async ({ page }) => {
 })
 
 test('delete the first rectangle', async ({ page }) => {
-  await page.keyboard.press('Escape')
-  await page.waitForTimeout(1000)
+  await page.keyboard.press('Escape', { delay: 100 })
+  await page.keyboard.press('Escape', { delay: 100 })
+
   await page.click('.logseq-tldraw .tl-box-container:first-of-type')
   await page.keyboard.press('Delete')
 
+  await page.waitForTimeout(200)
   await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(1)
   await expect(page.locator('.logseq-tldraw .tl-line-container')).toHaveCount(0)
 })
@@ -218,6 +221,8 @@ test('undo the color switch', async ({ page }) => {
 test('undo the shape conversion', async ({ page }) => {
   await page.keyboard.press(modKey + '+z')
 
+  await page.waitForTimeout(100)
+
   await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
   await expect(page.locator('.logseq-tldraw .tl-ellipse-container')).toHaveCount(0)
 })
@@ -231,9 +236,9 @@ test('locked elements should not be removed', async ({ page }) => {
   await page.mouse.down()
   await page.mouse.up()
   await page.mouse.move(bounds.x + 520, bounds.y + 520)
-  await page.keyboard.press(`${modKey}+l`)
-  await page.keyboard.press('Delete')
-  await page.keyboard.press(`${modKey}+Shift+l`)
+  await page.keyboard.press(`${modKey}+l`, { delay: 100 })
+  await page.keyboard.press('Delete', { delay: 100 })
+  await page.keyboard.press(`${modKey}+Shift+l`, { delay: 100 })
 
   await expect(page.locator('.logseq-tldraw .tl-box-container')).toHaveCount(2)
 
@@ -260,12 +265,15 @@ test('move arrow to front', async ({ page }) => {
 test('undo the move action', async ({ page }) => {
   await page.keyboard.press(modKey + '+z')
 
+  await page.waitForTimeout(100)
+
   await expect(page.locator('.logseq-tldraw .tl-canvas .tl-layer > div:first-of-type > div:first-of-type')).toHaveClass('tl-line-container')
 })
 
 test('cleanup the shapes', async ({ page }) => {
   await page.keyboard.press(`${modKey}+a`)
   await page.keyboard.press('Delete')
+  await page.waitForTimeout(100)
   await expect(page.locator('[data-type=Shape]')).toHaveCount(0)
 })
 

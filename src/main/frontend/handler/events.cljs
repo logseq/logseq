@@ -885,12 +885,6 @@
   (when (and command (not (string/blank? content)))
     (shell-handler/run-cli-command-wrapper! command content)))
 
-(defmethod handle :whiteboard/undo [[_ e]]
-  (whiteboard-handler/undo! e))
-
-(defmethod handle :whiteboard/redo [[_ e]]
-  (whiteboard-handler/redo! e))
-
 (defmethod handle :editor/quick-capture [[_ args]]
   (quick-capture/quick-capture args))
 

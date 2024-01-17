@@ -41,7 +41,10 @@
 
 (defn invoke-hooks
   [{:keys [request-id tx-meta tx-data deleted-block-uuids affected-keys blocks] :as opts}]
-  ;; (prn :debug :request-id request-id)
+  ;; (prn :debug
+  ;;      :request-id request-id
+  ;;      :tx-meta tx-meta
+  ;;      :tx-data tx-data)
   (let [{:keys [from-disk? new-graph? local-tx? undo? redo?]} tx-meta
         repo (state/get-current-repo)
         tx-report {:tx-meta tx-meta
