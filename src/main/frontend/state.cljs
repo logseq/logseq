@@ -1932,7 +1932,7 @@ Similar to re-frame subscriptions"
 
 (defn get-git-commit-on-close-enabled?
   []
-  (false? (sub [:electron/user-cfgs :git/disable-commit-on-close?])))
+  (sub [:electron/user-cfgs :git/commit-on-close?]))
 
 (defn set-last-key-code!
   [key-code]
