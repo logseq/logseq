@@ -501,6 +501,10 @@
 (defmethod handle :gitStatus [_ [_]]
   (git/short-status!))
 
+(defmethod handle :setGitAutoCommit []
+  (git/configure-auto-commit!)
+  nil)
+
 (defmethod handle :installMarketPlugin [_ [_ mft]]
   (plugin/install-or-update! mft))
 
