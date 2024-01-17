@@ -13,6 +13,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.history :as history]
+            [frontend.handler.notification :as notification]
             [frontend.rum :as r]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -138,6 +139,8 @@
                            (route-handler/redirect-to-whiteboard! page-name {:block-id page-name-or-uuid})
                            (route-handler/redirect-to-page! (model/get-redirect-page-name page-name-or-uuid))))))})
 
+(defonce *transact-result (atom nil))
+
 (rum/defc tldraw-app-inner < rum/reactive
   [page-name block-id loaded-app set-loaded-app]
   (let [populate-onboarding? (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
@@ -171,9 +174,16 @@
                 :onMount on-mount
                 :readOnly config/publishing?
                 :onPersist (fn [app info]
-                             (state/set-state! [:whiteboard/last-persisted-at (state/get-current-repo)] (util/time-ms))
-                             (util/profile "tldraw persist"
-                                           (whiteboard-handler/<transact-tldr-delta! page-name app (.-replace info))))
+                             (->
+                              (p/let [_ @*transact-result
+                                      result (p/do!
+                                              (state/set-state! [:whiteboard/last-persisted-at (state/get-current-repo)] (util/time-ms))
+                                              (whiteboard-handler/<transact-tldr-delta! page-name app (.-replace info)))]
+                                (reset! *transact-result result))
+                              (p/catch (fn [^js error]
+                                         (js/console.error error)
+                                         (notification/show! [:div
+                                                              (str "Save whiteboard failed, error:" (.-cause error))])))))
                 :model data})])))
 
 (rum/defc tldraw-app

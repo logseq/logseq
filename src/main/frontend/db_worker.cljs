@@ -276,9 +276,12 @@
              _ (when context (state/set-context! context))
              tx-meta' (if (:new-graph? tx-meta)
                         tx-meta
-                        (-> tx-meta
-                            (assoc :skip-store? true) ; delay writes to the disk
-                            (dissoc :insert-blocks?)))]
+                        (cond-> tx-meta
+                          (not (:whiteboard/transact? tx-meta)) ; delay writes to the disk
+                          (assoc :skip-store? true)
+
+                          true
+                          (dissoc :insert-blocks?)))]
          (when-not (and (:create-today-journal? tx-meta)
                         (:today-journal-name tx-meta)
                         (seq tx-data)
