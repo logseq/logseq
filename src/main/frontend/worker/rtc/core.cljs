@@ -25,9 +25,9 @@
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.ws :as ws]
+            [frontend.worker.rtc.asset-sync :as asset-sync]
             [promesa.core :as p]
             [cljs-bean.core :as bean]))
-
 
 ;;                     +-------------+
 ;;                     |             |
@@ -99,7 +99,7 @@
    {:persist-op? false
     :transact-opts {:repo (first args)
                     :conn (second args)}}
-    (apply outliner-core/delete-blocks! args)))
+   (apply outliner-core/delete-blocks! args)))
 
 (defmethod transact-db! :move-blocks [_ & args]
   (outliner-tx/transact!
@@ -320,7 +320,6 @@
       (update-block-attrs repo conn date-formatter self op-value)
       (prn :apply-remote-move-ops self r parents left))))
 
-
 (defn apply-remote-update-ops
   [repo conn date-formatter update-ops]
   (prn :update-ops update-ops)
@@ -370,7 +369,6 @@
   (doseq [op remove-page-ops]
     (when-let [page-name (:block/name (d/entity @conn [:block/uuid (:block-uuid op)]))]
       (worker-page/delete! repo conn page-name nil {:redirect-to-home? false :persist-op? false}))))
-
 
 (defn filter-remote-data-by-local-unpushed-ops
   "when remote-data request client to move/update/remove/... blocks,
@@ -464,7 +462,6 @@
     (let [r (<! (<apply-remote-data repo conn date-formatter push-data-from-ws))]
       (when (= r ::need-pull-remote-data)
         r))))
-
 
 (defn- remove-non-exist-block-uuids-in-add-retract-map
   [conn add-retract-map]
@@ -610,7 +607,6 @@
     {:remote-ops @*remote-ops
      :depend-on-block-uuids @*depend-on-block-uuid-set}))
 
-
 (defn gen-block-uuid->remote-ops
   [repo conn & {:keys [n] :or {n 50}}]
   (loop [current-handling-block-ops nil
@@ -689,7 +685,6 @@
                            (some->> (:remove-page remote-ops) (vector :remove-page)))
                          block-uuid->remote-ops)]
     (concat update-page-ops remove-ops sorted-move-ops update-ops remove-page-ops)))
-
 
 (defn- <client-op-update-handler
   [state _token]
@@ -809,7 +804,6 @@
                 nil))))
       (async/unsub data-from-ws-pub "push-updates" push-data-from-ws-ch))))
 
-
 (defn <grant-graph-access-to-others
   [state graph-uuid & {:keys [target-user-uuids target-user-emails]}]
   (go
@@ -856,7 +850,6 @@
 ;;       (<! (ws/<send&receive state {:action "query-blocks" :graph-uuid @(:*graph-uuid state)
 ;;                                    :block-uuids [page-block-uuid]})))))
 
-
 (defn init-state
   [ws data-from-ws-chan repo token]
   ;; {:post [(m/validate state-schema %)]}
@@ -897,24 +890,30 @@
 
 ;; FIXME: token might be expired
 (defn <init-state
-  [repo token]
+  [repo token reset-*state?]
   (go
     (let [data-from-ws-chan (chan (async/sliding-buffer 100))
           ws-opened-ch (chan)
           ws (ws/ws-listen token data-from-ws-chan ws-opened-ch)]
       (<! ws-opened-ch)
       (let [state (init-state ws data-from-ws-chan repo token)]
-        (reset! *state state)
-        (swap! *state update :counter inc)
+        (when reset-*state?
+          (reset! *state state)
+          (swap! *state update :counter inc))
         state))))
 
 (defn <start-rtc
   [repo conn token]
   (go
-    (let [state (<! (<init-state repo token))
+    (let [state (<! (<init-state repo token true))
+          state-for-asset-sync (asset-sync/init-state-from-rtc-state state)
+          _ (reset! asset-sync/*asset-sync-state state-for-asset-sync)
           config (worker-state/get-config repo)]
       (if-let [graph-uuid (op-mem-layer/get-graph-uuid repo)]
-        (<! (<loop-for-rtc state graph-uuid repo conn (common-config/get-date-formatter config)))
+        (let [c1 (<loop-for-rtc state graph-uuid repo conn (common-config/get-date-formatter config))
+              c2 (asset-sync/<loop-for-assets-sync state-for-asset-sync graph-uuid repo conn)]
+          (<! c1)
+          (<! c2))
         (worker-util/post-message :notification (pr-str
                                                  [[:div
                                                    [:p "RTC is not supported for this graph"]]
@@ -922,10 +921,14 @@
 
 (defn <stop-rtc
   []
-  (when-let [chan (some-> @*state
-                           :*stop-rtc-loop-chan
-                           deref)]
-    (async/close! chan)))
+  (when-let [ch (some-> @*state
+                        :*stop-rtc-loop-chan
+                        deref)]
+    (async/close! ch))
+  (when-let [ch (some-> @asset-sync/*asset-sync-state
+                        :*stop-asset-sync-loop-chan
+                        deref)]
+    (async/close! ch)))
 
 (defn <toggle-sync
   []
@@ -936,12 +939,12 @@
   [repo token]
   (let [d (p/deferred)]
     (go
-     (let [state (or @*state (<! (<init-state repo token)))
-           graph-list (with-sub-data-from-ws state
-                        (<! (ws/<send! state {:req-id (get-req-id)
-                                              :action "list-graphs"}))
-                        (:graphs (<! (get-result-ch))))]
-       (p/resolve! d (bean/->js graph-list))))
+      (let [state (or @*state (<! (<init-state repo token true)))
+            graph-list (with-sub-data-from-ws state
+                         (<! (ws/<send! state {:req-id (get-req-id)
+                                               :action "list-graphs"}))
+                         (:graphs (<! (get-result-ch))))]
+        (p/resolve! d (bean/->js graph-list))))
     d))
 
 (add-watch *state :notify-main-thread
