@@ -110,7 +110,7 @@
   &-panel {
     @apply relative rounded-md shadow-lg border border-gray-06 overflow-hidden;
 
-    background: or(--ls-modal-panel-color, --lx-gray-04, --ls-secondary-background-color);
+    background: or(--ls-modal-panel-color, --lx-gray-02, --ls-secondary-background-color);
 
     .panel-content {
       overflow-y: auto;
@@ -277,7 +277,7 @@ html.is-mobile {
 }
 
 .dropdown-wrapper {
-  @apply border min-w-[12rem] rounded-md bg-popovelx overflow-hidden;
+  @apply border min-w-[12rem] rounded-md bg-popover overflow-hidden;
 
   .menu-links-wrapper {
     @apply border-0;

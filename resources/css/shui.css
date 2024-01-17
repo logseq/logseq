@@ -15,12 +15,12 @@ html {
   .ui__dropdown-menu-item,
   div[data-radix-popper-content-wrapper] div[role=menuitem] {
     &:focus, &:hover {
-      background-color: var(--lx-gray-04, hsl(var(--accent)));
+      /* background-color: var(--lx-gray-04, hsl(var(--accent))); */
     }
   }
 
   div[data-radix-popper-content-wrapper] div[role=menu] {
-    background-color: var(--lx-gray-03, hsl(var(--popover)));
+    /* background-color: var(--lx-gray-03, hsl(var(--popover))); */
   }
 
   &:not([data-color=logseq]) {
