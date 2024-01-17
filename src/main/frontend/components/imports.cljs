@@ -329,18 +329,19 @@
                          (state/set-modal!
                           #(set-graph-name-dialog e {:sqlite? true})))}]]
 
-         [:label.action-input.flex.items-center.mx-2.my-2
-          [:span.as-flex-center [:i (svg/logo 28)]]
-          [:span.flex.flex-col
-           [[:strong "Graph Folder"]
-            [:small  "Import from a graph folder as a DB-based graph"]]]
-          [:input.absolute.hidden
-           {:id        "import-graph-folder"
-            :type      "file"
-            :webkitdirectory "true"
-            :on-change (debounce (fn [e]
-                                   (graph-folder-to-db-import-handler e {}))
-                                 1000)}]]
+         (when (or util/electron? util/web-platform?)
+          [:label.action-input.flex.items-center.mx-2.my-2
+           [:span.as-flex-center [:i (svg/logo 28)]]
+           [:span.flex.flex-col
+            [[:strong "Graph Folder"]
+             [:small  "Import from a graph folder as a DB-based graph"]]]
+           [:input.absolute.hidden
+            {:id        "import-graph-folder"
+             :type      "file"
+             :webkitdirectory "true"
+             :on-change (debounce (fn [e]
+                                    (graph-folder-to-db-import-handler e {}))
+                                  1000)}]])
 
          [:label.action-input.flex.items-center.mx-2.my-2
           [:span.as-flex-center [:i (svg/logo 28)]]
