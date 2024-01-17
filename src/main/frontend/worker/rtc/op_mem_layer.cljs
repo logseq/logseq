@@ -454,6 +454,14 @@
           keys
           count))
 
+(defn get-unpushed-asset-update-count
+  [repo]
+  (some-> (get @*ops-store repo)
+          :current-branch
+          :asset-uuid->ops
+          keys
+          count))
+
 (defn intersection-block-uuids
   [repo block-uuid-coll]
   (some->> (get @*ops-store repo)
