@@ -133,7 +133,7 @@
                                              :fn      #(.sendToBack ^js (state/active-tldraw-app))}
 
    :whiteboard/bring-forward                {:binding "close-square-bracket"
-                                             :fn      #(.bringForward ^js (state/active-tldraw-app))}
+                                             :fn      #(.bringForward ^js (state/active-tldraw-app) false)}
 
    :whiteboard/bring-to-front               {:binding "shift+close-square-bracket"
                                              :fn      #(.bringToFront ^js (state/active-tldraw-app))}
