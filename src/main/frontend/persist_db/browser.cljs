@@ -38,7 +38,7 @@
                  (when (seq new-state)
                    (.sync-app-state worker (pr-str new-state)))))))
 
-(defn- transact!
+(defn transact!
   [^js worker repo tx-data tx-meta]
   (let [tx-meta' (pr-str tx-meta)
         tx-data' (pr-str tx-data)
