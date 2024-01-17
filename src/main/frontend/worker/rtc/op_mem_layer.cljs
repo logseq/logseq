@@ -4,7 +4,7 @@
   (:require [clojure.core.async :as async :refer [<! go-loop timeout]]
             [clojure.set :as set]
             [frontend.worker.rtc.op-idb-layer :as op-idb-layer]
-            [frontend.worker.state :as state]
+            [frontend.worker.state :as worker-state]
             [malli.core :as m]
             [malli.transform :as mt]
             [promesa.core :as p]
@@ -533,7 +533,7 @@
   []
   (go-loop []
     (<! (timeout 3000))
-    (when-let [repo (state/get-current-repo)]
+    (when-let [repo (worker-state/get-current-repo)]
       (when (and (sqlite-util/db-based-graph? repo)
                  (contains? (@*ops-store repo) :current-branch))
         (<! (<sync-to-idb-layer! repo))))

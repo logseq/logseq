@@ -7,7 +7,6 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.property.util :as pu]
-            [frontend.modules.editor.undo-redo :as history]
             [frontend.state :as state]
             [frontend.config :as config]
             [frontend.storage :as storage]

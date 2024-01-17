@@ -12,7 +12,7 @@
             [datascript.core :as d]
             [logseq.db :as ldb]
             [malli.core :as m]
-            [frontend.worker.state :as state]
+            [frontend.worker.state :as worker-state]
             [goog.object :as gobj]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.util :as common-util]))
@@ -68,7 +68,7 @@
                                   (contains? #{:delete-blocks :move-blocks} outliner-op))]
     (when (or (>= blocks-count 1) blocks-just-deleted?)
       (if (and (or (> blocks-count 500) whiteboard?)
-               (not (state/tx-idle? repo {:diff 3000})))
+               (not (worker-state/tx-idle? repo {:diff 3000})))
         (async/put! file-writes-chan [repo page-db-id outliner-op (tc/to-long (t/now)) request-id])
         (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
               blocks (ldb/get-page-blocks @conn (:block/name page-block) {:pull-keys pull-keys})
@@ -121,7 +121,7 @@
                           (fn [col]
                             (when (seq col)
                               (let [repo (ffirst col)
-                                    conn (state/get-datascript-conn repo)]
+                                    conn (worker-state/get-datascript-conn repo)]
                                 (if conn
-                                  (write-files! conn col (state/get-context))
+                                  (write-files! conn col (worker-state/get-context))
                                   (js/console.error (str "DB is not found for ") repo)))))))
