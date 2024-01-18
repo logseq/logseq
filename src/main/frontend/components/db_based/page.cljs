@@ -90,7 +90,7 @@
   [page]
   [:div.grid.grid-cols-5.gap-1.items-center.leading-8
    [:label.col-span-2 "Icon:"]
-   (let [icon-value (pu/get-property page :icon)]
+   (let [icon-value (pu/get-block-property-value page :icon)]
      [:div.col-span-3.flex.flex-row.items-center.gap-2
       (icon-component/icon-picker icon-value
                                   {:disabled? config/publishing?

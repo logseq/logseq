@@ -482,8 +482,6 @@
           block? (some? (:block/page page))
           journal? (db/journal-page? page-name)
           db-based? (config/db-based-graph? repo)
-          built-in-property? (and (contains? (:block/type page) "property")
-                                  (contains? db-property/built-in-properties-keys-str page-name))
           fmt-journal? (boolean (date/journal-title->int page-name))
           whiteboard? (:whiteboard? option) ;; in a whiteboard portal shape?
           whiteboard-page? (model/whiteboard-page? page-name) ;; is this page a whiteboard?
@@ -526,7 +524,6 @@
                  (when (and (not whiteboard?) original-name)
                    (page-title page-name {:journal? journal?
                                           :fmt-journal? fmt-journal?
-                                          :built-in-property? built-in-property?
                                           :preview? preview?})))
                (when (not config/publishing?)
                  (when config/lsp-enabled?
@@ -1237,7 +1234,7 @@
                               {:on-change (fn []
                                             (swap! *checks update idx not))})]
                [:td.icon.w-4.p-0.overflow-hidden
-                (when-let [icon (pu/get-property page :icon)]
+                (when-let [icon (pu/get-block-property-value page :icon)]
                   icon)]
                [:td.name [:a {:on-click (fn [e]
                                           (.preventDefault e)

@@ -13,9 +13,9 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [frontend.util.marker :as marker]
             [frontend.util.priority :as priority]
             [frontend.handler.file-based.property :as file-property-handler]
+            [frontend.handler.property.util :as pu]
             [frontend.handler.property.file :as property-file]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -24,7 +24,10 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.handler.file-based.status :as file-based-status]
+            [frontend.handler.db-based.status :as db-based-status]
+            [frontend.handler.db-based.property :as db-property-handler]))
 
 ;; TODO: move to frontend.handler.editor.commands
 
@@ -85,7 +88,7 @@
 (defn ->marker
   [marker]
   [[:editor/clear-current-slash]
-   [:editor/set-marker marker]
+   [:editor/set-status marker]
    [:editor/move-cursor-to-end]])
 
 (defn ->priority
@@ -113,6 +116,18 @@
                                     :backward-pos 4}]
    [:editor/search-block :embed]])
 
+(defn file-based-statuses
+  []
+  (let [workflow (state/get-preferred-workflow)]
+    (if (= :now workflow)
+      ["LATER" "NOW" "TODO" "DOING" "DONE" "WAITING" "CANCELED"]
+      ["TODO" "DOING" "LATER" "NOW" "DONE" "WAITING" "CANCELED"])))
+
+(defn db-based-statuses
+  []
+  (map (fn [id] (get-in (db/entity [:block/uuid id]) [:block/schema :value]))
+    (pu/get-closed-property-values "status")))
+
 (defn db-based-embed-page
   []
   [[:editor/input "[[]]" {:last-pattern command-trigger
@@ -125,18 +140,34 @@
                           :backward-pos 2}]
    [:editor/search-block :embed]])
 
-(defn get-preferred-workflow
+(defn get-statuses
   []
-  (let [workflow (state/get-preferred-workflow)]
-    (if (= :now workflow)
-      [["LATER" (->marker "LATER")]
-       ["NOW" (->marker "NOW")]
-       ["TODO" (->marker "TODO")]
-       ["DOING" (->marker "DOING")]]
-      [["TODO" (->marker "TODO")]
-       ["DOING" (->marker "DOING")]
-       ["LATER" (->marker "LATER")]
-       ["NOW" (->marker "NOW")]])))
+  (let [result (->>
+                (if (config/db-based-graph? (state/get-current-repo))
+                  (db-based-statuses)
+                  (file-based-statuses))
+                (mapv (fn [m] [m (->marker m) (str "Set status to " m)])))]
+    (when (seq result)
+      (update result 0 (fn [v] (conj v "TASK"))))))
+
+(defn file-based-priorities
+  []
+  ["A" "B" "C"])
+
+(defn db-based-priorities
+  []
+  (map (fn [id] (get-in (db/entity [:block/uuid id]) [:block/schema :value]))
+    (pu/get-closed-property-values "priority")))
+
+(defn get-priorities
+  []
+  (let [result (->>
+                (if (config/db-based-graph? (state/get-current-repo))
+                  (db-based-priorities)
+                  (file-based-priorities))
+                (mapv (fn [item] [item (->priority item) (str "Set priority to " item)])))]
+    (when (seq result)
+      (update result 0 (fn [v] (conj v "PRIORITY"))))))
 
 ;; Credits to roamresearch.com
 
@@ -154,15 +185,6 @@
 
 (defonce *matched-commands (atom nil))
 (defonce *initial-commands (atom nil))
-
-(defonce *first-command-group
-  {"Page reference" "BASIC"
-   "Tomorrow" "TIME & DATE"
-   "LATER" "TASK"
-   "A" "PRIORITY"
-   "Number list" "LIST TYPE"
-   "Query" "ADVANCED"
-   "Quote" "ORG-MODE"})
 
 (defn ->block
   ([type]
@@ -202,7 +224,9 @@
   []
   (->>
    (concat
-    [["Quote" (->block "quote")]
+    [["Quote" (->block "quote")
+      "Add a quote"
+      "More"]
      ["Src" (->block "src" "")]
      ["Query" (->block "query")]
      ["Latex export" (->block "export" "latex")]
@@ -235,8 +259,11 @@
     (->>
      (concat
     ;; basic
-      [["Page reference" [[:editor/input page-ref/left-and-right-brackets {:backward-pos 2}]
-                          [:editor/search-page]] "Create a backlink to a page"]
+      [["Page reference"
+        [[:editor/input page-ref/left-and-right-brackets {:backward-pos 2}]
+         [:editor/search-page]]
+        "Create a backlink to a page"
+        "BASIC"]
        ["Page embed" (embed-page) "Embed a page here"]
        ["Block reference" [[:editor/input block-ref/left-and-right-parens {:backward-pos 2}]
                            [:editor/search-block :reference]] "Create a backlink to a block"]
@@ -261,37 +288,41 @@
 
     ;; time & date
 
-      [["Tomorrow" #(get-page-ref-text (date/tomorrow)) "Insert the date of tomorrow"]
+      [["Tomorrow"
+        #(get-page-ref-text (date/tomorrow))
+        "Insert the date of tomorrow"
+        "TIME & DATE"]
        ["Yesterday" #(get-page-ref-text (date/yesterday)) "Insert the date of yesterday"]
        ["Today" #(get-page-ref-text (date/today)) "Insert the date of today"]
        ["Current time" #(date/get-current-time) "Insert current time"]
        ["Date picker" [[:editor/show-date-picker]] "Pick a date and insert here"]]
 
-    ;; order list
-      [["Number list" [[:editor/clear-current-slash]
-                       [:editor/toggle-own-number-list]] "Number list"]
+      ;; order list
+      [["Number list"
+        [[:editor/clear-current-slash]
+         [:editor/toggle-own-number-list]]
+        "Number list"
+        "LIST TYPE"]
        ["Number children" [[:editor/clear-current-slash]
                            [:editor/toggle-children-number-list]] "Number children"]]
 
     ;; task management
-      (get-preferred-workflow)
-      [["DONE" (->marker "DONE")]
-       ["WAITING" (->marker "WAITING")]
-       ["CANCELED" (->marker "CANCELED")]
-       ["Deadline" [[:editor/clear-current-slash]
+      (get-statuses)
+      [["Deadline" [[:editor/clear-current-slash]
                     [:editor/show-date-picker :deadline]]]
        ["Scheduled" [[:editor/clear-current-slash]
                      [:editor/show-date-picker :scheduled]]]]
 
     ;; priority
-      [["A" (->priority "A")]
-       ["B" (->priority "B")]
-       ["C" (->priority "C")]]
+      (get-priorities)
 
     ;; advanced
 
-      [["Query" [[:editor/input "{{query }}" {:backward-pos 2}]
-                 [:editor/exit]] query-doc]
+      [["Query"
+        [[:editor/input "{{query }}" {:backward-pos 2}]
+         [:editor/exit]]
+        query-doc
+        "ADVANCED"]
        ["Zotero" (zotero-steps) "Import Zotero journal article"]
        ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function"]
        ["Calculator" [[:editor/input "```calc\n\n```" {:type "block"
@@ -579,7 +610,7 @@
 
 (defn compute-pos-delta-when-change-marker
   [edit-content marker pos]
-  (let [old-marker (some->> (first (util/safe-re-find marker/bare-marker-pattern edit-content))
+  (let [old-marker (some->> (first (util/safe-re-find file-based-status/bare-marker-pattern edit-content))
                             (string/trim))
         pos-delta (- (count marker)
                      (count old-marker))
@@ -592,7 +623,8 @@
                         pos-delta)]
     (max (+ pos pos-delta) 0)))
 
-(defmethod handle-step :editor/set-marker [[_ marker] format]
+(defn- file-based-set-status
+  [marker format]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (let [edit-content (gobj/get current-input "value")
@@ -607,7 +639,7 @@
                     (count (util/safe-re-find re-pattern prefix))))
             new-value (str (subs edit-content 0 pos)
                            (string/replace-first (subs edit-content pos)
-                                                 (marker/marker-pattern format)
+                                                 (file-based-status/marker-pattern format)
                                                  (str marker " ")))]
         (state/set-edit-content! input-id new-value)
         (let [new-pos (compute-pos-delta-when-change-marker
@@ -615,7 +647,18 @@
           ;; TODO: any performance issue?
           (js/setTimeout #(cursor/move-cursor-to current-input new-pos) 10))))))
 
-(defmethod handle-step :editor/set-priority [[_ priority] _format]
+(defn- db-based-set-status
+  [status]
+  (when-let [block (state/get-edit-block)]
+    (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] "status" status)))
+
+(defmethod handle-step :editor/set-status [[_ status] format]
+  (if (config/db-based-graph? (state/get-current-repo))
+    (db-based-set-status status)
+    (file-based-set-status status format)))
+
+(defn- file-based-set-priority
+  [priority]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
@@ -623,6 +666,16 @@
             new-priority (util/format "[#%s]" priority)
             new-value (string/trim (priority/add-or-update-priority edit-content format new-priority))]
         (state/set-edit-content! input-id new-value)))))
+
+(defn- db-based-set-priority
+  [priority]
+  (when-let [block (state/get-edit-block)]
+    (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] "priority" priority)))
+
+(defmethod handle-step :editor/set-priority [[_ priority] _format]
+  (if (config/db-based-graph? (state/get-current-repo))
+    (db-based-set-priority priority)
+    (file-based-set-priority priority)))
 
 (defmethod handle-step :editor/insert-properties [[_ _] _format]
   (when-let [input-id (state/get-edit-input-id)]

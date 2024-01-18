@@ -14,19 +14,26 @@
         db (db/get-db repo)]
     (db-property/lookup repo db coll key)))
 
-(defn get-property
+(defn get-block-property-value
   "Get the value of block's property `key`"
   [block key]
   (let [repo (state/get-current-repo)
         db (db/get-db repo)]
-    (db-property/get-property repo db block key)))
+    (db-property/get-block-property-value repo db block key)))
 
+(defn get-property
+  "Get a property given its unsanitized name"
+  [property-name]
+  (let [repo (state/get-current-repo)
+        db (db/get-db repo)]
+    (db-property/get-property db property-name)))
+
+;; TODO: move this to another ns
 (defn get-page-uuid
   "Get a user property's uuid given its unsanitized name"
   ;; Get a page's uuid given its unsanitized name
-  ([property-name] (get-page-uuid (state/get-current-repo) property-name))
-  ([repo property-name]
-   (:block/uuid (db/entity repo [:block/name (common-util/page-name-sanity-lc (name property-name))]))))
+  [property-name]
+  (:block/uuid (get-property property-name)))
 
 (defn get-pid
   "Get a property's id (name or uuid) given its name. For file and db graphs"
@@ -36,13 +43,26 @@
     (db-property/get-pid repo db property-name)))
 
 (defn block->shape [block]
-  (get-property block :logseq.tldraw.shape))
+  (get-block-property-value block :logseq.tldraw.shape))
 
 (defn page-block->tldr-page [block]
-  (get-property block :logseq.tldraw.page))
+  (get-block-property-value block :logseq.tldraw.page))
 
 (defn shape-block?
   [block]
   (let [repo (state/get-current-repo)
         db (db/get-db repo)]
     (db-property/shape-block? repo db block)))
+
+(defn get-closed-property-values
+  [property-name]
+  (when-let [property (get-property property-name)]
+    (get-in property [:block/schema :values])))
+
+(defn get-closed-value-entity-by-name
+  [property-name value-name]
+  (let [values (get-closed-property-values property-name)]
+    (some (fn [id]
+            (let [e (db/entity [:block/uuid id])]
+              (when (= (get-in e [:block/schema :value]) value-name)
+                e))) values)))
