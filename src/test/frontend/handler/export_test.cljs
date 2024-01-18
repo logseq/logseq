@@ -144,7 +144,31 @@
   2
   3
   - 4
-    5"))
+    5"
+"
+some inner code
+```jsx
+import React;
+
+function main() {
+  return 0;
+}
+
+export default main;
+```
+"
+    "
+- some inner code
+  - ```jsx
+    import React;
+
+    function main() {
+      return 0;
+    }
+
+    export default main;
+    ```
+"))
 
 
 (deftest-async export-files-as-markdown
