@@ -13,7 +13,7 @@
             [cljs-bean.core :as bean]
             [frontend.worker.search :as search]
             [logseq.db.sqlite.util :as sqlite-util]
-            [frontend.worker.state :as state]
+            [frontend.worker.state :as worker-state]
             [frontend.worker.file :as file]
             [logseq.db :as ldb]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
@@ -25,10 +25,10 @@
             [frontend.worker.util :as worker-util]
             [frontend.worker.handler.page.rename :as worker-page-rename]))
 
-(defonce *sqlite state/*sqlite)
-(defonce *sqlite-conns state/*sqlite-conns)
-(defonce *datascript-conns state/*datascript-conns)
-(defonce *opfs-pools state/*opfs-pools)
+(defonce *sqlite worker-state/*sqlite)
+(defonce *sqlite-conns worker-state/*sqlite-conns)
+(defonce *datascript-conns worker-state/*datascript-conns)
+(defonce *opfs-pools worker-state/*opfs-pools)
 
 (defn- get-pool-name
   [graph-name]
@@ -36,7 +36,7 @@
 
 (defn- <get-opfs-pool
   [graph]
-  (or (state/get-opfs-pool graph)
+  (or (worker-state/get-opfs-pool graph)
       (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (get-pool-name graph)
                                                              :initialCapacity 20})]
         (swap! *opfs-pools assoc graph pool)
@@ -72,7 +72,7 @@
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
   [repo data delete-addrs]
-  (let [^Object db (state/get-sqlite-conn repo)]
+  (let [^Object db (worker-state/get-sqlite-conn repo)]
     (assert (some? db) "sqlite db not exists")
     (.transaction db (fn [tx]
                        (doseq [item data]
@@ -85,7 +85,7 @@
 
 (defn restore-data-from-addr
   [repo addr]
-  (let [^Object db (state/get-sqlite-conn repo)]
+  (let [^Object db (worker-state/get-sqlite-conn repo)]
     (assert (some? db) "sqlite db not exists")
     (when-let [content (-> (.exec db #js {:sql "select content from kvs where addr = ?"
                                           :bind #js [addr]
@@ -116,7 +116,7 @@
   (swap! *datascript-conns dissoc repo)
   (when db (.close db))
   (when search (.close search))
-  (when-let [^js pool (state/get-opfs-pool repo)]
+  (when-let [^js pool (worker-state/get-opfs-pool repo)]
     (.releaseAccessHandles pool))
   (swap! *opfs-pools dissoc repo))
 
@@ -133,7 +133,7 @@
 
 (defn- create-or-open-db!
   [repo]
-  (when-not (state/get-sqlite-conn repo)
+  (when-not (worker-state/get-sqlite-conn repo)
     (p/let [^js pool (<get-opfs-pool repo)
             capacity (.getCapacity pool)
             _ (when (zero? capacity)   ; file handle already releases since pool will be initialized only once
@@ -197,7 +197,7 @@
 
 (defn- get-search-db
   [repo]
-  (state/get-sqlite-conn repo {:search? true}))
+  (worker-state/get-sqlite-conn repo {:search? true}))
 
 
 #_:clj-kondo/ignore
@@ -217,7 +217,7 @@
 
   (init
    [_this rtc-ws-url]
-   (reset! state/*rtc-ws-url rtc-ws-url)
+   (reset! worker-state/*rtc-ws-url rtc-ws-url)
    (init-sqlite-module!))
 
   (listDB
@@ -249,20 +249,20 @@
 
   (getMaxTx
    [_this repo]
-   (when-let [conn (state/get-datascript-conn repo)]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
      (:max-tx @conn)))
 
   (q [_this repo inputs-str]
      "Datascript q"
-     (when-let [conn (state/get-datascript-conn repo)]
+     (when-let [conn (worker-state/get-datascript-conn repo)]
        (let [inputs (edn/read-string inputs-str)]
          (let [result (apply d/q (first inputs) @conn (rest inputs))]
            (bean/->js result)))))
 
   (transact
    [_this repo tx-data tx-meta context]
-   (when repo (state/set-db-latest-tx-time! repo))
-   (when-let [conn (state/get-datascript-conn repo)]
+   (when repo (worker-state/set-db-latest-tx-time! repo))
+   (when-let [conn (worker-state/get-datascript-conn repo)]
      (try
        (let [tx-data (if (string? tx-data)
                        (edn/read-string tx-data)
@@ -273,7 +273,7 @@
              context (if (string? context)
                        (edn/read-string context)
                        context)
-             _ (when context (state/set-context! context))
+             _ (when context (worker-state/set-context! context))
              tx-meta' (if (:new-graph? tx-meta)
                         tx-meta
                         (cond-> tx-meta
@@ -298,7 +298,7 @@
 
   (getInitialData
    [_this repo]
-   (when-let [conn (state/get-datascript-conn repo)]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
      (->> (sqlite-common-db/get-initial-data @conn)
           dt/write-transit-str)))
 
@@ -311,7 +311,7 @@
 
   (releaseAccessHandles
    [_this repo]
-   (when-let [^js pool (state/get-opfs-pool repo)]
+   (when-let [^js pool (worker-state/get-opfs-pool repo)]
      (.releaseAccessHandles pool)))
 
   (dbExists
@@ -355,23 +355,23 @@
 
   (search-build-blocks-indice
    [this repo]
-   (when-let [conn (state/get-datascript-conn repo)]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
      (search/build-blocks-indice repo @conn)))
 
   (search-build-pages-indice
    [this repo]
-   (when-let [conn (state/get-datascript-conn repo)]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
      (search/build-blocks-indice repo @conn)))
 
   (page-search
    [this repo q limit]
-   (when-let [conn (state/get-datascript-conn repo)]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
      (search/page-search repo @conn q limit)))
 
   (page-rename
    [this repo old-name new-name]
-   (when-let [conn (state/get-datascript-conn repo)]
-     (let [config (state/get-config repo)
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (let [config (worker-state/get-config repo)
            result (worker-page-rename/rename! repo conn config old-name new-name)]
        (bean/->js {:result result}))))
 
@@ -387,13 +387,13 @@
   (sync-app-state
    [this new-state-str]
    (let [new-state (edn/read-string new-state-str)]
-     (state/set-new-state! new-state)
+     (worker-state/set-new-state! new-state)
      nil))
 
   ;; RTC
   (rtc-start
    [this repo token]
-   (when-let [conn (state/get-datascript-conn repo)]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
      (rtc-core/<start-rtc repo conn token)
      nil))
 
@@ -421,7 +421,7 @@
 
   (rtc-upload-graph
    [this repo token]
-   (when-let [conn (state/get-datascript-conn repo)]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
      (async/go
        (try
          (let [state (<! (rtc-core/<init-state repo token false))]
@@ -485,7 +485,7 @@
   "web worker entry"
   []
   (let [^js obj (DBWorker.)]
-    (state/set-worker-object! obj)
+    (worker-state/set-worker-object! obj)
     (file/<ratelimit-file-writes!)
     (Comlink/expose obj)))
 

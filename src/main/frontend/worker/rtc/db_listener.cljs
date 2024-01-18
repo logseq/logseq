@@ -7,7 +7,7 @@
             [datascript.core :as d]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.pipeline :as pipeline]
+            [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.search :as search]
             [frontend.worker.util :as worker-util]
             [promesa.core :as p]
@@ -208,7 +208,7 @@
   (d/listen! conn :sync-db
              (fn [{:keys [tx-meta] :as tx-report}]
                (let [{:keys [pipeline-replace?]} tx-meta
-                     result (pipeline/invoke-hooks repo conn tx-report (worker-state/get-context))
+                     result (worker-pipeline/invoke-hooks repo conn tx-report (worker-state/get-context))
                      tx-report' (or (:tx-report result) tx-report)]
                  (when-not pipeline-replace?
                    (let [data (pr-str

@@ -11,7 +11,7 @@
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.ws :refer [<send!]]
             [logseq.db.frontend.schema :as db-schema]
-            [frontend.worker.state :as state]
+            [frontend.worker.state :as worker-state]
             [promesa.core :as p]
             [frontend.worker.util :as worker-util]))
 
@@ -120,11 +120,11 @@
    (let [{:keys [t blocks]} all-blocks
          blocks* (replace-db-id-with-temp-id blocks)
          blocks-with-page-id (fill-block-fields blocks*)
-         ^js worker-obj (:worker/object @state/*state)
+         ^js worker-obj (:worker/object @worker-state/*state)
          work (p/do!
                (.createOrOpenDB worker-obj repo)
                (.exportDB worker-obj repo)
-               (.transact worker-obj repo blocks-with-page-id nil (state/get-context))
+               (.transact worker-obj repo blocks-with-page-id nil (worker-state/get-context))
                (.releaseAccessHandles worker-obj repo))]
      (<? (p->c work))
 

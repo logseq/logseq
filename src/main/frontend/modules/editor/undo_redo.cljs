@@ -136,9 +136,18 @@
       (pop-undo))
     (pop-undo)))
 
+(defn pause-listener!
+  []
+  (reset! *pause-listener true))
+
+(defn resume-listener!
+  []
+  (reset! *pause-listener false))
+
 (defn undo
   []
   (when-let [e (smart-pop-undo)]
+    (pause-listener!)
     (state/set-editor-op! :undo)
     (let [{:keys [txs tx-meta tx-id]} e
           new-txs (get-txs false txs)
@@ -146,8 +155,7 @@
       (push-redo e)
       (p/do!
        (transact! new-txs (assoc tx-meta :undo? true))
-       (when (:whiteboard/transact? tx-meta)
-         (state/pub-event! [:whiteboard/undo e]))
+
        (when (= :rename-page (:outliner-op tx-meta))
          (when-let [old-page (:old-name (:data tx-meta))]
            (route-handler/redirect-to-page! old-page)))
@@ -159,6 +167,7 @@
 (defn redo
   []
   (when-let [{:keys [txs tx-meta tx-id] :as e} (smart-pop-redo)]
+    (pause-listener!)
     (state/set-editor-op! :redo)
     (let [new-txs (get-txs true txs)
           editor-cursor (let [s (get @(get @state/state :history/tx->editor-cursor) tx-id)]
@@ -168,8 +177,6 @@
       (push-undo e)
       (p/do!
        (transact! new-txs (assoc tx-meta :redo? true))
-       (when (:whiteboard/transact? tx-meta)
-         (state/pub-event! [:whiteboard/redo e]))
 
        (when (= :rename-page (:outliner-op tx-meta))
          (when-let [new-page (:new-name (:data tx-meta))]
@@ -188,13 +195,6 @@
     (notification/show!
      [:p (str "Undo/redo mode: " mode)])))
 
-(defn pause-listener!
-  []
-  (reset! *pause-listener true))
-
-(defn resume-listener!
-  []
-  (reset! *pause-listener false))
 
 (defn listen-db-changes!
   [{:keys [tx-id tx-data tx-meta blocks pages]}]
@@ -206,14 +206,19 @@
                    (set (map :a tx-data))
                    #{:block/created-at :block/updated-at})))
     (reset-redo)
-    (let [updated-blocks (concat blocks pages)
-          entity {:blocks updated-blocks
-                  :tx-id tx-id
-                  :txs tx-data
-                  :tx-meta tx-meta
-                  :app-state (select-keys @state/state
-                                          [:route-match
-                                           :ui/sidebar-open?
-                                           :ui/sidebar-collapsed-blocks
-                                           :sidebar/blocks])}]
-      (push-undo entity))))
+    (if (:replace? tx-meta)
+      (let [removed-e (pop-undo)
+            entity (update removed-e :txs concat tx-data)]
+        (push-undo entity))
+      (let [updated-blocks (concat blocks pages)
+           entity {:blocks updated-blocks
+                   :tx-id tx-id
+                   :txs tx-data
+                   :tx-meta tx-meta
+                   :app-state (select-keys @state/state
+                                           [:route-match
+                                            :ui/sidebar-open?
+                                            :ui/sidebar-collapsed-blocks
+                                            :sidebar/blocks])}]
+       (push-undo entity))))
+  (resume-listener!))

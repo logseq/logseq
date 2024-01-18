@@ -268,7 +268,7 @@ Options available:
         result (if skip-db-transact?
                  tx'
                  (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?])))]
-    {:tx result
+    {:tx-report result
      :ast ast}))
 
 (defn filter-files

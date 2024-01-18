@@ -54,7 +54,6 @@
             [frontend.handler.db-based.property.util :as db-pu]
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.handler.code :as code-handler]
             [frontend.mobile.core :as mobile]
@@ -884,12 +883,6 @@
 (defmethod handle :run/cli-command [[_ command content]]
   (when (and command (not (string/blank? content)))
     (shell-handler/run-cli-command-wrapper! command content)))
-
-(defmethod handle :whiteboard/undo [[_ e]]
-  (whiteboard-handler/undo! e))
-
-(defmethod handle :whiteboard/redo [[_ e]]
-  (whiteboard-handler/redo! e))
 
 (defmethod handle :editor/quick-capture [[_ args]]
   (quick-capture/quick-capture args))

@@ -6,7 +6,7 @@
   (:require [datascript.core :as d]
             [cljs.pprint :as pprint]
             [logseq.db :as ldb]
-            [frontend.worker.util :as util]))
+            [frontend.worker.util :as worker-util]))
 
 (defn- fix-parent-broken-chain
   [db parent-id]
@@ -27,10 +27,10 @@
                                                :block/left (:db/id (:block/left b))}) blocks)}]
             (prn :debug "Broken chain:")
             (pprint/pprint error-data)
-            (util/post-message :notification
-                               (pr-str [[:div
-                                         (str "Broken chain detected:\n" error-data)]
-                                        :error])))
+            (worker-util/post-message :notification
+                                      (pr-str [[:div
+                                                (str "Broken chain detected:\n" error-data)]
+                                               :error])))
           (let [first-child-id (:db/id (ldb/get-by-parent-&-left db parent-id parent-id))
                 *ids (atom children-ids)
                 sections (loop [sections []]
@@ -111,7 +111,7 @@
   [db conflicts]
   (when (seq conflicts)
     (prn :debug "Parent left id conflicts:")
-    (util/post-message :notification (pr-str [[:div
+    (worker-util/post-message :notification (pr-str [[:div
                                                (str "Parent-left conflicts detected:\n"
                                                     conflicts)]
                                               :error])))
