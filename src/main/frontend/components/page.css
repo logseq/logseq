@@ -247,11 +247,9 @@
   }
 
   .edit-input {
-    width: 100%;
-    border: none;
+    @apply w-full border-0 p-0 pr-1 bg-transparent outline-0;
+
     box-shadow: none;
-    padding: 0;
-    padding-right: 4px;
 
     &-wrapper {
       @apply rounded;
