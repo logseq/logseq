@@ -806,5 +806,15 @@
     :settings-page/auto-chmod "Automatiquement changer les permissions du fichier"
     :settings-page/auto-chmod-desc "Désactiver pour permettre l'édition par plusieurs utilisateurs avec les permissions données par l'appartenance au groupe."
     :settings-page/tab-keymap "Raccourcis"
-    :unlinked-references/reference-count (fn [total] (cond (= total "") "Références non liées" (= total 0) "Aucune référence non liée" (= total 1) "1 référence non liée" (> total 1) (str total " références non liées")))
-}
+    :unlinked-references/reference-count (fn [total]
+                                           (cond
+                                             (or (nil? total) (= total ""))
+                                             "Références non liées"
+                                             (= total 0)
+                                             "Aucune référence non liée"
+                                             (= total 1)
+                                             "1 référence non liée"
+                                             (> total 1)
+                                             (str total " références non liées")
+                                             :else
+                                             "Références non liées"))}
