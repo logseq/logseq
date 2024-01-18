@@ -41,3 +41,13 @@
            :block/journal? false
            :block/format :markdown}
           block)))
+
+
+(defn build-new-class
+  "Build a standard new class so that it is is consistent across contexts"
+  [block]
+  (block-with-timestamps
+   (merge {:block/type "class"
+           :block/journal? false
+           :block/format :markdown}
+          block)))

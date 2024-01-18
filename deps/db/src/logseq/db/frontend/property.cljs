@@ -45,7 +45,25 @@
    :logseq.order-list-type {:schema {:type :default}}
    :logseq.tldraw.page {:schema {:type :map}}
    :logseq.tldraw.shape {:schema {:type :map}}
-   ;; TODO: Add enums for logseq.color, logseq.table.headers and logseq.table.hover
+
+   ;; Task props
+   :status {:original-name "Status"
+            :schema
+            {:type :default}
+            :closed-values
+            (mapv #(hash-map :value % :uuid (random-uuid))
+                  ["Backlog" "Todo" "Doing" "In Review" "Done" "Canceled"])
+            :visible true}
+   :priority {:original-name "Priority"
+              :schema
+              {:type :default}
+              :closed-values
+              (mapv #(hash-map :value % :uuid (random-uuid))
+                    ["Urgent" "High" "Medium" "Low"])
+              :visible true}
+
+   ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
+
    ;; color props
    :logseq.color {:schema
                   {:type :default :hide? true}
