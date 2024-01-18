@@ -1,4 +1,4 @@
-const rootTailwindConfig = require('../../tailwind.config')
+const rootTailwindConfig = require('../../../tailwind.config')
 
 module.exports = {
   plugins: {
