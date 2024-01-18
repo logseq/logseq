@@ -20,11 +20,11 @@
       (catch :default e
         (log/error :failed-translation {:arguments args
                                         :lang preferred-language})
-        (apply translate :en args)
         (state/pub-event! [:capture-error {:error e
                                            :payload {:type :failed-translation
                                                      :arguments args
-                                                     :lang preferred-language}}])))))
+                                                     :lang preferred-language}}])
+        (apply translate :en args)))))
 
 (defn- fetch-local-language []
   (.. js/window -navigator -language))
