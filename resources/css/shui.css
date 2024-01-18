@@ -107,7 +107,7 @@ html[data-theme=dark] {
     --popover: 192 100% 11%;
     --input: 203 35% 25%;
 
-    background-color: #002b36;
+    @apply bg-[#002b36];
 
     .ui__button {
       &.as-outline {

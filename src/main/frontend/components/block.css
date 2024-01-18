@@ -756,3 +756,9 @@ html.is-mac {
     @apply bg-gray-03 rounded p-4;
   }
 }
+
+.cp__right-sidebar-inner {
+  .references-blocks-item {
+    @apply bg-gray-04;
+  }
+}
