@@ -89,7 +89,8 @@
   (defn- transact!*
     [repo-url tx-data tx-meta]
     ;; :save-block is for query-table actions like sorting and choosing columns
-    (when (#{:collapse-expand-blocks :save-block} (:outliner-op tx-meta))
+    (when (or (#{:collapse-expand-blocks :save-block} (:outliner-op tx-meta))
+              (:init-db? tx-meta))
       (conn/transact! repo-url tx-data tx-meta)))
   (def transact!* conn/transact!))
 
