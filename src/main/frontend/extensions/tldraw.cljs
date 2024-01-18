@@ -143,6 +143,65 @@
 
 (defonce *transact-result (atom nil))
 
+(defn- on-persist
+  [page-name app info]
+  (->
+   (p/let [_ @*transact-result
+           result (p/do!
+                   (state/set-state! [:whiteboard/last-persisted-at (state/get-current-repo)] (util/time-ms))
+                   (whiteboard-handler/<transact-tldr-delta! page-name app (.-replace info)))]
+     (reset! *transact-result result))
+   (p/catch (fn [^js error]
+              (js/console.error error)
+              (notification/show! [:div
+                                   (str "Save whiteboard failed, error:" (.-cause error))])))))
+
+(rum/defc tldraw-inner < rum/static
+  {:will-remount (fn [old-state new-state]
+                   (let [page-name (first (:rum/args old-state))
+                         old-data (nth (:rum/args old-state) 1)
+                         new-data (nth (:rum/args new-state) 1)
+                         old-shapes (let [shapes (some-> (gobj/get old-data "pages")
+                                                         first
+                                                         (gobj/get "shapes"))]
+                                      (zipmap (map #(gobj/get % "id") shapes)
+                                              shapes))
+                         new-shapes (some-> (gobj/get new-data "pages")
+                                            first
+                                            (gobj/get "shapes"))
+                         updated-shapes (filter (fn [shape]
+                                                  (when-let [old (get old-shapes (gobj/get shape "id"))]
+                                                    (not= (gobj/get shape "type") (gobj/get old "type"))))
+                                                new-shapes)]
+                     ;; FIXME: this should be handled by tldraw, any data changes should re-render the updated shapes
+                     (when (seq updated-shapes)
+                       (whiteboard-handler/update-shapes! updated-shapes))
+
+                     (whiteboard-handler/update-shapes-index! page-name))
+                   new-state)}
+  [page-name data populate-onboarding? loaded-app on-mount]
+  [:div.draw.tldraw.whiteboard.relative.w-full.h-full
+   {:style {:overscroll-behavior "none"}
+    :on-blur (fn [e]
+               (when (#{"INPUT" "TEXTAREA"} (.-tagName (gobj/get e "target")))
+                 (state/clear-edit!)))
+        ;; wheel -> overscroll may cause browser navigation
+    :on-wheel util/stop-propagation}
+
+   (when
+    (and populate-onboarding? (not loaded-app))
+     [:div.absolute.inset-0.flex.items-center.justify-center
+      {:style {:z-index 200}}
+      (ui/loading "Loading onboarding whiteboard ...")])
+
+   (tldraw {:renderers tldraw-renderers
+            :handlers (get-tldraw-handlers page-name)
+            :onMount on-mount
+            :readOnly config/publishing?
+            ;; :onPersist (debounce #(on-persist page-name %1 %2) 200)
+            :onPersist #(on-persist page-name %1 %2)
+            :model data})])
+
 (rum/defc tldraw-app-inner < rum/reactive
   [page-name block-id loaded-app set-loaded-app]
   (let [populate-onboarding? (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
@@ -158,35 +217,7 @@
                                     (set-loaded-app tln))))))
         data (whiteboard-handler/page-name->tldr! page-name)]
     (when data
-      [:div.draw.tldraw.whiteboard.relative.w-full.h-full
-       {:style {:overscroll-behavior "none"}
-        :on-blur (fn [e]
-                   (when (#{"INPUT" "TEXTAREA"} (.-tagName (gobj/get e "target")))
-                     (state/clear-edit!)))
-        ;; wheel -> overscroll may cause browser navigation
-        :on-wheel util/stop-propagation}
-
-       (when
-        (and populate-onboarding? (not loaded-app))
-         [:div.absolute.inset-0.flex.items-center.justify-center
-          {:style {:z-index 200}}
-          (ui/loading "Loading onboarding whiteboard ...")])
-       (tldraw {:renderers tldraw-renderers
-                :handlers (get-tldraw-handlers page-name)
-                :onMount on-mount
-                :readOnly config/publishing?
-                :onPersist (fn [app info]
-                             (->
-                              (p/let [_ @*transact-result
-                                      result (p/do!
-                                              (state/set-state! [:whiteboard/last-persisted-at (state/get-current-repo)] (util/time-ms))
-                                              (whiteboard-handler/<transact-tldr-delta! page-name app (.-replace info)))]
-                                (reset! *transact-result result))
-                              (p/catch (fn [^js error]
-                                         (js/console.error error)
-                                         (notification/show! [:div
-                                                              (str "Save whiteboard failed, error:" (.-cause error))])))))
-                :model data})])))
+      (tldraw-inner page-name data populate-onboarding? loaded-app on-mount))))
 
 (rum/defc tldraw-app
   [page-name block-id]

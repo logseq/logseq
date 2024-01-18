@@ -38,7 +38,7 @@
                  (when (seq new-state)
                    (.sync-app-state worker (pr-str new-state)))))))
 
-(defn- transact!
+(defn transact!
   [^js worker repo tx-data tx-meta]
   (let [tx-meta' (pr-str tx-meta)
         tx-data' (pr-str tx-data)
@@ -62,7 +62,7 @@
 
 (defn start-db-worker!
   []
-  (when-not (or config/publishing? util/node-test?)
+  (when-not util/node-test?
     (let [worker-url (if (util/electron?)
                        "js/db-worker.js"
                        "/static/js/db-worker.js")
@@ -82,11 +82,11 @@
                [_conn tx-data tx-meta]
                (transact! wrapped-worker (state/get-current-repo) tx-data
                  ;; not from remote(rtc)
-                 (assoc tx-meta :local-tx? true)))))
+                          (assoc tx-meta :local-tx? true)))))
           (p/catch (fn [error]
                      (prn :debug "Can't init SQLite wasm")
                      (js/console.error error)
-                     (notification/show! "It seems that OPFS is not supported on this browser, please upgrade it to the latest version or use another browser." :error)))))))
+                     (notification/show! "It seems that OPFS is not supported on this browser, please upgrade this browser to the latest version or use another browser." :error)))))))
 
 (defn <export-db!
   [repo data]

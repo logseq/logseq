@@ -3,6 +3,7 @@
             [cljs.core.async :as async :refer [<! >! chan go]]
             [frontend.worker.rtc.mock :as rtc-mock]
             [frontend.worker.rtc.core :as rtc-core]
+            [frontend.worker.rtc.asset-sync :as asset-sync]
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
@@ -12,6 +13,7 @@
             [frontend.state :as state]))
 
 (def *test-rtc-state (atom nil))
+(def *test-asset-sync-state (atom nil))
 (def test-graph-uuid "e6d04ed7-bbc4-4ed2-a91b-69f3c0b9459d")
 (def test-graph-init-local-t 1)
 
@@ -22,10 +24,18 @@
     (assoc (rtc-core/init-state ws data-from-ws-chan test-helper/test-db "")
            :*auto-push-client-ops? (atom false))))
 
+(defn- init-state-helper-for-asset-sync-loop
+  []
+  (let [data-from-ws-chan (chan (async/sliding-buffer 100))
+        ws (rtc-mock/mock-websocket data-from-ws-chan)
+        rtc-state (rtc-core/init-state ws data-from-ws-chan test-helper/test-db "")]
+    (assoc (asset-sync/init-state-from-rtc-state rtc-state)
+           :*auto-push-assets-update-ops? (atom false))))
+
 (defn- <start-rtc-loop
   []
   (go
-    (let [graph-uuid "e56287f0-44de-487d-8b9f-02e91ec57d98" ; just random generated
+    (let [graph-uuid test-graph-uuid
           repo test-helper/test-db
           state (init-state-helper)
           loop-started-ch (chan)]
@@ -33,21 +43,48 @@
       (rtc-core/<loop-for-rtc state graph-uuid repo (db/get-db repo false) (state/get-date-formatter) :loop-started-ch loop-started-ch)
       (<! loop-started-ch))))
 
+(defn- <start-asset-sync-loop
+  []
+  (go
+    (let [graph-uuid test-graph-uuid
+          repo test-helper/test-db
+          state (init-state-helper-for-asset-sync-loop)
+          loop-started-ch (chan)]
+      (reset! *test-asset-sync-state state)
+      (asset-sync/<loop-for-assets-sync state graph-uuid repo (db/get-db repo false) :loop-started-ch loop-started-ch)
+      (<! loop-started-ch))))
+
 (def start-and-stop-rtc-loop-fixture
   {:before
    #(t/async done
-             (go
-               (<! (<start-rtc-loop))
-               (prn :<started-rtc-loop)
-               (done)))
+      (go
+        (<! (<start-rtc-loop))
+        (prn :<started-rtc-loop)
+        (done)))
    :after
    #(t/async done
-             (go
-               (when-let [stop-rtc-loop-chan (some-> (:*stop-rtc-loop-chan @*test-rtc-state) deref)]
-                 (prn :stopping-rtc-loop)
-                 (>! stop-rtc-loop-chan true))
-               (reset! *test-rtc-state nil)
-               (done)))})
+      (go
+        (when-let [stop-rtc-loop-chan (some-> (:*stop-rtc-loop-chan @*test-rtc-state) deref)]
+          (prn :stopping-rtc-loop)
+          (>! stop-rtc-loop-chan true))
+        (reset! *test-rtc-state nil)
+        (done)))})
+
+(def start-and-stop-asset-sync-loop-fixture
+  {:before
+   #(t/async done
+      (go
+        (<! (<start-asset-sync-loop))
+        (prn :<start-asset-sync-loop)
+        (done)))
+   :after
+   #(t/async done
+      (go
+        (when-let [stop-asset-sync-loop-chan (some-> (:*stop-asset-sync-loop-chan @*test-asset-sync-state) deref)]
+          (prn :stopping-asset-sync-loop)
+          (>! stop-asset-sync-loop-chan true))
+        (reset! *test-asset-sync-state nil)
+        (done)))})
 
 
 (def listen-test-db-fixture

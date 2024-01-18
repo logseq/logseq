@@ -2,7 +2,7 @@
   "fuzzy search"
   (:require [clojure.string :as string]
             [cljs-bean.core :as bean]
-            [frontend.worker.util :as util]))
+            [frontend.worker.util :as worker-util]))
 
 (def MAX-STRING-LENGTH 1000.0)
 
@@ -59,12 +59,12 @@
 (defn fuzzy-search
   [data query & {:keys [limit extract-fn]
                  :or {limit 20}}]
-  (let [query (util/search-normalize query true)]
+  (let [query (worker-util/search-normalize query true)]
     (->> (take limit
                (sort-by :score (comp - compare)
                         (filter #(< 0 (:score %))
                                 (for [item data]
                                   (let [s (str (if extract-fn (extract-fn item) item))]
                                     {:data item
-                                     :score (score query (util/search-normalize s true))})))))
+                                     :score (score query (worker-util/search-normalize s true))})))))
          (map :data))))
