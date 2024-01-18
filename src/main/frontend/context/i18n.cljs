@@ -4,7 +4,8 @@
   throughout the application."
   (:require [frontend.dicts :as dicts]
             [tongue.core :as tongue]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [lambdaisland.glogi :as log]))
 
 (def dicts (merge dicts/dicts {:tongue/fallback :en}))
 
@@ -17,8 +18,13 @@
     (try
       (apply translate preferred-language args)
       (catch :default e
-        (js/console.error "Translating dict" e)
-        (apply translate :en args)))))
+        (log/error :failed-translation {:arguments args
+                                        :lang preferred-language})
+        (apply translate :en args)
+        (state/pub-event! [:capture-error {:error e
+                                           :payload {:type :failed-translation
+                                                     :arguments args
+                                                     :lang preferred-language}}])))))
 
 (defn- fetch-local-language []
   (.. js/window -navigator -language))
