@@ -16,7 +16,9 @@
             [malli.util :as mu]
             [malli.error :as me]
             [logseq.common.util.page-ref :as page-ref]
-            [datascript.impl.entity :as e]))
+            [datascript.impl.entity :as e]
+            [logseq.db.frontend.property :as db-property]
+            [frontend.handler.property.util :as pu]))
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
@@ -233,7 +235,8 @@
                   (do
                     (upsert-property! repo k-name (assoc property-schema :type property-type)
                                       {:property-uuid property-uuid})
-                    (let [new-value (cond
+                    (let [status? (= "status" (string/lower-case k-name))
+                          new-value (cond
                                       (and multiple-values? old-value
                                            (not= old-value :frontend.components.property/new-value-placeholder))
                                       (if (coll? v*)
@@ -256,15 +259,16 @@
                                         (set (remove string/blank? new-value)))
                                       new-value)
                           block-properties (assoc properties property-uuid new-value)
-                          refs (rebuild-block-refs repo
-                                                                 block
-                                                                 block-properties)]
-                      (db/transact! repo
-                                    [[:db/retract (:db/id block) :block/refs]
-                                     {:block/uuid (:block/uuid block)
-                                      :block/properties block-properties
-                                      :block/refs refs}]
-                                    {:outliner-op :save-block}))))))))))))
+                          refs (rebuild-block-refs repo block block-properties)
+                          tx-data [[:db/retract (:db/id block) :block/refs]
+                                   {:block/uuid (:block/uuid block)
+                                    :block/properties block-properties
+                                    :block/refs refs}
+                                   ;; Add task tag
+                                   (when status?
+                                     (when-let [task-id (:db/id (db-property/get-property (db/get-db repo) "task"))]
+                                       [:db/add (:db/id block) :block/tags task-id]))]]
+                      (db/transact! repo tx-data {:outliner-op :save-block}))))))))))))
 
 (defn- fix-cardinality-many-values!
   [repo property-uuid]
@@ -372,6 +376,7 @@
             (upsert-property! repo k-name (assoc (:block/schema property) :type property-type)
                               {:property-uuid property-uuid}))
         {:keys [cardinality]} (:block/schema property)
+        status? (= "status" (string/lower-case k-name))
         txs (mapcat
              (fn [id]
                (when-let [block (db/entity [:block/uuid id])]
@@ -387,7 +392,10 @@
                      [[:db/retract (:db/id block) :block/refs]
                       {:block/uuid (:block/uuid block)
                        :block/properties block-properties
-                       :block/refs refs}]))))
+                       :block/refs refs}
+                      (when status?
+                        (when-let [task-id (:db/id (db-property/get-property (db/get-db repo) "task"))]
+                          [:db/add (:db/id block) :block/tags task-id]))]))))
              block-ids)]
     (when (seq txs)
       (db/transact! repo txs {:outliner-op :save-block}))))
@@ -799,3 +807,13 @@
         from-property (when created-from-property (db/entity [:block/uuid created-from-property]))]
     {:from-block-id (or (:db/id from-block) (:db/id b))
      :from-property-id (:db/id from-property)}))
+
+(defn batch-set-property-closed-value!
+  [block-ids property-name closed-value]
+  (let [repo (state/get-current-repo)
+        closed-value-id (:block/uuid (pu/get-closed-value-entity-by-name property-name closed-value))]
+    (when closed-value-id
+      (batch-set-property! repo
+                           block-ids
+                           property-name
+                           closed-value-id))))

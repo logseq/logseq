@@ -560,7 +560,7 @@
   (let [db @conn
         tb (when target-block (block db target-block))
         target-block (if sibling? target-block (when tb (:block (otree/-get-down tb conn))))
-        list-type-fn (fn [block] (db-property/get-property repo db block :logseq.order-list-type))
+        list-type-fn (fn [block] (db-property/get-block-property-value repo db block :logseq.order-list-type))
         k (db-property/get-pid repo db :logseq.order-list-type)]
     (if-let [list-type (and target-block (list-type-fn target-block))]
       (mapv
