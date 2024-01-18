@@ -14,7 +14,11 @@
 (defn t
   [& args]
   (let [preferred-language (keyword (state/sub :preferred-language))]
-    (apply translate preferred-language args)))
+    (try
+      (apply translate preferred-language args)
+      (catch :default e
+        (js/console.error "Translating dict" e)
+        (apply translate :en args)))))
 
 (defn- fetch-local-language []
   (.. js/window -navigator -language))
