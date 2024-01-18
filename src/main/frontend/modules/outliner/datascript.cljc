@@ -107,9 +107,7 @@
                                             {:tx [[:db/retract (:db/id ref) :block/refs (:db/id block)]
                                                   [:db/retract (:db/id ref) :block/path-refs (:db/id block)]
                                                   [:db/add id :block/content new-content]]
-                                             :revert-tx [[:db/add (:db/id ref) :block/refs (:db/id block)]
-                                                         [:db/add (:db/id ref) :block/path-refs (:db/id block)]
-                                                         [:db/add id :block/content (:block/content ref)]]})) refs)))
+                                             :revert-tx [[:db/add id :block/content (:block/content ref)]]})) refs)))
                                (apply concat))
              retracted-tx' (mapcat :tx retracted-tx)
              revert-tx (mapcat :revert-tx retracted-tx)]
