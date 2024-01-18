@@ -93,8 +93,11 @@
   :publishing {:target        :browser
                :module-loader true
                :js-options    {:ignore-asset-requires true}
-               :modules       {:main
-                               {:init-fn    frontend.publishing/init}
+               :modules       {:shared
+                               {:entries []}
+                               :main
+                               {:init-fn    frontend.publishing/init
+                                :depends-on #{:shared}}
                                :code-editor
                                {:entries    [frontend.extensions.code]
                                 :depends-on #{:main}}
@@ -103,7 +106,11 @@
                                 :depends-on #{:main}}
                                :tldraw
                                {:entries    [frontend.extensions.tldraw]
-                                :depends-on #{:main}}}
+                                :depends-on #{:main}}
+                               :db-worker
+                               {:init-fn   frontend.db-worker/init
+                                :depends-on #{:shared}
+                                :web-worker true}}
 
                :output-dir       "./static/js/publishing"
                :asset-path       "static/js"
