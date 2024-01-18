@@ -12,18 +12,22 @@ html {
     --muted: var(--rx-gray-05-hsl);
   }
 
-  .ui__dropdown-menu-item,
-  div[data-radix-popper-content-wrapper] div[role=menuitem] {
-    &:focus, &:hover {
-      /* background-color: var(--lx-gray-04, hsl(var(--accent))); */
-    }
-  }
-
-  div[data-radix-popper-content-wrapper] div[role=menu] {
-    /* background-color: var(--lx-gray-03, hsl(var(--popover))); */
-  }
 
   &:not([data-color=logseq]) {
+    .ui__dropdown-menu-item,
+    div[data-radix-popper-content-wrapper] div[role=menuitem] {
+      &:focus, &:hover {
+        background-color: var(--lx-gray-04, hsl(var(--accent)));
+      }
+    }
+
+
+    div[data-radix-popper-content-wrapper] div[role=menu],
+    .menu-links-wrapper,
+    .menu-links-outer,
+    .absolute-modal[data-modal-name] {
+      background-color: var(--lx-popover-bg, var(--lx-gray-01, hsl(var(--popover))));
+    }
   }
 
   &[data-color=logseq] {
@@ -79,6 +83,12 @@ html[data-theme=dark] {
   --input: 0 0% 25%;
 
   background-color: #161616;
+
+  &:not([data-color=logseq]) {
+    body {
+      --lx-popover-bg: var(--lx-gray-02);
+    }
+  }
 
   &[data-color=logseq] {
     --background: 192 100% 11%;

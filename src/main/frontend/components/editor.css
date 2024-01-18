@@ -52,6 +52,14 @@
       max-width: 90vw !important;
     }
   }
+
+  &[data-modal-name="date-picker"] {
+    @apply py-0;
+
+    .rc-datepicker {
+      @apply my-0;
+    }
+  }
 }
 
 .is-mobile {
