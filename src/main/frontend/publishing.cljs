@@ -60,14 +60,10 @@
     (let [repo (-> @state/state :config keys first)]
       (state/set-current-repo! repo)
       (p/do!
-       (p/let [cached-data-length (storage/get :db-cached-str-length)]
-         (when (nil? cached-data-length)
-           (storage/set :db-cached-str-length (count data)))
-         (when (and cached-data-length (not= cached-data-length (count data)))
-           ;; delete old graph after re-published
-           (db-persist/delete-graph! repo)))
 
        (repo-handler/restore-and-setup-repo! repo)
+
+       (state/set-db-restoring! true)
 
        (when-not (db/entity :db/transacted?)
          (let [data (unescape-html data)
@@ -78,6 +74,9 @@
                                {:db/ident :db/transacted? :db/transacted? true})
                          {:init-db? true
                           :new-graph? true})))
+
+       (state/set-db-restoring! false)
+
        (ui-handler/re-render-root!)))))
 
 (defn restore-state!
