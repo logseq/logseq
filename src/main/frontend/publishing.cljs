@@ -65,15 +65,11 @@
 
        (state/set-db-restoring! true)
 
-       (when-not (db/entity :db/transacted?)
-         (let [data (unescape-html data)
-               db (db/string->db data)
-               datoms (d/datoms db :eavt)]
-           (db/transact! repo
-                         (conj (vec datoms)
-                               {:db/ident :db/transacted? :db/transacted? true})
-                         {:init-db? true
-                          :new-graph? true})))
+       (let [data (unescape-html data)
+             db (db/string->db data)
+             datoms (d/datoms db :eavt)]
+         (db/transact! repo datoms {:init-db? true
+                                    :new-graph? true}))
 
        (state/set-db-restoring! false)
 
