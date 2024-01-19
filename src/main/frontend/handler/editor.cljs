@@ -44,7 +44,7 @@
             [frontend.util.drawer :as drawer]
             [frontend.util.keycode :as keycode]
             [frontend.util.list :as list]
-            [frontend.util.marker :as marker]
+            [frontend.handler.file-based.status :as status]
             [frontend.handler.property.file :as property-file]
             [frontend.util.text :as text-util]
             [frontend.util.thingatpt :as thingatpt]
@@ -635,7 +635,7 @@
   ([block]
    (set-marker block nil))
   ([{:block/keys [marker content format] :as block} new-marker]
-   (let [[new-content _] (marker/cycle-marker content marker new-marker format (state/get-preferred-workflow))]
+   (let [[new-content _] (status/cycle-marker content marker new-marker format (state/get-preferred-workflow))]
      (save-block-if-changed! block new-content))))
 
 (defn cycle-todos!
@@ -663,7 +663,7 @@
               content (state/get-edit-content)
               format (or (db/get-page-format (state/get-current-page))
                          (state/get-preferred-format))
-              [new-content marker] (marker/cycle-marker content nil nil format (state/get-preferred-workflow))
+              [new-content marker] (status/cycle-marker content nil nil format (state/get-preferred-workflow))
               new-pos (commands/compute-pos-delta-when-change-marker
                        content marker (cursor/pos current-input))]
           (state/set-edit-content! edit-input-id new-content)

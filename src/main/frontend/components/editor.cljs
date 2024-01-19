@@ -1,7 +1,7 @@
 (ns frontend.components.editor
   (:require [clojure.string :as string]
             [frontend.commands :as commands
-             :refer [*first-command-group *matched-block-commands *matched-commands]]
+             :refer [*matched-block-commands *matched-commands]]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.svg :as svg]
             [frontend.components.search :as search]
@@ -40,7 +40,7 @@
        matched
        {:get-group-name
         (fn [item]
-          (get *first-command-group (first item)))
+          (when (= (count item) 4) (last item)))
 
         :item-render
         (fn [item]
