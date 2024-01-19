@@ -3,6 +3,7 @@
   (:require [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.common.util :as common-util]
             [datascript.core :as d]
@@ -39,5 +40,22 @@
                                      :block/name (common-util/page-name-sanity-lc k-name)
                                      :block/uuid (d/squuid)})])))
                             db-property/built-in-properties)
-        ]
-    (concat initial-data initial-files default-pages default-properties)))
+        name->properties (zipmap
+                          (map :block/name default-properties)
+                          default-properties)
+        default-classes (map
+                         (fn [[k-keyword {:keys [schema original-name]}]]
+                           (let [k-name (name k-keyword)]
+                             (sqlite-util/build-new-class
+                              {:block/original-name (or original-name k-name)
+                               :block/name (common-util/page-name-sanity-lc k-name)
+                               :block/uuid (d/squuid)
+                               :block/schema {:properties
+                                              (mapv
+                                               (fn [property-name]
+                                                 (let [id (:block/uuid (get name->properties property-name))]
+                                                   (assert id (str "Built-in property " property-name " is not defined yet"))
+                                                   id))
+                                               (:properties schema))}})))
+                         db-class/built-in-classes)]
+    (concat initial-data initial-files default-pages default-classes default-properties)))

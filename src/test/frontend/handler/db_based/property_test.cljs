@@ -153,9 +153,9 @@
       (let [fb (db/entity [:block/uuid fbid])
             sb (db/entity [:block/uuid sbid])]
         (are [x y] (= x y)
-          (pu/get-property fb k)
+          (pu/get-block-property-value fb k)
           v
-          (pu/get-property sb k)
+          (pu/get-block-property-value sb k)
           v))))
 
   (testing "Batch remove properties"

@@ -369,7 +369,7 @@
         items (if closed-values?
                 (keep (fn [id]
                         (when-let [block (when id (db/entity [:block/uuid id]))]
-                          (let [icon (pu/get-property block :icon)
+                          (let [icon (pu/get-block-property-value block :icon)
                                 value (or (:block/original-name block)
                                           (get-in block [:block/schema :value]))]
                             {:label (if icon
@@ -495,7 +495,7 @@
       [:div.text-sm.opacity-70 "loading"]
       (when-let [block (db/sub-block (:db/id (db/entity [:block/uuid value])))]
         (let [value' (get-in block [:block/schema :value])
-              icon (pu/get-property block :icon)]
+              icon (pu/get-block-property-value block :icon)]
           (cond
             (:block/name block)
             (page-cp {:disable-preview? true
