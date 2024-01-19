@@ -567,6 +567,7 @@
       :result-ast-tcoll
       persistent!))
 
+
 ;;; inline transformers
 
 (defn remove-emphasis
@@ -605,14 +606,35 @@
       ;; else
       [inline-ast])))
 
+(defn remove-prefix-spaces-in-Plain
+  [inline-coll]
+  (:r
+   (reduce
+    (fn [{:keys [r after-break-line?]} ast]
+      (let [[ast-type ast-content] ast]
+        (case ast-type
+          "Plain"
+          (let [trimmed-content (string/triml ast-content)]
+            (if after-break-line?
+              (if (empty? trimmed-content)
+                {:r r :after-break-line? false}
+                {:r (conj r ["Plain" trimmed-content]) :after-break-line? false})
+              {:r (conj r ast) :after-break-line? false}))
+          ("Break_Line" "Hard_Break_Line")
+          {:r (conj r ast) :after-break-line? true}
+        ;; else
+          {:r (conj r ast) :after-break-line? false})))
+    {:r [] :after-break-line? true}
+    inline-coll)))
+
 ;;; inline transformers (ends)
 
 ;;; walk on block-ast, apply inline transformers
 
 (defn- walk-block-ast-helper
-  [inline-coll map-fns-on-inline-ast mapcat-fns-on-inline-ast]
+  [inline-coll map-fns-on-inline-ast mapcat-fns-on-inline-ast fns-on-inline-coll]
   (->>
-   inline-coll
+   (reduce (fn [inline-coll f] (f inline-coll)) inline-coll fns-on-inline-coll)
    (mapv #(reduce (fn [inline-ast f] (f inline-ast)) % map-fns-on-inline-ast))
    (mapcatv #(reduce
               (fn [inline-ast-coll f] (mapcatv f inline-ast-coll)) [%] mapcat-fns-on-inline-ast))))
@@ -635,18 +657,20 @@
    list-items))
 
 (defn walk-block-ast
-  [{:keys [map-fns-on-inline-ast mapcat-fns-on-inline-ast] :as fns}
+  [{:keys [map-fns-on-inline-ast mapcat-fns-on-inline-ast fns-on-inline-coll] :as fns}
    block-ast]
   (let [[ast-type ast-content] block-ast]
     (case ast-type
       "Paragraph"
-      (mk-paragraph-ast (walk-block-ast-helper ast-content map-fns-on-inline-ast mapcat-fns-on-inline-ast) (meta block-ast))
+      (mk-paragraph-ast
+       (walk-block-ast-helper ast-content map-fns-on-inline-ast mapcat-fns-on-inline-ast fns-on-inline-coll)
+       (meta block-ast))
       "Heading"
       (let [{:keys [title]} ast-content]
         ["Heading"
          (assoc ast-content
                 :title
-                (walk-block-ast-helper title map-fns-on-inline-ast mapcat-fns-on-inline-ast))])
+                (walk-block-ast-helper title map-fns-on-inline-ast mapcat-fns-on-inline-ast fns-on-inline-coll))])
       "List"
       ["List" (walk-block-ast-for-list ast-content map-fns-on-inline-ast mapcat-fns-on-inline-ast)]
       "Quote"
@@ -654,11 +678,11 @@
       "Footnote_Definition"
       (let [[name contents] (rest block-ast)]
         ["Footnote_Definition"
-         name (walk-block-ast-helper contents map-fns-on-inline-ast mapcat-fns-on-inline-ast)])
+         name (walk-block-ast-helper contents map-fns-on-inline-ast mapcat-fns-on-inline-ast fns-on-inline-coll)])
       "Table"
       (let [{:keys [header groups]} ast-content
             header* (mapv
-                     #(walk-block-ast-helper % map-fns-on-inline-ast mapcat-fns-on-inline-ast)
+                     #(walk-block-ast-helper % map-fns-on-inline-ast mapcat-fns-on-inline-ast fns-on-inline-coll)
                      header)
             groups* (mapv
                      (fn [group]
@@ -666,7 +690,7 @@
                         (fn [row]
                           (mapv
                            (fn [col]
-                             (walk-block-ast-helper col map-fns-on-inline-ast mapcat-fns-on-inline-ast))
+                             (walk-block-ast-helper col map-fns-on-inline-ast mapcat-fns-on-inline-ast fns-on-inline-coll))
                            row))
                         group))
                      groups)]

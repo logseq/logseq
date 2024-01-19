@@ -402,7 +402,10 @@
                                         (update :map-fns-on-inline-ast conj common/remove-page-ref-brackets)
 
                                         (get-in *state* [:export-options :remove-tags?])
-                                        (update :mapcat-fns-on-inline-ast conj common/remove-tags))
+                                        (update :mapcat-fns-on-inline-ast conj common/remove-tags)
+
+                                        (= "no-indent" (get-in *state* [:export-options :indent-style]))
+                                        (update :mapcat-fns-on-inline-ast conj common/remove-prefix-spaces-in-Plain))
             ast*** (if-not (empty? config-for-walk-block-ast)
                      (util/profile :walk-block-ast (mapv (partial common/walk-block-ast config-for-walk-block-ast) ast**))
                      ast**)

@@ -259,6 +259,13 @@ html.is-mobile {
         padding-bottom: 0;
       }
     }
+
+    &[label="ls-modal-align-center"] {
+      .ui__modal-panel {
+        top: 8vh;
+        transform: translateY(-10%);
+      }
+    }
   }
 }
 

@@ -119,14 +119,14 @@
   (rum/use-effect!
     (fn []
       (let [err-handle
-                       (fn [^js e]
-                         (case (keyword (aget e "name"))
-                           :IllegalPluginPackageError
-                           (notification/show! "Illegal Logseq plugin package." :error)
-                           :ExistedImportedPluginPackageError
-                           (notification/show! "Existed Imported plugin package." :error)
-                           :default)
-                         (plugin-handler/reset-unpacked-state))
+            (fn [^js e]
+              (case (keyword (aget e "name"))
+                :IllegalPluginPackageError
+                (notification/show! "Illegal Logseq plugin package." :error)
+                :ExistedImportedPluginPackageError
+                (notification/show! (str "Existed plugin package (" (.-message e) ").") :error)
+                :default)
+              (plugin-handler/reset-unpacked-state))
             reg-handle #(plugin-handler/reset-unpacked-state)]
         (when unpacked-pkg-path
           (doto js/LSPluginCore

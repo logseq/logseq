@@ -91,7 +91,7 @@ test('page title property test', async ({ page }) => {
   await page.type(':nth-match(textarea, 1)', 'title:: ' + new_name + "     ")
   await page.press(':nth-match(textarea, 1)', 'Enter') // DWIM property mode creates new line
   await page.press(':nth-match(textarea, 1)', 'Enter')
-  expect(await page.innerText('.page-title .title')).toBe(new_name)
+  await expect(page.locator('.page-title .title')).toHaveText(new_name)
 
   // Edit Title Property and Esc (ETPE)
   // exit editing via moving out focus
@@ -101,5 +101,5 @@ test('page title property test', async ({ page }) => {
   await createPage(page, original_name)
   await page.type(':nth-match(textarea, 1)', 'title:: ' + new_name)
   await page.press(':nth-match(textarea, 1)', 'Escape')
-  expect(await page.innerText('.page-title .title')).toBe(new_name)
+  await expect(page.locator('.page-title .title')).toHaveText(new_name)
 })
