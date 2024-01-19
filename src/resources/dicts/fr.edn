@@ -142,7 +142,7 @@
     :linked-references/filter-excludes "Exclut : "
     :linked-references/filter-heading "Filtrer"
     :linked-references/filter-includes "Inclut : "
-    :linked-references/reference-count (fn [filtered-count total] (str filtered-count (when filtered-count (if (= filtered-count 1) " référence liée" " références liées")) " parmi " total))
+    :linked-references/reference-count (fn [filtered-count total] (cond (= filtered-count nil) (cond (= total 0) "Aucune référence liée" (= total 1) "1 référence liée" :else (str total " références liées")) (= filtered-count 1) (str "1 référence liée / " total) :else (str filtered-count " références liées / " total) ))
     :linked-references/filter-search "Rechercher dans les pages liées"
  :on-boarding/add-graph "Ajouter un graphe"
     :on-boarding/demo-graph "Il s'agit d'un graphe de démo, les changements ne seront pas enregistrés à moins que vous n'ouvriez un dossier local."
@@ -520,7 +520,7 @@
     :shortcut.category/plugins "Plugins"
     :settings-permission/start-granting "Permettre"
     :settings-page/update-error-2 "Vérifiez le/la"
-    :settings-page/update-error-1 "⚠️ Oups, quelque chose s'est mal passée !"
+    :settings-page/update-error-1 "⚠️ Oups, quelque chose s'est mal passé !"
     :settings-page/update-available "Nouvelle mise à jour trouvée"
     :settings-page/theme-system "système"
     :settings-page/theme-light "Clair"
@@ -684,7 +684,7 @@
     :page/logseq-is-having-a-problem "Logseq a un problème. Pour essayer de le ravoir…"
     :page/page-already-exists "Page “{1}” existe déjà !"
     :page/slide-view "Visualiser en diapositives"
-    :page/something-went-wrong "Quelque chose s'est mal passée"
+    :page/something-went-wrong "Quelque chose s'est mal passé"
     :page/step "Étape {1}"
     :page/try "Essayer"
     :page/whiteboard-to-journal-error "Les pages de tableau blanc ne peuvent pas être renommées en titre de journ…"
@@ -769,5 +769,15 @@
     :settings-page/auto-chmod "Automatiquement changer les permissions du fichier"
     :settings-page/auto-chmod-desc "Désactiver pour permettre l'édition par plusieurs utilisateurs avec les permissions données par l'appartenance au groupe."
     :settings-page/tab-keymap "Raccourcis"
-    :unlinked-references/reference-count (fn [total] (str total (if (= total 1) " référence non liée" " références non liées")))
-}
+    :unlinked-references/reference-count (fn [total]
+                                           (cond
+                                             (or (nil? total) (= total ""))
+                                             "Références non liées"
+                                             (= total 0)
+                                             "Aucune référence non liée"
+                                             (= total 1)
+                                             "1 référence non liée"
+                                             (> total 1)
+                                             (str total " références non liées")
+                                             :else
+                                             "Références non liées"))}

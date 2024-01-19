@@ -12,7 +12,7 @@
             [frontend.util :as util]
             [frontend.util.clock :as clock]
             [frontend.util.drawer :as drawer]
-            [frontend.util.marker :as marker]
+            [frontend.handler.file-based.status :as status]
             [frontend.handler.property.file :as property-file]
             [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.file-based.property.util :as property-util]
@@ -62,7 +62,7 @@
   (if (and (state/enable-timetracking?)
            (not= (:block/content block) value))
     (let [format (:block/format block)
-          new-marker (last (util/safe-re-find (marker/marker-pattern format) (or value "")))
+          new-marker (last (util/safe-re-find (status/marker-pattern format) (or value "")))
           new-value (with-marker-time value block format
                       new-marker
                       (:block/marker block))]

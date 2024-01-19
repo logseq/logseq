@@ -27,7 +27,7 @@
 (defn get-page-icon
   [page-entity opts]
   (let [default-icon (ui/icon "page" (merge opts {:extension? true}))
-        page-icon (pu/get-property page-entity :icon)]
+        page-icon (pu/get-block-property-value page-entity :icon)]
     (or
      (when-not (string/blank? page-icon)
        (icon page-icon opts))

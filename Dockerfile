@@ -13,7 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     apt-transport-https \
-    gpg
+    gpg \
+    build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
 
 # install NodeJS & yarn
 RUN curl -sL https://deb.nodesource.com/setup_18.x | bash -

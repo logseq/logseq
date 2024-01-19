@@ -582,7 +582,7 @@
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
                            (open-page-ref e config page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)))}
      (when-not hide-icon?
-       (when-let [icon (pu/get-property page-entity :icon)]
+       (when-let [icon (pu/get-block-property-value page-entity :icon)]
          [:span.mr-1 (icon/icon icon)]))
      (if (and (coll? children) (seq children))
        (for [child children]
@@ -1764,7 +1764,7 @@
    (every? #(= % ["Horizontal_Rule"]) body)))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id collapsed? *control-show? edit?]
+  [state config block uuid block-id collapsed? *control-show? edit? selected?]
   (let [doc-mode?          (state/sub :document/mode?)
         control-show?      (util/react *control-show?)
         ref?               (:ref? config)
@@ -1809,7 +1809,10 @@
                                    " hide-inner-bullet")
                                  (when order-list? " as-order-list typed-list"))}
 
-                    [:span.bullet {:blockid (str uuid)}
+                    [:span.bullet (cond->
+                                    {:blockid (str uuid)}
+                                    selected?
+                                    (assoc :class "selected"))
                      (when order-list?
                        [:label (str order-list-idx ".")])]]]]
        (cond
@@ -1820,15 +1823,15 @@
               (not doc-mode?))
          bullet
 
-         (and
-          (not (util/react *control-show?))
-          (or
-           (and empty-content?
-                (not edit?)
-                (not (:block.temp/top? block))
-                (not (:block.temp/bottom? block)))
-           (and doc-mode?
-                (not collapsed?))))
+         (or
+          (and empty-content?
+               (not edit?)
+               (not (:block.temp/top? block))
+               (not (:block.temp/bottom? block))
+               (not (util/react *control-show?)))
+          (and doc-mode?
+               (not collapsed?)
+               (not (util/react *control-show?))))
          ;; hidden
          [:span.bullet-container]
 
@@ -3013,26 +3016,21 @@
        (when top?
          (dnd-separator-wrapper block children block-id slide? true false))
 
-       [:div.block-main-container.flex.flex-row.pr-2
-        {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
-         :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
-         :on-touch-move (fn [event]
-                          (block-handler/on-touch-move event block uuid edit? *show-left-menu? *show-right-menu?))
-         :on-touch-end (fn [event]
-                         (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
-         :on-touch-cancel (fn [_e]
-                            (block-handler/on-touch-cancel *show-left-menu? *show-right-menu?))
-         :on-mouse-over (fn [e]
-                          (block-mouse-over e *control-show? block-id doc-mode?))
-         :on-mouse-leave (fn [e]
-                           (block-mouse-leave e *control-show? block-id doc-mode?))}
-        (when (and (not slide?) (not in-whiteboard?) (not hidden?))
-          (block-control config block uuid block-id collapsed? *control-show?
-                         (or edit?
-                             (= uuid (:block/uuid (state/get-edit-block)))
-                             (contains? @(:editor/new-created-blocks @state/state) uuid))))
-        (when (and @*show-left-menu? (not in-whiteboard?) (not hidden?))
-          (block-left-menu config block))
+     [:div.block-main-container.flex.flex-row.pr-2
+      {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
+       :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
+       :on-touch-move (fn [event]
+                        (block-handler/on-touch-move event block uuid edit? *show-left-menu? *show-right-menu?))
+       :on-touch-end (fn [event]
+                       (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
+       :on-touch-cancel (fn [_e]
+                          (block-handler/on-touch-cancel *show-left-menu? *show-right-menu?))
+       :on-mouse-over (fn [e]
+                        (block-mouse-over e *control-show? block-id doc-mode?))
+       :on-mouse-leave (fn [e]
+                         (block-mouse-leave e *control-show? block-id doc-mode?))}
+      (when (not slide?)
+        (block-control config block uuid block-id collapsed? *control-show? edit? selected?))
 
         (when-not hidden?
           (if whiteboard-block?

@@ -482,8 +482,6 @@
           block? (some? (:block/page page))
           journal? (db/journal-page? page-name)
           db-based? (config/db-based-graph? repo)
-          built-in-property? (and (contains? (:block/type page) "property")
-                                  (contains? db-property/built-in-properties-keys-str page-name))
           fmt-journal? (boolean (date/journal-title->int page-name))
           whiteboard? (:whiteboard? option) ;; in a whiteboard portal shape?
           whiteboard-page? (model/whiteboard-page? page-name) ;; is this page a whiteboard?
@@ -526,7 +524,6 @@
                  (when (and (not whiteboard?) original-name)
                    (page-title page-name {:journal? journal?
                                           :fmt-journal? fmt-journal?
-                                          :built-in-property? built-in-property?
                                           :preview? preview?})))
                (when (not config/publishing?)
                  (when config/lsp-enabled?
@@ -1111,24 +1108,27 @@
                                       [idx (boolean (get @*checks idx))])))
            (reset! *results pages)))
 
-       [:div
-        [:div.actions
+       [:div.cp__all_pages-content
+        [:div.actions.pt-4
          {:class (util/classnames [{:has-selected (or (nil? @*indeterminate)
                                                       (not= 0 @*indeterminate))}])}
          [:div.l.flex.items-center
           [:div.actions-wrap
            (ui/button
-            [(ui/icon "trash" {:style {:font-size 15}}) (t :delete)]
-            :on-click (fn []
-                        (let [selected (filter (fn [[_ v]] v) @*checks)
-                              selected (and (seq selected)
-                                            (into #{} (for [[k _] selected] k)))]
-                          (when-let [pages (and selected (filter #(contains? selected (:block/idx %)) @*results))]
-                            (state/set-modal! (batch-delete-dialog pages false #(do
-                                                                                  (reset! *checks nil)
-                                                                                  (refresh-pages)))))))
-            :class "fade-link"
-            :small? true)]
+             (t :delete)
+             {:on-click
+              (fn []
+                (let [selected (filter (fn [[_ v]] v) @*checks)
+                      selected (and (seq selected)
+                                 (into #{} (for [[k _] selected] k)))]
+                  (when-let [pages (and selected (filter #(contains? selected (:block/idx %)) @*results))]
+                    (state/set-modal! (batch-delete-dialog pages false #(do
+                                                                          (reset! *checks nil)
+                                                                          (refresh-pages)))))))
+              :icon "trash"
+              :variant :destructive
+              :icon-props {:size 14}
+              :size :sm})]
 
           [:div.search-wrap.flex.items-center.pl-2
            (let [search-fn (fn []
@@ -1142,7 +1142,8 @@
 
              [(ui/button (ui/icon "search")
                          :on-click search-fn
-                         :small? true)
+                         :variant :link
+                         :size :xs)
               [:input.form-input {:placeholder   (t :search/page-names)
                                   :on-key-up     (fn [^js e]
                                                    (let [^js target (.-target e)]
@@ -1237,7 +1238,7 @@
                               {:on-change (fn []
                                             (swap! *checks update idx not))})]
                [:td.icon.w-4.p-0.overflow-hidden
-                (when-let [icon (pu/get-property page :icon)]
+                (when-let [icon (pu/get-block-property-value page :icon)]
                   icon)]
                [:td.name [:a {:on-click (fn [e]
                                           (.preventDefault e)

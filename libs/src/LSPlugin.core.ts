@@ -384,14 +384,14 @@ function convertToLSPResource(fullUrl: string, dotPluginRoot: string) {
 class IllegalPluginPackageError extends Error {
   constructor(message: string) {
     super(message)
-    this.name = IllegalPluginPackageError.name
+    this.name = 'IllegalPluginPackageError'
   }
 }
 
 class ExistedImportedPluginPackageError extends Error {
   constructor(message: string) {
     super(message)
-    this.name = ExistedImportedPluginPackageError.name
+    this.name = 'ExistedImportedPluginPackageError'
   }
 }
 
@@ -409,7 +409,7 @@ class PluginLocal extends EventEmitter<
   private _localRoot?: string
   private _dotSettingsFile?: string
   private _caller?: LSPluginCaller
-  private _logger?: PluginLogger
+  private _logger?: PluginLogger = new PluginLogger('PluginLocal')
 
   /**
    * @param _options
@@ -595,9 +595,7 @@ class PluginLocal extends EventEmitter<
     // Validate id
     const { registeredPlugins, isRegistering } = this._ctx
     if (isRegistering && registeredPlugins.has(this.id)) {
-      throw new ExistedImportedPluginPackageError(
-        'Registered plugin package Error'
-      )
+      throw new ExistedImportedPluginPackageError(this.id)
     }
 
     return async () => {

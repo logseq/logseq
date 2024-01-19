@@ -331,7 +331,7 @@
 (rum/defc sidebar-resizer
   [sidebar-open? sidebar-id handler-position]
   (let [el-ref (rum/use-ref nil)
-        min-px-width 144 ; Custom window controls width
+        min-px-width 320 ; Custom window controls width
         min-ratio 0.1
         max-ratio 0.7
         keyboard-step 5
@@ -406,15 +406,16 @@
         #(reset! ui-handler/*right-sidebar-resized-at (js/Date.now)) 300))
      [sidebar-open?])
 
-    [:.resizer {:ref el-ref
-                :role "separator"
-                :aria-orientation "vertical"
-                :aria-label (t :right-side-bar/separator)
-                :aria-valuemin (* min-ratio 100)
-                :aria-valuemax (* max-ratio 100)
-                :aria-valuenow 50
-                :tabIndex "0"
-                :data-expanded sidebar-open?}]))
+    [:.resizer
+     {:ref              el-ref
+      :role             "separator"
+      :aria-orientation "vertical"
+      :aria-label       (t :right-side-bar/separator)
+      :aria-valuemin    (* min-ratio 100)
+      :aria-valuemax    (* max-ratio 100)
+      :aria-valuenow    50
+      :tabIndex         "0"
+      :data-expanded    sidebar-open?}]))
 
 (rum/defcs sidebar-inner <
   (rum/local false ::anim-finished?)
@@ -428,7 +429,7 @@
 
      [:div.cp__right-sidebar-scrollable
       {:on-drag-over util/stop}
-      [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.px-2.h-12
+      [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center
        [:div.cp__right-sidebar-settings.hide-scrollbar.gap-1 {:key "right-sidebar-settings"}
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
@@ -462,7 +463,7 @@
             (t :right-side-bar/history)]])
         ]]
 
-      [:.sidebar-item-list.flex-1.scrollbar-spacing.ml-2
+      [:.sidebar-item-list.flex-1.scrollbar-spacing
        (if @*anim-finished?
          (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
             (rum/with-key

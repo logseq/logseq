@@ -259,6 +259,13 @@ html.is-mobile {
         padding-bottom: 0;
       }
     }
+
+    &[label="ls-modal-align-center"] {
+      .ui__modal-panel {
+        top: 8vh;
+        transform: translateY(-10%);
+      }
+    }
   }
 }
 
@@ -368,7 +375,7 @@ html.is-mobile {
 }
 
 .ui__toggle-background-on {
-  background: or(--ls-toggle-on-background, --lx-accent-09, --ls-button-background);
+  @apply bg-primary;
 }
 
 .ui__toggle-background-off {

@@ -43,6 +43,7 @@
   (test-page-name "dsa&amp&semi;l dsalfjk jkl.")
   (test-page-name "hls__&amp&semi;l dsalfjk jkl.")
   (test-page-name "CON.")
+  (test-page-name ".NET.")
   (mapv test-page-name fs-util/windows-reserved-filebodies))
 
 (deftest new-path-computation-tests

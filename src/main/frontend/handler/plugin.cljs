@@ -773,8 +773,8 @@
                                                             (when (and (number? end)
                                                                        ;; valid end time
                                                                        (> end 0)
-                                                                       ;; greater than 3s
-                                                                       (> (- end (.-s v)) 3000))
+                                                                       ;; greater than 6s
+                                                                       (> (- end (.-s v)) 6000))
                                                               v))))
                                                       ((fn [perfs]
                                                          (doseq [perf perfs]
