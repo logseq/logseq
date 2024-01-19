@@ -24,8 +24,10 @@
   (case (:action msg)
     "register-graph-updates"
     (async/offer! push-data-to-client-chan (select-keys msg [:req-id]))
+    "list-graphs"
+    (async/offer! push-data-to-client-chan (assoc (select-keys msg [:req-id])
+                                                  :graphs []))
     ;; default
-
     nil))
 
 

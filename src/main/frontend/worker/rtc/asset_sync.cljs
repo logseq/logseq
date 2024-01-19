@@ -124,7 +124,9 @@
           stop-assets-sync-loop-chan (chan)]
       (reset! (:*stop-asset-sync-loop-chan state) stop-assets-sync-loop-chan)
       (async/sub data-from-ws-pub "push-assets-updates" push-data-from-ws-ch)
-      (when loop-started-ch (async/close! loop-started-ch))
+      (when loop-started-ch
+        (prn ::just-for-test (<? (ws/<send&receive state {:action "list-graphs"})))
+        (async/close! loop-started-ch))
       (<! (go-loop [push-assets-update-ops-ch
                     (make-push-assets-update-ops-timeout-ch repo (not @*auto-push-assets-update-ops?))]
             (let [{:keys [continue push-data-from-ws client-assets-update stop]}

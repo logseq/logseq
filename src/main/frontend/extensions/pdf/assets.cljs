@@ -237,7 +237,7 @@
         page-name (:block/original-name page)
         ;; FIXME: file-path property for db version
         file-path (:file-path (:block/properties page))
-        hl-page   (pu/get-property block :hl-page)]
+        hl-page   (pu/get-block-property-value block :hl-page)]
     (when-let [target-key (and page-name (subs page-name 5))]
       (p/let [hls (resolve-hls-data-by-key$ target-key)
               hls (and hls (:highlights hls))]
