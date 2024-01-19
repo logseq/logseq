@@ -109,9 +109,7 @@
                     #js {:$addr addr
                          :$content (pr-str data)})
                   addr+data-seq)]
-        ;; async write so that UI can be refreshed earlier
-        (async/go
-          (upsert-addr-content! repo data delete-addrs))))
+        (upsert-addr-content! repo data delete-addrs)))
 
     (-restore [_ addr]
       (restore-data-from-addr repo addr))))
@@ -339,7 +337,7 @@
    [_this repo]
    (<export-db-file repo))
 
-  ( importDb
+  (importDb
    [this repo data]
    (when-not (string/blank? repo)
      (p/let [pool (<get-opfs-pool repo)]
