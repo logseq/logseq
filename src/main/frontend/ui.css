@@ -66,7 +66,9 @@
   }
 
   .notification-area {
-    background-color: or(--logseq-of-notification-background, --lx-gray-04, --ls-tertiary-background-color, #fff);
+    @apply border;
+
+    background-color: or(--ls-notification-background, --lx-gray-03, --ls-tertiary-background-color, #fff);
     color: or(--ls-notification-text-color, --lx-gray-11, --ls-primary-text-color);
   }
 }

@@ -1,3 +1,24 @@
+html[data-theme=light] {
+  --accent: var(--rx-gray-04-hsl);
+  --accent-foreground: var(--rx-gray-12-hsl);
+  --input: var(--rx-gray-03-hsl);
+}
+
+html[data-theme=dark] {
+  --primary-foreground: 255 92% 100%;
+  --background: 0 0% 11%;
+  --foreground: 0 0% 95%;
+  --card: 0 0% 11%;
+  --card-foreground: 0 0% 95%;
+  --secondary: 0 0% 20%;
+  --secondary-foreground: 0 0% 98%;
+  --border: 0 0% 16%;
+  --muted: 0 0% 15%;
+  --popover: 0 0% 7%;
+  --popover-foreground: 0 0 95%;
+  --input: 0 0% 25%;
+}
+
 html {
   &[data-color=logseq] {
     --lx-accent-01: var(--rx-logseq-01);
@@ -14,6 +35,12 @@ html {
     --lx-accent-12: var(--rx-logseq-12);
 
     &[data-theme=light] {
+      --primary: 200 97% 37%;
+      --primary-foreground: 255 92% 100%;
+      --accent: 200 97% 37%;
+      --accent-foreground: 255 92% 100%;
+      --ring: 200 97% 37%;
+
       --lx-gray-01: var(--rx-gray-01);
       --lx-gray-02: var(--rx-gray-02);
       --lx-gray-03: var(--rx-gray-03);
@@ -26,6 +53,24 @@ html {
       --lx-gray-10: var(--rx-gray-10);
       --lx-gray-11: var(--rx-gray-11);
       --lx-gray-12: var(--rx-gray-12);
+    }
+
+    &[data-theme=dark] {
+      --background: 192 100% 11%;
+      --foreground: 0 0% 95%;
+      --accent: 192 80% 10%;
+      --accent-foreground: 255 92% 100%;
+      --primary: 200 97% 37%;
+      --primary-foreground: 255 92% 100%;
+      --ring: 200 97% 37%;
+      --secondary: 203 50% 20%;
+      --secondary-foreground: 0 0% 98%;
+      --muted: 192 100% 13%;
+      --border: 192 100% 14%;
+      --card: 192 100% 10%;
+      --card-foreground: 0 0% 95%;
+      --popover: 192 100% 11%;
+      --input: 203 35% 25%;
     }
   }
 
