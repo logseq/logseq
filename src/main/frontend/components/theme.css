@@ -59,10 +59,6 @@
   transform: scale(1.1);
 }
 
-body {
-  background-color: or(--lx-gray-01, --ls-primary-background-color, #fff);
-}
-
 html[data-theme='light'] .theme-container {
   .form-checkbox {
     &:focus {

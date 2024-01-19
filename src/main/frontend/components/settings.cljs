@@ -321,7 +321,7 @@
                                        :gap "0.75rem"
                                        :width "100%"
                                        :max-width "16rem"}}
-                    (for [color colors/color-list
+                    (for [color (concat [:none :logseq] colors/color-list)
                           :let [active? (= color color-accent)]]
                       [:div.flex.items-center {:style {:height 28}}
                        [:div {:class "w-5 h-5 rounded-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"
@@ -345,7 +345,7 @@
 
     [:<>
      (row-with-button-action {:left-label "Accent color"
-                              :description "Choosing an accent color will override any theme you have selected."
+                              :description "Choosing an accent color may override any theme you have selected."
                               :-for       "toggle_radix_theme"
                               :stretch    true
                               :action     pick-theme})]))

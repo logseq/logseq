@@ -1,7 +1,7 @@
 :root {
-  --ls-color-file-sync-error: var(--ls-error-color);
+  --ls-color-file-sync-error: var(--color-red-600);
   --ls-color-file-sync-pending: var(--color-yellow-600);
-  --ls-color-file-sync-idle: var(--ls-success-color);
+  --ls-color-file-sync-idle: var(--color-green-600);
 }
 
 .cp__file-sync {

@@ -15,10 +15,6 @@
   --ls-left-sidebar-sm-width: 74vw;
   --ls-left-sidebar-nav-btn-size: 38px;
   --ls-native-kb-height: 0px;
-  --ls-error-color: var(--color-red-600);
-  --ls-warning-color: var(--color-orange-600);
-  --ls-success-color: var(--color-green-600);
-  --ls-highlight-color-default: var(--ls-secondary-background-color);
 }
 
 .dark-theme,

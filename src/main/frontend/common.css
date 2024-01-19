@@ -26,9 +26,9 @@ html {
 }
 
 body {
-  color: or(--ls-default-text-color, --lx-gray-12, --ls-primary-text-color);
+  color: var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--foreground))));
+  background-color: var(--lx-gray-01, var(--ls-primary-background-color, hsl(var(--background))));
   line-height: 1.5;
-  background-color: transparent;
   min-height: 100%;
   word-break: break-word; /* compatible for overflow-wrap: anywhere */
 }
