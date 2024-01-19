@@ -2,7 +2,7 @@
   "Entry ns for publishing build. Provides frontend for publishing single page
   application"
   (:require [frontend.state :as state]
-            [frontend.colors :as colors]
+            [datascript.core :as d]
             [frontend.db :as db]
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
@@ -116,8 +116,6 @@
   ;; Set :preferred-lang as some components depend on it
   (i18n/start)
   (restore-state!)
-  (when-let [radix-color (state/get-color-accent)]
-    (colors/set-radix radix-color))
   (shortcut/refresh!)
   (events/run!)
   (p/do!

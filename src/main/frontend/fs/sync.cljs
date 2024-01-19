@@ -3358,18 +3358,19 @@
           ok? (and (= 200 (:status r1*))
                    (= 200 (:status r2*))
                    (= "OK" (:body r2*)))]
-      (if ok?
-        (notification/clear! :sync-connection-failed)
-        (notification/show! [:div
-                             (t :file-sync/connectivity-testing-failed)
-                             [:a {:href api-url} api-url]
-                             " and "
-                             [:a
-                              {:href config/CONNECTIVITY-TESTING-S3-URL}
-                              config/CONNECTIVITY-TESTING-S3-URL]]
-                            :warning
-                            false
-                            :sync-connection-failed))
+      (when (user/logged-in?)
+        (if ok?
+          (notification/clear! :sync-connection-failed)
+          (notification/show! [:div
+                               (t :file-sync/connectivity-testing-failed)
+                               [:a {:href api-url} api-url]
+                               " and "
+                               [:a
+                                {:href config/CONNECTIVITY-TESTING-S3-URL}
+                                config/CONNECTIVITY-TESTING-S3-URL]]
+                              :warning
+                              false
+                              :sync-connection-failed)))
       ok?)))
 
 (declare network-online-cursor)

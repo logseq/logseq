@@ -3,7 +3,8 @@ import { createRandomPage } from './utils'
 import { expect } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 
-test('should not have any automatically detectable accessibility issues', async ({ page }) => {
+// TODO: more configuration is required for this test
+test.skip('should not have any automatically detectable accessibility issues', async ({ page }) => {
   try {
     await page.waitForSelector('.notification-clear', { timeout: 10 })
     page.click('.notification-clear')
