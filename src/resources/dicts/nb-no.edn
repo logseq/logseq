@@ -79,7 +79,6 @@
  :content/copy-block-emebed "Kopier innebygging av blokk"
  :content/open-in-sidebar "Åpne i sidefeltet"
  :content/click-to-edit "Klikk for å redigere"
- :settings-page/git-confirm "Du må starte appen på nytt etter å ha oppdatert Git innstillingene."
  :settings-page/git-switcher-label "Skru på Git auto commit"
  :settings-page/git-commit-delay "Git auto commit sekunder"
  :settings-page/edit-config-edn "Rediger config.edn for nåværende repo"
@@ -790,7 +789,7 @@
  :settings-page/auto-chmod-desc "Deaktiver for å tillate redigering av flere brukere med tillatelser gitt av gruppemedlemskap."
  :settings-page/tab-keymap "Tastatur"
  :whiteboard/toggle-pen-mode "Veksle pen-modus"
- 
+
  :command.command-palette/toggle "Søk kommandoer"
  :command.go/search-in-page "Søk blokker på side"
  :command.ui/cycle-color "Veksle farge"

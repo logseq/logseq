@@ -172,7 +172,7 @@
     :linked-references/filter-excludes "Exclut : "
     :linked-references/filter-heading "Filtrer"
     :linked-references/filter-includes "Inclut : "
-    :linked-references/reference-count (fn [filtered-count total] (cond (= filtered-count nil) (cond (= total 0) "Aucune référence liée" (= total 1) "1 référence liée" :else (str total " références liées")) (= filtered-count 1) (str "1 référence liée / " total) :else (str filtered-count " références liées / " total) ))
+    :linked-references/reference-count (fn [filtered-count total] (str filtered-count (when filtered-count (if (= filtered-count 1) " référence liée" " références liées")) " parmi " total))
     :linked-references/filter-search "Rechercher dans les pages liées"
     :linked-references/unexpected-error "Références liées : erreur inattendue. Veuillez d'abord ré-indexer votre graphe."
     :on-boarding/add-graph "Ajouter un graphe"
@@ -269,7 +269,6 @@
     :settings-page/export-theme "Exporter le thème"
     :settings-page/filename-format "Format de nom de fichier"
     :settings-page/git-commit-delay "Délai (secondes) des commits Git automatiques"
-    :settings-page/git-confirm "Vous devez redémarrer l'application après avoir mis à jour le dossier Git"
     :settings-page/git-switcher-label "Activer les commits Git automatiques"
     :settings-page/home-default-page "Régler la page d'accueil par défaut"
     :settings-page/login-prompt "Pour accéder aux nouvelles fonctionnalités avant tout le monde, vous devez être sponsor ou \"backer\" (contributeur) sur Open Collective, puis vous connecter."
@@ -806,15 +805,4 @@
     :settings-page/auto-chmod "Automatiquement changer les permissions du fichier"
     :settings-page/auto-chmod-desc "Désactiver pour permettre l'édition par plusieurs utilisateurs avec les permissions données par l'appartenance au groupe."
     :settings-page/tab-keymap "Raccourcis"
-    :unlinked-references/reference-count (fn [total]
-                                           (cond
-                                             (or (nil? total) (= total ""))
-                                             "Références non liées"
-                                             (= total 0)
-                                             "Aucune référence non liée"
-                                             (= total 1)
-                                             "1 référence non liée"
-                                             (> total 1)
-                                             (str total " références non liées")
-                                             :else
-                                             "Références non liées"))}
+    :unlinked-references/reference-count  (fn [total] (str total (if (= total 1) " référence non liée" " références non liées")))}
