@@ -46,5 +46,11 @@
         (fn [event]
           (let [data (.-data event)]
             (when-not (= (.-type data) "RAW")
-              (let [[e payload] (bean/->clj data)]
-                (handle (keyword e) wrapped-worker payload)))))))
+              ;; Log thrown exceptions from comlink
+              ;; https://github.com/GoogleChromeLabs/comlink/blob/dffe9050f63b1b39f30213adeb1dd4b9ed7d2594/src/comlink.ts#L223-L236
+              (if (and (= "HANDLER" (.-type data)) (= "throw" (.-name data)))
+                (if (.-isError (.-value data))
+                  (js/console.error "Unexpected webworker error:" (-> data bean/->clj (get-in [:value :value])))
+                  (js/console.error "Unexpected webworker error:" data))
+                (let [[e payload] (bean/->clj data)]
+                  (handle (keyword e) wrapped-worker payload))))))))
