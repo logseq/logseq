@@ -110,3 +110,9 @@
     (is (= (config/ext-of-image? "file.svg") true))
     (is (= (config/ext-of-image? "a.file.png") true))
     (is (= (config/ext-of-image? "file.tiff") false))))
+
+(deftest ^:focus test-get-relative-path
+  (testing "test relative path resolution"
+    (is (= "../../foo" (util/get-relative-path "/User/foo/tester/file.org" "/User/foo/")))
+    (is (= "../pages/Org Mode.org" (util/get-relative-path "/User/foo/journal/2024-01-15.org" "/User/foo/pages/Org Mode.org")))
+    (is (= "../journal/2024-01-15.org" (util/get-relative-path  "/User/foo/pages/Org Mode.org" "/User/foo/journal/2024-01-15.org")))))
