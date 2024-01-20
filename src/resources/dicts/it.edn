@@ -77,7 +77,6 @@
  :content/copy-block-emebed "Copia blocco incorporato"
  :content/open-in-sidebar "Apri nel pannello laterale"
  :content/click-to-edit "Clicca per modificare"
- :settings-page/git-confirm "Devi riavviare l'app dopo aver aggiornato le impostazioni di Git."
  :settings-page/git-switcher-label "Commit automatico"
  :settings-page/git-commit-delay "Secondi per commit automatico"
  :settings-page/edit-config-edn "Modifica config.edn"

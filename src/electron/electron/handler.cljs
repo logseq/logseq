@@ -29,6 +29,7 @@
             [electron.state :as state]
             [electron.utils :as utils]
             [electron.window :as win]
+            [goog.functions :refer [debounce]]
             [logseq.common.graph :as common-graph]
             [promesa.core :as p]))
 
@@ -500,6 +501,12 @@
 
 (defmethod handle :gitStatus [_ [_]]
   (git/short-status!))
+
+(def debounced-configure-auto-commit! (debounce git/configure-auto-commit! 5000))
+(defmethod handle :setGitAutoCommit []
+  (debounced-configure-auto-commit!)
+  nil)
+
 
 (defmethod handle :installMarketPlugin [_ [_ mft]]
   (plugin/install-or-update! mft))

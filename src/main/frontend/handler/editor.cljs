@@ -2824,7 +2824,12 @@
       (outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
-       (outliner-core/indent-outdent-blocks! [block] indent?)))
+       (outliner-core/indent-outdent-blocks! [block] indent?))
+      (edit-block!
+        (db/pull (:db/id block))
+        (cursor/pos (state/get-input))
+        (:block/uuid block))
+    )
     (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler
