@@ -250,7 +250,24 @@
          enabled?
          (fn []
            (state/set-state! [:electron/user-cfgs :git/disable-auto-commit?] enabled?)
-           (ipc/ipc :userAppCfgs :git/disable-auto-commit? enabled?))
+           (p/do!
+            (ipc/ipc :userAppCfgs :git/disable-auto-commit? enabled?)
+            (ipc/ipc :setGitAutoCommit)))
+         true)]]]))
+
+(rum/defcs switch-git-commit-on-close-row < rum/reactive
+  [state t]
+  (let [enabled? (state/get-git-commit-on-close-enabled?)]
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+     [:label.block.text-sm.font-medium.leading-5.opacity-70
+      (t :settings-page/git-commit-on-close)]
+     [:div
+      [:div.rounded-md.sm:max-w-xs
+       (ui/toggle
+         enabled?
+         (fn []
+           (state/set-state! [:electron/user-cfgs :git/commit-on-close?] (not enabled?))
+           (ipc/ipc :userAppCfgs :git/commit-on-close? (not enabled?)))
          true)]]]))
 
 (rum/defcs git-auto-commit-seconds < rum/reactive
@@ -267,14 +284,15 @@
                           (let [value (-> (util/evalue event)
                                           util/safe-parse-int)]
                             (if (and (number? value)
-                                     (< 0 value (inc 600)))
-                              (do
+                                     (< 0 value (inc 86400)))
+                              (p/do!
                                 (state/set-state! [:electron/user-cfgs :git/auto-commit-seconds] value)
-                                (ipc/ipc :userAppCfgs :git/auto-commit-seconds value))
+                                (ipc/ipc :userAppCfgs :git/auto-commit-seconds value)
+                                (ipc/ipc :setGitAutoCommit))
                               (when-let [elem (gobj/get event "target")]
                                 (notification/show!
-                                  [:div "Invalid value! Must be a number between 1 and 600."]
-                                  :warning true)
+                                 [:div "Invalid value! Must be a number between 1 and 86400"]
+                                 :warning true)
                                 (gobj/set elem "value" secs)))))}]]]]))
 
 (rum/defc app-auto-update-row < rum/reactive [t]
@@ -749,11 +767,8 @@
      (t :settings-page/git-desc-3)]]
    [:br]
    (switch-git-auto-commit-row t)
-   (git-auto-commit-seconds t)
-
-   (ui/admonition
-     :warning
-     [:p (t :settings-page/git-confirm)])])
+   (switch-git-commit-on-close-row t)
+   (git-auto-commit-seconds t)])
 
 (rum/defc settings-advanced < rum/reactive
   [current-repo]

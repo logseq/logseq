@@ -425,7 +425,7 @@
 
 (declare save-current-block!)
 (defn outliner-insert-block!
-  [config current-block new-block {:keys [sibling? keep-uuid?
+  [config current-block new-block {:keys [sibling? keep-uuid? ordered-list?
                                           replace-empty-target?]}]
   (let [ref-query-top-block? (and (or (:ref? config)
                                       (:custom-query? config))
@@ -446,9 +446,11 @@
     (outliner-tx/transact!
      {:outliner-op :insert-blocks}
      (save-current-block! {:current-block current-block})
-     (outliner-core/insert-blocks! [new-block] current-block {:sibling? sibling?
-                                                              :keep-uuid? keep-uuid?
-                                                              :replace-empty-target? replace-empty-target?}))))
+      (outliner-core/insert-blocks! [new-block] current-block
+        {:sibling?              sibling?
+         :keep-uuid?            keep-uuid?
+         :replace-empty-target? replace-empty-target?
+         :ordered-list? ordered-list?}))))
 
 (defn- block-self-alone-when-insert?
   [config uuid]
@@ -566,7 +568,7 @@
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid sibling? before? properties
-                   custom-uuid replace-empty-target? edit-block?]
+                   custom-uuid replace-empty-target? edit-block? ordered-list?]
             :or {sibling? false
                  before? false
                  edit-block? true}}]
@@ -626,9 +628,11 @@
                                    :else
                                    nil)]
           (when block-m
-            (outliner-insert-block! {} block-m new-block {:sibling? sibling?
-                                                          :keep-uuid? true
-                                                          :replace-empty-target? replace-empty-target?})
+            (outliner-insert-block! {} block-m new-block
+              {:sibling?              sibling?
+               :keep-uuid?            true
+               :replace-empty-target? replace-empty-target?
+               :ordered-list? ordered-list?})
             (when edit-block?
               (if (and replace-empty-target?
                        (string/blank? (:block/content last-block)))
@@ -2020,7 +2024,8 @@
                   target-block
                   sibling?
                   keep-uuid?
-                  revert-cut-txs]
+                  revert-cut-txs
+                  skip-empty-target?]
            :or {exclude-properties []}}]
   (state/set-editor-op! :paste-blocks)
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
@@ -2033,7 +2038,8 @@
         block (db/entity (:db/id target-block))
         page (if (:block/name block) block
                  (when target-block (:block/page (db/entity (:db/id target-block)))))
-        empty-target? (string/blank? (:block/content target-block))
+        empty-target? (if (true? skip-empty-target?) false
+                        (string/blank? (:block/content target-block)))
         paste-nested-blocks? (nested-blocks blocks)
         target-block-has-children? (db/has-children? (:block/uuid target-block))
         replace-empty-target? (and empty-target?
@@ -2117,9 +2123,10 @@
    A block element: {:content :properties :children [block-1, block-2, ...]}"
   [target-block-id sibling? tree-vec format keep-uuid?]
   (insert-block-tree tree-vec format
-                     {:target-block (db/pull target-block-id)
-                      :keep-uuid?   keep-uuid?
-                      :sibling?     sibling?}))
+    {:target-block       (db/pull target-block-id)
+     :keep-uuid?         keep-uuid?
+     :skip-empty-target? true
+     :sibling?           sibling?}))
 
 (defn insert-template!
   ([element-id db-id]
@@ -2817,7 +2824,12 @@
       (outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
-       (outliner-core/indent-outdent-blocks! [block] indent?)))
+       (outliner-core/indent-outdent-blocks! [block] indent?))
+      (edit-block!
+        (db/pull (:db/id block))
+        (cursor/pos (state/get-input))
+        (:block/uuid block))
+    )
     (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler

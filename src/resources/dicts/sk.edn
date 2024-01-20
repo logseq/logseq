@@ -266,7 +266,6 @@
  :settings-page/git-desc-3                         " pre správu verzií. Používajte Git na vlastné riziko, pretože všeobecné problémy s Git nie sú podporované tímom Logseq."
  :settings-page/git-switcher-label                 "Povoliť automatický zápis do Git"
  :settings-page/git-commit-delay                   "Automatický zápis do Git po sekundách"
- :settings-page/git-confirm                        "Po aktualizácii nastavení Git je potrebné reštartovať aplikáciu."
  :settings-page/edit-config-edn                    "Upraviť config.edn"
  :settings-page/edit-global-config-edn             "Upraviť globálny config.edn"
  :settings-page/edit-custom-css                    "Upraviť custom.css"

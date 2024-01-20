@@ -270,7 +270,6 @@
  :settings-page/git-desc-3 " の利用も用意しています。Gitの利用はご自身の責任で行ってください。一般的なGitの問題について、Logseqチームはサポートしません。"
  :settings-page/git-switcher-label "Gitの自動コミットを有効化"
  :settings-page/git-commit-delay "Gitの自動コミット間隔（秒）"
- :settings-page/git-confirm "Git設定を更新するにはアプリを再起動する必要があります。"
  :settings-page/edit-config-edn "config.ednを編集"
  :settings-page/edit-global-config-edn "グローバルなconfig.ednを編集"
  :settings-page/edit-custom-css "custom.cssを編集"

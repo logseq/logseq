@@ -1934,6 +1934,10 @@ Similar to re-frame subscriptions"
   []
   (false? (sub [:electron/user-cfgs :git/disable-auto-commit?])))
 
+(defn get-git-commit-on-close-enabled?
+  []
+  (sub [:electron/user-cfgs :git/commit-on-close?]))
+
 (defn set-last-key-code!
   [key-code]
   (set-state! :editor/last-key-code key-code))

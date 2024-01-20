@@ -4,8 +4,8 @@
   throughout the application."
   (:require [frontend.dicts :as dicts]
             [tongue.core :as tongue]
-            [cljs.core :refer [PersistentVector]]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [lambdaisland.glogi :as log]))
 
 (def dicts (merge dicts/dicts {:tongue/fallback :en}))
 
@@ -31,7 +31,16 @@
 (defn t
   [& args]
   (let [preferred-language (keyword (state/sub :preferred-language))]
-    (apply translate preferred-language args)))
+    (try
+      (apply translate preferred-language args)
+      (catch :default e
+        (log/error :failed-translation {:arguments args
+                                        :lang preferred-language})
+        (state/pub-event! [:capture-error {:error e
+                                           :payload {:type :failed-translation
+                                                     :arguments args
+                                                     :lang preferred-language}}])
+        (apply translate :en args)))))
 
 (defn- fetch-local-language []
   (.. js/window -navigator -language))

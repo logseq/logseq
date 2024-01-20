@@ -261,7 +261,6 @@
  :settings-page/git-desc-3 " untuk kontrol versi. Gunakan Git dengan risiko Anda sendiri karena masalah umum Git tidak didukung oleh tim Logseq."
  :settings-page/git-switcher-label "Aktifkan komit otomatis Git"
  :settings-page/git-commit-delay "Detik komit otomatis Git"
- :settings-page/git-confirm "Anda perlu me-restart aplikasi setelah memperbarui pengaturan Git."
  :settings-page/edit-config-edn "Sunting config.edn"
  :settings-page/edit-global-config-edn "Sunting global config.edn"
  :settings-page/edit-custom-css "Sunting custom.css"
