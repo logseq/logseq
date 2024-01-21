@@ -11,12 +11,12 @@
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
-            [logseq.common.util :as common-util]
-            [frontend.handler.property.util :as pu]
             [malli.core :as m]
             [malli.util :as mu]
-            [frontend.db.async :as db-async]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.persist-db.browser :as db-browser]
+            [cljs-bean.core :as bean]
+            [frontend.worker.export :as worker-export]))
 
 ;;; TODO: split frontend.handler.export.text related states
 (def ^:dynamic *state*
@@ -90,20 +90,30 @@
                (mapv remove-block-ast-pos
                      (mldoc/->edn content format))))))
 
-(defn get-page-content
+(defn <get-page-content
   ([page-name]
-   (get-page-content (state/get-current-repo) page-name))
+   (<get-page-content (state/get-current-repo) page-name))
   ([repo page-name]
-   (when-let [page-uuid (pu/get-page-uuid page-name)]
-     (get-blocks-contents repo page-uuid :init-level 0))))
+   (when-let [^object worker @db-browser/*worker]
+     (.block->content worker repo page-name nil
+                      (pr-str {:export-bullet-indentation (state/get-export-bullet-indentation)})))))
+
+(defn get-page-content
+  [page-name]
+  (let [repo (state/get-current-repo)
+        db (db/get-db repo)]
+    (worker-export/block->content repo db page-name
+                                  nil
+                                  {:export-bullet-indentation (state/get-export-bullet-indentation)})))
 
 (defn- page-name->ast
   [page-name]
   (when-let [content (get-page-content page-name)]
-    (let [format :markdown]
-      (removev Properties-block-ast?
-               (mapv remove-block-ast-pos
-                     (mldoc/->edn content format))))))
+    (when content
+      (let [format :markdown]
+        (removev Properties-block-ast?
+                 (mapv remove-block-ast-pos
+                       (mldoc/->edn content format)))))))
 
 (defn- update-level-in-block-ast-coll
   [block-ast-coll origin-level]
@@ -180,33 +190,27 @@
                  ast-content)))
            inline-coll)))
 
-(defn- <get-file-contents
+(defn <get-all-pages
   [repo]
-  (db-async/<q repo '[:find ?pn ?fp ?fc
-                      :where
-                      [?e :block/original-name ?pn]
-                      [?e :block/file ?f]
-                      [?f :file/path ?fp]
-                      [?f :file/content ?fc]]))
+  (when-let [^object worker @db-browser/*worker]
+    (p/let [result (.get-all-pages worker repo)]
+      (bean/->clj result))))
 
-(defn- <get-md-file-contents
+(defn <get-all-page->content
   [repo]
-  (p/let [result (<get-file-contents repo)]
-    (filterv (fn [[path _]]
-               (let [path (string/lower-case path)]
-                 (re-find #"\.(?:md|markdown)$" path)))
-             result)))
+  (when-let [^object worker @db-browser/*worker]
+    (p/let [result (.get-all-page->content worker repo)]
+      (bean/->clj result))))
 
-(defn <get-file-contents-with-suffix
+(defn <get-file-contents
   [repo]
-  (p/let [md-files (<get-md-file-contents repo)]
-    (->>
-     md-files
-     (mapv (fn [[page-title path content]]
-             {:path path
-              :content content
-              :title page-title
-              :format (common-util/get-format path)})))))
+  (p/let [page->content (<get-all-page->content repo)]
+    (clojure.core/map (fn [[page-title content]]
+                        {:path (str page-title ".md")
+                         :content content
+                         :title page-title
+                         :format :markdown})
+                      page->content)))
 
 ;;; utils (ends)
 
