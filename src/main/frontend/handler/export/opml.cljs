@@ -446,7 +446,7 @@
          format (or (:block/format first-block) (state/get-preferred-format))]
      (export-helper content format options :title title))))
 
-(defn export-files-as-opml
+(defn- export-files-as-opml
   "options see also `export-blocks-as-opml`"
   [files options]
   (mapv
@@ -458,7 +458,7 @@
 
 (defn export-repo-as-opml!
   [repo]
-  (p/let [files (common/<get-file-contents-with-suffix repo)]
+  (p/let [files (common/<get-file-contents repo)]
     (when (seq files)
       (let [files (export-files-as-opml files nil)
             zip-file-name (str repo "_opml_" (quot (util/time-ms) 1000))]
