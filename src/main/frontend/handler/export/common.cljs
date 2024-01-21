@@ -5,7 +5,6 @@
   (:refer-clojure :exclude [map filter mapcat concat remove])
   (:require [cljs.core.match :refer [match]]
             [clojure.string :as string]
-            [datascript.core :as d]
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
             [frontend.modules.file.core :as outliner-file]
@@ -15,7 +14,9 @@
             [logseq.common.util :as common-util]
             [frontend.handler.property.util :as pu]
             [malli.core :as m]
-            [malli.util :as mu]))
+            [malli.util :as mu]
+            [frontend.db.async :as db-async]
+            [promesa.core :as p]))
 
 ;;; TODO: split frontend.handler.export.text related states
 (def ^:dynamic *state*
@@ -179,38 +180,33 @@
                  ast-content)))
            inline-coll)))
 
-(defn- get-file-contents
+(defn- <get-file-contents
   [repo]
-  (let [db (db/get-db repo)]
-    (->> (d/q '[:find ?fp
-                :where
-                [?e :block/file ?f]
-                [?f :file/path ?fp]] db)
-         (mapv (fn [[file-path]]
-                 [file-path
-                  (db/get-file file-path)])))))
+  (db-async/<q repo '[:find ?pn ?fp ?fc
+                      :where
+                      [?e :block/original-name ?pn]
+                      [?e :block/file ?f]
+                      [?f :file/path ?fp]
+                      [?f :file/content ?fc]]))
 
-(defn- get-md-file-contents
+(defn- <get-md-file-contents
   [repo]
-  (filterv (fn [[path _]]
-             (let [path (string/lower-case path)]
-               (re-find #"\.(?:md|markdown)$" path)))
-           (get-file-contents repo)))
+  (p/let [result (<get-file-contents repo)]
+    (filterv (fn [[path _]]
+               (let [path (string/lower-case path)]
+                 (re-find #"\.(?:md|markdown)$" path)))
+             result)))
 
-(defn get-file-contents-with-suffix
+(defn <get-file-contents-with-suffix
   [repo]
-  (let [db (db/get-db repo)
-        md-files (get-md-file-contents repo)]
+  (p/let [md-files (<get-md-file-contents repo)]
     (->>
      md-files
-     (mapv (fn [[path content]] {:path path :content content
-                                 :names (d/q '[:find [?n ?n2]
-                                               :in $ ?p
-                                               :where [?e :file/path ?p]
-                                               [?e2 :block/file ?e]
-                                               [?e2 :block/name ?n]
-                                               [?e2 :block/original-name ?n2]] db path)
-                                 :format (common-util/get-format path)})))))
+     (mapv (fn [[page-title path content]]
+             {:path path
+              :content content
+              :title page-title
+              :format (common-util/get-format path)})))))
 
 ;;; utils (ends)
 

@@ -15,6 +15,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [frontend.worker.state :as worker-state]
             [frontend.worker.file :as file]
+            [frontend.worker.export :as worker-export]
             [logseq.db :as ldb]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.db-listener :as rtc-db-listener]
@@ -404,6 +405,24 @@
    (let [new-state (edn/read-string new-state-str)]
      (worker-state/set-new-state! new-state)
      nil))
+
+  ;; Export
+  (block->content
+   [this repo block-uuid-or-page-name tree->file-opts context]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (worker-export/block->content repo @conn block-uuid-or-page-name
+                                   (edn/read-string tree->file-opts)
+                                   (edn/read-string context))))
+
+  (get-all-pages
+   [this repo]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (bean/->js (worker-export/get-all-pages repo @conn))))
+
+  (get-all-page->content
+   [this repo]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (bean/->js (worker-export/get-all-page->content repo @conn))))
 
   ;; RTC
   (rtc-start
