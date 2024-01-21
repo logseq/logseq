@@ -450,21 +450,22 @@
   "options see also `export-blocks-as-opml`"
   [files options]
   (mapv
-   (fn [{:keys [path content names format]}]
-     (when (first names)
+   (fn [{:keys [path content title format]}]
+     (when title
        (util/profile (print-str :export-files-as-opml path)
-                     [path (export-helper content format options :title (first names))])))
+                     [path (export-helper content format options :title title)])))
    files))
 
 (defn export-repo-as-opml!
   [repo]
-  (when-let [files (common/get-file-contents-with-suffix repo)]
-    (let [files (export-files-as-opml files nil)
-          zip-file-name (str repo "_opml_" (quot (util/time-ms) 1000))]
-      (p/let [zipfile (zip/make-zip zip-file-name files repo)]
-        (when-let [anchor (gdom/getElement "export-as-opml")]
-          (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-          (.setAttribute anchor "download" (.-name zipfile))
-          (.click anchor))))))
+  (p/let [files (common/<get-file-contents-with-suffix repo)]
+    (when (seq files)
+      (let [files (export-files-as-opml files nil)
+            zip-file-name (str repo "_opml_" (quot (util/time-ms) 1000))]
+        (p/let [zipfile (zip/make-zip zip-file-name files repo)]
+          (when-let [anchor (gdom/getElement "export-as-opml")]
+            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+            (.setAttribute anchor "download" (.-name zipfile))
+            (.click anchor)))))))
 
 ;;; export fns (ends)
