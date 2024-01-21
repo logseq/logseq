@@ -495,8 +495,8 @@
   "options see also `export-blocks-as-markdown`"
   [files options]
   (mapv
-   (fn [{:keys [path content names format]}]
-     (when (first names)
+   (fn [{:keys [path content title format]}]
+     (when title
        (util/profile (print-str :export-files-as-markdown path)
                      [path (export-helper content format options)])))
    files))
@@ -504,13 +504,14 @@
 (defn export-repo-as-markdown!
   "TODO: indent-style and remove-options"
   [repo]
-  (when-let [files (util/profile :get-file-content (common/get-file-contents-with-suffix repo))]
-    (let [files (export-files-as-markdown files nil)
-          zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
-      (p/let [zipfile (zip/make-zip zip-file-name files repo)]
-        (when-let [anchor (gdom/getElement "export-as-markdown")]
-          (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-          (.setAttribute anchor "download" (.-name zipfile))
-          (.click anchor))))))
+  (p/let [files (util/profile :get-file-content (common/<get-file-contents-with-suffix repo))]
+    (when (seq files)
+      (let [files (export-files-as-markdown files nil)
+            zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
+        (p/let [zipfile (zip/make-zip zip-file-name files repo)]
+          (when-let [anchor (gdom/getElement "export-as-markdown")]
+            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+            (.setAttribute anchor "download" (.-name zipfile))
+            (.click anchor)))))))
 
 ;;; export fns (ends)

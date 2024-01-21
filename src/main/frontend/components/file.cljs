@@ -57,13 +57,7 @@
                      (if (or (nil? modified-at) (zero? modified-at))
                        (t :file/no-data)
                        (date/get-date-time-string
-                        (t/to-default-time-zone (tc/to-date-time modified-at))))]])
-
-             (when-not mobile?
-               [:td [:a.text-sm
-                     {:on-click (fn [_e]
-                                  (export-handler/download-file! file))}
-                     [:span (t :download)]]])]))]])))
+                        (t/to-default-time-zone (tc/to-date-time modified-at))))]])]))]])))
 
 (rum/defc files
   []
