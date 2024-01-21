@@ -504,7 +504,7 @@
 (defn export-repo-as-markdown!
   "TODO: indent-style and remove-options"
   [repo]
-  (p/let [files (util/profile :get-file-content (common/<get-file-contents-with-suffix repo))]
+  (p/let [files (util/profile :get-file-content (common/<get-file-contents repo))]
     (when (seq files)
       (let [files (export-files-as-markdown files nil)
             zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]

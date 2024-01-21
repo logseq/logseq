@@ -18,8 +18,8 @@
    [lambdaisland.glogi :as log]
    [promesa.core :as p]
    [frontend.persist-db :as persist-db]
-   [frontend.persist-db.browser :as db-browser]
-   [cljs-bean.core :as bean])
+   [cljs-bean.core :as bean]
+   [frontend.handler.export.common :as export-common-handler])
   (:import
    [goog.string StringBuffer]))
 
@@ -48,21 +48,12 @@
           (.setAttribute anchor "download" "index.html")
           (.click anchor))))))
 
-(defn- <get-all-page->content
-  [repo]
-  (when-let [^object worker @db-browser/*worker]
-    (.get-all-page->content worker repo)))
-
 (defn export-repo-as-zip!
   [repo]
-  (p/let [page->content (<get-all-page->content repo)
+  (p/let [files (export-common-handler/<get-file-contents repo)
           [owner repo-name] (util/get-git-owner-and-repo repo)
           repo-name (str owner "-" repo-name)
-          files (map (fn [[title content]]
-                       [(str title "." (if (= :org (state/get-preferred-format))
-                                         "org"
-                                         "md"))
-                        content]) page->content)]
+          files (map (fn [{:keys [path content]}] [path content]) files)]
     (when (seq files)
       (p/let [zipfile (zip/make-zip repo-name files repo)]
         (when-let [anchor (gdom/getElement "download")]
@@ -106,14 +97,9 @@
        x))
    vec-tree))
 
-(defn- <get-all-pages
-  [repo]
-  (when-let [^object worker @db-browser/*worker]
-    (.get-all-pages worker repo)))
-
 (defn- <build-blocks
   [repo]
-  (p/let [pages (<get-all-pages repo)]
+  (p/let [pages (export-common-handler/<get-all-pages repo)]
     {:version 1
      :blocks
      (nested-select-keys pages
@@ -197,7 +183,7 @@
 ;; https://roamresearch.com/#/app/help/page/Nxz8u0vXU
 ;; export to roam json according to above spec
 (defn- <roam-data [repo]
-  (p/let [pages (<get-all-pages repo)]
+  (p/let [pages (export-common-handler/<get-all-pages repo)]
     (let [non-empty-pages (remove #(empty? (:block/children %)) pages)]
       (roam-export/traverse
        [:page/title
