@@ -59,21 +59,14 @@
   (when-let [data js/window.logseq_db]
     (let [repo (-> @state/state :config keys first)]
       (state/set-current-repo! repo)
-      (p/do!
-
-       (repo-handler/restore-and-setup-repo! repo)
-
-       (state/set-db-restoring! true)
-
-       (let [data (unescape-html data)
-             db (db/string->db data)
-             datoms (d/datoms db :eavt)]
-         (db/transact! repo datoms {:init-db? true
-                                    :new-graph? true}))
-
-       (state/set-db-restoring! false)
-
-       (ui-handler/re-render-root!)))))
+      (p/let [_ (repo-handler/restore-and-setup-repo! repo)
+              _ (let [data (unescape-html data)
+                      db (db/string->db data)
+                      datoms (d/datoms db :eavt)]
+                  (db/transact! repo datoms {:init-db? true
+                                             :new-graph? true}))]
+        (state/set-db-restoring! false)
+        (ui-handler/re-render-root!)))))
 
 (defn restore-state!
   []
@@ -117,6 +110,7 @@
   (events/run!)
   (p/do!
    (db-browser/start-db-worker!)
+   (state/set-db-restoring! true)
    (start)
    (restore-from-transit-str!)))
 
