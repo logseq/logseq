@@ -42,7 +42,8 @@
           }
         }
 
-        &.active {}
+        &.active {
+        }
       }
     }
 
@@ -196,7 +197,7 @@
   &-item-card {
     @apply flex py-3 px-1 rounded-md;
 
-    background-color: var(--ls-tertiary-background-color);
+    background-color: var(--ls-tertiary-background-color, hsl(var(--muted)));
     height: 150px;
 
     li {
@@ -893,7 +894,7 @@
         }
       }
 
-      .menu-links-wrapper  {
+      .menu-links-wrapper {
         a {
           @apply !text-popover-foreground/80;
 

@@ -2,6 +2,27 @@ html * {
   border-color: hsl(var(--border));
 }
 
+html[data-theme=light] {
+  --accent: var(--rx-gray-04-hsl);
+  --accent-foreground: var(--rx-gray-12-hsl);
+  --input: var(--rx-gray-03-hsl);
+}
+
+html[data-theme=dark] {
+  --primary-foreground: 255 92% 100%;
+  --background: 0 0% 11%;
+  --foreground: 0 0% 95%;
+  --card: 0 0% 11%;
+  --card-foreground: 0 0% 95%;
+  --secondary: 0 0% 20%;
+  --secondary-foreground: 0 0% 98%;
+  --border: 0 0% 16%;
+  --muted: 0 0% 15%;
+  --popover: 0 0% 7%;
+  --popover-foreground: 0 0 95%;
+  --input: 0 0% 25%;
+}
+
 html {
   .ui__dropdown-menu-content,
   .ui__context-menu-content,
@@ -10,6 +31,11 @@ html {
     --accent-foreground: var(--rx-gray-12-hsl);
 
     --muted: var(--rx-gray-05-hsl);
+  }
+
+  .ui__calendar {
+    --accent: var(--rx-gray-04-hsl);
+    --accent-foreground: var(--rx-gray-12-hsl);
   }
 
   &:not([data-color=logseq]) {
@@ -37,11 +63,6 @@ html {
     .block-children-left-border:hover {
       --ls-block-left-color: var(--rx-logseq-11);
     }
-  }
-
-  .ui__calendar {
-    --accent: var(--rx-gray-04-hsl);
-    --accent-foreground: var(--rx-gray-12-hsl);
   }
 }
 

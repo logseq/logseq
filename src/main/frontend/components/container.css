@@ -6,10 +6,7 @@
 }
 
 #root {
-  > div {
-    color: or(--ls-document-text-color, --lx-gray-12, --ls-primary-text-color, #24292e);
-    font-size: var(--ls-page-text-size);
-  }
+  font-size: var(--ls-page-text-size);
 }
 
 #app-container {
@@ -352,13 +349,13 @@
   }
 
   @screen sm {
-    --left-sidebar-bg-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color);
+    --left-sidebar-bg-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color, --rx-gray-03);
 
     padding-top: 0;
     width: var(--ls-left-sidebar-width);
 
     .dark & {
-      --left-sidebar-bg-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color);
+      --left-sidebar-bg-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color, --rx-gray-03);
     }
 
     > .wrap {
@@ -828,7 +825,7 @@ html[data-theme='dark'] {
   }
 
   .left-sidebar-inner {
-    --left-sidebar-bg-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color);
+    --left-sidebar-bg-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color, --rx-gray-03);
   }
 
   .cp__right-sidebar {

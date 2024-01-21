@@ -652,7 +652,8 @@
                    (state/close-settings!))
         modal-panel-content (or modal-panel-content (fn [_close] [:div]))]
     [:div.ui__modal
-     {:style {:z-index (if show? 999 -1)}
+     {:style {:z-index (if show? 999 -1)
+              :display (if show? "flex" "none")}
       :label label}
      (css-transition
       {:in show? :timeout 0}

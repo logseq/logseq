@@ -338,7 +338,7 @@ i.ti {
 /* region FIXME: override elements (?) */
 h1.title, h1.title input {
   margin-bottom: 1.5rem;
-  color: or(--ls-journal-title-color, --lx-gray-12, --ls-title-text-color, #222);
+  color: or(--ls-journal-title-color, --lx-gray-12, --ls-title-text-color, hsl(var(--foreground)/.8));
   font-size: var(--ls-page-title-size, 36px);
   font-weight: 500;
 }
@@ -350,7 +350,7 @@ h1.title, h1.title input {
 .block-highlight,
 .content .selected {
   transition: background-color 0.2s cubic-bezier(0, 1, 0, 1);
-  background-color: var(--ls-block-highlight-color);
+  background-color: var(--ls-block-highlight-color, var(--rx-gray-04));
   padding: -1px;
 }
 
@@ -384,7 +384,7 @@ button.menu {
 .menu-link:hover,
 button.pull:hover,
 button.menu:focus {
-  background-color: or(--lx-gray-05, --ls-menu-hover-color, #f4f5f7);
+  background-color: or(--lx-gray-05, --ls-menu-hover-color, --rx-gray-05);
 }
 
 .menu-links-wrapper,

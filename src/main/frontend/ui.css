@@ -23,7 +23,7 @@
       }
 
       &:hover, &.chosen {
-        background-color: or(--lx-gray-05, --ls-menu-hover-color, #f4f5f7);
+        background-color: or(--lx-gray-05, --ls-menu-hover-color, hsl(var(--accent)));
 
         .has-help small {
           visibility: visible;
@@ -32,7 +32,7 @@
 
       &:not(.chosen):hover {
         background-color: unset !important;
-        color: or(--ls-autocomplete-color-hover, --lx-gray-12, --ls-primary-text-color);
+        color: or(--ls-autocomplete-color-hover, --lx-gray-12, --ls-primary-text-color, hsl(var(--accent)));
       }
     }
   }
@@ -68,8 +68,8 @@
   .notification-area {
     @apply border;
 
-    background-color: or(--ls-notification-background, --lx-gray-03, --ls-tertiary-background-color, #fff);
-    color: or(--ls-notification-text-color, --lx-gray-11, --ls-primary-text-color);
+    background-color: or(--ls-notification-background, --lx-gray-03, --ls-tertiary-background-color, --rx-gray-03);
+    color: or(--ls-notification-text-color, --lx-gray-11, --ls-primary-text-color, --rx-gray-11);
   }
 }
 
@@ -100,7 +100,7 @@
   top-12 sm:top-[calc(3vh+50px)];
 
   &-overlay {
-    @apply fixed inset-0 transition-opacity;
+    @apply fixed inset-0;
   }
 
   &-overlay div {
@@ -112,7 +112,7 @@
   &-panel {
     @apply relative rounded-md shadow-lg border border-gray-06 overflow-hidden;
 
-    background: or(--ls-modal-panel-color, --lx-gray-02, --ls-secondary-background-color);
+    background: var(--lx-gray-02, var(--ls-secondary-background-color, hsl(var(--popover))));
 
     .panel-content {
       overflow-y: auto;

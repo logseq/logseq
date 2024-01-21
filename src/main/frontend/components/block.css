@@ -477,10 +477,10 @@
 }
 
 .color-level {
-  background-color: or(--ls-right-sidebar-content-background, --lx-gray-02, --color-level-1);
+  background-color: or(--ls-right-sidebar-content-background, --lx-gray-02, --color-level-1, --rx-gray-02);
 
   .dark & {
-    background-color: or(--ls-right-sidebar-content-background, --lx-gray-01, --color-level-1);
+    background-color: or(--ls-right-sidebar-content-background, --lx-gray-01, --color-level-1, --rx-gray-01);
   }
 
   & .color-level {

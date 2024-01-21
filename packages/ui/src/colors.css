@@ -1,24 +1,3 @@
-html[data-theme=light] {
-  --accent: var(--rx-gray-04-hsl);
-  --accent-foreground: var(--rx-gray-12-hsl);
-  --input: var(--rx-gray-03-hsl);
-}
-
-html[data-theme=dark] {
-  --primary-foreground: 255 92% 100%;
-  --background: 0 0% 11%;
-  --foreground: 0 0% 95%;
-  --card: 0 0% 11%;
-  --card-foreground: 0 0% 95%;
-  --secondary: 0 0% 20%;
-  --secondary-foreground: 0 0% 98%;
-  --border: 0 0% 16%;
-  --muted: 0 0% 15%;
-  --popover: 0 0% 7%;
-  --popover-foreground: 0 0 95%;
-  --input: 0 0% 25%;
-}
-
 html {
   &[data-color=logseq] {
     --lx-accent-01: var(--rx-logseq-01);
