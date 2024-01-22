@@ -27,7 +27,7 @@
                                        v)))
                     x)))))
 
-(defn update-refs-and-macros
+(defn- update-refs-and-macros
   "When a block is deleted, refs are updated and macros associated with the block are deleted"
   [txs db repo opts set-state-fn]
   (if (= :delete-blocks (:outliner-op opts))
