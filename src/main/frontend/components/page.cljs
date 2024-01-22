@@ -10,7 +10,6 @@
             [frontend.components.reference :as reference]
             [frontend.components.scheduled-deadlines :as scheduled]
             [frontend.components.icon :as icon-component]
-            [frontend.components.property.value :as pv]
             [frontend.components.db-based.page :as db-page]
             [frontend.handler.property.util :as pu]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -337,8 +336,7 @@
                         (date/journal-title->custom-format title)
                         title))
               old-name (or title page-name)
-              db-based? (config/db-based-graph? repo)
-              tags-property (db/entity [:block/name "tags"])]
+              db-based? (config/db-based-graph? repo)]
           [:div.ls-page-title.flex.flex-1.flex-row.flex-wrap.w-full.relative.items-center.gap-2
            {:on-mouse-over #(reset! *hover? true)
             :on-mouse-out #(reset! *hover? false)}
