@@ -871,7 +871,6 @@
         light? (= "light" (state/sub :ui/theme))
         sidebar-open?  (state/sub :ui/sidebar-open?)
         settings-open? (state/sub :ui/settings-open?)
-        settings-accent-open? (state/sub :ui/settings-accent-open?)
         left-sidebar-open?  (state/sub :ui/left-sidebar-open?)
         wide-mode? (state/sub :ui/wide-mode?)
         ls-block-hl-colored? (state/sub :pdf/block-highlight-colored?)
