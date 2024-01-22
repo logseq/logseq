@@ -16,6 +16,7 @@
             [rum.core :as rum]
             [logseq.shui.ui :as shui-ui]
             [frontend.util :as util]
+            [clojure.set :as set]
             [clojure.string :as string]))
 
 (rum/defc page-properties < rum/reactive
@@ -145,8 +146,8 @@
        [:<>
         (when (= mode :class)
           (class-component/configure page {:show-title? false}))
-        (tags-row page)
-        (icon-row page)
+        (when-not config/publishing? (tags-row page))
+        (when-not config/publishing? (icon-row page))
         (page-properties page (assoc page-opts :mode mode))])]))
 
 (rum/defc page-properties-react < rum/reactive
@@ -178,18 +179,27 @@
        (let [mode' (keyword (string/lower-case mode))
              selected? (= mode' current-mode)]
          (shui-ui/button {:variant (if selected? :outline :ghost) :size :sm
-                          :on-click (fn [e]
-                                      (util/stop-propagation e)
-                                      (reset! *mode mode'))}
+                          :on-click (if config/publishing?
+                                      util/stop-propagation
+                                      (fn [e]
+                                        (util/stop-propagation e)
+                                        (reset! *mode mode')))}
                          mode)))]))
 
 (rum/defcs page-info < rum/reactive
   (rum/local false ::hover?)
   (rum/local nil ::mode)
-  {:init (fn [state]
-           (let [page (first (:rum/args state))
-                 properties (:block/properties page)]
-             (assoc state ::collapsed? (atom (empty? properties)))))}
+  {:init (if config/publishing?
+           (fn [state]
+             (let [page* (first (:rum/args state))
+                   page (db/sub-block (:db/id page*))]
+               (assoc state
+                      ::collapsed?
+                      (atom (not (seq (set/intersection #{"class" "property"} (:block/type page))))))))
+           (fn [state]
+             (let [page (first (:rum/args state))
+                   properties (:block/properties page)]
+               (assoc state ::collapsed? (atom (empty? properties))))))}
   [state page *hover-title?]
   (let [page (db/sub-block (:db/id page))
         *collapsed? (::collapsed? state)
@@ -200,34 +210,44 @@
         collapsed? (rum/react *collapsed?)
         has-tags? (seq (:block/tags page))
         hover-or-expanded? (or @*hover? hover-title? (not collapsed?))]
-    [:div.page-info {:on-mouse-over #(reset! *hover? true)
-                     :on-mouse-leave #(reset! *hover? false)}
-     (when (or hover-or-expanded? has-tags?)
-       [:div.fade-in.p-2 (cond-> {}
-                           (or @*hover? (not collapsed?))
-                           (assoc :class "border rounded"))
-        [:div.info-title.cursor {:on-click #(swap! *collapsed? not)}
-         [:div.flex.flex-row.items-center.gap-2.justify-between
-          [:div.flex.flex-row.items-center.gap-2
-           (if collapsed?
-             [:<>
-              (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
-                              (ui/icon "tags"))
-              [:div {:on-click util/stop-propagation}
-               (tags page)]]
-             [:div.flex.flex-row.items-center.gap-1
-              (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
-                              (ui/icon "info-circle"))
-              [:a.text-sm.font-medium.fade-link
-               "Configure:"]
-              (mode-switch types *mode)])]
-          (when (or @*hover? (not collapsed?))
-            (shui-ui/button
-             {:variant :ghost :size :sm :class "fade-link"}
-             (ui/icon (if collapsed?
-                        "chevron-down"
-                        "chevron-up"))))]]
+    (when (if config/publishing?
+            ;; Since publishing is read-only, hide this component if it has no info to show
+            ;; as it creates a fair amount of empty vertical space
+            (or has-tags? (some? types))
+            true)
+     [:div.page-info {:on-mouse-over #(reset! *hover? true)
+                      :on-mouse-leave #(reset! *hover? false)}
+      (when (or hover-or-expanded? has-tags?)
+        [:div.fade-in.p-2 (cond-> {}
+                            (or @*hover? (not collapsed?))
+                            (assoc :class "border rounded"))
+         [:div.info-title.cursor {:on-click
+                                  (if config/publishing?
+                                    (fn [_]
+                                      (when (seq (set/intersection #{"class" "empty"} types))
+                                        (swap! *collapsed? not)))
+                                    #(swap! *collapsed? not))}
+          [:div.flex.flex-row.items-center.gap-2.justify-between
+           [:div.flex.flex-row.items-center.gap-2
+            (if collapsed?
+              [:<>
+               (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
+                               (ui/icon "tags"))
+               [:div {:on-click util/stop-propagation}
+                (tags page)]]
+              [:div.flex.flex-row.items-center.gap-1
+               (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
+                               (ui/icon "info-circle"))
+               [:a.text-sm.font-medium.fade-link
+                "Configure:"]
+               (mode-switch types *mode)])]
+           (when (or @*hover? (not collapsed?))
+             (shui-ui/button
+              {:variant :ghost :size :sm :class "fade-link"}
+              (ui/icon (if collapsed?
+                         "chevron-down"
+                         "chevron-up"))))]]
 
-        (when-not collapsed?
-          [:div.py-2.px-4
-           (page-configure page *mode)])])]))
+         (when-not collapsed?
+           [:div.py-2.px-4
+            (page-configure page *mode)])])])))
