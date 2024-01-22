@@ -13,7 +13,8 @@
             [goog.dom :as gdom]
             [frontend.format.mldoc :as mldoc]
             [malli.core :as m]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.config :as config]))
 
 ;;; block-ast, inline-ast -> simple-ast
 
@@ -504,9 +505,12 @@
 (defn export-repo-as-markdown!
   "TODO: indent-style and remove-options"
   [repo]
-  (p/let [files (util/profile :get-file-content (common/<get-file-contents repo))]
+  (p/let [files (util/profile :get-file-content (common/<get-file-contents repo "md"))]
     (when (seq files)
       (let [files (export-files-as-markdown files nil)
+            repo (-> repo
+                     (string/replace config/db-version-prefix "")
+                     (string/replace config/local-db-prefix ""))
             zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
         (p/let [zipfile (zip/make-zip zip-file-name files repo)]
           (when-let [anchor (gdom/getElement "export-as-markdown")]

@@ -50,7 +50,7 @@
 
 (defn export-repo-as-zip!
   [repo]
-  (p/let [files (export-common-handler/<get-file-contents repo)
+  (p/let [files (export-common-handler/<get-file-contents repo "md")
           [owner repo-name] (util/get-git-owner-and-repo repo)
           repo-name (str owner "-" repo-name)
           files (map (fn [{:keys [path content]}] [path content]) files)]
@@ -102,8 +102,7 @@
   (p/let [pages (export-common-handler/<get-all-pages repo)]
     {:version 1
      :blocks
-     (nested-select-keys pages
-                         [:block/id
+     (nested-select-keys [:block/id
                           :block/type
                           :block/page-name
                           :block/properties
@@ -111,7 +110,8 @@
                           :block/children
                           :block/content
                           :block/created-at
-                          :block/updated-at])}))
+                          :block/updated-at]
+                         pages)}))
 
 (defn- file-name [repo extension]
   (-> (string/replace repo config/local-db-prefix "")
@@ -121,23 +121,25 @@
 
 (defn- <export-repo-as-edn-str [repo]
   (p/let [result (<build-blocks repo)]
+    (prn :debug :result result)
     (let [sb (StringBuffer.)]
       (pprint/pprint result (StringBufferWriter. sb))
       (str sb))))
 
 (defn export-repo-as-edn!
   [repo]
-  (when-let [edn-str (<export-repo-as-edn-str repo)]
-    (let [data-str (some->> edn-str
-                            js/encodeURIComponent
-                            (str "data:text/edn;charset=utf-8,"))
-          filename (file-name repo :edn)]
-      (if (mobile-util/native-platform?)
-        (export-file-on-mobile edn-str filename)
-        (when-let [anchor (gdom/getElement "download-as-edn-v2")]
-          (.setAttribute anchor "href" data-str)
-          (.setAttribute anchor "download" filename)
-          (.click anchor))))))
+  (p/let [edn-str (<export-repo-as-edn-str repo)]
+    (when edn-str
+      (let [data-str (some->> edn-str
+                              js/encodeURIComponent
+                              (str "data:text/edn;charset=utf-8,"))
+            filename (file-name repo :edn)]
+        (if (mobile-util/native-platform?)
+          (export-file-on-mobile edn-str filename)
+          (when-let [anchor (gdom/getElement "download-as-edn-v2")]
+            (.setAttribute anchor "href" data-str)
+            (.setAttribute anchor "download" filename)
+            (.click anchor)))))))
 
 (defn- nested-update-id
   [vec-tree]
