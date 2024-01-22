@@ -197,7 +197,6 @@
       @apply pl-6 pr-4 py-1 flex justify-between items-center select-none sticky top-[-4px];
       @apply cursor-pointer z-[2] active:opacity-80;
 
-      background-color: var(--left-sidebar-bg-color);
 
       .ui__icon {
         @apply flex justify-center;
@@ -349,13 +348,11 @@
   }
 
   @screen sm {
-    --left-sidebar-bg-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color, --rx-gray-03);
-
     padding-top: 0;
     width: var(--ls-left-sidebar-width);
 
     .dark & {
-      --left-sidebar-bg-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color, --rx-gray-03);
+      --left-sidebar-bg-color: var(--lx-gray-02, var(--ls-secondary-background-color, hsl(var(--secondary, var(--rx-gray-03-hsl)))));
     }
 
     > .wrap {
@@ -822,10 +819,6 @@ html[data-theme='dark'] {
     > .shade-mask {
       background-color: rgba(0, 0, 0, .15);
     }
-  }
-
-  .left-sidebar-inner {
-    --left-sidebar-bg-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color, --rx-gray-03);
   }
 
   .cp__right-sidebar {

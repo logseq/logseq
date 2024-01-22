@@ -316,6 +316,17 @@
       pointer-events: none;
     }
   }
+
+  &-accent-colors-modal-inner {
+    & > .it {
+      grid-template-columns: auto;
+      margin: -8px;
+    }
+
+    label[for=toggle_radix_theme] {
+      @apply text-xl font-semibold opacity-90;
+    }
+  }
 }
 
 .cp__assets {
@@ -487,5 +498,11 @@ body[data-settings-tab=keymap] {
         @apply px-4 pt-[22px] pb-2 h-auto;
       }
     }
+  }
+}
+
+.ui__modal[label=accent-colors-picker] {
+  .panel-content {
+    @apply sm:min-w-[520px];
   }
 }

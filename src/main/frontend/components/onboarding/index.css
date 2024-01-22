@@ -413,7 +413,7 @@ body[data-page=import] {
 
     .shepherd-footer {
       button {
-        background-color: var(--lx-bg-override, var(--lx-accent-09, var(--ls-button-background)));
+        background-color: var(--lx-accent-09, var(--ls-button-background));
         padding: 4px 8px;
         border-radius: 6px;
         overflow: hidden;
@@ -431,7 +431,7 @@ body[data-page=import] {
       }
 
       button:hover {
-          background-color: var(--lx-bg-override, var(--lx-accent-10, var(--ls-button-background)));
+          background-color: var(--lx-accent-10, var(--ls-button-background));
       }
     }
   }

@@ -83,12 +83,12 @@ body {
 
   a {
     cursor: pointer;
-    color: or(--ls-anchor-link-text-color, --lx-accent-11, --ls-link-text-color, #045591);
+    color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary)/.8)));
     text-decoration: none;
   }
 
   a:hover {
-    color: or(--ls-anchor-link-text-color-hover, --lx-accent-12, --ls-link-text-hover-color, #000);
+    color: var(--lx-accent-12, var(--ls-link-text-hover-color, hsl(var(--primary))));
   }
 
   code {
@@ -338,7 +338,7 @@ i.ti {
 /* region FIXME: override elements (?) */
 h1.title, h1.title input {
   margin-bottom: 1.5rem;
-  color: or(--ls-journal-title-color, --lx-gray-12, --ls-title-text-color, hsl(var(--foreground)/.8));
+  color: var(--lx-gray-12, var(--ls-title-text-color, hsl(var(--foreground))));
   font-size: var(--ls-page-title-size, 36px);
   font-weight: 500;
 }

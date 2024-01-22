@@ -11,7 +11,7 @@ html[data-theme=light] {
 html[data-theme=dark] {
   --accent: var(--rx-gray-12-hsl);
   --accent-foreground: var(--rx-gray-02-hsl);
-  --primary-foreground: 255 92% 100%;
+  --primary-foreground: 0 0% 22%;
   --background: 0 0% 11%;
   --foreground: 0 0% 95%;
   --card: 0 0% 11%;
@@ -66,6 +66,12 @@ html {
       --ls-block-left-color: var(--rx-logseq-11);
     }
   }
+
+  &[data-color=none] {
+    #ui__ac-inner {
+
+    }
+  }
 }
 
 html[data-theme=light] {
@@ -92,6 +98,26 @@ html[data-theme=dark] {
   &[data-color=logseq] {
     @apply bg-[#002b36];
 
+    .ui__modal-panel {
+      @apply border-accent-01;
+    }
+
+    .references-blocks-item {
+      background-color: var(--lx-gray-03, var(--ls-secondary-background-color));
+    }
+
+    .cp__right-sidebar-inner {
+      .references-blocks-item {
+        background-color: var(--lx-gray-04, var(--ls-tertiary-background-color));
+      }
+    }
+
+    .cp__themes-installed {
+      .it.is-active, .it:hover {
+        @apply bg-accent-01;
+      }
+    }
+
     .ui__button {
       &.as-outline {
         --accent: 192 100% 12%;
@@ -115,6 +141,17 @@ html[data-theme=dark] {
 
     .rc-datepicker {
       --accent: 200 97% 37%;
+    }
+
+    .cp__cmdk {
+      .bg-gray-02 {
+        background-color: var(--ls-secondary-background-color, var(--lx-gray-02));
+      }
+
+      .border-gray-06, .border-gray-07 {
+        border-color: var(--ls-border-color, var(--lx-gray-06));
+        opacity: .6;
+      }
     }
   }
 }

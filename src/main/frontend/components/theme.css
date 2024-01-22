@@ -154,5 +154,5 @@ main.ls-fold-button-on-right {
 }
 
 main.theme-inner {
-  --left-sidebar-bg-color: or(--ls-left-sidebar-background-color, --lx-gray-02, --ls-primary-background-color, --rx-gray-03);
+  --left-sidebar-bg-color: var(--lx-gray-02, hsl(var(--secondary, var(--rx-gray-03-hsl))));
 }

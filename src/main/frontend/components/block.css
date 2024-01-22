@@ -296,10 +296,10 @@
 }
 
 .page-ref {
-  @apply text-accent-11;
+  color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary)/.8)));
 
   &:hover {
-    @apply text-accent-12;
+    color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary))));
   }
 }
 

@@ -23,7 +23,7 @@
       }
 
       &:hover, &.chosen {
-        background-color: or(--lx-gray-05, --ls-menu-hover-color, hsl(var(--accent)));
+        background-color: or(--lx-gray-05, --ls-menu-hover-color, hsl(var(--secondary)));
 
         .has-help small {
           visibility: visible;
@@ -32,7 +32,7 @@
 
       &:not(.chosen):hover {
         background-color: unset !important;
-        color: or(--ls-autocomplete-color-hover, --lx-gray-12, --ls-primary-text-color, hsl(var(--accent)));
+        color: or(--lx-gray-12, --ls-primary-text-color, hsl(var(--secondary)));
       }
     }
   }
@@ -159,7 +159,8 @@
     }
   }
 
-  &[label="ls-modal-align-center"] {
+  &[label="ls-modal-align-center"],
+  &.as-center{
     top: 0;
 
     .ui__modal-panel {

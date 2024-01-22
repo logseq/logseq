@@ -647,6 +647,7 @@
         close-backdrop? (state/sub :modal/close-backdrop?)
         show? (state/sub :modal/show?)
         label (state/sub :modal/label)
+        class (state/sub :modal/class)
         close-fn (fn []
                    (state/close-modal!)
                    (state/close-settings!))
@@ -654,7 +655,8 @@
     [:div.ui__modal
      {:style {:z-index (if show? 999 -1)
               :display (if show? "flex" "none")}
-      :label label}
+      :label label
+      :class class}
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
@@ -719,12 +721,14 @@
             close-backdrop? (:modal/close-backdrop? modal)
             show? (:modal/show? modal)
             label (:modal/label modal)
+            class (:modal/class modal)
             close-fn (fn []
                        (state/close-sub-modal! id))
             modal-panel-content (or modal-panel-content (fn [_close] [:div]))]
         [:div.ui__modal.is-sub-modal
          {:style {:z-index (if show? (+ 999 idx) -1)}
-          :label label}
+          :label label
+          :class class}
          (css-transition
           {:in show? :timeout 0}
           (fn [state]

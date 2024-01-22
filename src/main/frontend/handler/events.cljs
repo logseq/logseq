@@ -13,6 +13,7 @@
             [frontend.commands :as commands]
             [frontend.components.cmdk :as cmdk]
             [frontend.components.conversion :as conversion-component]
+            [frontend.components.settings :as settings]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
             [frontend.components.file-sync :as file-sync]
@@ -335,6 +336,12 @@
 (defmethod handle :modal/show-themes-modal [_]
   (plugin/open-select-theme!))
 
+(defmethod handle :modal/show-accent-colors-modal [_]
+  (state/set-sub-modal!
+    #(settings/modal-accent-colors-inner)
+    {:center? true
+     :label "accent-colors-picker"}))
+
 (rum/defc modal-output
   [content]
   content)
@@ -656,6 +663,9 @@
      nfs-handler/rebuild-index!
      #(do (page-handler/create-today-journal!)
           (file-sync-restart!)))))
+
+(defmethod handle :graph/clear-cache! [[_]]
+  (notification/show! "TODO: clear cache!"))
 
 (defmethod handle :graph/ask-for-re-index [[_ *multiple-windows? ui]]
   ;; *multiple-windows? - if the graph is opened in multiple windows, boolean atom

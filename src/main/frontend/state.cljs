@@ -1386,14 +1386,15 @@ Similar to re-frame subscriptions"
            input (medley/filter-vals
                    #(not (nil? %1))
                    {:modal/id            id
-                    :modal/label         (or label (if center? "ls-modal-align-center" ""))
+                    :modal/label         (if label (name label) "")
+                    :modal/class         (if center? "as-center" "")
                     :modal/payload       payload
                     :modal/show?         (if (boolean? show?) show? true)
                     :modal/panel-content panel-content
                     :modal/close-btn?    close-btn?
                     :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)})]
        (swap! state update-in
-              [:modal/subsets (or idx (count modals))]
+         [:modal/subsets (or idx (count modals))]
               merge input)
        (:modal/subsets @state)))))
 
@@ -1429,7 +1430,8 @@ Similar to re-frame subscriptions"
          (<! (async/timeout 100)))
        (swap! state assoc
               :modal/id id
-              :modal/label (or label (if center? "ls-modal-align-center" ""))
+              :modal/label (if label (name label) "")
+              :modal/class (if center? "as-center" "")
               :modal/show? (boolean modal-panel-content)
               :modal/panel-content modal-panel-content
               :modal/payload payload

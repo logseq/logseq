@@ -13,7 +13,6 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.dicts :as dicts]
-            [frontend.handler :as handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.global-config :as global-config-handler]
@@ -368,6 +367,11 @@
                               :stretch    true
                               :action     pick-theme})]))
 
+(rum/defc modal-accent-colors-inner
+  []
+  [:div.cp__settings-accent-colors-modal-inner
+   (accent-color-row)])
+
 (defn file-format-row [t preferred-format]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
@@ -569,7 +573,7 @@
 (defn clear-cache-row [t]
   (row-with-button-action {:left-label   (t :settings-page/clear-cache)
                            :button-label (t :settings-page/clear)
-                           :on-click     handler/clear-cache!
+                           :on-click     #(state/pub-event! [:graph/clear-cache!])
                            :-for         "clear_cache"}))
 
 (defn version-row [t version]
