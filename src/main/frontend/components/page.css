@@ -74,11 +74,7 @@
       }
 
       > span {
-        @apply text-sm;
-
-        color: or(--ls-all-pages-table-text, --lx-gray-11, rgb(115, 115, 115));
-
-        padding: 6px 8px;
+        @apply text-sm py-1.5 px-2;
       }
     }
 
@@ -181,6 +177,7 @@
         outline: none;
         border: none;
         position: absolute;
+        padding-left: 8px;
       }
 
       .form-input {
@@ -192,8 +189,8 @@
       .cancel {
         opacity: .3;
         position: absolute;
-        right: 5px;
-        top: 2px;
+        right: 6px;
+        top: 6px;
 
         &:hover {
           opacity: .6;

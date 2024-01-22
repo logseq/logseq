@@ -15,6 +15,6 @@
                                                status-id
                                                {}))))
 
-(defn cycle-status!
-  [block status]
-  )
+(comment
+  (defn cycle-status!
+   [block status]))

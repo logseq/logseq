@@ -234,7 +234,6 @@
     :settings-page/enable-whiteboards "Tableaux blancs"
     :settings-page/export-theme "Exporter le thème"
     :settings-page/git-commit-delay "Délai (secondes) des commits Git automatiques"
-    :settings-page/git-confirm "Vous devez redémarrer l'application après avoir mis à jour le dossier Git"
     :settings-page/git-switcher-label "Activer les commits Git automatiques"
     :settings-page/home-default-page "Régler la page d'accueil par défaut"
     :settings-page/login-prompt "Pour accéder aux nouvelles fonctionnalités avant tout le monde, vous devez être sponsor ou \"backer\" (contributeur) sur Open Collective, puis vous connecter."
@@ -520,7 +519,7 @@
     :shortcut.category/plugins "Plugins"
     :settings-permission/start-granting "Permettre"
     :settings-page/update-error-2 "Vérifiez le/la"
-    :settings-page/update-error-1 "⚠️ Oups, quelque chose s'est mal passée !"
+    :settings-page/update-error-1 "⚠️ Oups, quelque chose s'est mal passé !"
     :settings-page/update-available "Nouvelle mise à jour trouvée"
     :settings-page/theme-system "système"
     :settings-page/theme-light "Clair"
@@ -684,7 +683,7 @@
     :page/logseq-is-having-a-problem "Logseq a un problème. Pour essayer de le ravoir…"
     :page/page-already-exists "Page “{1}” existe déjà !"
     :page/slide-view "Visualiser en diapositives"
-    :page/something-went-wrong "Quelque chose s'est mal passée"
+    :page/something-went-wrong "Quelque chose s'est mal passé"
     :page/step "Étape {1}"
     :page/try "Essayer"
     :page/whiteboard-to-journal-error "Les pages de tableau blanc ne peuvent pas être renommées en titre de journ…"
@@ -769,5 +768,4 @@
     :settings-page/auto-chmod "Automatiquement changer les permissions du fichier"
     :settings-page/auto-chmod-desc "Désactiver pour permettre l'édition par plusieurs utilisateurs avec les permissions données par l'appartenance au groupe."
     :settings-page/tab-keymap "Raccourcis"
-    :unlinked-references/reference-count (fn [total] (str total (if (= total 1) " référence non liée" " références non liées")))
-}
+    :unlinked-references/reference-count  (fn [total] (str total (if (= total 1) " référence non liée" " références non liées")))}

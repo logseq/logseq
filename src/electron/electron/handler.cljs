@@ -31,6 +31,7 @@
             [electron.handler-interface :refer [handle]]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.sqlite.db :as sqlite-db]
+            [goog.functions :refer [debounce]]
             [logseq.common.graph :as common-graph]
             [promesa.core :as p]
             [clojure.edn :as edn]))
@@ -473,6 +474,12 @@
 
 (defmethod handle :gitStatus [_ [_]]
   (git/short-status!))
+
+(def debounced-configure-auto-commit! (debounce git/configure-auto-commit! 5000))
+(defmethod handle :setGitAutoCommit []
+  (debounced-configure-auto-commit!)
+  nil)
+
 
 (defmethod handle :installMarketPlugin [_ [_ mft]]
   (plugin/install-or-update! mft))

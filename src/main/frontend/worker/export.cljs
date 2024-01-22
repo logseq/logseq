@@ -5,8 +5,7 @@
             [frontend.worker.file.core :as worker-file]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
-            [logseq.graph-parser.property :as gp-property]
-            [datascript.core :as d]))
+            [logseq.graph-parser.property :as gp-property]))
 
 (defn block->content
   "Converts a block including its children (recursively) to plain-text."

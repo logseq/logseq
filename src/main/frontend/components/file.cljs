@@ -10,7 +10,6 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.fs :as fs]
-            [frontend.handler.export :as export-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]

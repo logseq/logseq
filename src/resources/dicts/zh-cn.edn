@@ -166,7 +166,6 @@
  :settings-page/edit-custom-css "编辑 custom.css （当前库）"
  :settings-page/custom-configuration "自定义配置"
  :settings-page/custom-theme "自定义主题"
- :settings-page/git-confirm "更新 Git 设置后，需要重启应用"
  :settings-page/git-switcher-label "开启 Git 自动 commit"
  :settings-page/git-commit-delay "Git 自动 commit 间隔秒数"
  :settings-page/preferred-outdenting "逻辑缩进"

@@ -38,7 +38,7 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [logseq.shui.core :as shui]
-            [frontend.shui :refer [make-shui-context]]))
+            [logseq.shui.ui :as shui-ui]))
 
 (declare icon)
 
@@ -196,7 +196,7 @@
                        (string/split #" "))
                    sequence)]
     [:span.keyboard-shortcut
-     (shui/shortcut-v1 sequence (make-shui-context) opts)]))
+     (shui/shortcut-v1 sequence opts)]))
 
 (rum/defc menu-link
   [{:keys [only-child? no-padding? class shortcut] :as options} child]
@@ -304,7 +304,8 @@
                                              :margin-right -18}}
             (button
               {:button-props {:aria-label "Close"}
-               :intent "link"
+               :variant :ghost
+               :class "hover:bg-transparent hover:text-foreground"
                :on-click (fn []
                            (notification/clear! uid))
                :icon "x"})]]]]]])))
@@ -656,7 +657,8 @@
      (mixins/on-key-down
       state
       {;; enter
-       13 (fn [state _e]
+       13 (fn [state e]
+            (.preventDefault e)
             (some->
              (.querySelector (rum/dom-node state) "button.ui__modal-enter")
              (.click)))})))
@@ -1014,32 +1016,36 @@
 (def icon shui/icon)
 
 (rum/defc button-inner
-  [text & {:keys [theme background href class intent on-click small? icon icon-props disabled? button-props]
+  [text & {:keys [theme background variant href size class intent small? icon icon-props disabled? button-props]
            :or   {small? false}
-           :as   option}]
-  (let [opts {:text text
-              :theme (or (when (contains? #{"link" "border-link"} intent) :text) theme)
-              :href href
-              :on-click on-click
-              :size (if small? :sm :md)
-              :icon icon
-              :icon-props icon-props
-              :button-props (merge
-                             (dissoc option
-                                     :background :href :class :intent :small? :large? :icon :icon-props :disabled? :button-props)
-                             button-props)
-              :class (if (= intent "border-link") (str class " border") class)
-              :muted disabled?
-              :disabled? disabled?}]
-    (shui/button (cond->
-                  opts
-                   background
-                   (assoc :color background))
-                 (make-shui-context))))
+           :as   opts}]
+  (let [button-props (merge
+                       (dissoc opts
+                         :theme :background :href :variant :class :intent :small? :icon :icon-props :disabled? :button-props)
+                       button-props)
+        props (merge {:variant (cond
+                                 (= theme :gray) :ghost
+                                 (= background "gray") :secondary
+                                 (= background "red") :destructive
+                                 (= intent "link") :ghost
+                                 :else (or variant :default))
+                      :href    href
+                      :size    (if small? :xs (or size :sm))
+                      :icon    icon
+                      :class   (if (and (string? background)
+                                     (not (contains? #{"gray" "red"} background)))
+                                 (str class " primary-" background) class)
+                      :muted   disabled?}
+                button-props)
+
+        icon (when icon (shui-ui/tabler-icon icon icon-props))
+        children [icon text]]
+
+    (shui-ui/button props children)))
 
 (defn button
   [text & {:keys []
-           :as opts}]
+           :as   opts}]
   (if (map? text)
     (button-inner nil text)
     (button-inner text opts)))
@@ -1050,7 +1056,7 @@
    [:span.ui__point.overflow-hidden.rounded-full.inline-block
     (merge {:class (str (util/hiccup->class klass) " " class)
             :style (merge {:width size :height size} style)}
-           (dissoc opts :style :class))]))
+      (dissoc opts :style :class))]))
 
 (rum/defc type-icon
   [{:keys [name class title extension?]}]

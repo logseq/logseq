@@ -32,6 +32,7 @@
         "stylelint": "^13.8.0",
         "stylelint-config-standard": "^20.0.0",
         "tailwindcss": "3.3.5",
+        "tailwindcss-animate": "^1.0.7",
         "typescript": "^4.4.3"
     },
     "scripts": {
@@ -56,6 +57,7 @@
         "css:build": "postcss tailwind.all.css -o static/css/style.css --verbose --env production",
         "css:watch": "cross-env TAILWIND_MODE=watch postcss tailwind.all.css -o static/css/style.css --verbose --watch",
         "cljs:watch": "clojure -M:cljs watch app electron",
+        "cljs:watch-storybook": "clojure -M:cljs watch stories-dev",
         "cljs:app-watch": "clojure -M:cljs watch app",
         "cljs:electron-watch": "clojure -M:cljs watch app electron --config-merge \"{:asset-path \\\"./js\\\"}\"",
         "cljs:release": "clojure -M:cljs release app publishing electron",

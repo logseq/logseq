@@ -538,7 +538,6 @@
  :settings-page/enable-tooltip "Tooltips"
  :settings-page/export-theme "Theme exportieren"
  :settings-page/git-commit-delay "Anzahl Sekunden für Git Auto Commit"
- :settings-page/git-confirm "Sie müssen die App neu starten, nachdem Sie die Git-Einstellungen angepasst haben."
  :settings-page/git-switcher-label "Git Auto Commit aktivieren"
  :settings-page/home-default-page "Standard-Homepage einrichten"
  :settings-page/login-prompt "Um vor allen anderen auf neue Funktionen zugreifen zu können, müssen Sie ein Open Collective Sponsor oder Backer von Logseq sein und sich daher zuerst anmelden."
