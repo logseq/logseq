@@ -3,12 +3,14 @@ html * {
 }
 
 html[data-theme=light] {
-  --accent: var(--rx-gray-04-hsl);
-  --accent-foreground: var(--rx-gray-12-hsl);
+  --accent: var(--rx-gray-12-hsl);
+  --accent-foreground: var(--rx-gray-02-hsl);
   --input: var(--rx-gray-03-hsl);
 }
 
 html[data-theme=dark] {
+  --accent: var(--rx-gray-12-hsl);
+  --accent-foreground: var(--rx-gray-02-hsl);
   --primary-foreground: 255 92% 100%;
   --background: 0 0% 11%;
   --foreground: 0 0% 95%;
