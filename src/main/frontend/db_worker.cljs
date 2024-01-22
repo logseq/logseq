@@ -155,7 +155,6 @@
   [repo]
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db] (get-db-and-search-db repo)
-            _ (prn :debug :db db :search-db search-db)
             storage (new-sqlite-storage repo {})]
       (swap! *sqlite-conns assoc repo {:db db
                                        :search search-db})
