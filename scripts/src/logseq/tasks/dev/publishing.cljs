@@ -21,7 +21,7 @@
                        output-path
                        {:repo-config repo-config :ui/theme "dark" :ui/radix-color :purple})))
 
-(defn- publish-db-graph [static-dir graph-dir output-path]
+(defn- publish-db-graph [static-dir graph-dir output-path opts]
   (let [db-name (node-path/basename graph-dir)
         conn (sqlite-db/open-db! (node-path/dirname graph-dir) db-name)
         repo-config (-> (d/q '[:find ?content
@@ -33,16 +33,16 @@
                        static-dir
                        graph-dir
                        output-path
-                       {:repo-config repo-config :db-graph? true :ui/theme "dark" :ui/radix-color :cyan})))
+                       (merge opts {:repo-config repo-config :db-graph? true :ui/theme "dark" :ui/radix-color :cyan}))))
 
 (defn -main
   [& args]
-  (when-not (= 3 (count args))
+  (when (< (count args) 3)
     (println "Usage: $0 STATIC-DIR GRAPH-DIR OUT-DIR")
     (js/process.exit 1))
   (let [[static-dir graph-dir output-path]
         ;; Offset relative paths since they are run in a different directory than user is in
         (map #(if (node-path/isAbsolute %) % (node-path/resolve ".." %)) args)]
     (if (sqlite-cli/db-graph-directory? graph-dir)
-      (publish-db-graph static-dir graph-dir output-path)
+      (publish-db-graph static-dir graph-dir output-path {:dev? (contains? (set args) "--dev")})
       (publish-file-graph static-dir graph-dir output-path))))

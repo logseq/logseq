@@ -20,7 +20,7 @@ can be passed:
 * :db-graph? - Boolean which indicates if graph is db based
 * :default-notification-fn - Configure how errors are reported when creating the export.
   Default is to throw an exception when it occurs."
-  [db static-dir graph-dir output-dir {:keys [notification-fn]
+  [db static-dir graph-dir output-dir {:keys [notification-fn dev?]
                                        :or {notification-fn default-notification-fn}
                                        :as options}]
   (let [options' (cond-> options
@@ -30,4 +30,5 @@ can be passed:
                    (assoc-in [:app-state :ui/radix-color] (:ui/radix-color options)))
         {:keys [html asset-filenames]} (publish-html/build-html db options')]
     (publish-export/create-export html static-dir graph-dir output-dir {:asset-filenames asset-filenames
-                                                                        :notification-fn notification-fn})))
+                                                                        :notification-fn notification-fn
+                                                                        :dev? dev?})))
