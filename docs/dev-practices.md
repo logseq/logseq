@@ -307,10 +307,14 @@ point out:
   ```sh
   # One time setup
   $ cd scripts && yarn install && cd -
-  # Build the export
+  # Build a release export
   $ bb dev:publishing /path/to/graph-dir tmp/publish
+  # OR build a dev export with `clojure -M:cljs watch publishing` and then
+  $ bb dev:publishing /path/to/graph-dir tmp/publish --dev
+
   # View the app in a browser
-  $ open tmp/publish/index.html
+  $ python3 -m http.server 8080 -d tmp/db-publish &; open http://localhost:8080
+
   ```
 
 There are also some tasks under `nbb:` which are useful for inspecting database
