@@ -179,9 +179,10 @@
                (get-in row [:block/content]))
     :block (or (get-in row [:block/original-name])
                (get-in row [:block/content]))
-    (or (get-in row [:block/properties column])
-        (get-in row [:block/properties-text-values column])
-        (get-in row [(keyword :block column)]))))
+
+           (or (get-in row [:block/properties column])
+               (get-in row [:block/properties-text-values column])
+               (get-in row [(keyword :block column)]))))
 
 (defn- render-column-value
   [{:keys [row-block row-format cell-format value]} page-cp inline-text {:keys [uuid-names db-graph?]}]
@@ -204,7 +205,7 @@
     ;; inline-text when no page entity is found
     (string? value) (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
                       (page-cp {} page)
-                       (inline-text row-block row-format value))
+                      (inline-text row-block row-format value))
     ;; render uuids as page refs
     (uuid? value)
     (page-cp {} {:block/name (get uuid-names value)})
@@ -251,7 +252,7 @@
             (sortable-title title column sort-state (:block/uuid current-block))))]]
       [:tbody
        (for [row sort-result]
-         (let [row-format (:block/format row)]
+         (let [format (:block/format row)]
            [:tr.cursor
             (for [column columns]
               (let [[cell-format value] (build-column-value row
@@ -273,7 +274,10 @@
                                                           :block-ref)
                                                          (reset! *mouse-down? false)))}
                  (when value
-                   (render-column-value {:row-block row :row-format row-format :cell-format cell-format :value value}
+                   (render-column-value {:row-block row
+                                         :row-format format
+                                         :cell-format cell-format
+                                         :value value}
                                         page-cp
                                         inline-text
                                         {:uuid-names uuid-names

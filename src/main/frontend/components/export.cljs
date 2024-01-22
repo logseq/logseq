@@ -22,10 +22,10 @@
      [:h1.title (t :export)]
      [:ul.mr-1
       [:li.mb-4
-       [:a.font-medium {:on-click #(export/export-repo-as-edn-v2! current-repo)}
+       [:a.font-medium {:on-click #(export/export-repo-as-edn! current-repo)}
         (t :export-edn)]]
       [:li.mb-4
-       [:a.font-medium {:on-click #(export/export-repo-as-json-v2! current-repo)}
+       [:a.font-medium {:on-click #(export/export-repo-as-json! current-repo)}
         (t :export-json)]]
       (when (config/db-based-graph? current-repo)
        [:li.mb-4

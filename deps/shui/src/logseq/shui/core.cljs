@@ -17,7 +17,6 @@
 ;; icon
 (def icon shui.icon.v2/root)
 (def icon-v2 shui.icon.v2/root)
-(def tabler-icon shui.icon.v2/tabler-icon)
 
 ;; list-item
 (def list-item shui.list-item.v1/root)

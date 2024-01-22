@@ -1071,7 +1071,7 @@ Similar to re-frame subscriptions"
 
 (defn set-selection-start-block!
   [start-block]
-  (swap! state assoc :selection/start-block start-block))
+  (set-state! :selection/start-block start-block))
 
 (defn set-selection-blocks!
   ([blocks]
@@ -1129,18 +1129,16 @@ Similar to re-frame subscriptions"
                    distinct
                    util/sort-by-height
                    vec)]
-    (swap! state assoc
-           :selection/mode true
-           :selection/blocks blocks
-           :selection/direction direction)))
+    (set-state! :selection/mode true)
+    (set-state! :selection/blocks blocks)
+    (set-state! :selection/direction direction)))
 
 (defn drop-selection-block!
   [block]
-  (swap! state assoc
-         :selection/mode true
-         :selection/blocks (-> (remove #(= block %) (get-selection-blocks))
-                               util/sort-by-height
-                               vec)))
+  (set-state! :selection/mode true)
+  (set-state! :selection/blocks (-> (remove #(= block %) (get-selection-blocks))
+                                    util/sort-by-height
+                                    vec)))
 
 (defn drop-last-selection-block!
   []
@@ -2014,6 +2012,10 @@ Similar to re-frame subscriptions"
 (defn get-git-auto-commit-enabled?
   []
   (false? (sub [:electron/user-cfgs :git/disable-auto-commit?])))
+
+(defn get-git-commit-on-close-enabled?
+  []
+  (sub [:electron/user-cfgs :git/commit-on-close?]))
 
 (defn set-last-key-code!
   [key-code]
