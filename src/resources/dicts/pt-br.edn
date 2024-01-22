@@ -239,7 +239,6 @@
  :settings-page/git-desc-3 " para controle de versão. Use o Git por sua própria conta e risco, uma vez que questões gerais do Git não são suportadas pela equipe do Logseq."
  :settings-page/git-switcher-label "Ativar confirmação automática do Git"
  :settings-page/git-commit-delay "Segundos para confirmação automática do Git"
- :settings-page/git-confirm "Você precisa reiniciar o aplicativo após atualizar as configurações do Git."
  :settings-page/edit-config-edn "Editar config.edn"
  :settings-page/edit-global-config-edn "Editar config.edn global"
  :settings-page/edit-custom-css "Editar custom.css"

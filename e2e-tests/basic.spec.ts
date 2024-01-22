@@ -120,10 +120,7 @@ test('block selection', async ({ page, block }) => {
 
   await page.keyboard.press('ArrowDown')
   await block.waitForSelectedBlocks(2)
-  await page.keyboard.up('Shift')
-
   // mod+click select or deselect
-  await page.keyboard.down(modKey)
   await page.click('.ls-block >> nth=7')
   await block.waitForSelectedBlocks(1)
 

@@ -15,7 +15,8 @@
             [goog.dom :as gdom]
             [hiccups.runtime :as h]
             [frontend.format.mldoc :as mldoc]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.config :as config]))
 
 ;;; *opml-state*
 (def ^:private ^:dynamic
@@ -449,25 +450,30 @@
          format (or (:block/format first-block) (state/get-preferred-format))]
      (export-helper content format options :title title))))
 
-(defn export-files-as-opml
+(defn- export-files-as-opml
   "options see also `export-blocks-as-opml`"
   [files options]
   (mapv
-   (fn [{:keys [path content names format]}]
-     (when (first names)
+   (fn [{:keys [path content title format]}]
+     (when (and title (not (string/blank? content)))
        (util/profile (print-str :export-files-as-opml path)
-                     [path (export-helper content format options :title (first names))])))
+                     [path (export-helper content format options :title title)])))
    files))
 
 (defn export-repo-as-opml!
   [repo]
-  (when-let [files (common/get-file-contents-with-suffix repo)]
-    (let [files (export-files-as-opml files nil)
-          zip-file-name (str repo "_opml_" (quot (util/time-ms) 1000))]
-      (p/let [zipfile (zip/make-zip zip-file-name files repo)]
-        (when-let [anchor (gdom/getElement "export-as-opml")]
-          (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-          (.setAttribute anchor "download" (.-name zipfile))
-          (.click anchor))))))
+  (p/let [files (common/<get-file-contents repo "opml")]
+    (when (seq files)
+      (let [repo (-> repo
+                     (string/replace config/db-version-prefix "")
+                     (string/replace config/local-db-prefix ""))
+            files (->> (export-files-as-opml files nil)
+                       (clojure.core/remove nil?))
+            zip-file-name (str repo "_opml_" (quot (util/time-ms) 1000))]
+        (p/let [zipfile (zip/make-zip zip-file-name files repo)]
+          (when-let [anchor (gdom/getElement "export-as-opml")]
+            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+            (.setAttribute anchor "download" (.-name zipfile))
+            (.click anchor)))))))
 
 ;;; export fns (ends)
