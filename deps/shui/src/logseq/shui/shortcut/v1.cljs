@@ -1,6 +1,6 @@
 (ns logseq.shui.shortcut.v1
   (:require [clojure.string :as string]
-            [logseq.shui.button.v2 :as button]
+            [logseq.shui.ui :as ui]
             [rum.core :as rum]
             [goog.userAgent]))
 
@@ -62,19 +62,22 @@
                            %)))))))
 
 (rum/defc part
-  [context theme ks size]
-  (button/root {:theme theme
+  [ks size]
+  (let [tiles (map print-shortcut-key ks)]
+    (ui/button {:variant     :default
+                :class       "bg-gray-03 text-gray-12 px-1.5 py-0 leading-4 h-5 hover:bg-gray-04 active:bg-gray-03 hover:text-gray-11"
                 :interactive false
-                :tiled true
-                :tiles (map print-shortcut-key ks)
-                :size size
-                :mused true}
-               context))
+                :size        size}
+      (for [[index tile] (map-indexed vector tiles)]
+        [:<>
+         (when (< 0 index)
+           [:div.ui__button__tile-separator])
+         [:div.ui__button__tile tile]]))))
 
 (rum/defc root
-  [shortcut context & {:keys [size theme]
-                       :or {size :sm
-                            theme :gray}}]
+  [shortcut & {:keys [size theme]
+                       :or   {size  :xs
+                              theme :gray}}]
   (when (seq shortcut)
     (let [shortcuts (if (coll? shortcut)
                       [shortcut]
@@ -85,5 +88,5 @@
            [:div.text-gray-11.text-sm "|"])
          (if (coll? (first binding))   ; + included
            (for [ks binding]
-             (part context theme ks size))
-           (part context theme binding size))]))))
+             (part ks size))
+           (part binding size))]))))

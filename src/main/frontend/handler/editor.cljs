@@ -326,7 +326,7 @@
 
 (declare save-current-block!)
 (defn outliner-insert-block!
-  [config current-block new-block {:keys [sibling? keep-uuid?
+  [config current-block new-block {:keys [sibling? keep-uuid? ordered-list?
                                           replace-empty-target?]}]
   (let [ref-query-top-block? (and (or (:ref? config)
                                       (:custom-query? config))
@@ -346,13 +346,14 @@
                    (not has-children?))]
     (p/do!
      (save-current-block! {:current-block current-block})
-
      (ui-outliner-tx/transact!
       {:outliner-op :insert-blocks}
        (outliner-core/insert-blocks! (state/get-current-repo) (db/get-db false)
                                     [new-block] current-block {:sibling? sibling?
                                                                :keep-uuid? keep-uuid?
+                                                               :ordered-list? ordered-list?
                                                                :replace-empty-target? replace-empty-target?})))))
+
 
 (defn- block-self-alone-when-insert?
   [config uuid]
@@ -478,8 +479,7 @@
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid sibling? before? properties
-                   custom-uuid replace-empty-target? edit-block?
-                   other-attrs]
+                   custom-uuid replace-empty-target? edit-block? ordered-list? other-attrs]
             :or {sibling? false
                  before? false
                  edit-block? true}}]
@@ -549,8 +549,9 @@
           (when block-m
             (p/do!
              (outliner-insert-block! {} block-m new-block {:sibling? sibling?
-                                                          :keep-uuid? true
-                                                          :replace-empty-target? replace-empty-target?})
+                                                           :keep-uuid? true
+                                                           :ordered-list? ordered-list?
+                                                           :replace-empty-target? replace-empty-target?})
              (when edit-block?
               (if (and replace-empty-target?
                        (string/blank? (:block/content last-block)))
@@ -1185,16 +1186,20 @@
       (delete-block-aux! block true))))
 
 (defn highlight-selection-area!
-  [end-block]
-  (when-let [start-block (state/get-selection-start-block-or-first)]
-    (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")
-          direction (util/get-direction-between-two-nodes start-block end-block "ls-block")
-          blocks (if (= :up direction)
-                   (reverse blocks)
-                   blocks)]
-      (if (state/get-edit-input-id)
-        (state/exit-editing-and-set-selected-blocks! blocks direction)
-        (state/set-selection-blocks! blocks direction)))))
+  ([end-block]
+   (highlight-selection-area! end-block false))
+  ([end-block append?]
+   (when-let [start-block (state/get-selection-start-block-or-first)]
+     (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")
+           direction (util/get-direction-between-two-nodes start-block end-block "ls-block")
+           blocks (if (= :up direction)
+                    (reverse blocks)
+                    blocks)]
+       (if append?
+         (do (state/clear-edit!)
+             (state/conj-selection-block! blocks direction))
+         (state/exit-editing-and-set-selected-blocks! blocks direction))))))
+
 
 (defn- select-block-up-down
   [direction]
@@ -2028,7 +2033,8 @@
                   target-block
                   sibling?
                   keep-uuid?
-                  revert-cut-txs]
+                  revert-cut-txs
+                  skip-empty-target?]
            :or {exclude-properties []}}]
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (some-> (db/pull [:block/uuid (:block/uuid editing-block)])
@@ -2040,7 +2046,8 @@
         block (db/entity (:db/id target-block))
         page (if (:block/name block) block
                  (when target-block (:block/page (db/entity (:db/id target-block)))))
-        empty-target? (string/blank? (:block/content target-block))
+        empty-target? (if (true? skip-empty-target?) false
+                        (string/blank? (:block/content target-block)))
         paste-nested-blocks? (nested-blocks blocks)
         target-block-has-children? (db/has-children? (:block/uuid target-block))
         replace-empty-target? (and empty-target?
@@ -2126,9 +2133,10 @@
    A block element: {:content :properties :children [block-1, block-2, ...]}"
   [target-block-id sibling? tree-vec format keep-uuid?]
   (insert-block-tree tree-vec format
-                     {:target-block (db/pull target-block-id)
-                      :keep-uuid?   keep-uuid?
-                      :sibling?     sibling?}))
+    {:target-block       (db/pull target-block-id)
+     :keep-uuid?         keep-uuid?
+     :skip-empty-target? true
+     :sibling?           sibling?}))
 
 (defn insert-template!
   ([element-id db-id]
@@ -2862,7 +2870,11 @@
                                               (block-handler/get-top-level-blocks [block])
                                               indent?
                                               {:get-first-block-original block-handler/get-first-block-original
-                                               :logical-outdenting? (state/logical-outdenting?)}))))))
+                                               :logical-outdenting? (state/logical-outdenting?)})
+         (edit-block!
+           (db/pull (:db/id block))
+           (cursor/pos (state/get-input))
+           (:block/uuid block)))))))
 
 (defn keydown-tab-handler
   [direction]

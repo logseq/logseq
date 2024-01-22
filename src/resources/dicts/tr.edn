@@ -262,7 +262,6 @@
  :settings-page/git-desc-3 " kullanımını da destekler. Genel Git sorunları Logseq ekibi tarafından desteklenmediğinden Git'i kullanmanın riski size aittir."
  :settings-page/git-switcher-label "Otomatik git commit'i etkinleştir"
  :settings-page/git-commit-delay "Otomatik git commit saniyesi"
- :settings-page/git-confirm "Git ayarlarını güncelledikten sonra uygulamayı yeniden başlatmanız gerekiyor."
  :settings-page/edit-config-edn "config.edn dosyasını düzenle"
  :settings-page/edit-global-config-edn "Genel config.edn dosyasını düzenle"
  :settings-page/edit-custom-css "custom.css dosyasını düzenle"

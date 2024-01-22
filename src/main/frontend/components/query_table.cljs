@@ -129,14 +129,8 @@
         query-properties (if page? (remove #{:block} query-properties) query-properties)
         columns (if (seq query-properties)
                   query-properties
-                  (get-all-columns-for-result result page?))
-        included-columns #{:created-at :updated-at}]
-    (distinct
-     ;; Ensure that timestamp columns are last columns since they take up space
-     (if (some included-columns columns)
-       (concat (remove included-columns columns)
-               (filter included-columns columns))
-       columns))))
+                  (get-all-columns-for-result result page?))]
+    (distinct columns)))
 
 (defn- build-column-value
   "Builds a column's tuple value for a query table given a row, column and
@@ -185,12 +179,13 @@
                (get-in row [:block/content]))
     :block (or (get-in row [:block/original-name])
                (get-in row [:block/content]))
-    (or (get-in row [:block/properties column])
-        (get-in row [:block/properties-text-values column])
-        (get-in row [(keyword :block column)]))))
+
+           (or (get-in row [:block/properties column])
+               (get-in row [:block/properties-text-values column])
+               (get-in row [(keyword :block column)]))))
 
 (defn- render-column-value
-  [{:keys [row-format cell-format value]} page-cp inline-text {:keys [uuid-names db-graph?]}]
+  [{:keys [row-block row-format cell-format value]} page-cp inline-text {:keys [uuid-names db-graph?]}]
   (cond
     ;; elements should be rendered as they are provided
     (= :element cell-format) value
@@ -210,7 +205,7 @@
     ;; inline-text when no page entity is found
     (string? value) (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
                       (page-cp {} page)
-                      (inline-text row-format value))
+                      (inline-text row-block row-format value))
     ;; render uuids as page refs
     (uuid? value)
     (page-cp {} {:block/name (get uuid-names value)})
@@ -279,7 +274,10 @@
                                                           :block-ref)
                                                          (reset! *mouse-down? false)))}
                  (when value
-                   (render-column-value {:format format :cell-format cell-format :value value}
+                   (render-column-value {:row-block row
+                                         :row-format format
+                                         :cell-format cell-format
+                                         :value value}
                                         page-cp
                                         inline-text
                                         {:uuid-names uuid-names

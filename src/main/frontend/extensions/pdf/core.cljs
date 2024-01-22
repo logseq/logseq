@@ -371,7 +371,7 @@
     (when-let [vw-bounding (get-in vw-hl [:position :bounding])]
       (let [{:keys [color]} (:properties hl)]
         [:div.extensions__pdf-hls-area-region
-         {:id              id
+         {:id              (str "hl_" id)
           :ref             *el
           :style           vw-bounding
           :data-color      color

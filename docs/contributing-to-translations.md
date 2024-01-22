@@ -84,7 +84,10 @@ Almost all translations are small. The only exceptions to this are the keys `:tu
 
 * Some translations may include punctuation like `:` or `!`. When translating them, please use the punctuation that makes the most sense for your language as you don't have to follow the English ones.
 * Some translations may include arguments/interpolations e.g. `{1}`. If you see them in a translation, be sure to include them. These arguments are substituted in the string and are usually used for something the app needs to calculate e.g. a number. See [these docs](https://github.com/tonsky/tongue#interpolation) for more examples.
-* Rarely, a translation may need to translate formatted text by returning [hiccup-style HTML](https://github.com/weavejester/hiccup#syntax). In this case, a Clojure function is the recommended approach. For example, a function translation would look like `(fn [] [:div "FOO"])`. See `:on-boarding/main-title` for an example.
+* Rarely, a translation is a function that calls code and look like `(fn ... )`
+    * The logic for these fns must be simple and can only use the following fns: `str`, `when`, `if` and `=`.
+    * These fn translations are usually used to handle pluralization or handle formatted text by returning [hiccup-style HTML](https://github.com/weavejester/hiccup#syntax). For example, a hiccup style translation would look like `(fn [] [:div "FOO"])`. See `:on-boarding/main-title` for more examples.
+
 ## Fix Mistakes
 
 There is a lint command to catch common translation mistakes - `bb

@@ -9,7 +9,7 @@
             [goog.object :as gobj]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.shui.core :as shui]))
+            [logseq.shui.ui :as ui]))
 
 (defn- commit-all!
   []
@@ -56,7 +56,7 @@
                                   (commit-all!)))))
   [state _close-fn]
   (let [*git-status (get state ::git-status)]
-    [:div.w-full.mx-auto.sm:max-w-lg.sm:w-96 {:style {:padding "48px 0"}}
+    [:div.w-full.mx-auto
      (if (empty? @*git-status)
        [:<>
         [:div.sm:flex.sm:items-start
@@ -64,28 +64,29 @@
           [:h3#modal-headline.text-lg.leading-6.font-medium
            "No changes to commit!"]]]
         [:div.mt-5.sm:mt-4.flex
-         (shui/button
-          {:text "Close"
-           :on-click state/close-modal!}
-          (shui/make-context))]]
+         (ui/button
+          {:on-click state/close-modal!}
+           "Close")]]
 
        [:<>
         [:div.sm:flex.sm:items-start
          [:div.mt-3.text-center.sm:mt-0.sm:text-left.mb-2
           (if (nil? @*git-status)
             [:div "Loading..."]
-            [:div "You have uncommitted changes"
-             [:pre (prettify-git-status @*git-status)]])
+            [:div.flex.w-full.flex-col
+             [:h2.text-xl "You have uncommitted changes: "]
+             [:pre.max-h-96.overflow-y-auto.bg-gray-02
+              {:class "md:max-w-[700px]"}
+              (prettify-git-status @*git-status)]])
           [:h3#modal-headline.text-lg.leading-6.font-medium
            "Your commit message:"]]]
         [:input#commit-message.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
          {:auto-focus true
           :default-value ""}]
-        [:div.mt-5.sm:mt-4.flex
-         (shui/button
-           {:text "Commit"
-           :on-click commit-all!}
-          (shui/make-context))]])]))
+        [:div.mt-5.sm:mt-4.flex.justify-end.pt-4
+         (ui/button
+           {:on-click commit-all!}
+           "Commit")]])]))
 
 (defn show-commit-modal! [e]
   (state/set-modal! add-commit-message)

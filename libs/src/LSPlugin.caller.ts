@@ -286,7 +286,7 @@ class LSPluginCaller extends EventEmitter {
       timer = setTimeout(() => {
         reject(new Error(`handshake Timeout`))
         pt.destroy()
-      }, 4 * 1000) // 4 secs
+      }, 8 * 1000) // 8 secs
 
       handshake
         .then((refChild: ParentAPI) => {

@@ -2,7 +2,7 @@
   "Entry ns for publishing build. Provides frontend for publishing single page
   application"
   (:require [frontend.state :as state]
-            [frontend.colors :as colors]
+            [datascript.core :as d]
             [frontend.db :as db]
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
@@ -24,10 +24,7 @@
             [frontend.persist-db.browser :as db-browser]
             [promesa.core :as p]
             [frontend.handler.repo :as repo-handler]
-            [datascript.core :as d]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.storage :as storage]
-            [frontend.db.persist :as db-persist]))
+            [frontend.handler.ui :as ui-handler]))
 
 ;; The publishing site should be as thin as possible.
 ;; Both files and git libraries can be removed.
@@ -104,8 +101,6 @@
   ;; Set :preferred-lang as some components depend on it
   (i18n/start)
   (restore-state!)
-  (when-let [radix-color (state/get-color-accent)]
-    (colors/set-radix radix-color))
   (shortcut/refresh!)
   (events/run!)
   (p/do!

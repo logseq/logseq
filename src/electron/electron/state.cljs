@@ -3,9 +3,7 @@
             [medley.core :as medley]))
 
 (defonce state
-  (atom {:git/auto-commit-interval nil
-
-         :config (config/get-config)
+  (atom {:config (config/get-config)
 
          ;; FIXME: replace with :window/graph
          :graph/current nil
@@ -22,22 +20,18 @@
     (swap! state assoc-in path value)
     (swap! state assoc path value)))
 
-(defn set-git-commit-interval!
-  [v]
-  (set-state! :git/auto-commit-interval v))
-
-(defn clear-git-commit-interval!
-  []
-  (when-let [interval (get @state :git/auto-commit-interval)]
-    (js/clearInterval interval)))
-
 (defn get-git-commit-seconds
   []
   (get-in @state [:config :git/auto-commit-seconds] 60))
 
-(defn git-auto-commit-disabled?
+(defn git-auto-commit-enabled?
   []
-  (get-in @state [:config :git/disable-auto-commit?] true))
+  ;; For backward compatibility, use negative logic
+  (false? (get-in @state [:config :git/disable-auto-commit?] true)))
+
+(defn git-commit-on-close-enabled?
+  []
+  (get-in @state [:config :git/commit-on-close?] false))
 
 (defn get-graph-path
   []
