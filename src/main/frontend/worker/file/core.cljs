@@ -7,7 +7,8 @@
             [datascript.core :as d]
             [logseq.db :as ldb]
             [frontend.worker.date :as worker-date]
-            [frontend.worker.util :as worker-util]))
+            [frontend.worker.util :as worker-util]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defonce *writes (atom {}))
 (defonce *request-id (atom 0))
@@ -44,7 +45,8 @@
 (defn transform-content
   [repo db {:block/keys [collapsed? format pre-block? content left page parent properties] :as b} level {:keys [heading-to-list?]} context]
   (let [block-ref-not-saved? (and (seq (:block/_refs (d/entity db (:db/id b))))
-                                  (not (string/includes? content (str (:block/uuid b)))))
+                                  (not (string/includes? content (str (:block/uuid b))))
+                                  (not (sqlite-util/db-based-graph? repo)))
         heading (:heading properties)
         markdown? (= :markdown format)
         content (or content "")
@@ -58,8 +60,7 @@
                     (str content "\n"))
 
                   :else
-                  (let [
-                        ;; first block is a heading, Markdown users prefer to remove the `-` before the content
+                  (let [;; first block is a heading, Markdown users prefer to remove the `-` before the content
                         markdown-top-heading? (and markdown?
                                                    (= parent page left)
                                                    heading)

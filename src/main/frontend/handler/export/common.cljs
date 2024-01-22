@@ -15,7 +15,6 @@
             [malli.util :as mu]
             [promesa.core :as p]
             [frontend.persist-db.browser :as db-browser]
-            [cljs-bean.core :as bean]
             [frontend.worker.export :as worker-export]
             [clojure.edn :as edn]))
 
