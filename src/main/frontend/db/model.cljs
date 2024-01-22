@@ -620,7 +620,9 @@ independent of format as format specific heading characters are stripped"
          page-name'
 
          (nil? page-entity)
-         page-name
+         (if-let [journal-name (date/journal-title->custom-format page-name)]
+           (util/page-name-sanity-lc journal-name)
+           page-name)
 
          (page-empty-or-dummy? (state/get-current-repo) (:db/id page-entity))
          (let [source-page (get-alias-source-page (state/get-current-repo) page-name')]

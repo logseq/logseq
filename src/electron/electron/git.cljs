@@ -170,13 +170,28 @@
        (p/resolved result))
      (p/catch error-handler))))
 
-(defn auto-commit-current-graph!
+(defonce auto-commit-interval (atom nil))
+(defn- auto-commit-tick-fn
   []
-  (when (not (state/git-auto-commit-disabled?))
-    (state/clear-git-commit-interval!)
-    (js/setTimeout add-all-and-commit! 3000)
-    (let [seconds (state/get-git-commit-seconds)]
-      (when (int? seconds)
-        (js/setTimeout add-all-and-commit! 5000)
-        (let [interval (js/setInterval add-all-and-commit! (* seconds 1000))]
-          (state/set-git-commit-interval! interval))))))
+  (when (state/git-auto-commit-enabled?)
+    (add-all-and-commit!)))
+
+(defn configure-auto-commit!
+  "Configure auto commit interval, reentrantable"
+  []
+  (when @auto-commit-interval
+    (swap! auto-commit-interval js/clearInterval))
+  (when (state/git-auto-commit-enabled?)
+    (let [seconds (state/get-git-commit-seconds)
+          millis (if (int? seconds)
+                   (* seconds 1000)
+                   6000)]
+      (logger/info ::set-auto-commit-interval seconds)
+      (js/setTimeout add-all-and-commit! 100)
+      (reset! auto-commit-interval (js/setInterval auto-commit-tick-fn millis)))))
+
+(defn before-graph-close-hook!
+  []
+  (when (and (state/git-auto-commit-enabled?)
+             (state/git-commit-on-close-enabled?))
+    (add-all-and-commit!)))

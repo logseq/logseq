@@ -18,8 +18,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [cljs-bean.core :as bean]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [clojure.data :as data]))
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn js->clj-keywordize
   [obj]
@@ -255,39 +254,18 @@
         blocks (:block/_page react-page)]
     (whiteboard-clj->tldr react-page blocks)))
 
-(defn- get-whiteboard-blocks
-  "Given a page, return all the logseq blocks (exclude all shapes)"
-  [page-name]
-  (let [blocks (model/get-page-blocks-no-cache page-name)]
-    (remove pu/shape-block? blocks)))
-
-(defn- get-last-root-block
-  "Get the last root Logseq block in the page. Main purpose is to calculate the new :block/left id"
-  [page-name]
-  (let [page-id (:db/id (model/get-page page-name))
-        blocks (get-whiteboard-blocks page-name)
-        root-blocks (filter (fn [block] (= page-id (:db/id (:block/parent block)))) blocks)
-        root-block-left-ids (->> root-blocks
-                                 (map (fn [block] (get-in block [:block/left :db/id] nil)))
-                                 (remove nil?)
-                                 (set))
-        blocks-with-no-next (remove #(root-block-left-ids (:db/id %)) root-blocks)]
-    (when (seq blocks-with-no-next) (first blocks-with-no-next))))
-
 (defn <add-new-block!
   [page-name content]
   (p/let [repo (state/get-current-repo)
           new-block-id (db/new-block-id)
           page-entity (model/get-page page-name)
-          last-root-block (or (get-last-root-block page-name) page-entity)
           tx (sqlite-util/block-with-timestamps
-              {:block/left (select-keys last-root-block [:db/id])
-               :block/uuid new-block-id
+              {:block/uuid new-block-id
                :block/content (or content "")
                :block/format :markdown
                :block/page {:block/name (util/page-name-sanity-lc page-name)
                             :block/original-name page-name}
-               :block/parent {:block/name page-name}})
+               :block/parent (:db/id page-entity)})
           _ (db/transact! repo [tx] {:whiteboard/transact? true})]
     new-block-id))
 

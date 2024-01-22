@@ -146,7 +146,6 @@
  :context-menu/input-template-name                     "Как назовём шаблон?"
  :context-menu/template-include-parent-block           "Включить родительский блок в шаблон?"
  :context-menu/template-exists-warning                 "Шаблон уже существует!"
- :settings-page/git-confirm                            "Необходимо перезапустить приложение после изменения настроек Git."
  :settings-page/git-switcher-label                     "Включить автокоммит в Git"
  :settings-page/git-commit-delay                       "Задержка автокоммита Git в секундах"
  :settings-page/edit-config-edn                        "Редактировать config.edn"

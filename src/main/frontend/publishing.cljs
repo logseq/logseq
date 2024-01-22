@@ -24,10 +24,7 @@
             [frontend.persist-db.browser :as db-browser]
             [promesa.core :as p]
             [frontend.handler.repo :as repo-handler]
-            [datascript.core :as d]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.storage :as storage]
-            [frontend.db.persist :as db-persist]))
+            [frontend.handler.ui :as ui-handler]))
 
 ;; The publishing site should be as thin as possible.
 ;; Both files and git libraries can be removed.
@@ -59,26 +56,14 @@
   (when-let [data js/window.logseq_db]
     (let [repo (-> @state/state :config keys first)]
       (state/set-current-repo! repo)
-      (p/do!
-       (p/let [cached-data-length (storage/get :db-cached-str-length)]
-         (when (nil? cached-data-length)
-           (storage/set :db-cached-str-length (count data)))
-         (when (and cached-data-length (not= cached-data-length (count data)))
-           ;; delete old graph after re-published
-           (db-persist/delete-graph! repo)))
-
-       (repo-handler/restore-and-setup-repo! repo)
-
-       (when-not (db/entity :db/transacted?)
-         (let [data (unescape-html data)
-               db (db/string->db data)
-               datoms (d/datoms db :eavt)]
-           (db/transact! repo
-                         (conj (vec datoms)
-                               {:db/ident :db/transacted? :db/transacted? true})
-                         {:init-db? true
-                          :new-graph? true})))
-       (ui-handler/re-render-root!)))))
+      (p/let [_ (repo-handler/restore-and-setup-repo! repo)
+              _ (let [data (unescape-html data)
+                      db (db/string->db data)
+                      datoms (d/datoms db :eavt)]
+                  (db/transact! repo datoms {:init-db? true
+                                             :new-graph? true}))]
+        (state/set-db-restoring! false)
+        (ui-handler/re-render-root!)))))
 
 (defn restore-state!
   []
@@ -120,6 +105,7 @@
   (events/run!)
   (p/do!
    (db-browser/start-db-worker!)
+   (state/set-db-restoring! true)
    (start)
    (restore-from-transit-str!)))
 

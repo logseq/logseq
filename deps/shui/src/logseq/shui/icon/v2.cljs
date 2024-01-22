@@ -14,13 +14,9 @@
 (def get-adapt-icon-class
   (memoize (fn [klass] (shui-utils/react->rum klass true))))
 
-(defn tabler-icon
-  [name]
-  (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase name))))
-
 (rum/defc root
   ([name] (root name nil))
-  ([name {:keys [extension? font? class size] :as opts}]
+  ([name {:keys [extension? font? class] :as opts}]
    (when-not (string/blank? name)
      (let [^js jsTablerIcons (gobj/get js/window "tablerIcons")]
        (if (or extension? font? (not jsTablerIcons))

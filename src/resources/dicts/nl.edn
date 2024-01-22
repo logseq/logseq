@@ -191,7 +191,6 @@
  :settings-page/enable-tooltip "Tooltips inschakelen"
  :settings-page/export-theme "Exporteer thema"
  :settings-page/git-commit-delay "Git auto commit seconden"
- :settings-page/git-confirm "Je moet de app opnieuw opstarten nadat je de Git instellingen hebt aangepast."
  :settings-page/git-switcher-label "Git auto commit inschakelen"
  :settings-page/home-default-page "De standaard startpagina instellen"
  :settings-page/network-proxy "Netwerk proxy"

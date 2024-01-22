@@ -26,7 +26,6 @@
             [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]
             [frontend.handler.file-based.status :as file-based-status]
-            [frontend.handler.db-based.status :as db-based-status]
             [frontend.handler.db-based.property :as db-property-handler]))
 
 ;; TODO: move to frontend.handler.editor.commands

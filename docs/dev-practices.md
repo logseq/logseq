@@ -90,8 +90,7 @@ translations here are some things to keep in mind:
   fn translation. Hiccup vectors are needed when word order matters for a
   translation and formatting is involved. See [this 3 word Turkish
   example](https://github.com/logseq/logseq/commit/1d932f07c4a0aad44606da6df03a432fe8421480#r118971415).
-* Translations can have arguments for interpolating strings. When they do, be
-  sure translators are using them correctly.
+* Translations can be anonymous fns with arguments for interpolating strings. Fns should be simple and only include the following fns: `str`, `when`, `if` and `=`.
 
 ### Spell Checker
 

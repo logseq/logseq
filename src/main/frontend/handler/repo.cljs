@@ -418,7 +418,8 @@
      (global-config-handler/restore-global-config!))
     ;; Don't have to unlisten the old listener, as it will be destroyed with the conn
    (ui-handler/add-style-if-exists!)
-   (state/set-db-restoring! false)))
+   (when-not config/publishing?
+     (state/set-db-restoring! false))))
 
 (defn rebuild-index!
   [url]

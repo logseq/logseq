@@ -10,7 +10,6 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.fs :as fs]
-            [frontend.handler.export :as export-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -57,13 +56,7 @@
                      (if (or (nil? modified-at) (zero? modified-at))
                        (t :file/no-data)
                        (date/get-date-time-string
-                        (t/to-default-time-zone (tc/to-date-time modified-at))))]])
-
-             (when-not mobile?
-               [:td [:a.text-sm
-                     {:on-click (fn [_e]
-                                  (export-handler/download-file! file))}
-                     [:span (t :download)]]])]))]])))
+                        (t/to-default-time-zone (tc/to-date-time modified-at))))]])]))]])))
 
 (rum/defc files
   []
