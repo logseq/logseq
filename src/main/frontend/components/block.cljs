@@ -1831,6 +1831,7 @@
           (and doc-mode?
                (not collapsed?)
                (not (util/react *control-show?))))
+
          ;; hidden
          [:span.bullet-container]
 
