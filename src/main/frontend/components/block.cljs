@@ -547,7 +547,6 @@
    All page-names are sanitized except page-name-in-block"
   [state config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?]
   (let [*hover? (::hover? state)
-        ;; FIXME: Bring back fix from https://github.com/logseq/logseq/pull/10434/commits/42f68ce32e7a035e6926bc2798d46843bbd70297
         *mouse-down? (::mouse-down? state)
         tag? (:tag? config)
         breadcrumb? (:breadcrumb? config)
