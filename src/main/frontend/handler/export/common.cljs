@@ -16,7 +16,8 @@
             [promesa.core :as p]
             [frontend.persist-db.browser :as db-browser]
             [cljs-bean.core :as bean]
-            [frontend.worker.export :as worker-export]))
+            [frontend.worker.export :as worker-export]
+            [clojure.edn :as edn]))
 
 ;;; TODO: split frontend.handler.export.text related states
 (def ^:dynamic *state*
@@ -194,19 +195,19 @@
   [repo]
   (when-let [^object worker @db-browser/*worker]
     (p/let [result (.get-all-pages worker repo)]
-      (bean/->clj result))))
+      (edn/read-string result))))
 
 (defn <get-all-page->content
   [repo]
   (when-let [^object worker @db-browser/*worker]
     (p/let [result (.get-all-page->content worker repo)]
-      (bean/->clj result))))
+      (edn/read-string result))))
 
 (defn <get-file-contents
-  [repo]
+  [repo suffix]
   (p/let [page->content (<get-all-page->content repo)]
     (clojure.core/map (fn [[page-title content]]
-                        {:path (str page-title ".md")
+                        {:path (str page-title "."suffix)
                          :content content
                          :title page-title
                          :format :markdown})

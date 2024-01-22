@@ -417,12 +417,12 @@
   (get-all-pages
    [this repo]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (bean/->js (worker-export/get-all-pages repo @conn))))
+     (pr-str (worker-export/get-all-pages repo @conn))))
 
   (get-all-page->content
    [this repo]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (bean/->js (worker-export/get-all-page->content repo @conn))))
+     (pr-str (worker-export/get-all-page->content repo @conn))))
 
   ;; RTC
   (rtc-start
