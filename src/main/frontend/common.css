@@ -61,7 +61,7 @@ html[data-theme='dark'] {
   --ls-link-text-hover-color: var(--ls-active-secondary-color);
   --ls-link-ref-text-color: var(--ls-link-text-color);
   --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
-  --ls-tag-text-color: var(--ls-secondary-text-color);
+  --ls-tag-text-color: var(--ls-link-text-color);
   --ls-tag-text-hover-color: var(--ls-link-text-hover-color);
   --ls-slide-background-color: var(--ls-primary-background-color);
   --ls-block-bullet-border-color: #0f4958;
@@ -142,7 +142,7 @@ html[data-theme='light'] {
   --ls-link-text-hover-color: #1a537c;
   --ls-link-ref-text-color: var(--ls-link-text-color);
   --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
-  --ls-tag-text-color: var(--ls-secondary-text-color);
+  --ls-tag-text-color: var(--ls-link-ref-text-color);
   --ls-tag-text-hover-color: var(--ls-link-ref-text-hover-color);
   --ls-slide-background-color: #fff;
   --ls-block-bullet-border-color: #dedede;
@@ -526,13 +526,10 @@ i.ti {
 
 /* region FIXME: override elements (?) */
 h1.title, h1.title input {
+  margin-bottom: 1.5rem;
   color: or(--ls-journal-title-color, --lx-gray-12, --ls-title-text-color, #222);
   font-size: var(--ls-page-title-size, 36px);
   font-weight: 500;
-}
-
-h1.title {
-  margin-bottom: 1.5rem;
 }
 
 .title .page-icon {
@@ -682,6 +679,7 @@ img.small {
 }
 
 a.tag {
+  font-size: 0.9em;
   text-align: center;
   text-decoration: none;
   display: inline-block;
@@ -934,14 +932,4 @@ html.is-mobile {
   img {
     @apply inline-block;
   }
-}
-
-h1.title {
-    @apply text-2xl;
-}
-h2.title {
-    @apply text-xl;
-}
-h3.title {
-    @apply text-lg;
 }

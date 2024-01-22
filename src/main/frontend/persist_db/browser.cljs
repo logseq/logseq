@@ -65,8 +65,8 @@
   (when-not util/node-test?
     (let [worker-url (if (util/electron?)
                        "js/db-worker.js"
-                       "/static/js/db-worker.js")
-          worker (js/Worker. (str worker-url "?electron=" (util/electron?)))
+                       "static/js/db-worker.js")
+          worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
           wrapped-worker (Comlink/wrap worker)]
       (worker-handler/handle-message! worker wrapped-worker)
       (reset! *worker wrapped-worker)

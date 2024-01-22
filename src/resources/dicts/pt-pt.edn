@@ -115,7 +115,6 @@
  :content/delete-ref "Apagar esta referência"
  :content/open-in-sidebar "Abrir na barra lateral"
  :content/click-to-edit "Clicar para editar"
- :settings-page/git-confirm "É necessário reiniciar a aplicação após atualizar as definições do Git."
  :settings-page/git-switcher-label "Ativar o auto commit do Git"
  :settings-page/git-commit-delay "Segundos entre cada auto commit"
  :settings-page/edit-config-edn "Editar config.edn"
