@@ -198,9 +198,7 @@
                       ::collapsed?
                       (atom (not (seq (set/intersection #{"class" "property"} (:block/type page))))))))
            (fn [state]
-             (let [page (first (:rum/args state))
-                   properties (:block/properties page)]
-               (assoc state ::collapsed? (atom (empty? properties))))))}
+             (assoc state ::collapsed? (atom true))))}
   [state page *hover-title?]
   (let [page (db/sub-block (:db/id page))
         *collapsed? (::collapsed? state)
@@ -211,44 +209,45 @@
         collapsed? (rum/react *collapsed?)
         has-tags? (seq (:block/tags page))
         hover-or-expanded? (or @*hover? hover-title? (not collapsed?))]
+    (prn :debug :collapsed? collapsed?)
     (when (if config/publishing?
             ;; Since publishing is read-only, hide this component if it has no info to show
             ;; as it creates a fair amount of empty vertical space
             (or has-tags? (some? types))
             true)
-     [:div.page-info {:on-mouse-over #(reset! *hover? true)
-                      :on-mouse-leave #(reset! *hover? false)}
-      (when (or hover-or-expanded? has-tags?)
-        [:div.fade-in.p-2 (cond-> {}
-                            (or @*hover? (not collapsed?))
-                            (assoc :class "border rounded"))
-         [:div.info-title.cursor {:on-click
-                                  (if config/publishing?
-                                    (fn [_]
-                                      (when (seq (set/intersection #{"class" "empty"} types))
-                                        (swap! *collapsed? not)))
-                                    #(swap! *collapsed? not))}
-          [:div.flex.flex-row.items-center.gap-2.justify-between
-           [:div.flex.flex-row.items-center.gap-2
-            (if collapsed?
-              [:<>
-               (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
-                               (ui/icon "tags"))
-               [:div {:on-click util/stop-propagation}
-                (tags page)]]
-              [:div.flex.flex-row.items-center.gap-1
-               (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
-                               (ui/icon "info-circle"))
-               [:a.text-sm.font-medium.fade-link
-                "Configure:"]
-               (mode-switch types *mode)])]
-           (when (or @*hover? (not collapsed?))
-             (shui-ui/button
-              {:variant :ghost :size :sm :class "fade-link"}
-              (ui/icon (if collapsed?
-                         "chevron-down"
-                         "chevron-up"))))]]
+      [:div.page-info {:on-mouse-over #(reset! *hover? true)
+                       :on-mouse-leave #(reset! *hover? false)}
+       (when (or hover-or-expanded? has-tags?)
+         [:div.fade-in.p-2 (cond-> {}
+                             (or @*hover? (not collapsed?))
+                             (assoc :class "border rounded"))
+          [:div.info-title.cursor {:on-click
+                                   (if config/publishing?
+                                     (fn [_]
+                                       (when (seq (set/intersection #{"class" "empty"} types))
+                                         (swap! *collapsed? not)))
+                                     #(swap! *collapsed? not))}
+           [:div.flex.flex-row.items-center.gap-2.justify-between
+            [:div.flex.flex-row.items-center.gap-2
+             (if collapsed?
+               [:<>
+                (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
+                                (ui/icon "tags"))
+                [:div {:on-click util/stop-propagation}
+                 (tags page)]]
+               [:div.flex.flex-row.items-center.gap-1
+                (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
+                                (ui/icon "info-circle"))
+                [:a.text-sm.font-medium.fade-link
+                 "Configure:"]
+                (mode-switch types *mode)])]
+            (when (or @*hover? (not collapsed?))
+              (shui-ui/button
+               {:variant :ghost :size :sm :class "fade-link"}
+               (ui/icon (if collapsed?
+                          "chevron-down"
+                          "chevron-up"))))]]
 
-         (when-not collapsed?
-           [:div.py-2.px-4
-            (page-configure page *mode)])])])))
+          (when-not collapsed?
+            [:div.py-2.px-4
+             (page-configure page *mode)])])])))
