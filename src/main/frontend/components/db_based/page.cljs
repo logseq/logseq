@@ -30,38 +30,23 @@
         has-class-properties? (seq (:properties (:block/schema page)))]
     (when (or configure? has-viewable-properties? has-class-properties? property?)
       [:div.ls-page-properties.mb-4
-       (if config/publishing?
-         [:div.flex.flex-col.gap-4
-          (when has-viewable-properties?
-            [:div
-             (when has-class-properties?
-               [:div.mb-1.opacity-70.font-medium.text-sm "Page properties:"])
-             (component-block/db-properties-cp {:editor-box editor/box}
-                                               page
-                                               (str edit-input-id-prefix "-page")
-                                               {:selected? false
-                                                :page-configure? false
-                                                :class-schema? false})])
-          (when has-class-properties?
-            [:div
-             (when has-viewable-properties?
-               [:div.mb-1.opacity-70.font-medium.text-sm "Class properties:"])
-             (component-block/db-properties-cp {:editor-box editor/box}
-                                               page
-                                               (str edit-input-id-prefix "-schema")
-                                               (assoc configure-opts :class-schema? true))])]
-         (cond
-           (= mode :class)
-           (component-block/db-properties-cp {:editor-box editor/box}
-                                             page
-                                             (str edit-input-id-prefix "-schema")
-                                             (assoc configure-opts :class-schema? true))
-
-           (= mode :page)
+       (cond
+         (= mode :class)
+         (if (and config/publishing? (not configure?))
            (component-block/db-properties-cp {:editor-box editor/box}
                                              page
                                              (str edit-input-id-prefix "-page")
-                                             (assoc configure-opts :class-schema? false))))])))
+                                             (assoc configure-opts :class-schema? false))
+           (component-block/db-properties-cp {:editor-box editor/box}
+                                             page
+                                             (str edit-input-id-prefix "-schema")
+                                             (assoc configure-opts :class-schema? true)))
+
+         (= mode :page)
+         (component-block/db-properties-cp {:editor-box editor/box}
+                                           page
+                                           (str edit-input-id-prefix "-page")
+                                           (assoc configure-opts :class-schema? false)))])))
 
 (rum/defc icon-row < rum/reactive
   [page]
@@ -156,25 +141,16 @@
              selected? (= mode' current-mode)]
          (shui-ui/button {:class (when-not selected? "opacity-70")
                           :variant (if selected? :outline :ghost) :size :sm
-                          :on-click (if config/publishing?
-                                      util/stop-propagation
-                                      (fn [e]
-                                        (util/stop-propagation e)
-                                        (reset! *mode mode')))}
+                          :on-click (fn [e]
+                                      (util/stop-propagation e)
+                                      (reset! *mode mode'))}
                          mode)))]))
 
 (rum/defcs page-info < rum/reactive
   (rum/local false ::hover?)
   (rum/local nil ::mode)
-  {:init (if config/publishing?
-           (fn [state]
-             (let [page* (first (:rum/args state))
-                   page (db/sub-block (:db/id page*))]
-               (assoc state
-                      ::collapsed?
-                      (atom (not (seq (set/intersection #{"class" "property"} (:block/type page))))))))
-           (fn [state]
-             (assoc state ::collapsed? (atom true))))}
+  {:init (fn [state]
+           (assoc state ::collapsed? (atom true)))}
   [state page *hover-title?]
   (let [page (db/sub-block (:db/id page))
         *collapsed? (::collapsed? state)
@@ -201,18 +177,21 @@
           [:div.info-title.cursor {:on-click
                                    (if config/publishing?
                                      (fn [_]
-                                       (when (seq (set/intersection #{"class" "empty"} types))
+                                       (when (seq (set/intersection #{"class" "property"} types))
                                          (swap! *collapsed? not)))
                                      #(swap! *collapsed? not))}
            [:div.flex.flex-row.items-center.gap-2.justify-between.pl-1
             [:div.flex.flex-row.items-center.gap-2
              (if collapsed?
-               (if (or has-tags? @*hover?)
+               (if (or has-tags? @*hover? config/publishing?)
                  [:<>
                   (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
                                   (ui/icon "tags"))
-                  [:div {:on-click util/stop-propagation}
-                   (tags page)]]
+                  (if (and config/publishing? (seq (set/intersection #{"class" "property"} types)))
+                    [:div
+                     [:div.opacity-50.pointer.text-sm "Expand for more info"]]
+                    [:div {:on-click util/stop-propagation}
+                     (tags page)])]
                  [:div.page-info-title-placeholder])
                [:div.flex.flex-row.items-center.gap-1
                 (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}

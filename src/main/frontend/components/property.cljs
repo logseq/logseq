@@ -650,6 +650,7 @@
      (when-not @*hide?
        (properties-section block hidden-properties opts))]))
 
+;; TODO: Remove :page-configure? as it only ever seems to be set to true
 (rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive
   [state target-block edit-input-id {:keys [in-block-container? page-configure? class-schema?] :as opts}]
   (let [block (resolve-linked-block-if-exists target-block)
