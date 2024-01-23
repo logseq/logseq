@@ -2870,11 +2870,7 @@
                                               (block-handler/get-top-level-blocks [block])
                                               indent?
                                               {:get-first-block-original block-handler/get-first-block-original
-                                               :logical-outdenting? (state/logical-outdenting?)})
-         (edit-block!
-           (db/pull (:db/id block))
-           (cursor/pos (state/get-input))
-           (:block/uuid block)))))))
+                                               :logical-outdenting? (state/logical-outdenting?)}))))))
 
 (defn keydown-tab-handler
   [direction]
