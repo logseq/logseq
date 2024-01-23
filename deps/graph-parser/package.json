@@ -4,7 +4,7 @@
   "private": true,
   "devDependencies": {
     "@logseq/nbb-logseq": "logseq/nbb-logseq#feat-db-v8",
-    "better-sqlite3": "8.0.1"
+    "better-sqlite3": "9.3.0"
   },
   "dependencies": {
     "mldoc": "^1.5.8"
