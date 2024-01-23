@@ -721,7 +721,13 @@
                    (not (:page-configure? opts)))
       [:div.ls-properties-area (cond-> (if in-block-container?
                                          {}
-                                         {:class [(if class-schema? "class-properties" "page-properties")]})
+                                         {:class [(cond
+                                                    class-schema?
+                                                    "class-properties"
+                                                    (config/db-based-graph? (state/get-current-repo))
+                                                    nil
+                                                    :else
+                                                    "page-properties")]})
                                  (:selected? opts)
                                  (update :class conj "select-none"))
        (properties-section block (if class-schema? properties own-properties) opts)
