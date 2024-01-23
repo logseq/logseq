@@ -15,6 +15,14 @@
   --ls-left-sidebar-sm-width: 74vw;
   --ls-left-sidebar-nav-btn-size: 38px;
   --ls-native-kb-height: 0px;
+
+  --ls-highlight-color-gray: var(--rx-gray-05);
+  --ls-highlight-color-red: var(--rx-red-05);
+  --ls-highlight-color-yellow: var(--rx-yellow-05);
+  --ls-highlight-color-green: var(--rx-green-05);
+  --ls-highlight-color-blue: var(--rx-blue-05);
+  --ls-highlight-color-purple: var(--rx-purple-05);
+  --ls-highlight-color-pink: var(--rx-pink-05);
 }
 
 .white-theme,
@@ -78,13 +86,7 @@ html[data-theme=light][data-color=logseq] {
   --ls-a-chosen-bg: var(--ls-quaternary-background-color);
   --ls-pie-bg-color: #e1e1e1;
   --ls-pie-fg-color: #0a4a5d;
-  --ls-highlight-color-gray: var(--color-gray-100);
-  --ls-highlight-color-red: var(--color-red-100);
-  --ls-highlight-color-yellow: var(--color-yellow-100);
-  --ls-highlight-color-green: var(--color-green-100);
-  --ls-highlight-color-blue: var(--color-blue-100);
-  --ls-highlight-color-purple: var(--color-purple-100);
-  --ls-highlight-color-pink: var(--color-pink-100);
+
   --ls-error-text-color: var(--color-red-700);
   --ls-error-background-color: var(--color-red-100);
   --ls-warning-text-color: var(--color-yellow-700);
@@ -148,13 +150,7 @@ html[data-theme=dark][data-color=logseq] {
   --ls-a-chosen-bg: var(--ls-quaternary-background-color);
   --ls-pie-bg-color: #01303b;
   --ls-pie-fg-color: #0b5869;
-  --ls-highlight-color-gray: var(--color-gray-900);
-  --ls-highlight-color-red: var(--color-red-900);
-  --ls-highlight-color-yellow: var(--color-yellow-900);
-  --ls-highlight-color-green: var(--color-green-900);
-  --ls-highlight-color-blue: var(--color-blue-900);
-  --ls-highlight-color-purple: var(--color-purple-900);
-  --ls-highlight-color-pink: var(--color-pink-900);
+
   --ls-error-text-color: var(--color-red-400);
   --ls-error-background-color: var(--color-red-900);
   --ls-warning-text-color: var(--color-yellow-400);
