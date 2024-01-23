@@ -80,7 +80,7 @@
       (assoc root' :block/children children)
       root')))
 
-(defn block-entity->map
+(defn ^:api block-entity->map
   [e]
   (cond-> {:db/id (:db/id e)
            :block/uuid (:block/uuid e)
@@ -93,7 +93,7 @@
     (:block/children e)
     (assoc :block/children (:block/children e))))
 
-(defn filter-top-level-blocks
+(defn ^:api filter-top-level-blocks
   [blocks]
   (let [id->blocks (zipmap (map :db/id blocks) blocks)]
     (filter #(nil?
@@ -121,7 +121,7 @@
                     (if sorted-nested-children [parent sorted-nested-children] [parent])))
         parents))
 
-(defn sort-blocks
+(defn ^:api sort-blocks
   "sort blocks by parent & left"
   [blocks-exclude-root root]
   (let [parent-groups (atom (group-by :block/parent blocks-exclude-root))]

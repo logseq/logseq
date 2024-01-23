@@ -811,7 +811,7 @@
 (defmethod handle :class/configure [[_ page]]
   (state/set-modal!
    #(vector :<>
-            (class-component/configure page)
+            (class-component/configure page {})
             (db-page/page-properties page {:configure? true}))
    {:id :page-configure
     :label "page-configure"
