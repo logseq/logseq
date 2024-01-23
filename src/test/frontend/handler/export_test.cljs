@@ -1,12 +1,9 @@
 (ns frontend.handler.export-test
-  (:require [cljs.test :refer [are async deftest is use-fixtures]]
-            [clojure.edn :as edn]
+  (:require [cljs.test :refer [are async deftest use-fixtures]]
             [clojure.string :as string]
-            [frontend.handler.export :as export]
             [frontend.handler.export.text :as export-text]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
-            [logseq.db.frontend.default :as default-db]
             [promesa.core :as p]))
 
 (def test-files

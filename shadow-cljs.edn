@@ -43,7 +43,8 @@
                            :externs ["datascript/externs.js"
                                      "externs.js"]
                            :warnings {:fn-deprecated false
-                                      :redef false}}
+                                      :redef false}
+                           :cross-chunk-method-motion false}
         :build-hooks [(shadow.hooks/git-revision-hook "--long --always --dirty")]
         :closure-defines {goog.debug.LOGGING_ENABLED true
                           frontend.modules.instrumentation.sentry/SENTRY-DSN #shadow/env "LOGSEQ_SENTRY_DSN"
