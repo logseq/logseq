@@ -172,22 +172,22 @@
   "Prepares a database assuming all pages are private unless a page has a 'public:: true'"
   [db {:keys [db-graph?]}]
   {:post [(some? %) (sequential? %)]}
-  (let [public-pages* (seq (if db-graph? (get-db-public-pages db) (get-public-pages db)))]
-    (let [public-pages (set/union (set public-pages*)
-                                  (get-aliases-for-page-ids db public-pages*))
-          exported-namespace? #(contains? #{"block" "recent"} %)
-          filtered-db (d/filter db
-                                (fn [db datom]
-                                  (let [ns (namespace (:a datom))]
-                                    (and
-                                     (not (contains? #{:block/file} (:a datom)))
-                                     (not= ns "file")
-                                     (or
-                                      (not (exported-namespace? ns))
-                                      (and (= ns "block")
-                                           (or
-                                            (contains? public-pages (:e datom))
-                                            (contains? public-pages (:db/id (:block/page (d/entity db (:e datom))))))))))))
-          datoms (d/datoms filtered-db :eavt)
-          assets (get-assets db datoms)]
-      [@(d/conn-from-datoms datoms (:schema db)) assets])))
+  (let [public-pages* (seq (if db-graph? (get-db-public-pages db) (get-public-pages db)))
+        public-pages (set/union (set public-pages*)
+                                (get-aliases-for-page-ids db public-pages*))
+        exported-namespace? #(contains? #{"block" "recent"} %)
+        filtered-db (d/filter db
+                              (fn [db datom]
+                                (let [ns (namespace (:a datom))]
+                                  (and
+                                   (not (contains? #{:block/file} (:a datom)))
+                                   (not= ns "file")
+                                   (or
+                                    (not (exported-namespace? ns))
+                                    (and (= ns "block")
+                                         (or
+                                          (contains? public-pages (:e datom))
+                                          (contains? public-pages (:db/id (:block/page (d/entity db (:e datom))))))))))))
+        datoms (d/datoms filtered-db :eavt)
+        assets (get-assets db datoms)]
+    [@(d/conn-from-datoms datoms (:schema db)) assets]))
