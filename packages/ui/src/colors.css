@@ -143,6 +143,7 @@ html {
     body, .dark-theme, .light-theme {
       --accent: 358 75.0% 59.0%;
       --primary: 358 75.0% 59.0%;
+      --primary-foreground: 190 43% 97%;
       --ring: 359 69.5% 74.3%;
       --accent-foreground: 190 43% 97%;
       --primary-accent-foreground: 190 43% 97%;
@@ -313,6 +314,7 @@ html {
     body, .dark-theme, .light-theme {
       --accent: 336 80.0% 57.8%;
       --primary: 336 80.0% 57.8%;
+      --primary-foreground: 190 43% 97%;
       --ring: 336 62.3% 72.9%;
       --accent-foreground: 190 43% 97%;
       --primary-accent-foreground: 190 43% 97%;

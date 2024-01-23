@@ -343,14 +343,10 @@
   }
 }
 
-.block-properties {
+.block-properties, .page-properties {
   margin: 4px 0;
   padding: 4px 8px;
-  background-color: var(--ls-block-properties-background-color, #f0f8ff);
-}
-
-.page-properties {
-  background-color: var(--ls-page-properties-background-color);
+  background-color: var(--lx-gray-03, var(--ls-block-properties-background-color, var(--rx-gray-03)));
 }
 
 .block-marker {

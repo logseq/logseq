@@ -373,5 +373,5 @@ html.is-mobile {
 }
 
 .ui__toggle-background-off {
-  background: or(--ls-toggle-off-background, --lx-gray-08, rgb(212, 212, 212));
+  background: var(--lx-gray-08, rgb(212, 212, 212));
 }

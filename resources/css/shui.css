@@ -78,6 +78,22 @@ html {
     .cp__cmdk {
       --lx-gray-07: var(--rx-gray-07);
     }
+
+    .ui__toggle {
+      &-background-off {
+        @apply bg-gray-08;
+
+        .switcher {
+          @apply bg-gray-10;
+        }
+      }
+
+      &-background-on {
+        .switcher {
+          @apply bg-gray-03;
+        }
+      }
+    }
   }
 }
 
