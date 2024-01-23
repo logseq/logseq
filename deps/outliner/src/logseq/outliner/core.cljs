@@ -16,7 +16,8 @@
             [logseq.graph-parser.property :as gp-property]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.util :as sqlite-util]
-            [cljs.pprint :as pprint]))
+            [cljs.pprint :as pprint]
+            [logseq.db.frontend.content :as db-content]))
 
 (def ^:private block-map
   (mu/optional-keys
@@ -318,7 +319,20 @@
           db-id (:db/id (:data this))
           block-uuid (:block/uuid (:data this))
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
-          block-entity (d/entity db eid)]
+          block-entity (d/entity db eid)
+          m (if (and (:block/content m) db-based?)
+              (update m :block/content
+                      (fn [content]
+                        (db-content/content-without-tags
+                         content
+                         (->>
+                          (map
+                           (fn [tag]
+                             (when (:block/uuid tag)
+                               (str db-content/page-ref-special-chars (:block/uuid tag))))
+                           (:block/tags m))
+                          (remove nil?)))))
+              m)]
 
       ;; Ensure block UUID never changes
       (when (and db-id block-uuid)
