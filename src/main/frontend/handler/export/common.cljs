@@ -90,13 +90,14 @@
                (mapv remove-block-ast-pos
                      (mldoc/->edn content format))))))
 
-(defn <get-page-content
-  ([page-name]
-   (<get-page-content (state/get-current-repo) page-name))
-  ([repo page-name]
-   (when-let [^object worker @db-browser/*worker]
-     (.block->content worker repo page-name nil
-                      (pr-str {:export-bullet-indentation (state/get-export-bullet-indentation)})))))
+;; TODO: Enable when unused
+#_(defn <get-page-content
+    ([page-name]
+     (<get-page-content (state/get-current-repo) page-name))
+    ([repo page-name]
+     (when-let [^object worker @db-browser/*worker]
+       (.block->content worker repo page-name nil
+                        (pr-str {:export-bullet-indentation (state/get-export-bullet-indentation)})))))
 
 (defn get-page-content
   [page-name]
@@ -206,7 +207,7 @@
   [repo suffix]
   (p/let [page->content (<get-all-page->content repo)]
     (clojure.core/map (fn [[page-title content]]
-                        {:path (str page-title "."suffix)
+                        {:path (str page-title "." suffix)
                          :content content
                          :title page-title
                          :format :markdown})
