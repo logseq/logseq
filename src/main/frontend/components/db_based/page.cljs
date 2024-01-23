@@ -118,7 +118,8 @@
     (pv/property-value page tags-property
                        (map :block/uuid (:block/tags page))
                        {:page-cp (fn [config page]
-                                   (component-block/page-cp (assoc config :tag? true) page))})))
+                                   (component-block/page-cp (assoc config :tag? true) page))
+                        :inline-text component-block/inline-text})))
 
 (rum/defc tags-row < rum/reactive
   [page]
