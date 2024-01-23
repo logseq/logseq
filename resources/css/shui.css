@@ -6,6 +6,7 @@ html[data-theme=light] {
   --accent: var(--rx-gray-12-hsl);
   --accent-foreground: var(--rx-gray-02-hsl);
   --input: var(--rx-gray-03-hsl);
+  --secondary: 240 4.8% 95.9%;
 }
 
 html[data-theme=dark] {
@@ -68,9 +69,11 @@ html {
   }
 
   &[data-color=none] {
-    #ui__ac-inner {
-
+    ::selection {
+      @apply bg-primary/20;
     }
+
+    #ui__ac-inner {}
   }
 }
 
@@ -88,12 +91,6 @@ html[data-theme=light] {
 
 html[data-theme=dark] {
   background-color: #161616;
-
-  &:not([data-color=logseq]) {
-    body {
-      --lx-popover-bg: var(--lx-gray-02);
-    }
-  }
 
   &[data-color=logseq] {
     @apply bg-[#002b36];
