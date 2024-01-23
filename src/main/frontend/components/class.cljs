@@ -61,12 +61,13 @@
 
 (rum/defcs configure < rum/reactive
   "Configure a class page"
-  [state page]
+  [state page {:keys [show-title?]
+               :or {show-title? true}}]
   (let [page-id (:db/id page)
         page (when page-id (db/sub-block page-id))]
     (when page
       [:div.property-configure.grid.gap-2
-       [:h1.title.mb-4 "Configure class"]
+       (when show-title? [:h1.title.mb-4 "Configure class"])
 
        [:div.grid.grid-cols-5.gap-1.items-center.class-parent
         [:div.col-span-2 "Parent class:"]

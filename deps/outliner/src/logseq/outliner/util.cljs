@@ -7,7 +7,7 @@
    [datascript.impl.entity :as e]
    [logseq.common.util :as common-util]))
 
-(defn block-id?
+(defn- block-id?
   [id]
   (or
    (number? id)

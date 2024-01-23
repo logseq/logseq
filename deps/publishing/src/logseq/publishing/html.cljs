@@ -122,6 +122,9 @@ necessary db filtering"
         }
       }(window.location))"]
             ;; TODO: should make this configurable
+            [:script {:src "static/js/react.production.min.js"}]
+            [:script {:src "static/js/react-dom.production.min.js"}]
+            [:script {:src "static/js/ui.js"}]
             [:script {:src "static/js/shared.js"}]
             [:script {:src "static/js/main.js"}]
             [:script {:src "static/js/interact.min.js"}]

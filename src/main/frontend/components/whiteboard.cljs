@@ -269,7 +269,7 @@
                             e
                             (content/page-title-custom-context-menu-content page-name))
                            (state/set-state! :page-title/context nil))}
-       (page/page-title page-name {:*configure-show? (atom false)})]
+       (page/page-title page-name {:*hover? (atom false)})]
 
       [:div.whiteboard-page-refs
        (references-count page-name

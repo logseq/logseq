@@ -395,7 +395,6 @@
  :linked-references/filter-includes                 "Incluye: "
  :linked-references/filter-search                   "Buscar en las páginas vinculadas"
  :linked-references/reference-count (fn [filtered-count total] (str (when filtered-count (str filtered-count " de ")) total (if (= total 1) " Referencia vinculada" " Referencias vinculadas")))
- :linked-references/unexpected-error                "Referencias vinculadas: Error inesperado. Reindexa tu gráfico primero."
  :notification/clear-all                            "Limpiar todo"
  :on-boarding/add-graph                             "Añadir grafo"
  :on-boarding/command-palette-quick-tour            "Tour rápido para acostumbrarse"
