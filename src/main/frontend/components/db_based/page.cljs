@@ -20,9 +20,8 @@
             [clojure.string :as string]))
 
 (rum/defc page-properties < rum/reactive
-  [page {:keys [configure? mode]}]
+  [page {:keys [mode configure?]}]
   (let [types (:block/type page)
-        class? (contains? types "class")
         property? (contains? types "property")
         edit-input-id-prefix (str "edit-block-" (:block/uuid page))
         configure-opts {:selected? false
@@ -31,63 +30,38 @@
         has-class-properties? (seq (:properties (:block/schema page)))]
     (when (or configure? has-viewable-properties? has-class-properties? property?)
       [:div.ls-page-properties.mb-4
-       (if configure?
+       (if config/publishing?
+         [:div.flex.flex-col.gap-4
+          (when has-viewable-properties?
+            [:div
+             (when has-class-properties?
+               [:div.mb-1.opacity-70.font-medium.text-sm "Page properties:"])
+             (component-block/db-properties-cp {:editor-box editor/box}
+                                               page
+                                               (str edit-input-id-prefix "-page")
+                                               {:selected? false
+                                                :page-configure? false
+                                                :class-schema? false})])
+          (when has-class-properties?
+            [:div
+             (when has-viewable-properties?
+               [:div.mb-1.opacity-70.font-medium.text-sm "Class properties:"])
+             (component-block/db-properties-cp {:editor-box editor/box}
+                                               page
+                                               (str edit-input-id-prefix "-schema")
+                                               (assoc configure-opts :class-schema? true))])]
          (cond
-           (and class? has-class-properties? (= :class mode))
-           nil
-
-           (and class? (not has-class-properties?))
+           (= mode :class)
            (component-block/db-properties-cp {:editor-box editor/box}
                                              page
                                              (str edit-input-id-prefix "-schema")
                                              (assoc configure-opts :class-schema? true))
 
-           (not (db-property-handler/block-has-viewable-properties? page))
+           (= mode :page)
            (component-block/db-properties-cp {:editor-box editor/box}
                                              page
                                              (str edit-input-id-prefix "-page")
-                                             (assoc configure-opts :class-schema? false)))
-         (if config/publishing?
-           [:div.flex.flex-col.gap-4
-            (when has-viewable-properties?
-              [:div
-               (when has-class-properties?
-                 [:div.mb-1.opacity-70.font-medium.text-sm "Page properties:"])
-               (component-block/db-properties-cp {:editor-box editor/box}
-                                                 page
-                                                 (str edit-input-id-prefix "-page")
-                                                 {:selected? false
-                                                  :page-configure? false
-                                                  :class-schema? false})])
-            (when has-class-properties?
-              [:div
-               (when has-viewable-properties?
-                 [:div.mb-1.opacity-70.font-medium.text-sm "Class properties:"])
-               (component-block/db-properties-cp {:editor-box editor/box}
-                                                 page
-                                                 (str edit-input-id-prefix "-schema")
-                                                 (assoc configure-opts :class-schema? true))])]
-
-           [:div.flex.flex-col.gap-4
-            (when has-class-properties?
-              [:div
-               (when has-viewable-properties?
-                 [:div.mb-1.opacity-70.font-medium.text-sm "Class properties:"])
-               (component-block/db-properties-cp {:editor-box editor/box}
-                                                 page
-                                                 (str edit-input-id-prefix "-schema")
-                                                 (assoc configure-opts :class-schema? true))])
-
-            (when has-viewable-properties?
-              [:div
-               (when has-class-properties?
-                 [:div.mb-1.opacity-70.font-medium.text-sm "Page properties:"])
-               (component-block/db-properties-cp {:editor-box editor/box}
-                                                 page
-                                                 (str edit-input-id-prefix "-page")
-                                                 {:selected? false
-                                                  :page-configure? false
-                                                  :class-schema? false})])]))])))
+                                             (assoc configure-opts :class-schema? false))))])))
 
 (rum/defc icon-row < rum/reactive
   [page]
@@ -149,6 +123,7 @@
           (class-component/configure page {:show-title? false}))
         (when-not config/publishing? (tags-row page))
         (when-not config/publishing? (icon-row page))
+        [:h2 "Properties: "]
         (page-properties page (assoc page-opts :mode mode))])]))
 
 (rum/defc page-properties-react < rum/reactive
@@ -179,7 +154,8 @@
      (for [mode modes]
        (let [mode' (keyword (string/lower-case mode))
              selected? (= mode' current-mode)]
-         (shui-ui/button {:variant (if selected? :outline :ghost) :size :sm
+         (shui-ui/button {:class (when-not selected? "opacity-70")
+                          :variant (if selected? :outline :ghost) :size :sm
                           :on-click (if config/publishing?
                                       util/stop-propagation
                                       (fn [e]
@@ -205,11 +181,12 @@
         *hover? (::hover? state)
         *mode (::mode state)
         types (:block/type page)
+        class? (contains? types "class")
         hover-title? (rum/react *hover-title?)
         collapsed? (rum/react *collapsed?)
         has-tags? (seq (:block/tags page))
+        has-properties? (seq (:block/properties page))
         hover-or-expanded? (or @*hover? hover-title? (not collapsed?))]
-    (prn :debug :collapsed? collapsed?)
     (when (if config/publishing?
             ;; Since publishing is read-only, hide this component if it has no info to show
             ;; as it creates a fair amount of empty vertical space
@@ -217,17 +194,17 @@
             true)
       [:div.page-info {:on-mouse-over #(reset! *hover? true)
                        :on-mouse-leave #(reset! *hover? false)}
-       (when (or hover-or-expanded? has-tags?)
-         [:div.fade-in.p-2 (cond-> {}
-                             (or @*hover? (not collapsed?))
-                             (assoc :class "border rounded"))
+       (when (or hover-or-expanded? has-tags? has-properties?)
+         [:div.fade-in.p-2 {:class (if (or @*hover? (not collapsed?))
+                                     "border rounded"
+                                     "border rounded border-transparent")}
           [:div.info-title.cursor {:on-click
                                    (if config/publishing?
                                      (fn [_]
                                        (when (seq (set/intersection #{"class" "empty"} types))
                                          (swap! *collapsed? not)))
                                      #(swap! *collapsed? not))}
-           [:div.flex.flex-row.items-center.gap-2.justify-between
+           [:div.flex.flex-row.items-center.gap-2.justify-between.pl-1
             [:div.flex.flex-row.items-center.gap-2
              (if collapsed?
                [:<>
@@ -247,7 +224,10 @@
                (ui/icon (if collapsed?
                           "chevron-down"
                           "chevron-up"))))]]
-
-          (when-not collapsed?
+          (if collapsed?
+            (when (or (seq (:block/properties page))
+                      (and class? (seq (:properties (:block/schema page)))))
+              [:div.py-2.px-4
+               (page-properties page {:mode (if class? :class :page)})])
             [:div.py-2.px-4
              (page-configure page *mode)])])])))
