@@ -207,11 +207,13 @@
            [:div.flex.flex-row.items-center.gap-2.justify-between.pl-1
             [:div.flex.flex-row.items-center.gap-2
              (if collapsed?
-               [:<>
-                (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
-                                (ui/icon "tags"))
-                [:div {:on-click util/stop-propagation}
-                 (tags page)]]
+               (if (or has-tags? @*hover?)
+                 [:<>
+                  (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
+                                  (ui/icon "tags"))
+                  [:div {:on-click util/stop-propagation}
+                   (tags page)]]
+                 [:div.page-info-title-placehoder])
                [:div.flex.flex-row.items-center.gap-1
                 (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
                                 (ui/icon "info-circle"))
