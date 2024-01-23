@@ -136,7 +136,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     return shapeInstances
   }
 
-  @action bringForward = (shapes: S[] | string[], skipPersist: boolean): this => {
+  @action bringForward = (shapes: S[] | string[]): this => {
     const shapesToMove = this.parseShapesArg(shapes)
     shapesToMove
       .sort((a, b) => this.shapes.indexOf(b) - this.shapes.indexOf(a))
@@ -149,7 +149,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
         this.shapes[index] = this.shapes[index + 1]
         this.shapes[index + 1] = t
       })
-    if (!skipPersist) this.app.persist()
+    this.app.persist()
     return this
   }
 

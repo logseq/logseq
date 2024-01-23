@@ -277,8 +277,8 @@ export class TLApp<
     return this.shapes.find(group => group.props.children?.includes(shape.id))
   }
 
-  bringForward = (shapes: S[] | string[] = this.selectedShapesArray, skipPersist: boolean): this => {
-    if (shapes.length > 0 && !this.readOnly) this.currentPage.bringForward(shapes, skipPersist)
+  bringForward = (shapes: S[] | string[] = this.selectedShapesArray): this => {
+    if (shapes.length > 0 && !this.readOnly) this.currentPage.bringForward(shapes)
     return this
   }
 
