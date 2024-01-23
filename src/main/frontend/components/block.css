@@ -180,15 +180,21 @@
   position: absolute;
   border-radius: 2px;
   opacity: 0.6;
-}
+  border-left-color: var(--lx-gray-09, var(--ls-border-color, var(--rx-gray-09)));
 
-.block-children-left-border:hover {
-  background-color: or(--ls-block-left-color, --lx-gray-11, --ls-primary-text-color);
+  &:hover {
+    background-color: var(--lx-gray-10, var(--ls-primary-text-color, var(--rx-gray-10)));
+    opacity: .7;
+  }
+
+  &:active {
+    opacity: 1;
+  }
 }
 
 .block-children {
   border-left: 1px solid;
-  border-left-color: or(--lx-gray-04-alpha, --ls-guideline-color, #ddd) !important;
+  border-left-color: var(--lx-gray-04-alpha, var(--ls-guideline-color, var(--rx-gray-04-alpha))) !important;
 
   padding-top: 2px;
   padding-bottom: 3px;
@@ -374,7 +380,7 @@
     border-radius: 2px;
   }
 
-  .bullet-container .selected {
+  span.bullet-container:not(.as-order-list) .selected {
     border: 3px solid;
   }
 }
@@ -574,11 +580,11 @@
 
   &:not(.typed-list) {
     &.bullet-closed {
-      background-color: or(--ls-bullet-closed-background, --lx-gray-04-alpha, --ls-block-bullet-border-color, #ced9e0);
+      background-color: var(--lx-gray-04-alpha, var(--ls-block-bullet-border-color, var(--rx-gray-04-alpha)));
     }
 
     .bullet {
-      background-color: or(--lx-gray-08, --ls-block-bullet-color, #394b59);
+      background-color: var(--lx-gray-08, var(--ls-block-bullet-color, var(--rx-gray-08)));
       transition: transform 0.2s;
     }
   }
@@ -597,11 +603,11 @@
   color: var(--ls-primary-text-color);
 
   &:hover > .bullet-container:not(.typed-list) {
-    background-color: or(--lx-gray-04-alpha, --ls-block-bullet-border-color, #ced9e0);
+    background-color: var(--lx-gray-04-alpha, var(--ls-block-bullet-border-color, var(--rx-gray-04-alpha)));
 
     .bullet {
       transform: scale(1.2);
-      background-color: or(--lx-gray-08, --ls-block-bullet-color, inherit) !important;
+      background-color: var(--lx-gray-08, var(--ls-block-bullet-color, var(--rx-gray-08))) !important;
     }
   }
 }

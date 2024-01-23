@@ -265,8 +265,7 @@ li p:last-child,
 }
 
 .admonition-icon {
-  border-right: 1px solid;
-  border-right-color: var(--ls-border-color, #ccc);
+  @apply border-r;
 }
 
 i.ti {
@@ -527,7 +526,7 @@ svg.tip {
 
 hr {
   margin: 2rem 0;
-  border-color: var(--ls-border-color, #ccc);
+  border-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
 }
 
 .resize {

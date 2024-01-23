@@ -74,6 +74,10 @@ html {
     }
 
     #ui__ac-inner {}
+
+    .cp__cmdk {
+      --lx-gray-07: var(--rx-gray-07);
+    }
   }
 }
 

@@ -2227,7 +2227,7 @@ Similar to re-frame subscriptions"
   (util/set-android-theme))
 
 (defn unset-color-accent! []
-  (swap! state assoc :ui/radix-color nil)
+  (swap! state assoc :ui/radix-color :logseq)
   (storage/remove :ui/radix-color)
   (util/set-android-theme))
 

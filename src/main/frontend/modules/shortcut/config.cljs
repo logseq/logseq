@@ -530,10 +530,10 @@
    :editor/toggle-open-blocks               {:binding "t o"
                                              :fn      editor-handler/toggle-open!}
 
-   :ui/cycle-color-off                      {:binding "c o"
+   :ui/accent-color-reset                   {:binding "c o"
                                              :fn      state/unset-color-accent!}
 
-   :ui/cycle-color                          {:binding "c c"
+   :ui/accent-colors-picker                 {:binding "c c"
                                              :fn      #(state/pub-event! [:modal/show-accent-colors-modal])}
 
    :git/commit                              {:binding  "mod+g c"
@@ -736,8 +736,8 @@
             :dev/show-block-ast
             :dev/show-page-data
             :dev/show-page-ast
-            :ui/cycle-color
-            :ui/cycle-color-off])
+            :ui/accent-colors-picker
+            :ui/accent-color-reset])
        (with-meta {:before m/enable-when-not-editing-mode!}))
 
      :shortcut.handler/misc
@@ -851,8 +851,8 @@
       :ui/toggle-right-sidebar
       :ui/toggle-settings
       :ui/toggle-contents
-      :ui/cycle-color-off
-      :ui/cycle-color]
+      :ui/accent-color-reset
+      :ui/accent-colors-picker]
 
      :shortcut.category/whiteboard
      [:editor/new-whiteboard

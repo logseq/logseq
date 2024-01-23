@@ -506,3 +506,13 @@ body[data-settings-tab=keymap] {
     @apply sm:min-w-[520px];
   }
 }
+
+.cp__accent-colors {
+  &-list-wrap {
+    @apply grid grid-cols-8 gap-2 max-w-[250px];
+
+    &.as-modal-picker {
+      @apply grid-cols-8 gap-3 pt-1 pb-2 ml-8 max-w-none;
+    }
+  }
+}
