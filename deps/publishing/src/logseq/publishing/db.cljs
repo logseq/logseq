@@ -171,7 +171,8 @@
 (defn filter-only-public-pages-and-blocks
   "Prepares a database assuming all pages are private unless a page has a 'public:: true'"
   [db {:keys [db-graph?]}]
-  (when-let [public-pages* (seq (if db-graph? (get-db-public-pages db) (get-public-pages db)))]
+  {:post [(some? %) (sequential? %)]}
+  (let [public-pages* (seq (if db-graph? (get-db-public-pages db) (get-public-pages db)))]
     (let [public-pages (set/union (set public-pages*)
                                   (get-aliases-for-page-ids db public-pages*))
           exported-namespace? #(contains? #{"block" "recent"} %)
