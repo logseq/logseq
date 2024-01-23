@@ -140,8 +140,8 @@
   [repo]
   (if @*publishing?
     (p/let [^object DB (.-DB ^object (.-oo1 ^object @*sqlite))
-            db (new DB "/db.sqlite" "ct")
-            search-db (new DB "/search-db.sqlite" "ct")]
+            db (new DB "/db.sqlite" "c")
+            search-db (new DB "/search-db.sqlite" "c")]
       [db search-db])
     (p/let [^js pool (<get-opfs-pool repo)
             capacity (.getCapacity pool)

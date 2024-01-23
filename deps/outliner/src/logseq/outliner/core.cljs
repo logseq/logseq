@@ -18,7 +18,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [cljs.pprint :as pprint]))
 
-(def block-map
+(def ^:private block-map
   (mu/optional-keys
    [:map
     [:db/id :int]
@@ -28,12 +28,12 @@
     [:block/parent :map]
     [:block/page :map]]))
 
-(def block-map-or-entity
+(def ^:private block-map-or-entity
   [:or [:fn de/entity?] block-map])
 
-(defrecord Block [data])
+(defrecord ^:api Block [data])
 
-(defn block
+(defn ^:api block
   [db m]
   (assert (or (map? m) (de/entity? m)) (common-util/format "block data must be map or entity, got: %s %s" (type m) m))
   (let [e (if (or (de/entity? m)
@@ -48,11 +48,11 @@
                        :block/uuid (:block/uuid entity)))))]
     (->Block e)))
 
-(defn get-data
+(defn ^:api get-data
   [block]
   (:data block))
 
-(defn get-block-by-id
+(defn- get-block-by-id
   [db id]
   (let [r (ldb/get-by-id db (outliner-u/->block-lookup-ref id))]
     (when r (->Block r))))
@@ -74,7 +74,7 @@
                 (assoc :block/created-at updated-at))]
     block))
 
-(defn block-with-updated-at
+(defn ^:api block-with-updated-at
   [block]
   (let [updated-at (common-util/time-ms)]
     (assoc block :block/updated-at updated-at)))
@@ -192,7 +192,7 @@
                                       merge-tx))))))
      (reset! (:editor/create-page? @state/state) false))))
 
-(defn rebuild-block-refs
+(defn ^:api rebuild-block-refs
   [repo conn date-formatter block new-properties & {:keys [skip-content-parsing?]}]
   (let [db @conn
         property-key-refs (keys new-properties)
@@ -400,7 +400,7 @@
           children (ldb/get-block-immediate-children @conn parent-id)]
       (map #(block @conn %) children))))
 
-(defn get-right-sibling
+(defn ^:api get-right-sibling
   [db db-id]
   (when db-id
     (ldb/get-right-sibling db db-id)))
@@ -537,7 +537,7 @@
         (mapcat #(tree-seq map? children-key %))
         (map #(dissoc % :block/children)))))
 
-(defn save-block
+(defn ^:api save-block
   "Save the `block`."
   [repo conn date-formatter block']
   {:pre [(map? block')]}
@@ -577,7 +577,7 @@
 
 ;;; ### insert-blocks, delete-blocks, move-blocks
 
-(defn fix-top-level-blocks
+(defn ^:api fix-top-level-blocks
   "Blocks with :block/level"
   [blocks]
   (let [top-level-blocks (filter #(= (:block/level %) 1) blocks)
@@ -694,7 +694,7 @@
       result)))
 
 
-(defn blocks-with-level
+(defn ^:api blocks-with-level
   "Calculate `:block/level` for all the `blocks`. Blocks should be sorted already."
   [blocks]
   {:pre [(seq blocks)]}
@@ -723,7 +723,7 @@
               m' (vec (conj m block))]
           (recur m' (rest blocks)))))))
 
-(defn ^:large-vars/cleanup-todo insert-blocks
+(defn- ^:large-vars/cleanup-todo insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   Args:
     `conn`: db connection.
@@ -844,7 +844,7 @@
                                   non-consecutive-blocks)))) page-blocks)
        (remove nil?)))))
 
-(defn delete-block
+(defn ^:api delete-block
   "Delete block from the tree."
   [repo conn txs-state node {:keys [children? children-check? date-formatter]
                         :or {children-check? true}}]
@@ -933,7 +933,7 @@
                 (:db/id target-block))
              sibling?)))
 
-(defn move-blocks
+(defn- move-blocks
   "Move `blocks` to `target-block` as siblings or children."
   [repo conn blocks target-block {:keys [_sibling? _up? outliner-op _indent?]
                                   :as opts}]
@@ -979,7 +979,7 @@
                 {:tx-data full-tx
                  :tx-meta tx-meta}))))))))
 
-(defn move-blocks-up-down
+(defn- move-blocks-up-down
   "Move blocks up/down."
   [repo conn blocks up?]
   {:pre [(seq blocks) (boolean? up?)]}
@@ -1013,7 +1013,7 @@
           (move-blocks repo conn blocks right (merge opts {:sibling? sibling?
                                                            :up? up?})))))))
 
-(defn ^:large-vars/cleanup-todo indent-outdent-blocks
+(defn- ^:large-vars/cleanup-todo indent-outdent-blocks
   "Indent or outdent `blocks`."
   [repo conn blocks indent? & {:keys [get-first-block-original logical-outdenting?]}]
   {:pre [(seq blocks) (boolean? indent?)]}

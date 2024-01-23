@@ -239,9 +239,8 @@
 .ls-page-title {
   @apply rounded-sm;
 
-  padding: 5px 8px;
-  padding-bottom: 2rem;
-  margin: 0 -6px 12px -6px;
+  padding: 5px 8px 12px 8px;
+  margin: 0 -6px;
 
   &.title {
     margin-bottom: 12px;
@@ -407,4 +406,9 @@ html.is-native-ios {
 
 .ring-none {
     @apply focus:ring-0 focus:ring-offset-0;
+}
+
+.page-info {
+    min-height: 46px;
+    margin-left: -21px;
 }

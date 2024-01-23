@@ -177,7 +177,8 @@
      [:button.flex {:on-click #(when-not disabled? (toggle-fn))}
       (if icon-value
         (icon icon-value)
-        [:span.bullet-container.cursor [:span.bullet]])])
+        [:div.opacity-50.text-sm
+         "Empty"])])
    (if config/publishing?
      (constantly [])
      (fn [{:keys [toggle-fn]}]
