@@ -213,7 +213,7 @@
                                   (ui/icon "tags"))
                   [:div {:on-click util/stop-propagation}
                    (tags page)]]
-                 [:div.page-info-title-placehoder])
+                 [:div.page-info-title-placeholder])
                [:div.flex.flex-row.items-center.gap-1
                 (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
                                 (ui/icon "info-circle"))
