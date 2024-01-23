@@ -412,3 +412,7 @@ html.is-native-ios {
     min-height: 46px;
     margin-left: -21px;
 }
+
+.page-info-title-placehoder {
+    min-height: 28px;
+}
