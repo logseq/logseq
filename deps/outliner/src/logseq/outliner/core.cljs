@@ -17,7 +17,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.util :as sqlite-util]
             [cljs.pprint :as pprint]
-            [logseq.db.frontend.content :as db-content]))
+            [logseq.db.frontend.content :as db-content]
+            [logseq.common.marker :as common-marker]))
 
 (def ^:private block-map
   (mu/optional-keys
@@ -257,6 +258,36 @@
 ;; -get-id, -get-parent-id, -get-left-id return block-id
 ;; the :block/parent, :block/left should be datascript lookup ref
 
+;; TODO: don't parse marker and deprecate typing marker to set status
+(defn- db-marker-handle
+  [conn m]
+  (or
+   (let [marker (:block/marker m)
+         property (db-property/get-property @conn "status")
+         matched-status-id (when marker
+                             (->> (get-in property [:block/schema :values])
+                                 (some (fn [id]
+                                         (let [value-e (d/entity @conn [:block/uuid id])
+                                               value (get-in value-e [:block/schema :value])]
+                                           (when (= (string/lower-case marker) (string/lower-case value))
+                                             id))))))]
+     (cond-> m
+       matched-status-id
+       (update :block/properties assoc (:block/uuid property) matched-status-id)
+
+       matched-status-id
+       (update :block/content (fn [content]
+                                (common-marker/clean-marker content (get m :block/format :markdown))))
+       matched-status-id
+       (update :db/other-tx (fn [tx]
+                              (if-let [task (d/entity @conn [:block/name "task"])]
+                                (conj tx [:db/add (:db/id m) :block/tags (:db/id task)])
+                                tx)))
+
+       true
+       (dissoc :block/marker :block/priority)))
+   m))
+
 (extend-type Block
   otree/INode
   (-get-id [this conn]
@@ -320,7 +351,7 @@
           block-uuid (:block/uuid (:data this))
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
           block-entity (d/entity db eid)
-          m (if (and (:block/content m) db-based?)
+          m' (if (and (:block/content m) db-based?)
               (update m :block/content
                       (fn [content]
                         (db-content/content-without-tags
@@ -332,7 +363,10 @@
                                (str db-content/page-ref-special-chars (:block/uuid tag))))
                            (:block/tags m))
                           (remove nil?)))))
-              m)]
+              m)
+          m (cond->> m'
+              db-based?
+              (db-marker-handle conn))]
 
       ;; Ensure block UUID never changes
       (when (and db-id block-uuid)
