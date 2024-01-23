@@ -1,12 +1,10 @@
 (ns frontend.handler.file-based.status
   "Task (formerly todo) related util fns"
   (:require [clojure.string :as string]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [logseq.common.marker :as common-marker]))
 
-(defn marker-pattern [format]
-  (re-pattern
-   (str "^" (if (= format :markdown) "(#+\\s+)?" "(\\*+\\s+)?")
-        "(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|IN-PROGRESS)?\\s?")))
+(def marker-pattern common-marker/marker-pattern)
 
 (def bare-marker-pattern
   #"(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|IN-PROGRESS){1}\s+")
