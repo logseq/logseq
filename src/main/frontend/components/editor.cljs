@@ -142,8 +142,7 @@
                           (empty? matched-pages)
                           (when-not (db/page-exists? q)
                             (if db-tag?
-                              (concat [(str (t :new-page) " " q)
-                                       (str (t :new-class) " " q)]
+                              (concat [(str (t :new-class) " " q)]
                                       matched-pages)
                               (cons q matched-pages)))
 

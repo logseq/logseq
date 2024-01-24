@@ -366,7 +366,8 @@
               m)
           m (cond->> m'
               db-based?
-              (db-marker-handle conn))]
+              (db-marker-handle conn))
+          m (if db-based? (dissoc m :block/tags) m)]
 
       ;; Ensure block UUID never changes
       (when (and db-id block-uuid)
