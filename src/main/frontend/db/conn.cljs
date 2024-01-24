@@ -83,8 +83,7 @@
   ([repo tx-data]
    (transact! repo tx-data nil))
   ([repo tx-data tx-meta]
-   (when-let [conn (get-db repo false)]
-     (ldb/transact! conn tx-data tx-meta))))
+   (ldb/transact! repo tx-data tx-meta)))
 
 (defn start!
   ([repo]
