@@ -71,9 +71,10 @@
                  (callback)))))
 
 (defn transact!
-  ([conn tx-data]
-   (transact! conn tx-data nil))
-  ([conn tx-data tx-meta]
+  "`repo-or-conn`: repo for UI thread and conn for worker/node"
+  ([repo-or-conn tx-data]
+   (transact! repo-or-conn tx-data nil))
+  ([repo-or-conn tx-data tx-meta]
    (let [tx-data (->> (common-util/fast-remove-nils tx-data)
                       (remove empty?))
          request-finished? (request-finished?)]
@@ -91,14 +92,14 @@
                         (not sync?)
                         (assoc :request-id request-id))]
          (if sync?
-           (f conn tx-data tx-meta')
+           (f repo-or-conn tx-data tx-meta')
            (let [resp (p/deferred)]
              (when request-finished?
-               (f conn tx-data tx-meta'))
+               (f repo-or-conn tx-data tx-meta'))
              (let [value (if request-finished?
                            {:response resp}
                            {:response resp
-                            :callback #(f conn tx-data tx-meta')})]
+                            :callback #(f repo-or-conn tx-data tx-meta')})]
                (swap! *request-id->response assoc request-id value))
              resp)))))))
 

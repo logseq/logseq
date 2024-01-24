@@ -61,7 +61,8 @@
   {:block-type/property   "property"
    :block-type/class      "class"
    :block-type/whiteboard "whiteboard"
-   :block-type/macros     "macros"})
+   :block-type/macros     "macros"
+   :block-type/hidden     "hidden"})
 
 
 (defn- replace-db-id-with-temp-id
@@ -122,10 +123,10 @@
          blocks-with-page-id (fill-block-fields blocks*)
          ^js worker-obj (:worker/object @worker-state/*state)
          work (p/do!
-               (.createOrOpenDB worker-obj repo)
+               (.createOrOpenDB worker-obj repo {:close-other-db? false})
                (.exportDB worker-obj repo)
-               (.transact worker-obj repo blocks-with-page-id nil (worker-state/get-context))
-               (.releaseAccessHandles worker-obj repo))]
+               (.transact worker-obj repo blocks-with-page-id {:rtc-download-graph? true} (worker-state/get-context))
+               (.closeDB worker-obj repo))]
      (<? (p->c work))
 
      (worker-util/post-message :add-repo (pr-str {:repo repo}))

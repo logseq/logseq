@@ -4,6 +4,7 @@
   #?(:cljs (:require-macros [logseq.outliner.transaction]))
   #?(:cljs (:require [malli.core :as m])))
 
+#_:clj-kondo/ignore
 (def ^:private transact-opts [:or :symbol :map])
 
 #?(:org.babashka/nbb nil

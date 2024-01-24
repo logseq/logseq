@@ -131,7 +131,7 @@
     (when-not (= repo r)
       (close-db-aux! r db search))))
 
-(defn- close-db!
+(defn close-db!
   [repo]
   (let [{:keys [db search]} (@*sqlite-conns repo)]
     (close-db-aux! repo db search)))
@@ -258,8 +258,10 @@
      (bean/->js dbs)))
 
   (createOrOpenDB
-   [_this repo]
-   (p/let [_ (close-other-dbs! repo)]
+   [_this repo & {:keys [close-other-db?]
+                  :or {close-other-db? true}}]
+   (p/let [_ (when close-other-db?
+               (close-other-dbs! repo))]
      (create-or-open-db! repo)))
 
   (getMaxTx
@@ -292,7 +294,8 @@
              tx-meta' (if (:new-graph? tx-meta)
                         tx-meta
                         (cond-> tx-meta
-                          (not (:whiteboard/transact? tx-meta)) ; delay writes to the disk
+                          (and (not (:whiteboard/transact? tx-meta))
+                               (not (:rtc-download-graph? tx-meta))) ; delay writes to the disk
                           (assoc :skip-store? true)
 
                           true
@@ -316,6 +319,10 @@
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (->> (sqlite-common-db/get-initial-data @conn)
           dt/write-transit-str)))
+
+  (closeDB
+   [_this repo]
+   (close-db! repo))
 
   (unsafeUnlinkDB
    [_this repo]
