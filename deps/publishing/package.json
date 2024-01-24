@@ -4,7 +4,7 @@
   "private": true,
   "devDependencies": {
     "@logseq/nbb-logseq": "logseq/nbb-logseq#feat-db-v8",
-    "mldoc": "^1.5.1"
+    "mldoc": "^1.5.8"
   },
   "dependencies": {
     "fs-extra": "9.1.0"

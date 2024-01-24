@@ -93,11 +93,12 @@
        :on-click #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
       (t :context-menu/toggle-number-list))
 
-     (ui/menu-link
-      {:key "cycle todos"
-       :on-click editor-handler/cycle-todos!
-       :shortcut (ui/keyboard-shortcut-from-config :editor/cycle-todo)}
-      (t :editor/cycle-todo))
+     (when-not (config/db-based-graph? (state/get-current-repo))
+       (ui/menu-link
+        {:key "cycle todos"
+         :on-click editor-handler/cycle-todos!
+         :shortcut (ui/keyboard-shortcut-from-config :editor/cycle-todo)}
+        (t :editor/cycle-todo)))
 
      [:hr.menu-separator]
 

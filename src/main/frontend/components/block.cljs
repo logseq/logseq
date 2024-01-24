@@ -2319,7 +2319,7 @@
 (rum/defc tags
   [config block]
   (when (seq (:block/tags block))
-    [:div.flex.flex-row.flex-wrap.items-center.ml-4.gap-1.text-sm
+    [:div.flex.flex-row.flex-wrap.items-center.ml-4.gap-1
      (for [tag (:block/tags block)]
        (page-cp (assoc config
                        :tag? true
@@ -2387,7 +2387,8 @@
          "Large block will not be editable or searchable to not slow down the app, please use another editor to edit this block."])
       [:div.flex.flex-row.justify-between.block-content-inner
        (when-not plugin-slotted?
-         (let [block-tags (:block/tags block)]
+         (let [block-tags (:block/tags block)
+               db-based? (config/db-based-graph? (state/get-current-repo))]
            [:div.flex-1.w-full
             [:div.flex.flex-1.w-full.flex-row.flex-wrap.justify-between.items-center
              (cond
@@ -2403,7 +2404,7 @@
                nil)
 
              [:div.flex.flex-row.items-center.gap-1
-              (when (and (seq block-tags) (:block/name block))
+              (when (and db-based? (seq block-tags))
                 (tags config block))
               (when (and (:original-block config) (not (:block/name block)))
                 [:a.fade-link {:title "Embed block"
@@ -2509,8 +2510,8 @@
                                       :on-hide (fn [value event]
                                                  (let [select? (and (= event :esc)
                                                                       (not (string/includes? value "```")))]
-                                                     (editor-handler/escape-editing select?)
-                                                     (editor-handler/save-block! (editor-handler/get-state) value)))}
+                                                   (p/let [_ (editor-handler/save-block! (editor-handler/get-state) value)]
+                                                     (editor-handler/escape-editing select?))))}
                                      edit-input-id
                                      config))]
           (if (and named? (seq (:block/tags block)) db-based?)
