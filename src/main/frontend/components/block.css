@@ -377,9 +377,9 @@
     border-radius: 2px;
   }
 
-  .bullet-container .selected {
-    border: 3px solid;
-  }
+  /* .bullet-container .selected { */
+  /*   border: 3px solid; */
+  /* } */
 }
 
 .ls-block {

@@ -150,8 +150,7 @@
 
 ;; If only block/content changes
 (def db-version-retract-attributes
-  #{:block/tags
-    :block/refs
+  #{:block/refs
     :block/marker
     :block/priority
     :block/scheduled
