@@ -335,6 +335,17 @@
     (update-block-attrs repo conn date-formatter self op-value)
     (prn :apply-remote-update-ops self)))
 
+(defn- move-all-blocks-to-another-page
+  [repo conn from-page-name to-page-name]
+  (let [blocks (ldb/get-page-blocks @conn from-page-name {})
+        target-page-block (first (ldb/get-page-blocks @conn to-page-name {}))]
+    (when (and (seq blocks) target-page-block)
+      (outliner-tx/transact!
+       {:persist-op? true
+        :transact-opts {:repo repo
+                        :conn conn}}
+       (outliner-core/move-blocks! repo conn blocks target-page-block false)))))
+
 (defn apply-remote-update-page-ops
   [repo conn date-formatter update-page-ops]
   (let [config (worker-state/get-config repo)]
@@ -349,8 +360,10 @@
           ;; 1. rename local page's name to '<origin-name>-<ms-epoch>-Conflict'
           ;; 2. create page, name=<origin-name>, uuid=remote-uuid
           (and exist-page (not= (:block/uuid exist-page) self))
-          (do (worker-page-rename/rename! repo conn config original-name (common-util/format "%s-%s-CONFLICT" original-name (tc/to-long (t/now))))
-              (worker-page/create! repo conn config original-name create-opts))
+          (let [conflict-page-name (common-util/format "%s-%s-CONFLICT" original-name (tc/to-long (t/now)))]
+            (worker-page-rename/rename! repo conn config original-name conflict-page-name {:persist-op? false})
+            (worker-page/create! repo conn config original-name create-opts)
+            (move-all-blocks-to-another-page repo conn conflict-page-name original-name))
 
           ;; a client-page has same uuid as remote but different page-names,
           ;; then we need to rename the client-page to remote-page-name

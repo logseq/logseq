@@ -638,21 +638,25 @@
 
 (defn cycle-todos!
   []
-  (when-let [blocks (seq (get-selected-blocks))]
-    (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
-                                     (uuid id)) blocks))
-                   (remove nil?))]
-      (ui-outliner-tx/transact!
-       {:outliner-op :cycle-todos}
-       (doseq [id ids]
-         (let [block (db/pull [:block/uuid id])]
-           (when (not-empty (:block/content block))
-             (set-marker block))))))))
+  ;; TODO: closed values needs to be enriched to know which state to be the next one
+  (when-not (config/db-based-graph? (state/get-current-repo))
+    (when-let [blocks (seq (get-selected-blocks))]
+      (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
+                                       (uuid id)) blocks))
+                     (remove nil?))]
+        (ui-outliner-tx/transact!
+         {:outliner-op :cycle-todos}
+         (doseq [id ids]
+           (let [block (db/pull [:block/uuid id])]
+             (when (not-empty (:block/content block))
+               (set-marker block)))))))))
 
 (defn cycle-todo!
   []
   #_:clj-kondo/ignore
-  (when-not (state/get-editor-action)
+  (when (and (not (state/get-editor-action))
+             ;; TODO: closed values needs to be enriched to know which state to be the next one
+             (not (config/db-based-graph? (state/get-current-repo))))
     (if-let [blocks (seq (get-selected-blocks))]
       (cycle-todos!)
       (when (state/get-edit-block)
@@ -669,10 +673,11 @@
 
 (defn set-priority
   [{:block/keys [priority content] :as block} new-priority]
-  (let [new-content (string/replace-first content
-                                          (util/format "[#%s]" priority)
-                                          (util/format "[#%s]" new-priority))]
-    (save-block-if-changed! block new-content)))
+  (when-not (config/db-based-graph? (state/get-current-repo))
+    (let [new-content (string/replace-first content
+                                           (util/format "[#%s]" priority)
+                                           (util/format "[#%s]" new-priority))]
+     (save-block-if-changed! block new-content))))
 
 (defn delete-block-aux!
   [{:block/keys [uuid repo] :as _block} children? & {:keys [_children-checks?] :as delete-opts}]
@@ -2870,11 +2875,7 @@
                                               (block-handler/get-top-level-blocks [block])
                                               indent?
                                               {:get-first-block-original block-handler/get-first-block-original
-                                               :logical-outdenting? (state/logical-outdenting?)})
-         (edit-block!
-           (db/pull (:db/id block))
-           (cursor/pos (state/get-input))
-           (:block/uuid block)))))))
+                                               :logical-outdenting? (state/logical-outdenting?)}))))))
 
 (defn keydown-tab-handler
   [direction]
