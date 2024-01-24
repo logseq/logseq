@@ -218,7 +218,7 @@
       (fn [chosen e]
         (util/stop e)
         (state/clear-editor-action!)
-        (let [class? (string/starts-with? chosen (t :new-class))
+        (let [class? (and db-based? hashtag?)
               chosen (-> chosen
                          (string/replace-first (str (t :new-class) " ") "")
                          (string/replace-first (str (t :new-page) " ") ""))
@@ -242,11 +242,14 @@
                          _ (when-not tag-entity
                              (<create! tag {:redirect? false
                                             :create-first-block? false
-                                            :class? class?}))]
+                                            :class? class?}))
+                         tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)])]
                    (when class?
                      (let [repo (state/get-current-repo)
                            tag-entity (or tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)]))
-                           tx-data [[:db/add [:block/uuid (:block/uuid edit-block)] :block/tags (:db/id tag-entity)]
+                           tx-data [[:db/add (:db/id tag-entity) :block/type "class"]
+                                    [:db/add [:block/uuid (:block/uuid edit-block)] :block/tags (:db/id tag-entity)]
+                                    ;; TODO: Should classes counted as refs
                                     [:db/add [:block/uuid (:block/uuid edit-block)] :block/refs (:db/id tag-entity)]]]
                        (db/transact! repo tx-data {:outliner-op :save-block})))))))
            (editor-handler/insert-command! id
