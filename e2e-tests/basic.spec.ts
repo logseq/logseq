@@ -108,7 +108,7 @@ test('block selection', async ({ page, block }) => {
 
   // shift+up/down
   await page.keyboard.down('Shift')
-  
+
   await page.keyboard.press('ArrowUp')
   await block.waitForSelectedBlocks(1)
   let locator = page.locator('.ls-block >> nth=8')
