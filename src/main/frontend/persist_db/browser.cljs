@@ -79,10 +79,11 @@
                   _ (ask-persist-permission!)]
             (ldb/register-transact-fn!
              (fn worker-transact!
-               [_conn tx-data tx-meta]
-               (transact! wrapped-worker (state/get-current-repo) tx-data
+               [repo tx-data tx-meta]
+               (let [repo' (if (string? repo) repo (state/get-current-repo))]
+                 (transact! wrapped-worker repo' tx-data
                  ;; not from remote(rtc)
-                          (assoc tx-meta :local-tx? true)))))
+                            (assoc tx-meta :local-tx? true))))))
           (p/catch (fn [error]
                      (prn :debug "Can't init SQLite wasm")
                      (js/console.error error)
