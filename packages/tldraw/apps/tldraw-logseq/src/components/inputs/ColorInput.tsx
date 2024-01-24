@@ -59,7 +59,6 @@ export function ColorInput({
     <PopoverButton
       {...rest}
       border
-      arrow
       side={popoverSide}
       label={
         <Tooltip content={t('whiteboard/color')} side={popoverSide} sideOffset={14}>

@@ -910,14 +910,6 @@ html[data-theme='dark'] {
   stroke-width: min(100px, calc(12px * var(--tl-scale)));
 }
 
-.tl-popover-content {
-  @apply rounded-lg;
-
-  background-color: var(--ls-secondary-background-color);
-  box-shadow: var(--shadow-large);
-  z-index: 100000;
-}
-
 .tl-geometry-toolbar {
   box-shadow: none;
 }
