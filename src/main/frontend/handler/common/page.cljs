@@ -15,7 +15,21 @@
             [frontend.fs :as fs]
             [promesa.core :as p]
             [frontend.handler.block :as block-handler]
-            [frontend.handler.file-based.recent :as file-recent-handler]))
+            [frontend.handler.file-based.recent :as file-recent-handler]
+            [frontend.format.block :as block]
+            [logseq.db :as ldb]
+            [frontend.db.conn :as conn]
+            [datascript.core :as d]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [logseq.outliner.core :as outliner-core]))
+
+(defn build-hidden-page-tx-data
+  [page-name]
+  (let [page-name* (str "$$$" page-name)]
+    (assoc (block/page-name->map page-name* false false)
+           :block/type #{"hidden"}
+           :block/format :markdown)))
 
 ;; TODO: return page entity instead
 (defn create!
@@ -94,6 +108,47 @@
       (when-not (= old-favorites new-favorites)
         (config-handler/set-config! :favorites new-favorites)))))
 
+(def favorites-page-name "$$$favorites")
+
+(defn- find-block-in-favorites-page
+  [page-block-uuid]
+  (let [db (conn/get-db)
+        page-block-uuid-str (str page-block-uuid)
+        blocks (ldb/get-page-blocks db favorites-page-name {})]
+    (some (fn [block]
+            (when (= page-block-uuid-str (:block/content block))
+              block))
+          blocks)))
+
+(defn favorited?-v2
+  [page-block-uuid]
+  {:pre [(uuid? page-block-uuid)]}
+  (some? (find-block-in-favorites-page page-block-uuid)))
+
+(defn <favorite-page!-v2
+  [page-block-uuid]
+  {:pre [(uuid? page-block-uuid)]}
+  (let [favorites-page (d/entity (conn/get-db) [:block/name favorites-page-name])
+        favorites-page-tx-data (build-hidden-page-tx-data "favorites")]
+    (p/let [r1 (when-not favorites-page (ldb/transact! nil [favorites-page-tx-data]))
+            r2 (editor-handler/api-insert-new-block!
+                (str page-block-uuid)
+                {:page favorites-page-name :edit-block? false})]
+      (prn ::insert-favorite-page r1 r2))))
+
+(defn <unfavorite-page!-v2
+  [page-block-uuid]
+  {:pre [(uuid? page-block-uuid)]}
+  (let [repo (state/get-current-repo)]
+    (when-let [block (find-block-in-favorites-page page-block-uuid)]
+      (ui-outliner-tx/transact!
+       {:outliner-op :delete-blocks}
+       (outliner-core/delete-blocks! repo (conn/get-db false) (state/get-date-formatter) [block] {})))))
+
+
+;; favorites fns end ================
+
+
 (defn delete!
   "Deletes a page and then either calls the ok-handler or the error-handler if unable to delete"
   [page-name ok-handler & {:keys [_persist-op? _error-handler]
@@ -111,7 +166,12 @@
   [repo page-name file-path tx-meta]
   (let [repo-dir (config/get-repo-dir repo)]
       ;; TODO: move favorite && unfavorite to worker too
-    (unfavorite-page! page-name)
+    (if (config/db-based-graph? repo)
+      (when-let [page-block-uuid (:block/uuid
+                                  (d/entity (conn/get-db repo)
+                                            [:block/name (common-util/page-name-sanity-lc page-name)]))]
+        (<unfavorite-page!-v2 page-block-uuid))
+      (unfavorite-page! page-name))
 
     (when (and (not= :rename-page (:real-outliner-op tx-meta))
                (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
@@ -154,7 +214,7 @@
                                 :push        false
                                 :path-params {:name new-page-name}}))
 
-    (when (favorited? old-page-name)
+    (when (and (config/db-based-graph? repo) (favorited? old-page-name))
       (unfavorite-page! old-page-name)
       (favorite-page! new-page-name))
     (let [home (get (state/get-config) :default-home {})]

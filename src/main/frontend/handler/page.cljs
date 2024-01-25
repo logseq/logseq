@@ -45,6 +45,7 @@
 (def unfavorite-page! page-common-handler/unfavorite-page!)
 (def favorite-page! page-common-handler/favorite-page!)
 
+
 ;; FIXME: add whiteboard
 (defn- get-directory
   [journal?]
