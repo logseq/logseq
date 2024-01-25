@@ -22,21 +22,27 @@
 
 (defn- cleanup-js-dir
   "Moves used js files to the correct dir and removes unused js files"
-  [output-static-dir]
+  [output-static-dir source-static-dir {:keys [dev?]}]
   (let [publishing-dir (node-path/join output-static-dir "js" "publishing")]
     (p/let [_ (p/all (map (fn [file]
                             (fs/rmSync (node-path/join output-static-dir "js" file) #js {:force true}))
                           js-files))
+            _ (when dev?
+                (fse/remove (node-path/join output-static-dir "js" "cljs-runtime")))
             _ (p/all (map (fn [file]
-                            (fs/renameSync
-                             (node-path/join publishing-dir file)
-                             (node-path/join output-static-dir "js" file)))
+                            (if dev?
+                              (fs/symlinkSync
+                               (node-path/join source-static-dir "js" "publishing" file)
+                               (node-path/join output-static-dir "js" file))
+                              (fs/renameSync
+                               (node-path/join publishing-dir file)
+                               (node-path/join output-static-dir "js" file))))
                           js-files))
+            _ (when dev?
+                (fs/symlinkSync (node-path/join source-static-dir "js" "publishing" "cljs-runtime")
+                                (node-path/join output-static-dir "js" "cljs-runtime")))
             ;; remove publishing-dir
-            _ (p/all (map (fn [file]
-                            (fs/rmSync (node-path/join publishing-dir file)))
-                          (fs/readdirSync publishing-dir)))
-            _ (fs/rmdirSync publishing-dir)
+            _ (when-not dev? (fse/remove publishing-dir))
             ;; remove source map files
             _ (p/all (map (fn [file]
                             (fs/rmSync (node-path/join output-static-dir "js" (str file ".map")) #js {:force true}))
@@ -90,7 +96,7 @@
                 _ (fs/writeFileSync (node-path/join output-static-dir "css" "custom.css") custom-css)
                 custom-js (if (fs/existsSync custom-js-path) (str (fs/readFileSync custom-js-path)) "")
                 _ (fs/writeFileSync (node-path/join output-static-dir "js" "custom.js") custom-js)
-                _ (cleanup-js-dir output-static-dir)]
+                _ (cleanup-js-dir output-static-dir static-dir options)]
                (notification-fn {:type "success"
                                  :payload (str "Export public pages and publish assets to " output-dir " successfully 🎉")}))
         (p/catch (fn [error]

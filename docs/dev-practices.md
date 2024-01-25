@@ -307,10 +307,21 @@ point out:
   ```sh
   # One time setup
   $ cd scripts && yarn install && cd -
-  # Build the export
+
+  # Build a release publishing app
   $ bb dev:publishing /path/to/graph-dir tmp/publish
-  # View the app in a browser
-  $ open tmp/publish/index.html
+
+  # OR build a dev publishing app that watches frontend changes
+  $ bb dev:publishing /path/to/graph-dir tmp/publish --dev
+
+  # View the publishing app in a browser
+  $ python3 -m http.server 8080 -d tmp/publish &; open http://localhost:8080
+
+  # Rebuild the publishing backend for dev/release.
+  # Handy when making backend changes in deps/publishing or
+  # to test a different graph
+  $ bb dev:publishing-backend /path/graph-dir tmp/publish
+
   ```
 
 There are also some tasks under `nbb:` which are useful for inspecting database
