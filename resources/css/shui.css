@@ -94,6 +94,13 @@ html {
         }
       }
     }
+
+    .tl-container {
+      --ls-primary-background-color: hsl(var(--background));
+      --ls-secondary-background-color: var(--rx-gray-01);
+      --ls-tertiary-background-color: var(--rx-gray-03);
+      --ls-quaternary-background-color: var(--rx-gray-05);
+    }
   }
 }
 
@@ -172,6 +179,12 @@ html[data-theme=dark] {
       .border-gray-06, .border-gray-07 {
         border-color: var(--ls-border-color, var(--lx-gray-06));
         opacity: .6;
+      }
+    }
+
+    .tl-button {
+      &:hover {
+        @apply bg-accent-02;
       }
     }
   }

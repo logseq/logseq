@@ -6,19 +6,19 @@
   --ls-wb-stroke-color-blue: var(--color-blue-500, blue);
   --ls-wb-stroke-color-purple: var(--color-purple-500, purple);
   --ls-wb-stroke-color-pink: var(--color-pink-500, pink);
-  --ls-wb-stroke-color-default: var(--ls-secondary-border-color);
-  --ls-wb-text-color-default: var(--ls-primary-text-color);
-  --ls-wb-background-color-default: var(--ls-tertiary-background-color);
+  --ls-wb-stroke-color-default: var(--ls-secondary-border-color, hsl(var(--border, var(--rx-gray-05-hsl))));
+  --ls-wb-text-color-default: var(--ls-primary-text-color, hsl(var(--primary)));
+  --ls-wb-background-color-default: var(--ls-tertiary-background-color, var(--rx-gray-03));
 }
 
 .logseq-tldraw {
-  --color-panel: var(--ls-tertiary-background-color);
+  --color-panel: var(--ls-tertiary-background-color, hsl(var(--secondary)));
   --color-panel-inverted: var(--ls-secondary-text-color);
   --color-text: var(--ls-primary-text-color);
   --color-text-inverted: var(--ls-tertiary-background-color);
-  --color-hover: var(--ls-secondary-background-color);
-  --color-selectedStroke: var(--ls-button-background);
-  --color-selectedFill: hsl(var(--ls-button-background-hsl) / 0.9);
+  --color-hover: var(--ls-secondary-background-color, hsl(var(--secondary)));
+  --color-selectedStroke: var(--ls-button-background, hsl(var(--accent) / 0.9));
+  --color-selectedFill: hsl(var(--ls-button-background-hsl, var(--accent)) / 0.1);
   --color-selectedContrast: #fff;
   --shadow-small: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-medium: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
@@ -167,7 +167,7 @@ html[data-theme='light'] {
 
   pointer-events: all;
   position: relative;
-  background-color: or(--logseq-whiteboard-toolbar-background, --lx-gray-03, --ls-secondary-background-color);
+  background-color: var(--lx-gray-03, var(--ls-secondary-background-color, var(--rx-gray-03)));
   border-radius: 8px;
   white-space: nowrap;
   gap: 8px;
@@ -554,7 +554,7 @@ button.tl-select-input-trigger {
   @apply flex items-center rounded-lg text-base max-w-full;
 
   min-height: 40px;
-  background-color: var(--ls-secondary-background-color);
+  background-color: var(--ls-secondary-background-color, hsl(var(--background)));
   padding: 6px 16px;
   box-shadow: var(--shadow-small);
 }
@@ -602,6 +602,7 @@ button.tl-select-input-trigger {
 }
 
 .tl-quick-search .tl-text-input {
+  background-color: transparent;
   border: none;
 }
 
@@ -620,7 +621,7 @@ button.tl-select-input-trigger {
   @apply absolute left-0 w-full flex z-10;
 
   top: calc(100% + 12px);
-  background-color: var(--ls-primary-background-color);
+  background-color: var(--ls-primary-background-color, hsl(var(--background)));
   max-height: 300px;
   min-width: 460px;
   box-shadow: var(--shadow-large);
@@ -850,7 +851,7 @@ html[data-theme='dark'] {
 }
 
 .tl-toolbar-separator {
-  background-color: var(--ls-border-color);
+  background-color: var(--ls-border-color, var(--rx-gray-06));
   width: 1px;
   opacity: 0.9;
 
