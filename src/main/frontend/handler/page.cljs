@@ -11,7 +11,6 @@
             [frontend.fs :as fs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.common.page :as page-common-handler]
-            [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.notification :as notification]
@@ -248,6 +247,14 @@
     (let [current-selected (util/get-selected-text)]
       (cursor/move-cursor-forward input (+ 2 (count current-selected))))))
 
+(defn add-tag [repo block-id tag & {:keys [tag-entity]}]
+  (let [tag-entity (or tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)]))
+        tx-data [[:db/add (:db/id tag-entity) :block/type "class"]
+                 [:db/add [:block/uuid block-id] :block/tags (:db/id tag-entity)]
+                 ;; TODO: Should classes counted as refs
+                 [:db/add [:block/uuid block-id] :block/refs (:db/id tag-entity)]]]
+    (db/transact! repo tx-data {:outliner-op :save-block})))
+
 (defn on-chosen-handler
   [input id _q pos format]
   (let [current-pos (cursor/pos input)
@@ -292,13 +299,7 @@
                                             :class? class?}))
                          tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)])]
                    (when class?
-                     (let [repo (state/get-current-repo)
-                           tag-entity (or tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)]))
-                           tx-data [[:db/add (:db/id tag-entity) :block/type "class"]
-                                    [:db/add [:block/uuid (:block/uuid edit-block)] :block/tags (:db/id tag-entity)]
-                                    ;; TODO: Should classes counted as refs
-                                    [:db/add [:block/uuid (:block/uuid edit-block)] :block/refs (:db/id tag-entity)]]]
-                       (db/transact! repo tx-data {:outliner-op :save-block})))))))
+                     (add-tag (state/get-current-repo) (:block/uuid edit-block) tag {:tag-entity tag-entity}))))))
            (editor-handler/insert-command! id
                                            (str "#" wrapped-tag)
                                            format
