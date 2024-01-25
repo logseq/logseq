@@ -132,14 +132,7 @@
 
 (rum/defc favorites < rum/reactive
   [t]
-  (let [favorites (->> (:favorites (state/sub-config))
-                       (remove string/blank?)
-                       (filter string?)
-                       (mapv util/safe-page-name-sanity-lc)
-                       (distinct))
-        favorite-entities (->> favorites
-                               (mapv #(db/entity [:block/name %]))
-                               (remove nil?))]
+  (let [favorite-entities (page-handler/get-favorites)]
     (nav-content-item
      [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
       (ui/icon "star" {:size 16})
