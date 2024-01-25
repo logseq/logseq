@@ -104,7 +104,7 @@
           {:class "w-60"}
           (when-not recent?
             (shui/context-menu-item
-              {:on-click #(page-handler/unfavorite-page! original-name)}
+              {:on-click #(page-handler/<unfavorite-page! original-name)}
               (ctx-icon "star-off")
               (t :page/unfavorite)
               (shui/context-menu-shortcut (some-> (shortcut-dh/shortcut-binding :command/toggle-favorite) (first)
