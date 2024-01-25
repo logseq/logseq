@@ -24,7 +24,7 @@ export function PopoverButton({ side, align, alignOffset, label, children, borde
       </LSUI.PopoverTrigger>
 
       <LSUI.PopoverContent
-        className="w-auto"
+        className="w-auto p-1"
         align={align}
         alignOffset={alignOffset}
         side={side}
