@@ -740,17 +740,21 @@
    (let [[new-content _] (marker/cycle-marker content marker new-marker format (state/get-preferred-workflow))]
      (save-block-if-changed! block new-content))))
 
+(defn cycle-todo-by-block-ids!
+  [ids]
+  (when-let [ids (filter uuid? (distinct ids))]
+    (outliner-tx/transact! {:outliner-op :cycle-todos}
+                           (doseq [id ids]
+                             (let [block (db/pull [:block/uuid id])]
+                               (when (not-empty (:block/content block))
+                                 (set-marker block)))))))
+
 (defn cycle-todos!
   []
   (when-let [blocks (seq (get-selected-blocks))]
-    (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
-                                     (uuid id)) blocks))
-                   (remove nil?))]
-      (outliner-tx/transact! {:outliner-op :cycle-todos}
-        (doseq [id ids]
-          (let [block (db/pull [:block/uuid id])]
-            (when (not-empty (:block/content block))
-              (set-marker block))))))))
+    (let [ids (map #(when-let [id (dom/attr % "blockid")]
+                      (uuid id)) blocks)]
+      (cycle-todo-by-block-ids! ids))))
 
 (defn cycle-todo!
   []

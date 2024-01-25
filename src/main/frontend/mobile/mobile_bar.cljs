@@ -91,7 +91,16 @@
         (command #(if (state/sub :document/mode?)
                     (editor-handler/insert-new-block! nil)
                     (commands/simple-insert! parent-id "\n" {})) {:icon "arrow-back"})
-        (command editor-handler/cycle-todo! {:icon "checkbox"} true)
+        ;; On mobile devies, some IME(keyboard) uses composing mode.
+        ;; The composing text can be committed by losing focus.
+        ;; 100ms is enough to commit the composing text to db.
+        (command #(when-let [block-id (:block/uuid (state/get-edit-block))]
+                    (editor-handler/escape-editing true)
+                    (js/setTimeout
+                     (fn []
+                       (editor-handler/cycle-todo-by-block-ids! [block-id]))
+                     100))
+                 {:icon "checkbox"} true)
         (command #(mobile-camera/embed-photo parent-id) {:icon "camera"} true)
         (command history/undo! {:icon "rotate" :class "rotate-180"} true)
         (command history/redo! {:icon "rotate-clockwise" :class "rotate-180"} true)
