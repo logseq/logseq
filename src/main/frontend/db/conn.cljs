@@ -79,11 +79,17 @@
    :db/ident key
    key value})
 
-(defn transact!
-  ([repo tx-data]
-   (transact! repo tx-data nil))
-  ([repo tx-data tx-meta]
-   (ldb/transact! repo tx-data tx-meta)))
+(if util/node-test?
+  (defn transact!
+    ([repo tx-data]
+     (transact! repo tx-data nil))
+    ([repo tx-data tx-meta]
+     (ldb/transact! (get-db repo false) tx-data tx-meta)))
+  (defn transact!
+    ([repo tx-data]
+     (transact! repo tx-data nil))
+    ([repo tx-data tx-meta]
+     (ldb/transact! repo tx-data tx-meta))))
 
 (defn start!
   ([repo]

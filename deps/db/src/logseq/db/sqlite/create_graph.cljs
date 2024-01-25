@@ -9,6 +9,25 @@
             [datascript.core :as d]
             [logseq.db :as ldb]))
 
+(defn- build-initial-properties
+  []
+  (let [;; Some uuids need to be pre-defined since they are referenced by other properties
+        default-property-uuids {:icon (d/squuid)}]
+    (mapcat
+     (fn [[k-keyword {:keys [schema original-name closed-values]}]]
+       (let [k-name (name k-keyword)]
+         (if closed-values
+           (db-property-util/build-closed-values
+            (or original-name k-name)
+            {:block/schema schema :block/uuid (d/squuid) :closed-values closed-values}
+            {:icon-id (get default-property-uuids :icon)})
+           [(sqlite-util/build-new-property
+             {:block/schema schema
+              :block/original-name (or original-name k-name)
+              :block/name (common-util/page-name-sanity-lc k-name)
+              :block/uuid (get default-property-uuids k-keyword (d/squuid))})])))
+     db-property/built-in-properties)))
+
 (defn build-db-initial-data
   [config-content]
   (let [initial-data [{:db/ident :db/type :db/type "db"}
@@ -26,20 +45,7 @@
                         :file/content ""
                         :file/last-modified-at (js/Date.)}]
         default-pages (ldb/build-default-pages-tx)
-        default-properties (mapcat
-                            (fn [[k-keyword {:keys [schema original-name closed-values]}]]
-                              (let [k-name (name k-keyword)]
-                                (if closed-values
-                                  (db-property-util/build-closed-values
-                                   (or original-name k-name)
-                                   {:block/schema schema :block/uuid (d/squuid) :closed-values closed-values}
-                                   {})
-                                  [(sqlite-util/build-new-property
-                                    {:block/schema schema
-                                     :block/original-name (or original-name k-name)
-                                     :block/name (common-util/page-name-sanity-lc k-name)
-                                     :block/uuid (d/squuid)})])))
-                            db-property/built-in-properties)
+        default-properties (build-initial-properties)
         name->properties (zipmap
                           (map :block/name default-properties)
                           default-properties)
@@ -58,4 +64,4 @@
                                                    id))
                                                (:properties schema))}})))
                          db-class/built-in-classes)]
-    (concat initial-data initial-files default-pages default-classes default-properties)))
+    (vec (concat initial-data initial-files default-pages default-classes default-properties))))

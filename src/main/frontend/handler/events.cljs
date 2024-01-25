@@ -72,6 +72,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.common.config :as common-config]
             [promesa.core :as p]
+            [lambdaisland.glogi :as log]
             [rum.core :as rum]
             [frontend.persist-db.browser :as db-browser]
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
@@ -191,9 +192,15 @@
     (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite))
             request-finished? (ldb/request-finished?)]
       (if (or (not request-finished?) (not writes-finished?)) ; TODO: test (:sync-graph/init? @state/state)
-        (notification/show!
-         "Please wait seconds until all changes are saved for the current graph."
-         :warning)
+        (do
+          (log/info :graph/switch (cond->
+                                   {:request-finished? request-finished?
+                                    :file-writes-finished? writes-finished?}
+                                    (false? request-finished?)
+                                    (assoc :unfinished-requests? @ldb/*request-id->response)))
+          (notification/show!
+           "Please wait seconds until all changes are saved for the current graph."
+           :warning))
         (graph-switch-on-persisted graph opts)))))
 
 (defmethod handle :graph/pull-down-remote-graph [[_ graph dir-name]]
