@@ -67,7 +67,11 @@ export const GeometryTools = observer(function GeometryTools({
         </div>
       </LSUI.PopoverTrigger>
 
-      <LSUI.PopoverContent className="p-0 w-auto" side={popoverSide} sideOffset={15}>
+      <LSUI.PopoverContent
+        className="p-0 w-auto"
+        side={popoverSide}
+        sideOffset={15}
+        collisionBoundary={document.querySelector('.logseq-tldraw')}>
         <div
           className={`tl-toolbar tl-geometry-toolbar ${
             ['left', 'right'].includes(popoverSide) ? 'flex-col' : 'flex-row'
