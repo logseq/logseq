@@ -93,7 +93,7 @@ export function ColorInput({
               />
             </div>
           </div>
-          <label htmlFor="tl-custom-color-input" className="cursor-pointer">
+          <label htmlFor="tl-custom-color-input" className="text-xs cursor-pointer">
             {t('whiteboard/select-custom-color')}
           </label>
         </div>
