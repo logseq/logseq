@@ -309,59 +309,6 @@ html[data-theme='light'] {
 
 .tl-tools-floating-panel {
   flex-flow: column;
-
-  .tl-select-input-trigger {
-    @apply p-0 text-xs;
-
-    height: 32px;
-    min-width: 32px;
-  }
-
-  .tl-select-input-trigger-value {
-    @apply font-semibold justify-center;
-  }
-}
-
-button.tl-select-input-trigger {
-  @apply flex items-center px-3;
-  box-shadow: 0 0 0 1px var(--ls-secondary-border-color);
-  background-color: var(--ls-secondary-background-color);
-  border-radius: 0.25rem;
-  font-size: 16px;
-  height: 100%;
-  color: var(--ls-secondary-text-color);
-}
-
-.tl-select-input-trigger-value {
-  @apply flex items-center justify-start flex-1;
-}
-
-.tl-select-input-viewport {
-  border-radius: 8px;
-  background-color: var(--ls-secondary-background-color);
-}
-
-.tl-select-input-select-item {
-  cursor: default;
-  padding: 4px 12px;
-  outline-offset: -1px;
-
-  color: var(--ls-secondary-text-color);
-
-  &[data-state='unchecked']:hover {
-    background-color: var(--ls-tertiary-background-color);
-    color: var(--ls-primary-text-color);
-  }
-
-  &[data-state='checked'] {
-    background-color: or(--ls-whiteboard-select-background-selected, --lx-accent-09, --color-indigo-500);
-    color: #fff;
-  }
-}
-
-.tl-select-input-content {
-  z-index: 100;
-  font-family: var(--ls-font-family);
 }
 
 .tl-geometry-tools-pane-anchor {
