@@ -337,7 +337,8 @@
         pick-theme [:div.cp__accent-colors-list-wrap
                     {:class (if _in-modal? "as-modal-picker" "")}
                     (for [color (concat [:none :logseq] colors/color-list)
-                          :let [active? (= color color-accent)]]
+                          :let [active? (= color color-accent)
+                                none? (= color :none)]]
                       [:div.flex.items-center {:style {:height 28}}
                        (shui-ui/button
                          {:class      "w-5 h-5 px-1 rounded-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"
@@ -350,14 +351,16 @@
                                        :opacity          (if active? 1 0.5)}
                           :variant    :text
                           :on-click   (fn [_e] (state/set-color-accent! color))}
-                         [:span {:class "w-2 h-2 rounded-full transition ease-in duration-100"
-                                 :style {:background-color (str "var(--rx-" (name color) "-07)")
-                                         :opacity          (if active? 1 0)}}])])]]
+                         [:strong
+                          {:class (if none? "h-0.5 w-full bg-red-700"
+                                            "w-2 h-2 rounded-full transition ease-in duration-100")
+                           :style {:background-color (if-not none? (str "var(--rx-" (name color) "-07)") "")
+                                   :opacity          (if (or none? active?) 1 0)}}])])]]
 
     [:<>
-     (row-with-button-action {:left-label "Accent color"
+     (row-with-button-action {:left-label  "Accent color"
                               :description "Choosing an accent color may override any theme you have selected."
-                              :-for       "toggle_radix_theme"
+                              :-for        "toggle_radix_theme"
                               :stretch    true
                               :action     pick-theme})]))
 

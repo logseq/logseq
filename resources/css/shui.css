@@ -119,6 +119,10 @@ html[data-theme=dark] {
       @apply border-accent-01;
     }
 
+    .tippy-tooltip {
+      @apply border-accent-02;
+    }
+
     .references-blocks-item {
       background-color: var(--lx-gray-03, var(--ls-secondary-background-color));
     }

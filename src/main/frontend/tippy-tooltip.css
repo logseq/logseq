@@ -61,10 +61,9 @@
 .tippy-tooltip {
   @apply shadow border border-gray-07 dark:border-gray-05 px-2 py-1;
 
-  color: var(--ls-primary-text-color);
-  font-size: inherit;
   will-change: auto;
-  background-color: var(--ls-tertiary-background-color);
+  color: var(--ls-primary-text-color, hsl(var(--foreground)));
+  background-color: var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)));
 }
 
 .tippy-tooltip [x-circle] {
@@ -76,7 +75,6 @@
 }
 
 .tippy-wrapper {
-  background-color: var(--ls-tertiary-background-color);
   border-radius: 8px;
   margin: 0 -6px;
 }
