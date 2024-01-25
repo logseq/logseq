@@ -39,7 +39,8 @@
             [frontend.persist-db.browser :as db-browser]
             [cljs-bean.core :as bean]
             [datascript.core :as d]
-            [frontend.db.conn :as conn]))
+            [frontend.db.conn :as conn]
+            [logseq.db :as ldb]))
 
 (def create! page-common-handler/create!)
 (def <create! page-common-handler/<create!)
@@ -72,6 +73,24 @@
          (when-let [page-block-uuid (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
            (page-common-handler/favorited?-v2 page-block-uuid))))
       (page-common-handler/favorited? page-name))))
+
+
+(defn get-favorites
+  "return page-block entities"
+  []
+  (when-let [db (conn/get-db)]
+    (let [repo (state/get-current-repo)]
+      (if (config/db-based-graph? repo)
+        (let [blocks (ldb/get-page-blocks db page-common-handler/favorites-page-name {})]
+          (keep (fn [block]
+                  (when-let [block-uuid (parse-uuid (:block/content block))]
+                    (d/entity db [:block/uuid block-uuid]))) blocks))
+        (let [page-names (->> (:favorites (state/sub-config))
+                              (remove string/blank?)
+                              (filter string?)
+                              (mapv util/safe-page-name-sanity-lc)
+                              (distinct))]
+          (keep (fn [page-name] (d/entity db [:block/name page-name])) page-names))))))
 
 
 ;; FIXME: add whiteboard
