@@ -98,11 +98,12 @@
 
   :publishing {:target :browser
                :module-loader true
-               :js-options    {:ignore-asset-requires true
+               :js-options    {;; handle `require(xxx.css)`
+                               :ignore-asset-requires true
                                :resolve {"react" {:target :global
                                                   :global "React"}
                                          "react-dom" {:target :global
-                                                      :global "ReactDOM"}}} ;; handle `require(xxx.css)`
+                                                      :global "ReactDOM"}}}
                :modules       {:shared
                                {:entries []}
                                :main

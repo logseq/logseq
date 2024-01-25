@@ -42,10 +42,7 @@
                 (fs/symlinkSync (node-path/join source-static-dir "js" "publishing" "cljs-runtime")
                                 (node-path/join output-static-dir "js" "cljs-runtime")))
             ;; remove publishing-dir
-            _ (when-not dev? (p/all (map (fn [file]
-                                           (fs/rmSync (node-path/join publishing-dir file)))
-                                         (fs/readdirSync publishing-dir))))
-            _ (when-not dev? (fs/rmdirSync publishing-dir))
+            _ (when-not dev? (fse/remove publishing-dir))
             ;; remove source map files
             _ (p/all (map (fn [file]
                             (fs/rmSync (node-path/join output-static-dir "js" (str file ".map")) #js {:force true}))

@@ -13,13 +13,13 @@
 (defn- get-db [graph-dir]
   (let [{:keys [conn]} (gp-cli/parse-graph graph-dir {:verbose false})] @conn))
 
-(defn- publish-file-graph [static-dir graph-dir output-path]
+(defn- publish-file-graph [static-dir graph-dir output-path options]
   (let [repo-config (-> (node-path/join graph-dir "logseq" "config.edn") fs/readFileSync str edn/read-string)]
     (publishing/export (get-db graph-dir)
                        static-dir
                        graph-dir
                        output-path
-                       {:repo-config repo-config :ui/theme "dark" :ui/radix-color :purple})))
+                       (merge options {:repo-config repo-config :ui/theme "dark" :ui/radix-color :purple}))))
 
 (defn- publish-db-graph [static-dir graph-dir output-path opts]
   (let [db-name (node-path/basename graph-dir)
@@ -42,7 +42,8 @@
     (js/process.exit 1))
   (let [[static-dir graph-dir output-path]
         ;; Offset relative paths since they are run in a different directory than user is in
-        (map #(if (node-path/isAbsolute %) % (node-path/resolve ".." %)) args)]
+        (map #(if (node-path/isAbsolute %) % (node-path/resolve ".." %)) args)
+        options {:dev? (contains? (set args) "--dev")}]
     (if (sqlite-cli/db-graph-directory? graph-dir)
-      (publish-db-graph static-dir graph-dir output-path {:dev? (contains? (set args) "--dev")})
-      (publish-file-graph static-dir graph-dir output-path))))
+      (publish-db-graph static-dir graph-dir output-path options)
+      (publish-file-graph static-dir graph-dir output-path options))))

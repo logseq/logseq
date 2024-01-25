@@ -1300,37 +1300,37 @@
    (save-current-block! {}))
   ([{:keys [force? skip-properties? current-block] :as opts}]
    ;; non English input method
-   (let [result (when-not (state/editor-in-composition?)
-                  (when (state/get-current-repo)
-                    (try
-                      (let [input-id (state/get-edit-input-id)
-                            block (state/get-edit-block)
-                            db-block (when-let [block-id (:block/uuid block)]
-                                       (db/pull [:block/uuid block-id]))
-                            elem (and input-id (gdom/getElement input-id))
-                            db-content (:block/content db-block)
-                            db-content-without-heading (and db-content
-                                                            (common-util/safe-subs db-content (:block/level db-block)))
-                            value (if (= (:block/uuid current-block) (:block/uuid block))
-                                    (:block/content current-block)
-                                    (and elem (gobj/get elem "value")))]
-                        (when value
-                          (cond
-                            force?
-                            (save-block-aux! db-block value opts)
+   (when-not (or (state/editor-in-composition?)
+                 (state/get-editor-action))
+     (when (state/get-current-repo)
+       (try
+         (let [input-id (state/get-edit-input-id)
+               block (state/get-edit-block)
+               db-block (when-let [block-id (:block/uuid block)]
+                          (db/pull [:block/uuid block-id]))
+               elem (and input-id (gdom/getElement input-id))
+               db-content (:block/content db-block)
+               db-content-without-heading (and db-content
+                                               (common-util/safe-subs db-content (:block/level db-block)))
+               value (if (= (:block/uuid current-block) (:block/uuid block))
+                       (:block/content current-block)
+                       (and elem (gobj/get elem "value")))]
+           (when value
+             (cond
+               force?
+               (save-block-aux! db-block value opts)
 
-                            (and skip-properties?
-                                 (db-model/top-block? block)
-                                 (when elem (thingatpt/properties-at-point elem)))
-                            nil
+               (and skip-properties?
+                    (db-model/top-block? block)
+                    (when elem (thingatpt/properties-at-point elem)))
+               nil
 
-                            (and block value db-content-without-heading
-                                 (not= (string/trim db-content-without-heading)
-                                       (string/trim value)))
-                            (save-block-aux! db-block value opts))))
-                      (catch :default error
-                        (log/error :save-block-failed error)))))]
-     result)))
+               (and block value db-content-without-heading
+                    (not= (string/trim db-content-without-heading)
+                          (string/trim value)))
+               (save-block-aux! db-block value opts))))
+         (catch :default error
+           (log/error :save-block-failed error)))))))
 
 (defn- clean-content!
   [repo format content]
