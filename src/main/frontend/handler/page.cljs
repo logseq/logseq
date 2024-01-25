@@ -37,13 +37,41 @@
             [electron.ipc :as ipc]
             [frontend.context.i18n :refer [t]]
             [frontend.persist-db.browser :as db-browser]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [datascript.core :as d]
+            [frontend.db.conn :as conn]))
 
 (def create! page-common-handler/create!)
 (def <create! page-common-handler/<create!)
 (def delete! page-common-handler/delete!)
-(def unfavorite-page! page-common-handler/unfavorite-page!)
-(def favorite-page! page-common-handler/favorite-page!)
+
+(defn <unfavorite-page!
+  [page-name]
+  (let [repo (state/get-current-repo)]
+    (if (config/db-based-graph? repo)
+      (let [db (conn/get-db)]
+        (when-let [page-block-uuid (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
+          (page-common-handler/<unfavorite-page!-v2 page-block-uuid)))
+      (page-common-handler/unfavorite-page! page-name))))
+
+(defn <favorite-page!
+  [page-name]
+  (let [repo (state/get-current-repo)]
+    (if (config/db-based-graph? repo)
+      (let [db (conn/get-db)]
+        (when-let [page-block-uuid (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
+          (page-common-handler/<favorite-page!-v2 page-block-uuid)))
+      (page-common-handler/favorite-page! page-name))))
+
+(defn favorited?
+  [page-name]
+  (let [repo (state/get-current-repo)]
+    (if (config/db-based-graph? repo)
+      (when-let [db (conn/get-db)]
+        (boolean
+         (when-let [page-block-uuid (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
+           (page-common-handler/favorited?-v2 page-block-uuid))))
+      (page-common-handler/favorited? page-name))))
 
 
 ;; FIXME: add whiteboard
@@ -65,12 +93,10 @@
 (defn toggle-favorite! []
   ;; NOTE: in journals or settings, current-page is nil
   (when-let [page-name (state/get-current-page)]
-    (let [favorites  (:favorites (state/sub-config))
-          favorited? (contains? (set (map string/lower-case favorites))
-                                (string/lower-case page-name))]
+    (let [favorited? (favorited? page-name)]
       (if favorited?
-        (unfavorite-page! page-name)
-        (favorite-page! page-name)))))
+        (<unfavorite-page! page-name)
+        (<favorite-page! page-name)))))
 
 (defn rename!
   [old-name new-name & {:as _opts}]
@@ -86,8 +112,9 @@
         nil))))
 
 (defn reorder-favorites!
-  [favorites]
-  (config-handler/set-config! :favorites favorites))
+  [_favorites]
+  ;; TODO
+  nil)
 
 (defn has-more-journals?
   []
