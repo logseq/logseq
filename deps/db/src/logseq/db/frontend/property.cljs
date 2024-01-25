@@ -51,8 +51,12 @@
             :schema
             {:type :default}
             :closed-values
-            (mapv #(hash-map :value % :uuid (random-uuid))
-                  ["Backlog" "Todo" "Doing" "In Review" "Done" "Canceled"])
+            (mapv (fn [[status icon]]
+                    {:value status
+                     :uuid (random-uuid)
+                     :icon {:type :tabler-icon :id icon :name icon}})
+                  [["Backlog" "Backlog"] ["Todo" "Todo"] ["Doing" "In Progress 50"]
+                   ["In Review" "In Review"] ["Done" "Done"] ["Canceled" "Cancelled"]])
             :visible true}
    :priority {:original-name "Priority"
               :schema
