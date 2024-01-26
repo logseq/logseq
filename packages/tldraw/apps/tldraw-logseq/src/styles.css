@@ -861,10 +861,6 @@ html[data-theme='dark'] {
   box-shadow: none;
 }
 
-.tl-popover-arrow {
-  fill: var(--ls-secondary-background-color);
-}
-
 .tl-color-palette {
   @apply grid grid-cols-4;
 }
@@ -1094,7 +1090,7 @@ button.tl-shape-links-panel-item-remove-button {
   @apply block;
 }
 
-.tl-tooltip-arrow {
+.popper-arrow {
   fill: var(--ls-secondary-background-color);
 }
 
