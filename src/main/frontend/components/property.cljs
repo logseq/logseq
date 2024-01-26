@@ -396,34 +396,35 @@
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
      (if in-block-container? {:style {:padding-left 22}} {})
      (if @*property-key
-       (when-let [property (get-property-from-db @*property-key)]
+       (let [property (get-property-from-db @*property-key)]
          [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
           [:div.flex.flex-row.items-center.col-span-2
            [:span.bullet-container.cursor [:span.bullet]]
            [:div {:style {:padding-left 6}} @*property-key]]
-          [:div.col-span-3.flex.flex-row {:on-mouse-down (fn [e] (util/stop-propagation e))}
-           (when-not class-schema?
-             (if @*show-new-property-config?
-               (ui/dropdown
-                (fn [_opts]
-                  (pv/property-value entity property @*property-value
-                                     (assoc opts
-                                            :editing? true
-                                            :*show-new-property-config? *show-new-property-config?)))
-                (fn [{:keys [toggle-fn]}]
-                  [:div.p-6
-                   (property-config entity property (merge opts {:toggle-fn toggle-fn
-                                                                 :block entity
-                                                                 :add-new-property? true
-                                                                 :*show-new-property-config? *show-new-property-config?}))])
-                {:initial-open? true
-                 :modal-class (util/hiccup->class
-                               "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
-               (pv/property-value entity property @*property-value (assoc opts :editing? true))))]])
+          (when property
+            [:div.col-span-3.flex.flex-row {:on-mouse-down (fn [e] (util/stop-propagation e))}
+             (when-not class-schema?
+               (if @*show-new-property-config?
+                 (ui/dropdown
+                  (fn [_opts]
+                    (pv/property-value entity property @*property-value
+                                       (assoc opts
+                                              :editing? true
+                                              :*show-new-property-config? *show-new-property-config?)))
+                  (fn [{:keys [toggle-fn]}]
+                    [:div.p-6
+                     (property-config entity property (merge opts {:toggle-fn toggle-fn
+                                                                   :block entity
+                                                                   :add-new-property? true
+                                                                   :*show-new-property-config? *show-new-property-config?}))])
+                  {:initial-open? true
+                   :modal-class (util/hiccup->class
+                                 "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
+                 (pv/property-value entity property @*property-value (assoc opts :editing? true))))])])
 
        (let [on-chosen (fn [{:keys [value]}]
+                         (reset! *property-key value)
                          (p/let [result (add-property-from-dropdown entity value opts)]
-                           (reset! *property-key value)
                            (when (and (true? result) *show-new-property-config?)
                              (reset! *show-new-property-config? true))))
              input-opts {:on-blur (fn []
@@ -436,66 +437,39 @@
                              nil))}]
          (property-select exclude-properties on-chosen input-opts)))]))
 
-(defonce *last-new-property-input-id (atom nil))
 (rum/defcs new-property < rum/reactive
+  (rum/local false ::new-property?)
   (rum/local nil ::property-key)
   (rum/local nil ::property-value)
-  (rum/local false ::enter-key-down-triggered?)
-  (mixins/event-mixin
-   (fn [state]
-     (mixins/hide-when-esc-or-outside
-      state
-      :on-hide (fn []
-                 (when-not (:editor/property-configure? @state/state)
-                   (property-handler/set-editing-new-property! nil)))
-      :node (js/document.getElementById "edit-new-property"))
-     (mixins/on-key-down state
-                         ;; enter
-                         {13 (fn [_e]
-                               (reset! *last-new-property-input-id (:ui/new-property-input-id @state/state))
-                               (reset! (::enter-key-down-triggered? state) true))})
-     (mixins/on-enter state
-                      {:on-enter (fn [e]
-                                   (when-not (or (state/editing?)
-                                                 (state/selection?))
-                                     (when (and
-                                            @(::enter-key-down-triggered? state)
-                                            (or (= "main-content-container" (.-id (.-target e)))
-                                                (= (.-tagName (.-target e)) "BODY")))
-                                       (let [nodes (dom/by-class "add-property")
-                                             last-input-id @*last-new-property-input-id
-                                             node (if last-input-id
-                                                    (some (fn [node]
-                                                            (when (dom/has-class? node last-input-id) node)) nodes)
-                                                    (first nodes))]
-                                         (when node (.click node)))
-                                       (reset! (::enter-key-down-triggered? state) false))))
-                       :node js/window})))
-  [state block edit-input-id new-property? opts]
-  [:div.ls-new-property
-   (let [*property-key (::property-key state)
-         *property-value (::property-value state)]
-     (cond
-       new-property?
-       [:div#edit-new-property
-        (property-input block *property-key *property-value opts)]
+  [state block edit-input-id opts]
+  (let [*new-property? (::new-property? state)
+        mode (state/sub :editor/mode)
+        new-property? (and @*new-property? (= mode :properties))]
+    [:div.ls-new-property
+     (let [*property-key (::property-key state)
+           *property-value (::property-value state)]
+       (cond
+         new-property?
+         (property-input block *property-key *property-value opts)
 
-       (and (or (db-property-handler/block-has-viewable-properties? block)
-                (:page-configure? opts))
-            (not config/publishing?)
-            (not (:in-block-container? opts)))
-       [:a.fade-link.flex.add-property
-        {:class edit-input-id
-         :on-click (fn []
-                     (property-handler/set-editing-new-property! edit-input-id)
-                     (reset! *property-key nil)
-                     (reset! *property-value nil))}
-        [:div.flex.flex-row.items-center {:style {:padding-left 1}}
-         (ui/icon "plus" {:size 15})
-         [:div.ml-1.text-sm {:style {:padding-left 2}} "Add property"]]]
+         (and (or (db-property-handler/block-has-viewable-properties? block)
+                  (:page-configure? opts))
+              (not config/publishing?)
+              (not (:in-block-container? opts)))
+         [:a.fade-link.flex.add-property
+          {:class edit-input-id
+           :on-click (fn []
+                       (state/set-state! :editor/block block)
+                       (state/set-state! :editor/mode :properties)
+                       (reset! *new-property? true)
+                       (reset! *property-key nil)
+                       (reset! *property-value nil))}
+          [:div.flex.flex-row.items-center {:style {:padding-left 1}}
+           (ui/icon "plus" {:size 15})
+           [:div.ml-1.text-sm {:style {:padding-left 2}} "Add property"]]]
 
-       :else
-       [:div {:style {:height 28}}]))])
+         :else
+         [:div {:style {:height 28}}]))]))
 
 (defn- property-collapsed?
   [block property]
@@ -704,7 +678,6 @@
                           (concat block-own-properties' class-own-properties)
                           block-own-properties'))
         full-hidden-properties (concat block-hidden-properties class-hidden-properties)
-        new-property? (= edit-input-id (state/sub :ui/new-property-input-id))
         class->properties (loop [classes all-classes
                                  properties #{}
                                  result []]
@@ -718,7 +691,6 @@
                               result))]
     (when-not (and (empty? block-own-properties)
                    (empty? class->properties)
-                   (not new-property?)
                    (not (:page-configure? opts)))
       [:div.ls-properties-area (cond-> (if in-block-container?
                                          {}
@@ -730,8 +702,8 @@
        (when (and (seq full-hidden-properties) (not class-schema?) (not config/publishing?))
          (hidden-properties block full-hidden-properties opts))
 
-       (when (or new-property? (not in-block-container?))
-         (new-property block edit-input-id new-property? opts))
+       (when (not in-block-container?)
+         (rum/with-key (new-property block edit-input-id opts) (str (random-uuid))))
 
        (when (and (seq class->properties) (not one-class?))
          (let [page-cp (:page-cp opts)]
