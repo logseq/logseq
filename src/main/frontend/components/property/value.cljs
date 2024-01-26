@@ -343,7 +343,7 @@
            esc? (= (util/ekey e) "Escape")
            backspace? (= (util/ekey e) "Backspace")
            new-value (util/evalue e)
-           new-property? (= @(:editor/mode @state/state) :properties)]
+           new-property? (:editor/properties-container @state/state)]
        (when (and (or enter? esc? backspace?)
                   (not (state/get-editor-action)))
          (when-not backspace? (util/stop e))

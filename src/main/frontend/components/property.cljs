@@ -437,14 +437,14 @@
                              nil))}]
          (property-select exclude-properties on-chosen input-opts)))]))
 
-(rum/defcs new-property < rum/reactive
+(rum/defcs new-property < rum/reactive rum/static
   (rum/local false ::new-property?)
   (rum/local nil ::property-key)
   (rum/local nil ::property-value)
-  [state block edit-input-id opts]
+  [state block id opts]
   (let [*new-property? (::new-property? state)
-        mode (state/sub :editor/mode)
-        new-property? (and @*new-property? (= mode :properties))]
+        container-id (state/sub :editor/properties-container)
+        new-property? (and @*new-property? (= container-id id))]
     [:div.ls-new-property
      (let [*property-key (::property-key state)
            *property-value (::property-value state)]
@@ -457,10 +457,9 @@
               (not config/publishing?)
               (not (:in-block-container? opts)))
          [:a.fade-link.flex.add-property
-          {:class edit-input-id
-           :on-click (fn []
+          {:on-click (fn []
                        (state/set-state! :editor/block block)
-                       (state/set-state! :editor/mode :properties)
+                       (state/set-state! :editor/properties-container id)
                        (reset! *new-property? true)
                        (reset! *property-key nil)
                        (reset! *property-value nil))}
@@ -627,8 +626,11 @@
 
 ;; TODO: Remove :page-configure? as it only ever seems to be set to true
 (rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive
-  [state target-block edit-input-id {:keys [in-block-container? page-configure? class-schema?] :as opts}]
-  (let [block (resolve-linked-block-if-exists target-block)
+  {:init (fn [state]
+           (assoc state ::id (str (random-uuid))))}
+  [state target-block _edit-input-id {:keys [in-block-container? page-configure? class-schema?] :as opts}]
+  (let [id (::id state)
+        block (resolve-linked-block-if-exists target-block)
         block-properties (:block/properties block)
         properties (if (and class-schema? page-configure?)
                      (let [properties (:properties (:block/schema block))]
@@ -693,8 +695,9 @@
                    (empty? class->properties)
                    (not (:page-configure? opts)))
       [:div.ls-properties-area (cond-> (if in-block-container?
-                                         {}
-                                         {:class (when class-schema?  "class-properties")})
+                                         {:id id}
+                                         {:id id
+                                          :class (when class-schema?  "class-properties")})
                                  (:selected? opts)
                                  (update :class conj "select-none"))
        (properties-section block (if class-schema? properties own-properties) opts)
@@ -703,7 +706,7 @@
          (hidden-properties block full-hidden-properties opts))
 
        (when (not in-block-container?)
-         (rum/with-key (new-property block edit-input-id opts) (str (random-uuid))))
+         (rum/with-key (new-property block id opts) (str id "-add-property")))
 
        (when (and (seq class->properties) (not one-class?))
          (let [page-cp (:page-cp opts)]
