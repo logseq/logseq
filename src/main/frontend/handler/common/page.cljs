@@ -113,12 +113,12 @@
 (defn- find-block-in-favorites-page
   [page-block-uuid]
   (let [db (conn/get-db)
-        page-block-uuid-str (str page-block-uuid)
         blocks (ldb/get-page-blocks db favorites-page-name {})]
-    (some (fn [block]
-            (when (= page-block-uuid-str (:block/content block))
-              block))
-          blocks)))
+    (when-let [page-block-entity (d/entity db [:block/uuid page-block-uuid])]
+      (some (fn [block]
+              (when (= (:db/id (:block/link block)) (:db/id page-block-entity))
+                block))
+            blocks))))
 
 (defn favorited?-v2
   [page-block-uuid]
@@ -128,13 +128,19 @@
 (defn <favorite-page!-v2
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
-  (let [favorites-page (d/entity (conn/get-db) [:block/name favorites-page-name])
+  (let [repo (state/get-current-repo)
+        favorites-page (d/entity (conn/get-db) [:block/name favorites-page-name])
         favorites-page-tx-data (build-hidden-page-tx-data "favorites")]
-    (p/do!
-     (when-not favorites-page (ldb/transact! nil [favorites-page-tx-data]))
-     (editor-handler/api-insert-new-block!
-      (str page-block-uuid)
-      {:page favorites-page-name :edit-block? false}))))
+    (when (d/entity (conn/get-db) [:block/uuid page-block-uuid])
+      (p/do!
+       (when-not favorites-page (ldb/transact! nil [favorites-page-tx-data]))
+       (ui-outliner-tx/transact!
+        {:outliner-op :insert-blocks}
+        (outliner-core/insert-blocks! repo (conn/get-db false) [{:block/link [:block/uuid page-block-uuid]
+                                                                 :block/content ""
+                                                                 :block/format :markdown}]
+                                      (d/entity (conn/get-db) [:block/name favorites-page-name])
+                                      {}))))))
 
 (defn <unfavorite-page!-v2
   [page-block-uuid]
