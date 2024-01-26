@@ -71,9 +71,7 @@
           contents? (= page-name "contents")
           properties (:block/properties page)
           public? (true? (pu/lookup properties :public))
-          favorites (:favorites (state/sub-config))
-          favorited? (contains? (set (map util/page-name-sanity-lc favorites))
-                                page-name)
+          favorited? (page-handler/favorited? page-name)
           developer-mode? (state/sub [:ui/developer-mode?])
           file-rpath (when (util/electron?) (page-util/get-page-file-rpath page-name))
           _ (state/sub :auth/id-token)
@@ -91,8 +89,8 @@
              :options {:on-click
                        (fn []
                          (if favorited?
-                           (page-handler/unfavorite-page! page-original-name)
-                           (page-handler/favorite-page! page-original-name)))}})
+                           (page-handler/<unfavorite-page! page-original-name)
+                           (page-handler/<favorite-page! page-original-name)))}})
 
           (when (or (util/electron?) file-sync-graph-uuid)
             {:title   (t :page/version-history)

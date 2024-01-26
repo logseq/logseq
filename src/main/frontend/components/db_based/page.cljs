@@ -170,7 +170,7 @@
             true)
       [:div.page-info {:on-mouse-over #(reset! *hover? true)
                        :on-mouse-leave #(reset! *hover? false)}
-       (when (or hover-or-expanded? has-tags? has-properties?)
+       (when (or hover-or-expanded? has-tags? has-properties? class?)
          [:div.fade-in.p-2 {:class (if (or @*hover? (not collapsed?))
                                      "border rounded"
                                      "border rounded border-transparent")}
