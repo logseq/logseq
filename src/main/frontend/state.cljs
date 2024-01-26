@@ -2231,15 +2231,6 @@ Similar to re-frame subscriptions"
   (storage/remove :ui/radix-color)
   (util/set-android-theme))
 
-(defn cycle-color! []
-  (let [current-color (get-color-accent)
-        next-color (->> (cons nil colors/color-list)
-                        (drop-while #(not= % current-color))
-                        (second))]
-    (if next-color
-      (set-color-accent! next-color)
-      (unset-color-accent!))))
-
 (defn handbook-open?
   []
   (:ui/handbooks-open? @state))
