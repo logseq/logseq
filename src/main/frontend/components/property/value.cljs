@@ -312,12 +312,14 @@
 
 (defn <create-new-block!
   [block property value]
-  (p/let [last-block-id (db-property-handler/create-property-text-block! block property value
-                                                                       editor-handler/wrap-parse-block
+  (let [{:keys [last-block-id result]} (db-property-handler/create-property-text-block! block property value
+                                                                                        editor-handler/wrap-parse-block
 
-                                                                       {})
-          _ (exit-edit-property)]
-    (editor-handler/edit-block! (db/entity [:block/uuid last-block-id]) :max last-block-id)))
+                                                                                        {})]
+    (p/do!
+     result
+     (exit-edit-property)
+     (editor-handler/edit-block! (db/entity [:block/uuid last-block-id]) :max last-block-id))))
 
 (defn <create-new-block-from-template!
   "`template`: tag block"

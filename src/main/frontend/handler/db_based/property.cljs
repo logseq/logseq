@@ -617,11 +617,12 @@
         class? (contains? (:block/type block) "class")
         property-key (:block/original-name property)]
     (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})
-    (when property-key
-      (if (and class? class-schema?)
-        (class-add-property! repo (:block/uuid block) property-key)
-        (set-block-property! repo (:block/uuid block) property-key (:block/uuid first-block) {})))
-    last-block-id))
+    (let [result (when property-key
+                   (if (and class? class-schema?)
+                     (class-add-property! repo (:block/uuid block) property-key)
+                     (set-block-property! repo (:block/uuid block) property-key (:block/uuid first-block) {})))]
+      {:last-block-id last-block-id
+       :result result})))
 
 (defn property-create-new-block-from-template
   [block property template]
