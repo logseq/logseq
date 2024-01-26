@@ -921,14 +921,16 @@
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
 
 (defmethod handle :editor/new-property [[_]]
-  (when-let [edit-block (state/get-edit-block)]
-    (when-let [block-id (:block/uuid edit-block)]
-      (let [block (db/entity [:block/uuid block-id])
-            collapsed? (or (get-in @state/state [:ui/collapsed-blocks (state/get-current-repo) block-id])
-                           (:block/collapsed? block))]
-        (when collapsed?
-          (editor-handler/set-blocks-collapsed! [block-id] false)))))
-  (property-handler/editing-new-property!))
+  (p/do!
+    (when-let [edit-block (state/get-edit-block)]
+     (when-let [block-id (:block/uuid edit-block)]
+       (let [block (db/entity [:block/uuid block-id])
+             collapsed? (or (get-in @state/state [:ui/collapsed-blocks (state/get-current-repo) block-id])
+                            (:block/collapsed? block))]
+         (when collapsed?
+           (editor-handler/set-blocks-collapsed! [block-id] false)))))
+    (editor-handler/save-current-block!)
+    (property-handler/editing-new-property!)))
 
 (rum/defc multi-tabs-dialog
   []
