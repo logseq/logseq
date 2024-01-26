@@ -3448,19 +3448,21 @@
    (when block-id
      (let [repo (state/get-current-repo)]
        (if-let [block (db/entity [:block/uuid block-id])]
-         (or (db-model/has-children? block-id)
-             (valid-dsl-query-block? block)
-             (valid-custom-query-block? block)
-             (and (config/db-based-graph? repo)
-                  (seq (:block/properties block))
-                  (not (db-pu/all-hidden-built-in-properties? (keys (:block/properties block)))))
-             (and (config/db-based-graph? repo)
-                  (seq (:block/tags block)))
-             (and
-              (:outliner/block-title-collapse-enabled? (state/get-config))
-              (block-with-title? (:block/format block)
-                                 (:block/content block)
-                                 semantic?)))
+         (let [db-based? (config/db-based-graph? repo)
+               tags (:block/tags (db/entity (:db/id block)))]
+           (or (db-model/has-children? block-id)
+               (valid-dsl-query-block? block)
+               (valid-custom-query-block? block)
+               (and db-based?
+                    (seq (:block/properties block))
+                    (not (db-pu/all-hidden-built-in-properties? (keys (:block/properties block)))))
+               (and db-based? (seq tags)
+                    (some (fn [t] (seq (:properties (:block/schema t)))) tags))
+               (and
+                (:outliner/block-title-collapse-enabled? (state/get-config))
+                (block-with-title? (:block/format block)
+                                   (:block/content block)
+                                   semantic?))))
          false)))))
 
 (defn all-blocks-with-level
