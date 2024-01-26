@@ -6,9 +6,9 @@
   "scripts": {
     "watch:ui:examples": "parcel serve ./examples/index.html",
     "build:ui:only": "parcel build --target ui --no-source-maps",
-    "build:ui": "rm -rf .parcel-cache && yarn build:ui:only && cp dist/index.js ../../resources/js/ui.js",
+    "build:ui": "rm -rf .parcel-cache && yarn build:ui:only",
     "watch:storybook": "storybook dev -p 6006",
-    "_postinstall": "yarn build:ui"
+    "postinstall": "yarn build:ui"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.2",
@@ -84,7 +84,7 @@
   "targets": {
     "main": false,
     "ui": {
-      "source": "src/index.ts",
+      "source": "src/ui.ts",
       "outputFormat": "global",
       "includeNodeModules": {
         "react": false,
