@@ -20,8 +20,10 @@
   (some-> content
           (util/search-normalize (state/enable-search-remove-accents?))))
 
-(defn block->index
-  "Convert a block to the index for searching"
+(defn- strict-block->index
+  "Convert a block to the index for searching.
+
+   Applies full text preprocessing to the content, including removing built-in properties"
   [{:block/keys [uuid page content format] :as block
     :or {format :markdown}}]
   (when-not (> (count content) (max-len))
@@ -31,6 +33,21 @@
          :uuid (str uuid)
          :page page
          :content (sanitize content)}))))
+
+(defn- loose-block->index
+  "Convert a block to the index for searching
+
+   For speed, applies no preprocessing to the content"
+  [{:block/keys [uuid page content] :as block}]
+  (when-not (string/blank? content)
+    {:id (:db/id block)
+     :uuid (str uuid)
+     :page page
+     :content content}))
+
+(defonce block->index (if (util/electron?)
+                        strict-block->index
+                        loose-block->index))
 
 (defn page->index
   "Convert a page name to the index for searching (page content level)
