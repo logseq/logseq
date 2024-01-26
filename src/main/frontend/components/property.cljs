@@ -373,7 +373,7 @@
                      :on-chosen on-chosen
                      :input-opts input-opts})]]))
 
-(rum/defcs property-input < rum/static
+(rum/defcs property-input < rum/reactive
   (rum/local false ::show-new-property-config?)
   shortcut/disable-all-shortcuts
   [state entity *property-key *property-value {:keys [class-schema? _page-configure? in-block-container?]
