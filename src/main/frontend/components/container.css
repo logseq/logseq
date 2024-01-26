@@ -569,11 +569,9 @@
   }
 
   &-menu-popup {
-    @apply fixed bottom-14 right-8 z-10 border
-    rounded-lg min-w-[260px] shadow;
+    @apply fixed bottom-14 right-8 z-10 border rounded-lg min-w-[260px] shadow;
 
-    background-color: var(--ls-secondary-background-color);
-    border-color: var(--ls-border-color);
+    background-color: var(--ls-secondary-background-color, var(--rx-gray-03));
 
     > .list-wrap {
       @apply flex flex-col pt-3;
