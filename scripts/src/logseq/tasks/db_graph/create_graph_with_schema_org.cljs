@@ -33,20 +33,20 @@
       (throw (ex-info (str "No :block/uuid for " class-id) {}))))
 
 (defn- get-comment-string
-  [rdfs-comment renamed-classes]
+  [rdfs-comment renamed-pages]
   (let [desc* (if (map? rdfs-comment)
                 (get rdfs-comment "@value")
                 rdfs-comment)
         ;; Update refs to renamed classes
-        regex (re-pattern (str "\\[\\[(" (string/join "|" (keys renamed-classes)) ")\\]\\]"))
-        desc (string/replace desc* regex #(str "[[" (get renamed-classes (second %)) "]]"))]
+        regex (re-pattern (str "\\[\\[(" (string/join "|" (keys renamed-pages)) ")\\]\\]"))
+        desc (string/replace desc* regex #(str "[[" (get renamed-pages (second %)) "]]"))]
     ;; Fix markdown and html links to schema website docs
     (string/replace desc #"(\(|\")/docs" "$1https://schema.org/docs")))
 
 (defn- strip-schema-prefix [s]
   (string/replace-first s "schema:" ""))
 
-(defn- ->class-page [class-m class-db-ids class-uuids class-properties property-uuids {:keys [verbose renamed-classes]}]
+(defn- ->class-page [class-m class-db-ids class-uuids class-properties property-uuids {:keys [verbose renamed-classes renamed-pages]}]
   (let [parent-class* (class-m "rdfs:subClassOf")
         parent-class (cond
                        (map? parent-class*)
@@ -73,7 +73,7 @@
              :db/id (get-class-db-id class-db-ids (class-m "@id"))
              :properties (cond-> {:url url}
                            (class-m "rdfs:comment")
-                           (assoc :description (get-comment-string (class-m "rdfs:comment") renamed-classes)))}
+                           (assoc :description (get-comment-string (class-m "rdfs:comment") renamed-pages)))}
       parent-class
       (assoc :block/namespace {:db/id (get-class-db-id class-db-ids parent-class)})
       (seq properties)
@@ -105,7 +105,7 @@
              (when (class-map %) :page))
         range-includes))
 
-(defn- ->property-page [property-m prop-uuid class-map class-uuids {:keys [verbose renamed-classes]}]
+(defn- ->property-page [property-m prop-uuid class-map class-uuids {:keys [verbose renamed-pages renamed-properties]}]
   (let [range-includes (get-range-includes property-m)
         schema-type (get-schema-type range-includes class-map)
         ;; Pick first range to determine type as only one range is supported currently
@@ -113,12 +113,15 @@
             (println "Picked property type:"
                      {:property (property-m "@id") :type schema-type :range-includes (vec range-includes)}))
         _ (assert schema-type (str "No schema found for property " (property-m "@id")))
+        inverted-renamed-properties (set/map-invert renamed-properties)
+        class-name (strip-schema-prefix (property-m "@id"))
+        url (str "https://schema.org/" (get inverted-renamed-properties class-name class-name))
         schema (cond-> {:type schema-type}
                  ;; This cardinality rule should be adjusted as we use schema.org more
                  (= schema-type :page)
                  (assoc :cardinality :many)
                  (property-m "rdfs:comment")
-                 (assoc :description (get-comment-string (property-m "rdfs:comment") renamed-classes))
+                 (assoc :description (get-comment-string (property-m "rdfs:comment") renamed-pages))
                  (= schema-type :page)
                  (assoc :classes (let [invalid-classes (remove class-uuids range-includes)
                                        _ (when (seq invalid-classes)
@@ -131,7 +134,7 @@
     {(keyword (strip-schema-prefix (property-m "@id")))
      {:block/uuid prop-uuid
       :block/schema schema
-      :properties {:url (string/replace-first (property-m "@id") "schema:" "https://schema.org/")}}}))
+      :properties {:url url}}}))
 
 (defn- get-class-to-properties
   "Given a vec of class ids and a vec of properties map to process, return a map of
@@ -162,21 +165,60 @@
     (and (seq range-includes)
          (every? (fn [x] (contains? unsupported-data-types x)) range-includes))))
 
+(defn- get-vector-conflicts
+  "Given a seq of tuples returns a seq of tuples that conflict i.e. their first element
+   has a case insensitive conflict/duplicate with another. An example conflict:
+   [[\"schema:businessFunction\" :property] [\"schema:BusinessFunction\" :class]]"
+  [tuples-seq]
+  (->> tuples-seq
+       (group-by (comp common-util/page-name-sanity-lc first))
+       (filter #(> (count (val %)) 1))
+       vals))
+
+(defn- detect-final-conflicts
+  "Does one final detection for conflicts after everything has been renamed"
+  [all-properties all-classes page-tuples]
+  (let [property-ids (map #(vector (% "@id") :property) all-properties)
+        class-ids (map #(vector (% "@id") :class) all-classes)
+        existing-conflicts (get-vector-conflicts (concat property-ids class-ids page-tuples))]
+    (when (seq existing-conflicts) (prn :CONFLICTS existing-conflicts))
+    (assert (empty? existing-conflicts)
+            "There are no conflicts between existing pages, schema classes and properties")))
+
+(defn- detect-property-conflicts-and-get-renamed-properties
+  "Detects conflicts between properties and existing pages and returns renamed properties"
+  [property-ids existing-pages {:keys [verbose]}]
+  (let [conflicts (get-vector-conflicts (concat property-ids existing-pages))
+        _ (assert (every? #(= 2 (count %)) conflicts) "All conflicts must only be between two elements")
+        renamed-properties (->> conflicts
+                                (map #(-> % second first))
+                                ;; Renaming properties '_property' suffix guarantees uniqueness
+                                ;; b/c schema.org doesn't use '_' in their names
+                                (map #(vector % (str % "_property")))
+                                (into {}))]
+    (if verbose
+      (println "Renaming the following properties because they have names that conflict with Logseq's built in pages"
+               (keys renamed-properties) "\n")
+      (println "Renaming" (count renamed-properties) "properties due to page name conflicts"))
+    renamed-properties))
+
 (defn- detect-id-conflicts-and-get-renamed-classes
-  "Properties and class names conflict in Logseq because schema.org names are
-  case sensitive whereas Logseq's :block/name is case insensitive. This is dealt
-  with by appending a '_Class' suffix to conflicting classes.  If this strategy
-  changes, be sure to update schema->logseq-data-types"
-  [property-ids class-ids {:keys [verbose]}]
-  (let [conflicts
-        (->> (concat property-ids class-ids)
-             (group-by (comp common-util/page-name-sanity-lc first))
-             (filter #(> (count (val %)) 1))
-             vals)
+  "Detects conflicts between classes AND properties and existing
+  pages. Renames any detected conflicts. Properties and class names conflict in
+  Logseq because schema.org names are case sensitive whereas Logseq's
+  :block/name is case insensitive. This is dealt with by appending a '_Class'
+  suffix to conflicting classes.  If this strategy changes, be sure to update
+  schema->logseq-data-types"
+  [property-ids class-ids existing-pages {:keys [verbose]}]
+  (let [conflicts (get-vector-conflicts (concat property-ids class-ids))
         ;; If this assertion fails then renamed-classes approach to resolving
         ;; conflicts may need to be revisited
-        _ (assert (every? #(= (map second %) [:property :class]) conflicts)
-                  "All conflicts are between a property and class")
+        _ (assert (every? #(= 2 (count %)) conflicts) "All conflicts must only be between two elements")
+        existing-conflicts (get-vector-conflicts (concat class-ids existing-pages))
+        _ (when (seq existing-conflicts) (prn :EXISTING-CLASS-CONFLICTS existing-conflicts))
+        ;; Add existing-conflicts to conflicts if this ever fails
+        _ (assert (empty? existing-conflicts)
+                  "There are no conflicts between existing pages and schema classes and properties")
         renamed-classes (->> conflicts
                              (map #(-> % second first))
                              ;; Renaming classes with '_Class' suffix guarantees uniqueness
@@ -187,7 +229,6 @@
       (println "Renaming the following classes because they have property names that conflict with Logseq's case insensitive :block/name:"
                (keys renamed-classes) "\n")
       (println "Renaming" (count renamed-classes) "classes due to page name conflicts"))
-        ;; Looks for all instances of a renamed class and updates them to the renamed class reference
     renamed-classes))
 
 (defn- get-all-properties [schema-data {:keys [verbose]}]
@@ -232,39 +273,47 @@
 
 (defn- get-all-classes-and-properties
   "Get all classes and properties from raw json file"
-  [schema-data options]
+  [schema-data existing-pages options]
   (let [;; TODO: See if it's worth pulling in non-types like schema:MusicReleaseFormatType
         all-classes* (filter #(contains? (set (as-> (% "@type") type'
                                                 (if (string? type') [type'] type')))
                                          "rdfs:Class")
                              schema-data)
         all-properties* (get-all-properties schema-data options)
+        property-tuples (map #(vector (% "@id") :property) all-properties*)
+        class-tuples (map #(vector (% "@id") :class) all-classes*)
+        page-tuples (map #(vector (str "schema:" %) :page) existing-pages)
         renamed-classes (detect-id-conflicts-and-get-renamed-classes
-                         (map #(vector (% "@id") :property) all-properties*)
-                         (map #(vector (% "@id") :class) all-classes*)
-                         options)
-        rename-class-ids (fn [m]
-                           (w/postwalk (fn [x]
-                                         (if-let [new-class (and (map? x) (renamed-classes (x "@id")))]
-                                           (merge x {"@id" new-class})
-                                           x)) m))
+                         property-tuples class-tuples page-tuples options)
+        renamed-properties (detect-property-conflicts-and-get-renamed-properties
+                            property-tuples page-tuples options)
+        renamed-pages (merge renamed-classes renamed-properties)
         ;; Updates keys like @id, @subClassOf
-        all-classes (map rename-class-ids all-classes*)
+        rename-page-ids (fn [m]
+                          (w/postwalk (fn [x]
+                                        (if-let [new-page (and (map? x) (renamed-pages (x "@id")))]
+                                          (merge x {"@id" new-page})
+                                          x)) m))
         ;; Updates keys like @id, @rangeIncludes, @domainIncludes
-        all-properties (map rename-class-ids all-properties*)]
+        all-classes (map rename-page-ids all-classes*)
+        all-properties (map rename-page-ids all-properties*)]
+    (detect-final-conflicts all-properties all-classes page-tuples)
     {:all-classes all-classes
      :all-properties all-properties
+     :renamed-properties (->> renamed-properties
+                              (map (fn [[k v]] [(strip-schema-prefix k) (strip-schema-prefix v)]))
+                              (into {}))
      :renamed-classes (->> renamed-classes
                            (map (fn [[k v]] [(strip-schema-prefix k) (strip-schema-prefix v)]))
                            (into {}))}))
 
-(defn- create-init-data [options]
+(defn- create-init-data [existing-pages options]
   (let [schema-data (-> (str (fs/readFileSync "resources/schemaorg-current-https.json"))
                         js/JSON.parse
                         (js->clj)
                         (get "@graph"))
-        {:keys [all-classes all-properties renamed-classes]}
-        (get-all-classes-and-properties schema-data options)
+        {:keys [all-classes all-properties renamed-classes renamed-properties]}
+        (get-all-classes-and-properties schema-data existing-pages options)
         ;; Generate data shared across pages and properties
         class-map (->> all-classes
                        (map #(vector (% "@id") %))
@@ -283,13 +332,17 @@
         property-uuids (->> select-properties
                             (map #(vector % (random-uuid)))
                             (into {}))
+        options' (assoc options
+                        :renamed-classes renamed-classes
+                        :renamed-properties renamed-properties
+                        :renamed-pages (merge renamed-properties renamed-classes))
         ;; Generate pages and properties
         properties (generate-properties
                     (filter #(contains? select-properties (% "@id")) all-properties)
-                    property-uuids class-map class-uuids (assoc options :renamed-classes renamed-classes))
+                    property-uuids class-map class-uuids options')
         pages (generate-pages
                (map #(class-map %) select-class-ids)
-               class-uuids class-to-properties property-uuids (assoc options :renamed-classes renamed-classes))]
+               class-uuids class-to-properties property-uuids options')]
     {:pages-and-blocks pages
      :properties properties}))
 
@@ -297,8 +350,33 @@
   "Options spec"
   {:help {:alias :h
           :desc "Print help"}
+   :debug {:alias :d
+           :desc "Prints additional debug info and a schema.edn for debugging"}
    :verbose {:alias :v
              :desc "Verbose mode"}})
+
+(defn- write-debug-file [blocks-tx db]
+  (let [block-uuid->name* (->> (d/q '[:find (pull ?b [:block/name :block/uuid]) :where [?b :block/name]] db)
+                               (map first)
+                               (map (juxt :block/uuid :block/name))
+                               (into {}))
+        block-uuid->name #(or (block-uuid->name* %) (throw (ex-info (str "No entity found for " %) {})))
+        ;; TODO: Figure out why some Thing's properties don't exist
+        block-uuid->name-please-fixme
+        #(or (block-uuid->name* %2) (println "WARNING: Page" (pr-str (:block/original-name %1)) "skipped uuid" %2))]
+    (fs/writeFileSync "schema-org.edn"
+                      (pr-str
+                       (->> blocks-tx
+                            (map (fn [m]
+                                   (cond-> (select-keys m [:block/name :block/type :block/original-name
+                                                           :block/properties :block/schema])
+                                     (seq (:block/properties m))
+                                     (update :block/properties #(update-keys % block-uuid->name))
+                                     (seq (get-in m [:block/schema :properties]))
+                                     (update-in [:block/schema :properties] #(mapv (partial block-uuid->name-please-fixme m) %))
+                                     (seq (get-in m [:block/schema :classes]))
+                                     (update-in [:block/schema :classes] #(mapv block-uuid->name %)))))
+                            set)))))
 
 (defn -main [args]
   (let [[graph-dir] args
@@ -311,13 +389,15 @@
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
         conn (create-graph/init-conn dir db-name)
-        init-data (create-init-data options)
+        init-data (create-init-data (d/q '[:find [?name ...] :where [?b :block/name ?name]] @conn)
+                                    options)
         blocks-tx (create-graph/create-blocks-tx init-data)]
     (println "Generating" (str (count (filter :block/name blocks-tx)) " pages with "
                                (count (:pages-and-blocks init-data)) " classes and "
                                (count (:properties init-data)) " properties ..."))
     (d/transact! conn blocks-tx)
     (when (:verbose options) (println "Transacted" (count (d/datoms @conn :eavt)) "datoms"))
+    (when (:debug options) (write-debug-file blocks-tx @conn))
     (println "Created graph" (str db-name "!"))))
 
 (when (= nbb/*file* (:file (meta #'-main)))
