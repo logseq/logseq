@@ -8,6 +8,8 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [frontend.db :as db]
             [frontend.date :as date]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.page :as page-handler]
             [datascript.core :as d]
             [logseq.graph-parser.text :as text]))
 
@@ -47,8 +49,8 @@
   [property-lines]
   (->> property-lines
        (keep #(let [[k v] (string/split % #"::\s*" 2)]
-               (when (string/includes? % "::")
-                 [(keyword k) (parse-property-value v)])))
+                (when (string/includes? % "::")
+                  [(keyword k) (parse-property-value v)])))
        (into {})))
 
 (defn- build-block-properties
@@ -256,3 +258,10 @@ This can be called in synchronous contexts as no async fns should be invoked"
                 (start-test-db!))
    :after #(do (state/set-current-repo! nil)
                (destroy-test-db!))})
+
+(defn save-block!
+  "Wrapper around editor-handler/save-block! that also adds tags"
+  [repo block-uuid content {:keys [tags]}]
+  (editor-handler/save-block! repo block-uuid content)
+  (doseq [tag tags]
+    (page-handler/add-tag repo block-uuid tag)))

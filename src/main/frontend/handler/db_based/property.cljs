@@ -99,13 +99,12 @@
   (let [property (db/entity [:block/name (common-util/page-name-sanity-lc k-name)])
         k-name (name k-name)
         property-uuid (or (:block/uuid property) property-uuid (db/new-block-id))]
-    (when property
+    (if property
       (db/transact! repo [(outliner-core/block-with-updated-at
                            {:block/schema schema
                             :block/uuid property-uuid
                             :block/type "property"})]
-                    {:outliner-op :save-block}))
-    (when (nil? property) ;if property not exists yet
+                    {:outliner-op :save-block})
       (db/transact! repo [(sqlite-util/build-new-property
                            (cond-> {:block/original-name k-name
                                     :block/name (util/page-name-sanity-lc k-name)
@@ -618,11 +617,12 @@
         class? (contains? (:block/type block) "class")
         property-key (:block/original-name property)]
     (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})
-    (when property-key
-      (if (and class? class-schema?)
-        (class-add-property! repo (:block/uuid block) property-key)
-        (set-block-property! repo (:block/uuid block) property-key (:block/uuid first-block) {})))
-    last-block-id))
+    (let [result (when property-key
+                   (if (and class? class-schema?)
+                     (class-add-property! repo (:block/uuid block) property-key)
+                     (set-block-property! repo (:block/uuid block) property-key (:block/uuid first-block) {})))]
+      {:last-block-id last-block-id
+       :result result})))
 
 (defn property-create-new-block-from-template
   [block property template]

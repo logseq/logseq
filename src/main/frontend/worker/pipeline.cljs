@@ -106,7 +106,9 @@
                             ;; TODO: remove this since transact! is really slow
                             (ldb/transact! conn replace-tx {:replace? true
                                                             :pipeline-replace? true}))
-                          tx-report)
+                          (do
+                            (d/store @conn)
+                            tx-report))
               fix-tx-data (validate-and-fix-db! repo conn tx-report context)
               full-tx-data (concat (:tx-data tx-report) fix-tx-data (:tx-data tx-report'))
               final-tx-report (assoc tx-report'
