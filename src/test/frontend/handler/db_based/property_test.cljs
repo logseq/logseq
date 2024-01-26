@@ -202,8 +202,8 @@
       (db-property-handler/class-remove-property! repo c1id (:block/uuid (db/entity [:block/name "property-1"])))
       (is (= 1 (count (:properties (:block/schema (db/entity (:db/id c1))))))))
     (testing "Add classes to a block"
-      (editor-handler/save-block! repo fbid "Block 1 #class1 #class2 #class3")
-      (is (= 3 (count (:block/tags (db/entity [:block/uuid fbid]))))))
+        (test-helper/save-block! repo fbid "Block 1" {:tags ["class1" "class2" "class3"]})
+        (is (= 3 (count (:block/tags (db/entity [:block/uuid fbid]))))))
     ;; FIXME: @tiensonqin https://github.com/logseq/logseq/commit/575624c650b2b7e919033a79aa5d14b97507d86f
     #_(testing "Remove a class from a block"
       ;; make sure class2 will not be deleted when removing it from the first block
@@ -291,7 +291,7 @@
       ;; add property
       (db-property-handler/upsert-property! repo k {:type :default} {})
       (let [property (db/entity [:block/name k])
-            last-block-id (db-property-handler/create-property-text-block! fb property "Block content" editor-handler/wrap-parse-block {})
+            {:keys [last-block-id]} (db-property-handler/create-property-text-block! fb property "Block content" editor-handler/wrap-parse-block {})
             {:keys [from-block-id from-property-id]} (db-property-handler/get-property-block-created-block [:block/uuid last-block-id])]
         (is (= from-block-id (:db/id fb)))
         (is (= from-property-id (:db/id property)))))))

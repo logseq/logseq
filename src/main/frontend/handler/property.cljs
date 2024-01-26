@@ -31,13 +31,8 @@
        (set-block-property! repo (:block/uuid page) key value))
       (file-page-property/add-property! page-name key value))))
 
-(defn set-editing-new-property!
-  [value]
-  (state/set-state! :ui/new-property-input-id value))
-
 (defn editing-new-property!
   []
-  (set-editing-new-property! (state/get-edit-input-id))
   (state/clear-edit!))
 
 (defn remove-id-property

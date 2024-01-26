@@ -11,7 +11,6 @@
             [frontend.fs :as fs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.common.page :as page-common-handler]
-            [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.notification :as notification]
@@ -37,13 +36,63 @@
             [electron.ipc :as ipc]
             [frontend.context.i18n :refer [t]]
             [frontend.persist-db.browser :as db-browser]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [datascript.core :as d]
+            [frontend.db.conn :as conn]
+            [logseq.db :as ldb]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [logseq.outliner.core :as outliner-core]))
 
 (def create! page-common-handler/create!)
 (def <create! page-common-handler/<create!)
 (def delete! page-common-handler/delete!)
-(def unfavorite-page! page-common-handler/unfavorite-page!)
-(def favorite-page! page-common-handler/favorite-page!)
+
+(defn <unfavorite-page!
+  [page-name]
+  (let [repo (state/get-current-repo)]
+    (if (config/db-based-graph? repo)
+      (let [db (conn/get-db)]
+        (when-let [page-block-uuid (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
+          (page-common-handler/<unfavorite-page!-v2 page-block-uuid)))
+      (page-common-handler/unfavorite-page! page-name))))
+
+(defn <favorite-page!
+  [page-name]
+  (let [repo (state/get-current-repo)]
+    (if (config/db-based-graph? repo)
+      (let [db (conn/get-db)]
+        (when-let [page-block-uuid (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
+          (page-common-handler/<favorite-page!-v2 page-block-uuid)))
+      (page-common-handler/favorite-page! page-name))))
+
+(defn favorited?
+  [page-name]
+  (let [repo (state/get-current-repo)]
+    (if (config/db-based-graph? repo)
+      (when-let [db (conn/get-db)]
+        (boolean
+         (when-let [page-block-uuid (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
+           (page-common-handler/favorited?-v2 page-block-uuid))))
+      (page-common-handler/favorited? page-name))))
+
+
+(defn get-favorites
+  "return page-block entities"
+  []
+  (when-let [db (conn/get-db)]
+    (let [repo (state/get-current-repo)]
+      (if (config/db-based-graph? repo)
+        (let [blocks (ldb/get-page-blocks db page-common-handler/favorites-page-name {})]
+          (keep (fn [block]
+                  (when-let [block-uuid (some-> (:block/content block) parse-uuid)]
+                    (d/entity db [:block/uuid block-uuid]))) blocks))
+        (let [page-names (->> (:favorites (state/sub-config))
+                              (remove string/blank?)
+                              (filter string?)
+                              (mapv util/safe-page-name-sanity-lc)
+                              (distinct))]
+          (keep (fn [page-name] (d/entity db [:block/name page-name])) page-names))))))
+
 
 ;; FIXME: add whiteboard
 (defn- get-directory
@@ -64,12 +113,10 @@
 (defn toggle-favorite! []
   ;; NOTE: in journals or settings, current-page is nil
   (when-let [page-name (state/get-current-page)]
-    (let [favorites  (:favorites (state/sub-config))
-          favorited? (contains? (set (map string/lower-case favorites))
-                                (string/lower-case page-name))]
+    (let [favorited? (favorited? page-name)]
       (if favorited?
-        (unfavorite-page! page-name)
-        (favorite-page! page-name)))))
+        (<unfavorite-page! page-name)
+        (<favorite-page! page-name)))))
 
 (defn rename!
   [old-name new-name & {:as _opts}]
@@ -84,9 +131,24 @@
         (notification/show! "Can't merge whiteboard pages" :error)
         nil))))
 
-(defn reorder-favorites!
+(defn <reorder-favorites!
   [favorites]
-  (config-handler/set-config! :favorites favorites))
+  (let [repo (state/get-current-repo)
+        conn (conn/get-db false)]
+    (when (d/entity @conn [:block/name page-common-handler/favorites-page-name])
+      (let [favorite-page-block-uuid-coll
+            (keep (fn [page-name]
+                    (some-> (d/entity @conn [:block/name (common-util/page-name-sanity-lc page-name)])
+                            :block/uuid
+                            str))
+                  favorites)
+            current-blocks (ldb/get-page-blocks @conn page-common-handler/favorites-page-name {})]
+        (ui-outliner-tx/transact!
+         {}
+         (doseq [[page-block-uuid block] (zipmap favorite-page-block-uuid-coll current-blocks)]
+           (when (not= page-block-uuid (:block/content block))
+             (outliner-core/save-block! repo conn (state/get-date-formatter)
+                                        (assoc block :block/content page-block-uuid)))))))))
 
 (defn has-more-journals?
   []
@@ -201,6 +263,14 @@
     (let [current-selected (util/get-selected-text)]
       (cursor/move-cursor-forward input (+ 2 (count current-selected))))))
 
+(defn add-tag [repo block-id tag & {:keys [tag-entity]}]
+  (let [tag-entity (or tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)]))
+        tx-data [[:db/add (:db/id tag-entity) :block/type "class"]
+                 [:db/add [:block/uuid block-id] :block/tags (:db/id tag-entity)]
+                 ;; TODO: Should classes counted as refs
+                 [:db/add [:block/uuid block-id] :block/refs (:db/id tag-entity)]]]
+    (db/transact! repo tx-data {:outliner-op :save-block})))
+
 (defn on-chosen-handler
   [input id _q pos format]
   (let [current-pos (cursor/pos input)
@@ -245,13 +315,7 @@
                                             :class? class?}))
                          tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)])]
                    (when class?
-                     (let [repo (state/get-current-repo)
-                           tag-entity (or tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)]))
-                           tx-data [[:db/add (:db/id tag-entity) :block/type "class"]
-                                    [:db/add [:block/uuid (:block/uuid edit-block)] :block/tags (:db/id tag-entity)]
-                                    ;; TODO: Should classes counted as refs
-                                    [:db/add [:block/uuid (:block/uuid edit-block)] :block/refs (:db/id tag-entity)]]]
-                       (db/transact! repo tx-data {:outliner-op :save-block})))))))
+                     (add-tag (state/get-current-repo) (:block/uuid edit-block) tag {:tag-entity tag-entity}))))))
            (editor-handler/insert-command! id
                                            (str "#" wrapped-tag)
                                            format
