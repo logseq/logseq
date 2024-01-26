@@ -329,8 +329,7 @@
 (defn- add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context.
    For pages, used to add both schema properties or properties for a page"
-  [entity property-name {:keys [class-schema? page-configure?
-                                *show-new-property-config?]}]
+  [entity property-name {:keys [class-schema? page-configure?]}]
   (let [repo (state/get-current-repo)]
     ;; existing property selected or entered
     (if-let [_property (get-property-from-db property-name)]
@@ -347,10 +346,9 @@
       (if (db-property/valid-property-name? property-name)
         (if (and (contains? (:block/type entity) "class") page-configure?)
           (pv/<add-property! entity property-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
-          (do
+          (p/do!
             (db-property-handler/upsert-property! repo property-name {} {})
-            (when *show-new-property-config?
-              (reset! *show-new-property-config? true))))
+            true))
         (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
             (pv/exit-edit-property))))))
 
@@ -375,7 +373,7 @@
                      :on-chosen on-chosen
                      :input-opts input-opts})]]))
 
-(rum/defcs property-input < rum/reactive
+(rum/defcs property-input < rum/static
   (rum/local false ::show-new-property-config?)
   shortcut/disable-all-shortcuts
   [state entity *property-key *property-value {:keys [class-schema? _page-configure? in-block-container?]
@@ -424,9 +422,12 @@
                (pv/property-value entity property @*property-value (assoc opts :editing? true))))]])
 
        (let [on-chosen (fn [{:keys [value]}]
-                         (reset! *property-key value)
-                         (add-property-from-dropdown entity value (assoc opts :*show-new-property-config? *show-new-property-config?)))
-             input-opts {:on-blur (fn [] (pv/exit-edit-property))
+                         (p/let [result (add-property-from-dropdown entity value opts)]
+                           (reset! *property-key value)
+                           (when (and (true? result) *show-new-property-config?)
+                             (reset! *show-new-property-config? true))))
+             input-opts {:on-blur (fn []
+                                    (pv/exit-edit-property))
                          :on-key-down
                          (fn [e]
                            (case (util/ekey e)

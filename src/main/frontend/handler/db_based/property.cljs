@@ -99,13 +99,12 @@
   (let [property (db/entity [:block/name (common-util/page-name-sanity-lc k-name)])
         k-name (name k-name)
         property-uuid (or (:block/uuid property) property-uuid (db/new-block-id))]
-    (when property
+    (if property
       (db/transact! repo [(outliner-core/block-with-updated-at
                            {:block/schema schema
                             :block/uuid property-uuid
                             :block/type "property"})]
-                    {:outliner-op :save-block}))
-    (when (nil? property) ;if property not exists yet
+                    {:outliner-op :save-block})
       (db/transact! repo [(sqlite-util/build-new-property
                            (cond-> {:block/original-name k-name
                                     :block/name (util/page-name-sanity-lc k-name)
