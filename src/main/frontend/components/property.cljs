@@ -373,6 +373,10 @@
 
 (rum/defcs property-input < rum/reactive
   (rum/local false ::show-new-property-config?)
+  {:will-unmount (fn [state]
+                   (when-let [*property-key (nth (:rum/args state) 1)]
+                     (reset! *property-key nil))
+                   state)}
   shortcut/disable-all-shortcuts
   [state entity *property-key *property-value {:keys [class-schema? _page-configure? in-block-container?]
                                                :as opts}]
@@ -458,11 +462,11 @@
                 (not (:in-block-container? opts)))
            [:a.fade-link.flex.add-property
             {:on-click (fn []
+                         (reset! *property-key nil)
+                         (reset! *property-value nil)
                          (state/set-state! :editor/block block)
                          (state/set-state! :editor/properties-container id)
-                         (reset! *new-property? true)
-                         (reset! *property-key nil)
-                         (reset! *property-value nil))}
+                         (reset! *new-property? true))}
             [:div.flex.flex-row.items-center {:style {:padding-left 1}}
              (ui/icon "plus" {:size 15})
              [:div.ml-1.text-sm {:style {:padding-left 2}} "Add property"]]]
