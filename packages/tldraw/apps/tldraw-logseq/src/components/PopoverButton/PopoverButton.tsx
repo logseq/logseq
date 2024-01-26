@@ -32,6 +32,7 @@ export function PopoverButton({ side, align, alignOffset, label, children, borde
         collisionBoundary={document.querySelector('.logseq-tldraw')}
       >
         {children}
+        <LSUI.PopoverArrow className="popper-arrow" />
       </LSUI.PopoverContent>
     </LSUI.Popover>
   )
