@@ -15,7 +15,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.db-based.property.util :as db-pu]
-            [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -27,7 +26,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.components.icon :as icon-component]
             [frontend.components.dnd :as dnd]
-            [dommy.core :as dom]
             [frontend.components.property.closed-value :as closed-value]
             [frontend.components.property.util :as components-pu]
             [promesa.core :as p]))
