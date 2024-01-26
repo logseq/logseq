@@ -12,7 +12,7 @@ export function Tooltip({ side, content, sideOffset = 10, ...rest }) {
             {...rest}
           >
             {content}
-            <LSUI.TooltipArrow className="tl-tooltip-arrow" />
+            <LSUI.TooltipArrow className="popper-arrow" />
           </LSUI.TooltipContent>
       </LSUI.Tooltip>
     </LSUI.TooltipProvider>
