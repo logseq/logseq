@@ -112,7 +112,6 @@
                                                false
                                                true)
       :ui/scrolling?                         (atom false)
-      :ui/new-property-input-id              nil
       :document/mode?                        document-mode?
 
       :config                                {}
@@ -131,6 +130,7 @@
       :editor/in-composition?                false
       :editor/content                        (atom {})
       :editor/block                          (atom nil)
+      :editor/mode                           (atom nil)
       :editor/block-dom-id                   (atom nil)
       :editor/set-timestamp-block            (atom nil) ;; click rendered block timestamp-cp to set timestamp
       :editor/last-input-time                (atom {})
@@ -1286,6 +1286,7 @@ Similar to re-frame subscriptions"
   (swap! state merge {:editor/last-saved-cursor nil})
   (set-state! :editor/content {})
   (set-state! :editor/block nil)
+  (set-state! :editor/mode nil)
   (set-state! :ui/select-query-cache {}))
 
 (defn into-code-editor-mode!

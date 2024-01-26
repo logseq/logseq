@@ -34,7 +34,6 @@
   ([property-configure-check?]
    (when (or (and property-configure-check? (not (:editor/property-configure? @state/state)))
              (not property-configure-check?))
-     (property-handler/set-editing-new-property! nil)
      (state/clear-edit!))))
 
 (defn set-editing!
@@ -344,14 +343,14 @@
            esc? (= (util/ekey e) "Escape")
            backspace? (= (util/ekey e) "Backspace")
            new-value (util/evalue e)
-           new-property? (some? (:ui/new-property-input-id @state/state))]
+           new-property? (= @(:editor/mode @state/state) :properties)]
        (when (and (or enter? esc? backspace?)
                   (not (state/get-editor-action)))
          (when-not backspace? (util/stop e))
          (cond
            (or esc?
-               (and enter? new-property?)
-               (and enter? (util/tag? new-value)))
+               (and enter? (util/tag? new-value))
+               (and enter? new-property?))
            (save-text! repo block property value editor-id e)
 
            enter?
