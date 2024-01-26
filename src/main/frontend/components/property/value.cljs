@@ -209,7 +209,8 @@
 
                  :else
                  (model/get-all-page-original-names repo))
-               distinct)
+               distinct
+               (remove (fn [p] (util/uuid-string? (str p)))))
         options (map (fn [p] {:value p}) pages)
         string-classes (remove #(= :logseq.class %) classes)
         opts' (cond->
