@@ -5,6 +5,8 @@
   (:refer-clojure :exclude [run!])
   (:require ["@capacitor/filesystem" :refer [Directory Filesystem]]
             ["@sentry/react" :as Sentry]
+            [electron.ipc :as ipc]
+            [frontend.idb :as idb]
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
@@ -664,8 +666,21 @@
      #(do (page-handler/create-today-journal!)
           (file-sync-restart!)))))
 
+;; FIXME: move
+(defn- clear-cache!
+  []
+  (notification/show! "Clearing..." :warning false)
+  (p/let [_ (when (util/electron?)
+              (ipc/ipc "clearCache"))
+          _ (idb/clear-local-storage-and-idb!)]
+    (js/setTimeout
+      (fn [] (if (util/electron?)
+               (ipc/ipc :reloadWindowPage)
+               (js/window.location.reload)))
+      2000)))
+
 (defmethod handle :graph/clear-cache! [[_]]
-  (notification/show! "TODO: clear cache!"))
+  (clear-cache!))
 
 (defmethod handle :graph/ask-for-re-index [[_ *multiple-windows? ui]]
   ;; *multiple-windows? - if the graph is opened in multiple windows, boolean atom

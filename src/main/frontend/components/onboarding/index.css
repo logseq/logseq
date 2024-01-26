@@ -52,7 +52,7 @@ body[data-page=import] {
           flex: 1;
 
           &.a {
-            background-color: var(--ls-tertiary-background-color);
+            background-color: var(--ls-tertiary-background-color, var(--rx-gray-03));
             display: flex;
             flex-direction: column;
             align-items: center;
