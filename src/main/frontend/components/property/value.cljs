@@ -34,6 +34,7 @@
   ([property-configure-check?]
    (when (or (and property-configure-check? (not (:editor/property-configure? @state/state)))
              (not property-configure-check?))
+     (state/set-state! :editor/new-property-input-id nil)
      (state/clear-edit!))))
 
 (defn set-editing!
