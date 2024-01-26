@@ -104,7 +104,7 @@
           {:class "w-60"}
           (when-not recent?
             (shui/context-menu-item
-              {:on-click #(page-handler/unfavorite-page! original-name)}
+              {:on-click #(page-handler/<unfavorite-page! original-name)}
               (ctx-icon "star-off")
               (t :page/unfavorite)
               (shui/context-menu-shortcut (some-> (shortcut-dh/shortcut-binding :command/toggle-favorite) (first)
@@ -132,14 +132,7 @@
 
 (rum/defc favorites < rum/reactive
   [t]
-  (let [favorites (->> (:favorites (state/sub-config))
-                       (remove string/blank?)
-                       (filter string?)
-                       (mapv util/safe-page-name-sanity-lc)
-                       (distinct))
-        favorite-entities (->> favorites
-                               (mapv #(db/entity [:block/name %]))
-                               (remove nil?))]
+  (let [favorite-entities (page-handler/get-favorites)]
     (nav-content-item
      [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
       (ui/icon "star" {:size 16})
@@ -162,7 +155,7 @@
                         favorite-entities)]
          (dnd-component/items favorites
                               {:on-drag-end (fn [favorites]
-                                              (page-handler/reorder-favorites! favorites))
+                                              (page-handler/<reorder-favorites! favorites))
                                :parent-node :ul.favorites.text-sm}))))))
 
 (rum/defc recent-pages < rum/reactive db-mixins/query

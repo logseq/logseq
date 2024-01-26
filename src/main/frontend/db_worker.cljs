@@ -405,7 +405,11 @@
 
   (file-writes-finished?
    [this]
-   (empty? @file/*writes))
+   (if (empty? @file/*writes)
+     true
+     (do
+       (js/console.log "Unfinished file writes:" @file/*writes)
+       false)))
 
   (page-file-saved
    [this request-id page-id]

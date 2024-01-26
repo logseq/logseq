@@ -34,7 +34,6 @@
   ([property-configure-check?]
    (when (or (and property-configure-check? (not (:editor/property-configure? @state/state)))
              (not property-configure-check?))
-     (property-handler/set-editing-new-property! nil)
      (state/clear-edit!))))
 
 (defn set-editing!
@@ -312,12 +311,14 @@
 
 (defn <create-new-block!
   [block property value]
-  (p/let [last-block-id (db-property-handler/create-property-text-block! block property value
-                                                                       editor-handler/wrap-parse-block
+  (let [{:keys [last-block-id result]} (db-property-handler/create-property-text-block! block property value
+                                                                                        editor-handler/wrap-parse-block
 
-                                                                       {})
-          _ (exit-edit-property)]
-    (editor-handler/edit-block! (db/entity [:block/uuid last-block-id]) :max last-block-id)))
+                                                                                        {})]
+    (p/do!
+     result
+     (exit-edit-property)
+     (editor-handler/edit-block! (db/entity [:block/uuid last-block-id]) :max last-block-id))))
 
 (defn <create-new-block-from-template!
   "`template`: tag block"
@@ -342,14 +343,14 @@
            esc? (= (util/ekey e) "Escape")
            backspace? (= (util/ekey e) "Backspace")
            new-value (util/evalue e)
-           new-property? (some? (:ui/new-property-input-id @state/state))]
+           new-property? (:editor/properties-container @state/state)]
        (when (and (or enter? esc? backspace?)
                   (not (state/get-editor-action)))
          (when-not backspace? (util/stop e))
          (cond
            (or esc?
-               (and enter? new-property?)
-               (and enter? (util/tag? new-value)))
+               (and enter? (util/tag? new-value))
+               (and enter? new-property?))
            (save-text! repo block property value editor-id e)
 
            enter?

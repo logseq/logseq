@@ -5,8 +5,7 @@
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
             [frontend.handler.db-based.property :as db-property-handler]
-            [frontend.handler.page :as page-handler]
-            [frontend.handler.editor :as editor-handler]))
+            [frontend.handler.page :as page-handler]))
 
 (def repo test-helper/test-db-name-db-version)
 
@@ -52,23 +51,23 @@
     (is (= ["class1" "class2"] (map first (model/get-all-classes repo))))))
 
 (deftest get-class-objects-test
-  (let [opts {:redirect? false :create-first-block? false :class? true}
-        _ (page-handler/create! "class1" opts)
-        class (db/entity [:block/name "class1"])
-        _ (editor-handler/save-block! repo fbid "Block 1 #class1")]
-    (is (= (model/get-class-objects repo (:db/id class))
-           [(:db/id (db/entity [:block/uuid fbid]))]))
-
-    (testing "namespace classes"
-      (page-handler/create! "class2" opts)
-      ;; set class2's parent to class1
-      (let [class2 (db/entity [:block/name "class2"])]
-        (db/transact! [{:db/id (:db/id class2)
-                        :block/namespace (:db/id class)}]))
-      (editor-handler/save-block! repo sbid "Block 2 #class2")
+    (let [opts {:redirect? false :create-first-block? false :class? true}
+          _ (page-handler/create! "class1" opts)
+          class (db/entity [:block/name "class1"])
+          _ (test-helper/save-block! repo fbid "Block 1" {:tags ["class1"]})]
       (is (= (model/get-class-objects repo (:db/id class))
-           [(:db/id (db/entity [:block/uuid fbid]))
-            (:db/id (db/entity [:block/uuid sbid]))])))))
+             [(:db/id (db/entity [:block/uuid fbid]))]))
+
+      (testing "namespace classes"
+        (page-handler/create! "class2" opts)
+      ;; set class2's parent to class1
+        (let [class2 (db/entity [:block/name "class2"])]
+          (db/transact! [{:db/id (:db/id class2)
+                          :block/namespace (:db/id class)}]))
+        (test-helper/save-block! repo sbid "Block 2" {:tags ["class2"]})
+        (is (= (model/get-class-objects repo (:db/id class))
+               [(:db/id (db/entity [:block/uuid fbid]))
+                (:db/id (db/entity [:block/uuid sbid]))])))))
 
 (deftest get-classes-with-property-test
   (let [opts {:redirect? false :create-first-block? false :class? true}
@@ -86,8 +85,8 @@
 (deftest get-tag-blocks-test
   (let [opts {:redirect? false :create-first-block? false :class? true}
         _ (page-handler/create! "class1" opts)
-        _ (editor-handler/save-block! repo fbid "Block 1 #class1")
-        _ (editor-handler/save-block! repo sbid "Block 2 #class1")]
+        _ (test-helper/save-block! repo fbid "Block 1" {:tags ["class1"]})
+        _ (test-helper/save-block! repo sbid "Block 2" {:tags ["class1"]})]
     (is
      (= (model/get-tag-blocks repo "class1")
         [(:db/id (db/entity [:block/uuid fbid]))
