@@ -22,8 +22,7 @@
             [frontend.modules.editor.undo-redo :as undo-redo]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [frontend.handler.common :as common-handler]))
+            [rum.core :as rum]))
 
 (rum/defc toggle
   []
