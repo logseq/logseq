@@ -605,10 +605,8 @@ mark {
   font-family: MonoLisa, 'Fira Code', Monaco, Menlo, Consolas, 'COURIER NEW',
   monospace;
   letter-spacing: 0;
-  background-color: or(--ls-inline-code-background, --lx-gray-06, --ls-page-inline-code-bg-color, #eee);
-  color: or(--ls-inline-code-text, --lx-gray-11, --ls-page-inline-code-color);
-  background-color: var(--ls-page-inline-code-bg-color, #eee);
-  color: var(--ls-page-inline-code-color);
+  background-color: var(--lx-gray-06, var(--ls-page-inline-code-bg-color, var(--rx-gray-05)));
+  color: var(--lx-gray-11, var(--ls-page-inline-code-color, var(--rx-gray-11)));
   text-rendering: optimizeSpeed;
 }
 
