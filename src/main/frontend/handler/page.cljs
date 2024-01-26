@@ -39,7 +39,9 @@
             [cljs-bean.core :as bean]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [logseq.outliner.core :as outliner-core]))
 
 (def create! page-common-handler/create!)
 (def <create! page-common-handler/<create!)
@@ -82,7 +84,7 @@
       (if (config/db-based-graph? repo)
         (let [blocks (ldb/get-page-blocks db page-common-handler/favorites-page-name {})]
           (keep (fn [block]
-                  (when-let [block-uuid (parse-uuid (:block/content block))]
+                  (when-let [block-uuid (some-> (:block/content block) parse-uuid)]
                     (d/entity db [:block/uuid block-uuid]))) blocks))
         (let [page-names (->> (:favorites (state/sub-config))
                               (remove string/blank?)
@@ -129,10 +131,24 @@
         (notification/show! "Can't merge whiteboard pages" :error)
         nil))))
 
-(defn reorder-favorites!
-  [_favorites]
-  ;; TODO
-  nil)
+(defn <reorder-favorites!
+  [favorites]
+  (let [repo (state/get-current-repo)
+        conn (conn/get-db false)]
+    (when (d/entity @conn [:block/name page-common-handler/favorites-page-name])
+      (let [favorite-page-block-uuid-coll
+            (keep (fn [page-name]
+                    (some-> (d/entity @conn [:block/name (common-util/page-name-sanity-lc page-name)])
+                            :block/uuid
+                            str))
+                  favorites)
+            current-blocks (ldb/get-page-blocks @conn page-common-handler/favorites-page-name {})]
+        (ui-outliner-tx/transact!
+         {}
+         (doseq [[page-block-uuid block] (zipmap favorite-page-block-uuid-coll current-blocks)]
+           (when (not= page-block-uuid (:block/content block))
+             (outliner-core/save-block! repo conn (state/get-date-formatter)
+                                        (assoc block :block/content page-block-uuid)))))))))
 
 (defn has-more-journals?
   []

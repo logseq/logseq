@@ -130,11 +130,11 @@
   {:pre [(uuid? page-block-uuid)]}
   (let [favorites-page (d/entity (conn/get-db) [:block/name favorites-page-name])
         favorites-page-tx-data (build-hidden-page-tx-data "favorites")]
-    (p/let [r1 (when-not favorites-page (ldb/transact! nil [favorites-page-tx-data]))
-            r2 (editor-handler/api-insert-new-block!
-                (str page-block-uuid)
-                {:page favorites-page-name :edit-block? false})]
-      (prn ::insert-favorite-page r1 r2))))
+    (p/do!
+     (when-not favorites-page (ldb/transact! nil [favorites-page-tx-data]))
+     (editor-handler/api-insert-new-block!
+      (str page-block-uuid)
+      {:page favorites-page-name :edit-block? false}))))
 
 (defn <unfavorite-page!-v2
   [page-block-uuid]
