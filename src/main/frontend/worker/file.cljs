@@ -66,22 +66,26 @@
         blocks-count (ldb/get-page-blocks-count @conn page-db-id)
         blocks-just-deleted? (and (zero? blocks-count)
                                   (contains? #{:delete-blocks :move-blocks} outliner-op))]
-    (when (or (>= blocks-count 1) blocks-just-deleted?)
+    (if (or (>= blocks-count 1) blocks-just-deleted?)
       (if (and (or (> blocks-count 500) whiteboard?)
                (not (worker-state/tx-idle? repo {:diff 3000})))
         (async/put! file-writes-chan [repo page-db-id outliner-op (tc/to-long (t/now)) request-id])
         (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
               blocks (ldb/get-page-blocks @conn (:block/name page-block) {:pull-keys pull-keys})
               blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)]
-          (when-not (and (= 1 (count blocks))
-                         (string/blank? (:block/content (first blocks)))
-                         (nil? (:block/file page-block))
-                         (not whiteboard?))
+          (if (and (= 1 (count blocks))
+                   (string/blank? (:block/content (first blocks)))
+                   (nil? (:block/file page-block))
+                   (not whiteboard?))
+            (dissoc-request! request-id)
             (let [tree-or-blocks (if whiteboard? blocks
                                      (otree/blocks->vec-tree repo @conn blocks (:block/name page-block)))]
               (if page-block
                 (file/save-tree! repo conn page-block tree-or-blocks blocks-just-deleted? context request-id)
-                (js/console.error (str "can't find page id: " page-db-id))))))))))
+                (do
+                  (js/console.error (str "can't find page id: " page-db-id))
+                  (dissoc-request! request-id)))))))
+      (dissoc-request! request-id))))
 
 (defn write-files!
   [conn pages context]

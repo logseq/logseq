@@ -414,12 +414,21 @@
        (bean/->js {:result result}))))
 
   (file-writes-finished?
-   [this]
-   (if (empty? @file/*writes)
-     true
-     (do
-       (js/console.log "Unfinished file writes:" @file/*writes)
-       false)))
+   [this repo]
+   (let [conn (worker-state/get-datascript-conn repo)
+         writes @file/*writes]
+
+     ;; Clean pages that have been deleted
+     (when conn
+       (swap! file/*writes (fn [writes]
+                             (->> writes
+                                  (remove (fn [[_ pid]] (d/entity @conn pid)))
+                                  (into {})))))
+     (if (empty? writes)
+       true
+       (do
+         (prn "Unfinished file writes:" @file/*writes)
+         false))))
 
   (page-file-saved
    [this request-id page-id]

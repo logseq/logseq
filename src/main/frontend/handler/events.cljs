@@ -189,7 +189,7 @@
 
 (defmethod handle :graph/switch [[_ graph opts]]
   (let [^js sqlite @db-browser/*worker]
-    (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite))
+    (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite (state/get-current-repo)))
             request-finished? (ldb/request-finished?)]
       (if (or (not request-finished?) (not writes-finished?)) ; TODO: test (:sync-graph/init? @state/state)
         (do
@@ -369,7 +369,7 @@
 (defmethod handle :file/not-matched-from-disk [[_ path disk-content db-content]]
   (when-let [repo (state/get-current-repo)]
     (let [^js sqlite @db-browser/*worker]
-      (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite))
+      (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite (state/get-current-repo)))
               request-finished? (ldb/request-finished?)]
         (prn :debug :writes-finished? writes-finished?
              :request-finished? request-finished?)

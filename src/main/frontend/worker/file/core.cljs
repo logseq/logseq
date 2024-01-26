@@ -21,7 +21,12 @@
 
 (defn dissoc-request!
   [request-id]
-  (swap! *writes dissoc request-id))
+  (when-let [page-id (get @*writes request-id)]
+    (let [old-page-request-ids (keep (fn [[r p]]
+                                       (when (and (= p page-id) (<= r request-id))
+                                         r)) @*writes)]
+      (when (seq old-page-request-ids)
+        (swap! *writes (fn [x] (apply dissoc x old-page-request-ids)))))))
 
 (defn- indented-block-content
   [content spaces-tabs]
