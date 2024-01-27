@@ -69,6 +69,9 @@ html {
   }
 
   &[data-color=none] {
+    --ls-block-bullet-color: var(--rx-gray-08);
+    --ls-block-bullet-active-color: var(--rx-gray-12);
+
     ::selection {
       @apply bg-primary/20;
     }
