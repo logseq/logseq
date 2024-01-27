@@ -564,7 +564,7 @@
       @apply rounded-full h-8 w-8 flex items-center justify-center
       font-bold select-none cursor-pointer;
 
-      background-color: or(--ls-left-sidebar-help-background, --lx-gray-01, --ls-secondary-background-color);
+      background-color: var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02)));
     }
   }
 
@@ -580,7 +580,7 @@
         color: var(--ls-primary-text-color);
 
         &:active, &:hover {
-          background-color: var(--ls-tertiary-background-color);
+          background-color: var(--ls-tertiary-background-color, var(--rx-gray-05));
         }
       }
     }
