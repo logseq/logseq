@@ -27,12 +27,10 @@ html[data-theme=light] a.toggle:hover {
 
 .cp__header {
   > .r > div:not(.ui__dropdown-trigger) a, button {
-    @apply opacity-100;
-
-    color: or(--ls-header-button-text-color, --lx-gray-11, --ls-header-button-background);
+    color: var(--lx-gray-11, var(--ls-header-button-background, var(--rx-gray-11)));
 
     &:hover {
-      color: or(--ls-header-button-text-color-hover, --lx-gray-12, --ls-header-button-background);
+      color: var(--lx-gray-12, var(--ls-header-button-background, var(--rx-gray-12)));
     }
   }
 }
@@ -43,13 +41,5 @@ html[data-theme=light] a.toggle:hover {
 
   button {
     @apply opacity-100;
-  }
-}
-
-html[data-theme=dark] {
-  .cp__header {
-    > .r > div:not(.ui__dropdown-trigger) a, button {
-      @apply opacity-70;
-    }
   }
 }

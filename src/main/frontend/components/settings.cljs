@@ -368,8 +368,11 @@
      (row-with-button-action {:left-label  "Accent color"
                               :description "Choosing an accent color may override any theme you have selected."
                               :-for        "toggle_radix_theme"
-                              :stretch    true
-                              :action     pick-theme})]))
+                              :desc        (when-not _in-modal?
+                                             [:span.pl-6 (ui/render-keyboard-shortcut
+                                                           (shortcut-helper/gen-shortcut-seq :ui/accent-colors-picker))])
+                              :stretch     (boolean _in-modal?)
+                              :action      pick-theme})]))
 
 (rum/defc modal-accent-colors-inner
   []
