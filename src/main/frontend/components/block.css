@@ -296,10 +296,12 @@
 }
 
 .page-ref {
-  color: or(--ls-page-ref-text-color, --lx-accent-11, --ls-link-ref-text-color);
+  --lx-text-override: var(--ls-link-ref-text-color);
+  @apply text-accent-11;
 
   &:hover {
-    color: or(--ls-page-ref-text-color-hover, --lx-accent-12, --ls-link-ref-text-hover-color);
+    --lx-text-override: var(--ls-link-ref-text-hover-color);
+    @apply text-accent-12;
   }
 }
 
@@ -371,13 +373,12 @@
   transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 
   &.selected {
-    border-bottom-color: var(--ls-primary-background-color);
     border-radius: 2px;
-
-    &:last-child {
-      border-bottom-color: transparent;
-    }
   }
+
+  /* .bullet-container .selected { */
+  /*   border: 3px solid; */
+  /* } */
 }
 
 .ls-block,
@@ -479,6 +480,7 @@
 
 .color-level {
   background-color: or(--ls-right-sidebar-content-background, --lx-gray-02, --color-level-1);
+
   .dark & {
     background-color: or(--ls-right-sidebar-content-background, --lx-gray-01, --color-level-1);
   }
@@ -565,12 +567,7 @@
   }
 
   .bullet {
-    @apply rounded-full w-[6px] h-[6px];
-
-    font-size: 14px;
-
-    background-color: or(--lx-gray-08, --ls-block-bullet-color, #394b59);
-    transition: transform 0.2s;
+    @apply rounded-full w-[6px] h-[6px] text-[15px] opacity-80;
 
     > * {
       @apply cursor-pointer;
@@ -580,6 +577,11 @@
   &:not(.typed-list) {
     &.bullet-closed {
       background-color: or(--ls-bullet-closed-background, --lx-gray-04-alpha, --ls-block-bullet-border-color, #ced9e0);
+    }
+
+    .bullet {
+      background-color: or(--lx-gray-08, --ls-block-bullet-color, #394b59);
+      transition: transform 0.2s;
     }
   }
 
@@ -596,13 +598,13 @@
 .bullet-link-wrap {
   color: var(--ls-primary-text-color);
 
-  &:hover > .bullet-container .bullet {
-    transform: scale(1.2);
-    background-color: or(--lx-gray-08, --ls-block-bullet-color, inherit) !important;
-  }
-
   &:hover > .bullet-container:not(.typed-list) {
     background-color: or(--lx-gray-04-alpha, --ls-block-bullet-border-color, #ced9e0);
+
+    .bullet {
+      transform: scale(1.2);
+      background-color: or(--lx-gray-08, --ls-block-bullet-color, inherit) !important;
+    }
   }
 }
 
@@ -738,5 +740,21 @@ html.is-mac {
     .block-content {
       cursor: pointer;
     }
+  }
+}
+
+.references-blocks {
+  &-wrap {
+    .foldable-title {
+      @apply ml-3;
+
+      .block-control {
+        @apply relative right-[-5px] top-[1px];
+      }
+    }
+  }
+
+  &-item {
+    @apply bg-gray-03 rounded p-4;
   }
 }

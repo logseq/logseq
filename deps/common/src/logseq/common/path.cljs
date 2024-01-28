@@ -168,7 +168,28 @@
 
   (if (is-file-url? base)
     (apply url-join base segments)
-    (apply path-join-internal base segments)))
+    (let [rejoined-path (apply path-join-internal base segments)]
+      (if (and (not-empty base)
+               (string/starts-with? base "//")) ;; Win path fix
+        (str "/" rejoined-path)
+        rejoined-path))))
+
+(defn prepend-protocol
+  "Prepend protocol to path. Handle UNC path. aka. path-to-url
+
+   protocol is one of file: http: https: assets:"
+  [protocol path]
+  (cond
+    (string/starts-with? path protocol)
+    (do
+      (js/console.error "BUG: should not prepend protocol to path with protocol" protocol path)
+      path)
+
+    (string/starts-with? path "//") ;; Windows UNC path
+    (str protocol path)
+
+    :else
+    (path-join (str protocol "//") path)))
 
 
 (defn- path-normalize-internal
@@ -204,13 +225,16 @@
     ;; Check file:// and assets://, pathname behavior is different
     (let [^js url (js/URL. (string/replace original-url "assets://" "file://"))
           path (safe-decode-uri-component (.-pathname url))
+          host (.-host url)
           path (if (string/starts-with? path "///")
                  (subs path 2)
                  path)
           path (if (re-find #"(?i)^/[a-zA-Z]:" path) ;; Win path fix
                  (subs path 1)
                  path)]
-      path)
+      (if (string/blank? host)
+        path
+        (str "//" host path)))
     original-url))
 
 (defn trim-dir-prefix

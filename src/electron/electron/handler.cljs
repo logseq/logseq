@@ -29,6 +29,7 @@
             [electron.state :as state]
             [electron.utils :as utils]
             [electron.window :as win]
+            [goog.functions :refer [debounce]]
             [logseq.common.graph :as common-graph]
             [promesa.core :as p]))
 
@@ -83,8 +84,14 @@
 
 (defmethod handle :openFileBackupDir [_window [_ repo path]]
   (when (string? path)
-    (let [dir (backup-file/get-backup-dir repo path)]
-      (.openPath shell dir))))
+    (let [dir (backup-file/get-backup-dir repo path)
+          full-path (utils/to-native-win-path! dir)]
+      (.openPath shell full-path))))
+
+(defmethod handle :openFileInFolder [_window [_ full-path]]
+  (when-let [full-path (utils/to-native-win-path! full-path)]
+    (logger/info ::open-file-in-folder full-path)
+    (.showItemInFolder shell full-path)))
 
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))
@@ -495,6 +502,12 @@
 (defmethod handle :gitStatus [_ [_]]
   (git/short-status!))
 
+(def debounced-configure-auto-commit! (debounce git/configure-auto-commit! 5000))
+(defmethod handle :setGitAutoCommit []
+  (debounced-configure-auto-commit!)
+  nil)
+
+
 (defmethod handle :installMarketPlugin [_ [_ mft]]
   (plugin/install-or-update! mft))
 
@@ -722,6 +735,9 @@
 
 (defmethod handle :server/set-config [^js _win [_ config]]
   (server/set-config! config))
+
+(defmethod handle :window/open-blank-callback [^js win [_ _type]]
+  (win/setup-window-listeners! win) nil)
 
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]

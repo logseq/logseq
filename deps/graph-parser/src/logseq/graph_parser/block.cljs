@@ -519,6 +519,7 @@
                                                       (when (coll? refs)
                                                         refs))))
                                             (map :block/original-name))
+                         pre-block? (if (:heading properties) false true)
                          block {:block/uuid id
                                 :block/content content
                                 :block/level 1
@@ -526,16 +527,16 @@
                                 :block/properties-order (vec properties-order)
                                 :block/properties-text-values properties-text-values
                                 :block/invalid-properties invalid-properties
-                                :block/pre-block? true
+                                :block/pre-block? pre-block?
                                 :block/macros (extract-macros-from-ast body)
                                 :block/body body}
                          {:keys [tags refs]}
                          (with-page-block-refs {:body body :refs property-refs} false db date-formatter)]
                      (cond-> block
-                             tags
-                             (assoc :block/tags tags)
-                             true
-                             (assoc :block/refs (concat refs (:block-refs pre-block-properties)))))
+                       tags
+                       (assoc :block/tags tags)
+                       true
+                       (assoc :block/refs (concat refs (:block-refs pre-block-properties)))))
                    (select-keys first-block [:block/format :block/page]))
                   blocks)
                  blocks)]
@@ -613,7 +614,7 @@
                                                (str (gp-property/colons-org "id") " " (:block/uuid block)))))]
                            (string/replace-first c replace-str ""))))))
 
-(defn block-exists-in-another-page? 
+(defn block-exists-in-another-page?
   "For sanity check only.
    For renaming file externally, the file is actually deleted and transacted before-hand."
   [db block-uuid current-page-name]

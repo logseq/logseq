@@ -2,9 +2,9 @@
   (:require [cljs-bean.core :as bean]
             [cljs.reader]
             [logseq.sdk.core]
+            [logseq.sdk.git]
             [logseq.sdk.utils :as sdk-utils]
             [logseq.sdk.ui :as sdk-ui]
-            [logseq.sdk.git :as sdk-git]
             [logseq.sdk.assets :as sdk-assets]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -31,6 +31,7 @@
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.handler.command-palette :as palette-handler]
             [frontend.modules.shortcut.core :as st]
+            [frontend.modules.shortcut.config :as shortcut-config]
             [electron.listener :as el]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -349,10 +350,10 @@
   (fn [pid ^js cmd-action palette?]
     (when-let [[cmd action] (bean/->clj cmd-action)]
       (let [action      (assoc action 0 (keyword (first action)))
-            cmd         (assoc cmd :key (string/replace (:key cmd) ":" "-"))
+            cmd         (assoc cmd :key (-> (:key cmd) (string/trim) (string/replace ":" "-") (string/replace #"^([0-9])" "_$1")))
             key         (:key cmd)
             keybinding  (:keybinding cmd)
-            palette-cmd (and palette? (plugin-handler/simple-cmd->palette-cmd pid cmd action))
+            palette-cmd (plugin-handler/simple-cmd->palette-cmd pid cmd action)
             action'     #(state/pub-event! [:exec-plugin-cmd {:type type :key key :pid pid :cmd cmd :action action}])]
 
         ;; handle simple commands
@@ -369,8 +370,16 @@
                                  (palette-handler/invoke-command palette-cmd)
                                  (action')))
                 [mode-id id shortcut-map] (update shortcut-args 2 merge cmd {:fn dispatch-cmd :cmd palette-cmd})]
-            (println :shortcut/register-shortcut [mode-id id shortcut-map])
-            (st/register-shortcut! mode-id id shortcut-map)))))))
+
+            (cond
+              ;; FIX ME: move to register logic
+              (= mode-id :shortcut.handler/block-editing-only)
+              (shortcut-config/add-shortcut! mode-id id shortcut-map)
+
+              :else
+              (do
+                (println :shortcut/register-shortcut [mode-id id shortcut-map])
+                (st/register-shortcut! mode-id id shortcut-map)))))))))
 
 (defn ^:export unregister_plugin_simple_command
   [pid]
@@ -378,10 +387,10 @@
   (plugin-handler/unregister-plugin-simple-command pid)
 
   ;; remove palette commands
-  (let [palette-matched (->> (palette-handler/get-commands)
-                             (filter #(string/includes? (str (:id %)) (str "plugin." pid))))]
-    (when (seq palette-matched)
-      (doseq [cmd palette-matched]
+  (let [cmds-matched (->> (vals @shortcut-config/*shortcut-cmds)
+                          (filter #(string/includes? (str (:id %)) (str "plugin." pid))))]
+    (when (seq cmds-matched)
+      (doseq [cmd cmds-matched]
         (palette-handler/unregister (:id cmd))
         ;; remove keybinding commands
         (when (seq (:shortcut cmd))
@@ -595,7 +604,7 @@
   (fn [block-uuid-or-page-name content ^js opts]
     (when (string/blank? block-uuid-or-page-name)
       (throw (js/Error. "Page title or block UUID shouldn't be empty.")))
-    (let [{:keys [before sibling focus customUUID properties]} (bean/->clj opts)
+    (let [{:keys [before sibling focus customUUID properties autoOrderedList]} (bean/->clj opts)
           [page-name block-uuid] (if (util/uuid-string? block-uuid-or-page-name)
                                    [nil (uuid block-uuid-or-page-name)]
                                    [block-uuid-or-page-name nil])
@@ -626,31 +635,34 @@
                                    before?)
           new-block              (editor-handler/api-insert-new-block!
                                    content
-                                   {:block-uuid  block-uuid'
-                                    :sibling?    sibling?
-                                    :before?     before?
-                                    :edit-block? edit-block?
-                                    :page        page-name
-                                    :custom-uuid custom-uuid
-                                    :properties  (merge properties
-                                                        (when custom-uuid {:id custom-uuid}))})]
+                                   {:block-uuid    block-uuid'
+                                    :sibling?      sibling?
+                                    :before?       before?
+                                    :edit-block?   edit-block?
+                                    :page          page-name
+                                    :custom-uuid   custom-uuid
+                                    :ordered-list? (if (boolean? autoOrderedList) autoOrderedList false)
+                                    :properties    (merge properties
+                                                     (when custom-uuid {:id custom-uuid}))})]
       (bean/->js (sdk-utils/normalize-keyword-for-json new-block)))))
 
 (def ^:export insert_batch_block
   (fn [block-uuid ^js batch-blocks ^js opts]
     (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
       (when-let [bb (bean/->clj batch-blocks)]
-        (let [bb         (if-not (vector? bb) (vector bb) bb)
-              {:keys [sibling keepUUID]} (bean/->clj opts)
+        (let [bb (if-not (vector? bb) (vector bb) bb)
+              {:keys [sibling keepUUID before]} (bean/->clj opts)
               keep-uuid? (or keepUUID false)
-              _          (when keep-uuid? (doseq
-                                            [block (outliner/tree-vec-flatten bb :children)]
-                                            (let [uuid (:id (:properties block))]
-                                              (when (and uuid (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error uuid)))
-                                                (throw (js/Error.
-                                                         (util/format "Custom block UUID already exists (%s)." uuid)))))))
-              _          (editor-handler/insert-block-tree-after-target
-                           (:db/id block) sibling bb (:block/format block) keep-uuid?)]
+              _ (when keep-uuid? (doseq
+                                  [block (outliner/tree-vec-flatten bb :children)]
+                                   (let [uuid (:id (:properties block))]
+                                     (when (and uuid (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error uuid)))
+                                       (throw (js/Error.
+                                                (util/format "Custom block UUID already exists (%s)." uuid)))))))
+              block (if (and before sibling)
+                      (db/pull (:db/id (:block/left block))) block)
+              _ (editor-handler/insert-block-tree-after-target
+                  (:db/id block) sibling bb (:block/format block) keep-uuid?)]
           nil)))))
 
 (def ^:export remove_block
@@ -897,19 +909,12 @@
   (when-let [args (and args (seq (bean/->clj args)))]
     (shell/run-git-command! args)))
 
-;; git
-(def ^:export git_exec_command sdk-git/exec_command)
-(def ^:export git_load_ignore_file sdk-git/load_ignore_file)
-(def ^:export git_save_ignore_file sdk-git/save_ignore_file)
-
 ;; ui
 (def ^:export show_msg sdk-ui/-show_msg)
-(def ^:export ui_show_msg sdk-ui/show_msg)
-(def ^:export ui_close_msg sdk-ui/close_msg)
+(def ^:export query_element_rect sdk-ui/query_element_rect)
+(def ^:export query_element_by_id sdk-ui/query_element_by_id)
 
 ;; assets
-(def ^:export assets_list_files_of_current_graph sdk-assets/list_files_of_current_graph)
-(def ^:export assets_make_url sdk-assets/make_url)
 (def ^:export make_asset_url sdk-assets/make_url)
 
 ;; experiments
@@ -998,16 +1003,6 @@
       (p/then #(bean/->js %))))
 
 ;; helpers
-(defn ^:export query_element_by_id
-  [id]
-  (when-let [^js el (gdom/getElement id)]
-    (if el (str (.-tagName el) "#" id) false)))
-
-(defn ^:export query_element_rect
-  [selector]
-  (when-let [^js el (js/document.querySelector selector)]
-    (bean/->js (.toJSON (.getBoundingClientRect el)))))
-
 (defn ^:export set_focused_settings
   [pid]
   (when-let [plugin (state/get-plugin-by-id pid)]

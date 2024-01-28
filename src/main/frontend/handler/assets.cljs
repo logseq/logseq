@@ -76,8 +76,9 @@
 
                     (str "assets://" (string/replace rpath' (str "@" (:name alias)) (:dir alias)))
 
-                    (if has-schema? (path/path-join graph-root rpath)
-                        (path/path-join "file://" graph-root rpath))))]
+                    (if has-schema?
+                      (path/path-join graph-root rpath)
+                      (path/prepend-protocol "file:" (path/path-join graph-root rpath)))))]
         (convert-platform-protocol ret)))))
 
 (defn normalize-asset-resource-url

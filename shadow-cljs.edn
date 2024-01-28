@@ -1,5 +1,5 @@
 ;; shadow-cljs configuration
-{:deps  true
+{:deps true
  :nrepl {:port 8701}
 
  ;; "." for /static
@@ -8,107 +8,124 @@
  :js-options {:js-package-dirs ["node_modules" "tldraw/apps"]}
 
  :builds
- {:app {:target        :browser
+ {:app {:target :browser
         :module-loader true
-        :js-options    {:ignore-asset-requires true} ;; handle `require(xxx.css)`
-        :modules       {:main
-                        {:init-fn    frontend.core/init}
-                        :code-editor
-                        {:entries    [frontend.extensions.code]
-                         :depends-on #{:main}}
-                        :excalidraw
-                        {:entries    [frontend.extensions.excalidraw]
-                         :depends-on #{:main}}
-                        :tldraw
-                        {:entries    [frontend.extensions.tldraw]
-                         :depends-on #{:main}}}
-                        
-        :output-dir       "./static/js"
-        :asset-path       "/static/js"
-        :release          {:asset-path "https://asset.logseq.com/static/js"}
-        :compiler-options {:infer-externs      :auto
+        :js-options {:ignore-asset-requires true
+                     :resolve {"react" {:target :global
+                                        :global "React"}
+                               "react-dom" {:target :global
+                                            :global "ReactDOM"}}} ;; handle `require(xxx.css)`
+        :modules {:main
+                  {:init-fn frontend.core/init}
+                  :code-editor
+                  {:entries [frontend.extensions.code]
+                   :depends-on #{:main}}
+                  :excalidraw
+                  {:entries [frontend.extensions.excalidraw]
+                   :depends-on #{:main}}
+                  :tldraw
+                  {:entries [frontend.extensions.tldraw]
+                   :depends-on #{:main}}}
+
+        :output-dir "./static/js"
+        :asset-path "/static/js"
+        :release {:asset-path "https://asset.logseq.com/static/js"}
+        :compiler-options {:infer-externs :auto
                            :output-feature-set :es-next-in
-                           :source-map         true
-                           :externs            ["datascript/externs.js"
-                                                "externs.js"]
-                           :warnings           {:fn-deprecated false
-                                                :redef false}}
-        :build-hooks      [(shadow.hooks/git-revision-hook "--long --always --dirty")]
-        :closure-defines  {goog.debug.LOGGING_ENABLED       true
-                           frontend.modules.instrumentation.sentry/SENTRY-DSN #shadow/env "LOGSEQ_SENTRY_DSN"
-                           frontend.modules.instrumentation.posthog/POSTHOG-TOKEN #shadow/env "LOGSEQ_POSTHOG_TOKEN"
-                           frontend.config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS" :as :bool :default true]
-                           ;; Set to switch file sync server to dev, set this to false in `yarn watch`
-                           frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
-                           frontend.config/TEST #shadow/env ["LOGSEQ_CI" :as :bool :default false]
-                           frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]} ;; set by git-revision-hook
+                           :source-map true
+                           :externs ["datascript/externs.js"
+                                     "externs.js"]
+                           :warnings {:fn-deprecated false
+                                      :redef false}}
+        :build-hooks [(shadow.hooks/git-revision-hook "--long --always --dirty")]
+        :closure-defines {goog.debug.LOGGING_ENABLED true
+                          frontend.modules.instrumentation.sentry/SENTRY-DSN #shadow/env "LOGSEQ_SENTRY_DSN"
+                          frontend.modules.instrumentation.posthog/POSTHOG-TOKEN #shadow/env "LOGSEQ_POSTHOG_TOKEN"
+                          frontend.config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS" :as :bool :default true]
+                          ;; Set to switch file sync server to dev, set this to false in `yarn watch`
+                          frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
+                          frontend.config/TEST #shadow/env ["LOGSEQ_CI" :as :bool :default false]
+                          frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]} ;; set by git-revision-hook
 
         ;; NOTE: electron, browser/mobile-app use different asset-paths.
         ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
         ;;   For electron devs, assets are located in ./js(via relative path).
         ;; :dev      {:asset-path "./js"}
-        :devtools {:before-load frontend.core/stop  ;; before live-reloading any code call this function
-                   :after-load  frontend.core/start ;; after live-reloading finishes call this function
-                   :watch-path  "/static"
-                   :preloads    [devtools.preload
-                                 shadow.remote.runtime.cljs.browser]}}
+        :devtools {:before-load frontend.core/stop          ;; before live-reloading any code call this function
+                   :after-load frontend.core/start          ;; after live-reloading finishes call this function
+                   :watch-path "/static"
+                   :preloads [devtools.preload
+                              shadow.remote.runtime.cljs.browser]}}
 
-  :electron {:target           :node-script
-             :output-to        "static/electron.js"
-             :main             electron.core/main
-             :devtools         {:before-load electron.core/stop
-                                :after-load  electron.core/start}
-             :compiler-options {:infer-externs                      :auto
-                                :source-map                         true
+  :electron {:target :node-script
+             :output-to "static/electron.js"
+             :main electron.core/main
+             :devtools {:before-load electron.core/stop
+                        :after-load electron.core/start}
+             :compiler-options {:infer-externs :auto
+                                :source-map true
                                 :source-map-include-sources-content true
-                                :source-map-detail-level            :all
+                                :source-map-detail-level :all
 
-                                :externs  ["datascript/externs.js"
-                                           "externs.js"]
+                                :externs ["datascript/externs.js"
+                                          "externs.js"]
                                 :warnings {:fn-deprecated false
                                            :redef false}}}
 
-  :test {:target          :node-test
-         :output-to       "static/tests.js"
-         :closure-defines {frontend.util/NODETEST true}
-         :devtools        {:enabled false}
+  :test {:target :node-test
+         :output-to "static/tests.js"
+         :closure-defines {frontend.util/NODETEST true
+                           logseq.shui.util/NODETEST true}
+         :devtools {:enabled false}
          ;; disable :static-fns to allow for with-redefs and repl development
          :compiler-options {:static-fns false}
-         :main            frontend.test.frontend-node-test-runner/main}
+         :main frontend.test.frontend-node-test-runner/main}
 
   :gen-malli-kondo-config {:target :node-script
                            :closure-defines {frontend.util/NODETEST true}
-                           :devtools        {:enabled false}
+                           :devtools {:enabled false}
                            :compiler-options {:static-fns false}
                            :output-to "static/gen-malli-kondo-config.js"
                            :main gen-malli-kondo-config.core/main}
 
-  :publishing {:target        :browser
+  :publishing {:target :browser
                :module-loader true
-               :js-options    {:ignore-asset-requires true}
-               :modules       {:main
-                               {:init-fn    frontend.publishing/init}
-                               :code-editor
-                               {:entries    [frontend.extensions.code]
-                                :depends-on #{:main}}
-                               :excalidraw
-                               {:entries    [frontend.extensions.excalidraw]
-                                :depends-on #{:main}}
-                               :tldraw
-                               {:entries    [frontend.extensions.tldraw]
-                                :depends-on #{:main}}}
-                               
-               :output-dir       "./static/js/publishing"
-               :asset-path       "static/js"
-               :closure-defines  {frontend.config/PUBLISHING true
-                                  goog.debug.LOGGING_ENABLED true}
-               :compiler-options {:infer-externs      :auto
+               :js-options {;; handle `require(xxx.css)`
+                            :ignore-asset-requires true
+                            :resolve {"react" {:target :global
+                                               :global "React"}
+                                      "react-dom" {:target :global
+                                                   :global "ReactDOM"}}}
+
+               :modules {:main
+                         {:init-fn frontend.publishing/init}
+                         :code-editor
+                         {:entries [frontend.extensions.code]
+                          :depends-on #{:main}}
+                         :excalidraw
+                         {:entries [frontend.extensions.excalidraw]
+                          :depends-on #{:main}}
+                         :tldraw
+                         {:entries [frontend.extensions.tldraw]
+                          :depends-on #{:main}}}
+
+               :output-dir "./static/js/publishing"
+               :asset-path "static/js"
+               :closure-defines {frontend.config/PUBLISHING true
+                                 goog.debug.LOGGING_ENABLED true}
+               :compiler-options {:infer-externs :auto
                                   :output-feature-set :es-next
-                                  :externs            ["datascript/externs.js"
-                                                       "externs.js"]
-                                  :warnings           {:fn-deprecated false
-                                                       :redef false}}
-               :devtools         {:before-load frontend.core/stop
-                                  :after-load  frontend.core/start
-                                  :preloads    [devtools.preload]}}}}
+                                  :externs ["datascript/externs.js"
+                                            "externs.js"]
+                                  :warnings {:fn-deprecated false
+                                             :redef false}}
+               :devtools {:before-load frontend.core/stop
+                          :after-load frontend.core/start
+                          :preloads [devtools.preload]}}
+
+  :stories-dev {:target :npm-module
+                :entries [logseq.shui.storybook]
+                :output-dir "packages/ui/.storybook/cljs"
+                :devtools {:enabled true}
+                :compiler-options {:optimizations :simple}}}}
   

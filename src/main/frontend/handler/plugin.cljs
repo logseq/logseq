@@ -25,12 +25,13 @@
 (defn- normalize-keyword-for-json
   [input]
   (when input
-    (walk/postwalk
-      (fn [a]
-        (cond
-          (keyword? a) (csk/->camelCase (name a))
-          (uuid? a) (str a)
-          :else a)) input)))
+    (let [f (fn [[k v]] (if (keyword? k) [(csk/->camelCase (name k)) v] [k v]))]
+      (walk/postwalk
+        (fn [x]
+          (cond
+            (map? x) (into {} (map f x))
+            (uuid? x) (str x)
+            :else x)) input))))
 
 (defn invoke-exported-api
   [type & args]
@@ -297,7 +298,8 @@
   [pid key keybinding]
   (let [id      (keyword (str "plugin." pid "/" key))
         binding (:binding keybinding)
-        binding (some->> (if (string? binding) [binding] (seq binding))
+        binding (some->> (if (string? binding) [binding] (vec binding))
+                         (remove string/blank?)
                          (map shortcut-utils/undecorate-binding))
         binding (if util/mac?
                   (or (:mac keybinding) binding) binding)
@@ -495,7 +497,7 @@
                    payload)
                  (if (keyword? plugin-id) (name plugin-id) plugin-id))
       (catch :default e
-        (js/console.error "[Hook Plugin Err]" e)))))
+        (log/error :invoke-hook-exception e)))))
 
 (defn hook-plugin-app
   ([type payload] (hook-plugin-app type payload nil))
@@ -771,8 +773,8 @@
                                                             (when (and (number? end)
                                                                        ;; valid end time
                                                                        (> end 0)
-                                                                       ;; greater than 3s
-                                                                       (> (- end (.-s v)) 3000))
+                                                                       ;; greater than 6s
+                                                                       (> (- end (.-s v)) 6000))
                                                               v))))
                                                       ((fn [perfs]
                                                          (doseq [perf perfs]

@@ -221,6 +221,25 @@
  :page/updated-at "Updated At"
  :page/backlinks "Backlinks"
  :linked-references/filter-search "Search in linked pages"
+ :linked-references/unexpected-error "Linked References: Unexpected error. Please re-index your graph first."
+ :linked-references/filter-heading "Filter"
+ :linked-references/filter-directions "Click to include and shift-click to exclude. Click again to remove."
+ :linked-references/filter-includes "Includes: "
+ :linked-references/filter-excludes "Excludes: "
+ :linked-references/reference-count (fn [filtered-count total]
+                                      ;; 1 Linked Reference
+                                      ;; 1 of 1 Linked Reference
+                                      ;; 2 of 5 Linked References
+                                      (str
+                                       (when filtered-count
+                                         (str filtered-count " of "))
+                                       total
+                                       (if (= total 1) " Linked Reference" " Linked References")))
+ :unlinked-references/reference-count (fn [total]
+                                        ;; 1 Unlinked Reference
+                                        ;; 5 Unlinked References
+                                        (str total
+                                         (if (= total 1) " Unlinked Reference" " Unlinked References")))
  :editor/block-search "Search for a block"
  :text/image "Image"
  :asset/show-in-folder "Show image in folder"
@@ -268,9 +287,9 @@
  :settings-page/git-desc-1 "To view page's edit history, click the three horizontal dots in the top-right corner and select \"View page history\"."
  :settings-page/git-desc-2 "For professional users, Logseq also supports using "
  :settings-page/git-desc-3 " for version control. Use Git at your own risk as general Git issues are not supported by the Logseq team."
+ :settings-page/git-commit-on-close "Git commit on window close"
  :settings-page/git-switcher-label "Enable Git auto commit"
  :settings-page/git-commit-delay "Git auto commit seconds"
- :settings-page/git-confirm "You need to restart the app after updating the Git settings."
  :settings-page/edit-config-edn "Edit config.edn"
  :settings-page/edit-global-config-edn "Edit global config.edn"
  :settings-page/edit-custom-css "Edit custom.css"
@@ -460,6 +479,7 @@
  :whiteboard/toggle-grid "Toggle grid"
  :whiteboard/snap-to-grid "Snap to grid"
  :whiteboard/toggle-pen-mode "Toggle pen mode"
+ :whiteboard/reference-count (fn [refs-count] (if (= refs-count 1) "Reference" "References"))
  :flashcards/modal-welcome-title "Time to create a card!"
  :flashcards/modal-welcome-desc-1 "You can add \"#card\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."
  :flashcards/modal-welcome-desc-2 "You can "
@@ -760,6 +780,10 @@
   :whiteboard/group               "Group selection"
   :whiteboard/ungroup             "Ungroup selection"
   :whiteboard/toggle-grid         "Toggle the canvas grid"
+  :whiteboard/clone-right         "Clone right"
+  :whiteboard/clone-left          "Clone left"
+  :whiteboard/clone-up            "Clone up"
+  :whiteboard/clone-down          "Clone down"
   :ui/toggle-brackets             "Toggle whether to display brackets"
   :go/electron-find-in-page       "Find text in page"
   :go/electron-jump-to-the-next   "Jump to the next match to your Find bar search"

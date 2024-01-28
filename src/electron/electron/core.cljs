@@ -69,7 +69,19 @@
            url (decode-protected-assets-schema-path url)
            path (string/replace url "assets://" "")
            path (js/decodeURIComponent path)]
-       (callback #js {:path path}))))
+       (cond (or (string/starts-with? path "/")
+                 (re-find #"(?i)^/[a-zA-Z]:" path))
+             (callback #js {:path path})
+
+             ;; assume winwdows unc path
+             utils/win32?
+             (do (logger/debug :resolve-assets-url url)
+                 (callback #js {:path (str "//" path)}))
+
+             :else
+             (do
+               (logger/warn ::resolve-assets-url "Unknown assets url" url)
+               (callback #js {:path path}))))))
 
   (.registerFileProtocol
    protocol FILE_LSP_SCHEME
@@ -279,7 +291,7 @@
 
                (search/open-dbs!)
 
-               (git/auto-commit-current-graph!)
+               (git/configure-auto-commit!)
 
                (vreset! *setup-fn
                         (fn []
@@ -298,6 +310,7 @@
 
                ;; main window events
                (.on win "close" (fn [e]
+                                  (git/before-graph-close-hook!)
                                   (when @*quit-dirty? ;; when not updating
                                     (.preventDefault e)
 

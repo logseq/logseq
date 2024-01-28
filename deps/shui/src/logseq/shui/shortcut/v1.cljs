@@ -1,40 +1,47 @@
 (ns logseq.shui.shortcut.v1
   (:require [clojure.string :as string]
-            [logseq.shui.button.v2 :as button]
+            [logseq.shui.ui :as ui]
             [rum.core :as rum]
             [goog.userAgent]))
 
 (def mac? goog.userAgent/MAC)
 (defn print-shortcut-key [key]
-  (case key
-    ("cmd" "command" "mod" "⌘" "meta") "⌘"
-    ("return" "enter" "⏎") "⏎"
-    ("shift" "⇧") "⇧"
-    ("alt" "option" "opt" "⌥") "⌥"
-    ("ctrl" "control" "⌃") "⌃"
-    ("space" " ") " "
-    ("up" "↑") "↑"
-    ("down" "↓") "↓"
-    ("left" "←") "←"
-    ("right" "→") "→"
-    ("tab") "⇥"
-    ("open-square-bracket") "["
-    ("close-square-bracket") "]"
-    ("dash") "-"
-    ("semicolon") ";"
-    ("equals") "="
-    ("single-quote") "'"
-    ("backslash") "\\"
-    ("comma") ","
-    ("period") "."
-    ("slash") "/"
-    ("grave-accent") "`"
-    ("page-up") ""
-    ("page-down") ""
-    (nil) ""
-    (name key)))
+  (let [result (if (coll? key)
+                 (string/join "+" key)
+                 (case (if (string? key)
+                         (string/lower-case key)
+                         key)
+                   ("cmd" "command" "mod" "⌘") (if mac? "⌘" "Ctrl")
+                   ("meta") (if mac? "⌘" "⊞")
+                   ("return" "enter" "⏎") "⏎"
+                   ("shift" "⇧") "⇧"
+                   ("alt" "option" "opt" "⌥") (if mac? "Opt" "Alt")
+                   ("ctrl" "control" "⌃") "Ctrl"
+                   ("space" " ") "Space"
+                   ("up" "↑") "↑"
+                   ("down" "↓") "↓"
+                   ("left" "←") "←"
+                   ("right" "→") "→"
+                   ("tab") "Tab"
+                   ("open-square-bracket") "["
+                   ("close-square-bracket") "]"
+                   ("dash") "-"
+                   ("semicolon") ";"
+                   ("equals") "="
+                   ("single-quote") "'"
+                   ("backslash") "\\"
+                   ("comma") ","
+                   ("period") "."
+                   ("slash") "/"
+                   ("grave-accent") "`"
+                   ("page-up") ""
+                   ("page-down") ""
+                   (nil) ""
+                   (name key)))]
+    (if (= (count result) 1)
+      result
+      (string/capitalize result))))
 
-;; TODO: shortcut component shouldn't worry about this
 (defn to-string [input]
   (cond
     (string? input) input
@@ -45,57 +52,41 @@
     (nil? input) ""
     :else (pr-str input)))
 
+(defn- parse-shortcuts
+  [s]
+  (->> (string/split s #" \| ")
+       (map (fn [x]
+              (->> (string/split x #" ")
+                   (map #(if (string/includes? % "+")
+                           (string/split % #"\+")
+                           %)))))))
+
+(rum/defc part
+  [ks size]
+  (let [tiles (map print-shortcut-key ks)]
+    (ui/button {:variant     :default
+                :class       "bg-gray-03 text-gray-12 px-1.5 py-0 leading-4 h-5 hover:bg-gray-04 active:bg-gray-03 hover:text-gray-11"
+                :interactive false
+                :size        size}
+      (for [[index tile] (map-indexed vector tiles)]
+        [:<>
+         (when (< 0 index)
+           [:div.ui__button__tile-separator])
+         [:div.ui__button__tile tile]]))))
+
 (rum/defc root
-  [shortcut context & {:keys [tiled size theme]
-                       :or {tiled true
-                            size :sm
-                            theme :gray}}]
+  [shortcut & {:keys [size theme]
+                       :or   {size  :xs
+                              theme :gray}}]
   (when (seq shortcut)
-    (if (coll? shortcut)
-      (let [texts (map print-shortcut-key shortcut)
-            tiled? (every? #(= (count %) 1) texts)]
-        (if tiled?
-          [:div.flex.flex-row
-           (for [text texts]
-             (button/root {:theme theme
-                           :interactive false
-                           :text (to-string text)
-                           :tiled tiled?
-                           :size size
-                           :mused true}
-                          context))]
-          (let [text' (string/join " " texts)]
-            (button/root {:theme theme
-                          :interactive false
-                          :text text'
-                          :tiled false
-                          :size size
-                          :mused true}
-                         context))))
-      [:<>
-       (for [[index option] (map-indexed vector (string/split shortcut #" \| "))]
-         [:<>
-          (when (< 0 index)
-            [:div.text-gray-11.text-sm "|"])
-          (let [[system-default option] (if (.startsWith option "system default: ")
-                                          [true (subs option 16)]
-                                          [false option])]
-            [:<>
-             (when system-default
-               [:div.mr-1.text-xs "System default: "])
-             (for [sequence (string/split option #" ")
-                   :let [text (->> (string/split sequence #"\+")
-                                   (map print-shortcut-key)
-                                   (apply str))]]
-               (let [tiled? (if (contains?
-                                 #{"backspace" "delete" "home" "end" "insert"}
-                                 (string/lower-case text))
-                              false
-                              tiled)]
-                 (button/root {:theme theme
-                               :interactive false
-                               :text (to-string text)
-                               :tiled tiled?
-                               :size size
-                               :mused true}
-                              context)))])])])))
+    (let [shortcuts (if (coll? shortcut)
+                      [shortcut]
+                      (parse-shortcuts shortcut))]
+      (for [[index binding] (map-indexed vector shortcuts)]
+        [:<>
+         (when (< 0 index)
+           [:div.text-gray-11.text-sm "|"])
+         (if (coll? (first binding))   ; + included
+           (for [ks binding]
+             (part ks size))
+           (part binding size))]))))

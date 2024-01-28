@@ -43,6 +43,14 @@
       (string/replace path "\\" "/")
       path)))
 
+(defn to-native-win-path!
+  "Convert path to native win path"
+  [path]
+  (when (not-empty path)
+    (if win32?
+      (string/replace path "/" "\\")
+      path)))
+
 (defn get-ls-dotdir-root
   []
   (let [lg-dir (node-path/join (.getPath app "home") ".logseq")]

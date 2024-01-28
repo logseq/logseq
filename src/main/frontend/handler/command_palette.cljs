@@ -35,7 +35,10 @@
           (get @state/state :command-palette/commands)))
 
 (defn history
-  ([] (or (storage/get "commands-history") []))
+  ([] (or (try (storage/get "commands-history")
+               (catch js/Error e
+                 (log/error :commands-history e)))
+          []))
   ([vals] (storage/set "commands-history" vals)))
 
 (defn- assoc-invokes [cmds]

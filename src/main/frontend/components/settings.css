@@ -29,7 +29,7 @@
         }
 
         &.active {
-          background-color: var(--ls-quaternary-background-color);
+          @apply bg-black/10;
         }
       }
     }
@@ -484,7 +484,7 @@ body[data-settings-tab=keymap] {
       @apply p-0;
 
       > header {
-        @apply p-4 pb-2 h-auto;
+        @apply px-4 pt-[22px] pb-2 h-auto;
       }
     }
   }

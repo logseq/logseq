@@ -1,8 +1,7 @@
 (ns frontend.components.settings
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
-            [logseq.shui.core :as shui]
-            [frontend.shui :refer [make-shui-context]]
+            [logseq.shui.ui :as shui-ui]
             [frontend.colors :as colors]
             [frontend.components.assets :as assets]
             [frontend.components.conversion :as conversion-component]
@@ -58,25 +57,24 @@
 
      [:div.ctls.flex.items-center
 
-      [:div.mt-1.sm:mt-0.sm:col-span-2
-       {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
+      [:div.mt-1.sm:mt-0.sm:col-span-2.flex.gap-4.items-center.flex-wrap
        [:div (cond
                (mobile-util/native-android?)
                (ui/button
                 (t :settings-page/check-for-updates)
-                :class "text-sm p-1 mr-1"
+                :class "text-sm mr-1"
                 :href "https://github.com/logseq/logseq/releases")
 
                (mobile-util/native-ios?)
                (ui/button
                 (t :settings-page/check-for-updates)
-                :class "text-sm p-1 mr-1"
+                :class "text-sm mr-1"
                 :href "https://apps.apple.com/app/logseq/id1601013908")
 
                (util/electron?)
                (ui/button
                 (if update-pending? (t :settings-page/checking) (t :settings-page/check-for-updates))
-                :class "text-sm p-1 mr-1"
+                :class "text-sm mr-1"
                 :disabled update-pending?
                 :on-click #(js/window.apis.checkForUpdates false))
 
@@ -167,10 +165,12 @@
    [:div.mt-1.sm:mt-0.sm:col-span-2.flex.items-center
     {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
     [:div {:style (when stretch {:width "100%"})}
-     (if action action (shui/button {:text button-label
-                                     :href href
-                                     :on-click on-click}
-                         (make-shui-context)))]
+     (if action action (shui-ui/button
+                         {:as-child (not (string/blank? href))
+                          :size     :sm
+                          :on-click on-click}
+                         (if (string/blank? href) button-label
+                           (shui-ui/link {:href href} button-label))))]
     (when-not (or (util/mobile?)
                   (mobile-util/native-platform?))
       [:div.text-sm.flex desc])]])
@@ -250,7 +250,24 @@
          enabled?
          (fn []
            (state/set-state! [:electron/user-cfgs :git/disable-auto-commit?] enabled?)
-           (ipc/ipc :userAppCfgs :git/disable-auto-commit? enabled?))
+           (p/do!
+            (ipc/ipc :userAppCfgs :git/disable-auto-commit? enabled?)
+            (ipc/ipc :setGitAutoCommit)))
+         true)]]]))
+
+(rum/defcs switch-git-commit-on-close-row < rum/reactive
+  [state t]
+  (let [enabled? (state/get-git-commit-on-close-enabled?)]
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+     [:label.block.text-sm.font-medium.leading-5.opacity-70
+      (t :settings-page/git-commit-on-close)]
+     [:div
+      [:div.rounded-md.sm:max-w-xs
+       (ui/toggle
+         enabled?
+         (fn []
+           (state/set-state! [:electron/user-cfgs :git/commit-on-close?] (not enabled?))
+           (ipc/ipc :userAppCfgs :git/commit-on-close? (not enabled?)))
          true)]]]))
 
 (rum/defcs git-auto-commit-seconds < rum/reactive
@@ -267,13 +284,14 @@
                           (let [value (-> (util/evalue event)
                                           util/safe-parse-int)]
                             (if (and (number? value)
-                                     (< 0 value (inc 600)))
-                              (do
+                                     (< 0 value (inc 86400)))
+                              (p/do!
                                 (state/set-state! [:electron/user-cfgs :git/auto-commit-seconds] value)
-                                (ipc/ipc :userAppCfgs :git/auto-commit-seconds value))
+                                (ipc/ipc :userAppCfgs :git/auto-commit-seconds value)
+                                (ipc/ipc :setGitAutoCommit))
                               (when-let [elem (gobj/get event "target")]
                                 (notification/show!
-                                 [:div "Invalid value! Must be a number between 1 and 600."]
+                                 [:div "Invalid value! Must be a number between 1 and 86400"]
                                  :warning true)
                                 (gobj/set elem "value" secs)))))}]]]]))
 
@@ -325,6 +343,7 @@
                           :let [active? (= color color-accent)]]
                       [:div.flex.items-center {:style {:height 28}}
                        [:div {:class "w-5 h-5 rounded-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"
+                              :title color
                               :style {:background-color (colors/variable color :09)
                                       :outline-color (colors/variable color (if active? :07 :06))
                                       :outline-width (if active? "4px" "1px")
@@ -336,10 +355,11 @@
                                        :opacity (if active? 1 0)}}]]])
                     (when color-accent
                       [:div.col-span-5
-                       (shui/button {:text "Back to default color"
-                                     :theme :gray
-                                     :on-click (fn [_e] (state/unset-color-accent!))}
-                                    (make-shui-context nil nil))])]]
+                       (shui-ui/button
+                         {:variant  :secondary
+                          :size :xs
+                          :on-click (fn [_e] (state/unset-color-accent!))}
+                         "Back to default color")])]]
 
     [:<>
      (row-with-button-action {:left-label "Accent color"
@@ -522,7 +542,7 @@
     [:div
      (ui/button
        (t :settings)
-       :class "text-sm p-1"
+       :class "text-sm"
        :style {:margin-top "0px"}
        :on-click
        (fn []
@@ -611,7 +631,7 @@
                  "direct" "Direct"
                  (and protocol host port (str protocol "://" host ":" port)))]
               (ui/icon "edit")]
-             :class "text-sm p-1"
+             :class "text-sm"
              :on-click #(state/set-sub-modal!
                          (fn [_] (plugins/user-proxy-settings-panel agent-opts))
                          {:id :https-proxy-panel :center? true})))
@@ -735,7 +755,7 @@
      [:p (t :settings-page/git-tip)])
     [:span.text-sm.opacity-50.my-4
      (t :settings-page/git-desc-1)]
-    [:br][:br]
+    [:br] [:br]
     [:span.text-sm.opacity-50.my-4
      (t :settings-page/git-desc-2)]
     [:a {:href "https://git-scm.com/" :target "_blank"}
@@ -744,11 +764,8 @@
      (t :settings-page/git-desc-3)]]
    [:br]
    (switch-git-auto-commit-row t)
-   (git-auto-commit-seconds t)
-
-   (ui/admonition
-     :warning
-     [:p (t :settings-page/git-confirm)])])
+   (switch-git-commit-on-close-row t)
+   (git-auto-commit-seconds t)])
 
 (rum/defc settings-advanced < rum/reactive
   [current-repo]
@@ -1123,7 +1140,7 @@
 
     [:div#settings.cp__settings-main
      (settings-effect @*active)
-     [:div.cp__settings-inner {:class "min-h-[65dvh] max-h-[65dvh]"}
+     [:div.cp__settings-inner {:class "min-h-[70dvh] max-h-[70dvh]"}
       [:aside.md:w-64 {:style {:min-width "10rem"}}
        [:header.cp__settings-header
         [:h1.cp__settings-modal-title (t :settings)]]

@@ -93,7 +93,8 @@
   (when-let [handler (get-handler-by-id handler-id)]
     (when-let [ks (dh/shortcut-binding shortcut-id)]
       (doseq [k ks]
-        (.unregisterShortcut ^js handler (shortcut-utils/undecorate-binding k))))
+        (.unregisterShortcut ^js handler (shortcut-utils/undecorate-binding k)))))
+  (when shortcut-id
     (shortcut-config/remove-shortcut! handler-id shortcut-id)))
 
 (defn uninstall-shortcut-handler!
