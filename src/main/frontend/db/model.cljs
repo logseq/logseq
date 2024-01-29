@@ -336,25 +336,8 @@ independent of format as format specific heading characters are stripped"
     (->
      (react/q repo [:frontend.worker.react/block id]
               {:query-fn (fn [_]
-                           (let [e (db-utils/entity id)
-                                 children (map :db/id (sort-by-left (:block/_parent e) e))]
-                             [e {:name (:block/name e)
-                                 :original-name (:block/original-name e)
-                                 :link (:block/link e)
-                                 :namespace (:block/namespace e)
-                                 :types (:block/type e)
-                                 :schema (:block/schema e)
-                                 :content (:block/content e)
-                                 :marker (:block/marker e)
-                                 :priority (:block/priority e)
-                                 :properties (:block/properties e)
-                                 :properties-values (:block/properties-text-values e)
-                                 :alias (:block/alias e)
-                                 :tags (:block/tags e)
-                                 :children children
-                                 :collapsed? (:block/collapsed? e)
-                                 :collapsed-properties (:block/collapsed-properties e)
-                                 :refs-count (count (:block/_refs e))}]))}
+                           (let [e (db-utils/entity id)]
+                             [e (:block/tx-id e)]))}
               nil)
      react
      first)))

@@ -26,6 +26,8 @@
 
 (defonce *editor-editing-ref (atom nil))
 
+(defonce *db-worker (atom nil))
+
 ;; Stores main application state
 (defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
