@@ -12,7 +12,8 @@
             [frontend.db :as db]
             [frontend.persist-db.browser :as db-browser]
             [clojure.edn :as edn]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [frontend.db.react :as react]))
 
 (def <q db-async-util/<q)
 
@@ -104,15 +105,28 @@
     (file-async/<get-file-based-property-values graph property)))
 
 (defn <get-block-and-children
-  [graph name-or-uuid &loading? & {:keys [children?]
-                                   :or {children? true}}]
-  (when-let [^Object sqlite @db-browser/*worker]
-    (p/let [name' (str name-or-uuid)
-            result (.get-block-and-children sqlite graph name' children?)
-            {:keys [block children] :as result'} (edn/read-string result)
-            conn (db/get-db graph false)
-            _ (d/transact! conn (cons block children))]
-      (reset! &loading? false)
-      (if children?
-        block
-        result'))))
+  [graph name-or-uuid & {:keys [children?]
+                         :or {children? true}}]
+  (let [name' (str name-or-uuid)
+        e (if (util/uuid-string? name')
+            (db/entity [:block/uuid (uuid name')])
+            (db/entity [:block/name name']))]
+    (cond
+      (and e (not children?) (:block/tx-id e))
+      e
+
+      (and e children? (:block/tx-id e) (seq (:block/_parent e)))
+      e
+
+      :else
+      (when-let [^Object sqlite @db-browser/*worker]
+        (state/update-state! :restore/unloaded-blocks (fn [s] (conj s name')))
+        (p/let [result (.get-block-and-children sqlite graph name' children?)
+                {:keys [block children] :as result'} (edn/read-string result)
+                conn (db/get-db graph false)
+                _ (d/transact! conn (cons block children))]
+          (state/update-state! :restore/unloaded-blocks (fn [s] (disj s name')))
+          (react/refresh-affected-queries! graph [[:frontend.worker.react/block (:db/id block)]])
+          (if children?
+            block
+            result'))))))

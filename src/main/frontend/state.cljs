@@ -18,7 +18,8 @@
             [logseq.common.config :as common-config]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.rum :as r]))
 
 (defonce *profile-state
   (atom {}))
@@ -307,7 +308,8 @@
       :history/tx->editor-cursor             (atom {})
       :system/info                           {}
       ;; Whether block is selected
-      :ui/select-query-cache                 (atom {})})))
+      :ui/select-query-cache                 (atom {})
+      :restore/unloaded-blocks               (atom #{})})))
 
 ;; Block ast state
 ;; ===============
@@ -688,8 +690,8 @@ Similar to re-frame subscriptions"
   (let [*cache (:ui/select-query-cache @state)
         keys [::select-block block-uuid]
         atom (or (get @*cache keys)
-                 (let [result (rum/derived-atom
-                               [(:selection/blocks @state)]
+                 (let [result (r/cached-derived-atom
+                               (:selection/blocks @state)
                                keys
                                (fn [s]
                                  (contains? (set (get-selected-block-ids s)) block-uuid)))]
@@ -2302,11 +2304,11 @@ Similar to re-frame subscriptions"
   (storage/remove :user-groups))
 
 (defn sub-block-unloaded?
-  [repo block-uuid]
+  [block-uuid]
   (rum/react
-   (rum/derived-atom [(rum/cursor-in state [repo :restore/unloaded-blocks])] [::block-unloaded repo block-uuid]
-     (fn [s]
-       (contains? s (str block-uuid))))))
+   (r/cached-derived-atom (:restore/unloaded-blocks @state) [(get-current-repo) ::block-unloaded (str block-uuid)]
+                          (fn [s]
+                            (contains? s (str block-uuid))))))
 
 (defn get-color-accent []
   (get @state :ui/radix-color))

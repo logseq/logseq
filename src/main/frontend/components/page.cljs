@@ -460,17 +460,12 @@
   (rum/local false ::hover-title?)
   {:init (fn [state]
            (let [page-name (:page-name (first (:rum/args state)))
-                 page-name' (get-sanity-page-name state page-name)
-                 entity (get-page-entity page-name')
-                 *loading? (atom true)]
-             (if (and entity (seq (:block/_left entity))) ; block and its children has been loaded
-               (reset! *loading? false)
-               (db-async/<get-block-and-children (state/get-current-repo) page-name' *loading?))
+                 page-name' (get-sanity-page-name state page-name)]
+             (db-async/<get-block-and-children (state/get-current-repo) page-name')
              (assoc state
-                    ::page-name page-name'
-                    ::loading? *loading?)))}
+                    ::page-name page-name')))}
   [state {:keys [repo page-name preview? sidebar?] :as option}]
-  (when-not (rum/react (::loading? state))
+  (when-not (state/sub-block-unloaded? (::page-name state))
     (when-let [path-page-name (get-path-page-name state page-name)]
       (let [current-repo (state/sub :git/current-repo)
             repo (or repo current-repo)
@@ -1029,6 +1024,7 @@
         *search-key (::search-key state)
         *search-input (rum/create-ref)
 
+        ;; TODO: remove this
         *indeterminate (rum/derived-atom
                         [*checks] ::indeterminate
                          (fn [checks]
