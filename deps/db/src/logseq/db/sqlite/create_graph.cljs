@@ -22,10 +22,9 @@
             {:block/schema schema :block/uuid (d/squuid) :closed-values closed-values}
             {:icon-id (get default-property-uuids :icon)})
            [(sqlite-util/build-new-property
-             {:block/schema schema
-              :block/original-name (or original-name k-name)
-              :block/name (common-util/page-name-sanity-lc k-name)
-              :block/uuid (get default-property-uuids k-keyword (d/squuid))})])))
+             (or original-name k-name)
+             schema
+             (get default-property-uuids k-keyword (d/squuid)))])))
      db-property/built-in-properties)))
 
 (defn build-db-initial-data
