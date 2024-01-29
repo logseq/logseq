@@ -283,7 +283,7 @@
      (when-let [conn (worker-state/get-datascript-conn repo)]
        (let [inputs (edn/read-string inputs-str)]
          (let [result (apply d/q (first inputs) @conn (rest inputs))]
-           (bean/->js result)))))
+           (pr-str result)))))
 
   (get-block-and-children
    [_this repo name children?]

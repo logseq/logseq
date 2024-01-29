@@ -15,7 +15,7 @@
             [logseq.db :as ldb]
             [frontend.date :as date]))
 
-(defonce *worker (atom nil))
+(defonce *worker state/*db-worker)
 
 (defn- ask-persist-permission!
   []
