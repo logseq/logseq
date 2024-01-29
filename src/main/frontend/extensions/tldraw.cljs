@@ -22,7 +22,8 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.ui :as ui]
-            [frontend.components.whiteboard :as whiteboard]))
+            [frontend.components.whiteboard :as whiteboard]
+            [frontend.db.async :as db-async]))
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
@@ -201,21 +202,26 @@
             :model data})])
 
 (rum/defc tldraw-app-inner < rum/reactive
+  {:init (fn [state]
+           (let [page-name (first (:rum/args state))]
+             (db-async/<get-block-and-children (state/get-current-repo) page-name)
+             state))}
   [page-name block-id loaded-app set-loaded-app]
-  (let [populate-onboarding? (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
-        on-mount (fn [^js tln]
-                   (when tln
-                     (set! (.-appUndo tln) undo)
-                     (set! (.-appRedo tln) redo)
-                     (when-let [^js api (gobj/get tln "api")]
-                       (p/then (when populate-onboarding?
-                                 (whiteboard-handler/populate-onboarding-whiteboard api))
-                               #(do (whiteboard-handler/cleanup! (.-currentPage tln))
-                                    (state/focus-whiteboard-shape tln block-id)
-                                    (set-loaded-app tln))))))
-        data (whiteboard-handler/page-name->tldr! page-name)]
-    (when data
-      (tldraw-inner page-name data populate-onboarding? loaded-app on-mount))))
+  (when-not (state/sub-block-unloaded? page-name)
+    (let [populate-onboarding? (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
+          on-mount (fn [^js tln]
+                     (when tln
+                       (set! (.-appUndo tln) undo)
+                       (set! (.-appRedo tln) redo)
+                       (when-let [^js api (gobj/get tln "api")]
+                         (p/then (when populate-onboarding?
+                                   (whiteboard-handler/populate-onboarding-whiteboard api))
+                                 #(do (whiteboard-handler/cleanup! (.-currentPage tln))
+                                      (state/focus-whiteboard-shape tln block-id)
+                                      (set-loaded-app tln))))))
+          data (whiteboard-handler/page-name->tldr! page-name)]
+      (when data
+        (tldraw-inner page-name data populate-onboarding? loaded-app on-mount)))))
 
 (rum/defc tldraw-app
   [page-name block-id]
