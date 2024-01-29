@@ -4,7 +4,6 @@
             ["path" :as node-path]
             [clojure.string :as string]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db :as ldb]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util :as common-util]))
 
@@ -26,26 +25,24 @@
   (let [get-children (fn [col]
                        (map (fn [e]
                               (select-keys e [:db/id :block/uuid :block/page :block/left :block/parent]))
-                            col))]
-    (if (common-util/uuid-string? name)   ; block
-      (let [id (uuid name)
-            block (d/entity db [:block/uuid id])]
-        (when block
-          (let [result {:block (d/pull db '[*] (:db/id block))}]
-            (if children?
-              (let [children (->> (ldb/get-block-children-ids db id)
-                                  (map #(d/entity db [:block/uuid %])))]
-                (assoc result :children (get-children children)))
-              result))
-          (cond->
-           {:block (d/pull db '[*] (:db/id block))}
-            children?
-            (assoc :children (get-children (:block/_parent block))))))
-      (when-let [block (d/entity db [:block/name name])]
+                            col))
+        uuid? (common-util/uuid-string? name)
+        block (when uuid?
+                (let [id (uuid name)]
+                  (d/entity db [:block/uuid id])))]
+    (if (and block (not (:block/name block))) ; not a page
+      (cond->
+       {:block (d/pull db '[*] (:db/id block))}
+        children?
+        (assoc :children (get-children (:block/_parent block))))
+      (when-let [block (or block (d/entity db [:block/name name]))]
         (cond->
          {:block (d/pull db '[*] (:db/id block))}
           children?
-          (assoc :children (get-children (:block/_page block))))))))
+          (assoc :children
+                 (if (contains? (:block/type block) "whiteboard")
+                   (d/pull-many db '[*] (map :db/id (:block/_page block)))
+                   (get-children (:block/_page block)))))))))
 
 (defn get-latest-journals
   [db n]
