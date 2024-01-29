@@ -285,6 +285,12 @@
          (let [result (apply d/q (first inputs) @conn (rest inputs))]
            (bean/->js result)))))
 
+  (get-block-and-children
+   [_this repo name children?]
+   (assert (string? name))
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (pr-str (sqlite-common-db/get-block-and-children @conn name children?))))
+
   (transact
    [_this repo tx-data tx-meta context]
    (when repo (worker-state/set-db-latest-tx-time! repo))
