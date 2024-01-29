@@ -82,7 +82,6 @@ export const GeometryTools = observer(function GeometryTools({
               key={props.id}
               id={props.id}
               icon={props.icon}
-              tooltip={activeGeometry ? props.tooltip : ''}
               handleClick={setGeometry}
               tooltipSide={popoverSide}
             />
