@@ -1,4 +1,3 @@
-import * as Separator from '@radix-ui/react-separator'
 import {
   getContextBarTranslation,
   HTMLContainer,
@@ -10,6 +9,9 @@ import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import type { Shape } from '../../lib'
 import { getContextBarActionsForShapes } from './contextBarActionFactory'
+
+// @ts-ignore
+const LSUI = window.LSUI
 
 const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets, hidden }) => {
   const app = useApp()
@@ -52,7 +54,7 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets, hidden }) 
             <React.Fragment key={idx}>
               <Action />
               {idx < Actions.length - 1 && (
-                <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
+                <LSUI.Separator orientation="vertical" />
               )}
             </React.Fragment>
           ))}

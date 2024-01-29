@@ -86,6 +86,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { TooltipArrow } from '@radix-ui/react-tooltip'
 import { Link } from '@/components/ui/link'
+import { Separator } from '@/components/ui/separator'
 
 declare global {
   var LSUI: any
@@ -147,6 +148,7 @@ const shadui = {
   SelectSeparator,
   SelectScrollUpButton,
   SelectScrollDownButton,
+  Separator,
   Calendar,
   Popover,
   PopoverTrigger,

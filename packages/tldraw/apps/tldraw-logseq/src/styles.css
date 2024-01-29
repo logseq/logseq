@@ -827,17 +827,6 @@ html[data-theme='dark'] {
   }
 }
 
-.tl-toolbar-separator {
-  background-color: var(--ls-border-color);
-  width: 1px;
-  opacity: 0.5;
-
-  &[data-orientation='horizontal'] {
-    height: 1px;
-    width: auto;
-  }
-}
-
 .tl-youtube-link,
 .tl-twitter-link,
 .tl-iframe-src {

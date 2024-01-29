@@ -6,8 +6,10 @@ import { ToolButton } from '../ToolButton'
 import { GeometryTools } from '../GeometryTools'
 import { ColorInput } from '../inputs/ColorInput'
 import { ScaleInput } from '../inputs/ScaleInput'
-import * as Separator from '@radix-ui/react-separator'
 import { LogseqContext } from '../../lib/logseq-context'
+
+// @ts-ignore
+const LSUI = window.LSUI
 
 export const PrimaryTools = observer(function PrimaryTools() {
   const app = useApp()
@@ -51,7 +53,7 @@ export const PrimaryTools = observer(function PrimaryTools() {
           id="move"
           icon={app.isIn('move.panning') ? 'hand-grab' : 'hand-stop'}
         />
-        <Separator.Root className="tl-toolbar-separator" orientation="horizontal" />
+        <LSUI.Separator orientation="horizontal" />
         <ToolButton
           handleClick={() => app.selectTool('logseq-portal')}
           tooltip={t('whiteboard/add-block-or-page')}
@@ -89,8 +91,7 @@ export const PrimaryTools = observer(function PrimaryTools() {
           icon="text"
         />
         <GeometryTools activeGeometry={activeGeomId} setGeometry={handleToolClick} />
-        <Separator.Root
-          className="tl-toolbar-separator"
+        <LSUI.Separator
           orientation="horizontal"
           style={{ margin: '0 -4px' }}
         />
