@@ -39,8 +39,8 @@ export function SelectInput({
         onValueChange={onValueChange}
       >
         <Tooltip content={tooltip} side={popoverSide}>
-          <LSUI.SelectTrigger 
-            className={`h-8 font-medium bg-transparent ${compact ? "px-0 justify-center" : "px-2"}`}>
+          <LSUI.SelectTrigger
+            className={`tl-select-trigger ${compact ? "compact" : ""}`}>
             <LSUI.SelectValue />
             {!compact && (
               <LSUI.SelectIcon asChild>
