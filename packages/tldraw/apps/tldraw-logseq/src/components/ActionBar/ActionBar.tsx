@@ -8,8 +8,10 @@ import { TablerIcon } from '../icons'
 import { Button } from '../Button'
 import { ToggleInput } from '../inputs/ToggleInput'
 import { ZoomMenu } from '../ZoomMenu'
-import * as Separator from '@radix-ui/react-separator'
 import { LogseqContext } from '../../lib/logseq-context'
+
+// @ts-ignore
+const LSUI = window.LSUI
 
 export const ActionBar = observer(function ActionBar(): JSX.Element {
   const app = useApp<Shape>()
@@ -65,7 +67,7 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
         <Button tooltip={t('whiteboard/zoom-out')} onClick={zoomOut} id="tl-zoom-out">
           <TablerIcon name="minus" />
         </Button>
-        <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
+        <LSUI.Separator orientation="vertical" />
         <ZoomMenu />
       </div>
 

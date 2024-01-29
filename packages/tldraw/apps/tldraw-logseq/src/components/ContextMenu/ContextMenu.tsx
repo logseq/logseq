@@ -8,8 +8,10 @@ import { KeyboardShortcut } from '../KeyboardShortcut'
 import * as React from 'react'
 
 import * as ReactContextMenu from '@radix-ui/react-context-menu'
-import * as Separator from '@radix-ui/react-separator'
 import { toJS } from 'mobx'
+
+// @ts-ignore
+const LSUI = window.LSUI
 
 interface ContextMenuProps {
   children: React.ReactNode
@@ -82,7 +84,7 @@ export const ContextMenu = observer(function ContextMenu({
                     >
                       <TablerIcon name="layout-align-right" />
                     </Button>
-                    <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
+                    <LSUI.Separator orientation="vertical" />
                     <Button
                       tooltip={t('whiteboard/distribute-horizontally')}
                       onClick={() =>
@@ -111,7 +113,7 @@ export const ContextMenu = observer(function ContextMenu({
                     >
                       <TablerIcon name="layout-align-bottom" />
                     </Button>
-                    <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
+                    <LSUI.Separator orientation="vertical" />
                     <Button
                       tooltip={t('whiteboard/distribute-vertically')}
                       onClick={() =>
