@@ -176,7 +176,7 @@
       (when-not (= new-result result)
        (set-new-result! k new-result)))))
 
-(defn- refresh-affected-queries!
+(defn refresh-affected-queries!
   [repo-url affected-keys]
   (util/profile
    "refresh!"

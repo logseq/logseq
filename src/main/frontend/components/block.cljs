@@ -82,6 +82,7 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
+            [frontend.rum :as r]
             [shadow.loader :as loader]
             [logseq.common.path :as path]
             [electron.ipc :as ipc]
@@ -810,26 +811,34 @@
 (declare block-container)
 
 (rum/defc block-embed < rum/reactive
+  {:init (fn [state]
+           (let [block-id (second (:rum/args state))]
+             (db-async/<get-block-and-children (state/get-current-repo) block-id))
+           state)}
   [config uuid]
-  (when-let [block (db/entity [:block/uuid uuid])]
-    (let [repo (state/get-current-repo)]
-      (if (state/sub-block-unloaded? repo (str uuid))
-        [:span "Loading..."]
-        [:div.color-level.embed-block.bg-base-2
-         {:style {:z-index 2}
-          :on-double-click #(edit-parent-block % config)
-          :on-mouse-down (fn [e] (.stopPropagation e))}
-         [:div.px-3.pt-1.pb-2
-          (let [config' (assoc config
-                               :db/id (:db/id block)
-                               :id (str uuid)
-                               :embed-id uuid
-                               :embed? true
-                               :embed-parent (:block config)
-                               :ref? false)]
-            (blocks-container [block] config'))]]))))
+  (if (state/sub-block-unloaded? (str uuid))
+    [:span "Loading..."]
+    (when-let [block (db/entity [:block/uuid uuid])]
+      [:div.color-level.embed-block.bg-base-2
+       {:style {:z-index 2}
+        :on-double-click #(edit-parent-block % config)
+        :on-mouse-down (fn [e] (.stopPropagation e))}
+       [:div.px-3.pt-1.pb-2
+        (let [config' (assoc config
+                             :db/id (:db/id block)
+                             :id (str uuid)
+                             :embed-id uuid
+                             :embed? true
+                             :embed-parent (:block config)
+                             :ref? false)]
+          (blocks-container [block] config'))]])))
 
 (rum/defc page-embed < rum/reactive db-mixins/query
+  {:init (fn [state]
+           (let [page-name (second (:rum/args state))
+                 page-name' (util/page-name-sanity-lc (string/trim page-name))]
+             (db-async/<get-block-and-children (state/get-current-repo) page-name'))
+           state)}
   [config page-name]
   (let [page-name (util/page-name-sanity-lc (string/trim page-name))
         current-page (state/get-current-page)
@@ -841,22 +850,24 @@
      [:section.flex.items-center.p-1.embed-header
       [:div.mr-3 svg/page]
       (page-cp config {:block/name page-name})]
-     (when (and
-            (not= (util/page-name-sanity-lc (or current-page ""))
-                  page-name)
-            (not= (util/page-name-sanity-lc (get config :id ""))
-                  page-name))
-       (if whiteboard-page?
-         ((state/get-component :whiteboard/tldraw-preview) page-name)
-         (let [block (model/get-page page-name)
-               block (db/sub-block (:db/id block))
-               blocks (db/sort-by-left (:block/_parent block) block)]
-           (blocks-container blocks (assoc config
-                                           :db/id (:db/id block)
-                                           :id page-name
-                                           :embed? true
-                                           :page-embed? true
-                                           :ref? false)))))]))
+     (if (state/sub-block-unloaded? page-name)
+       [:span "Loading..."]
+       (when (and
+              (not= (util/page-name-sanity-lc (or current-page ""))
+                    page-name)
+              (not= (util/page-name-sanity-lc (get config :id ""))
+                    page-name))
+         (if whiteboard-page?
+           ((state/get-component :whiteboard/tldraw-preview) page-name)
+           (let [block (model/get-page page-name)
+                 block (db/sub-block (:db/id block))
+                 blocks (db/sort-by-left (:block/_parent block) block)]
+             (blocks-container blocks (assoc config
+                                             :db/id (:db/id block)
+                                             :id page-name
+                                             :embed? true
+                                             :page-embed? true
+                                             :ref? false))))))]))
 
 (defn- get-label-text
   [label]
@@ -880,88 +891,91 @@
 (declare breadcrumb)
 
 (rum/defc block-reference < rum/reactive
+  {:init (fn [state]
+           (let [block-id (second (:rum/args state))]
+             (db-async/<get-block-and-children (state/get-current-repo) block-id :children? false))
+           state)}
   db-mixins/query
   [config id label]
   (if-let [block-id (if (uuid? id) id (parse-uuid id))]
-    (let [repo (state/get-current-repo)
-          block (db/entity [:block/uuid block-id])]
-      (if (state/sub-block-unloaded? repo (str block-id))
-        [:span "Loading..."]
-        (let [db-id (:db/id block)
-              block (when db-id (db/sub-block db-id))
-              properties (:block/properties block)
-              block-type (keyword (pu/lookup properties :ls-type))
-              hl-type (pu/lookup properties :hl-type)
-              repo (state/get-current-repo)
-              stop-inner-events? (= block-type :whiteboard-shape)]
-          (if (and block (:block/content block))
-            (let [title [:span.block-ref
-                         (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
-                                        block nil (:block/uuid block)
-                                        (:slide? config)
-                                        false
-                                        (atom nil))]
-                  inner (if label
-                          (->elem
-                           :span.block-ref
-                           (map-inline config label))
-                          title)]
-              [:div.block-ref-wrap.inline
-               {:data-type    (name (or block-type :default))
-                :data-hl-type hl-type
-                :on-mouse-down
-                (fn [^js/MouseEvent e]
-                  (if (util/right-click? e)
-                    (state/set-state! :block-ref/context {:block (:block config)
-                                                          :block-ref block-id})
-                    (when (and
-                           (or (gobj/get e "shiftKey")
-                               (not (.. e -target (closest ".blank"))))
-                           (not (util/right-click? e)))
-                      (util/stop e)
+    (if (state/sub-block-unloaded? (str block-id))
+      [:span "Loading..."]
+      (let [block (db/entity [:block/uuid block-id])
+            db-id (:db/id block)
+            block (when db-id (db/sub-block db-id))
+            properties (:block/properties block)
+            block-type (keyword (pu/lookup properties :ls-type))
+            hl-type (pu/lookup properties :hl-type)
+            repo (state/get-current-repo)
+            stop-inner-events? (= block-type :whiteboard-shape)]
+        (if (and block (:block/content block))
+          (let [title [:span.block-ref
+                       (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
+                                      block nil (:block/uuid block)
+                                      (:slide? config)
+                                      false
+                                      (atom nil))]
+                inner (if label
+                        (->elem
+                         :span.block-ref
+                         (map-inline config label))
+                        title)]
+            [:div.block-ref-wrap.inline
+             {:data-type    (name (or block-type :default))
+              :data-hl-type hl-type
+              :on-mouse-down
+              (fn [^js/MouseEvent e]
+                (if (util/right-click? e)
+                  (state/set-state! :block-ref/context {:block (:block config)
+                                                        :block-ref block-id})
+                  (when (and
+                         (or (gobj/get e "shiftKey")
+                             (not (.. e -target (closest ".blank"))))
+                         (not (util/right-click? e)))
+                    (util/stop e)
 
-                      (cond
-                        (gobj/get e "shiftKey")
-                        (state/sidebar-add-block!
-                         (state/get-current-repo)
-                         (:db/id block)
-                         :block-ref)
+                    (cond
+                      (gobj/get e "shiftKey")
+                      (state/sidebar-add-block!
+                       (state/get-current-repo)
+                       (:db/id block)
+                       :block-ref)
 
-                        (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
-                        (whiteboard-handler/add-new-block-portal-shape!
-                         (:block/uuid block)
-                         (whiteboard-handler/closest-shape (.-target e)))
+                      (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
+                      (whiteboard-handler/add-new-block-portal-shape!
+                       (:block/uuid block)
+                       (whiteboard-handler/closest-shape (.-target e)))
 
-                        :else
-                        (match [block-type (util/electron?)]
+                      :else
+                      (match [block-type (util/electron?)]
                           ;; pdf annotation
-                          [:annotation true] (pdf-assets/open-block-ref! block)
+                        [:annotation true] (pdf-assets/open-block-ref! block)
 
-                          [:whiteboard-shape true] (route-handler/redirect-to-whiteboard!
-                                                    (get-in block [:block/page :block/name]) {:block-id block-id})
+                        [:whiteboard-shape true] (route-handler/redirect-to-whiteboard!
+                                                  (get-in block [:block/page :block/name]) {:block-id block-id})
 
                           ;; default open block page
-                          :else (route-handler/redirect-to-page! id))))))}
+                        :else (route-handler/redirect-to-page! id))))))}
 
-               (if (and (not (util/mobile?))
-                        (not (:preview? config))
-                        (not (:modal/show? @state/state))
-                        (nil? block-type))
-                 (ui/tippy {:html        (fn []
-                                           [:div.tippy-wrapper.overflow-y-auto.p-4
-                                            {:style {:width      735
-                                                     :text-align "left"
-                                                     :max-height 600}}
-                                            [(breadcrumb config repo block-id {:indent? true})
-                                             (blocks-container
-                                              (db/get-block-and-children repo block-id)
-                                              (assoc config :id (str id) :preview? true))]])
-                            :interactive true
-                            :in-editor?  true
-                            :delay       [1000, 100]} inner)
-                 inner)])
-            [:span.warning.mr-1 {:title "Block ref invalid"}
-             (block-ref/->block-ref id)]))))
+             (if (and (not (util/mobile?))
+                      (not (:preview? config))
+                      (not (:modal/show? @state/state))
+                      (nil? block-type))
+               (ui/tippy {:html        (fn []
+                                         [:div.tippy-wrapper.overflow-y-auto.p-4
+                                          {:style {:width      735
+                                                   :text-align "left"
+                                                   :max-height 600}}
+                                          [(breadcrumb config repo block-id {:indent? true})
+                                           (blocks-container
+                                            (db/get-block-and-children repo block-id)
+                                            (assoc config :id (str id) :preview? true))]])
+                          :interactive true
+                          :in-editor?  true
+                          :delay       [1000, 100]} inner)
+               inner)])
+          [:span.warning.mr-1 {:title "Block ref invalid"}
+           (block-ref/->block-ref id)])))
 
     [:span.warning.mr-1 {:title "Block ref invalid"}
      (block-ref/->block-ref id)]))
@@ -2884,21 +2898,21 @@
 (defn- get-hidden-atom
   [sub-id *ref {:keys [initial-value]}]
   (let [*latest-value (atom nil)
-        *hidden? (rum/derived-atom [(:ui/main-container-scroll-top @state/state)] [::lazy-display sub-id]
-                   (fn [_top]
-                     (if (false? @*latest-value)
-                       @*latest-value
-                       (let [value (cond
-                                     (some? initial-value)
-                                     initial-value
+        *hidden? (r/cached-derived-atom (:ui/main-container-scroll-top @state/state) [::lazy-display sub-id]
+                                        (fn [_top]
+                                          (if (false? @*latest-value)
+                                            @*latest-value
+                                            (let [value (cond
+                                                          (some? initial-value)
+                                                          initial-value
 
-                                     @*ref
-                                     (hide-block? @*ref)
+                                                          @*ref
+                                                          (hide-block? @*ref)
 
-                                     :else
-                                     true)]
-                         (reset! *latest-value value)
-                         value))))]
+                                                          :else
+                                                          true)]
+                                              (reset! *latest-value value)
+                                              value))))]
     *hidden?))
 
 (rum/defcs ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
@@ -3091,11 +3105,8 @@
   (rum/local false ::show-block-right-menu?)
   {:init (fn [state]
            (let [[config block] (:rum/args state)
-                 block-id (:block/uuid block)
-                 *loading? (atom true)]
-             (if (:block/content (db/entity [:block/uuid block-id]))
-               (reset! *loading? false)
-               (db-async/<get-block-and-children (state/get-current-repo) block-id *loading? :children? false))
+                 block-id (:block/uuid block)]
+             (db-async/<get-block-and-children (state/get-current-repo) block-id :children? false)
              (cond
                (root-block? config block)
                (state/set-collapsed-block! block-id false)
@@ -3107,7 +3118,6 @@
                :else
                nil)
              (assoc state
-                    ::loading? *loading?
                     ::control-show? (atom false)
                     ::navigating-block (atom (:block/uuid block)))))
    :will-unmount (fn [state]
@@ -3121,10 +3131,9 @@
   (let [repo (state/get-current-repo)
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
-        navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
-        loading? (rum/react (::loading? state))]
+        navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)]
     (cond
-      loading?
+      (state/sub-block-unloaded? (:block/uuid block))
       [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
        [:div.flex.flex-row
         [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}

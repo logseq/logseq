@@ -74,6 +74,7 @@
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
             [rum.core :as rum]
+            [frontend.rum :as r]
             [frontend.persist-db.browser :as db-browser]
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [frontend.modules.outliner.pipeline :as pipeline]
@@ -188,6 +189,9 @@
    state/set-state! :sync-graph/init? false))
 
 (defmethod handle :graph/switch [[_ graph opts]]
+  (state/set-state! :restore/unloaded-blocks #{})
+  (reset! r/*key->atom {})
+
   (let [^js sqlite @db-browser/*worker]
     (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite (state/get-current-repo)))
             request-finished? (ldb/request-finished?)]
