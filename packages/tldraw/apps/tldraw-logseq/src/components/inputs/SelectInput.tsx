@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { Tooltip } from '../Tooltip'
+import { ChevronDown } from 'lucide-react'
 import type { Side } from '@radix-ui/react-popper'
 
 // @ts-ignore
@@ -15,7 +16,7 @@ interface SelectInputProps extends React.HTMLAttributes<HTMLElement> {
   value: string
   tooltip?: React.ReactNode
   popoverSide?: Side
-  chevron?: boolean
+  compact?: boolean
   onValueChange: (value: string) => void
 }
 
@@ -23,7 +24,7 @@ export function SelectInput({
   options,
   tooltip,
   popoverSide,
-  chevron = true,
+  compact = false,
   value,
   onValueChange,
   ...rest
@@ -38,13 +39,19 @@ export function SelectInput({
         onValueChange={onValueChange}
       >
         <Tooltip content={tooltip} side={popoverSide}>
-          <LSUI.SelectTrigger className="h-8 bg-transparent">
+          <LSUI.SelectTrigger 
+            className={`h-8 font-medium bg-transparent ${compact ? "px-0 justify-center" : "px-2"}`}>
             <LSUI.SelectValue />
+            {!compact && (
+              <LSUI.SelectIcon asChild>
+                <ChevronDown className="h-4 w-4 opacity-50"/>
+              </LSUI.SelectIcon>
+            )}
           </LSUI.SelectTrigger>
         </Tooltip>
 
         <LSUI.SelectContent
-        className="min-w-min"
+          className="min-w-min"
           side={popoverSide}
           position="popper"
           sideOffset={14}
