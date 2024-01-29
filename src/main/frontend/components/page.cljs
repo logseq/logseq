@@ -48,7 +48,8 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.db.async :as db-async]))
 
 (defn- get-page-name
   [state]
@@ -445,15 +446,16 @@
       (state/get-current-page)))
 
 (defn- get-page-entity
-  [repo path-page-name page-name]
+  [page-name]
   (if-let [block-id (parse-uuid page-name)]
     (let [entity (db/entity [:block/uuid block-id])]
       entity)
-    (do
-      (when-not (db/entity repo [:block/name page-name])
-        (let [m (block/page-name->map path-page-name true)]
-          (db/transact! repo [m])))
-      (db/entity [:block/name page-name]))))
+    (db/entity [:block/name page-name])))
+
+(defn- get-sanity-page-name
+  [state page-name]
+  (when-let [path-page-name (get-path-page-name state page-name)]
+    (util/page-name-sanity-lc path-page-name)))
 
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive db-mixins/query
@@ -461,12 +463,17 @@
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
   (rum/local false ::hover-title?)
+  {:init (fn [state]
+           (let [page-name (:page-name (first (:rum/args state)))
+                 page-name' (get-sanity-page-name state page-name)]
+             (db-async/<get-block-and-children (state/get-current-repo) page-name')
+             (assoc state ::page-name page-name')))}
   [state {:keys [repo page-name preview? sidebar?] :as option}]
   (when-let [path-page-name (get-path-page-name state page-name)]
     (let [current-repo (state/sub :git/current-repo)
           repo (or repo current-repo)
           page-name (util/page-name-sanity-lc path-page-name)
-          page (get-page-entity repo path-page-name page-name)
+          page (get-page-entity page-name)
           block-id (:block/uuid page)
           block? (some? (:block/page page))
           journal? (db/journal-page? page-name)
@@ -570,7 +577,7 @@
   (let [path-page-name (get-path-page-name state (:page-name option))
         page-name (util/page-name-sanity-lc path-page-name)
         repo (state/get-current-repo)
-        page (get-page-entity repo path-page-name page-name)
+        page (get-page-entity page-name)
         block? (some? (:block/page page))
         page-unloaded? (or (state/sub-page-unloaded? repo page-name) (nil? page))]
     (if (and page-unloaded? (not block?))

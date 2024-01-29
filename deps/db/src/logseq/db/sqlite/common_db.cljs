@@ -4,7 +4,9 @@
             ["path" :as node-path]
             [clojure.string :as string]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.common.util.date-time :as date-time-util]))
+            [logseq.db :as ldb]
+            [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.util :as common-util]))
 
 (defn- get-built-in-files
   [db]
@@ -18,6 +20,32 @@
   (->> (d/datoms db :avet :block/name)
        (map (fn [e]
               (d/pull db '[*] (:e e))))))
+
+(defn get-block-and-children
+  [db name children?]
+  (let [get-children (fn [col]
+                       (map (fn [e]
+                              (select-keys e [:db/id :block/uuid :block/page :block/left :block/parent]))
+                            col))]
+    (if (common-util/uuid-string? name)   ; block
+      (let [id (uuid name)
+            block (d/entity db [:block/uuid id])]
+        (when block
+          (let [result {:block (d/pull db '[*] (:db/id block))}]
+            (if children?
+              (let [children (->> (ldb/get-block-children-ids db id)
+                                  (map #(d/entity db [:block/uuid %])))]
+                (assoc result :children (get-children children)))
+              result))
+          (cond->
+           {:block (d/pull db '[*] (:db/id block))}
+            children?
+            (assoc :children (get-children (:block/_parent block))))))
+      (when-let [block (d/entity db [:block/name name])]
+        (cond->
+         {:block (d/pull db '[*] (:db/id block))}
+          children?
+          (assoc :children (get-children (:block/_page block))))))))
 
 (defn get-latest-journals
   [db n]

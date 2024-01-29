@@ -8,7 +8,11 @@
             [frontend.util :as util]
             [frontend.db.utils :as db-utils]
             [frontend.db.async.util :as db-async-util]
-            [frontend.db.file-based.async :as file-async]))
+            [frontend.db.file-based.async :as file-async]
+            [frontend.db :as db]
+            [frontend.persist-db.browser :as db-browser]
+            [clojure.edn :as edn]
+            [datascript.core :as d]))
 
 (def <q db-async-util/<q)
 
@@ -98,3 +102,16 @@
   (if (config/db-based-graph? graph)
     (<get-db-based-property-values graph property)
     (file-async/<get-file-based-property-values graph property)))
+
+(defn <get-block-and-children
+  [graph name-or-uuid & {:keys [children?]
+                         :or {children? true}}]
+  (when-let [^Object sqlite @db-browser/*worker]
+    (p/let [name' (str name-or-uuid)
+            result (.get-block-and-children sqlite graph name' children?)
+            {:keys [block children] :as result'} (edn/read-string result)
+            conn (db/get-db graph false)
+            _ (d/transact! conn (cons block children))]
+      (if children?
+        block
+        result'))))

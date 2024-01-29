@@ -342,6 +342,7 @@
         parents))))
 
 (defn get-block-children-ids
+  "Returns children UUIDs"
   [db block-uuid]
   (when-let [eid (:db/id (d/entity db [:block/uuid block-uuid]))]
     (let [seen   (volatile! [])]
