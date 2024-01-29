@@ -3132,17 +3132,7 @@
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)]
-    (cond
-      (state/sub-block-unloaded? (:block/uuid block))
-      [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
-       [:div.flex.flex-row
-        [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
-         [:span.bullet-container.cursor
-          [:span.bullet]]]
-        [:div.flex.flex-1
-         ""]]]
-
-      :else
+    (when-not (state/sub-block-unloaded? (:block/uuid block))
       (let [[original-block block] (build-block config block {:navigating-block navigating-block :navigated? navigated?})
             config' (if original-block
                       (assoc config :original-block original-block)
