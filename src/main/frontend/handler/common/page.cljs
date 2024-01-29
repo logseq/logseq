@@ -20,7 +20,6 @@
             [logseq.db :as ldb]
             [frontend.db.conn :as conn]
             [datascript.core :as d]
-            [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [logseq.outliner.core :as outliner-core]))
 
