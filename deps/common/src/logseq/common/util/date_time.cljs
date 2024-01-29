@@ -1,4 +1,4 @@
-(ns logseq.graph-parser.date-time-util
+(ns logseq.common.util.date-time
   "cljs-time util fns for graph-parser"
   (:require [cljs-time.format :as tf]
             [clojure.string :as string]
@@ -73,3 +73,9 @@
   ([date sep]
    (let [{:keys [year month day]} (year-month-day-padded (get-date date))]
      (str year sep month sep day))))
+
+(defn date->int
+  "Given a date object, returns its journal page integer"
+  [date]
+  (parse-long
+   (string/replace (ymd date) "/" "")))

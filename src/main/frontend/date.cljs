@@ -7,7 +7,7 @@
             [cljs-time.format :as tf]
             [cljs-time.local :as tl]
             [frontend.state :as state]
-            [logseq.graph-parser.date-time-util :as date-time-util]
+            [logseq.common.util.date-time :as date-time-util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [frontend.worker.date :as worker-date]))

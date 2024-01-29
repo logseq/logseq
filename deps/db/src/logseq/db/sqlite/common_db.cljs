@@ -3,18 +3,58 @@
   (:require [datascript.core :as d]
             ["path" :as node-path]
             [clojure.string :as string]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.common.util.date-time :as date-time-util]))
 
-(defn get-initial-data
-  "Returns initial data as vec of datoms"
+(defn- get-built-in-files
   [db]
-  (->> (d/datoms db :eavt)
-       vec))
+  (let [files ["logseq/config.edn"
+               "logseq/custom.css"
+               "logseq/custom.js"]]
+    (map #(d/pull db '[*] [:file/path %]) files)))
+
+(defn get-all-pages
+  [db]
+  (->> (d/datoms db :avet :block/name)
+       (map (fn [e]
+              (d/pull db '[*] (:e e))))))
+
+(defn get-latest-journals
+  [db n]
+  (let [date (js/Date.)
+        _ (.setDate date (- (.getDate date) (dec n)))
+        today (date-time-util/date->int (js/Date.))]
+    (->>
+     (d/q '[:find [(pull ?page [*]) ...]
+            :in $ ?today
+            :where
+            [?page :block/name ?page-name]
+            [?page :block/journal? true]
+            [?page :block/journal-day ?journal-day]
+            [(<= ?journal-day ?today)]]
+          db
+          today)
+     (sort-by :block/journal-day)
+     (reverse)
+     (take n))))
+
+;; built-in files + latest journals + favorites
+(defn get-initial-data
+  "Returns initial data"
+  [db]
+  (let [files (get-built-in-files db)
+        journals (get-latest-journals db 3)
+        journal-blocks (mapcat (fn [journal]
+                                 (let [blocks (:block/_page (d/entity db (:db/id journal)))]
+                                   (map (fn [b] (d/pull db '[*] (:db/id b))) blocks))) journals)]
+    (concat files journals journal-blocks)))
 
 (defn restore-initial-data
   "Given initial sqlite data and schema, returns a datascript connection"
-  [datoms schema]
-  (d/conn-from-datoms datoms schema))
+  [data schema]
+  (let [conn (d/create-conn schema)]
+    (d/transact! conn data)
+    conn))
 
 (defn create-kvs-table!
   "Creates a sqlite table for use with datascript.storage if one doesn't exist"

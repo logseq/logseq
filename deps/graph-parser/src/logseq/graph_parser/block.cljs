@@ -5,7 +5,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [logseq.common.config :as common-config]
-            [logseq.graph-parser.date-time-util :as date-time-util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
