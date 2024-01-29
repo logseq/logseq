@@ -18,10 +18,6 @@
               (:whiteboard/transact? tx-meta))
       (undo-redo/listen-db-changes! opts))))
 
-(defn- mark-pages-as-loaded!
-  [repo page-names]
-  (state/update-state! [repo :unloaded-pages] #(remove page-names %)))
-
 (defn- get-tx-id
   [tx-report]
   (get-in tx-report [:tempids :db/current-tx]))
@@ -64,10 +60,6 @@
                                 (true? (:added datom)))) tx-data)]
       (when (seq new-datoms)
         (state/set-state! :editor/new-created-blocks (set (map :v new-datoms)))))
-
-    (let [pages (set (keep #(when (= :block/name (:a %)) (:v %)) tx-data))]
-      (when (seq pages)
-        (mark-pages-as-loaded! repo pages)))
 
     (if (or from-disk? new-graph?)
       (do

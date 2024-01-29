@@ -204,11 +204,7 @@
   ([name]
    (p/let [uuid (or (and name (parse-uuid name)) (d/squuid))
            name (or name (str uuid))
-           repo (state/get-current-repo)
            _ (db/transact! (get-default-new-whiteboard-tx name uuid))]
-     ;; TODO: check to remove this
-     (state/update-state! [repo :unloaded-pages] (fn [pages] (conj (set pages)
-                                                                   (util/page-name-sanity-lc name))))
      name)))
 
 (defn <create-new-whiteboard-and-redirect!

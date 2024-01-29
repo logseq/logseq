@@ -104,14 +104,15 @@
     (file-async/<get-file-based-property-values graph property)))
 
 (defn <get-block-and-children
-  [graph name-or-uuid & {:keys [children?]
-                         :or {children? true}}]
+  [graph name-or-uuid &loading? & {:keys [children?]
+                                   :or {children? true}}]
   (when-let [^Object sqlite @db-browser/*worker]
     (p/let [name' (str name-or-uuid)
             result (.get-block-and-children sqlite graph name' children?)
             {:keys [block children] :as result'} (edn/read-string result)
             conn (db/get-db graph false)
             _ (d/transact! conn (cons block children))]
+      (reset! &loading? false)
       (if children?
         block
         result'))))

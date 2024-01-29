@@ -84,7 +84,8 @@
             [rum.core :as rum]
             [shadow.loader :as loader]
             [logseq.common.path :as path]
-            [electron.ipc :as ipc]))
+            [electron.ipc :as ipc]
+            [frontend.db.async :as db-async]))
 
 ;; local state
 (defonce *dragging?
@@ -3090,7 +3091,11 @@
   (rum/local false ::show-block-right-menu?)
   {:init (fn [state]
            (let [[config block] (:rum/args state)
-                 block-id (:block/uuid block)]
+                 block-id (:block/uuid block)
+                 *loading? (atom true)]
+             (if (:block/content (db/entity [:block/uuid block-id]))
+               (reset! *loading? false)
+               (db-async/<get-block-and-children (state/get-current-repo) block-id *loading? :children? false))
              (cond
                (root-block? config block)
                (state/set-collapsed-block! block-id false)
@@ -3102,6 +3107,7 @@
                :else
                nil)
              (assoc state
+                    ::loading? *loading?
                     ::control-show? (atom false)
                     ::navigating-block (atom (:block/uuid block)))))
    :will-unmount (fn [state]
@@ -3113,31 +3119,30 @@
                    state)}
   [state config block]
   (let [repo (state/get-current-repo)
-        unloaded? (state/sub-block-unloaded? repo (str (:block/uuid block)))
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
-        [original-block block] (build-block config block {:navigating-block navigating-block :navigated? navigated?})
-        config' (if original-block
-                  (assoc config :original-block original-block)
-                  config)
-        opts {}]
+        loading? (rum/react (::loading? state))]
     (cond
-      unloaded?
+      loading?
       [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
        [:div.flex.flex-row
         [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
          [:span.bullet-container.cursor
           [:span.bullet]]]
         [:div.flex.flex-1
-         [:span.opacity-70
-          "Loading..."]]]]
+         ""]]]
 
       :else
-      (rum/with-key
-        (block-container-inner state repo config' block
-                               (merge opts {:navigating-block navigating-block :navigated? navigated?}))
-        (str "block-inner" (:block/uuid block))))))
+      (let [[original-block block] (build-block config block {:navigating-block navigating-block :navigated? navigated?})
+            config' (if original-block
+                      (assoc config :original-block original-block)
+                      config)
+            opts {}]
+        (rum/with-key
+          (block-container-inner state repo config' block
+                                 (merge opts {:navigating-block navigating-block :navigated? navigated?}))
+          (str "block-inner" (:block/uuid block)))))))
 
 (defn divide-lists
   [[f & l]]

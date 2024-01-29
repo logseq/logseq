@@ -71,11 +71,8 @@
   "Returns initial data"
   [db]
   (let [files (get-built-in-files db)
-        journals (get-latest-journals db 3)
-        journal-blocks (mapcat (fn [journal]
-                                 (let [blocks (:block/_page (d/entity db (:db/id journal)))]
-                                   (map (fn [b] (d/pull db '[*] (:db/id b))) blocks))) journals)]
-    (concat files journals journal-blocks)))
+        journals (get-latest-journals db 3)]
+    (concat files journals)))
 
 (defn restore-initial-data
   "Given initial sqlite data and schema, returns a datascript connection"
