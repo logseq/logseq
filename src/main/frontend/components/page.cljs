@@ -202,11 +202,6 @@
                           {:page page-name})]
                (add-button args)))])))))
 
-(defn contents-page
-  [page]
-  (when-let [repo (state/get-current-repo)]
-    (page-blocks-cp repo page {:sidebar? true})))
-
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
   (when (and today? (not sidebar?))
@@ -575,6 +570,15 @@
     (page-inner option)
     (or (:page-name option)
         (get-page-name state))))
+
+(rum/defc contents-page < rum/reactive
+  {:init (fn [state]
+           (db-async/<get-block-and-children (state/get-current-repo) "contents")
+           state)}
+  [page]
+  (when-let [repo (state/get-current-repo)]
+    (when-not (state/sub-block-unloaded? "contents")
+      (page-blocks-cp repo page {:sidebar? true}))))
 
 (defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
 
