@@ -15,7 +15,7 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.common.util :as common-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
-            [logseq.graph-parser.date-time-util :as date-time-util]
+            [logseq.common.util.date-time :as date-time-util]
             [frontend.handler.page :as page-handler]
             [frontend.handler.editor :as editor]
             [frontend.handler.notification :as notification]

@@ -6,7 +6,6 @@
             [datascript.core :as d]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [shadow.cljs.modern :refer [defclass]]
-            [datascript.transit :as dt]
             ["@logseq/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [clojure.string :as string]
@@ -333,8 +332,15 @@
   (getInitialData
    [_this repo]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (->> (sqlite-common-db/get-initial-data @conn)
-          dt/write-transit-str)))
+     (let [data (->> (sqlite-common-db/get-initial-data @conn)
+                     pr-str)]
+       (async/go
+         (let [all-pages (sqlite-common-db/get-all-pages @conn)]
+           (worker-util/post-message :sync-db-changes (pr-str
+                                                       {:repo repo
+                                                        :tx-data all-pages
+                                                        :tx-meta nil}))))
+       data)))
 
   (closeDB
    [_this repo]
