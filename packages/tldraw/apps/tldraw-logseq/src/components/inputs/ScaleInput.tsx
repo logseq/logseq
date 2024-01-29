@@ -50,7 +50,7 @@ export function ScaleInput({ scaleLevel, compact, popoverSide, ...rest }: ScaleI
       options={sizeOptions}
       value={scaleLevel}
       popoverSide={popoverSide}
-      chevron={!compact}
+      compact={compact}
       onValueChange={v => {
         app.api.setScaleLevel(v)
       }}

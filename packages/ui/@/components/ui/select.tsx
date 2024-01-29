@@ -11,6 +11,8 @@ const SelectGroup = SelectPrimitive.Group
 
 const SelectValue = SelectPrimitive.Value
 
+const SelectIcon = SelectPrimitive.Icon
+
 const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
@@ -29,9 +31,6 @@ const SelectTrigger = React.forwardRef<
     {...props}
   >
     {children}
-    <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 opacity-50"/>
-    </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ))
 SelectTrigger.displayName = SelectPrimitive.Trigger.displayName
@@ -159,6 +158,7 @@ export {
   SelectTrigger,
   SelectContent,
   SelectLabel,
+  SelectIcon,
   SelectItem,
   SelectSeparator,
   SelectScrollUpButton,
