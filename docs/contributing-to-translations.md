@@ -31,18 +31,18 @@ $ bb lang:list
 |      :en |                 100 |                492 |                English |
 |      :uk |                  95 |                466 |             Українська |
 |      :ru |                  95 |                466 |                Русский |
-|      :ko |                  93 |                459 |                    한국어 |
+|      :ko |                  93 |                459 |                 한국어  |
 |      :de |                  93 |                459 |                Deutsch |
 |      :fr |                  92 |                453 |               Français |
 |   :pt-PT |                  92 |                453 |    Português (Europeu) |
 |   :pt-BR |                  92 |                451 | Português (Brasileiro) |
 |      :sk |                  90 |                445 |             Slovenčina |
-|   :zh-CN |                  90 |                441 |                   简体中文 |
+|   :zh-CN |                  90 |                441 |                简体中文 |
 |   :nb-NO |                  75 |                370 |         Norsk (bokmål) |
-|      :ja |                  75 |                368 |                    日本語 |
+|      :ja |                  75 |                368 |                 日本語 |
 |      :pl |                  72 |                353 |                 Polski |
 |      :nl |                  72 |                353 |     Dutch (Nederlands) |
-| :zh-Hant |                  71 |                349 |                   繁體中文 |
+| :zh-Hant |                  71 |                349 |                繁體中文 |
 |      :it |                  71 |                349 |               Italiano |
 |      :af |                  22 |                106 |              Afrikaans |
 Total: 19
