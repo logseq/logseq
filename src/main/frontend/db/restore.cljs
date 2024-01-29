@@ -48,8 +48,6 @@
     ;; (db-migrate/migrate attached-db)
 
     (p/let [_ (p/delay 150)]          ; More time for UI refresh
-      (state/set-state! [repo :restore/unloaded-blocks] nil)
-      (state/set-state! [repo :restore/unloaded-pages] nil)
       (state/set-state! :graph/loading? false)
       (react/clear-query-state!)
       (state/pub-event! [:ui/re-render-root]))))
