@@ -12,10 +12,20 @@
       (when result
         (edn/read-string result)))))
 
-(defn <pull-many
-  [graph selector ids]
-  (assert (seq ids))
-  (when-let [^Object sqlite @state/*db-worker]
-    (p/let [result (.pull-many sqlite graph (pr-str selector) (pr-str ids))]
-      (when result
-        (edn/read-string result)))))
+(defn <pull
+  ([graph id]
+   (<pull graph '[*] id))
+  ([graph selector id]
+   (when-let [^Object sqlite @state/*db-worker]
+     (p/let [result (.pull sqlite graph (pr-str selector) (pr-str id))]
+       (when result
+         (edn/read-string result))))))
+
+(comment
+  (defn <pull-many
+   [graph selector ids]
+   (assert (seq ids))
+   (when-let [^Object sqlite @state/*db-worker]
+     (p/let [result (.pull-many sqlite graph (pr-str selector) (pr-str ids))]
+       (when result
+         (edn/read-string result))))))

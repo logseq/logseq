@@ -41,7 +41,7 @@
            (p/let [_ (loader/load :tldraw)]
              (reset! tldraw-loaded? true))
            (let [page-name (first (:rum/args state))]
-             (db-async/<get-block-and-children (state/get-current-repo) page-name))
+             (db-async/<get-block (state/get-current-repo) page-name))
            state)}
   [page-name]
   (let [loaded? (rum/react tldraw-loaded?)

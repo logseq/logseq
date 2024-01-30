@@ -285,6 +285,14 @@
              result (apply d/q (first inputs) @conn (rest inputs))]
          (pr-str result))))
 
+  (pull
+   [_this repo selector-str id-str]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (let [selector (edn/read-string selector-str)
+           id (edn/read-string id-str)
+           result (d/pull @conn selector id)]
+       (pr-str result))))
+
   (pull-many
    [_this repo selector-str ids-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -366,10 +374,11 @@
      (let [data (->> (sqlite-common-db/get-initial-data @conn)
                      pr-str)]
        (async/go
-         (let [all-pages (sqlite-common-db/get-all-pages @conn)]
+         (let [all-pages (sqlite-common-db/get-all-pages @conn)
+               all-files (sqlite-common-db/get-all-files @conn)]
            (worker-util/post-message :sync-db-changes (pr-str
                                                        {:repo repo
-                                                        :tx-data all-pages
+                                                        :tx-data (concat all-files all-pages)
                                                         :tx-meta nil}))))
        data)))
 

@@ -21,7 +21,8 @@
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.util.block-ref :as block-ref]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.db.async :as db-async]))
 
 ;; all IPC paths must be normalized! (via common-util/path-normalize)
 
@@ -69,9 +70,9 @@
           {:keys [mtime]} stat
           ext (keyword (path/file-ext path))]
       (when (contains? #{:org :md :markdown :css :js :edn :excalidraw :tldr} ext)
-        (let [db-content (db/get-file repo path)
-              exists-in-db? (not (nil? db-content))
-              db-content (or db-content "")]
+        (p/let [db-content (db-async/<get-file repo path)
+                exists-in-db? (not (nil? db-content))
+                db-content (or db-content "")]
           (when (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
             (cond
               (and (= "unlinkDir" type) dir)
@@ -172,7 +173,7 @@
                              (:mtime (fs/stat repo-dir file-rpath)))
                 db-empty? (db/page-empty? repo page-name)
                 db-content (if-not db-empty?
-                             (db/get-file repo file-rpath)
+                             (db-async/<get-file repo file-rpath)
                              "")]
           (p/let [_ (cond
                       (and file-exists?
@@ -193,11 +194,11 @@
   [graph exclude-files]
   (when graph
     (let [repo-dir (config/get-repo-dir graph)
-          db-files (->> (db/get-files graph)
-                        (map first))
           exclude-files (set (or exclude-files []))]
       ;; read all files in the repo dir, notify if readdir error
-      (p/let [[files deleted-files]
+      (p/let [db-files' (db-async/<get-files graph)
+              db-files (map first db-files')
+              [files deleted-files]
               (-> (fs/readdir repo-dir :path-only? true)
                   (p/chain (fn [files]
                              (->> files

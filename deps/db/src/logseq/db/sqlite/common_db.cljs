@@ -20,6 +20,13 @@
        (map (fn [e]
               (d/pull db '[*] (:e e))))))
 
+(defn get-all-files
+  [db]
+  (->> (d/datoms db :avet :file/path)
+       (map (fn [e]
+              {:db/id (:e e)
+               :file/path (:v e)}))))
+
 (defn get-block-and-children
   [db name children?]
   (let [get-children (fn [col]

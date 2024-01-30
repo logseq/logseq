@@ -11,7 +11,6 @@
             [frontend.components.whiteboard :as whiteboard]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
-            [frontend.db :as db]
             [frontend.db.restore :as db-restore]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
@@ -41,7 +40,8 @@
             [frontend.mobile.core :as mobile]
             [cljs-bean.core :as bean]
             [frontend.handler.test :as test]
-            [frontend.persist-db.browser :as db-browser]))
+            [frontend.persist-db.browser :as db-browser]
+            [frontend.db.async :as db-async]))
 
 (defn- set-global-error-notification!
   []
@@ -87,17 +87,18 @@
                 ;; install after config is restored
                 (shortcut/refresh!)
 
-                (cond
-                  (and (not (seq (db/get-files config/demo-repo)))
-                       ;; Not native local directory
-                       (not (some config/local-file-based-graph? (map :url repos)))
-                       (not (mobile-util/native-platform?))
-                       (not (config/db-based-graph? repo)))
-                  ;; will execute `(state/set-db-restoring! false)` inside
-                  (repo-handler/setup-demo-repo-if-not-exists!)
+                (p/let [files (db-async/<get-files config/demo-repo)]
+                  (cond
+                    (and (not (seq files))
+                         ;; Not native local directory
+                         (not (some config/local-file-based-graph? (map :url repos)))
+                         (not (mobile-util/native-platform?))
+                         (not (config/db-based-graph? repo)))
+                    ;; will execute `(state/set-db-restoring! false)` inside
+                    (repo-handler/setup-demo-repo-if-not-exists!)
 
-                  :else
-                  (state/set-db-restoring! false)))))))
+                    :else
+                    (state/set-db-restoring! false))))))))
         (p/then
          (fn []
            (js/console.log "db restored, setting up repo hooks")

@@ -446,7 +446,7 @@
 (rum/defc property-template-value < rum/reactive
   {:init (fn [state]
            (let [block-id (second (:rum/args state))]
-             (db-async/<get-block-and-children (state/get-current-repo) block-id :children? false))
+             (db-async/<get-block (state/get-current-repo) block-id :children? false))
            state)}
   [config value opts]
   (when value
@@ -468,7 +468,7 @@
   (rum/local nil ::template-instance)
   {:init (fn [state]
            (let [block-id (first (:rum/args state))]
-             (db-async/<get-block-and-children (state/get-current-repo) block-id :children? false))
+             (db-async/<get-block (state/get-current-repo) block-id :children? false))
            state)}
   [state value block property block-cp editor-box opts page-cp editor-id]
   (let [*template-instance (::template-instance state)
@@ -504,7 +504,7 @@
 (rum/defc closed-value-item < rum/reactive
   {:init (fn [state]
            (let [block-id (first (:rum/args state))]
-             (db-async/<get-block-and-children (state/get-current-repo) block-id :children? false))
+             (db-async/<get-block (state/get-current-repo) block-id :children? false))
            state)}
   [value {:keys [page-cp inline-text icon?]}]
   (when value
