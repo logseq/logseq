@@ -946,6 +946,7 @@ independent of format as format specific heading characters are stripped"
          (sort-by :block/name)
          (first))))
 
+;; TODO: async query
 (defn get-all-referenced-blocks-uuid
   "Get all uuids of blocks with any back link exists."
   []
@@ -982,6 +983,7 @@ independent of format as format specific heading characters are stripped"
                     :file/content content}]
        (db-utils/transact! repo [tx-data] (merge opts {:skip-refresh? true}))))))
 
+;; TODO: async query
 (defn get-pre-block
   [repo page-id]
   (-> (d/q '[:find (pull ?b [*])
