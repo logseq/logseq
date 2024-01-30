@@ -56,4 +56,4 @@
           (prn :debug :progressing (:block/name (first tx-data)))
           (d/transact! conn tx-data {:new-graph? true})))))
 
-  (create-graph! conn 10000 20 0))
+  (create-graph! conn 30000 20 0))
