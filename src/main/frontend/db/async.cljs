@@ -147,3 +147,12 @@
   (assert (integer? eid))
   (when-let [^Object worker @db-browser/*worker]
     (.get-block-refs-count worker graph eid)))
+
+(defn <get-all-referenced-blocks-uuid
+  "Get all uuids of blocks with any back link exists."
+  [graph]
+  (<q '[:find [?refed-uuid ...]
+        :where
+           ;; ?referee-b is block with ref towards ?refed-b
+        [?refed-b   :block/uuid ?refed-uuid]
+        [?referee-b :block/refs ?refed-b]]))
