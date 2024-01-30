@@ -291,7 +291,7 @@ html[data-theme='light'] {
 }
 
 .tl-select-trigger {
-  @apply h-8 font-medium bg-transparent px-2;
+  @apply h-8 font-medium bg-transparent px-3;
 
   border: 1px solid var(--ls-secondary-border-color);
 
