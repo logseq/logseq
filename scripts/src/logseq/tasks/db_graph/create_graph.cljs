@@ -176,13 +176,13 @@
                                   :property-attributes
                                   {:db/id (or (property-db-ids (name prop-name))
                                               (throw (ex-info "No :db/id for property" {:property prop-name})))}})
-                                [(sqlite-util/build-new-property
-                                  (merge (db-property-util/new-property-tx prop-name (get-in properties [prop-name :block/schema]) uuid)
-                                         {:db/id (or (property-db-ids (name prop-name))
-                                                     (throw (ex-info "No :db/id for property" {:property prop-name})))}
-                                         (when-let [props (not-empty (get-in properties [prop-name :properties]))]
-                                           {:block/properties (->block-properties-tx props uuid-maps)
-                                            :block/refs (build-property-refs props property-db-ids)})))]))
+                                [(merge
+                                  (sqlite-util/build-new-property prop-name (get-in properties [prop-name :block/schema]) uuid)
+                                  {:db/id (or (property-db-ids (name prop-name))
+                                                      (throw (ex-info "No :db/id for property" {:property prop-name})))}
+                                  (when-let [props (not-empty (get-in properties [prop-name :properties]))]
+                                            {:block/properties (->block-properties-tx props uuid-maps)
+                                             :block/refs (build-property-refs props property-db-ids)}))]))
                             property-uuids))
         pages-and-blocks-tx
         (vec
