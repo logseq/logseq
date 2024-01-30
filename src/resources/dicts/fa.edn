@@ -412,7 +412,7 @@
  :shortcut.category/navigating "ناوبری"
  :shortcut.category/block-editing "تنظیمات عمومی ویرایش بلوک"
  :shortcut.category/block-command-editing "ویرایش دستوری بلوک"
- :shortcut.category/block-selection "انتخاب بلوک (با دکه Esc از حالت انتخاب خارج می‌شوید)"
+ :shortcut.category/block-selection "انتخاب بلوک (با دکمه Esc از حالت انتخاب خارج می‌شوید)"
  :shortcut.category/toggle "تغییر حالت"
  :shortcut.category/others "سایر"
  :shortcut.category/plugins "افزونه‌ها"
