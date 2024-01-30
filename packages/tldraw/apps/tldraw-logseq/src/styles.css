@@ -274,7 +274,7 @@ html[data-theme='light'] {
   @apply relative flex items-center justify-center rounded border-0 gap-1;
 
   height: 32px;
-  min-width: 32px;
+  width: 32px;
   font-family: var(--ls-font-family);
   background: none;
   cursor: pointer;
