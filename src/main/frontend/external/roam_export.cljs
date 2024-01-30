@@ -20,6 +20,7 @@
   (->> (repeatedly 9 nano-id-char)
        (str/join)))
 
+;; TODO: async
 (defn uuid->uid-map []
   (let [db (db/get-db (state/get-current-repo))]
     (->>
