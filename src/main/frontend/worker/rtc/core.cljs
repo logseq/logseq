@@ -302,7 +302,11 @@
                                                                                   (d/pull-many @conn [:db/id])
                                                                                   (filter :db/id)))
                   (contains? key-set :properties)     (assoc :block/properties
-                                                             (transit/read transit-r (:properties op-value))))]
+                                                             (transit/read transit-r (:properties op-value)))
+                  (contains? key-set :link)           (assoc :block/link (some->> (:link op-value)
+                                                                                  (vector :block/uuid)
+                                                                                  (d/pull @conn [:db/id])
+                                                                                  :db/id)))]
             (transact-db! :save-block repo conn date-formatter new-block)))))))
 
 (defn apply-remote-move-ops
