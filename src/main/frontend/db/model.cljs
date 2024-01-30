@@ -117,18 +117,6 @@
   (when-let [db (conn/get-db repo)]
     (ldb/get-alias-source-page db alias)))
 
-(defn get-files
-  [repo]
-  (when-let [db (conn/get-db repo)]
-    (->> (d/q
-          '[:find ?path ?modified-at
-            :where
-            [?file :file/path ?path]
-            [(get-else $ ?file :file/last-modified-at 0) ?modified-at]]
-          db)
-         (seq)
-         (reverse))))
-
 (defn get-files-blocks
   [repo-url paths]
   (let [paths (set paths)

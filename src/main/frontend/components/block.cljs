@@ -813,7 +813,7 @@
 (rum/defc block-embed < rum/reactive
   {:init (fn [state]
            (let [block-id (second (:rum/args state))]
-             (db-async/<get-block-and-children (state/get-current-repo) block-id))
+             (db-async/<get-block (state/get-current-repo) block-id))
            state)}
   [config uuid]
   (if (state/sub-async-query-loading (str uuid))
@@ -837,7 +837,7 @@
   {:init (fn [state]
            (let [page-name (second (:rum/args state))
                  page-name' (util/page-name-sanity-lc (string/trim page-name))]
-             (db-async/<get-block-and-children (state/get-current-repo) page-name'))
+             (db-async/<get-block (state/get-current-repo) page-name'))
            state)}
   [config page-name]
   (let [page-name (util/page-name-sanity-lc (string/trim page-name))
@@ -893,7 +893,7 @@
 (rum/defc block-reference < rum/reactive
   {:init (fn [state]
            (let [block-id (second (:rum/args state))]
-             (db-async/<get-block-and-children (state/get-current-repo) block-id :children? false))
+             (db-async/<get-block (state/get-current-repo) block-id :children? false))
            state)}
   db-mixins/query
   [config id label]
@@ -3114,7 +3114,7 @@
   {:init (fn [state]
            (let [[config block] (:rum/args state)
                  block-id (:block/uuid block)]
-             (db-async/<get-block-and-children (state/get-current-repo) block-id :children? false)
+             (db-async/<get-block (state/get-current-repo) block-id :children? false)
              (cond
                (root-block? config block)
                (state/set-collapsed-block! block-id false)

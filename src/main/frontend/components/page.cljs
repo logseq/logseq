@@ -456,7 +456,7 @@
   {:init (fn [state]
            (let [page-name (:page-name (first (:rum/args state)))
                  page-name' (get-sanity-page-name state page-name)]
-             (db-async/<get-block-and-children (state/get-current-repo) page-name')
+             (db-async/<get-block (state/get-current-repo) page-name')
              (assoc state ::page-name page-name')))}
   [state {:keys [repo page-name preview? sidebar?] :as option}]
   (when-not (state/sub-async-query-loading (::page-name state))
@@ -573,7 +573,7 @@
 
 (rum/defc contents-page < rum/reactive
   {:init (fn [state]
-           (db-async/<get-block-and-children (state/get-current-repo) "contents")
+           (db-async/<get-block (state/get-current-repo) "contents")
            state)}
   [page]
   (when-let [repo (state/get-current-repo)]

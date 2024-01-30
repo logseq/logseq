@@ -16,6 +16,7 @@
             [frontend.db.react :as react]))
 
 (def <q db-async-util/<q)
+(def <pull db-async-util/<pull)
 (comment
   (def <pull-many db-async-util/<pull-many))
 
@@ -106,7 +107,7 @@
     (<get-db-based-property-values graph property)
     (file-async/<get-file-based-property-values graph property)))
 
-(defn <get-block-and-children
+(defn <get-block
   [graph name-or-uuid & {:keys [children?]
                          :or {children? true}}]
   (let [name' (str name-or-uuid)
@@ -151,8 +152,15 @@
 (defn <get-all-referenced-blocks-uuid
   "Get all uuids of blocks with any back link exists."
   [graph]
-  (<q '[:find [?refed-uuid ...]
+  (<q graph
+      '[:find [?refed-uuid ...]
         :where
            ;; ?referee-b is block with ref towards ?refed-b
         [?refed-b   :block/uuid ?refed-uuid]
         [?referee-b :block/refs ?refed-b]]))
+
+(defn <get-file
+  [graph path]
+  (when (and graph path)
+    (p/let [result (<pull graph [:file/path path])]
+      (:file/content result))))

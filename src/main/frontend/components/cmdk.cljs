@@ -417,7 +417,7 @@
 (defmethod handle-action :open-block [_ state _event]
   (when-let [block-id (some-> state state->highlighted-item :source-block :block/uuid)]
     (p/let [repo (state/get-current-repo)
-            _ (db-async/<get-block-and-children repo block-id)]
+            _ (db-async/<get-block repo block-id)]
       (let [get-block-page (partial model/get-block-page repo)
            block (db/entity [:block/uuid block-id])]
        (when block
