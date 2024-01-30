@@ -120,13 +120,31 @@
 
       :else
       (when-let [^Object sqlite @db-browser/*worker]
-        (state/update-state! :restore/unloaded-blocks (fn [s] (conj s name')))
+        (state/update-state! :db/async-queries (fn [s] (conj s name')))
         (p/let [result (.get-block-and-children sqlite graph name' children?)
                 {:keys [block children] :as result'} (edn/read-string result)
                 conn (db/get-db graph false)
                 _ (d/transact! conn (cons block children))]
-          (state/update-state! :restore/unloaded-blocks (fn [s] (disj s name')))
+          (state/update-state! :db/async-queries (fn [s] (disj s name')))
           (react/refresh-affected-queries! graph [[:frontend.worker.react/block (:db/id block)]])
           (if children?
             block
             result'))))))
+
+(defn <get-block-refs
+  [graph eid]
+  (assert (integer? eid))
+  (when-let [^Object worker @db-browser/*worker]
+    (state/update-state! :db/async-queries (fn [s] (conj s (str eid "-refs"))))
+    (p/let [result-str (.get-block-refs worker graph eid)
+            result (edn/read-string result-str)
+            conn (db/get-db graph false)
+            _ (d/transact! conn result)]
+      (state/update-state! :db/async-queries (fn [s] (disj s (str eid "-refs"))))
+      result)))
+
+(defn <get-block-refs-count
+  [graph eid]
+  (assert (integer? eid))
+  (when-let [^Object worker @db-browser/*worker]
+    (.get-block-refs-count worker graph eid)))

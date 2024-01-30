@@ -311,7 +311,7 @@
       :system/info                           {}
       ;; Whether block is selected
       :ui/select-query-cache                 (atom {})
-      :restore/unloaded-blocks               (atom #{})})))
+      :db/async-queries               (atom #{})})))
 
 ;; Block ast state
 ;; ===============
@@ -2305,12 +2305,12 @@ Similar to re-frame subscriptions"
   []
   (storage/remove :user-groups))
 
-(defn sub-block-unloaded?
-  [block-uuid]
+(defn sub-async-query-loading
+  [k]
+  (assert (some? k))
   (rum/react
-   (r/cached-derived-atom (:restore/unloaded-blocks @state) [(get-current-repo) ::block-unloaded (str block-uuid)]
-                          (fn [s]
-                            (contains? s (str block-uuid))))))
+   (r/cached-derived-atom (:db/async-queries @state) [(get-current-repo) ::async-query (str k)]
+                          (fn [s] (contains? s (str k))))))
 
 (defn get-color-accent []
   (get @state :ui/radix-color))

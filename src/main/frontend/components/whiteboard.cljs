@@ -48,7 +48,7 @@
         tldr (whiteboard-handler/page-name->tldr! page-name)
         generate-preview (when loaded?
                            (resolve 'frontend.extensions.tldraw/generate-preview))]
-    (when (and generate-preview (not (state/sub-block-unloaded? page-name)))
+    (when (and generate-preview (not (state/sub-async-query-loading page-name)))
       (generate-preview tldr))))
 
 ;; TODO: use frontend.ui instead of making a new one

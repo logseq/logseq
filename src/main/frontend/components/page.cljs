@@ -457,10 +457,9 @@
            (let [page-name (:page-name (first (:rum/args state)))
                  page-name' (get-sanity-page-name state page-name)]
              (db-async/<get-block-and-children (state/get-current-repo) page-name')
-             (assoc state
-                    ::page-name page-name')))}
+             (assoc state ::page-name page-name')))}
   [state {:keys [repo page-name preview? sidebar?] :as option}]
-  (when-not (state/sub-block-unloaded? (::page-name state))
+  (when-not (state/sub-async-query-loading (::page-name state))
     (when-let [path-page-name (get-path-page-name state page-name)]
       (let [current-repo (state/sub :git/current-repo)
             repo (or repo current-repo)
@@ -549,12 +548,13 @@
            (when-not block?
              (tagged-pages repo page-name page-original-name))
 
-       ;; referenced blocks
+           ;; referenced blocks
            (when-not block-or-whiteboard?
-             [:div {:key "page-references"}
-              (rum/with-key
-                (reference/references route-page-name)
-                (str route-page-name "-refs"))])
+             (when page
+               [:div {:key "page-references"}
+                (rum/with-key
+                  (reference/references route-page-name)
+                  (str route-page-name "-refs"))]))
 
            (when-not block-or-whiteboard?
              (when (not journal?)
@@ -577,7 +577,7 @@
            state)}
   [page]
   (when-let [repo (state/get-current-repo)]
-    (when-not (state/sub-block-unloaded? "contents")
+    (when-not (state/sub-async-query-loading "contents")
       (page-blocks-cp repo page {:sidebar? true}))))
 
 (defonce layout (atom [js/window.innerWidth js/window.innerHeight]))

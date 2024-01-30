@@ -450,7 +450,7 @@
            state)}
   [config value opts]
   (when value
-    (if (state/sub-block-unloaded? value)
+    (if (state/sub-async-query-loading value)
       [:div.text-sm.opacity-70 "loading"]
       (when-let [entity (db/sub-block (:db/id (db/entity [:block/uuid value])))]
         (let [properties-cp (:properties-cp opts)]
@@ -474,7 +474,7 @@
   (let [*template-instance (::template-instance state)
         template-instance @*template-instance]
     (when value
-      (if (state/sub-block-unloaded? value)
+      (if (state/sub-async-query-loading value)
         [:div.text-sm.opacity-70 "loading"]
         (when-let [v-block (db/sub-block (:db/id (db/entity [:block/uuid value])))]
           (let [class? (contains? (:block/type v-block) "class")
@@ -508,7 +508,7 @@
            state)}
   [value {:keys [page-cp inline-text icon?]}]
   (when value
-    (if (state/sub-block-unloaded? value)
+    (if (state/sub-async-query-loading value)
       [:div.text-sm.opacity-70 "loading"]
       (when-let [block (db/sub-block (:db/id (db/entity [:block/uuid value])))]
         (let [value' (get-in block [:block/schema :value])

@@ -291,6 +291,16 @@
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (pr-str (sqlite-common-db/get-block-and-children @conn name children?))))
 
+  (get-block-refs
+   [_this repo id]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (pr-str (ldb/get-block-refs @conn id))))
+
+  (get-block-refs-count
+   [_this repo id]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (ldb/get-block-refs-count @conn id)))
+
   (transact
    [_this repo tx-data tx-meta context]
    (when repo (worker-state/set-db-latest-tx-time! repo))

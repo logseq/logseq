@@ -813,8 +813,7 @@ independent of format as format specific heading characters are stripped"
          (->>
           (react/q repo
             [:frontend.worker.react/refs page-id]
-            {:use-cache? false
-             :query-fn (fn []
+            {:query-fn (fn []
                          (let [entities (mapcat (fn [id]
                                                   (:block/_path-refs (db-utils/entity id))) pages)
                                blocks (map (fn [e]

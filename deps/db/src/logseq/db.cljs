@@ -528,6 +528,42 @@
                      '[:db/id :block/name :block/original-name]
                      ids)))))
 
+(defn get-page-alias
+  [db page-id]
+  (->>
+   (d/q
+    '[:find [?e ...]
+      :in $ ?page %
+      :where
+      (alias ?page ?e)]
+    db
+    page-id
+    (:alias rules/rules))
+   distinct))
+
+(defn get-page-refs
+  [db id]
+  (let [alias (->> (get-page-alias db id)
+                   (cons id)
+                   distinct)
+        refs (->> (mapcat (fn [id] (:block/_path-refs (d/entity db id))) alias)
+                  distinct)]
+    (d/pull-many db '[*] (map :db/id refs))))
+
+(defn get-block-refs
+  [db id]
+  (let [block (d/entity db id)]
+    (if (:block/name block)
+      (get-page-refs db id)
+      (let [refs (:block/_refs (d/entity db id))]
+       (d/pull-many db '[*] (map :db/id refs))))))
+
+(defn get-block-refs-count
+  [db id]
+  (some-> (d/entity db id)
+          :block/_refs
+          count))
+
 (comment
   (defn db-based-graph?
     "Whether the current graph is db-only"
