@@ -31,7 +31,6 @@
                              (gp-property/valid-property-name? (str k))) properties)
                    (into {}))))))
 
-;; TODO: async query
 (defn get-all-pages
   "Get all pages and their children blocks."
   [repo db]

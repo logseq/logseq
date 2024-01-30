@@ -906,7 +906,6 @@ independent of format as format specific heading characters are stripped"
          (sort-by :block/name)
          (first))))
 
-;; TODO: async query
 (defn get-all-referenced-blocks-uuid
   "Get all uuids of blocks with any back link exists."
   []
@@ -920,7 +919,8 @@ independent of format as format specific heading characters are stripped"
 (defn delete-blocks
   [repo-url files _delete-page?]
   (when (seq files)
-    (let [blocks (get-files-blocks repo-url files)]
+    (let [blocks (->> (get-files-blocks repo-url files)
+                      (remove nil?))]
       (mapv (fn [eid] [:db.fn/retractEntity eid]) blocks))))
 
 (defn delete-files
@@ -943,7 +943,7 @@ independent of format as format specific heading characters are stripped"
                     :file/content content}]
        (db-utils/transact! repo [tx-data] (merge opts {:skip-refresh? true}))))))
 
-;; TODO: async query
+;; TODO: check whether this works when adding pdf back on Web
 (defn get-pre-block
   [repo page-id]
   (-> (d/q '[:find (pull ?b [*])

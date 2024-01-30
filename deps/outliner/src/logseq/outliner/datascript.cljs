@@ -65,7 +65,7 @@
                               ;; Only delete if last reference
                               (keep #(when (<= (count (:block/_macros (d/entity db (:db/id %))))
                                                1)
-                                       (vector :db.fn/retractEntity (:db/id %)))
+                                       (when (:db/id %) (vector :db.fn/retractEntity (:db/id %))))
                                     (:block/macros b)))
                             retracted-blocks)]
       (when (and (seq retracted-tx') (fn? set-state-fn))

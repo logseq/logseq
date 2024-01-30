@@ -153,7 +153,7 @@
                                   ;; Only delete if last reference
                                   (keep #(when (<= (count (:block/_macros (d/entity db (:db/id %))))
                                                    1)
-                                           (vector :db.fn/retractEntity (:db/id %)))
+                                           (when (:db/id %) (vector :db.fn/retractEntity (:db/id %))))
                                         (:block/macros block-entity)))))))
 
 (comment
@@ -413,11 +413,13 @@
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
     (let [block-id (otree/-get-id this conn)
-          ids (set (if children?
-                     (let [children (ldb/get-block-children @conn block-id)
-                           children-ids (map :block/uuid children)]
-                       (conj children-ids block-id))
-                     [block-id]))
+          ids (->>
+               (if children?
+                 (let [children (ldb/get-block-children @conn block-id)
+                       children-ids (map :block/uuid children)]
+                   (conj children-ids block-id))
+                 [block-id])
+               (remove nil?))
           txs (map (fn [id] [:db.fn/retractEntity [:block/uuid id]]) ids)
           txs (if-not children?
                 (let [immediate-children (ldb/get-block-immediate-children @conn block-id)]
