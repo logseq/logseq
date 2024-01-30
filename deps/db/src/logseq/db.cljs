@@ -548,7 +548,8 @@
                    distinct)
         refs (->> (mapcat (fn [id] (:block/_path-refs (d/entity db id))) alias)
                   distinct)]
-    (d/pull-many db '[*] (map :db/id refs))))
+    (when (seq refs)
+      (d/pull-many db '[*] (map :db/id refs)))))
 
 (defn get-block-refs
   [db id]
@@ -556,13 +557,30 @@
     (if (:block/name block)
       (get-page-refs db id)
       (let [refs (:block/_refs (d/entity db id))]
-       (d/pull-many db '[*] (map :db/id refs))))))
+        (when (seq refs)
+          (d/pull-many db '[*] (map :db/id refs)))))))
 
 (defn get-block-refs-count
   [db id]
   (some-> (d/entity db id)
           :block/_refs
           count))
+
+(defn get-page-unlinked-refs
+  "Get unlinked refs from search result"
+  [db page-id search-result-eids]
+  (let [alias (->> (get-page-alias db page-id)
+                   (cons page-id)
+                   set)
+        eids (remove
+              (fn [eid]
+                (when-let [e (d/entity db eid)]
+                  (or (some alias (map :db/id (:block/refs e)))
+                      (:block/link e)
+                      (nil? (:block/content e)))))
+              search-result-eids)]
+    (when (seq eids)
+      (d/pull-many db '[*] eids))))
 
 (comment
   (defn db-based-graph?

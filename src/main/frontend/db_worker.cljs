@@ -281,9 +281,18 @@
   (q [_this repo inputs-str]
      "Datascript q"
      (when-let [conn (worker-state/get-datascript-conn repo)]
-       (let [inputs (edn/read-string inputs-str)]
-         (let [result (apply d/q (first inputs) @conn (rest inputs))]
-           (pr-str result)))))
+       (let [inputs (edn/read-string inputs-str)
+             result (apply d/q (first inputs) @conn (rest inputs))]
+         (pr-str result))))
+
+  (pull-many
+   [_this repo selector-str ids-str]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (let [selector (edn/read-string selector-str)
+           ids (edn/read-string ids-str)
+           result (d/pull-many @conn selector ids)]
+       (let []
+         (pr-str result)))))
 
   (get-block-and-children
    [_this repo name children?]
@@ -300,6 +309,12 @@
    [_this repo id]
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (ldb/get-block-refs-count @conn id)))
+
+  (get-page-unlinked-refs
+   [_this repo page-id search-result-eids-str]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (let [search-result-eids (edn/read-string search-result-eids-str)]
+       (pr-str (ldb/get-page-unlinked-refs @conn page-id search-result-eids)))))
 
   (transact
    [_this repo tx-data tx-meta context]
