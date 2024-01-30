@@ -60,7 +60,7 @@
  :on-boarding/section-tip-1     "هر برگه  یک پرونده است که تنها روی {1} شما ذخیره می‌شود."
  :on-boarding/section-tip-2     "بعدا می‌توانید انتخاب کنید که آن را هم‌گام کنید."
  :on-boarding/section-assets    "گ‍رافیک‌ها و اسناد"
- :on-boarding/section-computer ‍ "رایانه"
+ :on-boarding/section-computer  "رایانه"
  :on-boarding/section-journals  "یادداشت‌های روزانه"
  :on-boarding/section-pages     "برگه‌ها"
  :on-boarding/section-phone     "گوشی"
