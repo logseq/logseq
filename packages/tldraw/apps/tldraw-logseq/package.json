@@ -12,8 +12,6 @@
   "devDependencies": {
     "@radix-ui/react-context-menu": "^2.1.0",
     "@radix-ui/react-slider": "^1.1.0",
-    "@radix-ui/react-toggle": "^1.0.1",
-    "@radix-ui/react-toggle-group": "^1.0.1",
     "@tldraw/core": "2.0.0-alpha.1",
     "@tldraw/react": "2.0.0-alpha.1",
     "@tldraw/vec": "2.0.0-alpha.1",

@@ -816,30 +816,6 @@
     "@babel/runtime" "^7.13.10"
     "@radix-ui/react-compose-refs" "1.0.0"
 
-"@radix-ui/react-toggle-group@^1.0.1":
-  version "1.0.1"
-  resolved "https://registry.yarnpkg.com/@radix-ui/react-toggle-group/-/react-toggle-group-1.0.1.tgz#26ca9629b5b5e76680ddbd1d362d8bdf359fa14c"
-  integrity sha512-eye/gYvzy82xtoSSeu5Pwlzrh6N2rOcDIwAI7xMatu622Qjlg64LtwB0PSh3iWdmn6Wqy1Fjo5twNPQsp0guiw==
-  dependencies:
-    "@babel/runtime" "^7.13.10"
-    "@radix-ui/primitive" "1.0.0"
-    "@radix-ui/react-context" "1.0.0"
-    "@radix-ui/react-direction" "1.0.0"
-    "@radix-ui/react-primitive" "1.0.1"
-    "@radix-ui/react-roving-focus" "1.0.1"
-    "@radix-ui/react-toggle" "1.0.1"
-    "@radix-ui/react-use-controllable-state" "1.0.0"
-
-"@radix-ui/react-toggle@1.0.1", "@radix-ui/react-toggle@^1.0.1":
-  version "1.0.1"
-  resolved "https://registry.yarnpkg.com/@radix-ui/react-toggle/-/react-toggle-1.0.1.tgz#20120c060cd3cd6267463a6a9bcb106134b5af57"
-  integrity sha512-hZIp9ZKnw4NwVqeB4evWBLa91ryaSJhAO0Ed82wkzRPgg/I29ypcY6SuBb3AMZW+GsuBZpIVujpCq+33TdEcyg==
-  dependencies:
-    "@babel/runtime" "^7.13.10"
-    "@radix-ui/primitive" "1.0.0"
-    "@radix-ui/react-primitive" "1.0.1"
-    "@radix-ui/react-use-controllable-state" "1.0.0"
-
 "@radix-ui/react-use-callback-ref@1.0.0":
   version "1.0.0"
   resolved "https://registry.yarnpkg.com/@radix-ui/react-use-callback-ref/-/react-use-callback-ref-1.0.0.tgz#9e7b8b6b4946fe3cbe8f748c82a2cce54e7b6a90"

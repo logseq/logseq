@@ -1,5 +1,7 @@
 import { Tooltip } from '../Tooltip'
-import * as Toggle from '@radix-ui/react-toggle'
+
+// @ts-ignore
+const LSUI = window.LSUI
 
 interface ToggleInputProps extends React.HTMLAttributes<HTMLElement> {
   toggle?: boolean
@@ -19,13 +21,13 @@ export function ToggleInput({
   return (
     <Tooltip content={tooltip}>
       <div className="inline-block">
-        <Toggle.Root
+        <LSUI.Toggle
           {...rest}
           data-toggle={toggle}
-          className={'tl-toggle-input' + (className ? ' ' + className : '')}
+          className={'h-full' + (className ? ' ' + className : '')}
           pressed={pressed}
           onPressedChange={onPressedChange}
-        ></Toggle.Root>
+        />
       </div>
     </Tooltip>
   )

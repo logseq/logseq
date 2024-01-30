@@ -1,6 +1,8 @@
-import * as ToggleGroup from '@radix-ui/react-toggle-group'
 import { TablerIcon } from '../icons'
 import { Tooltip } from '../Tooltip'
+
+// @ts-ignore
+const LSUI = window.LSUI
 
 export interface ToggleGroupInputOption {
   value: string
@@ -22,8 +24,7 @@ interface ToggleGroupMultipleInputProps extends React.HTMLAttributes<HTMLElement
 
 export function ToggleGroupInput({ options, value, onValueChange }: ToggleGroupInputProps) {
   return (
-    <ToggleGroup.Root
-      className="tl-toggle-group-input"
+    <LSUI.ToggleGroup
       type="single"
       value={value}
       onValueChange={onValueChange}
@@ -31,19 +32,19 @@ export function ToggleGroupInput({ options, value, onValueChange }: ToggleGroupI
       {options.map(option => {
         return (
           <Tooltip content={option.tooltip} key={option.value}>
-            <div className="inline-block">
-              <ToggleGroup.Item
-                className="tl-toggle-group-input-button"
+            <div className="inline-block h-full">
+              <LSUI.ToggleGroupItem
+                className="h-full"
                 value={option.value}
                 disabled={option.value === value}
               >
                 <TablerIcon name={option.icon} />
-              </ToggleGroup.Item>
+              </LSUI.ToggleGroupItem>
             </div>
           </Tooltip>
         )
       })}
-    </ToggleGroup.Root>
+    </LSUI.ToggleGroup>
   )
 }
 
@@ -53,23 +54,23 @@ export function ToggleGroupMultipleInput({
   onValueChange,
 }: ToggleGroupMultipleInputProps) {
   return (
-    <ToggleGroup.Root
-      className="tl-toggle-group-input"
+    <LSUI.ToggleGroup
+      className="contents"
       type="multiple"
       value={value}
       onValueChange={onValueChange}
     >
       {options.map(option => {
         return (
-          <ToggleGroup.Item
-            className="tl-toggle-group-input-button"
+          <LSUI.ToggleGroupItem
+            className="h-full"
             key={option.value}
             value={option.value}
           >
             <TablerIcon name={option.icon} />
-          </ToggleGroup.Item>
+          </LSUI.ToggleGroupItem>
         )
       })}
-    </ToggleGroup.Root>
+    </LSUI.ToggleGroup>
   )
 }
