@@ -1,7 +1,6 @@
 (ns frontend.components.imports
   "Import data into Logseq."
-  (:require [borkdude.rewrite-edn :as rewrite]
-            [cljs.core.async.interop :refer [p->c]]
+  (:require [cljs.core.async.interop :refer [p->c]]
             [clojure.core.async :as async]
             [clojure.edn :as edn]
             [clojure.string :as string]
@@ -13,7 +12,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.fs :as fs]
-            [frontend.handler.common.config-edn :as config-edn-common-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.import :as import-handler]
             [frontend.handler.notification :as notification]
@@ -219,10 +217,7 @@
   (-> (when config-file
         (.text config-file))
       (p/then (fn [content]
-                (let [migrated-content (-> (reduce rewrite/dissoc
-                                                   (rewrite/parse-string (str content))
-                                                   (keys config-edn-common-handler/file-only-config))
-                                           str)]
+                (let [migrated-content (repo-handler/migrate-db-config content)]
                   (p/do!
                    (db-editor-handler/save-file! "logseq/config.edn" migrated-content))
                   (edn/read-string migrated-content))))))
