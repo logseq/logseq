@@ -345,9 +345,9 @@
                    :else
                    (not has-children?))]
     (p/do!
-     (save-current-block! {:current-block current-block})
      (ui-outliner-tx/transact!
       {:outliner-op :insert-blocks}
+       (save-current-block! {:current-block current-block})
        (outliner-core/insert-blocks! (state/get-current-repo) (db/get-db false)
                                     [new-block] current-block {:sibling? sibling?
                                                                :keep-uuid? keep-uuid?
@@ -408,7 +408,7 @@
                        (wrap-parse-block))
         sibling? (when block-self? false)]
     (p/let [_ (outliner-insert-block! config current-block next-block {:sibling? sibling?
-                                                              :keep-uuid? true})]
+                                                                       :keep-uuid? true})]
       (util/set-change-value input fst-block-text)
       (assoc next-block :block/content snd-block-text))))
 

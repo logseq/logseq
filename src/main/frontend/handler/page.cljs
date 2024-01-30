@@ -82,10 +82,12 @@
   (when-let [db (conn/get-db)]
     (let [repo (state/get-current-repo)]
       (if (config/db-based-graph? repo)
-        (let [blocks (ldb/get-page-blocks db page-common-handler/favorites-page-name {})]
+        (let [blocks (ldb/sort-by-left
+                      (ldb/get-page-blocks db page-common-handler/favorites-page-name {})
+                      (d/entity db [:block/name page-common-handler/favorites-page-name]))]
           (keep (fn [block]
-                  (when-let [block-uuid (some-> (:block/content block) parse-uuid)]
-                    (d/entity db [:block/uuid block-uuid]))) blocks))
+                  (when-let [block-db-id (:db/id (:block/link block))]
+                    (d/entity db block-db-id))) blocks))
         (let [page-names (->> (:favorites (state/sub-config))
                               (remove string/blank?)
                               (filter string?)
@@ -135,20 +137,21 @@
   [favorites]
   (let [repo (state/get-current-repo)
         conn (conn/get-db false)]
-    (when (d/entity @conn [:block/name page-common-handler/favorites-page-name])
-      (let [favorite-page-block-uuid-coll
+    (when-let [favorites-page-entity (d/entity @conn [:block/name page-common-handler/favorites-page-name])]
+      (let [favorite-page-block-db-id-coll
             (keep (fn [page-name]
                     (some-> (d/entity @conn [:block/name (common-util/page-name-sanity-lc page-name)])
-                            :block/uuid
-                            str))
+                            :db/id))
                   favorites)
-            current-blocks (ldb/get-page-blocks @conn page-common-handler/favorites-page-name {})]
+            current-blocks (ldb/sort-by-left (ldb/get-page-blocks @conn page-common-handler/favorites-page-name {})
+                                             favorites-page-entity)]
+        (prn :favorite-page-block-db-id-coll favorite-page-block-db-id-coll)
         (ui-outliner-tx/transact!
          {}
-         (doseq [[page-block-uuid block] (zipmap favorite-page-block-uuid-coll current-blocks)]
-           (when (not= page-block-uuid (:block/content block))
+         (doseq [[page-block-db-id block] (zipmap favorite-page-block-db-id-coll current-blocks)]
+           (when (not= page-block-db-id (:db/id (:block/link block)))
              (outliner-core/save-block! repo conn (state/get-date-formatter)
-                                        (assoc block :block/content page-block-uuid)))))))))
+                                        (assoc block :block/link page-block-db-id)))))))))
 
 (defn has-more-journals?
   []
