@@ -328,7 +328,7 @@
          nil)
        (catch :default e
          (prn :debug :error)
-         (js/console.error e)))))
+         (js/console.error e tx-data)))))
 
   (getInitialData
    [_this repo]

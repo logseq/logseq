@@ -26,7 +26,7 @@
 (defn build-hidden-page-tx-data
   [page-name]
   (let [page-name* (str "$$$" page-name)]
-    (assoc (block/page-name->map page-name* false false)
+    (assoc (block/page-name->map page-name* true false)
            :block/type #{"hidden"}
            :block/format :markdown)))
 
