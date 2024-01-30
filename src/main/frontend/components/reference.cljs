@@ -17,7 +17,9 @@
             [frontend.util :as util]
             [rum.core :as rum]
             [frontend.modules.outliner.tree :as tree]
-            [frontend.db.async :as db-async]))
+            [frontend.db.async :as db-async]
+            [promesa.core :as p]
+            [frontend.search :as search]))
 
 (defn- frequencies-sort
   [references]
@@ -271,27 +273,26 @@
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query
-  {:wrap-render
-   (fn [render-fn]
-     (fn [state]
-       (reset! (second (:rum/args state))
-               (apply +
-                      (for [[_ rfs]
-                            (db/get-page-unlinked-references
-                             (first (:rum/args state)))]
-                        (count rfs))))
-       (render-fn state)))}
+  {:init
+   (fn [state]
+     (let [*result (atom nil)
+           [page-name *n-ref] (:rum/args state)]
+       (p/let [result (search/get-page-unlinked-refs page-name)]
+         (reset! *n-ref (count result))
+         (reset! *result result))
+       (assoc state ::result *result)))}
   [state page-name _n-ref]
-  (let [ref-blocks (db/get-page-unlinked-references page-name)]
-    [:div.references-blocks
-     (let [ref-hiccup (block/->hiccup ref-blocks
-                                      {:id (str page-name "-unlinked-")
-                                       :ref? true
-                                       :group-by-page? true
-                                       :editor-box editor/box}
-                                      {})]
-       (content/content page-name
-                        {:hiccup ref-hiccup}))]))
+  (let [ref-blocks (rum/react (::result state))]
+    (when (seq ref-blocks)
+      [:div.references-blocks
+       (let [ref-hiccup (block/->hiccup ref-blocks
+                                        {:id (str page-name "-unlinked-")
+                                         :ref? true
+                                         :group-by-page? true
+                                         :editor-box editor/box}
+                                        {})]
+         (content/content page-name
+                          {:hiccup ref-hiccup}))])))
 
 (rum/defcs unlinked-references < rum/reactive
   (rum/local nil ::n-ref)

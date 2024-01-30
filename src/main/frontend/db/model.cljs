@@ -274,15 +274,7 @@ independent of format as format specific heading characters are stripped"
   [repo-url page]
   (when-let [page-id (:db/id (db-utils/entity repo-url [:block/name (util/safe-page-name-sanity-lc page)]))]
     (->>
-     (d/q '[:find ?e
-            :in $ ?page-name %
-            :where
-            [?page :block/name ?page-name]
-            (alias ?page ?e)]
-          (conn/get-db repo-url)
-          (util/safe-page-name-sanity-lc page)
-          (:alias rules/rules))
-     db-utils/seq-flatten
+     (ldb/get-page-alias (conn/get-db repo-url) page-id)
      (set)
      (set/union #{page-id}))))
 
@@ -862,37 +854,6 @@ independent of format as format specific heading characters are stripped"
                react
                (sort-by-left-recursive)
                db-utils/group-by-page))))))
-
-(defn- pattern [name]
-  (re-pattern (str "(?i)(^|[^\\[#0-9a-zA-Z]|((^|[^\\[])\\[))"
-                   (util/regex-escape name)
-                   "($|[^0-9a-zA-Z])")))
-
-(defn get-page-unlinked-references
-  [page]
-  (when-let [repo (state/get-current-repo)]
-    (let [page (util/safe-page-name-sanity-lc page)
-          page-id     (:db/id (db-utils/entity [:block/name page]))
-          alias-names (get-page-alias-names repo page)
-          patterns    (->> (conj alias-names page)
-                           (map pattern))
-          filter-fn   (fn [datom]
-                        (some (fn [p]
-                                (re-find p (->> (:v datom)
-                                                (drawer/remove-logbook))))
-                              patterns))]
-      (->> (react/q repo [:frontend.worker.react/page-unlinked-refs page-id]
-             {:query-fn (fn [db _result]
-                          (let [ids
-                                (->> (d/datoms db :aevt :block/content)
-                                     (filter filter-fn)
-                                     (map :e))
-                                result (db-utils/pull-many repo block-attrs ids)]
-                            (remove (fn [block] (= page-id (:db/id (:block/page block)))) result)))}
-             nil)
-           react
-           (sort-by-left-recursive)
-           db-utils/group-by-page))))
 
 (defn get-block-referenced-blocks
   ([block-uuid]
