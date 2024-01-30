@@ -16,7 +16,8 @@
             [frontend.db.react :as react]))
 
 (def <q db-async-util/<q)
-(def <pull-many db-async-util/<pull-many)
+(comment
+  (def <pull-many db-async-util/<pull-many))
 
 (defn <get-files
   [graph]
@@ -146,8 +147,3 @@
   (assert (integer? eid))
   (when-let [^Object worker @db-browser/*worker]
     (.get-block-refs-count worker graph eid)))
-
-(defn- pattern [name]
-  (re-pattern (str "(?i)(^|[^\\[#0-9a-zA-Z]|((^|[^\\[])\\[))"
-                   (util/regex-escape name)
-                   "($|[^0-9a-zA-Z])")))
