@@ -1,11 +1,12 @@
 import type { Side } from '@radix-ui/react-popper'
-import * as Slider from '@radix-ui/react-slider'
 import { Color, isBuiltInColor, debounce } from '@tldraw/core'
 import { TablerIcon } from '../icons'
 import { PopoverButton } from '../PopoverButton'
 import { Tooltip } from '../Tooltip'
 import React from 'react'
 import { LogseqContext } from '../../lib/logseq-context'
+// @ts-ignore
+const LSUI = window.LSUI
 
 interface ColorInputProps extends React.HTMLAttributes<HTMLButtonElement> {
   color?: string
@@ -100,7 +101,7 @@ export function ColorInput({
 
         {setOpacity && (
           <div className="mx-1 my-2">
-            <Slider.Root
+            <LSUI.Slider
               defaultValue={[opacity ?? 0]}
               onValueCommit={value => setOpacity(value[0])}
               max={1}
@@ -108,11 +109,11 @@ export function ColorInput({
               aria-label={t('whiteboard/opacity')}
               className="tl-slider-root"
             >
-              <Slider.Track className="tl-slider-track">
-                <Slider.Range className="tl-slider-range" />
-              </Slider.Track>
-              <Slider.Thumb className="tl-slider-thumb" />
-            </Slider.Root>
+              <LSUI.SliderTrack className="tl-slider-track">
+                <LSUI.SliderRange className="tl-slider-range" />
+              </LSUI.SliderTrack>
+              <LSUI.SliderThumb className="tl-slider-thumb" />
+            </LSUI.Slider>
           </div>
         )}
       </div>
