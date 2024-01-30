@@ -30,7 +30,6 @@
 (defonce *datascript-conns worker-state/*datascript-conns)
 (defonce *opfs-pools worker-state/*opfs-pools)
 (defonce *publishing? (atom false))
-(defonce *store-jobs (atom #{}))
 
 (defn- get-pool-name
   [graph-name]
@@ -108,11 +107,8 @@
                   (fn [[addr data]]
                     #js {:$addr addr
                          :$content (pr-str data)})
-                  addr+data-seq)
-            p (p/do! (upsert-addr-content! repo data delete-addrs))]
-        (swap! *store-jobs conj p)
-        (p/then p (fn [] (swap! *store-jobs disj p)))
-        p))
+                  addr+data-seq)]
+        (upsert-addr-content! repo data delete-addrs)))
 
     (-restore [_ addr]
       (restore-data-from-addr repo addr))))
@@ -263,13 +259,7 @@
    [_this repo & {:keys [close-other-db?]
                   :or {close-other-db? true}}]
    (p/do!
-    ;; Store the current db if store jobs not finished yet
-    (when (seq @*store-jobs)
-      (-> (p/all @*store-jobs)
-          (p/then (fn [_]
-                    (reset! *store-jobs #{})
-                    (println "DB store job finished")))))
-    (when close-other-db?
+     (when close-other-db?
       (close-other-dbs! repo))
     (create-or-open-db! repo)))
 
@@ -374,12 +364,19 @@
      (let [data (->> (sqlite-common-db/get-initial-data @conn)
                      pr-str)]
        (async/go
+         ;; TODO: after UI db transacted
+         (async/<! (async/timeout 500))
          (let [all-pages (sqlite-common-db/get-all-pages @conn)
-               all-files (sqlite-common-db/get-all-files @conn)]
-           (worker-util/post-message :sync-db-changes (pr-str
-                                                       {:repo repo
-                                                        :tx-data (concat all-files all-pages)
-                                                        :tx-meta nil}))))
+               all-files (sqlite-common-db/get-all-files @conn)
+               full-data (concat all-files all-pages)
+               partitioned-data (map-indexed (fn [idx p] [idx p]) (partition-all 2000 full-data))]
+           (doseq [[idx tx-data] partitioned-data]
+             (worker-util/post-message :sync-db-changes (pr-str
+                                                         {:repo repo
+                                                          :tx-data tx-data
+                                                          :tx-meta {:initial-pages? true
+                                                                    :end? (= idx (dec (count partitioned-data)))}}))
+             (async/<! (async/timeout 100)))))
        data)))
 
   (closeDB
