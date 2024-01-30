@@ -1,9 +1,11 @@
 (ns frontend.components.imports
   "Import data into Logseq."
-  (:require [cljs.core.async.interop :refer [p->c]]
+  (:require [borkdude.rewrite-edn :as rewrite]
+            [cljs.core.async.interop :refer [p->c]]
             [clojure.core.async :as async]
             [clojure.edn :as edn]
             [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
@@ -11,12 +13,15 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.fs :as fs]
-            [frontend.persist-db.browser :as db-browser]
+            [frontend.handler.common.config-edn :as config-edn-common-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.import :as import-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -24,13 +29,13 @@
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [logseq.common.path :as path]
+            [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
             [logseq.graph-parser :as graph-parser]
+            [logseq.outliner.core :as outliner-core]
             [medley.core :as medley]
             [promesa.core :as p]
-            [borkdude.rewrite-edn :as rewrite]
-            [rum.core :as rum]
-            [frontend.handler.repo :as repo-handler]
-            [frontend.handler.common.config-edn :as config-edn-common-handler]))
+            [rum.core :as rum]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
@@ -222,30 +227,71 @@
                    (db-editor-handler/save-file! "logseq/config.edn" migrated-content))
                   (edn/read-string migrated-content))))))
 
+(defn- build-hidden-favorites-page-blocks
+  [page-block-uuid-coll]
+  (map
+   (fn [uuid]
+     {:block/link [:block/uuid uuid]
+      :block/content ""
+      :block/format :markdown})
+   page-block-uuid-coll))
+
+(def hidden-favorites-page-name "$$$favorites")
+(def hidden-favorites-page-tx
+  {:block/uuid (d/squuid)
+   :block/name hidden-favorites-page-name
+   :block/original-name hidden-favorites-page-name
+   :block/journal? false
+   :block/type #{"hidden"}
+   :block/format :markdown})
+
+(defn- import-favorites-from-config-edn!
+  [db-conn repo config-file]
+  (let [now (inst-ms (js/Date.))]
+    (p/do!
+     (ldb/transact! repo [(assoc hidden-favorites-page-tx
+                                 :block/created-at now
+                                 :block/updated-at now)])
+     (p/let [content (when config-file (.text config-file))]
+       (when-let [content-edn (try (edn/read-string content)
+                                   (catch :default _ nil))]
+         (when-let [favorites (seq (:favorites content-edn))]
+           (when-let [page-block-uuid-coll
+                      (seq
+                       (keep (fn [page-name]
+                               (some-> (d/entity @db-conn [:block/name (common-util/page-name-sanity-lc page-name)])
+                                       :block/uuid))
+                             favorites))]
+             (let [page-entity (d/entity @db-conn [:block/name hidden-favorites-page-name])]
+               (ui-outliner-tx/transact!
+                {:outliner-op :insert-blocks}
+                (outliner-core/insert-blocks! repo db-conn (build-hidden-favorites-page-blocks page-block-uuid-coll)
+                                              page-entity {}))))))))))
+
 
 (rum/defc confirm-graph-name-dialog
-  [initial-name on-graph-name-confirmed]
-  (let [[input set-input!] (rum/use-state initial-name)
-        on-submit #(do (on-graph-name-confirmed input)
-                       (state/close-modal!))]
-    [:div.container
-     [:div.sm:flex.sm:items-start
-      [:div.mt-3.text-center.sm:mt-0.sm:text-left
-       [:h3#modal-headline.leading-6.font-medium
-        "Imported new graph name:"]]]
+          [initial-name on-graph-name-confirmed]
+          (let [[input set-input!] (rum/use-state initial-name)
+                on-submit #(do (on-graph-name-confirmed input)
+                               (state/close-modal!))]
+            [:div.container
+             [:div.sm:flex.sm:items-start
+              [:div.mt-3.text-center.sm:mt-0.sm:text-left
+               [:h3#modal-headline.leading-6.font-medium
+                "Imported new graph name:"]]]
 
-     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
-      {:auto-focus true
-       :default-value input
-       :on-change (fn [e]
-                    (set-input! (util/evalue e)))
-       :on-key-press (fn [e]
-                       (when (= "Enter" (util/ekey e))
-                         (on-submit)))}]
+             [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
+              {:auto-focus true
+               :default-value input
+               :on-change (fn [e]
+                            (set-input! (util/evalue e)))
+               :on-key-press (fn [e]
+                               (when (= "Enter" (util/ekey e))
+                                 (on-submit)))}]
 
-     [:div.mt-5.sm:mt-4.flex
-      (ui/button "Confirm"
-                 {:on-click on-submit})]]))
+             [:div.mt-5.sm:mt-4.flex
+              (ui/button "Confirm"
+                         {:on-click on-submit})]]))
 
 (defn graph-folder-to-db-import-handler
   "Import from a graph folder as a DB-based graph.
@@ -277,6 +323,7 @@
                                 (async/<! (p->c (import-config-file! config-file)))
                                 (async/<! (import-from-asset-files! asset-files))
                                 (async/<! (import-from-doc-files! db-conn repo doc-files))
+                                (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))
                                 (state/set-state! :graph/importing nil)
                                 (finished-cb)))))]
     (state/set-modal!

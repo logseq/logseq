@@ -352,18 +352,18 @@
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
           block-entity (d/entity db eid)
           m' (if (and (:block/content m) db-based?)
-              (update m :block/content
-                      (fn [content]
-                        (db-content/content-without-tags
-                         content
-                         (->>
-                          (map
-                           (fn [tag]
-                             (when (:block/uuid tag)
-                               (str db-content/page-ref-special-chars (:block/uuid tag))))
-                           (:block/tags m))
-                          (remove nil?)))))
-              m)
+               (update m :block/content
+                       (fn [content]
+                         (db-content/content-without-tags
+                          content
+                          (->>
+                           (map
+                            (fn [tag]
+                              (when (:block/uuid tag)
+                                (str db-content/page-ref-special-chars (:block/uuid tag))))
+                            (:block/tags m))
+                           (remove nil?)))))
+               m)
           m (cond->> m'
               db-based?
               (db-marker-handle conn))
@@ -394,7 +394,8 @@
         ;; Remove macros as they are replaced by new ones
         (remove-macros-when-save db txs-state block-entity)
         ;; Remove orphaned refs from block
-        (remove-orphaned-refs-when-save @conn txs-state block-entity m))
+        (when (and (:block/content m) (not= (:block/content m) (:block/content block-entity)))
+          (remove-orphaned-refs-when-save @conn txs-state block-entity m)))
 
       ;; handle others txs
       (let [other-tx (:db/other-tx m)]

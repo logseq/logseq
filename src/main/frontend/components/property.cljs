@@ -373,6 +373,10 @@
 
 (rum/defcs property-input < rum/reactive
   (rum/local false ::show-new-property-config?)
+  {:will-unmount (fn [state]
+                   (when-let [*property-key (nth (:rum/args state) 1)]
+                     (reset! *property-key nil))
+                   state)}
   shortcut/disable-all-shortcuts
   [state entity *property-key *property-value {:keys [class-schema? _page-configure? in-block-container?]
                                                :as opts}]
@@ -435,38 +439,40 @@
                              nil))}]
          (property-select exclude-properties on-chosen input-opts)))]))
 
-(rum/defcs new-property < rum/reactive rum/static
+(rum/defcs new-property < rum/reactive
   (rum/local false ::new-property?)
   (rum/local nil ::property-key)
   (rum/local nil ::property-value)
-  [state block id opts]
+  [state block id keyboard-triggered? opts]
   (let [*new-property? (::new-property? state)
         container-id (state/sub :editor/properties-container)
-        new-property? (and @*new-property? (= container-id id))]
-    [:div.ls-new-property
-     (let [*property-key (::property-key state)
-           *property-value (::property-value state)]
-       (cond
-         new-property?
-         (property-input block *property-key *property-value opts)
+        new-property? (or keyboard-triggered? (and @*new-property? (= container-id id)))]
 
-         (and (or (db-property-handler/block-has-viewable-properties? block)
-                  (:page-configure? opts))
-              (not config/publishing?)
-              (not (:in-block-container? opts)))
-         [:a.fade-link.flex.add-property
-          {:on-click (fn []
-                       (state/set-state! :editor/block block)
-                       (state/set-state! :editor/properties-container id)
-                       (reset! *new-property? true)
-                       (reset! *property-key nil)
-                       (reset! *property-value nil))}
-          [:div.flex.flex-row.items-center {:style {:padding-left 1}}
-           (ui/icon "plus" {:size 15})
-           [:div.ml-1.text-sm {:style {:padding-left 2}} "Add property"]]]
+    (when-not (and (:in-block-container? opts) (not keyboard-triggered?))
+      [:div.ls-new-property
+       (let [*property-key (::property-key state)
+             *property-value (::property-value state)]
+         (cond
+           new-property?
+           (property-input block *property-key *property-value opts)
 
-         :else
-         [:div {:style {:height 28}}]))]))
+           (and (or (db-property-handler/block-has-viewable-properties? block)
+                    (:page-configure? opts))
+                (not config/publishing?)
+                (not (:in-block-container? opts)))
+           [:a.fade-link.flex.add-property
+            {:on-click (fn []
+                         (reset! *property-key nil)
+                         (reset! *property-value nil)
+                         (state/set-state! :editor/block block)
+                         (state/set-state! :editor/properties-container id)
+                         (reset! *new-property? true))}
+            [:div.flex.flex-row.items-center {:style {:padding-left 1}}
+             (ui/icon "plus" {:size 15})
+             [:div.ml-1.text-sm {:style {:padding-left 2}} "Add property"]]]
+
+           :else
+           [:div {:style {:height 28}}]))])))
 
 (defn- property-collapsed?
   [block property]
@@ -626,7 +632,7 @@
 (rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive
   {:init (fn [state]
            (assoc state ::id (str (random-uuid))))}
-  [state target-block _edit-input-id {:keys [in-block-container? page-configure? class-schema?] :as opts}]
+  [state target-block edit-input-id {:keys [in-block-container? page-configure? class-schema?] :as opts}]
   (let [id (::id state)
         block (resolve-linked-block-if-exists target-block)
         block-properties (:block/properties block)
@@ -688,10 +694,12 @@
                                 (recur (rest classes)
                                        (set/union properties (set cur-properties))
                                        (conj result [class cur-properties])))
-                              result))]
+                              result))
+        keyboard-triggered? (= (state/sub :editor/new-property-input-id) edit-input-id)]
     (when-not (and (empty? block-own-properties)
                    (empty? class->properties)
-                   (not (:page-configure? opts)))
+                   (not (:page-configure? opts))
+                   (not keyboard-triggered?))
       [:div.ls-properties-area (cond-> (if in-block-container?
                                          {:id id}
                                          {:id id
@@ -703,8 +711,7 @@
        (when (and (seq full-hidden-properties) (not class-schema?) (not config/publishing?))
          (hidden-properties block full-hidden-properties opts))
 
-       (when (not in-block-container?)
-         (rum/with-key (new-property block id opts) (str id "-add-property")))
+       (rum/with-key (new-property block id keyboard-triggered? opts) (str id "-add-property"))
 
        (when (and (seq class->properties) (not one-class?))
          (let [page-cp (:page-cp opts)]

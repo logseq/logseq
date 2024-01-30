@@ -47,16 +47,6 @@
         (assoc :block/type #{"hidden"}
                :block/format :markdown))))
 
-(defn new-property-tx
-  "Provide attributes for a new built-in property given name, schema and uuid.
-   TODO: Merge this with sqlite-util/build-new-property once common-util/page-name-sanity-lc
-   is available to deps/db"
-  [prop-name prop-schema prop-uuid]
-  {:block/uuid prop-uuid
-   :block/schema (merge {:type :default} prop-schema)
-   :block/original-name (name prop-name)
-   :block/name (common-util/page-name-sanity-lc (name prop-name))})
-
 (defn build-closed-values
   "Builds all the tx needed for property with closed values including
    the hidden page and closed value blocks as needed"
@@ -76,8 +66,7 @@
                (:closed-values property)))
         property-schema (assoc (:block/schema property)
                                :values (mapv :block/uuid closed-value-blocks-tx))
-        property-tx (merge (sqlite-util/build-new-property
-                            (new-property-tx prop-name property-schema (:block/uuid property)))
+        property-tx (merge (sqlite-util/build-new-property prop-name property-schema (:block/uuid property))
                            property-attributes)]
     (into [property-tx page-tx]
           (when-not closed-value-page-uuids? closed-value-blocks-tx))))
