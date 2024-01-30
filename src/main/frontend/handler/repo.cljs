@@ -11,6 +11,7 @@
             [frontend.fs.nfs :as nfs]
             [frontend.handler.file :as file-handler]
             [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.handler.common.config-edn :as config-edn-common-handler]
             [frontend.handler.common.file :as file-common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
@@ -35,7 +36,8 @@
             [clojure.core.async :as async]
             [frontend.mobile.util :as mobile-util]
             [medley.core :as medley]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [borkdude.rewrite-edn :as rewrite]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -104,7 +106,7 @@
                     :else
                     default-content)
           file-rpath (path/path-join (config/get-journals-directory) (str file-name "."
-                                                                              (config/get-file-extension format)))
+                                                                          (config/get-file-extension format)))
           page-exists? (db/entity repo-url [:block/name (util/page-name-sanity-lc title)])
           empty-blocks? (db/page-empty? repo-url (util/page-name-sanity-lc title))]
       (when (or empty-blocks? (not page-exists?))
@@ -518,13 +520,20 @@
   (let [full-graph-name (string/lower-case (str config/db-version-prefix graph-name))]
     (some #(= (some-> (:url %) string/lower-case) full-graph-name) (state/get-repos))))
 
+(defn migrate-db-config
+  [content]
+  (-> (reduce rewrite/dissoc
+              (rewrite/parse-string (str content))
+              (keys config-edn-common-handler/file-only-config))
+      str))
+
 (defn- create-db [full-graph-name {:keys [file-graph-import?]}]
   (->
    (p/let [_ (persist-db/<new full-graph-name)
            _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name})
            _ (when-not file-graph-import? (route-handler/redirect-to-home!))
-           initial-data (sqlite-create-graph/build-db-initial-data config/config-default-content)
+           initial-data (sqlite-create-graph/build-db-initial-data (migrate-db-config config/config-default-content))
            _ (db/transact! full-graph-name initial-data)
            _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
           ;; TODO: handle global graph
