@@ -20,11 +20,11 @@ export function ToggleInput({
 }: ToggleInputProps) {
   return (
     <Tooltip content={tooltip}>
-      <div className="inline-block">
+      <div className="inline-flex">
         <LSUI.Toggle
           {...rest}
           data-toggle={toggle}
-          className={'h-full' + (className ? ' ' + className : '')}
+          className={'tl-button' + (className ? ' ' + className : '')}
           pressed={pressed}
           onPressedChange={onPressedChange}
         />

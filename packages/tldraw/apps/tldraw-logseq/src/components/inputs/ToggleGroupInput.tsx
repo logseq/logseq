@@ -32,9 +32,9 @@ export function ToggleGroupInput({ options, value, onValueChange }: ToggleGroupI
       {options.map(option => {
         return (
           <Tooltip content={option.tooltip} key={option.value}>
-            <div className="inline-block h-full">
+            <div className="inline-flex">
               <LSUI.ToggleGroupItem
-                className="h-full"
+                className="tl-button"
                 value={option.value}
                 disabled={option.value === value}
               >
@@ -55,7 +55,7 @@ export function ToggleGroupMultipleInput({
 }: ToggleGroupMultipleInputProps) {
   return (
     <LSUI.ToggleGroup
-      className="contents"
+      className="inline-flex"
       type="multiple"
       value={value}
       onValueChange={onValueChange}
@@ -63,7 +63,7 @@ export function ToggleGroupMultipleInput({
       {options.map(option => {
         return (
           <LSUI.ToggleGroupItem
-            className="h-full"
+            className="tl-button"
             key={option.value}
             value={option.value}
           >
