@@ -338,11 +338,16 @@
 (defmethod handle :modal/show-themes-modal [_]
   (plugin/open-select-theme!))
 
-(defmethod handle :modal/show-accent-colors-modal [_]
-  (state/set-sub-modal!
-    #(settings/modal-accent-colors-inner)
-    {:center? true
-     :label "accent-colors-picker"}))
+(defmethod handle :modal/toggle-accent-colors-modal [_]
+  (let [label "accent-colors-picker"]
+    (if (or (= label (state/get-modal-id))
+          (= label (some-> (state/get-sub-modals) (first) :modal/id)))
+      (state/close-sub-modal! label)
+      (state/set-sub-modal!
+        #(settings/modal-accent-colors-inner)
+        {:center? true
+         :id      label
+         :label   label}))))
 
 (rum/defc modal-output
   [content]

@@ -534,7 +534,7 @@
                                              :fn      state/unset-color-accent!}
 
    :ui/accent-colors-picker                 {:binding "c c"
-                                             :fn      #(state/pub-event! [:modal/show-accent-colors-modal])}
+                                             :fn      #(state/pub-event! [:modal/toggle-accent-colors-modal])}
 
    :git/commit                              {:binding  "mod+g c"
                                              :inactive (not (util/electron?))
