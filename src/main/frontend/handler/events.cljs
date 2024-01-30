@@ -189,7 +189,7 @@
    state/set-state! :sync-graph/init? false))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (state/set-state! :restore/unloaded-blocks #{})
+  (state/set-state! :db/async-queries #{})
   (reset! r/*key->atom {})
 
   (let [^js sqlite @db-browser/*worker]

@@ -816,7 +816,7 @@
              (db-async/<get-block-and-children (state/get-current-repo) block-id))
            state)}
   [config uuid]
-  (if (state/sub-block-unloaded? (str uuid))
+  (if (state/sub-async-query-loading (str uuid))
     [:span "Loading..."]
     (when-let [block (db/entity [:block/uuid uuid])]
       [:div.color-level.embed-block.bg-base-2
@@ -850,7 +850,7 @@
      [:section.flex.items-center.p-1.embed-header
       [:div.mr-3 svg/page]
       (page-cp config {:block/name page-name})]
-     (if (state/sub-block-unloaded? page-name)
+     (if (state/sub-async-query-loading page-name)
        [:span "Loading..."]
        (when (and
               (not= (util/page-name-sanity-lc (or current-page ""))
@@ -898,7 +898,7 @@
   db-mixins/query
   [config id label]
   (if-let [block-id (if (uuid? id) id (parse-uuid id))]
-    (if (state/sub-block-unloaded? (str block-id))
+    (if (state/sub-async-query-loading (str block-id))
       [:span "Loading..."]
       (let [block (db/entity [:block/uuid block-id])
             db-id (:db/id block)
@@ -2499,10 +2499,16 @@
                  current-block-page? (= (str (:block/uuid block)) (state/get-current-page))
                  embed-self? (and (:embed? config)
                                   (= (:block/uuid block) (:block/uuid (:block config))))
-                 default-hide? (not (and current-block-page? (not embed-self?) (state/auto-expand-block-refs?)))]
-             (assoc state ::hide-block-refs? (atom default-hide?))))}
+                 default-hide? (not (and current-block-page? (not embed-self?) (state/auto-expand-block-refs?)))
+                 *refs-count (atom nil)]
+             (p/let [count (db-async/<get-block-refs-count (state/get-current-repo) (:db/id block))]
+               (reset! *refs-count count))
+             (assoc state
+                    ::hide-block-refs? (atom default-hide?)
+                    ::refs-count *refs-count)))}
   [state config {:block/keys [uuid format] :as block} edit-input-id block-id edit? hide-block-refs-count? selected? *ref]
   (let [*hide-block-refs? (get state ::hide-block-refs?)
+        *refs-count (get state ::refs-count)
         hide-block-refs? (rum/react *hide-block-refs?)
         editor-box (get config :editor-box)
         editor-id (str "editor-" edit-input-id)
@@ -2527,7 +2533,7 @@
                                       :format format
                                       :on-hide (fn [value event]
                                                  (let [select? (and (= event :esc)
-                                                                      (not (string/includes? value "```")))]
+                                                                    (not (string/includes? value "```")))]
                                                    (p/let [_ (editor-handler/save-block! (editor-handler/get-state) value)]
                                                      (editor-handler/escape-editing select?))))}
                                      edit-input-id
@@ -2537,7 +2543,9 @@
              editor-cp
              (tags config block)]
             editor-cp))]
-       (let [refs-count (count (:block/_refs block))]
+       (let [refs-count (if (seq (:block/_refs block))
+                          (count (:block/_refs block))
+                          (rum/react *refs-count))]
          [:div.flex.flex-1.flex-col.block-content-wrapper
           [:div.flex.flex-row
            [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
@@ -2574,7 +2582,7 @@
               (block-refs-count block refs-count *hide-block-refs?)])]
 
           (when (and (not hide-block-refs?) (> refs-count 0))
-            (let [refs-cp (state/get-component :block/linked-references)]
+            (when-let [refs-cp (state/get-component :block/linked-references)]
               (refs-cp uuid)))]))]))
 
 (rum/defc single-block-cp
@@ -3132,7 +3140,7 @@
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)]
-    (when-not (state/sub-block-unloaded? (:block/uuid block))
+    (when-not (state/sub-async-query-loading (:block/uuid block))
       (let [[original-block block] (build-block config block {:navigating-block navigating-block :navigated? navigated?})
             config' (if original-block
                       (assoc config :original-block original-block)

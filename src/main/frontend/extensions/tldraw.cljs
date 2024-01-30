@@ -207,7 +207,7 @@
              (db-async/<get-block-and-children (state/get-current-repo) page-name)
              state))}
   [page-name block-id loaded-app set-loaded-app]
-  (when-not (state/sub-block-unloaded? page-name)
+  (when-not (state/sub-async-query-loading page-name)
     (let [populate-onboarding? (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
           on-mount (fn [^js tln]
                      (when tln
