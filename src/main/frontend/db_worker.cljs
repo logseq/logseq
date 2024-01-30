@@ -31,6 +31,7 @@
 (defonce *datascript-conns worker-state/*datascript-conns)
 (defonce *opfs-pools worker-state/*opfs-pools)
 (defonce *publishing? (atom false))
+(defonce *store-jobs (atom #{}))
 
 (defn- get-pool-name
   [graph-name]
@@ -104,13 +105,15 @@
   [repo _opts]
   (reify IStorage
     (-store [_ addr+data-seq delete-addrs]
-      (prn :debug (str "SQLite store addr+data count: " (count addr+data-seq)))
       (let [data (map
                   (fn [[addr data]]
                     #js {:$addr addr
                          :$content (pr-str data)})
-                  addr+data-seq)]
-        (upsert-addr-content! repo data delete-addrs)))
+                  addr+data-seq)
+            p (p/do! (upsert-addr-content! repo data delete-addrs))]
+        (swap! *store-jobs conj p)
+        (p/then p (fn [] (swap! *store-jobs disj p)))
+        p))
 
     (-restore [_ addr]
       (restore-data-from-addr repo addr))))
@@ -260,9 +263,16 @@
   (createOrOpenDB
    [_this repo & {:keys [close-other-db?]
                   :or {close-other-db? true}}]
-   (p/let [_ (when close-other-db?
-               (close-other-dbs! repo))]
-     (create-or-open-db! repo)))
+   (p/do!
+    ;; Store the current db if store jobs not finished yet
+    (when (seq @*store-jobs)
+      (-> (p/all @*store-jobs)
+          (p/then (fn [_]
+                    (reset! *store-jobs #{})
+                    (println "DB store job finished")))))
+    (when close-other-db?
+      (close-other-dbs! repo))
+    (create-or-open-db! repo)))
 
   (getMaxTx
    [_this repo]
@@ -318,7 +328,7 @@
          nil)
        (catch :default e
          (prn :debug :error)
-         (js/console.error e)))))
+         (js/console.error e tx-data)))))
 
   (getInitialData
    [_this repo]
@@ -404,12 +414,21 @@
        (bean/->js {:result result}))))
 
   (file-writes-finished?
-   [this]
-   (if (empty? @file/*writes)
-     true
-     (do
-       (js/console.log "Unfinished file writes:" @file/*writes)
-       false)))
+   [this repo]
+   (let [conn (worker-state/get-datascript-conn repo)
+         writes @file/*writes]
+
+     ;; Clean pages that have been deleted
+     (when conn
+       (swap! file/*writes (fn [writes]
+                             (->> writes
+                                  (remove (fn [[_ pid]] (d/entity @conn pid)))
+                                  (into {})))))
+     (if (empty? writes)
+       true
+       (do
+         (prn "Unfinished file writes:" @file/*writes)
+         false))))
 
   (page-file-saved
    [this request-id page-id]

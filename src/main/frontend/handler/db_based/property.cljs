@@ -105,12 +105,7 @@
                             :block/uuid property-uuid
                             :block/type "property"})]
                     {:outliner-op :save-block})
-      (db/transact! repo [(sqlite-util/build-new-property
-                           (cond-> {:block/original-name k-name
-                                    :block/name (util/page-name-sanity-lc k-name)
-                                    :block/uuid property-uuid}
-                             (seq schema)
-                             (assoc :block/schema schema)))]
+      (db/transact! repo [(sqlite-util/build-new-property k-name schema property-uuid)]
                     {:outliner-op :insert-blocks}))))
 
 (defn validate-property-value

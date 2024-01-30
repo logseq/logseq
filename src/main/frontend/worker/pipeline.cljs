@@ -82,7 +82,8 @@
               _ (when (sqlite-util/local-file-based-graph? repo)
                   (let [page-ids (distinct (map :db/id pages))]
                     (doseq [page-id page-ids]
-                      (file/sync-to-file repo page-id tx-meta))))
+                      (when (d/entity @conn page-id)
+                        (file/sync-to-file repo page-id tx-meta)))))
               deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))
               replace-tx (concat
                           ;; block path refs
