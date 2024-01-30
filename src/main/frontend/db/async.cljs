@@ -115,9 +115,6 @@
       (and e (not children?) (:block/tx-id e))
       e
 
-      (and e children? (:block/tx-id e) (seq (:block/_parent e)))
-      e
-
       :else
       (when-let [^Object sqlite @db-browser/*worker]
         (state/update-state! :db/async-queries (fn [s] (conj s name')))
