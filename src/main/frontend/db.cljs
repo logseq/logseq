@@ -22,7 +22,7 @@
   remove-conn!]
 
  [frontend.db.utils
-  db->json db->edn-str db->string get-max-tx-id get-tx-id
+  db->edn-str db->string get-max-tx-id get-tx-id
   group-by-page seq-flatten
   string->db
 
