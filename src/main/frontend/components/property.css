@@ -209,3 +209,20 @@ a.control-link {
         margin-bottom: 1rem;
     }
 }
+
+.property-select {
+   .menu-link:hover, a.menu-link.chosen {
+       .iconTablerExtInProgress50,
+       .iconTablerExtBacklog,
+       .iconTablerExtTodo,
+       .iconTablerExtDoing,
+       .iconTablerExtInReview,
+       .iconTablerExtDone {
+           @apply text-accent-09;
+       }
+
+       .iconTablerExtCancelled {
+           @apply text-red-rx-09;
+       }
+   }
+}
