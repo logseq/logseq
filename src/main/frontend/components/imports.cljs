@@ -1,9 +1,11 @@
 (ns frontend.components.imports
   "Import data into Logseq."
-  (:require [cljs.core.async.interop :refer [p->c]]
+  (:require [borkdude.rewrite-edn :as rewrite]
+            [cljs.core.async.interop :refer [p->c]]
             [clojure.core.async :as async]
             [clojure.edn :as edn]
             [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
@@ -11,12 +13,15 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.fs :as fs]
-            [frontend.persist-db.browser :as db-browser]
+            [frontend.handler.common.config-edn :as config-edn-common-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.import :as import-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -24,18 +29,13 @@
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [logseq.common.path :as path]
-            [logseq.graph-parser :as graph-parser]
-            [medley.core :as medley]
-            [promesa.core :as p]
-            [borkdude.rewrite-edn :as rewrite]
-            [rum.core :as rum]
-            [frontend.handler.repo :as repo-handler]
-            [frontend.handler.common.config-edn :as config-edn-common-handler]
-            [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [logseq.outliner.core :as outliner-core]))
+            [logseq.graph-parser :as graph-parser]
+            [logseq.outliner.core :as outliner-core]
+            [medley.core :as medley]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
