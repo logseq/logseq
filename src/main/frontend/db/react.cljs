@@ -89,7 +89,7 @@
 
 (defn- <q-aux
   [repo db query-fn inputs-fn k query inputs]
-  (let [kv? (and (vector? k) (= :kv (first k)))]
+  (let [kv? (and (vector? k) (= :kv (second k)))]
     (when (or query-fn query kv?)
       (cond
         query-fn
