@@ -50,8 +50,7 @@
    (let [repo (state/get-current-repo)
          conn (db/get-db repo false)
          config (state/get-config repo)
-         _ (worker-page/create! repo conn config title options)
-         [_ page-name] (worker-page/get-title-and-pagename title)]
+         [_ page-name] (worker-page/create! repo conn config title options)]
      (when redirect?
        (route-handler/redirect-to-page! page-name))
      (when-let [first-block (first (:block/_left (db/entity [:block/name page-name])))]
@@ -67,8 +66,8 @@
    (p/let [repo (state/get-current-repo)
            conn (db/get-db repo false)
            config (state/get-config repo)
-           _ (worker-page/create! repo conn config title options)
-           [_ page-name] (worker-page/get-title-and-pagename title)]
+           [p page-name] (worker-page/create! repo conn config title options)
+           _result p]
      (when redirect?
        (route-handler/redirect-to-page! page-name))
      (let [page (db/entity [:block/name page-name])]
