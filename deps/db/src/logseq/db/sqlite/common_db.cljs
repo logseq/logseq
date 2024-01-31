@@ -25,7 +25,8 @@
   (->> (d/datoms db :avet :file/path)
        (map (fn [e]
               {:db/id (:e e)
-               :file/path (:v e)}))))
+               :file/path (:v e)
+               :file/content (:file/content (d/entity db (:e e)))}))))
 
 (defn get-block-and-children
   [db name children?]

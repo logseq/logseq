@@ -519,9 +519,13 @@
                       (plugins/hook-ui-slot :page-head-actions-slotted nil)
                       (plugins/hook-ui-items :pagebar)]))])
 
-              (when (and db-based? (not block?))
+              (cond
+                (and db-based? (not block?))
                 [:div.pb-4
-                 (db-page/page-info page (::hover-title? state))])
+                 (db-page/page-info page (::hover-title? state))]
+
+                (and (not db-based?) (not block?))
+                [:div.pb-4])
 
               [:div
                (when (and block? (not sidebar?) (not whiteboard?))
