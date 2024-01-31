@@ -39,6 +39,12 @@
                        [(get ?p :template) ?t]])]
     (into {} result)))
 
+(defn <get-template-by-name
+  [name]
+  (let [repo (state/get-current-repo)]
+    (p/let [templates (<get-all-templates repo)]
+      (get templates name))))
+
 (defn <db-based-get-all-properties
   ":block/type could be one of [property, class]."
   [graph]
@@ -112,6 +118,8 @@
                          :or {children? true}}]
   (let [name' (str name-or-uuid)
         e (cond
+            (number? name-or-uuid)
+            (db/entity name-or-uuid)
             (util/uuid-string? name')
             (db/entity [:block/uuid (uuid name')])
             :else

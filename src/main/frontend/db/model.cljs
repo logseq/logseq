@@ -878,21 +878,6 @@ independent of format as format specific heading characters are stripped"
   [property-uuid]
   (ldb/get-classes-with-property (conn/get-db) property-uuid))
 
-(defn get-template-by-name
-  [name]
-  (when (string? name)
-    (->> (d/q
-          '[:find [(pull ?b [*]) ...]
-            :in $ ?name
-            :where
-            [?b :block/properties ?p]
-            [(get ?p :template) ?t]
-            [(= ?t ?name)]]
-          (conn/get-db)
-          name)
-         (sort-by :block/name)
-         (first))))
-
 (defn get-all-referenced-blocks-uuid
   "Get all uuids of blocks with any back link exists."
   []
