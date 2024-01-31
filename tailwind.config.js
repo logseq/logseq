@@ -34,10 +34,10 @@ const accent = {
 
 const gray = {
   ...colors.gray,
-  '01': 'var(--lx-gray-01, var(--rx-gray-01))',
-  '02': 'var(--lx-gray-02, var(--rx-gray-02))',
-  '03': 'var(--lx-gray-03, var(--rx-gray-03))',
-  '04': 'var(--lx-gray-04, var(--rx-gray-04))',
+  '01': 'var(--lx-gray-01, var(--ls-primary-background-color, var(--rx-gray-01)))',
+  '02': 'var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02)))',
+  '03': 'var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)))',
+  '04': 'var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)))',
   '05': 'var(--lx-gray-05, var(--rx-gray-05))',
   '06': 'var(--lx-gray-06, var(--rx-gray-06))',
   '07': 'var(--lx-gray-07, var(--rx-gray-07))',
