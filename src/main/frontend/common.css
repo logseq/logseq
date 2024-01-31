@@ -405,11 +405,7 @@ button.menu:focus {
 }
 
 .menu-separator {
-  @apply my-1;
-
-  opacity: 0.5;
-  border-top-width: 1px;
-  border-color: var(--ls-border-color, #ccc);
+  @apply my-1 opacity-50 border-t;
 }
 
 a.login {
@@ -641,11 +637,11 @@ a.tooltip-priority {
 }
 
 .page-reference:hover {
-  background: or(--ls-page-reference-hover-background, --lx-accent-04-alpha, --ls-secondary-background-color);
+  background: var(--lx-accent-04-alpha, var(--ls-secondary-background-color, hsl(var(--primary)/.4)));
 }
 
 .references-blocks .page-reference:hover {
-  background: or(--ls-page-reference-block-hover-background, --lx-accent-04-alpha, --ls-tertiary-background-color);
+  background: var(--lx-accent-04-alpha, var(--ls-tertiary-background-color, hsl(var(--primary)/.4)));
 }
 
 #head .fade-link {

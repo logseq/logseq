@@ -163,8 +163,8 @@
     }
 
     &:hover, &.active {
-      background-color: or(--ls-left-sidebar-active-background, --lx-gray-04, --color-level-3);
-      color: or(--ls-left-sidebar-active-text-color, --lx-gray-12);
+      background-color: var(--lx-gray-04, var(--color-level-3, var(--rx-gray-04)));
+      color: var(--lx-gray-12, var(--rx-gray-12));
 
       .ui__icon {
         opacity: .9;
@@ -209,7 +209,7 @@
       }
 
       &:hover {
-        background-color: or(--ls-nav-item-hover, --lx-gray-04, --ls-tertiary-background-color);
+        background-color: var(--lx-gray-04, var(--ls-tertiary-background-color, var(--rx-gray-04)));
 
         * {
           opacity: 1 !important;
