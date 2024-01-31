@@ -785,25 +785,26 @@ independent of format as format specific heading characters are stripped"
    (when repo
      (when (conn/get-db repo)
        (let [page-id (:db/id (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)]))
-             pages (page-alias-set repo page)
-             aliases (set/difference pages #{page-id})]
+             pages (page-alias-set repo page)]
          (->>
           (react/q repo
-            [:frontend.worker.react/refs page-id]
-            {:query-fn (fn []
-                         (let [entities (mapcat (fn [id]
-                                                  (:block/_path-refs (db-utils/entity id))) pages)
-                               blocks (map (fn [e]
-                                             {:block/parent (:block/parent e)
-                                              :block/left (:block/left e)
-                                              :block/page (:block/page e)
-                                              :block/collapsed? (:block/collapsed? e)}) entities)]
-                           {:entities entities
-                            :blocks blocks}))}
-            nil)
+                   [:frontend.worker.react/refs page-id]
+                   {:query-fn (fn []
+                                (let [entities (mapcat (fn [id]
+                                                         (:block/_path-refs (db-utils/entity id))) pages)
+                                      blocks (map (fn [e]
+                                                    {:block/parent (:block/parent e)
+                                                     :block/left (:block/left e)
+                                                     :block/page (:block/page e)
+                                                     :block/collapsed? (:block/collapsed? e)}) entities)]
+                                  {:entities entities
+                                   :blocks blocks}))}
+                   nil)
           react
           :entities
-          (remove (fn [block] (= page-id (:db/id (:block/page block)))))))))))
+          (remove (fn [block]
+                    (= page-id (:db/id (:block/page block)))))
+          (util/distinct-by :db/id)))))))
 
 (defn get-block-referenced-blocks
   ([block-uuid]
