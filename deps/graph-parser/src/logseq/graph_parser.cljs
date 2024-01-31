@@ -222,7 +222,8 @@ Options available:
                     (common-config/whiteboard? file)
                     (extract/extract-whiteboard-edn file content extract-options')
 
-                    :else nil)
+                    :else
+                    (println "Skipped file since its format is not supported:" file))
               ;; remove file path relative
               pages (map #(dissoc % :block/file :block/properties) pages)
               block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
