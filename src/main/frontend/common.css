@@ -489,7 +489,7 @@ a.tag {
   cursor: pointer;
   padding: 0 2px;
   border-radius: 4px;
-  color: or(--ls-tag-text, --lx-accent-11, --ls-tag-text-color, #045591);
+  color: var(--lx-accent-11, var(--ls-tag-text-color, hsl(var(--primary))));
   opacity: var(--ls-tag-text-opacity, 0.7);
 }
 
@@ -499,11 +499,11 @@ a.tag:hover {
 }
 
 svg.note {
-  color: var(--ls-primary-text-color, #19407c);
+  color: var(--rx-yellow-08);
 }
 
 svg.tip {
-  color: var(--ls-active-primary-color);
+  color: var(--lx-accent-08, var(--rx-blue-08));
 }
 
 /* endregion */
