@@ -17,8 +17,6 @@
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util.db :as db-util]
             [logseq.common.util :as common-util]
-            [cljs-time.core :as t]
-            [cljs-time.format :as tf]
             [frontend.config :as config]
             [logseq.db :as ldb]))
 
@@ -806,41 +804,6 @@ independent of format as format specific heading characters are stripped"
           react
           :entities
           (remove (fn [block] (= page-id (:db/id (:block/page block)))))))))))
-
-(defn get-date-scheduled-or-deadlines
-  [journal-title]
-  (when-let [date (date/journal-title->int journal-title)]
-    (let [future-days (state/get-scheduled-future-days)
-          date-format (tf/formatter "yyyyMMdd")
-          current-day (tf/parse date-format (str date))
-          future-day (some->> (t/plus current-day (t/days future-days))
-                              (tf/unparse date-format)
-                              (parse-long))]
-      (when future-day
-        (when-let [repo (state/get-current-repo)]
-          (->> (react/q repo [:custom :scheduled-deadline journal-title]
-                 {:use-cache? false}
-                 '[:find [(pull ?block ?block-attrs) ...]
-                   :in $ ?day ?future ?block-attrs
-                   :where
-                   (or
-                    [?block :block/scheduled ?d]
-                    [?block :block/deadline ?d])
-                   [(get-else $ ?block :block/repeated? false) ?repeated]
-                   [(get-else $ ?block :block/marker "NIL") ?marker]
-                   [(not= ?marker "DONE")]
-                   [(not= ?marker "CANCELED")]
-                   [(not= ?marker "CANCELLED")]
-                   [(<= ?d ?future)]
-                   (or-join [?repeated ?d ?day]
-                            [(true? ?repeated)]
-                            [(>= ?d ?day)])]
-                 date
-                 future-day
-                 block-attrs)
-               react
-               (sort-by-left-recursive)
-               db-utils/group-by-page))))))
 
 (defn get-block-referenced-blocks
   ([block-uuid]

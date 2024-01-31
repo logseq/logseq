@@ -7,8 +7,8 @@
             [clojure.string :as string]
             [frontend.components.editor :as editor]
             [rum.core :as rum]
-            [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]))
+            [frontend.db.async :as db-async]
+            [promesa.core :as p]))
 
 (defn- scheduled-or-deadlines?
   [page-name]
@@ -16,10 +16,16 @@
        (not (true? (state/scheduled-deadlines-disabled?)))
        (= (string/lower-case page-name) (string/lower-case (date/journal-name)))))
 
-(rum/defc scheduled-and-deadlines-inner < rum/reactive db-mixins/query
-  [page-name]
-  (let [scheduled-or-deadlines (when (scheduled-or-deadlines? page-name)
-                                 (db/get-date-scheduled-or-deadlines (string/capitalize page-name)))]
+(rum/defcs scheduled-and-deadlines-inner < rum/reactive
+  {:init (fn [state]
+           (let [*result (atom nil)
+                 page-name (first (:rum/args state))]
+             (p/let [result (when (scheduled-or-deadlines? page-name)
+                              (db-async/<get-date-scheduled-or-deadlines (string/capitalize page-name)))]
+               (reset! *result result))
+             (assoc state ::result *result)))}
+  [state page-name]
+  (let [scheduled-or-deadlines (rum/react (::result state))]
     (when (seq scheduled-or-deadlines)
       [:div.scheduled-or-deadlines.mt-8
        (ui/foldable
