@@ -33,7 +33,8 @@
             [logseq.outliner.core :as outliner-core]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.common.config :as common-config]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
@@ -220,7 +221,8 @@
                 (let [migrated-content (repo-handler/migrate-db-config content)]
                   (p/do!
                    (db-editor-handler/save-file! "logseq/config.edn" migrated-content))
-                  (edn/read-string migrated-content))))))
+                  ;; Return original config as import process depends on original config e.g. :hidden
+                  (edn/read-string content))))))
 
 (defn- build-hidden-favorites-page-blocks
   [page-block-uuid-coll]
@@ -314,10 +316,11 @@
                             (async/go
                               (async/<! (p->c (repo-handler/new-db! graph-name {:file-graph-import? true})))
                               (let [repo (state/get-current-repo)
-                                    db-conn (db/get-db repo false)]
-                                (async/<! (p->c (import-config-file! config-file)))
+                                    db-conn (db/get-db repo false)
+                                    config (async/<! (p->c (import-config-file! config-file)))
+                                    filtered-doc-files (common-config/remove-hidden-files doc-files config #(.-rpath ^js %))]
                                 (async/<! (import-from-asset-files! asset-files))
-                                (async/<! (import-from-doc-files! db-conn repo doc-files))
+                                (async/<! (import-from-doc-files! db-conn repo filtered-doc-files))
                                 (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))
                                 (state/set-state! :graph/importing nil)
                                 (finished-cb)))))]
