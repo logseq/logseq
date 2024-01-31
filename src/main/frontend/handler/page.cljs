@@ -49,21 +49,25 @@
 
 (defn <unfavorite-page!
   [page-name]
-  (let [repo (state/get-current-repo)]
-    (if (config/db-based-graph? repo)
-      (let [db (conn/get-db)]
-        (when-let [page-block-uuid (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
-          (page-common-handler/<unfavorite-page!-v2 page-block-uuid)))
-      (page-common-handler/unfavorite-page! page-name))))
+  (p/do!
+   (let [repo (state/get-current-repo)]
+     (if (config/db-based-graph? repo)
+       (let [db (conn/get-db)]
+         (when-let [page-block-uuid (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
+           (page-common-handler/<unfavorite-page!-v2 page-block-uuid)))
+       (page-common-handler/unfavorite-page! page-name)))
+   (state/update-favorites-updated!)))
 
 (defn <favorite-page!
   [page-name]
-  (let [repo (state/get-current-repo)]
-    (if (config/db-based-graph? repo)
-      (let [db (conn/get-db)]
-        (when-let [page-block-uuid (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
-          (page-common-handler/<favorite-page!-v2 page-block-uuid)))
-      (page-common-handler/favorite-page! page-name))))
+  (p/do!
+   (let [repo (state/get-current-repo)]
+     (if (config/db-based-graph? repo)
+       (let [db (conn/get-db)]
+         (when-let [page-block-uuid (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
+           (page-common-handler/<favorite-page!-v2 page-block-uuid)))
+       (page-common-handler/favorite-page! page-name)))
+   (state/update-favorites-updated!)))
 
 (defn favorited?
   [page-name]
@@ -145,13 +149,14 @@
                   favorites)
             current-blocks (ldb/sort-by-left (ldb/get-page-blocks @conn page-common-handler/favorites-page-name {})
                                              favorites-page-entity)]
-        (prn :favorite-page-block-db-id-coll favorite-page-block-db-id-coll)
-        (ui-outliner-tx/transact!
-         {}
-         (doseq [[page-block-db-id block] (zipmap favorite-page-block-db-id-coll current-blocks)]
-           (when (not= page-block-db-id (:db/id (:block/link block)))
-             (outliner-core/save-block! repo conn (state/get-date-formatter)
-                                        (assoc block :block/link page-block-db-id)))))))))
+        (p/do!
+          (ui-outliner-tx/transact!
+              {}
+              (doseq [[page-block-db-id block] (zipmap favorite-page-block-db-id-coll current-blocks)]
+                (when (not= page-block-db-id (:db/id (:block/link block)))
+                  (outliner-core/save-block! repo conn (state/get-date-formatter)
+                                             (assoc block :block/link page-block-db-id)))))
+          (state/update-favorites-updated!))))))
 
 (defn has-more-journals?
   []
