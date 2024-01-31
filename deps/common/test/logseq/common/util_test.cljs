@@ -27,7 +27,9 @@
        "C:\\Users\\foo\\Documents\\audio.mp3" "mp3"
        "/root/Documents/audio" nil
        "/root/Documents/audio." nil
-       "special/characters/aäääöüß.7z" "7z"))
+       "special/characters/aäääöüß.7z" "7z"
+       "asldk lakls .lsad" "lsad"
+       "中文asldk lakls .lsad" "lsad"))
 
 (deftest url?
   (are [x y]

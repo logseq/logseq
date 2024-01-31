@@ -27,6 +27,66 @@
         (common-util/safe-decode-uri-component (string/replace result "." "/"))
         result))))
 
+(defn- path->file-name
+  ;; Only for internal paths, as they are converted to POXIS already
+  ;; https://github.com/logseq/logseq/blob/48b8e54e0fdd8fbd2c5d25b7f1912efef8814714/deps/graph-parser/src/logseq/graph_parser/extract.cljc#L32
+  ;; Should be converted to POXIS first for external paths
+  [path]
+  (if (string/includes? path "/")
+    (last (common-util/split-last "/" path))
+    path))
+
+(defn- path->file-body
+  [path]
+  (when-let [file-name (path->file-name path)]
+    (if (string/includes? file-name ".")
+      (first (common-util/split-last "." file-name))
+      file-name)))
+
+(defn- safe-url-decode
+  [string]
+  (if (string/includes? string "%")
+    (some-> string str common-util/safe-decode-uri-component)
+    string))
+
+(defn- decode-namespace-underlines
+  "Decode namespace underlines to slashed;
+   If continuous underlines, only decode at start;
+   Having empty namespace is invalid."
+  [string]
+  (string/replace string "___" "/"))
+
+(defn- make-valid-namespaces
+  "Remove those empty namespaces from title to make it a valid page name."
+  [title]
+  (->> (string/split title "/")
+       (remove empty?)
+       (string/join "/")))
+
+(defn- tri-lb-title-parsing
+  "Parsing file name under the new file name format
+   Avoid calling directly"
+  [file-name]
+  (some-> file-name
+          (decode-namespace-underlines)
+          (string/replace common-util/url-encoded-pattern safe-url-decode)
+          (make-valid-namespaces)))
+
+;; Keep for backward compatibility
+;; Rule of dir-ver 0
+;; Source: https://github.com/logseq/logseq/blob/e7110eea6790eda5861fdedb6b02c2a78b504cd9/deps/graph-parser/src/logseq/graph_parser/extract.cljc#L35
+(defn- legacy-title-parsing
+  [file-name-body]
+  (let [title (string/replace file-name-body "." "/")]
+    (or (common-util/safe-decode-uri-component title) title)))
+
+(defn title-parsing
+  "Convert file name in the given file name format to page title"
+  [file-name-body filename-format]
+  (case filename-format
+    :triple-lowbar (tri-lb-title-parsing file-name-body)
+    (legacy-title-parsing file-name-body)))
+
 (defn- get-page-name
   "Get page name with overridden order of
      `title::` property
@@ -54,9 +114,9 @@
                                (and first-block
                                     (string? title)
                                     title))
-            file-name (when-let [result (common-util/path->file-body file)]
+            file-name (when-let [result (path->file-body file)]
                         (if (common-config/mldoc-support? (common-util/get-file-ext file))
-                          (common-util/title-parsing result filename-format)
+                          (title-parsing result filename-format)
                           result))]
         (or property-name
             file-name

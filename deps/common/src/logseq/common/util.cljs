@@ -18,12 +18,6 @@
       (log/error :decode-uri-component-failed uri)
       uri)))
 
-(defn safe-url-decode
-  [string]
-  (if (string/includes? string "%")
-    (some-> string str safe-decode-uri-component)
-    string))
-
 (defn path-normalize
   "Normalize file path (for reading paths from FS, not required by writing)
    Keep capitalization senstivity"
@@ -129,12 +123,7 @@
          result))
      (map string/trim))))
 
-(defn decode-namespace-underlines
-  "Decode namespace underlines to slashed;
-   If continuous underlines, only decode at start;
-   Having empty namespace is invalid."
-  [string]
-  (string/replace string "___" "/"))
+(def url-encoded-pattern #"(?i)%[0-9a-f]{2}") ;; (?i) for case-insensitive mode
 
 (defn page-name-sanity
   "Sanitize the page-name. Unify different diacritics and other visual differences.
@@ -145,24 +134,6 @@
   (some-> page-name
           (remove-boundary-slashes)
           (path-normalize)))
-
-(defn make-valid-namespaces
-  "Remove those empty namespaces from title to make it a valid page name."
-  [title]
-  (->> (string/split title "/")
-       (remove empty?)
-       (string/join "/")))
-
-(def url-encoded-pattern #"(?i)%[0-9a-f]{2}") ;; (?i) for case-insensitive mode
-
-(defn- tri-lb-title-parsing
-  "Parsing file name under the new file name format
-   Avoid calling directly"
-  [file-name]
-  (some-> file-name
-          (decode-namespace-underlines)
-          (string/replace url-encoded-pattern safe-url-decode)
-          (make-valid-namespaces)))
 
 (defn page-name-sanity-lc
   "Sanitize the query string for a page name (mandate for :block/name)"
@@ -202,22 +173,6 @@
     ;; default
     (keyword format)))
 
-(defn path->file-name
-  ;; Only for internal paths, as they are converted to POXIS already
-  ;; https://github.com/logseq/logseq/blob/48b8e54e0fdd8fbd2c5d25b7f1912efef8814714/deps/graph-parser/src/logseq/graph_parser/extract.cljc#L32
-  ;; Should be converted to POXIS first for external paths
-  [path]
-  (if (string/includes? path "/")
-    (last (split-last "/" path))
-    path))
-
-(defn path->file-body
-  [path]
-  (when-let [file-name (path->file-name path)]
-    (if (string/includes? file-name ".")
-      (first (split-last "." file-name))
-      file-name)))
-
 (defn path->file-ext
   [path-or-file-name]
   (second (re-find #"(?:\.)(\w+)[^.]*$" path-or-file-name)))
@@ -244,27 +199,6 @@
                   (edn/read-string (str "{" s " nil}"))))
     (catch :default _
       false)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;     Keep for backward compatibility     ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; Rule of dir-ver 0
-;; Source: https://github.com/logseq/logseq/blob/e7110eea6790eda5861fdedb6b02c2a78b504cd9/deps/graph-parser/src/logseq/graph_parser/extract.cljc#L35
-(defn legacy-title-parsing
-  [file-name-body]
-  (let [title (string/replace file-name-body "." "/")]
-    (or (safe-decode-uri-component title) title)))
-
-;; Register sanitization / parsing fns in:
-;; logseq.common.util (parsing only)
-;; frontend.util.fs         (sanitization only)
-(defn title-parsing
-  "Convert file name in the given file name format to page title"
-  [file-name-body filename-format]
-  (case filename-format
-    :triple-lowbar (tri-lb-title-parsing file-name-body)
-    (legacy-title-parsing file-name-body)))
 
 (defn safe-read-string
   ([content]
