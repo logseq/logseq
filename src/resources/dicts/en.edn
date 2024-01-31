@@ -51,7 +51,7 @@
  :on-boarding/importing-desc "If they are in a JSON, EDN or Markdown format Logseq can work with them."
  :on-boarding/importing-roam-desc "Import a JSON Export of your Roam graph"
  :on-boarding/importing-lsq-desc "Import an EDN or a JSON Export of your Logseq graph"
- :on-boarding/importing-sqlite-desc "Import an SQLite DB Export of your Logseq graph, this will create a new graph with your input name"
+ :on-boarding/importing-sqlite-desc "Import a SQLite DB Export of your Logseq graph into a new DB graph"
  :on-boarding/importing-opml-desc " Import OPML files"
  :on-boarding/main-title (fn [] ["Welcome to " [:strong "Logseq!"]])
  :on-boarding/main-desc "First you need to choose a folder where Logseq will store your thoughts, ideas, notes."

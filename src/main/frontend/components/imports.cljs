@@ -378,8 +378,8 @@
           [:label.action-input.flex.items-center.mx-2.my-2
            [:span.as-flex-center [:i (svg/logo 28)]]
            [:span.flex.flex-col
-            [[:strong "Graph Folder"]
-             [:small  "Import from a graph folder as a DB-based graph"]]]
+            [[:strong "File to DB graph"]
+             [:small  "Import a file-based Logseq graph folder into a new DB graph"]]]
            [:input.absolute.hidden
             {:id        "import-graph-folder"
              :type      "file"
