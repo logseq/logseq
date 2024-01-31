@@ -222,7 +222,12 @@
                   (p/do!
                    (db-editor-handler/save-file! "logseq/config.edn" migrated-content))
                   ;; Return original config as import process depends on original config e.g. :hidden
-                  (edn/read-string content))))))
+                  (edn/read-string content))))
+      (p/catch (fn [_err]
+                 (notification/show! "Import may have mistakes due to an invalid config.edn. Recommend re-importing with a valid config.edn"
+                                     :warning
+                                     false)
+                 (edn/read-string config/config-default-content)))))
 
 (defn- build-hidden-favorites-page-blocks
   [page-block-uuid-coll]
