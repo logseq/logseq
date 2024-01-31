@@ -109,7 +109,7 @@
         (apply db-async-util/<q repo [query])))))
 
 (defn q
-  [repo k {:keys [use-cache? transform-fn query-fn inputs-fn disable-reactive?]
+  [repo k {:keys [use-cache? transform-fn query-fn inputs-fn disable-reactive? return-promise?]
            :or {use-cache? true
                 transform-fn identity}} query & inputs]
   ;; {:pre [(s/valid? :frontend.worker.react/block k)]}
@@ -127,12 +127,18 @@
                 p-or-value (<q-aux repo db query-fn inputs-fn k query inputs)]
             (when-not disable-reactive?
               (add-q! k query inputs result-atom transform-fn query-fn inputs-fn))
-            (if (p/promise? p-or-value)
+            (cond
+              return-promise?
+              p-or-value
+
+              (p/promise? p-or-value)
               (do
                 (p/let [result p-or-value
                         result' (transform-fn result)]
                   (reset! result-atom result'))
                 result-atom)
+
+              :else
               (let [result' (transform-fn p-or-value)]
                 ;; Don't notify watches now
                 (set! (.-state result-atom) result')
