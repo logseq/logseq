@@ -11,7 +11,8 @@
             [frontend.util :as util :refer [react]]
             [clojure.core.async :as async]
             [frontend.db.async.util :as db-async-util]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [datascript.core :as d]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
@@ -89,7 +90,10 @@
 
 (defn- <q-aux
   [repo db query-fn inputs-fn k query inputs]
-  (let [kv? (and (vector? k) (= :kv (second k)))]
+  (let [kv? (and (vector? k) (= :kv (second k)))
+        q (if util/node-test?
+            (fn [query inputs] (apply d/q query db inputs))
+            (fn [query inputs] (apply db-async-util/<q repo (cons query inputs))))]
     (when (or query-fn query kv?)
       (cond
         query-fn
@@ -100,13 +104,13 @@
 
         inputs-fn
         (let [inputs (inputs-fn)]
-          (apply db-async-util/<q repo (cons query inputs)))
+          (q query inputs))
 
         (seq inputs)
-        (apply db-async-util/<q repo (cons query inputs))
+        (q query inputs)
 
         :else
-        (apply db-async-util/<q repo [query])))))
+        (q query nil)))))
 
 (defn q
   [repo k {:keys [use-cache? transform-fn query-fn inputs-fn disable-reactive? return-promise?]

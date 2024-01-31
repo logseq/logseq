@@ -51,8 +51,8 @@
     (are [x y] (= x y)
          4 (count a-aliases)
          4 (count b-aliases)
-         4 (count b-ref-blocks)
-         4 (count a-ref-blocks)
+         2 (count b-ref-blocks)
+         2 (count a-ref-blocks)
          #{"ab" "ac" "ad"} (set alias-names))))
 
 (deftest test-page-alias-set
@@ -66,9 +66,9 @@
         alias-names (model/get-page-alias-names test-helper/test-db "aa")
         a-ref-blocks (model/get-page-referenced-blocks "aa")]
     (are [x y] (= x y)
-         3 (count a-aliases)
-         3 (count a-ref-blocks)
-         #{"ab" "ac"} (set alias-names))))
+      3 (count a-aliases)
+      2 (count a-ref-blocks)
+      #{"ab" "ac"} (set alias-names))))
 
 (deftest get-pages-that-mentioned-page-with-show-journal
   (load-test-files [{:file/path "journals/2020_08_15.md"
