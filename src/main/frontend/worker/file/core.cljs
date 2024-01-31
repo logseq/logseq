@@ -8,7 +8,8 @@
             [logseq.db :as ldb]
             [frontend.worker.date :as worker-date]
             [frontend.worker.util :as worker-util]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [promesa.core :as p]))
 
 (defonce *writes (atom {}))
 (defonce *request-id (atom 0))

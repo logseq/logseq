@@ -137,64 +137,11 @@
       ;; return nil, otherwise the entire db will be transferred by ipc
       nil)))
 
-(defn preload-graph-homepage-files!
-  "Preload the homepage file for the current graph. Return loaded file paths.
-
-   Prerequisites:
-   - current graph is set
-   - config is loaded"
-  []
-  (when-let [repo (state/get-current-repo)]
-    (when (and (not (state/loading-files? repo))
-               (config/local-file-based-graph? repo))
-      (let [repo-dir (config/get-repo-dir repo)
-            page-name (if (state/enable-journals? repo)
-                        (date/today)
-                        (or (:page (state/get-default-home)) "Contents"))
-            page-name (util/page-name-sanity-lc page-name)
-            file-rpath (or (:file/path (db/get-page-file page-name))
-                           (let [format (state/get-preferred-format repo)
-                                 ext (config/get-file-extension format)
-                                 file-name (if (state/enable-journals? repo)
-                                             (date/journal-title->default (date/today))
-                                             (or (:page (state/get-default-home)) "contents"))
-                                 parent-dir (if (state/enable-journals? repo)
-                                              (config/get-journals-directory)
-                                              (config/get-pages-directory))]
-                             (str parent-dir "/" file-name "." ext)))]
-        (prn ::preload-homepage file-rpath)
-        (p/let [file-exists? (fs/file-exists? repo-dir file-rpath)
-                _ (when file-exists?
-                    ;; BUG: avoid active-editing block content overwrites incoming fs changes
-                    (editor-handler/escape-editing false))
-                file-content (when file-exists?
-                               (fs/read-file repo-dir file-rpath))
-                file-mtime (when file-exists?
-                             (:mtime (fs/stat repo-dir file-rpath)))
-                db-empty? (db/page-empty? repo page-name)
-                db-content (if-not db-empty?
-                             (db-async/<get-file repo file-rpath)
-                             "")]
-          (p/let [_ (cond
-                      (and file-exists?
-                           db-empty?)
-                      (handle-add-and-change! repo file-rpath file-content db-content file-mtime false)
-
-                      (and file-exists?
-                           (not db-empty?)
-                           (not= file-content db-content))
-                      (handle-add-and-change! repo file-rpath file-content db-content file-mtime true))]
-
-            (ui-handler/re-render-root!)
-
-            [file-rpath]))))))
-
 (defn load-graph-files!
   "This fn replaces the former initial fs watcher"
-  [graph exclude-files]
+  [graph]
   (when graph
-    (let [repo-dir (config/get-repo-dir graph)
-          exclude-files (set (or exclude-files []))]
+    (let [repo-dir (config/get-repo-dir graph)]
       ;; read all files in the repo dir, notify if readdir error
       (p/let [db-files' (db-async/<get-files graph)
               db-files (map first db-files')
@@ -210,8 +157,7 @@
                                                     (string/lower-case f)]))))
                            (fn [files]
                              (let [deleted-files (set/difference (set db-files) (set files))]
-                               [(->> files
-                                     (remove #(contains? exclude-files %)))
+                               [files
                                 deleted-files])))
                   (p/catch (fn [error]
                              (when-not (config/demo-graph? graph)

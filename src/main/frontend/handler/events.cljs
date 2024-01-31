@@ -396,14 +396,12 @@
       (when (and (not dir-exists?)
                  (not util/nfs?))
         (state/pub-event! [:graph/dir-gone dir]))))
-  (p/let [loaded-homepage-files (when-not (config/db-based-graph? repo)
-                                  (fs-watcher/preload-graph-homepage-files!))
-          ;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
+  (p/let [;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
           _ (js/setTimeout #(mobile/mobile-postinit) 1000)
           ;; FIXME: an ugly implementation for redirecting to page on new window is restored
           _ (repo-handler/graph-ready! repo)
           _ (when-not (config/db-based-graph? repo)
-              (fs-watcher/load-graph-files! repo loaded-homepage-files))]))
+              (fs-watcher/load-graph-files! repo))]))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
