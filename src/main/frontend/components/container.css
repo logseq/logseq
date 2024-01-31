@@ -267,9 +267,8 @@
           }
 
           &:hover {
-            background-color: or(--ls-recessed-nav-item-hover, --lx-gray-04, --ls-quaternary-background-color);
+            background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
             opacity: 1;
-            background-color: var(--ls-quaternary-background-color);
           }
         }
       }
@@ -368,18 +367,15 @@
 }
 
 .cp__sidebar-left-layout {
-  position: fixed;
-  top: 0;
+  @apply fixed top-0 left-0 w-[10px];
 
-  left: 0;
   z-index: var(--ls-z-index-level-5);
-  width: 10px;
 
   a {
     @apply opacity-90 hover:opacity-100;
     transition: all 120ms ease-out;
 
-    color: or(--ls-left-sidebar-text-color, --ls-header-button-background);
+    color: var(--ls-left-sidebar-text-color, var(--ls-header-button-background));
   }
 
   > .left-sidebar-inner {
