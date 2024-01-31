@@ -14,6 +14,7 @@
  :preferred-workflow :now
 
  ;; Exclude directories/files.
+ ;; This is _only_ for file graphs.
  ;; Example usage:
  ;; :hidden ["/archived" "/test.md" "../assets/archived"]
  :hidden []
@@ -144,6 +145,7 @@
  ;; :whiteboards-directory "whiteboards"
 
  ;; Enabling this option converts
+ ;; This is _only_ for file graphs.
  ;; [[Grant Ideas]] to [[file:./grant_ideas.org][Grant Ideas]] for org-mode.
  ;; For more information, visit https://github.com/logseq/logseq/issues/672
  ;; :org-mode/insert-file-link? false
@@ -289,6 +291,7 @@
  ;;  :journal?        false} ; Default value: false
 
  ;; Favorites to list on the left sidebar
+ ;; This is _only_ for file graphs.
  :favorites []
 
  ;; Set flashcards interval.
@@ -307,19 +310,23 @@
  ;; :block-hidden-properties #{:public :icon}
 
  ;; Create a page for all properties.
+ ;; This is _only_ for file graphs.
  ;; Default value: true
  :property-pages/enabled? true
 
  ;; Properties to exclude from having property pages
+ ;; This is _only_ for file graphs.
  ;; Example usage:
  ;; :property-pages/excludelist #{:duration :author}
 
  ;; By default, property value separated by commas will not be treated as
  ;; page references. You can add properties to enable it.
+ ;; This is _only_ for file graphs.
  ;; Example usage:
  ;; :property/separated-by-commas #{:alias :tags}
 
  ;; Properties that are ignored when parsing property values for references
+ ;; This is _only_ for file graphs.
  ;; Example usage:
  ;; :ignored-page-references-keywords #{:author :website}
 
@@ -398,10 +405,10 @@
  ;;  :list?            false}      ;; Default value: false
 
  ;; Configure the escaping method for special characters in page titles.
+ ;; This is _only_ for file graphs.
  ;; Warning:
  ;;   This is a dangerous operation. To modify the setting,
- ;;   access the 'Filename format' setting and follow the instructions.
- ;;   Otherwise, You may need to manually rename all affected files and
+ ;;   you'll need to manually rename all affected files and
  ;;   re-index them on all clients after synchronization.
  ;;   Incorrect handling may result in messy page titles.
  ;; Available options:

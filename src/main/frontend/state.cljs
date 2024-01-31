@@ -311,7 +311,8 @@
       :system/info                           {}
       ;; Whether block is selected
       :ui/select-query-cache                 (atom {})
-      :db/async-queries               (atom #{})})))
+      :favorites/updated?                    (atom 0)
+      :db/async-queries                      (atom #{})})))
 
 ;; Block ast state
 ;; ===============
@@ -2366,3 +2367,7 @@ Similar to re-frame subscriptions"
     (when (and max-tx-id (nil? (:after (get @(:history/tx->editor-cursor @state) max-tx-id))))
       (update-state! :history/tx->editor-cursor
                      (fn [m] (assoc-in m [max-tx-id :after] editor-cursor))))))
+
+(defn update-favorites-updated!
+  []
+  (update-state! :favorites/updated? inc))
