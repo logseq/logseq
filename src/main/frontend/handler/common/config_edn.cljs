@@ -103,9 +103,8 @@ nested keys or positional errors e.g. tuples"
    :block-hidden-properties
    "is not used in DB graphs as hiding a property is done in its configuration"
    :ignored-page-references-keywords
-   ;; TODO: Remove key when default is changed
-   ;;  "is not used in DB graphs"
-   ;;  :file/name-format
+   "is not used in DB graphs"
+   :file/name-format
    "is not used in DB graphs"
    :feature/enable-block-timestamps?
    "is not used in DB graphs as it is always enabled"
