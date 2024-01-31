@@ -7,7 +7,6 @@
             [logseq.sdk.ui :as sdk-ui]
             [logseq.sdk.assets :as sdk-assets]
             [clojure.string :as string]
-            [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.components.plugins :as plugins]
@@ -616,6 +615,8 @@
         (let [{:keys [pos] :or {pos :max}} (bean/->clj opts)]
           (editor-handler/edit-block! block pos block-uuid))))))
 
+;; TODO: perf improvement, some operations such as delete-block doesn't need to load the full page
+;; instead, the db worker should provide those calls
 (defn- <ensure-page-loaded
   [block-uuid-or-page-name]
   (p/let [repo (state/get-current-repo)

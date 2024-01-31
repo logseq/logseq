@@ -18,8 +18,7 @@
             [rum.core :as rum]
             [frontend.modules.outliner.tree :as tree]
             [frontend.db.async :as db-async]
-            [promesa.core :as p]
-            [frontend.search :as search]))
+            [promesa.core :as p]))
 
 (defn- frequencies-sort
   [references]
