@@ -47,7 +47,7 @@
 
 .form-checkbox, .form-radio {
   color: var(--ls-page-checkbox-color, hsl(var(--primary)/.4));
-  background-color: var(--ls-page-checkbox-color, hsl(var(--input)));
+  background-color: var(--ls-page-checkbox-color, var(--rx-gray-06));
   border-color: var(--ls-page-checkbox-border-color, hsl(var(--border)));
   border: none;
   position: relative;
