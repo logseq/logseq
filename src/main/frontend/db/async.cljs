@@ -10,10 +10,14 @@
             [frontend.db.async.util :as db-async-util]
             [frontend.db.file-based.async :as file-async]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.persist-db.browser :as db-browser]
             [clojure.edn :as edn]
             [datascript.core :as d]
-            [frontend.db.react :as react]))
+            [frontend.db.react :as react]
+            [frontend.date :as date]
+            [cljs-time.core :as t]
+            [cljs-time.format :as tf]))
 
 (def <q db-async-util/<q)
 (def <pull db-async-util/<pull)
@@ -174,3 +178,37 @@
   (when (and graph path)
     (p/let [result (<pull graph [:file/path path])]
       (:file/content result))))
+
+(defn <get-date-scheduled-or-deadlines
+  [journal-title]
+  (when-let [date (date/journal-title->int journal-title)]
+    (let [future-days (state/get-scheduled-future-days)
+          date-format (tf/formatter "yyyyMMdd")
+          current-day (tf/parse date-format (str date))
+          future-day (some->> (t/plus current-day (t/days future-days))
+                              (tf/unparse date-format)
+                              (parse-long))]
+      (when future-day
+        (when-let [repo (state/get-current-repo)]
+          (p/let [result (<q repo
+                             '[:find [(pull ?block ?block-attrs) ...]
+                               :in $ ?day ?future ?block-attrs
+                               :where
+                               (or
+                                [?block :block/scheduled ?d]
+                                [?block :block/deadline ?d])
+                               [(get-else $ ?block :block/repeated? false) ?repeated]
+                               [(get-else $ ?block :block/marker "NIL") ?marker]
+                               [(not= ?marker "DONE")]
+                               [(not= ?marker "CANCELED")]
+                               [(not= ?marker "CANCELLED")]
+                               [(<= ?d ?future)]
+                               (or-join [?repeated ?d ?day]
+                                        [(true? ?repeated)]
+                                        [(>= ?d ?day)])]
+                             date
+                             future-day
+                             db-model/block-attrs)]
+            (->> result
+                 db-model/sort-by-left-recursive
+                 db-utils/group-by-page)))))))
