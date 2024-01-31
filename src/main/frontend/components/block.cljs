@@ -511,14 +511,16 @@
   [e config page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?]
   (util/stop e)
   (when (not (util/right-click? e))
-    (let [redirect-page-name (or redirect-page-name
-                                 (model/get-redirect-page-name page-name (:block/alias? config)))]
+    (p/let [redirect-page-name (or redirect-page-name
+                                   (model/get-redirect-page-name page-name (:block/alias? config)))
+            page (when redirect-page-name
+                   (db-async/<pull (state/get-current-repo) [:block/name (util/page-name-sanity-lc redirect-page-name)]))]
       (cond
         (gobj/get e "shiftKey")
-        (when-let [page-entity (db/entity [:block/name redirect-page-name])]
+        (when page
           (state/sidebar-add-block!
            (state/get-current-repo)
-           (:db/id page-entity)
+           (:db/id page)
            :page))
 
         (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
@@ -529,11 +531,11 @@
         whiteboard-page?
         (route-handler/redirect-to-whiteboard! page-name)
 
-        (not= redirect-page-name page-name)
-        (route-handler/redirect-to-page! redirect-page-name)
+        (nil? page)
+        (state/pub-event! [:page/create page-name-in-block])
 
         :else
-        (state/pub-event! [:page/create page-name-in-block]))))
+        (route-handler/redirect-to-page! redirect-page-name))))
   (when (and contents-page?
              (util/mobile?)
              (state/get-left-sidebar-open?))
