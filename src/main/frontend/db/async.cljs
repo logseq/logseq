@@ -33,7 +33,7 @@
 (defn <get-all-templates
   [graph]
   (p/let [result (<q graph
-                     '[:find ?t ?b
+                     '[:find ?t (pull ?b [*])
                        :where
                        [?b :block/properties ?p]
                        [(get ?p :template) ?t]])]
@@ -111,22 +111,24 @@
   [graph name-or-uuid & {:keys [children?]
                          :or {children? true}}]
   (let [name' (str name-or-uuid)
-        e (if (util/uuid-string? name')
+        e (cond
+            (util/uuid-string? name')
             (db/entity [:block/uuid (uuid name')])
-            (db/entity [:block/name name']))]
-    (cond
-      (and e (not children?) (:block/tx-id e))
+            :else
+            (db/entity [:block/name (util/page-name-sanity-lc name')]))]
+    (if (:block.temp/fully-loaded? e)
       e
-
-      :else
       (when-let [^Object sqlite @db-browser/*worker]
         (state/update-state! :db/async-queries (fn [s] (conj s name')))
         (p/let [result (.get-block-and-children sqlite graph name' children?)
                 {:keys [block children] :as result'} (edn/read-string result)
                 conn (db/get-db graph false)
-                _ (d/transact! conn (cons block children))]
+                block-and-children (cons (assoc block :block.temp/fully-loaded? true) children)
+                _ (d/transact! conn block-and-children)]
           (state/update-state! :db/async-queries (fn [s] (disj s name')))
-          (react/refresh-affected-queries! graph [[:frontend.worker.react/block (:db/id block)]])
+          (react/refresh-affected-queries!
+           graph
+           [[:frontend.worker.react/block (:db/id block)]])
           (if children?
             block
             result'))))))

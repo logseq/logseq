@@ -341,7 +341,7 @@
                   data)
           m (-> data'
                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom?
-                        :block/title :block/body :block/level)
+                        :block/title :block/body :block/level :block.temp/fully-loaded?)
                 common-util/remove-nils
                 block-with-updated-at
                 fix-tag-ids)

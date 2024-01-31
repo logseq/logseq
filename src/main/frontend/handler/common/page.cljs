@@ -20,7 +20,6 @@
             [logseq.db :as ldb]
             [frontend.db.conn :as conn]
             [datascript.core :as d]
-            [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [logseq.outliner.core :as outliner-core]))
 
@@ -155,14 +154,16 @@
 ;; favorites fns end ================
 
 
-(defn delete!
+(defn <delete!
   "Deletes a page and then either calls the ok-handler or the error-handler if unable to delete"
-  [page-name ok-handler & {:keys [_persist-op? _error-handler]
-                           :as opts}]
+  [page-name ok-handler & {:keys [error-handler]}]
   (when page-name
-    (when-let [repo (state/get-current-repo)]
-      (let [conn (db/get-db repo false)]
-        (worker-page/delete! repo conn page-name ok-handler opts)))))
+    (when-let [^Object worker @state/*db-worker]
+      (-> (p/let [repo (state/get-current-repo)
+                  _ (.page-delete worker repo page-name)]
+            (when ok-handler (ok-handler)))
+          (p/catch (fn [error]
+                     (when error-handler (error-handler error))))))))
 
 ;; other fns
 ;; =========

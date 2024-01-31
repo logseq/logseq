@@ -960,16 +960,16 @@
        :on-click (fn []
                    (close-fn)
                    (let [failed-pages (atom [])]
-                     (doseq [page-name (map :block/name pages)]
-                       (page-handler/delete! page-name #()
-                                             {:error-handler
-                                              (fn [msg]
-                                                (js/console.error msg)
-                                                (swap! failed-pages conj page-name))}))
-                     (if (seq @failed-pages)
-                       (notification/show! (t :all-pages/failed-to-delete-pages (string/join ", " (map pr-str @failed-pages)))
-                                           :warning false)
-                       (notification/show! (t :tips/all-done) :success)))
+                     (p/let [_ (p/all (map (fn [page-name]
+                                             (page-handler/<delete! page-name nil
+                                                                    {:error-handler
+                                                                     (fn [msg]
+                                                                       (js/console.error msg)
+                                                                       (swap! failed-pages conj page-name))})) (map :block/name pages)))]
+                       (if (seq @failed-pages)
+                         (notification/show! (t :all-pages/failed-to-delete-pages (string/join ", " (map pr-str @failed-pages)))
+                                             :warning false)
+                         (notification/show! (t :tips/all-done) :success))))
                    (js/setTimeout #(refresh-fn) 200)))]]))
 
 (rum/defc pagination

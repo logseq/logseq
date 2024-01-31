@@ -45,7 +45,7 @@
 
 (def create! page-common-handler/create!)
 (def <create! page-common-handler/<create!)
-(def delete! page-common-handler/delete!)
+(def <delete! page-common-handler/<delete!)
 
 (defn <unfavorite-page!
   [page-name]
