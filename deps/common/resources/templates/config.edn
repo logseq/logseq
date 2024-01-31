@@ -405,10 +405,10 @@
  ;;  :list?            false}      ;; Default value: false
 
  ;; Configure the escaping method for special characters in page titles.
+ ;; This is _only_ for file graphs.
  ;; Warning:
  ;;   This is a dangerous operation. To modify the setting,
- ;;   access the 'Filename format' setting and follow the instructions.
- ;;   Otherwise, You may need to manually rename all affected files and
+ ;;   you'll need to manually rename all affected files and
  ;;   re-index them on all clients after synchronization.
  ;;   Incorrect handling may result in messy page titles.
  ;; Available options:
