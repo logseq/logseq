@@ -12,7 +12,6 @@
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
-            [frontend.util.drawer :as drawer]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.content :as db-content]
             [logseq.graph-parser.text :as text]

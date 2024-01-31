@@ -23,7 +23,8 @@
             [clojure.core.async :as async]
             [frontend.worker.async-util :include-macros true :refer [<?]]
             [frontend.worker.util :as worker-util]
-            [frontend.worker.handler.page.rename :as worker-page-rename]))
+            [frontend.worker.handler.page.rename :as worker-page-rename]
+            [frontend.worker.handler.page :as worker-page]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -454,6 +455,13 @@
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (let [config (worker-state/get-config repo)
            result (worker-page-rename/rename! repo conn config old-name new-name)]
+       (bean/->js {:result result}))))
+
+  (page-delete
+   [this repo page-name]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (let [config (worker-state/get-config repo)
+           result (worker-page/delete! repo conn page-name nil {})]
        (bean/->js {:result result}))))
 
   (file-writes-finished?

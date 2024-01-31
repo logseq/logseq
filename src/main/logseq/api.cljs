@@ -53,6 +53,16 @@
 
 ;; Alert: this namespace shouldn't invoke any reactive queries
 
+(defn- <pull-block
+  [id-or-name]
+  (when id-or-name
+    (let [eid (cond
+                (and (vector? id-or-name) (= (count id-or-name) 2)) id-or-name
+                (number? id-or-name) id-or-name
+                (and (string? id-or-name) (util/uuid-string? id-or-name)) [:block/uuid (uuid id-or-name)]
+                :else [:block/name (util/page-name-sanity-lc id-or-name)])]
+      (db-async/<pull (state/get-current-repo) eid))))
+
 ;; helpers
 (defn ^:export install-plugin-hook
   [pid hook ^js opts]
@@ -142,7 +152,6 @@
     (when-let [repo (state/get-current-repo)]
       (p/let [templates (db-async/<get-all-templates repo)]
         (some-> templates
-                (update-vals db/pull)
                 (sdk-utils/normalize-keyword-for-json)
                 (bean/->js))))))
 
@@ -538,16 +547,21 @@
 (def ^:export get_current_page
   (fn []
     (when-let [page (state/get-current-page)]
-      (when-let [page (db-model/get-page page)]
+      (p/let [page (<pull-block page)]
         (bean/->js (sdk-utils/normalize-keyword-for-json (db-utils/pull (:db/id page))))))))
 
 (def ^:export get_page
   (fn [id-or-page-name]
-    (when-let [page (cond
-                      (number? id-or-page-name) (db-utils/pull id-or-page-name)
-                      (string? id-or-page-name) (db-model/get-page id-or-page-name))]
-      (when-not (contains? page :block/left)
-        (bean/->js (sdk-utils/normalize-keyword-for-json (db-utils/pull (:db/id page))))))))
+    (p/let [page (db-async/<pull (state/get-current-repo)
+                                 (cond
+                                   (number? id-or-page-name)
+                                   id-or-page-name
+                                   (util/uuid-string? id-or-page-name)
+                                   [:block/uuid (uuid id-or-page-name)]
+                                   :else
+                                   [:block/name (util/page-name-sanity-lc id-or-page-name)]))]
+      (when (:block/name page)
+        (bean/->js (sdk-utils/normalize-keyword-for-json page))))))
 
 (def ^:export get_all_pages
   (fn [repo]
@@ -558,7 +572,7 @@
   (fn [name ^js properties ^js opts]
     (let [properties (bean/->clj properties)
           {:keys [redirect createFirstBlock format journal]} (bean/->clj opts)]
-      (p/let [page (db-model/get-page name)
+      (p/let [page (<pull-block name)
               new-page (when-not page
                          (page-handler/<create!
                           name
@@ -575,7 +589,7 @@
 
 (def ^:export delete_page
   (fn [name]
-    (p/create (fn [ok] (page-handler/delete! name ok)))))
+    (page-handler/<delete! name nil)))
 
 (def ^:export rename_page
   page-handler/rename!)
@@ -606,47 +620,57 @@
   (fn [block-uuid-or-page-name content ^js opts]
     (when (string/blank? block-uuid-or-page-name)
       (throw (js/Error. "Page title or block UUID shouldn't be empty.")))
-    (p/let [{:keys [before sibling focus customUUID properties autoOrderedList]} (bean/->clj opts)
-            [page-name block-uuid] (if (util/uuid-string? block-uuid-or-page-name)
-                                     [nil (uuid block-uuid-or-page-name)]
-                                     [block-uuid-or-page-name nil])
-            page-name              (when page-name (util/page-name-sanity-lc page-name))
-            _                      (when (and page-name (not (db/entity [:block/name page-name])))
-                                     (page-handler/<create! block-uuid-or-page-name {:create-first-block? false}))
-            custom-uuid            (or customUUID (:id properties))
-            custom-uuid            (when custom-uuid (sdk-utils/uuid-or-throw-error custom-uuid))
-            edit-block?            (if (nil? focus) true focus)
-            _                      (when (and custom-uuid (db-model/query-block-by-uuid custom-uuid))
-                                     (throw (js/Error.
-                                             (util/format "Custom block UUID already exists (%s)." custom-uuid))))
-            block-uuid'            (if (and (not sibling) before block-uuid)
-                                     (let [block       (db/entity [:block/uuid block-uuid])
-                                           first-child (db-model/get-by-parent-&-left (db/get-db)
-                                                                                      (:db/id block)
-                                                                                      (:db/id block))]
-                                       (if first-child
-                                         (:block/uuid first-child)
-                                         block-uuid))
-                                     block-uuid)
-            insert-at-first-child? (not= block-uuid' block-uuid)
-            [sibling? before?] (if insert-at-first-child?
-                                 [true true]
-                                 [sibling before])
-            before?                (if (and (false? sibling?) before? (not insert-at-first-child?))
-                                     false
-                                     before?)
-            new-block              (editor-handler/api-insert-new-block!
-                                    content
-                                    {:block-uuid  block-uuid'
-                                     :sibling?    sibling?
-                                     :before?     before?
-                                     :edit-block? edit-block?
-                                     :page        page-name
-                                     :custom-uuid custom-uuid
-                                     :ordered-list? (if (boolean? autoOrderedList) autoOrderedList false)
-                                     :properties  (merge properties
-                                                         (when custom-uuid {:id custom-uuid}))})]
-      (bean/->js (sdk-utils/normalize-keyword-for-json new-block)))))
+    (p/let [repo (state/get-current-repo)
+            block? (util/uuid-string? (str block-uuid-or-page-name))
+            ;; Ensure page or block's page has been loaded
+            result (db-async/<get-block repo block-uuid-or-page-name)
+            block (if (:block result) (:block result) result)
+            _ (when-let [page-id (:db/id (:block/page block))]
+                (when-let [page-uuid (:block/uuid (db/entity page-id))]
+                  (db-async/<get-block repo page-uuid)))]
+      (if (and block? (not block))
+        (throw (js/Error. "Block not exists"))
+        (p/let [{:keys [before sibling focus customUUID properties autoOrderedList]} (bean/->clj opts)
+                [page-name block-uuid] (if (util/uuid-string? block-uuid-or-page-name)
+                                         [nil (uuid block-uuid-or-page-name)]
+                                         [block-uuid-or-page-name nil])
+                page-name              (when page-name (util/page-name-sanity-lc page-name))
+                _                      (when (and page-name (not (db/entity [:block/name page-name])))
+                                         (page-handler/<create! block-uuid-or-page-name {:create-first-block? false}))
+                custom-uuid            (or customUUID (:id properties))
+                custom-uuid            (when custom-uuid (sdk-utils/uuid-or-throw-error custom-uuid))
+                edit-block?            (if (nil? focus) true focus)
+                _                      (when (and custom-uuid (db-model/query-block-by-uuid custom-uuid))
+                                         (throw (js/Error.
+                                                 (util/format "Custom block UUID already exists (%s)." custom-uuid))))
+                block-uuid'            (if (and (not sibling) before block-uuid)
+                                         (let [block       (db/entity [:block/uuid block-uuid])
+                                               first-child (db-model/get-by-parent-&-left (db/get-db)
+                                                                                          (:db/id block)
+                                                                                          (:db/id block))]
+                                           (if first-child
+                                             (:block/uuid first-child)
+                                             block-uuid))
+                                         block-uuid)
+                insert-at-first-child? (not= block-uuid' block-uuid)
+                [sibling? before?] (if insert-at-first-child?
+                                     [true true]
+                                     [sibling before])
+                before?                (if (and (false? sibling?) before? (not insert-at-first-child?))
+                                         false
+                                         before?)
+                new-block              (editor-handler/api-insert-new-block!
+                                        content
+                                        {:block-uuid  block-uuid'
+                                         :sibling?    sibling?
+                                         :before?     before?
+                                         :edit-block? edit-block?
+                                         :page        page-name
+                                         :custom-uuid custom-uuid
+                                         :ordered-list? (if (boolean? autoOrderedList) autoOrderedList false)
+                                         :properties  (merge properties
+                                                             (when custom-uuid {:id custom-uuid}))})]
+          (bean/->js (sdk-utils/normalize-keyword-for-json new-block)))))))
 
 (def ^:export insert_batch_block
   (fn [block-uuid ^js batch-blocks ^js opts]
