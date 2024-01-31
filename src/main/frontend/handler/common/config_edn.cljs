@@ -107,7 +107,9 @@ nested keys or positional errors e.g. tuples"
    :file/name-format
    "is not used in DB graphs"
    :feature/enable-block-timestamps?
-   "is not used in DB graphs as it is always enabled"})
+   "is not used in DB graphs as it is always enabled"
+   :favorites
+   "is not stored in config for DB graphs"})
 
 (defn detect-deprecations
   "Detects config keys that will or have been deprecated"

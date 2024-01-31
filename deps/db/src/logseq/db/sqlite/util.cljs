@@ -35,12 +35,15 @@
 
 (defn build-new-property
   "Build a standard new property so that it is is consistent across contexts"
-  [block]
+  [prop-name prop-schema prop-uuid]
   (block-with-timestamps
-   (merge {:block/type "property"
-           :block/journal? false
-           :block/format :markdown}
-          block)))
+   {:block/type "property"
+    :block/journal? false
+    :block/format :markdown
+    :block/uuid prop-uuid
+    :block/schema (merge {:type :default} prop-schema)
+    :block/original-name (name prop-name)
+    :block/name (common-util/page-name-sanity-lc (name prop-name))}))
 
 
 (defn build-new-class
