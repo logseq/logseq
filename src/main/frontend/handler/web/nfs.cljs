@@ -288,17 +288,12 @@
 
 (defn rebuild-index!
   [repo ok-handler]
-  (let [ok-handler (fn []
-                     (ok-handler)
-                     (state/set-nfs-refreshing! false))]
-    (when repo
-      (state/set-nfs-refreshing! true)
-      (search/reset-indice! repo)
-      (db/remove-conn! repo)
-      (db/clear-query-state!)
-      (db/start-db-conn! repo {:db-graph? (config/db-based-graph? repo)})
-      (reload-dir! repo {:re-index? true
-                         :ok-handler ok-handler}))))
+  (let [graph-dir (config/get-repo-dir repo)]
+    (when (and repo (not (config/db-based-graph? repo)))
+      (p/do!
+       (repo-handler/remove-repo! {:url repo} :switch-graph? false)
+       (ls-dir-files-with-path! graph-dir)
+       (when (fn? ok-handler) (ok-handler))))))
 
 ;; TODO: move to frontend.handler.repo
 (defn refresh!
