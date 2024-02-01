@@ -17,7 +17,8 @@
             [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.file-based.property.util :as property-util]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.common.util.block-ref :as block-ref]))
+            [logseq.common.util.block-ref :as block-ref]
+            [promesa.core :as p]))
 
 (defn- remove-non-existed-refs!
   [refs]
