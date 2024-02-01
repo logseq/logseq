@@ -85,13 +85,21 @@
      (reverse)
      (take n))))
 
+(defn get-closed-values
+  [db]
+  (->> (d/datoms db :avet :block/type)
+       (keep (fn [e]
+               (when (= (:v e) "closed value")
+                 (d/pull db '[*] (:e e)))))))
+
 ;; built-in files + latest journals + favorites
 (defn get-initial-data
   "Returns initial data"
   [db]
   (let [all-pages (get-all-pages db)
-        all-files (get-all-files db)]
-    (concat all-pages all-files)))
+        all-files (get-all-files db)
+        closed-values (get-closed-values db)]
+    (concat all-pages all-files closed-values)))
 
 (defn restore-initial-data
   "Given initial sqlite data and schema, returns a datascript connection"
