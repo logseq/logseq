@@ -5,7 +5,7 @@
  ;; "." for /static
  :dev-http {3001 ["static" "."]}
 
- :js-options {:js-package-dirs ["node_modules" "tldraw/apps"]}
+ :js-options {:js-package-dirs ["node_modules" "packages/tldraw/apps"]}
 
  :builds
  {:app {:target        :browser
@@ -18,19 +18,19 @@
         :modules       {:shared
                         {:entries []}
                         :main
-                        {:init-fn    frontend.core/init
+                        {:init-fn frontend.core/init
                          :depends-on #{:shared}}
                         :code-editor
-                        {:entries    [frontend.extensions.code]
+                        {:entries [frontend.extensions.code]
                          :depends-on #{:main}}
                         :excalidraw
-                        {:entries    [frontend.extensions.excalidraw]
+                        {:entries [frontend.extensions.excalidraw]
                          :depends-on #{:main}}
                         :tldraw
-                        {:entries    [frontend.extensions.tldraw]
+                        {:entries [frontend.extensions.tldraw]
                          :depends-on #{:main}}
                         :db-worker
-                        {:init-fn   frontend.db-worker/init
+                        {:init-fn frontend.db-worker/init
                          :depends-on #{:shared}
                          :web-worker true}}
 
