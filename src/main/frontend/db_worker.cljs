@@ -24,7 +24,9 @@
             [frontend.worker.async-util :include-macros true :refer [<?]]
             [frontend.worker.util :as worker-util]
             [frontend.worker.handler.page.rename :as worker-page-rename]
-            [frontend.worker.handler.page :as worker-page]))
+            [frontend.worker.handler.page :as worker-page]
+            [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.transaction :as outliner-tx]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -293,6 +295,9 @@
        (let []
          (pr-str result)))))
 
+  (get-block-neighbors
+   [_this repo id])
+
   (get-block-and-children
    [_this repo name children?]
    (assert (string? name))
@@ -446,6 +451,7 @@
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (search/build-blocks-indice repo @conn)))
 
+  ;; page ops
   (page-search
    [this repo q limit]
    (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -461,9 +467,39 @@
   (page-delete
    [this repo page-name]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [config (worker-state/get-config repo)
-           result (worker-page/delete! repo conn page-name nil {})]
+     (let [result (worker-page/delete! repo conn page-name nil {})]
        (bean/->js {:result result}))))
+
+  ;; block ops
+
+  (delete-blocks
+   [this repo block-ids opts-str]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (let [block-ids (remove nil? block-ids)]
+       (when (seq block-ids)
+         (let [opts (if opts-str
+                      (edn/read-string opts-str)
+                      {})
+               blocks (map #(d/entity @conn %) block-ids)]
+           (outliner-tx/transact!
+             {:local-tx? true           ; keep this transaction in undo/redo history
+             :outliner-op :delete-blocks
+             :transact-opts {:repo repo
+                             :conn conn}}
+            (outliner-core/delete-blocks! repo conn
+                                          (worker-state/get-date-formatter repo)
+                                          blocks
+                                          opts)))))
+     nil))
+
+  (move-blocks-up-down
+   [this repo block-ids up?]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (let [block-ids (remove nil? block-ids)]
+       (when (seq block-ids)
+         (let [blocks (map #(d/entity @conn %) block-ids)
+               _ (outliner-core/move-blocks-up-down! repo conn blocks up?)]
+           (pr-str (outliner-core/clear-and-get-tx-data!)))))))
 
   (file-writes-finished?
    [this repo]
