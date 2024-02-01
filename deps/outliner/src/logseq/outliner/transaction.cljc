@@ -2,7 +2,8 @@
   "Provides a wrapper around logseq.outliner.datascript/transact! using
    transient state from logseq.outliner.core"
   #?(:cljs (:require-macros [logseq.outliner.transaction]))
-  #?(:cljs (:require [malli.core :as m])))
+  #?(:cljs (:require [malli.core :as m]
+                     [promesa.core :as p])))
 
 #_:clj-kondo/ignore
 (def ^:private transact-opts [:or :symbol :map])
@@ -28,35 +29,38 @@
     (move-blocks! ...)
     (delete-blocks! ...))"
   [opts & body]
-  `(let [transact-data# logseq.outliner.core/*transaction-data*
-         transaction-opts# logseq.outliner.core/*transaction-opts*
+  `(let [transact-data# logseq.outliner.core/*transaction-data
+         transaction-opts# logseq.outliner.core/*transaction-opts
          opts*# ~opts
          _# (assert (or (map? opts*#) (symbol? opts*#)) (str "opts is not a map or symbol, type: " (type opts*#)))
-         opts# (if transact-data#
+         opts# (if @transact-data#
                  (assoc opts*# :nested-transaction? true)
                  opts*#)]
-     (if transact-data#
+     (if @transact-data#
        (do
-         (when transaction-opts#
-           (conj! transaction-opts# opts#))
+         (when @transaction-opts#
+           (swap! transaction-opts# conj opts#))
          ~@body)
        (let [transaction-args# (cond-> {}
                                  (get opts*# :persist-op? true)
                                  (assoc :persist-op? true))]
-         (binding [logseq.outliner.core/*transaction-data* (transient [])
-                   logseq.outliner.core/*transaction-opts* (transient [])
-                   logseq.outliner.core/*transaction-args* transaction-args#]
-           (conj! logseq.outliner.core/*transaction-opts* opts#)
-           ~@body
-           (let [r# (persistent! logseq.outliner.core/*transaction-data*)
-                 tx# (mapcat :tx-data r#)
+         (reset! logseq.outliner.core/*transaction-data [])
+         (reset! logseq.outliner.core/*transaction-opts [opts#])
+         (p/do!
+          ~@body
+          (let [r# @logseq.outliner.core/*transaction-data
+                tx# (mapcat :tx-data r#)
                  ;; FIXME: should we merge all the tx-meta?
-                 tx-meta# (first (map :tx-meta r#))
-                 all-tx# (concat tx# (:additional-tx opts#))
-                 o# (persistent! logseq.outliner.core/*transaction-opts*)
-                 full-opts# (apply merge (reverse o#))
-                 opts## (merge (dissoc full-opts# :additional-tx :current-block :nested-transaction?) tx-meta#)]
+                tx-meta# (first (map :tx-meta r#))
+                all-tx# (concat tx# (:additional-tx opts#))
+                o# @logseq.outliner.core/*transaction-opts
+                full-opts# (apply merge (reverse o#))
+                opts## (merge (dissoc full-opts# :additional-tx :current-block :nested-transaction?) tx-meta#)]
 
-             (when (seq all-tx#) ;; If it's empty, do nothing
-               (when-not (:nested-transaction? opts#) ; transact only for the whole transaction
-                 (logseq.outliner.datascript/transact! all-tx# (dissoc opts## :transact-opts) (:transact-opts opts##))))))))))
+            (when (seq all-tx#) ;; If it's empty, do nothing
+              (when-not (:nested-transaction? opts#) ; transact only for the whole transaction
+                (prn :debug :data @transact-data#)
+                (logseq.outliner.datascript/transact! all-tx# (dissoc opts## :transact-opts) (:transact-opts opts##))))
+
+            (reset! logseq.outliner.core/*transaction-data nil)
+            (reset! logseq.outliner.core/*transaction-opts nil)))))))
