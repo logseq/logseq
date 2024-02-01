@@ -166,26 +166,30 @@
 
 
 (defn- import-from-doc-files!
-  [db-conn repo doc-files]
+  [db-conn repo config doc-files]
   (let [imported-chan (async/promise-chan)]
     (try
       (let [docs-chan (async/to-chan! (medley/indexed doc-files))]
         (state/set-state! [:graph/importing-state :total] (count doc-files))
         (async/go-loop []
           (if-let [[i ^js file] (async/<! docs-chan)]
-            (do
+            (let [rpath (.-rpath ^js file)
+                  extract-options {:date-formatter (common-config/get-date-formatter config)
+                                   :user-config config
+                                   :filename-format (or (:file/name-format config) :legacy)
+                                   :block-pattern (common-config/get-block-pattern (common-util/get-format rpath))}]
               (state/set-state! [:graph/importing-state :current-idx] (inc i))
-              (state/set-state! [:graph/importing-state :current-page] (.-rpath file))
+              (state/set-state! [:graph/importing-state :current-page] rpath)
               (async/<! (async/timeout 10))
               (async/<! (p->c (-> (.text file)
                                   (p/then (fn [content]
-                                            (prn :import- (.-rpath file))
-                                            {:file/path (.-rpath file)
+                                            (prn :import rpath)
+                                            {:file/path rpath
                                              :file/content content}))
                                   (p/then (fn [file]
                                             ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
                                             (let [{:keys [tx-report]}
-                                                  (graph-parser/import-file-to-db-graph db-conn (:file/path file) (:file/content file) {})]
+                                                  (graph-parser/import-file-to-db-graph db-conn (:file/path file) (:file/content file) {:extract-options extract-options})]
                                               (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report)))
                                             file)))))
               (recur))
@@ -325,7 +329,7 @@
                                     config (async/<! (p->c (import-config-file! config-file)))
                                     filtered-doc-files (common-config/remove-hidden-files doc-files config #(.-rpath ^js %))]
                                 (async/<! (import-from-asset-files! asset-files))
-                                (async/<! (import-from-doc-files! db-conn repo filtered-doc-files))
+                                (async/<! (import-from-doc-files! db-conn repo config filtered-doc-files))
                                 (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))
                                 (state/set-state! :graph/importing nil)
                                 (finished-cb)))))]
