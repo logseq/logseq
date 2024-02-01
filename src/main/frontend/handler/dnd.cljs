@@ -8,8 +8,7 @@
             [logseq.common.util.block-ref :as block-ref]
             [frontend.state :as state]
             [frontend.db :as db]
-            [frontend.handler.block :as block-handler]
-            [promesa.core :as p]))
+            [frontend.handler.block :as block-handler]))
 
 (defn move-blocks
   [^js event blocks target-block original-block move-to]

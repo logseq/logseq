@@ -3,8 +3,7 @@
   #?(:cljs (:require-macros [frontend.modules.outliner.ui]))
   #?(:cljs (:require [frontend.state :as state]
                      [frontend.config :as config]
-                     [frontend.db :as db]
-                     [promesa.core :as p])))
+                     [frontend.db :as db])))
 
 #?(:cljs
    (do
