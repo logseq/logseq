@@ -217,6 +217,18 @@
           (recur))
         true))))
 
+(defn- import-logseq-files
+  [logseq-files]
+  (let [custom-css (first (filter #(= (:rpath %) "logseq/custom.css") logseq-files))
+        custom-js (first (filter #(= (:rpath %) "logseq/custom.js") logseq-files))]
+    (p/do!
+     (some-> (:file-object custom-css)
+             (.text)
+             (p/then #(db-editor-handler/save-file! "logseq/custom.css" %)))
+     (some-> (:file-object custom-js)
+             (.text)
+             (p/then #(db-editor-handler/save-file! "logseq/custom.js" %))))))
+
 (defn- import-config-file!
   [{:keys [file-object]}]
   (-> (.text file-object)
@@ -284,42 +296,42 @@
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.leading-6.font-medium
-        "Imported new graph name:"]]]
+        "New graph name:"]]]
 
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
       {:auto-focus true
        :default-value input
        :on-change (fn [e]
                     (set-input! (util/evalue e)))
-       :on-key-press (fn [e]
-                       (when (= "Enter" (util/ekey e))
-                         (on-submit)))}]
+       :on-key-down (fn [e]
+                      (when (= "Enter" (util/ekey e))
+                        (on-submit)))}]
 
      [:div.mt-5.sm:mt-4.flex
       (ui/button "Confirm"
                  {:on-click on-submit})]]))
 
 (defn- import-file-graph
-  [files graph-name config-file]
+  [*files graph-name config-file]
   (state/set-state! :graph/importing :folder)
   (state/set-state! [:graph/importing-state :current-page] (str graph-name " Assets"))
   (async/go
     (async/<! (p->c (repo-handler/new-db! graph-name {:file-graph-import? true})))
     (let [repo (state/get-current-repo)
           db-conn (db/get-db repo false)
-          asset-files (filter #(string/starts-with? (:rpath %) "assets/") files)
-          ;; TODO handle, logseq/config.edn, logseq/custom.css, custom.js are ignored
-          doc-files (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:rpath %))) files)
           config (async/<! (p->c (import-config-file! config-file)))
-          filtered-doc-files (common-config/remove-hidden-files doc-files config :rpath)]
+          files (common-config/remove-hidden-files *files config :rpath)
+          doc-files (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:rpath %))) files)
+          asset-files (filter #(string/starts-with? (:rpath %) "assets/") files)]
+      (async/<! (p->c (import-logseq-files (filter #(string/starts-with? (:rpath %) "logseq/") files))))
       (async/<! (import-from-asset-files! asset-files))
-      (async/<! (import-from-doc-files! db-conn repo config filtered-doc-files))
+      (async/<! (import-from-doc-files! db-conn repo config doc-files))
       (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))
       (state/set-state! :graph/importing nil)
       (state/set-state! :graph/importing-state nil)
       (when-let [org-files (seq (filter #(= "org" (path/file-ext (:rpath %))) files))]
         (log/info :org-files (mapv :rpath org-files))
-        (notification/show! (str "Import imported " (count org-files) " org files as markdown. Support for org files will be added later")
+        (notification/show! (str "Imported " (count org-files) " org file(s) as markdown. Support for org files will be added later")
                             :info false))
       (finished-cb))))
 
