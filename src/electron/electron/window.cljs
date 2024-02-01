@@ -14,9 +14,9 @@
 (defonce *quitting? (atom false))
 
 (def MAIN_WINDOW_ENTRY (if dev?
-                         ;"http://localhost:3001"
-                         (str "file://" (node-path/join js/__dirname "index.html"))
-                         (str "file://" (node-path/join js/__dirname "electron.html"))))
+                         ;; Use index.html to test plugins on development mode
+                         "http://localhost:3001"
+                         (str "file://" (node-path/join js/__dirname "index.html"))))
 
 (defn create-main-window!
   ([]
@@ -140,7 +140,7 @@
               (if (some #(string/includes?
                           (.normalize node-path url)
                           (.join node-path (. app getAppPath) %))
-                        ["index.html" "electron.html"])
+                        ["index.html"])
                 (logger/info "pass-window" url)
                 (open-default-app! url open))))
 
