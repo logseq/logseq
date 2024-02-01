@@ -615,12 +615,24 @@
         (let [{:keys [pos] :or {pos :max}} (bean/->clj opts)]
           (editor-handler/edit-block! block pos block-uuid))))))
 
+;; TODO: perf improvement, some operations such as delete-block doesn't need to load the full page
+;; instead, the db worker should provide those calls
+(defn- <ensure-page-loaded
+  [block-uuid-or-page-name]
+  (p/let [repo (state/get-current-repo)
+          result (db-async/<get-block repo (str block-uuid-or-page-name))
+          block (if (:block result) (:block result) result)
+          _ (when-let [page-id (:db/id (:block/page block))]
+              (when-let [page-uuid (:block/uuid (db/entity page-id))]
+                (db-async/<get-block repo page-uuid)))]
+    block))
+
 (def ^:export insert_block
   (fn [block-uuid-or-page-name content ^js opts]
     (when (string/blank? block-uuid-or-page-name)
       (throw (js/Error. "Page title or block UUID shouldn't be empty.")))
     (p/let [block? (util/uuid-string? (str block-uuid-or-page-name))
-            block (db-async/<ensure-page-loaded block-uuid-or-page-name)]
+            block (<ensure-page-loaded block-uuid-or-page-name)]
       (if (and block? (not block))
         (throw (js/Error. "Block not exists"))
         (p/let [{:keys [before sibling focus customUUID properties autoOrderedList]} (bean/->clj opts)
@@ -667,7 +679,7 @@
 
 (def ^:export insert_batch_block
   (fn [block-uuid ^js batch-blocks ^js opts]
-    (p/let [block (db-async/<ensure-page-loaded block-uuid)]
+    (p/let [block (<ensure-page-loaded block-uuid)]
       (when block
         (when-let [bb (bean/->clj batch-blocks)]
           (let [bb (if-not (vector? bb) (vector bb) bb)
@@ -688,21 +700,21 @@
 (def ^:export remove_block
   (fn [block-uuid ^js _opts]
     (p/let [repo            (state/get-current-repo)
-            _ (db-async/<ensure-page-loaded block-uuid)]
+            _ (<ensure-page-loaded block-uuid)]
       (editor-handler/delete-block-aux!
        {:block/uuid (sdk-utils/uuid-or-throw-error block-uuid) :repo repo} true))))
 
 (def ^:export update_block
   (fn [block-uuid content ^js opts]
     (p/let [repo (state/get-current-repo)
-            _ (db-async/<ensure-page-loaded block-uuid)]
+            _ (<ensure-page-loaded block-uuid)]
       (editor-handler/save-block! repo
                                   (sdk-utils/uuid-or-throw-error block-uuid) content (bean/->clj opts)))))
 
 (def ^:export move_block
   (fn [src-block-uuid target-block-uuid ^js opts]
-    (p/let [_ (db-async/<ensure-page-loaded src-block-uuid)
-            _ (db-async/<ensure-page-loaded target-block-uuid)]
+    (p/let [_ (<ensure-page-loaded src-block-uuid)
+            _ (<ensure-page-loaded target-block-uuid)]
       (let [{:keys [before children]} (bean/->clj opts)
            move-to      (cond
                           (boolean before)
@@ -735,7 +747,7 @@
 (def ^:export get_previous_sibling_block
   (fn [block-uuid]
     (p/let [id (sdk-utils/uuid-or-throw-error block-uuid)
-            _ (db-async/<ensure-page-loaded id)]
+            _ (<ensure-page-loaded id)]
       (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
        (let [{:block/keys [parent left]} block
              block (when-not (= parent left) (db-utils/pull (:db/id left)))]
@@ -744,7 +756,7 @@
 (def ^:export get_next_sibling_block
   (fn [block-uuid]
     (p/let [id (sdk-utils/uuid-or-throw-error block-uuid)
-            _ (db-async/<ensure-page-loaded id)]
+            _ (<ensure-page-loaded id)]
       (when-let [block (db-model/query-block-by-uuid id)]
        (when-let [right-sibling (outliner-core/get-right-sibling (db/get-db) (:db/id block))]
          (let [block (db/pull (:db/id right-sibling))]
@@ -810,7 +822,7 @@
 
 (def ^:export get_page_blocks_tree
   (fn [id-or-page-name]
-    (p/let [_ (db-async/<ensure-page-loaded id-or-page-name)]
+    (p/let [_ (<ensure-page-loaded id-or-page-name)]
       (when-let [page-name (:block/name (db-model/get-page id-or-page-name))]
         (let [blocks (db-model/get-page-blocks-no-cache page-name)
               blocks (outliner-tree/blocks->vec-tree blocks page-name)
@@ -849,7 +861,7 @@
 
 (defn ^:export prepend_block_in_page
   [uuid-or-page-name content ^js opts]
-  (p/let [_               (db-async/<ensure-page-loaded uuid-or-page-name)
+  (p/let [_               (<ensure-page-loaded uuid-or-page-name)
           page?           (not (util/uuid-string? uuid-or-page-name))
           page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
           _               (and page-not-exist? (page-handler/<create! uuid-or-page-name
@@ -863,7 +875,7 @@
 
 (defn ^:export append_block_in_page
   [uuid-or-page-name content ^js opts]
-  (p/let [_               (db-async/<ensure-page-loaded uuid-or-page-name)
+  (p/let [_               (<ensure-page-loaded uuid-or-page-name)
           page?           (not (util/uuid-string? uuid-or-page-name))
           page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
           _               (and page-not-exist? (page-handler/<create! uuid-or-page-name

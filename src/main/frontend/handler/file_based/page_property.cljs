@@ -5,8 +5,7 @@
             [logseq.outliner.core :as outliner-core]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
-            [frontend.util :as util]
-            [promesa.core :as p]))
+            [frontend.util :as util]))
 
 (defn insert-property
   [format content key value]

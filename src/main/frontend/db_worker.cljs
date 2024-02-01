@@ -499,7 +499,7 @@
        (when (seq block-ids)
          (let [blocks (map #(d/entity @conn %) block-ids)
                _ (outliner-core/move-blocks-up-down! repo conn blocks up?)]
-           (pr-str (outliner-core/clear-and-get-tx-data!)))))))
+           )))))
 
   (file-writes-finished?
    [this repo]

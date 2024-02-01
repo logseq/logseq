@@ -212,15 +212,3 @@
             (->> result
                  db-model/sort-by-left-recursive
                  db-utils/group-by-page)))))))
-
-;; TODO: perf improvement, some operations such as delete-block doesn't need to load the full page
-;; instead, the db worker should provide those calls
-(defn <ensure-page-loaded
-  [block-uuid-or-page-name]
-  (p/let [repo (state/get-current-repo)
-          result (<get-block repo (str block-uuid-or-page-name))
-          block (if (:block result) (:block result) result)
-          _ (when-let [page-id (:db/id (:block/page block))]
-              (when-let [page-uuid (:block/uuid (db/entity page-id))]
-                (<get-block repo page-uuid)))]
-    block))
