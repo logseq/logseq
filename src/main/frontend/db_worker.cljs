@@ -25,8 +25,7 @@
             [frontend.worker.util :as worker-util]
             [frontend.worker.handler.page.rename :as worker-page-rename]
             [frontend.worker.handler.page :as worker-page]
-            [logseq.outliner.core :as outliner-core]
-            [logseq.outliner.transaction :as outliner-tx]))
+            [frontend.worker.outliner-op :as worker-outliner-op]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -470,36 +469,12 @@
      (let [result (worker-page/delete! repo conn page-name nil {})]
        (bean/->js {:result result}))))
 
-  ;; block ops
-
-  (delete-blocks
-   [this repo block-ids opts-str]
+  (apply-outliner-ops
+   [this repo ops-str opts-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [block-ids (remove nil? block-ids)]
-       (when (seq block-ids)
-         (let [opts (if opts-str
-                      (edn/read-string opts-str)
-                      {})
-               blocks (map #(d/entity @conn %) block-ids)]
-           (outliner-tx/transact!
-             {:local-tx? true           ; keep this transaction in undo/redo history
-             :outliner-op :delete-blocks
-             :transact-opts {:repo repo
-                             :conn conn}}
-            (outliner-core/delete-blocks! repo conn
-                                          (worker-state/get-date-formatter repo)
-                                          blocks
-                                          opts)))))
-     nil))
-
-  (move-blocks-up-down
-   [this repo block-ids up?]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [block-ids (remove nil? block-ids)]
-       (when (seq block-ids)
-         (let [blocks (map #(d/entity @conn %) block-ids)
-               _ (outliner-core/move-blocks-up-down! repo conn blocks up?)]
-           )))))
+     (let [ops (edn/read-string ops-str)
+           opts (edn/read-string opts-str)]
+       (worker-outliner-op/apply-ops! repo conn ops opts))))
 
   (file-writes-finished?
    [this repo]

@@ -33,6 +33,7 @@
             [frontend.handler.file-based.editor :as file-editor-handler]
             [frontend.mobile.util :as mobile-util]
             [logseq.outliner.core :as outliner-core]
+            [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.tree :as tree]
             [logseq.outliner.tree :as otree]
@@ -66,7 +67,8 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.handler.db-based.property :as db-property-handler]
-            [frontend.fs.capacitor-fs :as capacitor-fs]))
+            [frontend.fs.capacitor-fs :as capacitor-fs]
+            [clojure.edn :as edn]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -78,9 +80,7 @@
 
 (defn- outliner-save-block!
   [block]
-  (let [repo (state/get-current-repo)
-        conn (db/get-db false)]
-    (outliner-core/save-block! repo conn (state/get-date-formatter) block)))
+  (outliner-op/save-block! block))
 
 (defn get-block-own-order-list-type
   [block]
@@ -345,15 +345,13 @@
 
                    :else
                    (not has-children?))]
-    (p/do!
-     (ui-outliner-tx/transact!
-      {:outliner-op :insert-blocks}
-       (save-current-block! {:current-block current-block})
-       (outliner-core/insert-blocks! (state/get-current-repo) (db/get-db false)
-                                    [new-block] current-block {:sibling? sibling?
-                                                               :keep-uuid? keep-uuid?
-                                                               :ordered-list? ordered-list?
-                                                               :replace-empty-target? replace-empty-target?})))))
+    (ui-outliner-tx/transact!
+     {:outliner-op :insert-blocks}
+     (save-current-block! {:current-block current-block})
+     (outliner-op/insert-blocks! [new-block] current-block {:sibling? sibling?
+                                                            :keep-uuid? keep-uuid?
+                                                            :ordered-list? ordered-list?
+                                                            :replace-empty-target? replace-empty-target?}))))
 
 
 (defn- block-self-alone-when-insert?
@@ -554,10 +552,10 @@
                                                            :ordered-list? ordered-list?
                                                            :replace-empty-target? replace-empty-target?})
              (when edit-block?
-              (if (and replace-empty-target?
-                       (string/blank? (:block/content last-block)))
-                (edit-block! last-block :max nil)
-                (edit-block! new-block :max nil)))
+               (if (and replace-empty-target?
+                        (string/blank? (:block/content last-block)))
+                 (edit-block! last-block :max nil)
+                 (edit-block! new-block :max nil)))
              new-block)))))))
 
 (defn insert-first-page-block-if-not-exists!
@@ -687,15 +685,12 @@
     (when block
       (let [blocks (block-handler/get-top-level-blocks [block])]
         (state/set-state! :ui/deleting-block uuid)
-        (p/do!
-         (ui-outliner-tx/transact!
-          {:outliner-op :delete-blocks}
-          (outliner-core/delete-blocks! repo (db/get-db false)
-                                        (state/get-date-formatter)
-                                        blocks
-                                        (merge
-                                         delete-opts
-                                         {:children? children?}))))))))
+        (ui-outliner-tx/transact!
+         {:outliner-op :delete-blocks}
+         (outliner-op/delete-blocks! blocks
+                                     (merge
+                                      delete-opts
+                                      {:children? children?})))))))
 
 (defn- move-to-prev-block
   [repo sibling-block format _id value]
@@ -846,8 +841,7 @@
       (p/do!
        (ui-outliner-tx/transact!
         {:outliner-op :delete-blocks}
-        (when-let [^Object worker @state/*db-worker]
-          (.delete-blocks worker repo (clj->js (map :db/id blocks')) nil)))
+         (outliner-op/delete-blocks! blocks' nil))
        (when sibling-block
          (move-to-prev-block repo sibling-block
                              (:block/format block)
@@ -1740,14 +1734,12 @@
   [up?]
   (fn [event]
     (util/stop event)
-    (let [repo (state/get-current-repo)
-          edit-block-id (:block/uuid (state/get-edit-block))
+    (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)
                              result (ui-outliner-tx/transact!
                                      {:outliner-op :move-blocks}
-                                      (when-let [^Object worker @state/*db-worker]
-                                        (.move-blocks-up-down worker repo (clj->js (map :db/id blocks')) up?)))]
+                                      (outliner-op/move-blocks-up-down! blocks' up?))]
                          (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
                            (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))
                          result))]
@@ -2046,7 +2038,7 @@
         page (if (:block/name block) block
                  (when target-block (:block/page (db/entity (:db/id target-block)))))
         empty-target? (if (true? skip-empty-target?) false
-                        (string/blank? (:block/content target-block)))
+                          (string/blank? (:block/content target-block)))
         paste-nested-blocks? (nested-blocks blocks)
         target-block-has-children? (db/has-children? (:block/uuid target-block))
         replace-empty-target? (and empty-target?
@@ -2074,23 +2066,21 @@
        {:outliner-op :save-block}
        (outliner-save-block! editing-block)))
 
-    (p/let [*insert-result (atom nil)
-            _ (ui-outliner-tx/transact!
-               {:outliner-op :insert-blocks
-                :additional-tx revert-cut-txs}
-               (when target-block'
-                 (let [format (or (:block/format target-block') (state/get-preferred-format))
-                       repo (state/get-current-repo)
-                       blocks' (map (fn [block]
-                                      (paste-block-cleanup repo block page exclude-properties format content-update-fn keep-uuid?))
-                                    blocks)
-                       result (outliner-core/insert-blocks! repo (db/get-db false) blocks' target-block' {:sibling? sibling?
-                                                                                                          :outliner-op :paste
-                                                                                                          :replace-empty-target? replace-empty-target?
-                                                                                                          :keep-uuid? keep-uuid?})]
-                   (reset! *insert-result result))))]
+    (p/let [result (ui-outliner-tx/transact!
+                    {:outliner-op :insert-blocks
+                     :additional-tx revert-cut-txs}
+                    (when target-block'
+                      (let [format (or (:block/format target-block') (state/get-preferred-format))
+                            repo (state/get-current-repo)
+                            blocks' (map (fn [block]
+                                           (paste-block-cleanup repo block page exclude-properties format content-update-fn keep-uuid?))
+                                         blocks)]
+                        (outliner-op/insert-blocks! blocks' target-block' {:sibling? sibling?
+                                                                           :outliner-op :paste
+                                                                           :replace-empty-target? replace-empty-target?
+                                                                           :keep-uuid? keep-uuid?}))))]
       (state/set-block-op-type! nil)
-      (when-let [result @*insert-result] (edit-last-block-after-inserted! result)))))
+      (when result (edit-last-block-after-inserted! (edn/read-string result))))))
 
 (defn- block-tree->blocks
   "keep-uuid? - maintain the existing :uuid in tree vec"
@@ -2190,18 +2180,14 @@
                                :else
                                true)]
                (try
-                 (let [*result (atom nil)]
-                   (p/do!
-                    (ui-outliner-tx/transact!
-                     {:outliner-op :insert-blocks
-                      :created-from-journal-template? journal?}
-                     (when-not (string/blank? (state/get-edit-content))
-                       (save-current-block!))
-                     (let [result (outliner-core/insert-blocks! repo (db/get-db false) blocks'
-                                                                target
-                                                                (assoc opts :sibling? sibling?'))]
-                       (reset! *result result)))
-                    (some-> @*result edit-last-block-after-inserted!)))
+                 (p/let [result (ui-outliner-tx/transact!
+                                 {:outliner-op :insert-blocks
+                                  :created-from-journal-template? journal?}
+                                 (when-not (string/blank? (state/get-edit-content))
+                                   (save-current-block!))
+                                 (outliner-op/insert-blocks! blocks' target
+                                                             (assoc opts :sibling? sibling?')))]
+                   (when result (edit-last-block-after-inserted! (edn/read-string result))))
 
                  (catch :default ^js/Error e
                    (notification/show!
@@ -2266,9 +2252,8 @@
        :real-outliner-op :indent-outdent}
       (save-current-block!)
       (when target
-        (outliner-core/move-blocks! (state/get-current-repo) (db/get-db false)
-                                    (block-handler/get-top-level-blocks [block])
-                                    target true)))
+        (outliner-op/move-blocks! (block-handler/get-top-level-blocks [block])
+                                  target true)))
      (when original-block
        (util/schedule #(edit-block! block pos nil))))))
 

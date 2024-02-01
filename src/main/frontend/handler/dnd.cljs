@@ -2,9 +2,10 @@
   "Provides fns for drag and drop"
   (:require [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
-            [logseq.outliner.core :as outliner-core]
             [logseq.outliner.tree :as otree]
+            [logseq.outliner.core :as outliner-core]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.modules.outliner.op :as outliner-op]
             [logseq.common.util.block-ref :as block-ref]
             [frontend.state :as state]
             [frontend.db :as db]
@@ -12,8 +13,7 @@
 
 (defn move-blocks
   [^js event blocks target-block original-block move-to]
-  (let [repo (state/get-current-repo)
-        blocks' (map #(db/pull (:db/id %)) blocks)
+  (let [blocks' (map #(db/pull (:db/id %)) blocks)
         first-block (first blocks')
         top? (= move-to :top)
         nested? (= move-to :nested)
@@ -53,10 +53,10 @@
                     (otree/-get-left-id target-node conn))]
              (if first-child?
                (when-let [parent (otree/-get-parent target-node conn)]
-                 (outliner-core/move-blocks! repo conn blocks' (:data parent) false))
+                 (outliner-op/move-blocks! blocks' (:data parent) false))
                (when-let [before-node (otree/-get-left target-node conn)]
-                 (outliner-core/move-blocks! repo conn blocks' (:data before-node) true))))
-           (outliner-core/move-blocks! repo conn blocks' target-block (not nested?)))))
+                 (outliner-op/move-blocks! blocks' (:data before-node) true))))
+           (outliner-op/move-blocks! blocks' target-block (not nested?)))))
 
       :else
       nil)))
