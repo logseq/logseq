@@ -41,7 +41,7 @@
             [frontend.db.conn :as conn]
             [logseq.db :as ldb]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [logseq.outliner.core :as outliner-core]))
+            [frontend.modules.outliner.op :as outliner-op]))
 
 (def create! page-common-handler/create!)
 (def <create! page-common-handler/<create!)
@@ -139,8 +139,7 @@
 
 (defn <reorder-favorites!
   [favorites]
-  (let [repo (state/get-current-repo)
-        conn (conn/get-db false)]
+  (let [conn (conn/get-db false)]
     (when-let [favorites-page-entity (d/entity @conn [:block/name page-common-handler/favorites-page-name])]
       (let [favorite-page-block-db-id-coll
             (keep (fn [page-name]
@@ -150,13 +149,12 @@
             current-blocks (ldb/sort-by-left (ldb/get-page-blocks @conn page-common-handler/favorites-page-name {})
                                              favorites-page-entity)]
         (p/do!
-          (ui-outliner-tx/transact!
-              {}
-              (doseq [[page-block-db-id block] (zipmap favorite-page-block-db-id-coll current-blocks)]
-                (when (not= page-block-db-id (:db/id (:block/link block)))
-                  (outliner-core/save-block! repo conn (state/get-date-formatter)
-                                             (assoc block :block/link page-block-db-id)))))
-          (state/update-favorites-updated!))))))
+         (ui-outliner-tx/transact!
+          {}
+          (doseq [[page-block-db-id block] (zipmap favorite-page-block-db-id-coll current-blocks)]
+            (when (not= page-block-db-id (:db/id (:block/link block)))
+              (outliner-op/save-block! (assoc block :block/link page-block-db-id)))))
+         (state/update-favorites-updated!))))))
 
 (defn has-more-journals?
   []

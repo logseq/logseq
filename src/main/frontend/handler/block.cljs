@@ -8,6 +8,7 @@
    [frontend.mobile.haptics :as haptics]
    [logseq.outliner.core :as outliner-core]
    [frontend.modules.outliner.ui :as ui-outliner-tx]
+   [frontend.modules.outliner.op :as outliner-op]
    [frontend.state :as state]
    [frontend.util :as util]
    [frontend.util.drawer :as drawer]
@@ -334,12 +335,10 @@
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
        (when save-current-block (save-current-block))
-       (outliner-core/indent-outdent-blocks! (state/get-current-repo)
-                                             (db/get-db false)
-                                             (get-top-level-blocks blocks)
-                                             indent?
-                                             {:parent-original (get-first-block-original)
-                                              :logical-outdenting? (state/logical-outdenting?)})))))
+       (outliner-op/indent-outdent-blocks! (get-top-level-blocks blocks)
+                                           indent?
+                                           {:parent-original (get-first-block-original)
+                                            :logical-outdenting? (state/logical-outdenting?)})))))
 
 (def *swipe (atom nil))
 
