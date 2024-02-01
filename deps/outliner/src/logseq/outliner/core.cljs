@@ -370,11 +370,12 @@
           m (if db-based? (dissoc m :block/tags) m)]
 
       ;; Ensure block UUID never changes
-      (when (and db-id block-uuid)
-        (let [uuid-not-changed? (= block-uuid (:block/uuid (d/entity db db-id)))]
-          (when-not uuid-not-changed?
-            (js/console.error "Block UUID shouldn't be changed once created"))
-          (assert uuid-not-changed? "Block UUID changed")))
+      (let [e (d/entity db db-id)]
+        (when (and e block-uuid)
+          (let [uuid-not-changed? (= block-uuid (:block/uuid e))]
+           (when-not uuid-not-changed?
+             (js/console.error "Block UUID shouldn't be changed once created"))
+           (assert uuid-not-changed? "Block UUID changed"))))
 
       (when eid
         ;; Retract attributes to prepare for tx which rewrites block attributes

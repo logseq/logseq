@@ -16,6 +16,7 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
+            [logseq.db :as ldb]
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]
@@ -2371,3 +2372,6 @@ Similar to re-frame subscriptions"
 (defn update-favorites-updated!
   []
   (update-state! :favorites/updated? inc))
+
+(def get-worker-next-request-id ldb/get-next-request-id)
+(def add-worker-request! ldb/add-request!)

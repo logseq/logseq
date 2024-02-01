@@ -16,4 +16,9 @@
            (let [r# (persistent! frontend.modules.outliner.op/*outliner-ops*)
                  worker# @state/*db-worker]
              (when (and worker# (seq r#))
-               (.apply-outliner-ops ^Object worker# (state/get-current-repo) (pr-str r#) (pr-str ~opts)))))))))
+               (let [request-id# (state/get-worker-next-request-id)
+                     response# (.apply-outliner-ops ^Object worker# (state/get-current-repo)
+                                                    (pr-str r#)
+                                                    (pr-str (assoc ~opts :request-id request-id#)))]
+                 (state/add-worker-request! request-id# :outliner-tx)
+                 response#))))))))

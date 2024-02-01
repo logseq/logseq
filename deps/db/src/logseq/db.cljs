@@ -70,6 +70,14 @@
                (when-let [callback (:callback (get new request-id))]
                  (callback)))))
 
+(defn get-next-request-id
+  []
+  (swap! *request-id inc))
+
+(defn add-request!
+  [request-id data]
+  (swap! *request-id->response assoc request-id (if (map? data) data {:response data})))
+
 (defn transact!
   "`repo-or-conn`: repo for UI thread and conn for worker/node"
   ([repo-or-conn tx-data]
@@ -87,7 +95,7 @@
 
        (let [f (or @*transact-fn d/transact!)
              sync? (= f d/transact!)
-             request-id (when-not sync? (swap! *request-id inc))
+             request-id (when-not sync? (get-next-request-id))
              tx-meta' (cond-> tx-meta
                         (not sync?)
                         (assoc :request-id request-id))]
@@ -100,7 +108,7 @@
                            {:response resp}
                            {:response resp
                             :callback #(f repo-or-conn tx-data tx-meta')})]
-               (swap! *request-id->response assoc request-id value))
+               (add-request! request-id value))
              resp)))))))
 
 (defn build-default-pages-tx
