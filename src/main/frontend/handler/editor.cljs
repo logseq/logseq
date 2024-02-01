@@ -686,14 +686,15 @@
     (when block
       (let [blocks (block-handler/get-top-level-blocks [block])]
         (state/set-state! :ui/deleting-block uuid)
-        (ui-outliner-tx/transact!
-         {:outliner-op :delete-blocks}
-         (outliner-core/delete-blocks! repo (db/get-db false)
-                                       (state/get-date-formatter)
-                                       blocks
-                                       (merge
-                                        delete-opts
-                                        {:children? children?})))))))
+        (p/do!
+         (ui-outliner-tx/transact!
+          {:outliner-op :delete-blocks}
+          (outliner-core/delete-blocks! repo (db/get-db false)
+                                        (state/get-date-formatter)
+                                        blocks
+                                        (merge
+                                         delete-opts
+                                         {:children? children?}))))))))
 
 (defn- move-to-prev-block
   [repo sibling-block format _id value]
@@ -845,9 +846,8 @@
       (p/do!
        (ui-outliner-tx/transact!
         {:outliner-op :delete-blocks}
-        (outliner-core/delete-blocks! repo (db/get-db false)
-                                      (state/get-date-formatter)
-                                      blocks' {}))
+        (when-let [^Object worker @state/*db-worker]
+          (.delete-blocks worker repo (clj->js (map :db/id blocks')) nil)))
        (when sibling-block
          (move-to-prev-block repo sibling-block
                              (:block/format block)
@@ -1740,12 +1740,14 @@
   [up?]
   (fn [event]
     (util/stop event)
-    (let [edit-block-id (:block/uuid (state/get-edit-block))
+    (let [repo (state/get-current-repo)
+          edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)
                              result (ui-outliner-tx/transact!
                                      {:outliner-op :move-blocks}
-                                     (outliner-core/move-blocks-up-down! (state/get-current-repo) (db/get-db false) blocks' up?))]
+                                      (when-let [^Object worker @state/*db-worker]
+                                        (.move-blocks-up-down worker repo (clj->js (map :db/id blocks')) up?)))]
                          (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
                            (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))
                          result))]
@@ -1782,16 +1784,7 @@
   "`direction` = :left | :right."
   [direction]
   (let [blocks (get-selected-ordered-blocks)]
-    (when (seq blocks)
-      (ui-outliner-tx/transact!
-       {:outliner-op :move-blocks
-        :real-outliner-op :indent-outdent}
-       (outliner-core/indent-outdent-blocks! (state/get-current-repo)
-                                             (db/get-db false)
-                                             (block-handler/get-top-level-blocks blocks)
-                                             (= direction :right)
-                                             {:get-first-block-original block-handler/get-first-block-original
-                                              :logical-outdenting? (state/logical-outdenting?)})))))
+    (block-handler/indent-outdent-blocks! blocks (= direction :right) nil)))
 
 (defn- get-link [format link label]
   (let [link (or link "")
@@ -2866,16 +2859,7 @@
         {:keys [block]} (get-state)]
     (when block
       (state/set-editor-last-pos! pos)
-      (ui-outliner-tx/transact!
-       {:outliner-op :move-blocks
-        :real-outliner-op :indent-outdent}
-       (save-current-block!)
-       (outliner-core/indent-outdent-blocks! (state/get-current-repo)
-                                             (db/get-db false)
-                                             (block-handler/get-top-level-blocks [block])
-                                             indent?
-                                             {:get-first-block-original block-handler/get-first-block-original
-                                              :logical-outdenting? (state/logical-outdenting?)})))))
+      (block-handler/indent-outdent-blocks! [block] indent? save-current-block!))))
 
 (defn keydown-tab-handler
   [direction]
