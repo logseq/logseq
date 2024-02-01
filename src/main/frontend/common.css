@@ -336,10 +336,10 @@ i.ti {
 
 /* region FIXME: override elements (?) */
 h1.title, h1.title input {
-  margin-bottom: 1.5rem;
+  @apply mb-4 font-medium;
+
   color: var(--lx-gray-12, var(--ls-title-text-color, hsl(var(--foreground))));
-  font-size: var(--ls-page-title-size, 36px);
-  font-weight: 500;
+  font-size: var(--ls-page-title-size, 32px);
 }
 
 .title .page-icon {
