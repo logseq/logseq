@@ -260,7 +260,7 @@
    [_this repo & {:keys [close-other-db?]
                   :or {close-other-db? true}}]
    (p/do!
-     (when close-other-db?
+    (when close-other-db?
       (close-other-dbs! repo))
     (create-or-open-db! repo)))
 
@@ -364,20 +364,21 @@
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (let [data (->> (sqlite-common-db/get-initial-data @conn)
                      pr-str)]
-       (async/go
-         ;; TODO: after UI db transacted
-         (async/<! (async/timeout 500))
-         (let [all-pages (sqlite-common-db/get-all-pages @conn)
-               all-files (sqlite-common-db/get-all-files @conn)
-               full-data (concat all-files all-pages)
-               partitioned-data (map-indexed (fn [idx p] [idx p]) (partition-all 2000 full-data))]
-           (doseq [[idx tx-data] partitioned-data]
-             (worker-util/post-message :sync-db-changes (pr-str
-                                                         {:repo repo
-                                                          :tx-data tx-data
-                                                          :tx-meta {:initial-pages? true
-                                                                    :end? (= idx (dec (count partitioned-data)))}}))
-             (async/<! (async/timeout 100)))))
+       ;; (comment
+       ;;   (async/go
+       ;;   ;; TODO: after UI db transacted
+       ;;    (async/<! (async/timeout 500))
+       ;;    (let [all-pages (sqlite-common-db/get-all-pages @conn)
+       ;;          all-files (sqlite-common-db/get-all-files @conn)
+       ;;          full-data (concat all-files all-pages)
+       ;;          partitioned-data (map-indexed (fn [idx p] [idx p]) (partition-all 2000 full-data))]
+       ;;      (doseq [[idx tx-data] partitioned-data]
+       ;;        (worker-util/post-message :sync-db-changes (pr-str
+       ;;                                                    {:repo repo
+       ;;                                                     :tx-data tx-data
+       ;;                                                     :tx-meta {:initial-pages? true
+       ;;                                                               :end? (= idx (dec (count partitioned-data)))}}))
+       ;;        (async/<! (async/timeout 100))))))
        data)))
 
   (closeDB
