@@ -105,6 +105,6 @@
 
     (when request-id
       (when-let [deferred (ldb/get-deferred-response request-id)]
-        (p/resolve! deferred {:tx-meta tx-meta
-                              :tx-data tx-data})
-        (swap! ldb/*request-id->response dissoc request-id)))))
+        (when (p/promise? deferred)
+          (p/resolve! deferred {:tx-meta tx-meta :tx-data tx-data})))
+      (swap! ldb/*request-id->response dissoc request-id))))
