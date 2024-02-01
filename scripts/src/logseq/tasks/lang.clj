@@ -119,7 +119,7 @@
 (defn- whiteboard-dicts
   []
   (->> (shell {:out :string}
-              "grep -E -oh" "\\bt\\('[^ ']+" "-r" "tldraw/apps/tldraw-logseq/src/components")
+              "grep -E -oh" "\\bt\\('[^ ']+" "-r" "packages/tldraw/apps/tldraw-logseq/src/components")
        :out
        string/split-lines
        (map #(keyword (subs % 3)))))
