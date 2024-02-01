@@ -34,7 +34,8 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.common.config :as common-config]))
+            [logseq.common.config :as common-config]
+            [lambdaisland.glogi :as log]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
@@ -172,26 +173,25 @@
       (let [docs-chan (async/to-chan! (medley/indexed doc-files))]
         (state/set-state! [:graph/importing-state :total] (count doc-files))
         (async/go-loop []
-          (if-let [[i ^js file] (async/<! docs-chan)]
-            (let [rpath (.-rpath ^js file)
-                  extract-options {:date-formatter (common-config/get-date-formatter config)
+          (if-let [[i {:keys [rpath] :as file}] (async/<! docs-chan)]
+            (let [extract-options {:date-formatter (common-config/get-date-formatter config)
                                    :user-config config
                                    :filename-format (or (:file/name-format config) :legacy)
                                    :block-pattern (common-config/get-block-pattern (common-util/get-format rpath))}]
               (state/set-state! [:graph/importing-state :current-idx] (inc i))
               (state/set-state! [:graph/importing-state :current-page] rpath)
               (async/<! (async/timeout 10))
-              (async/<! (p->c (-> (.text file)
+              (async/<! (p->c (-> (.text (:file-object file))
                                   (p/then (fn [content]
                                             (prn :import rpath)
                                             {:file/path rpath
                                              :file/content content}))
-                                  (p/then (fn [file]
+                                  (p/then (fn [m]
                                             ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
                                             (let [{:keys [tx-report]}
-                                                  (graph-parser/import-file-to-db-graph db-conn (:file/path file) (:file/content file) {:extract-options extract-options})]
+                                                  (graph-parser/import-file-to-db-graph db-conn (:file/path m) (:file/content m) {:extract-options extract-options})]
                                               (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report)))
-                                            file)))))
+                                            m)))))
               (recur))
             (async/offer! imported-chan true))))
       (catch :default e
@@ -205,22 +205,22 @@
         repo-dir (config/get-repo-dir repo)]
     (prn :in-files asset-files)
     (async/go-loop []
-      (if-let [^js file (async/<! ch)]
+      (if-let [file (async/<! ch)]
         (do
-          (async/<! (p->c (-> (.arrayBuffer file)
+          (async/<! (p->c (-> (.arrayBuffer (:file-object file))
                               (p/then (fn [buffer]
                                         (let [content (js/Uint8Array. buffer)
-                                              parent-dir (path/path-join repo-dir (path/dirname (.-rpath file)))]
+                                              parent-dir (path/path-join repo-dir (path/dirname (:rpath file)))]
                                           (p/do!
                                            (fs/mkdir-if-not-exists parent-dir)
-                                           (fs/write-file! repo repo-dir (.-rpath file) content {:skip-transact? true}))))))))
+                                           (fs/write-file! repo repo-dir (:rpath file) content {:skip-transact? true}))))))))
           (recur))
         true))))
 
 (defn- import-config-file!
-  [config-file]
-  (-> (when config-file
-        (.text config-file))
+  [{:keys [file-object]}]
+  (-> (when file-object
+        (.text file-object))
       (p/then (fn [content]
                 (let [migrated-content (repo-handler/migrate-db-config content)]
                   (p/do!
@@ -258,7 +258,7 @@
      (ldb/transact! repo [(assoc hidden-favorites-page-tx
                                  :block/created-at now
                                  :block/updated-at now)])
-     (p/let [content (when config-file (.text config-file))]
+     (p/let [content (when config-file (.text (:file-object config-file)))]
        (when-let [content-edn (try (edn/read-string content)
                                    (catch :default _ nil))]
          (when-let [favorites (seq (:favorites content-edn))]
@@ -307,19 +307,14 @@
   (let [^js file-objs (array-seq (.-files (.-target ev)))
         original-graph-name (string/replace (.-webkitRelativePath (first file-objs)) #"/.*" "")
         import-graph-fn (fn [graph-name]
-                          (let [_ (doseq [^js file file-objs]
-                                    (set! (.-rpath file) (path/trim-dir-prefix original-graph-name (.-webkitRelativePath file))))
-                                asset-files (filter (fn [^js f]
-                                                      (string/starts-with? (.-rpath f) "assets/"))
-                                                    file-objs)
-                                file-objs (remove (fn [^js f] (fs-util/ignored-path? original-graph-name (.-webkitRelativePath f))) file-objs)
-                                                                                     ;; TODO handle, logseq/config.edn, logseq/custom.css, custom.js are ignored
-                                doc-files (filter (fn [^js f]
-                                                    (contains? #{"md" "org" "markdown" "edn"} (path/file-ext (.-rpath f))))
-                                                  file-objs)
-                                config-file (first (filter (fn [^js f]
-                                                             (= (.-rpath f) "logseq/config.edn"))
-                                                           file-objs))]
+                          (let [files (->> file-objs
+                                           (remove #(fs-util/ignored-path? original-graph-name (.-webkitRelativePath %)))
+                                           (map #(hash-map :file-object %
+                                                           :rpath (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %)))))
+                                asset-files (filter #(string/starts-with? (:rpath %) "assets/") files)
+                                ;; TODO handle, logseq/config.edn, logseq/custom.css, custom.js are ignored
+                                doc-files (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:rpath %))) files)
+                                config-file (first (filter #(= (:rpath %) "logseq/config.edn") files))]
                             (state/set-state! :graph/importing :folder)
                             (state/set-state! [:graph/importing-state :current-page] (str graph-name " Assets"))
                             (async/go
@@ -327,11 +322,16 @@
                               (let [repo (state/get-current-repo)
                                     db-conn (db/get-db repo false)
                                     config (async/<! (p->c (import-config-file! config-file)))
-                                    filtered-doc-files (common-config/remove-hidden-files doc-files config #(.-rpath ^js %))]
+                                    filtered-doc-files (common-config/remove-hidden-files doc-files config :rpath)]
                                 (async/<! (import-from-asset-files! asset-files))
                                 (async/<! (import-from-doc-files! db-conn repo config filtered-doc-files))
                                 (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))
                                 (state/set-state! :graph/importing nil)
+                                (state/set-state! :graph/importing-state nil)
+                                (when-let [org-files (seq (filter #(= "org" (path/file-ext (:rpath %))) files))]
+                                  (log/info :org-files (mapv :rpath org-files))
+                                  (notification/show! (str "Import imported " (count org-files) " org files as markdown. Support for org files will be added later")
+                                                      :info false))
                                 (finished-cb)))))]
     (state/set-modal!
      #(confirm-graph-name-dialog original-graph-name
