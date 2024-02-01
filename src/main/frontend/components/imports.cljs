@@ -219,15 +219,15 @@
 
 (defn- import-config-file!
   [{:keys [file-object]}]
-  (-> (when file-object
-        (.text file-object))
+  (-> (.text file-object)
       (p/then (fn [content]
                 (let [migrated-content (repo-handler/migrate-db-config content)]
                   (p/do!
                    (db-editor-handler/save-file! "logseq/config.edn" migrated-content))
                   ;; Return original config as import process depends on original config e.g. :hidden
                   (edn/read-string content))))
-      (p/catch (fn [_err]
+      (p/catch (fn [err]
+                 (log/error :import-config-file err)
                  (notification/show! "Import may have mistakes due to an invalid config.edn. Recommend re-importing with a valid config.edn"
                                      :warning
                                      false)
@@ -276,28 +276,52 @@
 
 
 (rum/defc confirm-graph-name-dialog
-          [initial-name on-graph-name-confirmed]
-          (let [[input set-input!] (rum/use-state initial-name)
-                on-submit #(do (on-graph-name-confirmed input)
-                               (state/close-modal!))]
-            [:div.container
-             [:div.sm:flex.sm:items-start
-              [:div.mt-3.text-center.sm:mt-0.sm:text-left
-               [:h3#modal-headline.leading-6.font-medium
-                "Imported new graph name:"]]]
+  [initial-name on-graph-name-confirmed]
+  (let [[input set-input!] (rum/use-state initial-name)
+        on-submit #(do (on-graph-name-confirmed input)
+                       (state/close-modal!))]
+    [:div.container
+     [:div.sm:flex.sm:items-start
+      [:div.mt-3.text-center.sm:mt-0.sm:text-left
+       [:h3#modal-headline.leading-6.font-medium
+        "Imported new graph name:"]]]
 
-             [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
-              {:auto-focus true
-               :default-value input
-               :on-change (fn [e]
-                            (set-input! (util/evalue e)))
-               :on-key-press (fn [e]
-                               (when (= "Enter" (util/ekey e))
-                                 (on-submit)))}]
+     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
+      {:auto-focus true
+       :default-value input
+       :on-change (fn [e]
+                    (set-input! (util/evalue e)))
+       :on-key-press (fn [e]
+                       (when (= "Enter" (util/ekey e))
+                         (on-submit)))}]
 
-             [:div.mt-5.sm:mt-4.flex
-              (ui/button "Confirm"
-                         {:on-click on-submit})]]))
+     [:div.mt-5.sm:mt-4.flex
+      (ui/button "Confirm"
+                 {:on-click on-submit})]]))
+
+(defn- import-file-graph
+  [files graph-name config-file]
+  (state/set-state! :graph/importing :folder)
+  (state/set-state! [:graph/importing-state :current-page] (str graph-name " Assets"))
+  (async/go
+    (async/<! (p->c (repo-handler/new-db! graph-name {:file-graph-import? true})))
+    (let [repo (state/get-current-repo)
+          db-conn (db/get-db repo false)
+          asset-files (filter #(string/starts-with? (:rpath %) "assets/") files)
+          ;; TODO handle, logseq/config.edn, logseq/custom.css, custom.js are ignored
+          doc-files (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:rpath %))) files)
+          config (async/<! (p->c (import-config-file! config-file)))
+          filtered-doc-files (common-config/remove-hidden-files doc-files config :rpath)]
+      (async/<! (import-from-asset-files! asset-files))
+      (async/<! (import-from-doc-files! db-conn repo config filtered-doc-files))
+      (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))
+      (state/set-state! :graph/importing nil)
+      (state/set-state! :graph/importing-state nil)
+      (when-let [org-files (seq (filter #(= "org" (path/file-ext (:rpath %))) files))]
+        (log/info :org-files (mapv :rpath org-files))
+        (notification/show! (str "Import imported " (count org-files) " org files as markdown. Support for org files will be added later")
+                            :info false))
+      (finished-cb))))
 
 (defn graph-folder-to-db-import-handler
   "Import from a graph folder as a DB-based graph.
@@ -310,29 +334,11 @@
                           (let [files (->> file-objs
                                            (remove #(fs-util/ignored-path? original-graph-name (.-webkitRelativePath %)))
                                            (map #(hash-map :file-object %
-                                                           :rpath (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %)))))
-                                asset-files (filter #(string/starts-with? (:rpath %) "assets/") files)
-                                ;; TODO handle, logseq/config.edn, logseq/custom.css, custom.js are ignored
-                                doc-files (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:rpath %))) files)
-                                config-file (first (filter #(= (:rpath %) "logseq/config.edn") files))]
-                            (state/set-state! :graph/importing :folder)
-                            (state/set-state! [:graph/importing-state :current-page] (str graph-name " Assets"))
-                            (async/go
-                              (async/<! (p->c (repo-handler/new-db! graph-name {:file-graph-import? true})))
-                              (let [repo (state/get-current-repo)
-                                    db-conn (db/get-db repo false)
-                                    config (async/<! (p->c (import-config-file! config-file)))
-                                    filtered-doc-files (common-config/remove-hidden-files doc-files config :rpath)]
-                                (async/<! (import-from-asset-files! asset-files))
-                                (async/<! (import-from-doc-files! db-conn repo config filtered-doc-files))
-                                (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))
-                                (state/set-state! :graph/importing nil)
-                                (state/set-state! :graph/importing-state nil)
-                                (when-let [org-files (seq (filter #(= "org" (path/file-ext (:rpath %))) files))]
-                                  (log/info :org-files (mapv :rpath org-files))
-                                  (notification/show! (str "Import imported " (count org-files) " org files as markdown. Support for org files will be added later")
-                                                      :info false))
-                                (finished-cb)))))]
+                                                           :rpath (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %)))))]
+                            (if-let [config-file (first (filter #(= (:rpath %) "logseq/config.edn") files))]
+                              (import-file-graph files graph-name config-file)
+                              (notification/show! "Import failed as the file 'logseq/config.edn' was not found for a Logseq graph."
+                                                  :error))))]
     (state/set-modal!
      #(confirm-graph-name-dialog original-graph-name
                                  (fn [graph-name]
