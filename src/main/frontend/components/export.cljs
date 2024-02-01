@@ -95,8 +95,7 @@
 
 (defn- get-image-blob
   [block-uuids-or-page-name {:keys [transparent-bg? x y width height zoom]} callback]
-  (let [html js/document.body.parentNode
-        style (js/window.getComputedStyle html)
+  (let [style (js/window.getComputedStyle js/document.body)
         background (when-not transparent-bg? (.getPropertyValue style "--ls-primary-background-color"))
         page? (string? block-uuids-or-page-name)
         selector (if page?
