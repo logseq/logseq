@@ -56,6 +56,7 @@
   [id-or-name]
   (when id-or-name
     (let [eid (cond
+                (uuid? id-or-name) [:block/uuid id-or-name]
                 (and (vector? id-or-name) (= (count id-or-name) 2)) id-or-name
                 (number? id-or-name) id-or-name
                 (and (string? id-or-name) (util/uuid-string? id-or-name)) [:block/uuid (uuid id-or-name)]
@@ -632,7 +633,7 @@
     (when (string/blank? block-uuid-or-page-name)
       (throw (js/Error. "Page title or block UUID shouldn't be empty.")))
     (p/let [block? (util/uuid-string? (str block-uuid-or-page-name))
-            block (<ensure-page-loaded block-uuid-or-page-name)]
+            block (<pull-block (str block-uuid-or-page-name))]
       (if (and block? (not block))
         (throw (js/Error. "Block not exists"))
         (p/let [{:keys [before sibling focus customUUID properties autoOrderedList]} (bean/->clj opts)
@@ -700,21 +701,21 @@
 (def ^:export remove_block
   (fn [block-uuid ^js _opts]
     (p/let [repo            (state/get-current-repo)
-            _ (<ensure-page-loaded block-uuid)]
+            _ (<pull-block  block-uuid)]
       (editor-handler/delete-block-aux!
        {:block/uuid (sdk-utils/uuid-or-throw-error block-uuid) :repo repo} true))))
 
 (def ^:export update_block
   (fn [block-uuid content ^js opts]
     (p/let [repo (state/get-current-repo)
-            _ (<ensure-page-loaded block-uuid)]
+            _ (<pull-block block-uuid)]
       (editor-handler/save-block! repo
                                   (sdk-utils/uuid-or-throw-error block-uuid) content (bean/->clj opts)))))
 
 (def ^:export move_block
   (fn [src-block-uuid target-block-uuid ^js opts]
-    (p/let [_ (<ensure-page-loaded src-block-uuid)
-            _ (<ensure-page-loaded target-block-uuid)]
+    (p/let [_ (<pull-block src-block-uuid)
+            _ (<pull-block target-block-uuid)]
       (let [{:keys [before children]} (bean/->clj opts)
            move-to      (cond
                           (boolean before)
@@ -747,20 +748,21 @@
 (def ^:export get_previous_sibling_block
   (fn [block-uuid]
     (p/let [id (sdk-utils/uuid-or-throw-error block-uuid)
-            _ (<ensure-page-loaded id)]
-      (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
-       (let [{:block/keys [parent left]} block
-             block (when-not (= parent left) (db-utils/pull (:db/id left)))]
-         (and block (bean/->js (sdk-utils/normalize-keyword-for-json block))))))))
+            block (<pull-block id)]
+      (when block
+       (p/let [{:block/keys [parent left]} block
+               block (when-not (= parent left) (<pull-block (:db/id left)))]
+         (when block
+           (bean/->js (sdk-utils/normalize-keyword-for-json block))))))))
 
 (def ^:export get_next_sibling_block
   (fn [block-uuid]
     (p/let [id (sdk-utils/uuid-or-throw-error block-uuid)
-            _ (<ensure-page-loaded id)]
-      (when-let [block (db-model/query-block-by-uuid id)]
-       (when-let [right-sibling (outliner-core/get-right-sibling (db/get-db) (:db/id block))]
-         (let [block (db/pull (:db/id right-sibling))]
-           (bean/->js (sdk-utils/normalize-keyword-for-json block))))))))
+            block (<pull-block id)]
+      (when block
+        (p/let [sibling (db-async/<get-right-sibling (state/get-current-repo) (:db/id block))]
+          (when sibling
+            (bean/->js (sdk-utils/normalize-keyword-for-json sibling))))))))
 
 (def ^:export set_block_collapsed
   (fn [block-uuid ^js opts]
@@ -861,7 +863,7 @@
 
 (defn ^:export prepend_block_in_page
   [uuid-or-page-name content ^js opts]
-  (p/let [_               (<ensure-page-loaded uuid-or-page-name)
+  (p/let [_               (<pull-block uuid-or-page-name)
           page?           (not (util/uuid-string? uuid-or-page-name))
           page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
           _               (and page-not-exist? (page-handler/<create! uuid-or-page-name
