@@ -282,7 +282,8 @@
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (let [selector (edn/read-string selector-str)
            id (edn/read-string id-str)
-           result (d/pull @conn selector id)]
+           result (->> (d/pull @conn selector id)
+                       (sqlite-common-db/with-parent-and-left @conn))]
        (pr-str result))))
 
   (pull-many
@@ -291,11 +292,13 @@
      (let [selector (edn/read-string selector-str)
            ids (edn/read-string ids-str)
            result (d/pull-many @conn selector ids)]
-       (let []
-         (pr-str result)))))
+       (pr-str result))))
 
-  (get-block-neighbors
-   [_this repo id])
+  (get-right-sibling
+   [_this repo db-id]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (let [result (ldb/get-right-sibling @conn db-id)]
+       (pr-str result))))
 
   (get-block-and-children
    [_this repo name children?]

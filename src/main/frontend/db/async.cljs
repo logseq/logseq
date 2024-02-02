@@ -145,6 +145,16 @@
             block
             result'))))))
 
+(defn <get-right-sibling
+  [graph db-id]
+  (assert (integer? db-id))
+  (when-let [^Object worker @db-browser/*worker]
+    (p/let [result-str (.get-right-sibling worker graph db-id)
+            result (edn/read-string result-str)
+            conn (db/get-db graph false)
+            _ (d/transact! conn result)]
+      result)))
+
 (defn <get-block-refs
   [graph eid]
   (assert (integer? eid))

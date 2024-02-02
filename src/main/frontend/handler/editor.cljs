@@ -764,16 +764,18 @@
                                     (delete-block-aux! block delete-children? {:children-check? false}))]
               (when-not (and has-children? left-has-children?)
                 (when block-parent-id
-                  (let [block-parent (gdom/getElement block-parent-id)
-                        sibling-block (if (:embed? config)
-                                        (util/get-prev-block-non-collapsed
-                                         block-parent
-                                         {:container (util/rec-get-blocks-container block-parent)})
-                                        (util/get-prev-block-non-collapsed-non-embed block-parent))
-                        {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)
-                        concat-prev-block? (boolean (and prev-block new-content))
-                        transact-opts {:outliner-op :delete-blocks}
-                        db-based? (config/db-based-graph? repo)]
+                  (p/let [block-parent (gdom/getElement block-parent-id)
+                          sibling-block (if (:embed? config)
+                                          (util/get-prev-block-non-collapsed
+                                           block-parent
+                                           {:container (util/rec-get-blocks-container block-parent)})
+                                          (util/get-prev-block-non-collapsed-non-embed block-parent))
+                          {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)
+                          concat-prev-block? (boolean (and prev-block new-content))
+                          transact-opts {:outliner-op :delete-blocks}
+                          db-based? (config/db-based-graph? repo)
+                          block-right (db-async/<get-right-sibling repo (:db/id block))
+                          parent-right (when prev-block (db-async/<get-right-sibling repo (:db/id prev-block)))]
                     (ui-outliner-tx/transact!
                      transact-opts
                      (cond
@@ -786,7 +788,7 @@
                        (let [new-properties (merge (:block/properties (db/entity (:db/id prev-block)))
                                                    (:block/properties (db/entity (:db/id block))))]
                          (if (seq (:block/_refs (db/entity (:db/id block))))
-                           (let [block-right (outliner-core/get-right-sibling (db/get-db) (:db/id block))]
+                           (do
                              (delete-block-fn prev-block)
                              (save-block! repo block new-content {})
                              (outliner-save-block! {:db/id (:db/id block)
@@ -812,7 +814,7 @@
 
                              ;; parent will be removed
                              (when (= (:db/id prev-block) (:db/id (:block/parent block)))
-                               (when-let [parent-right (outliner-core/get-right-sibling (db/get-db) (:db/id prev-block))]
+                               (when parent-right
                                  (outliner-save-block! {:db/id (:db/id parent-right)
                                                         :block/left (:db/id block)})))
 
@@ -2673,15 +2675,15 @@
   (state/set-edit-content! (state/get-edit-input-id) (.-value input)))
 
 (defn- delete-concat [current-block]
-  (let [repo (state/get-current-repo)
-        ^js input (state/get-input)
-        current-pos (cursor/pos input)
-        value (gobj/get input "value")
-        collapsed? (util/collapsed? current-block)
-        next-block (when-let [e (db-model/get-next (db/get-db repo) (:db/id current-block))]
-                     (db/pull (:db/id e)))
-        next-block-right (when next-block (outliner-core/get-right-sibling (db/get-db) (:db/id next-block)))
-        db-based? (config/db-based-graph? repo)]
+  (p/let [repo (state/get-current-repo)
+          ^js input (state/get-input)
+          current-pos (cursor/pos input)
+          value (gobj/get input "value")
+          collapsed? (util/collapsed? current-block)
+          next-block (when-let [e (db-model/get-next (db/get-db repo) (:db/id current-block))]
+                       (db/pull (:db/id e)))
+          next-block-right (when next-block (db-async/<get-right-sibling repo (:db/id next-block)))
+          db-based? (config/db-based-graph? repo)]
     (cond
       (nil? next-block)
       nil

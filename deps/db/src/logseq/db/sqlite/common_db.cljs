@@ -28,17 +28,13 @@
                :file/path (:v e)
                :file/content (:file/content (d/entity db (:e e)))}))))
 
-(defn- get-block-with-refs
+(defn with-parent-and-left
   [db block]
-  (update block :block/refs (fn [refs]
-                               (map (fn [ref]
-                                      (let [e (d/entity db (:db/id ref))]
-                                        (if (and e (:block/name e))
-                                          (assoc ref
-                                                 :block/uuid (:block/uuid e)
-                                                 :block/original-name (:block/name e)
-                                                 :block/name (:block/name e))
-                                          ref))) refs))))
+  (if (:block/name block)
+    block
+    (assoc block
+          :block/left (select-keys (d/entity db (:db/id (:block/left block))) [:db/id :block/uuid])
+          :block/parent (select-keys (d/entity db (:db/id (:block/parent block))) [:db/id :block/uuid]))))
 
 (defn get-block-and-children
   [db name children?]
@@ -51,10 +47,10 @@
                 (let [id (uuid name)]
                   (d/entity db [:block/uuid id])))]
     (if (and block (not (:block/name block))) ; not a page
-      (let [block' (d/pull db '[*] (:db/id block))
-            block-with-refs (get-block-with-refs db block')]
+      (let [block' (->> (d/pull db '[*] (:db/id block))
+                        (with-parent-and-left db))]
         (cond->
-         {:block block-with-refs}
+         {:block block'}
           children?
           (assoc :children (get-children (:block/_parent block)))))
       (when-let [block (or block (d/entity db [:block/name name]))]
