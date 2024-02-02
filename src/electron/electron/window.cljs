@@ -137,10 +137,9 @@
                         (utils/safe-decode-uri-component url) url)
                   url (if-not win32? (string/replace url "file://" "") url)]
               (logger/info "new-window" url)
-              (if (some #(string/includes?
-                          (.normalize node-path url)
-                          (.join node-path (. app getAppPath) %))
-                        ["index.html"])
+              (if (string/includes?
+                   (.normalize node-path url)
+                   (.join node-path (. app getAppPath) "index.html"))
                 (logger/info "pass-window" url)
                 (open-default-app! url open))))
 
