@@ -1,4 +1,5 @@
 (ns frontend.handler.file-based.repo
+  "Repo fns for creating, loading and parsing file graphs"
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -277,8 +278,6 @@
     (parse-files-and-load-to-db! repo-url file-objs {:new-graph? new-graph?
                                                      :empty-graph? empty-graph?})
     (state/set-parsing-state! {:graph-loading? false})))
-
-
 
 (defn load-repo-to-db!
   [repo-url {:keys [diffs file-objs refresh? new-graph? empty-graph?]}]
