@@ -8,7 +8,8 @@
             [logseq.graph-parser.extract :as extract]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]))
 
 (defn- retract-blocks-tx
   [blocks retain-uuids]
@@ -141,8 +142,10 @@ Options available:
             (fn [tags]
               (mapv #(-> %
                          add-missing-timestamps
+                         ;; don't use build-new-class b/c of timestamps
                          (merge {:block/journal? false
                                  :block/format :markdown
+                                 :block/type "class"
                                  :block/uuid (d/squuid)}))
                     tags)))
     block))
@@ -178,6 +181,13 @@ Options available:
                                                k)))
                               (remove-keys keyword?)))))))
         update-block-with-invalid-tags
+        ((fn [block']
+           (if (seq (:block/tags block'))
+             (update block :block/content
+                     db-content/content-without-tags
+                     (map :block/original-name (:block/tags block')))
+             block)))
+
         ((fn [block']
            (if (seq (:block/refs block'))
              (update block' :block/refs
