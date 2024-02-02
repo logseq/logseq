@@ -5,7 +5,7 @@
             [frontend.handler.events :as events]
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.handler.file-based.nfs :as nfs-handler]
             [frontend.fs.sync :as sync]
             [frontend.state :as state]
             [frontend.ui :as ui]
