@@ -5,6 +5,7 @@
             [frontend.external :as external]
             [frontend.handler.file :as file-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.file-based.repo :as file-repo-handler]
             [frontend.state :as state]
             [frontend.date :as date]
             [frontend.config :as config]
@@ -51,7 +52,7 @@
                             :file/content text}))))
                 files)
         files (remove nil? files)]
-    (repo-handler/parse-files-and-load-to-db! repo files nil)
+    (file-repo-handler/parse-files-and-load-to-db! repo files nil)
     (let [files (->> (map (fn [{:file/keys [path content]}] (when path [path content])) files)
                      (remove nil?))]
       (file-handler/alter-files repo files {:add-history? false

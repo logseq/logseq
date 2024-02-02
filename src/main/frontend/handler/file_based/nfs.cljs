@@ -1,4 +1,4 @@
-(ns frontend.handler.web.nfs
+(ns frontend.handler.file-based.nfs
   "The File System Access API, https://web.dev/file-system-access/."
   (:require ["/frontend/utils" :as utils]
             [clojure.set :as set]
@@ -10,6 +10,7 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.file-based.repo :as file-repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
@@ -151,10 +152,10 @@
                                      (repo-handler/start-repo-db-if-not-exists! repo)
                                      (when (config/global-config-enabled?)
                                        (global-config-handler/restore-global-config!))
-                                     (repo-handler/load-new-repo-to-db! repo
-                                                                        {:new-graph?   true
-                                                                         :empty-graph? (nil? (seq markup-files))
-                                                                         :file-objs    files})
+                                     (file-repo-handler/load-new-repo-to-db! repo
+                                                                             {:new-graph?   true
+                                                                              :empty-graph? (nil? (seq markup-files))
+                                                                              :file-objs    files})
                                      (state/add-repo! {:url repo :nfs? true})
                                      (persist-db/<export-db repo {})
                                      (state/set-loading-files! repo false)
@@ -241,11 +242,11 @@
                                (rename-f "modify" modified))]
                     (when (or (and (seq diffs) (seq modified-files))
                               (seq diffs))
-                      (-> (repo-handler/load-repo-to-db! repo
-                                                         {:diffs     diffs
-                                                          :nfs-files modified-files
-                                                          :refresh? (not re-index?)
-                                                          :new-graph? re-index?})
+                      (-> (file-repo-handler/load-repo-to-db! repo
+                                                              {:diffs     diffs
+                                                               :nfs-files modified-files
+                                                               :refresh? (not re-index?)
+                                                               :new-graph? re-index?})
                           (p/then (fn [_state]
                                     (ok-handler)))
                           (p/catch (fn [error]
@@ -288,7 +289,7 @@
 (defn rebuild-index!
   [repo ok-handler]
   (let [graph-dir (config/get-repo-dir repo)]
-    (when (and repo (not (config/db-based-graph? repo)))
+    (when repo
       (p/do!
        (repo-handler/remove-repo! {:url repo} :switch-graph? false)
        (ls-dir-files-with-path! graph-dir)
