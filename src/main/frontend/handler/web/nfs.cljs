@@ -13,7 +13,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
-            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.fs :as util-fs]

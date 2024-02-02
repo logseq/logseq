@@ -77,6 +77,8 @@
           _ (state/sub :auth/id-token)
           file-sync-graph-uuid (and (user-handler/logged-in?)
                                     (file-sync-handler/enable-sync?)
+                                    ;; FIXME: Sync state is not cleared when switching to a new graph
+                                    (file-sync-handler/current-graph-sync-on?)
                                     (file-sync-handler/get-current-graph-uuid))
           built-in-property? (and (contains? (:block/type page) "property")
                                   (contains? db-property/built-in-properties-keys-str page-name))]
