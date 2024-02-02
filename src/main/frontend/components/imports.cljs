@@ -344,9 +344,11 @@
         original-graph-name (string/replace (.-webkitRelativePath (first file-objs)) #"/.*" "")
         import-graph-fn (fn [graph-name]
                           (let [files (->> file-objs
-                                           (remove #(fs-util/ignored-path? original-graph-name (.-webkitRelativePath %)))
                                            (map #(hash-map :file-object %
-                                                           :rpath (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %)))))]
+                                                           :rpath (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %))))
+                                           (remove #(and (not (string/starts-with? (:rpath %) "assets/"))
+                                                         ;; TODO: Update this when supporting more formats as this agressively excludes most formats
+                                                         (fs-util/ignored-path? original-graph-name (.-webkitRelativePath (:file-object %))))))]
                             (if-let [config-file (first (filter #(= (:rpath %) "logseq/config.edn") files))]
                               (import-file-graph files graph-name config-file)
                               (notification/show! "Import failed as the file 'logseq/config.edn' was not found for a Logseq graph."
