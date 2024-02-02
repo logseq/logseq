@@ -179,7 +179,7 @@
           (repo-handler/broadcast-persist-db! graph))))
      (repo-handler/restore-and-setup-repo! graph)
      (graph-switch graph)
-     state/set-state! :sync-graph/init? false)))
+     (state/set-state! :sync-graph/init? false))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
   (let [opts (if (false? (:persist? opts)) opts (assoc opts :persist? true))]
