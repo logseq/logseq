@@ -4,10 +4,48 @@
             [logseq.outliner.core :as outliner-core]
             [frontend.worker.state :as worker-state]
             [datascript.core :as d]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [malli.core :as m]))
+
+(def op-schema
+  [:multi {:dispatch first}
+   [:save-block
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::block]]]]
+   [:insert-blocks
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::blocks ::id ::option]]]]
+   [:delete-blocks
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::ids ::option]]]]
+   [:move-blocks
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::ids ::id :boolean]]]]
+   [:move-blocks-up-down
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::ids :boolean]]]]
+   [:indent-outdent-blocks
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::ids :boolean ::option]]]]])
+
+(def ops-schema [:schema {:registry {::id int?
+                                     ::block map?
+                                     ::option [:maybe map?]
+                                     ::blocks [:sequential ::block]
+                                     ::ids [:sequential ::id]}}
+                 [:sequential op-schema]])
+
+(def ops-validator (m/validator ops-schema))
 
 (defn apply-ops!
   [repo conn ops opts]
+  (assert (ops-validator ops) ops)
   (let [opts' (assoc opts
                      :transact-opts {:repo repo :conn conn}
                      :local-tx? true)
