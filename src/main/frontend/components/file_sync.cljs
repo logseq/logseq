@@ -17,7 +17,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.web.nfs :as web-nfs]
+            [frontend.handler.file-based.nfs :as nfs-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -62,7 +62,7 @@
                                  nil)
                                (.then #(do
                                          (notification/show! (str "Cloned to => " dest-dir) :success)
-                                         (web-nfs/ls-dir-files-with-path! dest-dir)
+                                         (nfs-handler/ls-dir-files-with-path! dest-dir)
                                          (repo-handler/remove-repo! {:url repo})
                                          (close-fn)))
                                (.catch #(js/console.error %)))))]

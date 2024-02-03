@@ -6,7 +6,7 @@
             [frontend.components.widgets :as widgets]
             [frontend.handler.page :as page-handler]
             [frontend.util :as util]
-            [frontend.handler.web.nfs :as nfs]
+            [frontend.handler.file-based.nfs :as nfs]
             [frontend.mobile.util :as mobile-util]
             [frontend.mobile.graph-picker :as graph-picker]
             [frontend.modules.shortcut.core :as shortcut]

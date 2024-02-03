@@ -63,7 +63,7 @@ a project may be further defined and clarified by project maintainers.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported by by contacting the moderators on the [Forum](https://discuss.logseq.com), [Discord](https://discord.gg/KpN4eHY) channel, Tienson Qin (@tiensonqin) on GitHub, or the official [Twitter](https://twitter.com/logseq). We will work with you to resolve the issue promptly. All
+reported by contacting the moderators on the [Forum](https://discuss.logseq.com), [Discord](https://discord.gg/KpN4eHY) channel, Tienson Qin (@tiensonqin) on GitHub, or the official [Twitter](https://twitter.com/logseq). We will work with you to resolve the issue promptly. All
 complaints will be reviewed and investigated and will result in a response that
 is deemed necessary and appropriate to the circumstances. The Logseq team
 will maintain confidentiality with regard to the reporter of an incident.

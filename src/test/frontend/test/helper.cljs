@@ -1,6 +1,6 @@
 (ns frontend.test.helper
   "Common helper fns for tests"
-  (:require [frontend.handler.repo :as repo-handler]
+  (:require [frontend.handler.file-based.repo :as file-repo-handler]
             [frontend.state :as state]
             [frontend.db.conn :as conn]
             [clojure.string :as string]
@@ -114,7 +114,7 @@
   [files*]
   (let [files (mapv update-file-for-db-graph files*)]
     ;; TODO: Use sqlite instead of file graph to create client db
-    (repo-handler/parse-files-and-load-to-db!
+    (file-repo-handler/parse-files-and-load-to-db!
      test-db
      files
      {:re-render? false :verbose false :refresh? true})
@@ -196,7 +196,7 @@ This can be called in synchronous contexts as no async fns should be invoked"
   [files]
   (if js/process.env.DB_GRAPH
     (load-test-files-for-db-graph files)
-    (repo-handler/parse-files-and-load-to-db!
+    (file-repo-handler/parse-files-and-load-to-db!
      test-db
      files
    ;; Set :refresh? to avoid creating default files in after-parse
