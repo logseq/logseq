@@ -76,9 +76,8 @@
     txs))
 
 (defn transact!
-  [txs tx-meta {:keys [repo conn unlinked-graph? set-state-fn]}]
-  (let [db-based? (and repo (sqlite-util/db-based-graph? repo))
-        txs (map (fn [m]
+  [txs tx-meta {:keys [repo conn set-state-fn]}]
+  (let [txs (map (fn [m]
                    (if (map? m)
                      (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
                              :block/title :block/body :block/level :block/container :db/other-tx
@@ -92,10 +91,7 @@
               true
               (distinct))]
 
-    (when (and (seq txs)
-               (or db-based?
-                   (and (fn? unlinked-graph?) (not (unlinked-graph?)))
-                   (some? js/process)))
+    (when (seq txs)
 
       ;; (prn :debug "DB transact")
       ;; (cljs.pprint/pprint txs)
