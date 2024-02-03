@@ -20,7 +20,10 @@
                                      (not (map? (first result'))))
                               (apply concat result')
                               result')]
-                (d/transact! conn tx-data))))
+                (try
+                  (d/transact! conn tx-data)
+                  (catch :default _e
+                    nil)))))
           result')))))
 
 (defn <pull

@@ -2945,7 +2945,18 @@
                  *hidden? (get-hidden-atom id *ref
                                            {:initial-value (when (or disable-lazy? editing?) false)
                                             :id (:db/id current-block)
-                                            :content (:block/content current-block)})]
+                                            :content (:block/content current-block)})
+                 <load-block (fn []
+                               (let [block-id (:block/uuid (nth (:rum/args state) 3))]
+                                 (db-async/<get-block (state/get-current-repo) block-id :children? false)))]
+             (if (false? @*hidden?)
+               (<load-block)
+               (add-watch *hidden?
+                        :show
+                        (fn [_ _ _ n]
+                          (when (false? n)
+                            (<load-block)))))
+
              (assoc state
                     ::sub-id id
                     ::ref *ref
@@ -2977,6 +2988,11 @@
   (let [*ref (::ref state)
         ref (rum/react *ref)
         hidden? (rum/react (::hidden? state))
+        _ (when (:block/uuid block) (state/sub-async-query-loading (:block/uuid block)))
+        [original-block block] (build-block config* block {:navigating-block navigating-block :navigated? navigated?})
+        config* (if original-block
+                  (assoc config* :original-block original-block)
+                  config*)
         ref? (:ref? config*)
         ;; whiteboard block shape
         in-whiteboard? (and (:in-whiteboard? config*)
@@ -3079,8 +3095,8 @@
                            (block-mouse-leave e *control-show? block-id doc-mode?))}
         (when (and (not slide?) (not in-whiteboard?) (not hidden?))
           (let [edit? (or edit?
-                             (= uuid (:block/uuid (state/get-edit-block)))
-                             (contains? @(:editor/new-created-blocks @state/state) uuid))]
+                          (= uuid (:block/uuid (state/get-edit-block)))
+                          (contains? @(:editor/new-created-blocks @state/state) uuid))]
             (block-control config block uuid block-id collapsed? *control-show? edit? selected?)))
 
         (when (and @*show-left-menu? (not in-whiteboard?) (not hidden?))
@@ -3125,7 +3141,6 @@
   {:init (fn [state]
            (let [[config block] (:rum/args state)
                  block-id (:block/uuid block)]
-             (db-async/<get-block (state/get-current-repo) block-id :children? false)
              (cond
                (root-block? config block)
                (state/set-collapsed-block! block-id false)
@@ -3150,18 +3165,12 @@
   (let [repo (state/get-current-repo)
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
-        navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
-        _ (when (:block/uuid block) (state/sub-async-query-loading (:block/uuid block)))]
+        navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)]
     (when (:block/uuid block)
-      (let [[original-block block] (build-block config block {:navigating-block navigating-block :navigated? navigated?})
-            config' (if original-block
-                      (assoc config :original-block original-block)
-                      config)
-            opts {}]
-        (rum/with-key
-          (block-container-inner state repo config' block
-                                 (merge opts {:navigating-block navigating-block :navigated? navigated?}))
-          (str "block-inner" (:block/uuid block)))))))
+      (rum/with-key
+        (block-container-inner state repo config block
+                               {:navigating-block navigating-block :navigated? navigated?})
+        (str "block-inner" (:block/uuid block))))))
 
 (defn divide-lists
   [[f & l]]
