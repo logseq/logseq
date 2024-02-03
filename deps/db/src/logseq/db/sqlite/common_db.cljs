@@ -7,12 +7,13 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util :as common-util]))
 
-(defn- get-built-in-files
-  [db]
-  (let [files ["logseq/config.edn"
-               "logseq/custom.css"
-               "logseq/custom.js"]]
-    (map #(d/pull db '[*] [:file/path %]) files)))
+(comment
+  (defn- get-built-in-files
+    [db]
+    (let [files ["logseq/config.edn"
+                 "logseq/custom.css"
+                 "logseq/custom.js"]]
+      (map #(d/pull db '[*] [:file/path %]) files))))
 
 (defn get-all-pages
   [db]
@@ -28,15 +29,29 @@
                :file/path (:v e)
                :file/content (:file/content (d/entity db (:e e)))}))))
 
+(defn- with-block-refs
+  [db block]
+  (update block :block/refs (fn [refs]
+                              (map (fn [ref]
+                                     (let [e (d/entity db (:db/id ref))]
+                                       (if (and e (:block/name e))
+                                         (assoc ref
+                                                :block/uuid (:block/uuid e)
+                                                :block/original-name (:block/name e)
+                                                :block/name (:block/name e))
+                                         ref))) refs))))
+
 (defn with-parent-and-left
   [db block]
   (cond
     (:block/name block)
     block
     (:block/page block)
-    (assoc block
-          :block/left (select-keys (d/entity db (:db/id (:block/left block))) [:db/id :block/uuid])
-          :block/parent (select-keys (d/entity db (:db/id (:block/parent block))) [:db/id :block/uuid]))
+    (->>
+     (assoc block
+            :block/left (select-keys (d/entity db (:db/id (:block/left block))) [:db/id :block/uuid])
+            :block/parent (select-keys (d/entity db (:db/id (:block/parent block))) [:db/id :block/uuid]))
+     (with-block-refs db))
     :else
     block))
 
@@ -96,10 +111,10 @@
 (defn get-initial-data
   "Returns initial data"
   [db]
-  (let [all-pages (get-all-pages db)
+  (let [latest-journals (get-latest-journals db 3)
         all-files (get-all-files db)
         closed-values (get-closed-values db)]
-    (concat all-pages all-files closed-values)))
+    (concat latest-journals all-files closed-values)))
 
 (defn restore-initial-data
   "Given initial sqlite data and schema, returns a datascript connection"
