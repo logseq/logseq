@@ -764,18 +764,17 @@
                                     (delete-block-aux! block delete-children? {:children-check? false}))]
               (when-not (and has-children? left-has-children?)
                 (when block-parent-id
-                  (p/let [block-parent (gdom/getElement block-parent-id)
-                          sibling-block (if (:embed? config)
-                                          (util/get-prev-block-non-collapsed
-                                           block-parent
-                                           {:container (util/rec-get-blocks-container block-parent)})
-                                          (util/get-prev-block-non-collapsed-non-embed block-parent))
-                          {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)
-                          concat-prev-block? (boolean (and prev-block new-content))
-                          transact-opts {:outliner-op :delete-blocks}
-                          db-based? (config/db-based-graph? repo)
-                          block-right (db-async/<get-right-sibling repo (:db/id block))
-                          parent-right (when prev-block (db-async/<get-right-sibling repo (:db/id prev-block)))]
+                  (let [block-parent (gdom/getElement block-parent-id)
+                        sibling-block (if (:embed? config)
+                                        (util/get-prev-block-non-collapsed
+                                         block-parent
+                                         {:container (util/rec-get-blocks-container block-parent)})
+                                        (util/get-prev-block-non-collapsed-non-embed block-parent))
+                        {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)
+                        concat-prev-block? (boolean (and prev-block new-content))
+                        transact-opts {:outliner-op :delete-blocks}
+                        db-based? (config/db-based-graph? repo)
+                        db (db/get-db repo)]
                     (ui-outliner-tx/transact!
                      transact-opts
                      (cond
@@ -797,10 +796,11 @@
                                                                     (:db/id (:block/parent prev-block)))})
 
                              ;; block->right needs to point its `left` to block->left
-                             (when (and block-right (not= (:db/id (:block/parent prev-block))
-                                                          (:db/id (:block/parent block))))
-                               (outliner-save-block! {:db/id (:db/id block-right)
-                                                      :block/left (:db/id (:block/left block))}))
+                             (let [block-right (outliner-core/get-right-sibling db (:db/id block))]
+                               (when (and block-right (not= (:db/id (:block/parent prev-block))
+                                                           (:db/id (:block/parent block))))
+                                (outliner-save-block! {:db/id (:db/id block-right)
+                                                       :block/left (:db/id (:block/left block))})))
 
                              ;; update prev-block's children to point to the refed block
                              (when (or (:block/collapsed? prev-block)
@@ -814,7 +814,7 @@
 
                              ;; parent will be removed
                              (when (= (:db/id prev-block) (:db/id (:block/parent block)))
-                               (when parent-right
+                               (when-let [parent-right (when prev-block (outliner-core/get-right-sibling db (:db/id prev-block)))]
                                  (outliner-save-block! {:db/id (:db/id parent-right)
                                                         :block/left (:db/id block)})))
 
