@@ -340,7 +340,7 @@
                   (assoc (.-kv ^js data) :db/id (:db/id data))
                   data)
           m (-> data'
-                (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom?
+                (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom? :block/unordered
                         :block/title :block/body :block/level)
                 common-util/remove-nils
                 block-with-updated-at
@@ -351,23 +351,9 @@
           block-uuid (:block/uuid (:data this))
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
           block-entity (d/entity db eid)
-          m' (if (and (:block/content m) db-based?)
-               (update m :block/content
-                       (fn [content]
-                         (db-content/content-without-tags
-                          content
-                          (->>
-                           (map
-                            (fn [tag]
-                              (when (:block/uuid tag)
-                                (str db-content/page-ref-special-chars (:block/uuid tag))))
-                            (:block/tags m))
-                           (remove nil?)))))
-               m)
-          m (cond->> m'
+          m (cond->> m
               db-based?
-              (db-marker-handle conn))
-          m (if db-based? (dissoc m :block/tags) m)]
+              (db-marker-handle conn))]
 
       ;; Ensure block UUID never changes
       (when (and db-id block-uuid)
