@@ -576,13 +576,8 @@
          (widgets/demo-graph-alert))
 
        (cond
-         (not indexeddb-support?)
+         (or db-restoring? (not indexeddb-support?))
          nil
-
-         db-restoring?
-         [:div.mt-20
-          [:div.ls-center
-           (ui/loading)]]
 
          :else
          [:div

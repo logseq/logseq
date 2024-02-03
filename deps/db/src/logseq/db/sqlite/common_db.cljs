@@ -55,30 +55,43 @@
     :else
     block))
 
+(defn- mark-block-fully-loaded
+  [b]
+  (assoc b :block.temp/fully-loaded? true))
+
 (defn get-block-and-children
   [db name children?]
-  (let [get-children (fn [col]
-                       (map (fn [e]
-                              (select-keys e [:db/id :block/uuid :block/page :block/left :block/parent :block/collapsed?]))
-                            col))
-        uuid? (common-util/uuid-string? name)
+  (let [uuid? (common-util/uuid-string? name)
         block (when uuid?
                 (let [id (uuid name)]
-                  (d/entity db [:block/uuid id])))]
+                  (d/entity db [:block/uuid id])))
+        get-children (fn [children]
+                       (let [long-page? (> (count children) 500)]
+                         (if long-page?
+                           (map (fn [e]
+                                  (select-keys e [:db/id :block/uuid :block/page :block/left :block/parent :block/collapsed?]))
+                                children)
+                           (->> (d/pull-many db '[*] (map :db/id children))
+                                (map #(with-block-refs db %))
+                                (map mark-block-fully-loaded)))))]
     (if (and block (not (:block/name block))) ; not a page
       (let [block' (->> (d/pull db '[*] (:db/id block))
-                        (with-parent-and-left db))]
+                        (with-parent-and-left db)
+                        mark-block-fully-loaded)]
         (cond->
          {:block block'}
           children?
           (assoc :children (get-children (:block/_parent block)))))
       (when-let [block (or block (d/entity db [:block/name name]))]
         (cond->
-         {:block (d/pull db '[*] (:db/id block))}
+         {:block (-> (d/pull db '[*] (:db/id block))
+                     mark-block-fully-loaded)}
           children?
           (assoc :children
                  (if (contains? (:block/type block) "whiteboard")
-                   (d/pull-many db '[*] (map :db/id (:block/_page block)))
+                   (->> (d/pull-many db '[*] (map :db/id (:block/_page block)))
+                        (map #(with-block-refs db %))
+                        (map mark-block-fully-loaded))
                    (get-children (:block/_page block)))))))))
 
 (defn get-latest-journals
@@ -100,11 +113,11 @@
      (reverse)
      (take n))))
 
-(defn get-closed-values
+(defn get-structured-blocks
   [db]
   (->> (d/datoms db :avet :block/type)
        (keep (fn [e]
-               (when (= (:v e) "closed value")
+               (when (contains? #{"closed value" "property" "class"} (:v e))
                  (d/pull db '[*] (:e e)))))))
 
 ;; built-in files + latest journals + favorites
@@ -113,8 +126,8 @@
   [db]
   (let [latest-journals (get-latest-journals db 3)
         all-files (get-all-files db)
-        closed-values (get-closed-values db)]
-    (concat latest-journals all-files closed-values)))
+        structured-blocks (get-structured-blocks db)]
+    (concat latest-journals all-files structured-blocks)))
 
 (defn restore-initial-data
   "Given initial sqlite data and schema, returns a datascript connection"

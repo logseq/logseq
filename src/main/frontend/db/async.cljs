@@ -136,7 +136,7 @@
         (p/let [result (.get-block-and-children sqlite graph name' children?)
                 {:keys [block children] :as result'} (edn/read-string result)
                 conn (db/get-db graph false)
-                block-and-children (cons (assoc block :block.temp/fully-loaded? true) children)
+                block-and-children (cons block children)
                 _ (d/transact! conn block-and-children)]
           (state/update-state! :db/async-queries (fn [s] (disj s name')))
           (react/refresh-affected-queries!
