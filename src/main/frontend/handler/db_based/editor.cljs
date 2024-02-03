@@ -71,7 +71,7 @@
     (assoc block :block/content content')))
 
 (defn wrap-parse-block
-  [{:block/keys [content left level] :as block}]
+  [{:block/keys [content left level tags] :as block}]
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
         block (if (string/blank? content)
                 block
@@ -98,7 +98,9 @@
                   (:block/tags result))
                  (remove nil?))))
         ;; Remove :block/tags built from mldoc
-        (dissoc :block/tags))))
+        (dissoc :block/tags)
+        ;; Add tags back
+        (assoc :block/tags tags))))
 
 (defn save-file!
   "This fn is the db version of file-handler/alter-file"
