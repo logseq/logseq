@@ -24,6 +24,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.file-based.repo :as file-repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
@@ -95,7 +96,7 @@
                          (not (mobile-util/native-platform?))
                          (not (config/db-based-graph? repo)))
                     ;; will execute `(state/set-db-restoring! false)` inside
-                    (repo-handler/setup-demo-repo-if-not-exists!)
+                    (file-repo-handler/setup-demo-repo-if-not-exists!)
 
                     :else
                     (state/set-db-restoring! false))))))))
