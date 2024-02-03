@@ -417,7 +417,7 @@
 (defmethod handle-action :open-block [_ state _event]
   (when-let [block-id (some-> state state->highlighted-item :source-block :block/uuid)]
     (p/let [repo (state/get-current-repo)
-            _ (db-async/<get-block repo block-id)]
+            _ (db-async/<get-block repo block-id :children? false)]
       (let [get-block-page (partial model/get-block-page repo)
            block (db/entity [:block/uuid block-id])]
        (when block
@@ -442,8 +442,10 @@
 
 (defmethod handle-action :open-block-right [_ state _event]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid)]
-    (editor-handler/open-block-in-sidebar! block-uuid)
-    (state/close-modal!)))
+    (p/let [repo (state/get-current-repo)
+            _ (db-async/<get-block repo block-uuid :children? false)]
+      (editor-handler/open-block-in-sidebar! block-uuid)
+      (state/close-modal!))))
 
 (defn- open-file
   [file-path]

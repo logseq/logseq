@@ -236,3 +236,8 @@
             (->> result
                  db-model/sort-by-left-recursive
                  db-utils/group-by-page)))))))
+
+(defn <fetch-all-pages
+  [graph]
+  (when-let [^Object worker @db-browser/*worker]
+    (.fetch-all-pages worker graph)))
