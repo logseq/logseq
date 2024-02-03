@@ -3151,7 +3151,7 @@
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
-        _ (state/sub-async-query-loading (:block/uuid block))]
+        _ (when (:block/uuid block) (state/sub-async-query-loading (:block/uuid block)))]
     (when (:block/uuid block)
       (let [[original-block block] (build-block config block {:navigating-block navigating-block :navigated? navigated?})
             config' (if original-block
