@@ -155,6 +155,19 @@
             _ (d/transact! conn result)]
       result)))
 
+(defn <get-block-parents
+  [graph id depth]
+  (assert (integer? id))
+  (when-let [^Object worker @db-browser/*worker]
+    (when-let [block-id (:block/uuid (db/entity graph id))]
+      (state/update-state! :db/async-queries (fn [s] (conj s (str block-id "-parents"))))
+      (p/let [result-str (.get-block-parents worker graph id depth)
+              result (edn/read-string result-str)
+              conn (db/get-db graph false)
+              _ (d/transact! conn result)]
+        (state/update-state! :db/async-queries (fn [s] (disj s (str block-id "-parents"))))
+        result))))
+
 (defn <get-block-refs
   [graph eid]
   (assert (integer? eid))

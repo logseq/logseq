@@ -58,7 +58,7 @@
              (recur more))))))
 
 (defn highlight-query* [app-config query text]
-  (if (vector? text)                    ; hiccup
+  (if (or (vector? text) (object? text))                    ; hiccup
     text
     (let [text-string (to-string text)]
       (if-not (seq text-string)

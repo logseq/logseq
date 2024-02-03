@@ -2644,21 +2644,30 @@
   (ui/icon "chevron-right" {:style {:font-size 20}
                             :class "opacity-50 mx-1"}))
 
-(defn breadcrumb
-  "block-id - uuid of the target block of breadcrumb. page uuid is also acceptable"
+;; "block-id - uuid of the target block of breadcrumb. page uuid is also acceptable"
+(rum/defc breadcrumb < rum/reactive
+  {:init (fn [state]
+           (let [args (:rum/args state)
+                 block-id (nth args 2)
+                 depth (:level-limit (last args))]
+             (p/let [id (:db/id (db/entity [:block/uuid block-id]))]
+               (when id (db-async/<get-block-parents (state/get-current-repo) id depth)))
+             state))}
   [config repo block-id {:keys [show-page? indent? end-separator? level-limit _navigating-block]
                          :or {show-page? true
                               level-limit 3}
                          :as opts}]
   (when block-id
-    (let [{:keys [from-block-id from-property-id]}
+    (let [_ (state/sub-async-query-loading (str block-id "-parents"))
+          {:keys [from-block-id from-property-id]}
           (when (and block-id (config/db-based-graph? repo))
             (db-property-handler/get-property-block-created-block [:block/uuid block-id]))
           from-block (when from-block-id (db/entity from-block-id))
           from-property (when from-property-id (db/entity from-property-id))
           block-id (or (:block/uuid from-block) block-id)
+          parents (db/get-block-parents repo block-id {:depth (inc level-limit)})
           parents (concat
-                   (db/get-block-parents repo block-id {:depth (inc level-limit)})
+                   parents
                    (when (and from-block from-property)
                      [from-block from-property]))
           page (or (db/get-block-page repo block-id) ;; only return for block uuid
