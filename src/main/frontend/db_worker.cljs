@@ -316,6 +316,14 @@
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (ldb/get-block-refs-count @conn id)))
 
+  (get-block-parents
+   [_this repo id depth]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (let [block-id (:block/uuid (d/entity @conn id))
+           parents (->> (ldb/get-block-parents @conn block-id {:depth (or depth 3)})
+                        (map (fn [b] (d/pull @conn '[*] (:db/id b)))))]
+       (pr-str parents))))
+
   (get-page-unlinked-refs
    [_this repo page-id search-result-eids-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
