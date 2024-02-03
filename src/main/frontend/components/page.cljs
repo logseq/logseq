@@ -741,10 +741,7 @@
      (mixins/listen state js/window "resize"
                     (fn [_e]
                       (reset! layout [js/window.innerWidth js/window.innerHeight])))))
-  {:will-mount (fn [state]
-                 (state/set-search-mode! :graph)
-                 state)
-   :will-unmount (fn [state]
+  {:will-unmount (fn [state]
                    (reset! *n-hops nil)
                    (reset! *focus-nodes [])
                    (state/set-search-mode! :global)
