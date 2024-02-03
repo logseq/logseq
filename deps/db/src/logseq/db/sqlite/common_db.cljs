@@ -30,11 +30,15 @@
 
 (defn with-parent-and-left
   [db block]
-  (if (:block/name block)
+  (cond
+    (:block/name block)
     block
+    (:block/page block)
     (assoc block
           :block/left (select-keys (d/entity db (:db/id (:block/left block))) [:db/id :block/uuid])
-          :block/parent (select-keys (d/entity db (:db/id (:block/parent block))) [:db/id :block/uuid]))))
+          :block/parent (select-keys (d/entity db (:db/id (:block/parent block))) [:db/id :block/uuid]))
+    :else
+    block))
 
 (defn get-block-and-children
   [db name children?]
