@@ -73,7 +73,7 @@
 (defn wrap-parse-block
   [{:block/keys [content left level tags] :as block}]
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
-        block (if (string/blank? content)
+        block (if (nil? content)
                 block
                 (let [ast (mldoc/->edn (string/trim content) :markdown)
                       first-elem-type (first (ffirst ast))
