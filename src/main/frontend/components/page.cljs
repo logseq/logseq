@@ -41,7 +41,8 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.extensions.graph.pixi :as pixi]))
 
 (defn- get-page-name
   [state]
@@ -552,6 +553,21 @@
 (defonce *charge-strength (atom -600))
 (defonce *charge-range (atom 600))
 
+(rum/defcs simulation-switch < rum/reactive
+  [state]
+  (let [*simulation-paused? pixi/*simulation-paused?]
+    [:div.flex.flex-col.mb-2
+     [:p {:title "Pause simulation"}
+      "Pause simulation"]
+     (ui/toggle
+      (rum/react *simulation-paused?)
+      (fn []
+        (let [paused? @*simulation-paused?]
+          (if paused?
+            (pixi/resume-simulation!)
+            (pixi/stop-simulation!))))
+      true)]))
+
 (rum/defc ^:large-vars/cleanup-todo graph-filters < rum/reactive
   [graph settings forcesettings n-hops]
   (let [{:keys [journal? orphan-pages? builtin-pages? excluded-pages?]
@@ -575,8 +591,8 @@
                        (let [new-settings (assoc settings key value)]
                          (config-handler/set-config! :graph/settings new-settings)))
         set-forcesetting! (fn [key value]
-                       (let [new-forcesettings (assoc forcesettings key value)]
-                         (config-handler/set-config! :graph/forcesettings new-forcesettings)))
+                            (let [new-forcesettings (assoc forcesettings key value)]
+                              (config-handler/set-config! :graph/forcesettings new-forcesettings)))
         search-graph-filters (state/sub :search/graph-filters)
         focus-nodes (rum/react *focus-nodes)]
     [:div.absolute.top-4.right-4.graph-filters
@@ -691,49 +707,42 @@
             open?
             [:div
              [:p.text-sm.opacity-70.px-4
-              (let [;; c1 (count (:nodes graph))
-                    ;; s1 (if (> c1 1) "s" "")
-                    c2 (count (:links graph))
-                    s2 (if (> c2 1) "s" "")
-                    ]
-                ;; (util/format "%d page%s, %d link%s" c1 s1 c2 s2)
+              (let [c2 (count (:links graph))
+                    s2 (if (> c2 1) "s" "")]
                 (util/format "%d link%s" c2 s2))]
              [:div.p-6
-              [:div.flex.flex-col.mb-2
-                [:p {:title "Link Distance"}
-                "Link Distance"]
-                (ui/tippy {:html [:div.pr-3 link-dist]}
-                          (ui/slider (/ link-dist 10)
-                                     {:min 1   ;; 10
-                                      :max 18  ;; 180
-                                      ;; :on-change #(reset! *link-dist (int %))}))]
-                                      :on-change #(let [value (int %)]
-                                                    (reset! *link-dist (* value 10))
-                                                    (set-forcesetting! :link-dist (* value 10)))}))]
-                                      ;; :on-change #(let [value (util/evalue %)]
-                                      ;;                (reset! *link-dist value)
-                                      ;;                (set-forcesetting! :link-dist value))}))]
-              [:div.flex.flex-col.mb-2
-                [:p {:title "Charge Strength"}
-                "Charge Strength"]
-                (ui/tippy {:html [:div.pr-3 charge-strength]}
-                          (ui/slider (/ charge-strength 100)
-                                     {:min -10  ;;-1000
-                                      :max 10   ;;1000
-                                      :on-change #(let [value (int %)]
-                                                    (reset! *charge-strength (* value 100))
-                                                    (set-forcesetting! :charge-strength (* value 100)))}))]
-              [:div.flex.flex-col.mb-2
-                [:p {:title "Charge Range"}
-                "Charge Range"]
-                (ui/tippy {:html [:div.pr-3 charge-range]}
-                          (ui/slider (/ charge-range 100)
-                                     {:min 5    ;;500
-                                      :max 40   ;;4000
-                                      :on-change #(let [value (int %)]
-                                                    (reset! *charge-range (* value 100))
-                                                    (set-forcesetting! :charge-range (* value 100)))}))]
+              (simulation-switch)
 
+              [:div.flex.flex-col.mb-2
+               [:p {:title "Link Distance"}
+                "Link Distance"]
+               (ui/tippy {:html [:div.pr-3 link-dist]}
+                         (ui/slider (/ link-dist 10)
+                                    {:min 1   ;; 10
+                                     :max 18  ;; 180
+                                     :on-change #(let [value (int %)]
+                                                   (reset! *link-dist (* value 10))
+                                                   (set-forcesetting! :link-dist (* value 10)))}))]
+              [:div.flex.flex-col.mb-2
+               [:p {:title "Charge Strength"}
+                "Charge Strength"]
+               (ui/tippy {:html [:div.pr-3 charge-strength]}
+                         (ui/slider (/ charge-strength 100)
+                                    {:min -10  ;;-1000
+                                     :max 10   ;;1000
+                                     :on-change #(let [value (int %)]
+                                                   (reset! *charge-strength (* value 100))
+                                                   (set-forcesetting! :charge-strength (* value 100)))}))]
+              [:div.flex.flex-col.mb-2
+               [:p {:title "Charge Range"}
+                "Charge Range"]
+               (ui/tippy {:html [:div.pr-3 charge-range]}
+                         (ui/slider (/ charge-range 100)
+                                    {:min 5    ;;500
+                                     :max 40   ;;4000
+                                     :on-change #(let [value (int %)]
+                                                   (reset! *charge-range (* value 100))
+                                                   (set-forcesetting! :charge-range (* value 100)))}))]
 
               [:a.opacity-70.opacity-100 {:on-click (fn []
                                                       (swap! *graph-forcereset? not)
