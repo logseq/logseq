@@ -36,8 +36,7 @@ html[data-theme=light] a.toggle:hover {
 }
 
 .cp__right-sidebar-topbar {
-  @apply px-1 h-12;
-  background-color: var(--ls-primary-background-color);
+  @apply px-1 h-12 bg-transparent;
 
   button {
     @apply opacity-100;

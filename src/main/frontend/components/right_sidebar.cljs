@@ -251,7 +251,7 @@
       (let [collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
         [:<>
          (when (zero? idx) (drop-indicator (dec idx) drag-to))
-         [:div.flex.sidebar-item.content.color-level.rounded-md
+         [:div.flex.sidebar-item.content.color-level.rounded-md.shadow-lg
           {:class [(str "item-type-" (name block-type))
                    (when collapsed? "collapsed")]}
           (let [[title component] item]
@@ -456,7 +456,7 @@
                                                                        (state/sidebar-add-block! repo "history" :history))}
             (t :right-side-bar/history)]])]]
 
-      [:.sidebar-item-list.flex-1.scrollbar-spacing
+      [:.sidebar-item-list.flex-1.scrollbar-spacing.px-2
        (if @*anim-finished?
          (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
             (rum/with-key
