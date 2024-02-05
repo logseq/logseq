@@ -63,6 +63,7 @@
     [:ref/default-open-blocks-level :int]
     [:ref/linked-references-collapsed-threshold :int]
     [:graph/settings [:map-of :keyword :boolean]]
+    [:graph/forcesettings [:map-of :keyword :int]]
     [:favorites [:vector :string]]
     ;; There isn't a :float yet
     [:srs/learning-fraction float?]
