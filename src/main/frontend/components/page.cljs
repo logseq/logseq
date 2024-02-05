@@ -41,7 +41,8 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.extensions.graph.pixi :as pixi]))
 
 (defn- get-page-name
   [state]
@@ -542,27 +543,56 @@
 (defonce *n-hops (atom nil))
 (defonce *focus-nodes (atom []))
 (defonce *graph-reset? (atom false))
+(defonce *graph-forcereset? (atom false))
 (defonce *journal? (atom nil))
 (defonce *orphan-pages? (atom true))
 (defonce *builtin-pages? (atom nil))
 (defonce *excluded-pages? (atom true))
 (defonce *show-journals-in-page-graph? (atom nil))
+(defonce *link-dist (atom 70))
+(defonce *charge-strength (atom -600))
+(defonce *charge-range (atom 600))
+
+(rum/defcs simulation-switch < rum/reactive
+  [state]
+  (let [*simulation-paused? pixi/*simulation-paused?]
+    [:div.flex.flex-col.mb-2
+     [:p {:title "Pause simulation"}
+      "Pause simulation"]
+     (ui/toggle
+      (rum/react *simulation-paused?)
+      (fn []
+        (let [paused? @*simulation-paused?]
+          (if paused?
+            (pixi/resume-simulation!)
+            (pixi/stop-simulation!))))
+      true)]))
 
 (rum/defc ^:large-vars/cleanup-todo graph-filters < rum/reactive
-  [graph settings n-hops]
+  [graph settings forcesettings n-hops]
   (let [{:keys [journal? orphan-pages? builtin-pages? excluded-pages?]
          :or {orphan-pages? true}} settings
+        {:keys [link-dist charge-strength charge-range]} forcesettings
         journal?' (rum/react *journal?)
         orphan-pages?' (rum/react *orphan-pages?)
         builtin-pages?' (rum/react *builtin-pages?)
         excluded-pages?' (rum/react *excluded-pages?)
+        link-dist'  (rum/react *link-dist)
+        charge-strength'  (rum/react *charge-strength)
+        charge-range'  (rum/react *charge-range)
         journal? (if (nil? journal?') journal? journal?')
         orphan-pages? (if (nil? orphan-pages?') orphan-pages? orphan-pages?')
         builtin-pages? (if (nil? builtin-pages?') builtin-pages? builtin-pages?')
         excluded-pages? (if (nil? excluded-pages?') excluded-pages? excluded-pages?')
+        link-dist (if (nil? link-dist') link-dist link-dist')
+        charge-strength (if (nil? charge-strength') charge-strength charge-strength')
+        charge-range (if (nil? charge-range') charge-range charge-range')
         set-setting! (fn [key value]
                        (let [new-settings (assoc settings key value)]
                          (config-handler/set-config! :graph/settings new-settings)))
+        set-forcesetting! (fn [key value]
+                            (let [new-forcesettings (assoc forcesettings key value)]
+                              (config-handler/set-config! :graph/forcesettings new-forcesettings)))
         search-graph-filters (state/sub :search/graph-filters)
         focus-nodes (rum/react *focus-nodes)]
     [:div.absolute.top-4.right-4.graph-filters
@@ -671,6 +701,57 @@
                 "Click to search"])]))
          {:search-filters search-graph-filters})
         (graph-filter-section
+         [:span.font-medium "Forces"]
+         (fn [open?]
+           (filter-expand-area
+            open?
+            [:div
+             [:p.text-sm.opacity-70.px-4
+              (let [c2 (count (:links graph))
+                    s2 (if (> c2 1) "s" "")]
+                (util/format "%d link%s" c2 s2))]
+             [:div.p-6
+              (simulation-switch)
+
+              [:div.flex.flex-col.mb-2
+               [:p {:title "Link Distance"}
+                "Link Distance"]
+               (ui/tippy {:html [:div.pr-3 link-dist]}
+                         (ui/slider (/ link-dist 10)
+                                    {:min 1   ;; 10
+                                     :max 18  ;; 180
+                                     :on-change #(let [value (int %)]
+                                                   (reset! *link-dist (* value 10))
+                                                   (set-forcesetting! :link-dist (* value 10)))}))]
+              [:div.flex.flex-col.mb-2
+               [:p {:title "Charge Strength"}
+                "Charge Strength"]
+               (ui/tippy {:html [:div.pr-3 charge-strength]}
+                         (ui/slider (/ charge-strength 100)
+                                    {:min -10  ;;-1000
+                                     :max 10   ;;1000
+                                     :on-change #(let [value (int %)]
+                                                   (reset! *charge-strength (* value 100))
+                                                   (set-forcesetting! :charge-strength (* value 100)))}))]
+              [:div.flex.flex-col.mb-2
+               [:p {:title "Charge Range"}
+                "Charge Range"]
+               (ui/tippy {:html [:div.pr-3 charge-range]}
+                         (ui/slider (/ charge-range 100)
+                                    {:min 5    ;;500
+                                     :max 40   ;;4000
+                                     :on-change #(let [value (int %)]
+                                                   (reset! *charge-range (* value 100))
+                                                   (set-forcesetting! :charge-range (* value 100)))}))]
+
+              [:a.opacity-70.opacity-100 {:on-click (fn []
+                                                      (swap! *graph-forcereset? not)
+                                                      (reset! *link-dist 70)
+                                                      (reset! *charge-strength -600)
+                                                      (reset! *charge-range 600))}
+               "Reset Forces"]]]))
+         {})
+        (graph-filter-section
          [:span.font-medium "Export"]
          (fn [open?]
            (filter-expand-area
@@ -699,11 +780,15 @@
          (reset! last-node-position [node (.-x event) (.-y event)]))))
 
 (rum/defc global-graph-inner < rum/reactive
-  [graph settings theme]
+  [graph settings forcesettings theme]
   (let [[width height] (rum/react layout)
         dark? (= theme "dark")
         n-hops (rum/react *n-hops)
+        link-dist (rum/react *link-dist)
+        charge-strength (rum/react *charge-strength)
+        charge-range (rum/react *charge-range)
         reset? (rum/react *graph-reset?)
+        forcereset? (rum/react *graph-forcereset?)
         focus-nodes (when n-hops (rum/react *focus-nodes))
         graph (if (and (integer? n-hops)
                        (seq focus-nodes)
@@ -722,11 +807,15 @@
                       :width (- width 24)
                       :height (- height 48)
                       :dark? dark?
+                      :link-dist link-dist
+                      :charge-strength charge-strength
+                      :charge-range charge-range
                       :register-handlers-fn
                       (fn [graph]
                         (graph-register-handlers graph *focus-nodes *n-hops dark?))
-                      :reset? reset?})
-     (graph-filters graph settings n-hops)]))
+                      :reset? reset?
+                      :forcereset? forcereset?})
+     (graph-filters graph settings forcesettings n-hops)]))
 
 (defn- filter-graph-nodes
   [nodes filters]
@@ -741,21 +830,19 @@
      (mixins/listen state js/window "resize"
                     (fn [_e]
                       (reset! layout [js/window.innerWidth js/window.innerHeight])))))
-  {:will-mount (fn [state]
-                 (state/set-search-mode! :graph)
-                 state)
-   :will-unmount (fn [state]
+  {:will-unmount (fn [state]
                    (reset! *n-hops nil)
                    (reset! *focus-nodes [])
                    (state/set-search-mode! :global)
                    state)}
   [state]
   (let [settings (state/graph-settings)
+        forcesettings (state/graph-forcesettings)
         theme (state/sub :ui/theme)
         graph (graph-handler/build-global-graph theme settings)
         search-graph-filters (state/sub :search/graph-filters)
         graph (update graph :nodes #(filter-graph-nodes % search-graph-filters))]
-    (global-graph-inner graph settings theme)))
+    (global-graph-inner graph settings forcesettings theme)))
 
 (rum/defc page-graph-inner < rum/reactive
   [_page graph dark?]
