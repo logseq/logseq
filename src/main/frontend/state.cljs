@@ -644,6 +644,10 @@ Similar to re-frame subscriptions"
   []
   (:graph/settings (sub-config)))
 
+(defn graph-forcesettings
+  []
+  (:graph/forcesettings (sub-config)))
+
 ;; Enable by default
 (defn show-brackets?
   []

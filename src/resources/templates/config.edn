@@ -291,6 +291,13 @@
  ;;  :excluded-pages? false  ; Default value: false
  ;;  :journal?        false} ; Default value: false
 
+ ;; Graph view configuration.
+ ;; Example usage:
+ ;; :graph/forcesettings
+ ;; {:link-dist       180    ; Default value: 180
+ ;;  :charge-strength -600   ; Default value: -600
+ ;;  :charge-range    600}   ; Default value: 600
+
  ;; Favorites to list on the left sidebar
  :favorites []
 

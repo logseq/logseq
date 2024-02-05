@@ -1353,7 +1353,10 @@
                   url)]
         (if (and (coll? src)
                  (= (first src) "youtube-player"))
-          (youtube/youtube-video (last src) nil)
+          (let [t (re-find #"&t=(\d+)" url)
+                opts (when (seq t)
+                       {:start (nth t 1)})]
+            (youtube/youtube-video (last src) opts))
           (when src
             (let [width (min (- (util/get-width) 96) 560)
                   height (int (* width (/ (if (string/includes? src "player.bilibili.com")
