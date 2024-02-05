@@ -10,6 +10,8 @@
 
 (defonce *graph-instance (atom nil))
 (defonce *simulation (atom nil))
+(defonce *simulation-paused?
+  (atom false))
 
 (def Graph (gobj/get graphology "Graph"))
 
@@ -113,7 +115,20 @@
   (when-let [instance (:pixi @*graph-instance)]
     (.destroy instance)
     (reset! *graph-instance nil)
-    (reset! *simulation nil)))
+    (reset! *simulation nil))
+  (reset! *simulation-paused? false))
+
+(defn stop-simulation!
+  []
+  (when-let [^js simulation @*simulation]
+    (.stop simulation)
+    (reset! *simulation-paused? true)))
+
+(defn resume-simulation!
+  []
+  (when-let [^js simulation @*simulation]
+    (.restart simulation))
+  (reset! *simulation-paused? false))
 
 (defn- update-position!
   [node obj]
@@ -161,7 +176,8 @@
              #_:clj-kondo/ignore
              (when-let [node (.get nodes node-key)]
                (when-let [s @*simulation]
-                 (when-not (.-active event)
+                 (when-not (or (.-active event)
+                               @*simulation-paused?)
                    (-> (.alphaTarget s 0.3)
                        (.restart))
                    (js/setTimeout #(.alphaTarget s 0) 2000))
