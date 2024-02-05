@@ -381,3 +381,7 @@ html.is-mobile {
 .ui__toggle-background-off {
   background: or(--ls-toggle-off-background, --lx-gray-08, rgb(212, 212, 212));
 }
+
+input[type='range'] {
+  accent-color: var(--lx-accent-10, var(--rx-blue-10));
+}
