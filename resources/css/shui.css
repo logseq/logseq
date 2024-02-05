@@ -76,7 +76,8 @@ html {
       @apply bg-primary/20;
     }
 
-    #ui__ac-inner {}
+    #ui__ac-inner {
+    }
 
     .cp__cmdk {
       --lx-gray-07: var(--rx-gray-07);
@@ -162,6 +163,12 @@ html[data-theme=dark] {
       --muted: 192 100% 13%;
     }
 
+    .ui__button {
+      &.as-ghost {
+        @apply hover:bg-accent-01;
+      }
+    }
+
     .menu-separator {
       @apply opacity-20;
     }
@@ -175,13 +182,14 @@ html[data-theme=dark] {
     }
 
     .cp__cmdk {
-      .bg-gray-02 {
-        background-color: var(--ls-secondary-background-color, var(--lx-gray-02));
-      }
-
-      .border-gray-06, .border-gray-07 {
+      .border-gray-06,
+      .border-gray-07 {
         border-color: var(--ls-border-color, var(--lx-gray-06));
         opacity: .6;
+      }
+
+      > .hints {
+        @apply border-accent-01 bg-gray-02;
       }
     }
 

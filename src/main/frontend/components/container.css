@@ -346,13 +346,13 @@
     }
   }
 
+  .dark & {
+    --left-sidebar-bg-color: var(--lx-gray-02, var(--ls-secondary-background-color, hsl(var(--secondary, var(--rx-gray-03-hsl)))));
+  }
+
   @screen sm {
     padding-top: 0;
     width: var(--ls-left-sidebar-width);
-
-    .dark & {
-      --left-sidebar-bg-color: var(--lx-gray-02, var(--ls-secondary-background-color, hsl(var(--secondary, var(--rx-gray-03-hsl)))));
-    }
 
     > .wrap {
       margin-top: 52px;
