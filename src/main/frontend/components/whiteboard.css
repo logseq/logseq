@@ -188,6 +188,7 @@ input.tl-text-input {
     border: none;
     box-shadow: none;
     padding: 0;
+    background-color: transparent;
   }
 }
 
