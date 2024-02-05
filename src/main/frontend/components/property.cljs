@@ -441,8 +441,10 @@
 
 (rum/defcs new-property < rum/reactive
   (rum/local false ::new-property?)
-  (rum/local nil ::property-key)
   (rum/local nil ::property-value)
+  {:will-unmount (fn [state]
+                   (state/set-state! :editor/new-property-key nil)
+                   state)}
   [state block id keyboard-triggered? opts]
   (let [*new-property? (::new-property? state)
         container-id (state/sub :editor/properties-container)
@@ -450,7 +452,7 @@
 
     (when-not (and (:in-block-container? opts) (not keyboard-triggered?))
       [:div.ls-new-property
-       (let [*property-key (::property-key state)
+       (let [*property-key (:editor/new-property-key @state/state)
              *property-value (::property-value state)]
          (cond
            new-property?

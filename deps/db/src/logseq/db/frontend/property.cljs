@@ -65,6 +65,12 @@
               (mapv #(hash-map :value % :uuid (random-uuid))
                     ["Urgent" "High" "Medium" "Low"])
               :visible true}
+   :scheduled {:original-name "Scheduled"
+               :schema {:type :date}
+               :visible true}
+   :deadline {:original-name "Deadline"
+              :schema {:type :date}
+              :visible true}
 
    ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
 
