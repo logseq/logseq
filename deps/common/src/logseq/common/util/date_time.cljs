@@ -1,5 +1,5 @@
 (ns logseq.common.util.date-time
-  "cljs-time util fns for graph-parser"
+  "cljs-time util fns for deps"
   (:require [cljs-time.format :as tf]
             [clojure.string :as string]
             [logseq.common.util :as common-util]))

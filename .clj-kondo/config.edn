@@ -102,7 +102,8 @@
              frontend.idb idb
              frontend.loader loader
              frontend.mixins mixins
-             frontend.modules.outliner.core outliner-core
+             frontend.modules.outliner.op outliner-op
+             frontend.modules.outliner.ui ui-outliner-tx
              frontend.mobile.util mobile-util
              frontend.page page
              frontend.persist-db persist-db
@@ -148,6 +149,7 @@
              logseq.common.util.block-ref block-ref
              logseq.graph-parser.util.db db-util
              logseq.graph-parser.date-time-util date-time-util
+             logseq.outliner.core outliner-core
              logseq.outliner.pipeline outliner-pipeline
              logseq.outliner.datascript-report ds-report
              medley.core medley
@@ -170,7 +172,6 @@
            clojure.test.check.clojure-test/defspec clojure.core/def
            clojure.test.check.properties/for-all clojure.core/for
            ;; src/main
-           frontend.modules.outliner.datascript/auto-transact! clojure.core/let
            frontend.namespaces/import-vars potemkin/import-vars
            ;; src/test
            frontend.test.helper/deftest-async clojure.test/deftest
