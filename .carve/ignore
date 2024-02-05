@@ -46,10 +46,6 @@ frontend.image/get-orientation
 frontend.mixins/perf-measure-mixin
 ;; Previously useful fn
 frontend.mobile.util/get-idevice-statusbar-height
-;; Used in macro
-frontend.modules.outliner.datascript/transact!
-frontend.modules.outliner.core/*transaction-opts*
-frontend.modules.outliner.core/*transaction-args*
 ;; Referenced in comment
 frontend.page/route-view
 ;; placeholder fn
