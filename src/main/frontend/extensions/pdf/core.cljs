@@ -1,4 +1,4 @@
-(ns frontend.extensions.pdf.core
+;(ns frontend.extensions.pdf.core
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.svg :as svg]
@@ -415,7 +415,7 @@
                                     (when (and (not (.contains (.-classList target) "extensions__pdf-hls-area-region"))
                                                (.closest target ".page"))
                                       (and e (or (.-metaKey e)
-                                                 (and util/win32? (.-shiftKey e))
+                                                 (.-shiftKey e)
                                                  @*area-mode?)))))
 
         reset-coords!           #(do
