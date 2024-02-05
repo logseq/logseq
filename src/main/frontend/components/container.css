@@ -628,7 +628,7 @@
 
   &-inner {
     padding-top: 0;
-    background-color: transparent;
+    background-color: var(--lx-gray-02, var(--ls-secondary-background-color));
   }
 
   &-settings {

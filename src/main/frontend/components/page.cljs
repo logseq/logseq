@@ -1203,7 +1203,6 @@
                                               (doseq [{:block/keys [idx]} @*results]
                                                 (swap! *checks assoc idx (or indeterminate? (not all?))))))
                            :indeterminate (when (= -1 @*indeterminate) "indeterminate")})]
-           [:th.icon ""]
            (sortable-title (t :block/name) :block/name *sort-by-item *desc?)
            (when-not mobile?
              [(sortable-title (t :page/backlinks) :block/backlinks *sort-by-item *desc?)
@@ -1219,19 +1218,19 @@
                               (get @*checks idx)
                               {:on-change (fn []
                                             (swap! *checks update idx not))})]
-               [:td.icon.w-4.p-0.overflow-hidden
-                (when-let [icon (get-in page [:block/properties :icon])]
-                  icon)]
-               [:td.name [:a {:on-click (fn [e]
-                                          (.preventDefault e)
-                                          (let [repo (state/get-current-repo)]
-                                            (when (gobj/get e "shiftKey")
-                                              (state/sidebar-add-block!
-                                               repo
-                                               (:db/id page)
-                                               :page))))
-                              :href     (rfe/href :page {:name (:block/name page)})}
-                          (component-block/page-cp {} page)]]
+               [:td.name
+                [:a {:on-click (fn [e]
+                                 (.preventDefault e)
+                                 (let [repo (state/get-current-repo)]
+                                   (when (gobj/get e "shiftKey")
+                                     (state/sidebar-add-block!
+                                       repo
+                                       (:db/id page)
+                                       :page))))
+                     :href     (rfe/href :page {:name (:block/name page)})}
+                 (when-let [icon (get-in page [:block/properties :icon])]
+                   [:span.pr-1 icon])
+                 (component-block/page-cp {} page)]]
 
                (when-not mobile?
                  [[:td.backlinks [:span backlinks]]
