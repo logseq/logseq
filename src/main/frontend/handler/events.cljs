@@ -916,7 +916,7 @@
   (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
 
-(defmethod handle :editor/new-property [[_]]
+(defmethod handle :editor/new-property [[_ property-key]]
   (p/do!
     (when-let [edit-block (state/get-edit-block)]
      (when-let [block-id (:block/uuid edit-block)]
@@ -926,6 +926,8 @@
          (when collapsed?
            (editor-handler/set-blocks-collapsed! [block-id] false)))))
     (editor-handler/save-current-block!)
+    (when property-key
+      (state/set-state! :editor/new-property-key property-key))
     (property-handler/editing-new-property!)))
 
 (rum/defc multi-tabs-dialog
