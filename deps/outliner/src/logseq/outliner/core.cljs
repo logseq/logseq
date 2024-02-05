@@ -17,7 +17,6 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.util :as sqlite-util]
             [cljs.pprint :as pprint]
-            [logseq.db.frontend.content :as db-content]
             [logseq.common.marker :as common-marker]))
 
 (def ^:private block-map
