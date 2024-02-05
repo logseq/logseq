@@ -1,7 +1,7 @@
 (ns frontend.components.widgets
   (:require [frontend.context.i18n :refer [t]]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.web.nfs :as nfs]
+            [frontend.handler.file-based.nfs :as nfs]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.ui :as ui]
             [rum.core :as rum]

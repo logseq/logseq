@@ -8,7 +8,8 @@
             [logseq.graph-parser.extract :as extract]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]))
 
 (defn- retract-blocks-tx
   [blocks retain-uuids]
@@ -141,8 +142,10 @@ Options available:
             (fn [tags]
               (mapv #(-> %
                          add-missing-timestamps
+                         ;; don't use build-new-class b/c of timestamps
                          (merge {:block/journal? false
                                  :block/format :markdown
+                                 :block/type "class"
                                  :block/uuid (d/squuid)}))
                     tags)))
     block))
@@ -179,6 +182,13 @@ Options available:
                               (remove-keys keyword?)))))))
         update-block-with-invalid-tags
         ((fn [block']
+           (if (seq (:block/tags block'))
+             (update block :block/content
+                     db-content/content-without-tags
+                     (map :block/original-name (:block/tags block')))
+             block)))
+
+        ((fn [block']
            (if (seq (:block/refs block'))
              (update block' :block/refs
                      (fn [refs]
@@ -199,9 +209,7 @@ Options available:
 
 (defn import-file-to-db-graph
   "Parse file and save parsed data to the given db graph."
-  [conn file content {:keys [delete-blocks-fn extract-options skip-db-transact?]
-                      :or {delete-blocks-fn (constantly [])
-                           skip-db-transact? false}
+  [conn file content {:keys [extract-options]
                       :as options}]
   (let [format (common-util/get-format file)
         {:keys [tx ast]}
@@ -227,7 +235,6 @@ Options available:
               ;; remove file path relative
               pages (map #(dissoc % :block/file :block/properties) pages)
               block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
-              delete-blocks (delete-blocks-fn @conn (first pages) file block-ids)
               block-refs-ids (->> (mapcat :block/refs blocks)
                                   (filter (fn [ref] (and (vector? ref)
                                                          (= :block/uuid (first ref)))))
@@ -263,12 +270,10 @@ Options available:
               blocks (map #(update-imported-block conn %) blocks)
               pages-index (map #(select-keys % [:block/name]) pages)]
 
-          {:tx (concat refs whiteboard-pages pages-index delete-blocks pages block-ids blocks)
+          {:tx (concat refs whiteboard-pages pages-index pages block-ids blocks)
            :ast ast})
         tx' (common-util/fast-remove-nils tx)
-        result (if skip-db-transact?
-                 tx'
-                 (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?])))]
+        result (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?]))]
     {:tx-report result
      :ast ast}))
 

@@ -16,7 +16,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.web.nfs :as web-nfs]
+            [frontend.handler.file-based.nfs :as nfs-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -219,7 +219,7 @@
 (defn ls-dir-files!
   ([ok-handler] (ls-dir-files! ok-handler nil))
   ([ok-handler opts]
-   (web-nfs/ls-dir-files-with-handler!
+   (nfs-handler/ls-dir-files-with-handler!
     (fn [e]
       (init-commands!)
       (when ok-handler

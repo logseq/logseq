@@ -4,7 +4,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.handler.file-based.nfs :as nfs-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
