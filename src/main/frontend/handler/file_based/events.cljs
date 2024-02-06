@@ -9,7 +9,8 @@
             [frontend.fs.sync :as sync]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.config :as config]))
 
 (defmethod events/handle :graph/ask-for-re-index [[_ *multiple-windows? ui]]
   ;; *multiple-windows? - if the graph is opened in multiple windows, boolean atom
@@ -35,9 +36,10 @@
 
 (defmethod events/handle :graph/re-index [[_]]
   ;; Ensure the graph only has ONE window instance
-  (async/go
-    (async/<! (sync/<sync-stop))
-    (repo-handler/re-index!
-     nfs-handler/rebuild-index!
-     #(do (page-handler/create-today-journal!)
-          (events/file-sync-restart!)))))
+  (when (config/local-file-based-graph? (state/get-current-repo))
+    (async/go
+     (async/<! (sync/<sync-stop))
+     (repo-handler/re-index!
+      nfs-handler/rebuild-index!
+      #(do (page-handler/create-today-journal!)
+           (events/file-sync-restart!))))))
