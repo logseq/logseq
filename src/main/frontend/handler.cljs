@@ -140,18 +140,6 @@
 
                                nil)))))))
 
-(defn clear-cache!
-  []
-  (notification/show! "Clearing..." :warning false)
-  (p/let [_ (when (util/electron?)
-              (ipc/ipc "clearCache"))
-          _ (idb/clear-local-storage-and-idb!)]
-    (js/setTimeout
-     (fn [] (if (util/electron?)
-              (ipc/ipc :reloadWindowPage)
-              (js/window.location.reload)))
-     2000)))
-
 (defn- register-components-fns!
   []
   (state/set-page-blocks-cp! page/page)

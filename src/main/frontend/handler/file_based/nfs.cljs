@@ -289,7 +289,7 @@
 (defn rebuild-index!
   [repo ok-handler]
   (let [graph-dir (config/get-repo-dir repo)]
-    (when (and repo (not (config/db-based-graph? repo)))
+    (when repo
       (p/do!
        (repo-handler/remove-repo! {:url repo} :switch-graph? false)
        (ls-dir-files-with-path! graph-dir)
