@@ -168,7 +168,7 @@
                                   (date/journal-title->int (date/today))))
                      (state/pub-event! [:journal/insert-template page-name])))
                  state)}
-  [state repo page-e {:keys [sidebar? whiteboard?] :as config}]
+  [state _repo page-e {:keys [sidebar? whiteboard?] :as config}]
   (when page-e
     (let [page-name (or (:block/name page-e)
                         (str (:block/uuid page-e)))
