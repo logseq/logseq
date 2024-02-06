@@ -7,6 +7,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.history :as history]
+            [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.journal :as journal-handler]
@@ -47,6 +48,8 @@
 ;;  * :fn - Fn or a qualified keyword that represents a fn
 ;;  * :inactive - Optional boolean to disable a shortcut for certain conditions
 ;;    e.g. a given platform or feature condition
+;;  * :file-graph? - Optional boolean to identify a command to only be run in file graphs
+;;    and warned gracefully in db graphs
 (def ^:large-vars/data-var all-built-in-keyboard-shortcuts
   ;; BUG: Actually, "enter" is registered by mixin behind a "when inputing" guard
   ;; So this setting item does not cover all cases.
@@ -174,6 +177,10 @@
    :auto-complete/shift-complete            {:binding "shift+enter"
                                              :fn      ui-handler/auto-complete-shift-complete}
 
+   :auto-complete/meta-complete             {:binding "mod+enter"
+                                             :fn      (fn [state e]
+                                                        (ui-handler/auto-complete-complete state e))}
+
    :auto-complete/open-link                 {:binding "mod+o"
                                              :fn      ui-handler/auto-complete-open-link}
 
@@ -209,7 +216,7 @@
                                              :fn      editor-handler/keydown-new-line-handler}
 
    :editor/new-whiteboard                   {:binding "n w"
-                                             :fn      #(whiteboard-handler/create-new-whiteboard-and-redirect!)}
+                                             :fn      #(whiteboard-handler/<create-new-whiteboard-and-redirect!)}
 
    :editor/follow-link                      {:binding "mod+o"
                                              :fn      editor-handler/follow-link-under-cursor!}
@@ -355,6 +362,11 @@
    :editor/toggle-number-list               {:binding "t n"
                                              :fn      #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
 
+   :editor/add-property                     {:binding "mod+p"
+                                             :fn      (fn [e]
+                                                        (.preventDefault e)
+                                                        (state/pub-event! [:editor/new-property]))}
+
    :ui/toggle-brackets                      {:binding "mod+c mod+b"
                                              :fn      config-handler/toggle-ui-show-brackets!}
 
@@ -364,7 +376,6 @@
                                              :fn      #(search :commands)}
    :go/search-in-page                       {:binding "mod+shift+k"
                                              :fn      #(search :current-page)}
-
 
    :go/electron-find-in-page                {:binding  "mod+f"
                                              :inactive (not (util/electron?))
@@ -404,9 +415,8 @@
    :misc/copy                               {:binding "mod+c"
                                              :fn      (fn [] (js/document.execCommand "copy"))}
 
-
    :graph/export-as-html                    {:fn      #(export-handler/download-repo-as-html!
-                                                        (state/get-current-repo))
+                                                         (state/get-current-repo))
                                              :binding []}
 
    :graph/open                              {:fn      #(do
@@ -422,12 +432,16 @@
    :graph/add                               {:fn      (fn [] (route-handler/redirect! {:to :repo-add}))
                                              :binding []}
 
-   :graph/save                              {:fn      #(state/pub-event! [:graph/save])
-                                             :binding []}
+   :graph/db-add                            {:fn #(state/pub-event! [:graph/new-db-graph])
+                                             ;; TODO: Remove this once feature is released
+                                             :inactive (not config/db-graph-enabled?)
+                                             :binding false}
+
 
    :graph/re-index                          {:fn      (fn []
                                                         (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
                                                           (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
+                                             :file-graph? true
                                              :binding []}
 
    :command/run                             {:binding  "mod+shift+1"
@@ -492,14 +506,17 @@
 
    :editor/open-file-in-default-app         {:binding  "mod+d mod+a"
                                              :inactive (not (util/electron?))
+                                             :file-graph? true
                                              :fn       page-handler/open-file-in-default-app}
 
    :editor/open-file-in-directory           {:binding  "mod+d mod+i"
                                              :inactive (not (util/electron?))
+                                             :file-graph? true
                                              :fn       page-handler/open-file-in-directory}
 
    :editor/copy-current-file                {:binding  false
                                              :inactive (not (util/electron?))
+                                             :file-graph? true
                                              :fn       page-handler/copy-current-file}
 
    :editor/copy-page-url                    {:binding  []
@@ -538,7 +555,12 @@
 
    :git/commit                              {:binding  "mod+g c"
                                              :inactive (not (util/electron?))
+                                             :file-graph? true
                                              :fn       commit/show-commit-modal!}
+
+   :dev/replace-graph-with-db-file           {:binding  []
+                                              :inactive (or (not (util/electron?)) (not (state/developer-mode?)))
+                                              :fn       :frontend.handler.common.developer/replace-graph-with-db-file}
 
    :dev/show-block-data                     {:binding  []
                                              :inactive (not (state/developer-mode?))
@@ -573,6 +595,15 @@
       (resolved-fn)
       (throw (ex-info (str "Unable to resolve " keyword-fn " to a fn") {})))))
 
+(defn- wrap-fn-with-file-graph-only-warning
+  "Wraps file graph only commands so they are only run in file graphs and warned
+   when in DB graphs"
+  [f]
+  (fn []
+    (if (config/db-based-graph? (state/get-current-repo))
+      (notification/show! "This command is only for file graphs." :warning true nil 3000)
+      (f))))
+
 (defn build-category-map [ks]
   (->> (if (sequential? ks)
          ks (let [{:keys [ns includes excludes]} ks]
@@ -589,6 +620,10 @@
     (map (fn [[k v]]
            [k (if (keyword? (:fn v))
                 (assoc v :fn (resolve-fn (:fn v)))
+                v)]))
+    (map (fn [[k v]]
+           [k (if (:file-graph? v)
+                (update v :fn wrap-fn-with-file-graph-only-warning)
                 v)]))
     (into {})))
 
@@ -649,7 +684,7 @@
             :graph/open
             :graph/remove
             :graph/add
-            :graph/save
+            :graph/db-add
             :graph/re-index
             :editor/cycle-todo
             :editor/up
@@ -684,9 +719,8 @@
             :editor/undo
             :editor/redo
             :ui/toggle-brackets
-            :go/search
             :go/search-in-page
-            :command-palette/toggle
+            :go/search
             :go/electron-find-in-page
             :go/electron-jump-to-the-next
             :go/electron-jump-to-the-previous
@@ -696,6 +730,8 @@
             :sidebar/open-today-page
             :sidebar/clear
             :command/run
+            :command-palette/toggle
+            :editor/add-property
             :window/close])
        (with-meta {:before m/prevent-default-behavior}))
 
@@ -736,8 +772,9 @@
             :dev/show-block-ast
             :dev/show-page-data
             :dev/show-page-ast
-            :ui/accent-colors-picker
-            :ui/accent-color-reset])
+            :dev/replace-graph-with-db-file
+            :ui/cycle-color
+            :ui/cycle-color-off])
        (with-meta {:before m/enable-when-not-editing-mode!}))
 
      :shortcut.handler/misc
@@ -811,7 +848,8 @@
       :editor/open-link-in-sidebar
       :editor/move-block-up
       :editor/move-block-down
-      :editor/escape-editing]
+      :editor/escape-editing
+      :editor/add-property]
 
      :shortcut.category/block-command-editing
      [:editor/backspace
@@ -851,8 +889,8 @@
       :ui/toggle-right-sidebar
       :ui/toggle-settings
       :ui/toggle-contents
-      :ui/accent-color-reset
-      :ui/accent-colors-picker]
+      :ui/cycle-color-off
+      :ui/cycle-color]
 
      :shortcut.category/whiteboard
      [:editor/new-whiteboard
@@ -896,7 +934,6 @@
       :graph/open
       :graph/remove
       :graph/add
-      :graph/save
       :graph/re-index
       :sidebar/close-top
       :sidebar/clear
@@ -911,6 +948,7 @@
       :auto-complete/next
       :auto-complete/complete
       :auto-complete/shift-complete
+      :auto-complete/meta-complete
       :auto-complete/open-link
       :date-picker/prev-day
       :date-picker/next-day
@@ -922,6 +960,7 @@
       :dev/show-block-ast
       :dev/show-page-data
       :dev/show-page-ast
+      :dev/replace-graph-with-db-file
       :ui/clear-all-notifications]
 
      :shortcut.category/plugins
