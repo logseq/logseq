@@ -3,7 +3,6 @@
   localStorage values are edn"
   (:refer-clojure :exclude [get set remove])
   (:require [cljs.reader :as reader]
-            [datascript.transit :as dt]
             [frontend.spec.storage :as storage-spec]
             [cljs.spec.alpha :as s]
             [frontend.util :as util]))
@@ -23,17 +22,19 @@
   (when-not util/node-test?
     (.setItem ^js js/localStorage (name key) (pr-str value))))
 
-(defn get-transit
-  [key]
-  (when-not util/node-test?
-    (dt/read-transit-str ^js (.getItem js/localStorage (name key)))))
+(comment
+  (defn get-transit
+    [key]
+    (when-not util/node-test?
+      (dt/read-transit-str ^js (.getItem js/localStorage (name key))))))
 
 (defn remove
   [key]
   (when-not util/node-test?
     (.removeItem ^js js/localStorage (name key))))
 
-(defn clear
-  []
-  (when-not util/node-test?
-    (.clear ^js js/localStorage)))
+(comment
+  (defn clear
+    []
+    (when-not util/node-test?
+      (.clear ^js js/localStorage))))
