@@ -25,7 +25,7 @@
             [frontend.worker.util :as worker-util]
             [frontend.worker.handler.page.rename :as worker-page-rename]
             [frontend.worker.handler.page :as worker-page]
-            [frontend.worker.outliner-op :as worker-outliner-op]))
+            [logseq.outliner.op :as outliner-op]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -482,8 +482,18 @@
    [this repo ops-str opts-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (let [ops (edn/read-string ops-str)
-           opts (edn/read-string opts-str)]
-       (worker-outliner-op/apply-ops! repo conn ops opts))))
+           opts (edn/read-string opts-str)
+           start-tx (:max-tx @conn)
+           result (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts)
+           end-tx (:max-tx @conn)]
+       (when (= start-tx end-tx)        ; nothing changes
+         ;; remove task from ldb/*request-id->response
+         (worker-util/post-message :sync-db-changes (pr-str
+                                                     {:request-id (:request-id opts)
+                                                      :repo repo
+                                                      :tx-data []
+                                                      :tx-meta nil})))
+       (pr-str result))))
 
   (file-writes-finished?
    [this repo]
