@@ -11,25 +11,6 @@
             [frontend.db.async :as db-async]
             [clojure.core.async :as async]))
 
-(comment
-  (defn- old-schema?
-    "Requires migration if the schema version is older than db-schema/version"
-    [db]
-    (let [v (db-migrate/get-schema-version db)
-        ;; backward compatibility
-          v (if (integer? v) v 0)]
-      (cond
-        (= db-schema/version v)
-        false
-
-        (< db-schema/version v)
-        (do
-          (js/console.error "DB schema version is newer than the app, please update the app. " ":db-version" v)
-          false)
-
-        :else
-        true))))
-
 (defn restore-graph!
   "Restore db from SQLite"
   [repo]
@@ -44,10 +25,7 @@
           _ (swap! db-conn/conns assoc db-name conn)
           end-time (t/now)]
 
-    (println :restore-graph-from-sqlite!-prepare (t/in-millis (t/interval start-time end-time)) "ms")
-
-    ;; FIXME:
-    ;; (db-migrate/migrate attached-db)
+    (println ::restore-graph! "loads" (count data') "txs in" (t/in-millis (t/interval start-time end-time)) "ms")
 
     (state/set-state! :graph/loading? false)
     (react/clear-query-state!)
