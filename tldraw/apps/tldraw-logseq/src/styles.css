@@ -6,19 +6,19 @@
   --ls-wb-stroke-color-blue: var(--color-blue-500, blue);
   --ls-wb-stroke-color-purple: var(--color-purple-500, purple);
   --ls-wb-stroke-color-pink: var(--color-pink-500, pink);
-  --ls-wb-stroke-color-default: var(--ls-secondary-border-color);
-  --ls-wb-text-color-default: var(--ls-primary-text-color);
-  --ls-wb-background-color-default: var(--ls-tertiary-background-color);
+  --ls-wb-stroke-color-default: var(--ls-secondary-border-color, hsl(var(--border, var(--rx-gray-05-hsl))));
+  --ls-wb-text-color-default: var(--ls-primary-text-color, hsl(var(--primary)));
+  --ls-wb-background-color-default: var(--ls-tertiary-background-color, var(--rx-gray-03));
 }
 
 .logseq-tldraw {
-  --color-panel: var(--ls-tertiary-background-color);
+  --color-panel: var(--ls-tertiary-background-color, hsl(var(--secondary)));
   --color-panel-inverted: var(--ls-secondary-text-color);
   --color-text: var(--ls-primary-text-color);
   --color-text-inverted: var(--ls-tertiary-background-color);
-  --color-hover: var(--ls-secondary-background-color);
-  --color-selectedStroke: var(--ls-button-background);
-  --color-selectedFill: hsl(var(--ls-button-background-hsl) / 0.9);
+  --color-hover: var(--ls-secondary-background-color, hsl(var(--secondary)));
+  --color-selectedStroke: var(--ls-button-background, hsl(var(--accent) / 0.9));
+  --color-selectedFill: hsl(var(--ls-button-background-hsl, var(--accent)) / 0.1);
   --color-selectedContrast: #fff;
   --shadow-small: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-medium: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
@@ -98,60 +98,50 @@ html[data-theme='light'] {
   background-color: transparent !important;
 }
 
-.tl-menu-item {
-  @apply flex items-center pl-10 pr-4 py-1 text-sm relative !important;
-
-  min-width: 220px;
-  all: unset;
-  line-height: 1;
-  height: 25px;
-  padding: 0 5px;
-  position: relative;
-  user-select: none;
-  color: var(--ls-primary-text-color);
-
-  &:hover,
-  &:focus {
-    cursor: pointer;
-    background-color: var(--ls-primary-background-color) !important;
-  }
-
-  .tl-menu-icon {
-    @apply absolute left-4 text-base opacity-50;
-  }
-
-  &[data-disabled] {
-    @apply opacity-50 pointer-events-none;
-  }
-}
-
 #tl-zoom {
   @apply w-auto !important;
+}
+
+.tl-menu-item {
+  @apply leading-[20px];
 }
 
 #zoomPopup .tl-menu-item {
   @apply pl-4 !important;
 }
 
+.tl-menu-button-row-wrap {
+  @apply flex flex-col;
+}
+
 .tl-menu-button-row {
-  @apply flex justify-between px-4 py-1;
+  @apply flex justify-between py-1 gap-[26px] opacity-80 hover:opacity-100;
+
+  .ti {
+    @apply text-lg;
+  }
 }
 
 .tl-menu {
-  @apply relative py-2 flex bottom-0 flex border-0 rounded shadow-lg;
+  @apply relative flex flex-col opacity-100 select-none;
 
-  opacity: 100%;
-  user-select: none;
-  flex-direction: column;
   z-index: 180;
   min-width: 220px;
   pointer-events: 'all';
-  background: var(--ls-secondary-background-color);
+}
+
+.tl-menu-icon {
+  @apply text-[16px] leading-none opacity-70 mr-1;
+}
+
+.tl-menu-icon.ti-circle-dotted {
+  @apply invisible;
 }
 
 .tl-menu-right-slot {
   margin-left: auto;
   padding-left: 20px;
+  line-height: 1;
 
   .keyboard-shortcut > code {
     padding: 4px !important;
@@ -177,7 +167,7 @@ html[data-theme='light'] {
 
   pointer-events: all;
   position: relative;
-  background-color: or(--logseq-whiteboard-toolbar-background, --lx-gray-03, --ls-secondary-background-color);
+  background-color: var(--lx-gray-03, var(--ls-secondary-background-color, var(--rx-gray-03)));
   border-radius: 8px;
   white-space: nowrap;
   gap: 8px;
@@ -271,22 +261,11 @@ html[data-theme='light'] {
 }
 
 .tl-button {
-  @apply relative flex items-center justify-center rounded border-0 gap-1;
-
-  height: 32px;
-  min-width: 32px;
-  font-family: var(--ls-font-family);
-  background: none;
-  cursor: pointer;
-  color: var(--ls-primary-text-color);
-
-  &:hover {
-    background-color: or(--ls-whiteboard-button-background-hover, --lx-gray-06, --ls-primary-background-color);
-  }
+  @apply relative flex items-center justify-center rounded border-0 gap-1 bg-none cursor-pointer;
+  @apply w-[32px] h-[32px] hover:bg-gray-06;
 
   &[data-selected='true'] {
-    background-color: or(--ls-whiteboard-button-background-selected, --lx-accent-09, --color-selectedFill);
-    color: or(--ls-whiteboard-button-text-selected, --lx-gray-12, --color-selectedContrast);
+    @apply bg-accent text-accent-foreground;
   }
 }
 
@@ -575,7 +554,7 @@ button.tl-select-input-trigger {
   @apply flex items-center rounded-lg text-base max-w-full;
 
   min-height: 40px;
-  background-color: var(--ls-secondary-background-color);
+  background-color: var(--ls-secondary-background-color, hsl(var(--background)));
   padding: 6px 16px;
   box-shadow: var(--shadow-small);
 }
@@ -623,6 +602,7 @@ button.tl-select-input-trigger {
 }
 
 .tl-quick-search .tl-text-input {
+  background-color: transparent;
   border: none;
 }
 
@@ -641,7 +621,7 @@ button.tl-select-input-trigger {
   @apply absolute left-0 w-full flex z-10;
 
   top: calc(100% + 12px);
-  background-color: var(--ls-primary-background-color);
+  background-color: var(--ls-primary-background-color, hsl(var(--background)));
   max-height: 300px;
   min-width: 460px;
   box-shadow: var(--shadow-large);
@@ -871,9 +851,9 @@ html[data-theme='dark'] {
 }
 
 .tl-toolbar-separator {
-  background-color: var(--ls-border-color);
+  background-color: var(--ls-border-color, var(--rx-gray-06));
   width: 1px;
-  opacity: 0.5;
+  opacity: 0.9;
 
   &[data-orientation='horizontal'] {
     height: 1px;

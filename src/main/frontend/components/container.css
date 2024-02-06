@@ -5,25 +5,12 @@
   }
 }
 
-#app-container {
-  background-color: or(--ls-top-bar-background, --lx-gray-01, --ls-primary-background-color, #fff);
-  position: relative;
-}
-
-.dark #app-container {
-  background-color: or(--ls-top-bar-background, --lx-gray-02, --ls-primary-background-color, #fff);
-}
-
 #root {
-  > div {
-    color: or(--ls-document-text-color, --lx-gray-12, --ls-primary-text-color, #24292e);
-    font-size: var(--ls-page-text-size);
-  }
+  font-size: var(--ls-page-text-size);
 }
 
 #app-container {
-  display: flex;
-  flex: 0 0 100%;
+  @apply flex basis-full;
 }
 
 #skip-to-main {
@@ -79,13 +66,7 @@
   overflow: auto;
 }
 
-.dark .left-sidebar-inner {
-  --left-sidebar-bg-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color);
-}
-
 .left-sidebar-inner {
-  --left-sidebar-bg-color: or(--ls-left-sidebar-background-color, --lx-gray-02, --ls-primary-background-color);
-
   position: relative;
   height: 100%;
   padding-top: 12px;
@@ -182,8 +163,8 @@
     }
 
     &:hover, &.active {
-      background-color: or(--ls-left-sidebar-active-background, --lx-gray-04, --color-level-3);
-      color: or(--ls-left-sidebar-active-text-color, --lx-gray-12);
+      background-color: var(--lx-gray-04, var(--color-level-3, var(--rx-gray-04)));
+      color: var(--lx-gray-12, var(--rx-gray-12));
 
       .ui__icon {
         opacity: .9;
@@ -216,7 +197,6 @@
       @apply pl-6 pr-4 py-1 flex justify-between items-center select-none sticky top-[-4px];
       @apply cursor-pointer z-[2] active:opacity-80;
 
-      background-color: var(--left-sidebar-bg-color);
 
       .ui__icon {
         @apply flex justify-center;
@@ -229,7 +209,7 @@
       }
 
       &:hover {
-        background-color: or(--ls-nav-item-hover, --lx-gray-04, --ls-tertiary-background-color);
+        background-color: var(--lx-gray-04, var(--ls-tertiary-background-color, var(--rx-gray-04)));
 
         * {
           opacity: 1 !important;
@@ -287,9 +267,8 @@
           }
 
           &:hover {
-            background-color: or(--ls-recessed-nav-item-hover, --lx-gray-04, --ls-quaternary-background-color);
+            background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
             opacity: 1;
-            background-color: var(--ls-quaternary-background-color);
           }
         }
       }
@@ -367,15 +346,13 @@
     }
   }
 
-  @screen sm {
-    --left-sidebar-bg-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color);
+  .dark & {
+    --left-sidebar-bg-color: var(--lx-gray-02, var(--ls-secondary-background-color, hsl(var(--secondary, var(--rx-gray-03-hsl)))));
+  }
 
+  @screen sm {
     padding-top: 0;
     width: var(--ls-left-sidebar-width);
-
-    .dark & {
-      --left-sidebar-bg-color: or(--ls-left-sidebar-background, --lx-gray-02, --ls-secondary-background-color);
-    }
 
     > .wrap {
       margin-top: 52px;
@@ -390,18 +367,15 @@
 }
 
 .cp__sidebar-left-layout {
-  position: fixed;
-  top: 0;
+  @apply fixed top-0 left-0 w-[10px];
 
-  left: 0;
   z-index: var(--ls-z-index-level-5);
-  width: 10px;
 
   a {
     @apply opacity-90 hover:opacity-100;
     transition: all 120ms ease-out;
 
-    color: or(--ls-left-sidebar-text-color, --ls-header-button-background);
+    color: var(--ls-left-sidebar-text-color, var(--ls-header-button-background));
   }
 
   > .left-sidebar-inner {
@@ -560,14 +534,6 @@
   /* box-shadow: inset 0 0 0 1px var(--ls-border-color); */
 }
 
-.cp__sidebar-main-layout {
-  background-color: or(--ls-main-content-background, --lx-gray-01, --ls-primary-background-color);
-}
-
-.dark .cp__sidebar-main-layout {
-  background-color: or(--ls-main-content-background, --lx-gray-02, --ls-primary-background-color);
-}
-
 .cp__sidebar-main-content {
   width: 100%;
   max-width: var(--ls-main-content-max-width);
@@ -594,16 +560,14 @@
       @apply rounded-full h-8 w-8 flex items-center justify-center
       font-bold select-none cursor-pointer;
 
-      background-color: or(--ls-left-sidebar-help-background, --lx-gray-01, --ls-secondary-background-color);
+      background-color: var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02)));
     }
   }
 
   &-menu-popup {
-    @apply fixed bottom-14 right-8 z-10 border
-    rounded-lg min-w-[260px] shadow;
+    @apply fixed bottom-14 right-8 z-10 border rounded-lg min-w-[260px] shadow;
 
-    background-color: var(--ls-secondary-background-color);
-    border-color: var(--ls-border-color);
+    background-color: var(--ls-secondary-background-color, var(--rx-gray-03));
 
     > .list-wrap {
       @apply flex flex-col pt-3;
@@ -612,7 +576,7 @@
         color: var(--ls-primary-text-color);
 
         &:active, &:hover {
-          background-color: var(--ls-tertiary-background-color);
+          background-color: var(--ls-tertiary-background-color, var(--rx-gray-05));
         }
       }
     }
@@ -664,6 +628,7 @@
 
   &-inner {
     padding-top: 0;
+    background-color: var(--lx-gray-02, var(--ls-secondary-background-color));
   }
 
   &-settings {
@@ -734,9 +699,7 @@
   }
 
   .sidebar-item {
-    @apply relative;
-    flex: 1 1;
-    min-height: 100px;
+    @apply relative flex-1 min-h-[100px];
 
     .sidebar-item-header {
       .breadcrumb {
@@ -849,6 +812,12 @@ html[data-theme='dark'] {
   #left-sidebar {
     > .shade-mask {
       background-color: rgba(0, 0, 0, .15);
+    }
+  }
+
+  .cp__right-sidebar {
+    .sidebar-item {
+      background-color: var(--lx-gray-03, var(--ls-secondary-background-color));
     }
   }
 }

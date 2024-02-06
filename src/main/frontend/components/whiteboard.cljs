@@ -188,7 +188,7 @@
     (fn [e]
       (util/stop e)
       (whiteboard-handler/create-new-whiteboard-and-redirect!))}
-   (ui/icon "plus")
+   (ui/icon "plus" {:size 32})
    [:span.dashboard-create-card-caption.select-none
     (t :whiteboard/dashboard-card-new-whiteboard)]])
 
