@@ -5,8 +5,6 @@
   (:refer-clojure :exclude [run!])
   (:require ["@capacitor/filesystem" :refer [Directory Filesystem]]
             ["@sentry/react" :as Sentry]
-            [electron.ipc :as ipc]
-            [frontend.idb :as idb]
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
@@ -15,8 +13,6 @@
             [frontend.commands :as commands]
             [frontend.components.class :as class-component]
             [frontend.components.cmdk :as cmdk]
-            [frontend.components.conversion :as conversion-component]
-            [frontend.components.settings :as settings]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
             [frontend.components.file-sync :as file-sync]
@@ -91,12 +87,12 @@
 
 (defn file-sync-restart! []
   (async/go (async/<! (p->c (persist-var/load-vars)))
-            (async/<! (sync/<sync-stop))
-            (some-> (sync/<sync-start) async/<!)))
+    (async/<! (sync/<sync-stop))
+    (some-> (sync/<sync-start) async/<!)))
 
 (defn- file-sync-stop! []
   (async/go (async/<! (p->c (persist-var/load-vars)))
-            (async/<! (sync/<sync-stop))))
+    (async/<! (sync/<sync-stop))))
 
 (defn- enable-beta-features!
   []
@@ -122,9 +118,9 @@
               (p/let [repos (repo-handler/refresh-repos!)]
                 (when-let [repo (state/get-current-repo)]
                   (when (some #(and (= (:url %) repo)
-                                    (vector? (:sync-meta %))
-                                    (util/uuid-string? (first (:sync-meta %)))
-                                    (util/uuid-string? (second (:sync-meta %)))) repos)
+                                 (vector? (:sync-meta %))
+                                 (util/uuid-string? (first (:sync-meta %)))
+                                 (util/uuid-string? (second (:sync-meta %)))) repos)
                     (sync/<sync-start)))))
             (ui-handler/re-render-root!)
             (file-sync/maybe-onboarding-show status)))))))
@@ -171,7 +167,7 @@
        (do
          (state/set-current-repo! graph)
          (page-handler/init-commands!)
-       ;; load config
+         ;; load config
          (repo-config-handler/restore-repo-config! graph)
          (when-not (= :draw (state/get-current-route))
            (route-handler/redirect-to-home!))
@@ -187,9 +183,9 @@
   "graph: the target graph to switch to"
   [graph _opts]
   (p/do!
-   (repo-handler/restore-and-setup-repo! graph)
-   (graph-switch graph)
-   (state/set-state! :sync-graph/init? false)))
+    (repo-handler/restore-and-setup-repo! graph)
+    (graph-switch graph)
+    (state/set-state! :sync-graph/init? false)))
 
 (defmethod handle :graph/switch [[_ graph opts]]
   (let [^js sqlite @db-browser/*worker]
@@ -198,13 +194,13 @@
       (if (or (not request-finished?) (not writes-finished?)) ; TODO: test (:sync-graph/init? @state/state)
         (do
           (log/info :graph/switch (cond->
-                                   {:request-finished? request-finished?
-                                    :file-writes-finished? writes-finished?}
+                                    {:request-finished? request-finished?
+                                     :file-writes-finished? writes-finished?}
                                     (false? request-finished?)
                                     (assoc :unfinished-requests? @ldb/*request-id->response)))
           (notification/show!
-           "Please wait seconds until all changes are saved for the current graph."
-           :warning))
+            "Please wait seconds until all changes are saved for the current graph."
+            :warning))
         (graph-switch-on-persisted graph opts)))))
 
 (defmethod handle :graph/pull-down-remote-graph [[_ graph dir-name]]
@@ -218,33 +214,33 @@
           (when-let [root (state/get-local-container-root-url)]
             (let [graph-path (graph-picker/validate-graph-dirname root graph-name)]
               (->
-               (p/let [exists? (fs/dir-exists? graph-path)]
-                 (let [overwrite? (if exists?
-                                    (js/confirm (str "There's already a directory with the name \"" graph-name "\", do you want to overwrite it? Make sure to backup it first if you're not sure about it."))
-                                    true)]
-                   (if overwrite?
-                     (p/let [_ (fs/mkdir-if-not-exists graph-path)]
-                       (nfs-handler/ls-dir-files-with-path!
-                        graph-path
-                        {:ok-handler (fn []
-                                       (file-sync-handler/init-remote-graph graph-path graph)
-                                       (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))}))
-                     (let [graph-name (-> (js/prompt "Please specify a new directory name to download the graph:")
-                                          str
-                                          string/trim)]
-                       (when-not (string/blank? graph-name)
-                         (state/pub-event! [:graph/pull-down-remote-graph graph graph-name]))))))
-               (p/catch (fn [^js e]
-                          (notification/show! (str e) :error)
-                          (js/console.error e)))))))))
+                (p/let [exists? (fs/dir-exists? graph-path)]
+                  (let [overwrite? (if exists?
+                                     (js/confirm (str "There's already a directory with the name \"" graph-name "\", do you want to overwrite it? Make sure to backup it first if you're not sure about it."))
+                                     true)]
+                    (if overwrite?
+                      (p/let [_ (fs/mkdir-if-not-exists graph-path)]
+                        (nfs-handler/ls-dir-files-with-path!
+                          graph-path
+                          {:ok-handler (fn []
+                                         (file-sync-handler/init-remote-graph graph-path graph)
+                                         (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))}))
+                      (let [graph-name (-> (js/prompt "Please specify a new directory name to download the graph:")
+                                         str
+                                         string/trim)]
+                        (when-not (string/blank? graph-name)
+                          (state/pub-event! [:graph/pull-down-remote-graph graph graph-name]))))))
+                (p/catch (fn [^js e]
+                           (notification/show! (str e) :error)
+                           (js/console.error e)))))))))
     (state/set-modal!
-     (file-sync/pick-dest-to-sync-panel graph)
-     {:center? true})))
+      (file-sync/pick-dest-to-sync-panel graph)
+      {:center? true})))
 
 (defmethod handle :graph/pick-page-histories [[_ graph-uuid page-name]]
   (state/set-modal!
-   (file-sync/pick-page-histories-panel graph-uuid page-name)
-   {:id :page-histories :label "modal-page-histories"}))
+    (file-sync/pick-page-histories-panel graph-uuid page-name)
+    {:id :page-histories :label "modal-page-histories"}))
 
 (defmethod handle :graph/open-new-window [[_ev target-repo]]
   (p/let [current-repo (state/get-current-repo)]
@@ -263,19 +259,19 @@
   [repo]
   (when
    (and (not (util/electron?))
-        (not (mobile-util/native-platform?)))
+     (not (mobile-util/native-platform?)))
     (fn [close-fn]
       [:div
-      ;; TODO: fn translation with args
+       ;; TODO: fn translation with args
        [:p
         "Grant native filesystem permission for directory: "
         [:b (config/get-local-dir repo)]]
        (ui/button
-        (t :settings-permission/start-granting)
-        :class "ui__modal-enter"
-        :on-click (fn []
-                    (nfs/check-directory-permission! repo)
-                    (close-fn)))])))
+         (t :settings-permission/start-granting)
+         :class "ui__modal-enter"
+         :on-click (fn []
+                     (nfs/check-directory-permission! repo)
+                     (close-fn)))])))
 
 (defmethod handle :modal/nfs-ask-permission []
   (when-let [repo (get-local-repo)]
@@ -283,9 +279,9 @@
 
 (defonce *query-properties (atom {}))
 (rum/defc query-properties-settings-inner < rum/reactive
-  {:will-unmount (fn [state]
-                   (reset! *query-properties {})
-                   state)}
+                                            {:will-unmount (fn [state]
+                                                             (reset! *query-properties {})
+                                                             state)}
   [block shown-properties all-properties]
   (let [query-properties (rum/react *query-properties)]
     [:div.p-4
@@ -305,15 +301,15 @@
          [:div.flex.flex-row.m-2.justify-between.align-items
           [:div (if (uuid? property) (db-pu/get-property-name property) (name property))]
           [:div.mt-1 (ui/toggle shown?
-                                (fn []
-                                  (let [value (not shown?)]
-                                    (swap! *query-properties assoc property value)
-                                    (editor-handler/set-block-query-properties!
-                                     (:block/uuid block)
-                                     all-properties
-                                     property
-                                     value)))
-                                true)]]))]))
+                       (fn []
+                         (let [value (not shown?)]
+                           (swap! *query-properties assoc property value)
+                           (editor-handler/set-block-query-properties!
+                             (:block/uuid block)
+                             all-properties
+                             property
+                             value)))
+                       true)]]))]))
 
 (defn query-properties-settings
   [block shown-properties all-properties]
@@ -326,13 +322,13 @@
         block-properties (if (config/db-based-graph? (state/get-current-repo))
                            query-properties
                            (some-> query-properties
-                                   (common-handler/safe-read-string "Parsing query properties failed")))
+                             (common-handler/safe-read-string "Parsing query properties failed")))
         shown-properties (if (seq block-properties)
                            (set block-properties)
                            (set all-properties))
         shown-properties (set/intersection (set all-properties) shown-properties)]
     (state/set-modal! (query-properties-settings block shown-properties all-properties)
-                      {:center? true})))
+      {:center? true})))
 
 (defmethod handle :modal/show-cards [_]
   (state/set-modal! srs/global-cards {:id :srs
@@ -344,17 +340,6 @@
 
 (defmethod handle :modal/show-themes-modal [_]
   (plugin/open-select-theme!))
-
-(defmethod handle :modal/toggle-accent-colors-modal [_]
-  (let [label "accent-colors-picker"]
-    (if (or (= label (state/get-modal-id))
-          (= label (some-> (state/get-sub-modals) (first) :modal/id)))
-      (state/close-sub-modal! label)
-      (state/set-sub-modal!
-        #(settings/modal-accent-colors-inner)
-        {:center? true
-         :id      label
-         :label   label}))))
 
 (rum/defc modal-output
   [content]
@@ -387,11 +372,11 @@
       (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite (state/get-current-repo)))
               request-finished? (ldb/request-finished?)]
         (prn :debug :writes-finished? writes-finished?
-             :request-finished? request-finished?)
+          :request-finished? request-finished?)
         (when (and request-finished? writes-finished? disk-content db-content
-                   (not= (util/trim-safe disk-content) (util/trim-safe db-content)))
+                (not= (util/trim-safe disk-content) (util/trim-safe db-content)))
           (state/set-modal! #(diff/local-file repo path disk-content db-content)
-                            {:label "diff__cp"}))))))
+            {:label "diff__cp"}))))))
 
 
 (defmethod handle :modal/display-file-version-selector  [[_ versions path  get-content]]
@@ -406,7 +391,7 @@
     (p/let [dir               (config/get-repo-dir repo)
             dir-exists?       (fs/dir-exists? dir)]
       (when (and (not dir-exists?)
-                 (not util/nfs?))
+              (not util/nfs?))
         (state/pub-event! [:graph/dir-gone dir]))))
   (p/let [loaded-homepage-files (when-not (config/db-based-graph? repo)
                                   (fs-watcher/preload-graph-homepage-files!))
@@ -426,10 +411,10 @@
 
 (defmethod handle :go/search [_]
   (state/set-modal! cmdk/cmdk-modal
-                    {:fullscreen? true
-                     :close-btn?  false
-                     :panel?      false
-                     :label "ls-modal-search"}))
+    {:fullscreen? true
+     :close-btn?  false
+     :panel?      false
+     :label "ls-modal-search"}))
 
 (defmethod handle :go/plugins [_]
   (plugin/open-plugins-modal!))
@@ -450,8 +435,8 @@
 
 (defmethod handle :go/proxy-settings [[_ agent-opts]]
   (state/set-sub-modal!
-   (fn [_] (plugin/user-proxy-settings-panel agent-opts))
-   {:id :https-proxy-panel :center? true}))
+    (fn [_] (plugin/user-proxy-settings-panel agent-opts))
+    {:id :https-proxy-panel :center? true}))
 
 
 (defmethod handle :redirect-to-home [_]
@@ -465,11 +450,11 @@
 (defmethod handle :capture-error [[_ {:keys [error payload]}]]
   (let [[user-uuid graph-uuid tx-id] @sync/graphs-txid
         payload (assoc payload
-                       :user-id user-uuid
-                       :graph-id graph-uuid
-                       :tx-id tx-id)]
+                  :user-id user-uuid
+                  :graph-id graph-uuid
+                  :tx-id tx-id)]
     (Sentry/captureException error
-                             (bean/->js {:tags payload}))))
+      (bean/->js {:tags payload}))))
 
 (defmethod handle :exec-plugin-cmd [[_ {:keys [pid cmd action]}]]
   (commands/exec-plugin-simple-command! pid cmd action))
@@ -503,7 +488,7 @@
       (js/setTimeout (fn []
                        (when-let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
                          (set! (.. toolbar -style -bottom) (str keyboard-height "px"))))
-                     100))))
+        100))))
 
 (defmethod handle :mobile/keyboard-will-hide [[_]]
   (let [main-node (util/app-scroll-container-node)]
@@ -531,8 +516,8 @@
   [repo-url]
   (when repo-url
     (let [app-id (-> (first (string/split repo-url "/Documents"))
-                     (string/split "/")
-                     last)]
+                   (string/split "/")
+                   last)]
       app-id)))
 
 (defmethod handle :validate-appId [[_ graph-switch-f graph]]
@@ -547,13 +532,13 @@
               current-document-url (.getUri Filesystem #js {:path ""
                                                             :directory (.-Documents Directory)})
               current-app-id (-> (js->clj current-document-url :keywordize-keys true)
-                                 get-ios-app-id)]
+                               get-ios-app-id)]
         (if (= deprecated-app-id current-app-id)
           (when graph-switch-f (graph-switch-f graph true))
           (do
             (notification/show! [:div "Migrating from previous App installation..."]
-                                :warning
-                                true)
+              :warning
+              true)
             (prn ::migrate-app-id :from deprecated-app-id :to current-app-id)
             (file-sync-stop!)
             (.unwatch mobile-util/fs-watcher)
@@ -562,11 +547,11 @@
               (try
                 ;; replace app-id part of repo url
                 (reset! conn/conns
-                        (update-keys @conn/conns
-                                     (fn [key]
-                                       (if (string/includes? key deprecated-app-id)
-                                         (string/replace key deprecated-app-id current-app-id)
-                                         key))))
+                  (update-keys @conn/conns
+                    (fn [key]
+                      (if (string/includes? key deprecated-app-id)
+                        (string/replace key deprecated-app-id current-app-id)
+                        key))))
                 (db-persist/rename-graph! deprecated-repo current-repo)
                 (search/remove-db! deprecated-repo)
                 (state/add-repo! {:url current-repo :nfs? true})
@@ -584,7 +569,7 @@
   (let [downloading?   (:plugin/updates-downloading? @state/state)
         auto-checking? (plugin-handler/get-auto-checking?)]
     (when-let [coming (and (not downloading?)
-                           (get-in @state/state [:plugin/updates-coming id]))]
+                        (get-in @state/state [:plugin/updates-coming id]))]
       (let [error-code (:error-code coming)
             error-code (if (= error-code (str :no-new-version)) nil error-code)
             title      (:title coming)]
@@ -592,14 +577,14 @@
           (if-not error-code
             (plugin/set-updates-sub-content! (str title "...") 0)
             (notification/show!
-             (str "[Checked]<" title "> " error-code) :error)))))
+              (str "[Checked]<" title "> " error-code) :error)))))
 
     (if (and updated? downloading?)
       ;; try to start consume downloading item
       (if-let [next-coming (state/get-next-selected-coming-update)]
         (plugin-handler/check-or-update-marketplace-plugin!
-         (assoc next-coming :only-check false :error-code nil)
-         (fn [^js e] (js/console.error "[Download Err]" next-coming e)))
+          (assoc next-coming :only-check false :error-code nil)
+          (fn [^js e] (js/console.error "[Download Err]" next-coming e)))
         (plugin-handler/close-updates-downloading))
 
       ;; try to start consume pending item
@@ -607,29 +592,29 @@
         (do
           (println "Updates: take next pending - " (:id next-pending))
           (js/setTimeout
-           #(plugin-handler/check-or-update-marketplace-plugin!
-             (assoc next-pending :only-check true :auto-check auto-checking? :error-code nil)
-             (fn [^js e]
-               (notification/show! (.toString e) :error)
-               (js/console.error "[Check Err]" next-pending e))) 500))
+            #(plugin-handler/check-or-update-marketplace-plugin!
+               (assoc next-pending :only-check true :auto-check auto-checking? :error-code nil)
+               (fn [^js e]
+                 (notification/show! (.toString e) :error)
+                 (js/console.error "[Check Err]" next-pending e))) 500))
 
         ;; try to open waiting updates list
         (do (when (and prev-pending? (not auto-checking?)
-                       (seq (state/all-available-coming-updates)))
+                    (seq (state/all-available-coming-updates)))
               (plugin/open-waiting-updates-modal!))
             (plugin-handler/set-auto-checking! false))))))
 
 (defmethod handle :plugin/hook-db-tx [[_ {:keys [blocks tx-data] :as payload}]]
   (when-let [payload (and (seq blocks)
-                          (merge payload {:tx-data (map #(into [] %) tx-data)}))]
+                       (merge payload {:tx-data (map #(into [] %) tx-data)}))]
     (plugin-handler/hook-plugin-db :changed payload)
     (plugin-handler/hook-plugin-block-changes payload)))
 
 (defmethod handle :plugin/loader-perf-tip [[_ {:keys [^js o _s _e]}]]
   (when-let [opts (.-options o)]
     (notification/show!
-     (plugin/perf-tip-content (.-id o) (.-name opts) (.-url opts))
-     :warning false (.-id o))))
+      (plugin/perf-tip-content (.-id o) (.-name opts) (.-url opts))
+      :warning false (.-id o))))
 
 (defmethod handle :mobile-file-watcher/changed [[_ ^js event]]
   (let [type (.-event event)
@@ -650,16 +635,16 @@
 
 (defmethod handle :graph/ask-for-re-fresh [_]
   (handle
-   [:modal/show
-    [:div {:style {:max-width 700}}
-     [:p (t :sync-from-local-changes-detected)]
-     (ui/button
-      (t :yes)
-      :autoFocus "on"
-      :class "ui__modal-enter"
-      :on-click (fn []
-                  (state/close-modal!)
-                  (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))
+    [:modal/show
+     [:div {:style {:max-width 700}}
+      [:p (t :sync-from-local-changes-detected)]
+      (ui/button
+        (t :yes)
+        :autoFocus "on"
+        :class "ui__modal-enter"
+        :on-click (fn []
+                    (state/close-modal!)
+                    (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))
 
 (defmethod handle :sync/create-remote-graph [[_ current-repo]]
   (let [graph-name (js/decodeURI (util/node-path.basename current-repo))]
@@ -673,68 +658,21 @@
         (state/set-repos! (map (fn [r]
                                  (if (= (:url r) current-repo)
                                    (assoc r
-                                          :GraphUUID GraphUUID
-                                          :GraphName graph-name
-                                          :remote? true)
+                                     :GraphUUID GraphUUID
+                                     :GraphName graph-name
+                                     :remote? true)
                                    r))
-                               (state/get-repos)))))))
-
-(defmethod handle :graph/re-index [[_]]
-  ;; Ensure the graph only has ONE window instance
-  (async/go
-    (async/<! (sync/<sync-stop))
-    (repo-handler/re-index!
-     nfs-handler/rebuild-index!
-     #(do (page-handler/create-today-journal!)
-          (file-sync-restart!)))))
-
-;; FIXME: move
-(defn- clear-cache!
-  []
-  (notification/show! "Clearing..." :warning false)
-  (p/let [_ (when (util/electron?)
-              (ipc/ipc "clearCache"))
-          _ (idb/clear-local-storage-and-idb!)]
-    (js/setTimeout
-      (fn [] (if (util/electron?)
-               (ipc/ipc :reloadWindowPage)
-               (js/window.location.reload)))
-      2000)))
-
-(defmethod handle :graph/clear-cache! [[_]]
-  (clear-cache!))
-
-(defmethod handle :graph/ask-for-re-index [[_ *multiple-windows? ui]]
-  ;; *multiple-windows? - if the graph is opened in multiple windows, boolean atom
-  ;; ui - custom message to show on asking for re-index
-  (if (and (util/atom? *multiple-windows?) @*multiple-windows?)
-    (handle
-     [:modal/show
-      [:div
-       (when (not (nil? ui)) ui)
-       [:p (t :re-index-multiple-windows-warning)]]])
-    (handle
-     [:modal/show
-      [:div {:style {:max-width 700}}
-       (when (not (nil? ui)) ui)
-       [:p (t :re-index-discard-unsaved-changes-warning)]
-       (ui/button
-        (t :yes)
-        :autoFocus "on"
-        :class "ui__modal-enter"
-        :on-click (fn []
-                    (state/close-modal!)
-                    (state/pub-event! [:graph/re-index])))]])))
+                            (state/get-repos)))))))
 
 (defmethod handle :modal/remote-encryption-input-pw-dialog [[_ repo-url remote-graph-info type opts]]
   (state/set-modal!
-   (encryption/input-password
-    repo-url nil (merge
-                  (assoc remote-graph-info
-                         :type (or type :create-pwd-remote)
-                         :repo repo-url)
-                  opts))
-   {:center? true :close-btn? false :close-backdrop? false}))
+    (encryption/input-password
+      repo-url nil (merge
+                     (assoc remote-graph-info
+                       :type (or type :create-pwd-remote)
+                       :repo repo-url)
+                     opts))
+    {:center? true :close-btn? false :close-backdrop? false}))
 
 (defmethod handle :journal/insert-template [[_ page-name]]
   (let [page-name (util/page-name-sanity-lc page-name)]
@@ -742,9 +680,9 @@
       (when (db/page-empty? (state/get-current-repo) page-name)
         (when-let [template (state/get-default-journal-template)]
           (editor-handler/insert-template!
-           nil
-           template
-           {:target page}))))))
+            nil
+            template
+            {:target page}))))))
 
 (defmethod handle :editor/set-org-mode-heading [[_ block heading]]
   (when-let [id (:block/uuid block)]
@@ -755,31 +693,31 @@
     (let [file (:block/file page-entity)]
       (when-let [path (:file/path file)]
         (when (and (not= content (:file/content file))
-                   (:file/content file))
+                (:file/content file))
           (sync/add-new-version-file graph path (:file/content file)))
         (p/let [_ (file-handler/alter-file graph
-                                           path
-                                           content
-                                           {:re-render-root? true
-                                            :skip-compare? true})]
+                    path
+                    content
+                    {:re-render-root? true
+                     :skip-compare? true})]
           (state/close-modal!)
           (route-handler/redirect! {:to :page
                                     :path-params {:name (:block/name page-entity)}}))))))
 
 (defmethod handle :whiteboard/onboarding [[_ opts]]
   (state/set-modal!
-   (fn [close-fn] (whiteboard/onboarding-welcome close-fn))
-   (merge {:close-btn?      false
-           :center?         true
-           :close-backdrop? false} opts)))
+    (fn [close-fn] (whiteboard/onboarding-welcome close-fn))
+    (merge {:close-btn?      false
+            :center?         true
+            :close-backdrop? false} opts)))
 
 (defmethod handle :file-sync/onboarding-tip [[_ type opts]]
   (let [type (keyword type)]
     (state/set-modal!
-     (file-sync/make-onboarding-panel type)
-     (merge {:close-btn?      false
-             :center?         true
-             :close-backdrop? (not= type :welcome)} opts))))
+      (file-sync/make-onboarding-panel type)
+      (merge {:close-btn?      false
+              :center?         true
+              :close-backdrop? (not= type :welcome)} opts))))
 
 (defmethod handle :file-sync/maybe-onboarding-show [[_ type]]
   (file-sync/maybe-onboarding-show type))
@@ -825,24 +763,24 @@
 
 (defmethod handle :ui/notify-skipped-downloading-files [[_ paths]]
   (notification/show!
-   [:div
-    [:div.mb-4
-     [:div.font-semibold.mb-4.text-xl "It seems that some of your filenames are in the outdated format."]
-     [:p
-      "The files below that have reserved characters can't be saved on this device."]
-     [:div.overflow-y-auto.max-h-96
-      [:ol.my-2
-       (for [path paths]
-         [:li path])]]
-
-     [:div
+    [:div
+     [:div.mb-4
+      [:div.font-semibold.mb-4.text-xl "It seems that some of your filenames are in the outdated format."]
       [:p
-       "Check " [:a {:href "https://docs.logseq.com/#/page/logseq%20file%20and%20folder%20naming%20rules"
-                     :target "_blank"}
-                 "Logseq file and folder naming rules"]
-       " for more details."]]]]
-   :warning
-   false))
+       "The files below that have reserved characters can't be saved on this device."]
+      [:div.overflow-y-auto.max-h-96
+       [:ol.my-2
+        (for [path paths]
+          [:li path])]]
+
+      [:div
+       [:p
+        "Check " [:a {:href "https://docs.logseq.com/#/page/logseq%20file%20and%20folder%20naming%20rules"
+                      :target "_blank"}
+                  "Logseq file and folder naming rules"]
+        " for more details."]]]]
+    :warning
+    false))
 
 (defmethod handle :graph/setup-a-repo [[_ opts]]
   (let [opts' (merge {:picked-root-fn #(state/close-modal!)
@@ -850,37 +788,37 @@
                       :logged?        (user-handler/logged-in?)} opts)]
     (if (mobile-util/native-ios?)
       (state/set-modal!
-       #(graph-picker/graph-picker-cp opts')
-       {:label "graph-setup"})
+        #(graph-picker/graph-picker-cp opts')
+        {:label "graph-setup"})
       (page-handler/ls-dir-files! st/refresh! opts'))))
 
 (defmethod handle :graph/new-db-graph [[_ _opts]]
   (state/set-modal!
-   repo/new-db-graph
-   {:id :new-db-graph
-    :label "graph-setup"}))
+    repo/new-db-graph
+    {:id :new-db-graph
+     :label "graph-setup"}))
 
 (defmethod handle :search/transact-data [[_ repo data]]
   (let [file-based? (config/local-file-based-graph? repo)
         data' (cond-> data
                 file-based?
-                        ;; remove built-in properties from content
+                ;; remove built-in properties from content
                 (update :blocks-to-add
-                        (fn [blocks]
-                          (map #(update % :content
-                                        (fn [content]
-                                          (property-util/remove-built-in-properties (get % :format :markdown) content)))
-                               blocks))))]
+                  (fn [blocks]
+                    (map #(update % :content
+                            (fn [content]
+                              (property-util/remove-built-in-properties (get % :format :markdown) content)))
+                      blocks))))]
     (search/transact-blocks! repo data')))
 
 (defmethod handle :class/configure [[_ page]]
   (state/set-modal!
-   #(vector :<>
-            (class-component/configure page {})
-            (db-page/page-properties page {:configure? true}))
-   {:id :page-configure
-    :label "page-configure"
-    :container-overflow-visible? true}))
+    #(vector :<>
+       (class-component/configure page {})
+       (db-page/page-properties page {:configure? true}))
+    {:id :page-configure
+     :label "page-configure"
+     :container-overflow-visible? true}))
 
 (defmethod handle :file/alter [[_ repo path content]]
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]
@@ -904,21 +842,21 @@
         [:div
          [:p
           (str "It seems that another whiteboard file already has the ID \"" id
-               "\". You can fix it by changing the ID in this file with another UUID.")]
+            "\". You can fix it by changing the ID in this file with another UUID.")]
          [:p
           "Or, let me"
           (ui/button "Fix"
-                     :on-click (fn []
-                                 (let [dir (config/get-repo-dir repo)]
-                                   (p/let [content (fs/read-file dir file)]
-                                     (let [new-content (string/replace content (str id) (str (random-uuid)))]
-                                       (p/let [_ (fs/write-file! repo
-                                                                 dir
-                                                                 file
-                                                                 new-content
-                                                                 {})]
-                                         (reset! resolved? true))))))
-                     :class "inline mx-1")
+            :on-click (fn []
+                        (let [dir (config/get-repo-dir repo)]
+                          (p/let [content (fs/read-file dir file)]
+                            (let [new-content (string/replace content (str id) (str (random-uuid)))]
+                              (p/let [_ (fs/write-file! repo
+                                          dir
+                                          file
+                                          new-content
+                                          {})]
+                                (reset! resolved? true))))))
+            :class "inline mx-1")
           "it."]])]]))
 
 (defmethod handle :file/parse-and-load-error [[_ repo parse-errors]]
@@ -930,10 +868,10 @@
                         (for [[file error] parse-errors]
                           (let [data (ex-data error)]
                             (cond
-                             (and (common-config/whiteboard? file)
-                                  (= :transact/upsert (:error data))
-                                  (uuid? (last (:assertion data))))
-                             (rum/with-key (file-id-conflict-item repo file data) file)
+                              (and (common-config/whiteboard? file)
+                                (= :transact/upsert (:error data))
+                                (uuid? (last (:assertion data))))
+                              (rum/with-key (file-id-conflict-item repo file data) file)
 
                               :else
                               (do
@@ -981,12 +919,12 @@
 (defmethod handle :editor/new-property [[_ property-key]]
   (p/do!
     (when-let [edit-block (state/get-edit-block)]
-     (when-let [block-id (:block/uuid edit-block)]
-       (let [block (db/entity [:block/uuid block-id])
-             collapsed? (or (get-in @state/state [:ui/collapsed-blocks (state/get-current-repo) block-id])
-                            (:block/collapsed? block))]
-         (when collapsed?
-           (editor-handler/set-blocks-collapsed! [block-id] false)))))
+      (when-let [block-id (:block/uuid edit-block)]
+        (let [block (db/entity [:block/uuid block-id])
+              collapsed? (or (get-in @state/state [:ui/collapsed-blocks (state/get-current-repo) block-id])
+                           (:block/collapsed? block))]
+          (when collapsed?
+            (editor-handler/set-blocks-collapsed! [block-id] false)))))
     (editor-handler/save-current-block!)
     (when property-key
       (state/set-state! :editor/new-property-key property-key))
@@ -998,7 +936,7 @@
     [:div.flex.p-4.flex-col.gap-4.h-64
      [:span.warning.text-lg
       (util/format "Logseq doesn't support multiple %ss access to the same graph yet, please close this %s or switch to another graph."
-                   word word)]
+        word word)]
      [:div.text-lg
       [:p "Switch to another repo: "]
       (repo/repos-dropdown {:on-click (fn [e]
@@ -1029,18 +967,18 @@
     (async/go-loop []
       (let [[payload d] (async/<! chan)]
         (->
-         (try
-           (p/resolved (handle payload))
-           (catch :default error
-             (p/rejected error)))
-         (p/then (fn [result]
-                   (p/resolve! d result)))
-         (p/catch (fn [error]
-                    (let [type :handle-system-events/failed]
-                      (state/pub-event! [:capture-error {:error error
-                                                         :payload {:type type
-                                                                   :payload payload}}])
-                      (p/reject! d error))))))
+          (try
+            (p/resolved (handle payload))
+            (catch :default error
+              (p/rejected error)))
+          (p/then (fn [result]
+                    (p/resolve! d result)))
+          (p/catch (fn [error]
+                     (let [type :handle-system-events/failed]
+                       (state/pub-event! [:capture-error {:error error
+                                                          :payload {:type type
+                                                                    :payload payload}}])
+                       (p/reject! d error))))))
       (recur))
     chan))
 
