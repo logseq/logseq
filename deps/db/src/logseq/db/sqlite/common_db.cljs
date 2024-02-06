@@ -115,7 +115,7 @@
   [db]
   (->> (d/datoms db :avet :block/type)
        (keep (fn [e]
-               (when (contains? #{"closed value"} (:v e))
+               (when (contains? #{"closed value" "class"} (:v e))
                  (d/pull db '[*] (:e e)))))))
 
 (defn get-initial-data
