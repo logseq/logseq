@@ -279,6 +279,10 @@ html[data-theme='light'] {
   }
 }
 
+.popper-arrow {
+  fill: var(--ls-secondary-background-color);
+}
+
 .tl-primary-tools {
   @apply absolute h-full top-0 flex items-center justify-center;
 
