@@ -85,8 +85,9 @@
 
   &-input {
     padding: 16px;
-    font-size: 20px;
+    font-size: 16px;
     outline: none;
+    background-color: transparent;
   }
 
   &-results {
