@@ -11,6 +11,7 @@ import android.provider.Settings;
 import android.util.Log;
 
 import androidx.activity.result.ActivityResult;
+import androidx.core.content.FileProvider;
 import androidx.documentfile.provider.DocumentFile;
 
 import com.getcapacitor.JSObject;
@@ -47,6 +48,23 @@ public class FolderPicker extends Plugin {
             intent.setData(uri);
             startActivityForResult(call, intent, 20);
         }
+    }
+
+    @PluginMethod()
+    public void openFile(PluginCall call) {
+        Uri uri = Uri.parse(call.getString("uri"));
+        File file = new File(uri.getPath());
+
+        // Get URI and MIME type of file
+        String appId = getAppId();
+        uri = FileProvider.getUriForFile(getActivity(), appId + ".fileprovider", file);
+        String mime = getContext().getContentResolver().getType(uri);
+
+        Intent intent = new Intent();
+        intent.setAction(Intent.ACTION_VIEW);
+        intent.setDataAndType(uri, mime);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        getContext().startActivity(intent);
     }
 
     @ActivityCallback
