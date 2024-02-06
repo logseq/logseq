@@ -12,8 +12,6 @@ import { TablerIcon } from '../icons'
 import { Button } from '../Button'
 import { KeyboardShortcut } from '../KeyboardShortcut'
 import * as React from 'react'
-
-import * as Separator from '@radix-ui/react-separator'
 import { toJS } from 'mobx'
 
 // @ts-ignore
@@ -90,7 +88,7 @@ export const ContextMenu = observer(function ContextMenu({
                     >
                       <TablerIcon name="layout-align-right"/>
                     </Button>
-                    <Separator.Root className="tl-toolbar-separator"
+                    <LSUI.Separator className="tl-toolbar-separator"
                                     orientation="vertical"/>
                     <Button
                       tooltip={t('whiteboard/distribute-horizontally')}
@@ -120,7 +118,7 @@ export const ContextMenu = observer(function ContextMenu({
                     >
                       <TablerIcon name="layout-align-bottom"/>
                     </Button>
-                    <Separator.Root className="tl-toolbar-separator"
+                    <LSUI.Separator className="tl-toolbar-separator"
                                     orientation="vertical"/>
                     <Button
                       tooltip={t('whiteboard/distribute-vertically')}
