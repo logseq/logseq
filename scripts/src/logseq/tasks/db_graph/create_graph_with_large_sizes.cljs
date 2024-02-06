@@ -68,8 +68,8 @@
         blocks-tx (create-graph/create-blocks-tx (create-init-data options))]
     (println "Built" (count blocks-tx) "tx," (count (filter :block/name blocks-tx)) "pages and"
              (count (filter :block/content blocks-tx)) "blocks ...")
-    ;; Vary the chunking with page size for now
-    (let [tx-chunks (partition-all (:pages options) blocks-tx)]
+    ;; Vary the chunking with page size up to a max to avoid OOM
+    (let [tx-chunks (partition-all (min (:pages options) 30000) blocks-tx)]
       (loop [chunks tx-chunks
              chunk-num 1]
         (when-let [chunk (first chunks)]
