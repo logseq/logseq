@@ -22,7 +22,8 @@
                               result')]
                 (try
                   (d/transact! conn tx-data)
-                  (catch :default _e
+                  (catch :default e
+                    (js/console.error "<q failed with:" e)
                     nil)))))
           result')))))
 
