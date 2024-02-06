@@ -31,15 +31,7 @@
 
 (defn- with-block-refs
   [db block]
-  (update block :block/refs (fn [refs]
-                              (map (fn [ref]
-                                     (let [e (d/entity db (:db/id ref))]
-                                       (if (and e (:block/name e))
-                                         (assoc ref
-                                                :block/uuid (:block/uuid e)
-                                                :block/original-name (:block/name e)
-                                                :block/name (:block/name e))
-                                         ref))) refs))))
+  (update block :block/refs (fn [refs] (map (fn [ref] (d/pull db '[*] (:db/id ref))) refs))))
 
 (defn with-parent-and-left
   [db block]
@@ -47,11 +39,16 @@
     (:block/name block)
     block
     (:block/page block)
-    (->>
-     (assoc block
-            :block/left (select-keys (d/entity db (:db/id (:block/left block))) [:db/id :block/uuid])
-            :block/parent (select-keys (d/entity db (:db/id (:block/parent block))) [:db/id :block/uuid]))
-     (with-block-refs db))
+    (let [left (when-let [e (d/entity db (:db/id (:block/left block)))]
+                 (select-keys e [:db/id :block/uuid]))
+          parent (when-let [e (d/entity db (:db/id (:block/parent block)))]
+                   (select-keys e [:db/id :block/uuid]))]
+      (->>
+       (assoc block
+              :block/left left
+              :block/parent parent)
+       (common-util/remove-nils-non-nested)
+       (with-block-refs db)))
     :else
     block))
 
@@ -77,6 +74,7 @@
     (if (and block (not (:block/name block))) ; not a page
       (let [block' (->> (d/pull db '[*] (:db/id block))
                         (with-parent-and-left db)
+                        (with-block-refs db)
                         mark-block-fully-loaded)]
         (cond->
          {:block block'}
@@ -117,10 +115,9 @@
   [db]
   (->> (d/datoms db :avet :block/type)
        (keep (fn [e]
-               (when (contains? #{"closed value" "property" "class"} (:v e))
+               (when (contains? #{"closed value"} (:v e))
                  (d/pull db '[*] (:e e)))))))
 
-;; built-in files + latest journals + favorites
 (defn get-initial-data
   "Returns initial data"
   [db]

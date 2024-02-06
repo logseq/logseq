@@ -576,8 +576,14 @@
          (widgets/demo-graph-alert))
 
        (cond
-         (or db-restoring? (not indexeddb-support?))
+         (not indexeddb-support?)
          nil
+
+         db-restoring?
+         [:div.space-y-2
+          (shui/skeleton {:class "h-8 w-1/3 mb-8"})
+          (shui/skeleton {:class "h-6 w-full"})
+          (shui/skeleton {:class "h-6 w-full"})]
 
          :else
          [:div
