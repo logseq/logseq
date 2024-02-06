@@ -461,7 +461,7 @@
              (db-async/<get-block (state/get-current-repo) page-name')
              (assoc state ::page-name page-name')))}
   [state {:keys [repo page-name preview? sidebar?] :as option}]
-  (let [loading? (state/sub-async-query-loading (::page-name state))]
+  (let [loading? (when (::page-name state)  (state/sub-async-query-loading (::page-name state)))]
     (when-let [path-page-name (get-path-page-name state page-name)]
       (let [current-repo (state/sub :git/current-repo)
             repo (or repo current-repo)
