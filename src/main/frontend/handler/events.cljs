@@ -13,6 +13,7 @@
             [frontend.commands :as commands]
             [frontend.components.class :as class-component]
             [frontend.components.cmdk :as cmdk]
+            [frontend.components.settings :as settings]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
             [frontend.components.file-sync :as file-sync]
@@ -340,6 +341,17 @@
 
 (defmethod handle :modal/show-themes-modal [_]
   (plugin/open-select-theme!))
+
+(defmethod handle :modal/toggle-accent-colors-modal [_]
+  (let [label "accent-colors-picker"]
+    (if (or (= label (state/get-modal-id))
+          (= label (some-> (state/get-sub-modals) (first) :modal/id)))
+      (state/close-sub-modal! label)
+      (state/set-sub-modal!
+        #(settings/modal-accent-colors-inner)
+        {:center? true
+         :id      label
+         :label   label}))))
 
 (rum/defc modal-output
   [content]

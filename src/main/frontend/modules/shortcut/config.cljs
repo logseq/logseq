@@ -773,8 +773,8 @@
             :dev/show-page-data
             :dev/show-page-ast
             :dev/replace-graph-with-db-file
-            :ui/cycle-color
-            :ui/cycle-color-off])
+            :ui/accent-colors-picker
+            :ui/accent-color-reset])
        (with-meta {:before m/enable-when-not-editing-mode!}))
 
      :shortcut.handler/misc
@@ -889,8 +889,8 @@
       :ui/toggle-right-sidebar
       :ui/toggle-settings
       :ui/toggle-contents
-      :ui/cycle-color-off
-      :ui/cycle-color]
+      :ui/accent-colors-picker
+      :ui/accent-color-reset]
 
      :shortcut.category/whiteboard
      [:editor/new-whiteboard
