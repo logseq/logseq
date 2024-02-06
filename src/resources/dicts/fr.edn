@@ -372,8 +372,6 @@
     :command.search/re-index  "Reconstruire l'index de recherche"
     :command.sidebar/clear  "Vider intégralement la barre latérale droite"
     :command.sidebar/open-today-page  "Ouvrir la page du jour dans la barre latérale droite"
-    :command.ui/cycle-color "Bascule de la couleur"
-    :command.ui/cycle-color-off "Bascule de la couleur désactivée"
     :command.ui/goto-plugins  "Aller vers le panneau des extensions"
     :command.ui/install-plugins-from-file  "Installer les extensions depuis plugins.edn"
     :command.ui/select-theme-color  "Sélectionner les couleurs disponibles du thème"

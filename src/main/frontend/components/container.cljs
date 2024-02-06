@@ -85,6 +85,7 @@
                              (state/get-current-repo)
                              (:db/id page-entity)
                              :page))]
+    ;; TODO: move to standalone component
     (shui/context-menu
       (shui/context-menu-trigger
         [:a.flex.items-center
@@ -708,11 +709,7 @@
         links (state/sub :custom-context-menu/links)
         position (state/sub :custom-context-menu/position)]
     (when (and show? links position)
-      (ui/css-transition
-       {:class-names "fade"
-        :timeout {:enter 500
-                  :exit 300}}
-       (render-custom-context-menu links position)))))
+      (render-custom-context-menu links position))))
 
 (rum/defc new-block-mode < rum/reactive
   []

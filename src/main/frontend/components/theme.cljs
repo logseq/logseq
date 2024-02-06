@@ -22,12 +22,14 @@
         [restored-sidebar? set-restored-sidebar?] (rum/use-state false)]
 
     (rum/use-effect!
-     #(let [doc js/document.documentElement
-            cls (.-classList doc)]
+     #(let [^js doc js/document.documentElement
+            ^js cls (.-classList doc)
+            ^js cls-body (.-classList js/document.body)]
         (.setAttribute doc "data-theme" theme)
         (if (= theme "dark") ;; for tailwind dark mode
-          (.add cls "dark")
-          (.remove cls "dark"))
+          ; The white-theme is for backward compatibility. See: https://github.com/logseq/logseq/pull/4652.
+          (do (.add cls "dark") (doto cls-body (.remove "white-theme" "light-theme") (.add "dark-theme")))
+          (do (.remove cls "dark") (doto cls-body (.remove "dark-theme") (.add "white-theme" "light-theme"))))
         (ui/apply-custom-theme-effect! theme)
         (plugin-handler/hook-plugin-app :theme-mode-changed {:mode theme}))
      [theme])
@@ -111,11 +113,8 @@
      #(storage/set :file-sync/onboarding-state onboarding-state)
      [onboarding-state])
 
-    [:div
-     {:class    (util/classnames
-                 [(str theme "-theme")
-                  {:white-theme (= "light" theme)}]) ; The white-theme is for backward compatibility. See: https://github.com/logseq/logseq/pull/4652.
-      :on-click on-click}
+    [:div.theme-container
+     {:on-click on-click}
      child
 
      (pdf/default-embed-playground)]))

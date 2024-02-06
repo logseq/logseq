@@ -1390,7 +1390,10 @@
                   url)]
         (if (and (coll? src)
                  (= (first src) "youtube-player"))
-          (youtube/youtube-video (last src) nil)
+          (let [t (re-find #"&t=(\d+)" url)
+                opts (when (seq t)
+                       {:start (nth t 1)})]
+            (youtube/youtube-video (last src) opts))
           (when src
             (let [width (min (- (util/get-width) 96) 560)
                   height (int (* width (/ (if (string/includes? src "player.bilibili.com")
@@ -2536,8 +2539,9 @@
                                       :on-hide (fn [value event]
                                                  (let [select? (and (= event :esc)
                                                                     (not (string/includes? value "```")))]
-                                                   (p/let [_ (editor-handler/save-block! (editor-handler/get-state) value)]
-                                                     (editor-handler/escape-editing select?))))}
+                                                   (p/do!
+                                                    (editor-handler/save-block! (editor-handler/get-state) value)
+                                                    (editor-handler/escape-editing select?))))}
                                      edit-input-id
                                      config))]
           (if (and named? (seq (:block/tags block)) db-based?)

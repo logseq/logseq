@@ -606,7 +606,8 @@
                    :options {:on-click
                              #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                 (js/apis.openPath (str root "/preferences.json")))}}
-                  {:title   [:span.flex.items-center.whitespace-nowrap.space-x-1 (ui/icon "bug") (t :plugin/open-logseq-dir) [:code "~/.logseq"]]
+                  {:title   [:span.flex.items-center.whitespace-nowrap.gap-1
+                             (ui/icon "bug") (t :plugin/open-logseq-dir) [:code "~/.logseq"]]
                    :options {:on-click
                              #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                 (js/apis.openPath root))}}])
@@ -1043,7 +1044,7 @@
           {:title   key
            :item    [:div.flex.items-center.item-wrap
                      (ui-item-renderer pid :toolbar (assoc opts :prefix "pl-" :key (str "pl-" key)))
-                     [:span.opacity-80 {:style {:padding-left "2px"}} key]
+                     [:span {:style {:padding-left "2px"}} key]
                      [:span.pin.flex.items-center.opacity-60
                       {:class (util/classnames [{:pinned pinned?}])}
                       (ui/icon (if pinned? "pinned" "pin"))]]
@@ -1065,7 +1066,7 @@
 
          (when badge-updates?
            {:title   [:div.flex.items-center.space-x-5.leading-none
-                      [:span (t :plugin/found-updates)] (ui/point "bg-red-600" 5 {:style {:margin-top 2}})]
+                      [:span (t :plugin/found-updates)] (ui/point "bg-red-700" 5 {:style {:margin-top 2}})]
             :options {:on-click #(open-waiting-updates-modal!)
                       :class    "extra-item"}
             :icon    (ui/icon "download")})]

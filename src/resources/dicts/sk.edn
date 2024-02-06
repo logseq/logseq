@@ -747,8 +747,6 @@
  :command.ui/toggle-help                           "Zobraziť/Skryť pomocníka"
  :command.ui/toggle-theme                          "Prepínať medzi tmavým/svetlým motívom"
  :command.ui/toggle-contents                       "Zobraziť/Skryť obsah na bočnom paneli"
- :command.ui/cycle-color-off                       "Vypnúť zmenu farieb"
- :command.ui/cycle-color                           "Zmeniť farbu"
  :command.command/toggle-favorite                  "Pridať/Odstrániť z obľúbených"
  :command.editor/open-file-in-default-app          "Otvoriť súbor v predvolenej aplikácii"
  :command.editor/open-file-in-directory            "Otvoriť súbor v nadradenom adresári"

@@ -3,7 +3,7 @@
   (:require [clojure.string :as string]
             [frontend.util :as util]))
 
-(def color-list [:tomato :red :crimson :pink :plum :purple :violet :indigo :blue :cyan :teal :green :grass :orange :brown])
+(def color-list [:tomato :red :crimson :pink :plum :purple :violet :indigo :blue :cyan :teal :green :grass :orange])
 ;(def color-list [:tomato :red :blue])
 
 (defn variable
