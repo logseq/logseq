@@ -284,6 +284,7 @@
 
           :else
           (let [b-ent (d/entity @conn [:block/uuid block-uuid])
+                db-id (:db/id b-ent)
                 new-block
                 (cond-> b-ent
                   (and (contains? key-set :content)
@@ -300,13 +301,31 @@
                   (contains? key-set :tags)           (assoc :block/tags (some->> (seq (:tags op-value))
                                                                                   (map (partial vector :block/uuid))
                                                                                   (d/pull-many @conn [:db/id])
-                                                                                  (filter :db/id)))
+                                                                                  (keep :db/id)))
                   (contains? key-set :properties)     (assoc :block/properties
                                                              (transit/read transit-r (:properties op-value)))
                   (contains? key-set :link)           (assoc :block/link (some->> (:link op-value)
                                                                                   (vector :block/uuid)
                                                                                   (d/pull @conn [:db/id])
-                                                                                  :db/id)))]
+                                                                                  :db/id)))
+                *other-tx-data (atom [])]
+            ;; 'save-block' dont handle card-many attrs well?
+            (when (and (contains? key-set :alias)
+                       (some->> (seq (:alias op-value))
+                                (map (partial vector :block/uuid))
+                                (d/pull-many @conn [:db/id])
+                                (keep :db/id)
+                                seq))
+              (swap! *other-tx-data conj [:db/retract db-id :block/alias]))
+            (when (and (contains? key-set :tags)
+                       (some->> (seq (:tags op-value))
+                                (map (partial vector :block/uuid))
+                                (d/pull-many @conn [:db/id])
+                                (keep :db/id)
+                                seq))
+              (swap! *other-tx-data conj [:db/retract db-id :block/tags]))
+            (when (seq @*other-tx-data)
+              (ldb/transact! conn @*other-tx-data {:persist-op? false}))
             (transact-db! :save-block repo conn date-formatter new-block)))))))
 
 (defn apply-remote-move-ops
