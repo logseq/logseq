@@ -51,6 +51,7 @@
       (do
         (util/profile "transact initial-pages" (d/transact! conn tx-data tx-meta))
         (when end?
+          (state/pub-event! [:init/commands])
           (ui-handler/re-render-root!)))
       (do
         (let [tx-report (d/transact! conn tx-data tx-meta)]
