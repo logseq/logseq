@@ -852,7 +852,7 @@
      [:section.flex.items-center.p-1.embed-header
       [:div.mr-3 svg/page]
       (page-cp config {:block/name page-name})]
-     (if (state/sub-async-query-loading page-name)
+     (if (and page-name (state/sub-async-query-loading page-name))
        [:span "Loading..."]
        (when (and
               (not= (util/page-name-sanity-lc (or current-page ""))

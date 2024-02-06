@@ -52,6 +52,10 @@
     :else
     block))
 
+(defn- with-tags
+  [db block]
+  (update block :block/tags (fn [tags] (d/pull-many db '[*] (map :db/id tags)))))
+
 (defn- mark-block-fully-loaded
   [b]
   (assoc b :block.temp/fully-loaded? true))
@@ -82,8 +86,9 @@
           (assoc :children (get-children (:block/_parent block)))))
       (when-let [block (or block (d/entity db [:block/name name]))]
         (cond->
-         {:block (-> (d/pull db '[*] (:db/id block))
-                     mark-block-fully-loaded)}
+         {:block (->> (d/pull db '[*] (:db/id block))
+                      (with-tags db)
+                      mark-block-fully-loaded)}
           children?
           (assoc :children
                  (if (contains? (:block/type block) "whiteboard")
@@ -113,10 +118,12 @@
 
 (defn get-structured-blocks
   [db]
-  (->> (d/datoms db :avet :block/type)
-       (keep (fn [e]
-               (when (contains? #{"closed value"} (:v e))
-                 (d/pull db '[*] (:e e)))))))
+  (let [special-pages (map #(d/pull db '[*] [:block/name %]) #{"tags"})
+        closed-values (->> (d/datoms db :avet :block/type)
+                           (keep (fn [e]
+                                   (when (contains? #{"closed value"} (:v e))
+                                     (d/pull db '[*] (:e e))))))]
+    (concat special-pages closed-values)))
 
 (defn get-initial-data
   "Returns initial data"
