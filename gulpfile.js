@@ -73,6 +73,11 @@ const common = {
         'node_modules/react-dom/umd/react-dom.development.js',
       ]).pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src([
+        'node_modules/@glidejs/glide/dist/glide.min.js',
+        'node_modules/@glidejs/glide/dist/css/glide.core.min.css',
+        'node_modules/@glidejs/glide/dist/css/glide.theme.min.css',
+      ]).pipe(gulp.dest(path.join(outputPath, 'js', 'glide'))),
+      () => gulp.src([
         'node_modules/pdfjs-dist/build/pdf.js',
         'node_modules/pdfjs-dist/build/pdf.worker.js',
         'node_modules/pdfjs-dist/web/pdf_viewer.js'
