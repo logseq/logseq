@@ -1,4 +1,4 @@
-;(ns frontend.extensions.pdf.core
+(ns frontend.extensions.pdf.core
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.svg :as svg]
