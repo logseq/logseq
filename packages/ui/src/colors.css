@@ -12,6 +12,45 @@ html {
     --lx-accent-10: var(--rx-logseq-10);
     --lx-accent-11: var(--rx-logseq-11);
     --lx-accent-12: var(--rx-logseq-12);
+
+    &[data-theme=light] {
+      --primary: 200 97% 37%;
+      --primary-foreground: 255 92% 100%;
+      --accent: 200 97% 37%;
+      --accent-foreground: 255 92% 100%;
+      --ring: 200 97% 37%;
+
+      --lx-gray-01: var(--rx-gray-01);
+      --lx-gray-02: var(--rx-gray-02);
+      --lx-gray-03: var(--rx-gray-03);
+      --lx-gray-04: var(--rx-gray-04);
+      --lx-gray-05: var(--rx-gray-05);
+      --lx-gray-06: var(--rx-gray-06);
+      --lx-gray-07: var(--rx-gray-07);
+      --lx-gray-08: var(--rx-gray-08);
+      --lx-gray-09: var(--rx-gray-09);
+      --lx-gray-10: var(--rx-gray-10);
+      --lx-gray-11: var(--rx-gray-11);
+      --lx-gray-12: var(--rx-gray-12);
+    }
+
+    &[data-theme=dark] {
+      --background: 192 100% 11%;
+      --foreground: 0 0% 95%;
+      --accent: 192 80% 10%;
+      --accent-foreground: 255 92% 100%;
+      --primary: 200 97% 37%;
+      --primary-foreground: 255 92% 100%;
+      --ring: 200 97% 37%;
+      --secondary: 203 50% 20%;
+      --secondary-foreground: 0 0% 98%;
+      --muted: 192 100% 13%;
+      --border: 192 100% 14%;
+      --card: 192 100% 10%;
+      --card-foreground: 0 0% 95%;
+      --popover: 192 100% 11%;
+      --input: 203 35% 25%;
+    }
   }
 
   &[data-color=tomato] {
@@ -80,8 +119,8 @@ html {
       --ls-link-text-color: var(--rx-tomato-11);
       --ls-link-text-hover-color: var(--rx-tomato-12);
       --ls-block-ref-link-text-color: var(--rx-tomato-09);
-      --ls-secondary-text-color: var(--rx-mauve-12);
-      --ls-primary-text-color: var(--rx-mauve-11);
+      --ls-secondary-text-color: var(--rx-mauve-11);
+      --ls-primary-text-color: var(--rx-mauve-12);
       --ls-border-color: var(--rx-mauve-05);
       --ls-secondary-border-color: var(--rx-tomato-05);
       --ls-page-checkbox-color: var(--rx-mauve-07);
@@ -104,6 +143,7 @@ html {
     body, .dark-theme, .light-theme {
       --accent: 358 75.0% 59.0%;
       --primary: 358 75.0% 59.0%;
+      --primary-foreground: 190 43% 97%;
       --ring: 359 69.5% 74.3%;
       --accent-foreground: 190 43% 97%;
       --primary-accent-foreground: 190 43% 97%;
@@ -165,8 +205,8 @@ html {
       --ls-link-text-color: var(--rx-red-11);
       --ls-link-text-hover-color: var(--rx-red-12);
       --ls-block-ref-link-text-color: var(--rx-red-09);
-      --ls-secondary-text-color: var(--rx-mauve-12);
-      --ls-primary-text-color: var(--rx-mauve-11);
+      --ls-secondary-text-color: var(--rx-mauve-11);
+      --ls-primary-text-color: var(--rx-mauve-12);
       --ls-border-color: var(--rx-mauve-05);
       --ls-secondary-border-color: var(--rx-red-05);
       --ls-page-checkbox-color: var(--rx-mauve-07);
@@ -250,8 +290,8 @@ html {
       --ls-link-text-color: var(--rx-blue-11);
       --ls-link-text-hover-color: var(--rx-blue-12);
       --ls-block-ref-link-text-color: var(--rx-blue-09);
-      --ls-secondary-text-color: var(--rx-slate-12);
-      --ls-primary-text-color: var(--rx-slate-11);
+      --ls-secondary-text-color: var(--rx-slate-11);
+      --ls-primary-text-color: var(--rx-slate-12);
       --ls-border-color: var(--rx-slate-05);
       --ls-secondary-border-color: var(--rx-blue-05);
       --ls-page-checkbox-color: var(--rx-slate-07);
@@ -274,6 +314,7 @@ html {
     body, .dark-theme, .light-theme {
       --accent: 336 80.0% 57.8%;
       --primary: 336 80.0% 57.8%;
+      --primary-foreground: 190 43% 97%;
       --ring: 336 62.3% 72.9%;
       --accent-foreground: 190 43% 97%;
       --primary-accent-foreground: 190 43% 97%;
@@ -335,8 +376,8 @@ html {
       --ls-link-text-color: var(--rx-crimson-11);
       --ls-link-text-hover-color: var(--rx-crimson-12);
       --ls-block-ref-link-text-color: var(--rx-crimson-09);
-      --ls-secondary-text-color: var(--rx-mauve-12);
-      --ls-primary-text-color: var(--rx-mauve-11);
+      --ls-secondary-text-color: var(--rx-mauve-11);
+      --ls-primary-text-color: var(--rx-mauve-12);
       --ls-border-color: var(--rx-mauve-05);
       --ls-secondary-border-color: var(--rx-crimson-05);
       --ls-page-checkbox-color: var(--rx-mauve-07);
@@ -419,8 +460,8 @@ html {
       --ls-link-text-color: var(--rx-pink-11);
       --ls-link-text-hover-color: var(--rx-pink-12);
       --ls-block-ref-link-text-color: var(--rx-pink-09);
-      --ls-secondary-text-color: var(--rx-mauve-12);
-      --ls-primary-text-color: var(--rx-mauve-11);
+      --ls-secondary-text-color: var(--rx-mauve-11);
+      --ls-primary-text-color: var(--rx-mauve-12);
       --ls-border-color: var(--rx-mauve-05);
       --ls-secondary-border-color: var(--rx-pink-05);
       --ls-page-checkbox-color: var(--rx-mauve-07);
@@ -503,8 +544,8 @@ html {
       --ls-link-text-color: var(--rx-plum-11);
       --ls-link-text-hover-color: var(--rx-plum-12);
       --ls-block-ref-link-text-color: var(--rx-plum-09);
-      --ls-secondary-text-color: var(--rx-mauve-12);
-      --ls-primary-text-color: var(--rx-mauve-11);
+      --ls-secondary-text-color: var(--rx-mauve-11);
+      --ls-primary-text-color: var(--rx-mauve-12);
       --ls-border-color: var(--rx-mauve-05);
       --ls-secondary-border-color: var(--rx-plum-05);
       --ls-page-checkbox-color: var(--rx-mauve-07);
@@ -587,8 +628,8 @@ html {
       --ls-link-text-color: var(--rx-purple-11);
       --ls-link-text-hover-color: var(--rx-purple-12);
       --ls-block-ref-link-text-color: var(--rx-purple-09);
-      --ls-secondary-text-color: var(--rx-mauve-12);
-      --ls-primary-text-color: var(--rx-mauve-11);
+      --ls-secondary-text-color: var(--rx-mauve-11);
+      --ls-primary-text-color: var(--rx-mauve-12);
       --ls-border-color: var(--rx-mauve-05);
       --ls-secondary-border-color: var(--rx-purple-05);
       --ls-page-checkbox-color: var(--rx-mauve-07);
@@ -671,8 +712,8 @@ html {
       --ls-link-text-color: var(--rx-violet-11);
       --ls-link-text-hover-color: var(--rx-violet-12);
       --ls-block-ref-link-text-color: var(--rx-violet-09);
-      --ls-secondary-text-color: var(--rx-mauve-12);
-      --ls-primary-text-color: var(--rx-mauve-11);
+      --ls-secondary-text-color: var(--rx-mauve-11);
+      --ls-primary-text-color: var(--rx-mauve-12);
       --ls-border-color: var(--rx-mauve-05);
       --ls-secondary-border-color: var(--rx-violet-05);
       --ls-page-checkbox-color: var(--rx-mauve-07);
@@ -755,8 +796,8 @@ html {
       --ls-link-text-color: var(--rx-indigo-11);
       --ls-link-text-hover-color: var(--rx-indigo-12);
       --ls-block-ref-link-text-color: var(--rx-indigo-09);
-      --ls-secondary-text-color: var(--rx-slate-12);
-      --ls-primary-text-color: var(--rx-slate-11);
+      --ls-secondary-text-color: var(--rx-slate-11);
+      --ls-primary-text-color: var(--rx-slate-12);
       --ls-border-color: var(--rx-slate-05);
       --ls-secondary-border-color: var(--rx-indigo-05);
       --ls-page-checkbox-color: var(--rx-slate-07);
@@ -841,8 +882,8 @@ html {
       --ls-link-text-color: var(--rx-cyan-11);
       --ls-link-text-hover-color: var(--rx-cyan-12);
       --ls-block-ref-link-text-color: var(--rx-cyan-09);
-      --ls-secondary-text-color: var(--rx-slate-12);
-      --ls-primary-text-color: var(--rx-slate-11);
+      --ls-secondary-text-color: var(--rx-slate-11);
+      --ls-primary-text-color: var(--rx-slate-12);
       --ls-border-color: var(--rx-slate-05);
       --ls-secondary-border-color: var(--rx-cyan-05);
       --ls-page-checkbox-color: var(--rx-slate-07);
@@ -925,8 +966,8 @@ html {
       --ls-link-text-color: var(--rx-teal-11);
       --ls-link-text-hover-color: var(--rx-teal-12);
       --ls-block-ref-link-text-color: var(--rx-teal-09);
-      --ls-secondary-text-color: var(--rx-sage-12);
-      --ls-primary-text-color: var(--rx-sage-11);
+      --ls-secondary-text-color: var(--rx-sage-11);
+      --ls-primary-text-color: var(--rx-sage-12);
       --ls-border-color: var(--rx-sage-05);
       --ls-secondary-border-color: var(--rx-teal-05);
       --ls-page-checkbox-color: var(--rx-sage-07);
@@ -1010,8 +1051,8 @@ html {
       --ls-link-text-color: var(--rx-green-11);
       --ls-link-text-hover-color: var(--rx-green-12);
       --ls-block-ref-link-text-color: var(--rx-green-09);
-      --ls-secondary-text-color: var(--rx-sage-12);
-      --ls-primary-text-color: var(--rx-sage-11);
+      --ls-secondary-text-color: var(--rx-sage-11);
+      --ls-primary-text-color: var(--rx-sage-12);
       --ls-border-color: var(--rx-sage-05);
       --ls-secondary-border-color: var(--rx-green-05);
       --ls-page-checkbox-color: var(--rx-sage-07);
@@ -1094,8 +1135,8 @@ html {
       --ls-link-text-color: var(--rx-grass-11);
       --ls-link-text-hover-color: var(--rx-grass-12);
       --ls-block-ref-link-text-color: var(--rx-grass-09);
-      --ls-secondary-text-color: var(--rx-olive-12);
-      --ls-primary-text-color: var(--rx-olive-11);
+      --ls-secondary-text-color: var(--rx-olive-11);
+      --ls-primary-text-color: var(--rx-olive-12);
       --ls-border-color: var(--rx-olive-05);
       --ls-secondary-border-color: var(--rx-grass-05);
       --ls-page-checkbox-color: var(--rx-olive-07);
@@ -1178,8 +1219,8 @@ html {
       --ls-link-text-color: var(--rx-orange-11);
       --ls-link-text-hover-color: var(--rx-orange-12);
       --ls-block-ref-link-text-color: var(--rx-orange-09);
-      --ls-secondary-text-color: var(--rx-sand-12);
-      --ls-primary-text-color: var(--rx-sand-11);
+      --ls-secondary-text-color: var(--rx-sand-11);
+      --ls-primary-text-color: var(--rx-sand-12);
       --ls-border-color: var(--rx-sand-05);
       --ls-secondary-border-color: var(--rx-orange-05);
       --ls-page-checkbox-color: var(--rx-sand-07);
@@ -1263,8 +1304,8 @@ html {
       --ls-link-text-color: var(--rx-brown-11);
       --ls-link-text-hover-color: var(--rx-brown-12);
       --ls-block-ref-link-text-color: var(--rx-brown-09);
-      --ls-secondary-text-color: var(--rx-sand-12);
-      --ls-primary-text-color: var(--rx-sand-11);
+      --ls-secondary-text-color: var(--rx-sand-11);
+      --ls-primary-text-color: var(--rx-sand-12);
       --ls-border-color: var(--rx-sand-05);
       --ls-secondary-border-color: var(--rx-brown-05);
       --ls-page-checkbox-color: var(--rx-sand-07);

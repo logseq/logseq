@@ -388,8 +388,6 @@
  :command.pdf/find "PDF: cerca testo nel documento"
  :command.sidebar/close-top "Chiudi l'elemento in alto nel pannello laterale destra"
  :command.ui/clear-all-notifications "Cancella tutte le notifiche"
- :command.ui/cycle-color "Cicla colore"
- :command.ui/cycle-color-off "Disattiva cicla colore"
  :command.ui/install-plugins-from-file "Installa plugin da plugins.edn"
  :command.whiteboard/bring-forward "Sposta in avanti"
  :command.whiteboard/bring-to-front "Sposta in fronte"

@@ -30,24 +30,18 @@
   state)
 
 (defn will-remount!
-  [old-state state]
+  [_old-state state]
   (keyboards-handler/esc-save! state)
-  (let [old-content (:block/content (:block (first (:rum/args old-state))))
-        new-content (:block/content (:block (first (:rum/args state))))
-        input (state/get-input)]
-    (when (and input (not= old-content new-content))
-      (set! (.-new-value input) new-content))
-    state))
+  state)
 
 (defn will-unmount
   [state]
-  (let [{:keys [value block node] :as state} (editor-handler/get-state)
-        new-value (or (and node (.-new-value node)) value)]
+  (let [{:keys [value block] :as state} (editor-handler/get-state)]
     (editor-handler/clear-when-saved!)
     (when (db/entity [:block/uuid (:block/uuid block)]) ; block still exists
       (when-not (or (contains? #{:undo :redo} (state/get-editor-op))
                     (state/editor-in-composition?))
-        (editor-handler/save-block! state new-value))))
+        (editor-handler/save-block! state value))))
   state)
 
 (def lifecycle

@@ -16,7 +16,6 @@
     .menu-link {
       transition: none;
       border: none;
-      border-radius: unset !important;
       background: none;
 
       .type-icon {
@@ -40,13 +39,13 @@
 
       &.chosen,
       &.chosen p {
-        background-color: or(--ls-cp-chosen, --lx-gray-03, --ls-a-chosen-bg);
+        background-color: var(--lx-gray-03, var(--ls-a-chosen-bg, var(--rx-gray-03)));
         color: var(--ls-secondary-text-color);
       }
 
       .dark &.chosen,
       .dark &.chosen p {
-        background-color: or(--ls-cp-chosen, --lx-gray-02, --ls-a-chosen-bg);
+        background-color: var(--lx-gray-02, var(--ls-a-chosen-bg, var(--rx-gray-02)));
       }
 
       &:hover p {
@@ -86,8 +85,9 @@
 
   &-input {
     padding: 16px;
-    font-size: 20px;
+    font-size: 16px;
     outline: none;
+    background-color: transparent;
   }
 
   &-results {

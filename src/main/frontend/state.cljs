@@ -7,7 +7,6 @@
             [clojure.string :as string]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
-            [frontend.colors :as colors]
             [frontend.mobile.util :as mobile-util]
             [frontend.spec.storage :as storage-spec]
             [frontend.storage :as storage]
@@ -135,6 +134,7 @@
       :editor/content                        (atom {})
       :editor/block                          (atom nil)
       :editor/new-property-input-id          (atom nil)
+      :editor/new-property-key               (atom nil)
       :editor/properties-container           (atom nil)
       :editor/block-dom-id                   (atom nil)
       :editor/set-timestamp-block            (atom nil) ;; click rendered block timestamp-cp to set timestamp
@@ -671,6 +671,10 @@ Similar to re-frame subscriptions"
 (defn graph-settings
   []
   (:graph/settings (sub-config)))
+
+(defn graph-forcesettings
+  []
+  (:graph/forcesettings (sub-config)))
 
 ;; Enable by default
 (defn show-brackets?
@@ -1480,14 +1484,15 @@ Similar to re-frame subscriptions"
            input (medley/filter-vals
                    #(not (nil? %1))
                    {:modal/id            id
-                    :modal/label         (or label (if center? "ls-modal-align-center" ""))
+                    :modal/label         (if label (name label) "")
+                    :modal/class         (if center? "as-center" "")
                     :modal/payload       payload
                     :modal/show?         (if (boolean? show?) show? true)
                     :modal/panel-content panel-content
                     :modal/close-btn?    close-btn?
                     :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)})]
        (swap! state update-in
-              [:modal/subsets (or idx (count modals))]
+         [:modal/subsets (or idx (count modals))]
               merge input)
        (:modal/subsets @state)))))
 
@@ -1527,7 +1532,8 @@ Similar to re-frame subscriptions"
          (<! (async/timeout 100)))
        (swap! state assoc
               :modal/id id
-              :modal/label (or label (if center? "ls-modal-align-center" ""))
+              :modal/label (if label (name label) "")
+              :modal/class (if center? "as-center" "")
               :modal/show? (boolean modal-panel-content)
               :modal/panel-content modal-panel-content
               :modal/payload payload
@@ -2323,18 +2329,9 @@ Similar to re-frame subscriptions"
   (util/set-android-theme))
 
 (defn unset-color-accent! []
-  (swap! state assoc :ui/radix-color nil)
+  (swap! state assoc :ui/radix-color :logseq)
   (storage/remove :ui/radix-color)
   (util/set-android-theme))
-
-(defn cycle-color! []
-  (let [current-color (get-color-accent)
-        next-color (->> (cons nil colors/color-list)
-                        (drop-while #(not= % current-color))
-                        (second))]
-    (if next-color
-      (set-color-accent! next-color)
-      (unset-color-accent!))))
 
 (defn handbook-open?
   []

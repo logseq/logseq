@@ -106,6 +106,7 @@
         input-container (or
                          input-container
                          [:div.input-wrap
+                          {:style {:margin-bottom "-2px"}}
                           [:input.cp__select-input.w-full
                            (merge {:type        "text"
                                    :placeholder (or input-default-placeholder (t prompt-key))
@@ -116,7 +117,7 @@
                                                     (reset! input v)
                                                     (and (fn? on-input) (on-input v))))}
                                   input-opts')]])
-        results-container [:div
+        results-container [:div.py-1
                            [:div.item-results-wrap
                             (ui/auto-complete
                              search-result

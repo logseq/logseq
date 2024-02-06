@@ -425,15 +425,16 @@ input::-webkit-inner-spin-button {
   }
 
   &-resizer {
-    position: absolute;
-    width: 3px;
-    height: 88vh;
-    background-color: rgba(0, 0, 0, 0);
-    overflow: hidden;
-    z-index: 4;
-    top: 10vh;
-    cursor: col-resize;
-    right: 0;
+    @apply absolute w-[3px] h-screen overflow-hidden;
+    @apply z-10 right-0 cursor-col-resize;
+
+    transition: background-color 300ms;
+    transition-delay: 300ms;
+
+    &.is-active, &:hover,
+    &:focus, &:active {
+      @apply bg-primary/90;
+    }
   }
 
   &-hls-text-region {
@@ -841,14 +842,7 @@ input::-webkit-inner-spin-button {
     }
 
     .hl-area {
-      @apply relative;
-
-      display: inline-block;
-      cursor: text;
-      border: 1px solid #eee;
-      border-radius: 4px;
-      overflow: hidden;
-      margin-top: 4px;
+      @apply relative inline-block cursor-text border rounded-md overflow-hidden mt-1;
 
       .actions {
         @apply absolute right-1 top-1 flex opacity-0 transition-opacity;
@@ -936,7 +930,7 @@ body[data-page] {
     }
 
     &-viewer-cnt {
-      display: flex;
+      @apply flex overflow-x-hidden;
     }
 
     &-highlights {

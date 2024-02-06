@@ -63,65 +63,65 @@
         logged?        (user-handler/logged-in?)]
 
     (setups-container
-     :picker
-     [:article.flex.w-full
-      [:section.a.
-       (when (and (mobile-util/native-platform?) (not native-ios?))
-         (mobile-intro))
+      :picker
+      [:article.flex.w-full
+       [:section.a.
+        (when (and (mobile-util/native-platform?) (not native-ios?))
+          (mobile-intro))
 
-       (if native-ios?
-         ;; TODO: open for all native mobile platforms
-         (graph-picker/graph-picker-cp {:onboarding-and-home? onboarding-and-home?
-                                        :logged? logged?
-                                        :native-icloud? native-icloud?})
+        (if native-ios?
+          ;; TODO: open for all native mobile platforms
+          (graph-picker/graph-picker-cp {:onboarding-and-home? onboarding-and-home?
+                                         :logged? logged?
+                                         :native-icloud? native-icloud?})
 
-         (if (or (nfs/supported?) (mobile-util/native-platform?))
-           [:div.choose.flex.flex-col.items-center
-            {:on-click #(page-handler/ls-dir-files!
-                         (fn []
-                           (shortcut/refresh!)))}
-            [:i]
-            [:div.control
-             [:label.action-input.flex.items-center.justify-center.flex-col
-              {:disabled parsing?}
-
-              (if parsing?
-                (ui/loading "")
-                [[:strong (t :on-boarding/section-btn-title)]
-                 [:small (t :on-boarding/section-btn-desc)]])]]]
-           [:div.px-5
-            (ui/admonition :warning
-                           (widgets/native-fs-api-alert))
+          (if (or (nfs/supported?) (mobile-util/native-platform?))
             [:div.choose.flex.flex-col.items-center
-             (ui/button "Open a DB-based Graph"
-                        :on-click #(state/pub-event! [:graph/new-db-graph]))]]))]
-      [:section.b.flex.items-center.flex-col
-       [:p.flex
-        [:i.as-flex-center (ui/icon "zoom-question" {:style {:fontSize "22px"}})]
-        [:span.flex-1.flex.flex-col
-         [:strong (t :on-boarding/section-title)]
-         [:small.opacity-60 (t :on-boarding/section-desc)]]]
+             {:on-click #(page-handler/ls-dir-files!
+                           (fn []
+                             (shortcut/refresh!)))}
+             [:i]
+             [:div.control
+              [:label.action-input.flex.items-center.justify-center.flex-col
+               {:disabled parsing?}
 
-       [:p.text-sm.pt-5.tracking-wide
-        [:span (str (t :on-boarding/section-tip-1 DEVICE))]
-        [:br]
-        [:span (t :on-boarding/section-tip-2)]]
+               (if parsing?
+                 (ui/loading "")
+                 [[:strong (t :on-boarding/section-btn-title)]
+                  [:small (t :on-boarding/section-btn-desc)]])]]]
+            [:div.px-5
+             (ui/admonition :warning
+               (widgets/native-fs-api-alert))
+             [:div.choose.flex.flex-col.items-center
+              (ui/button "Open a DB-based Graph"
+                :on-click #(state/pub-event! [:graph/new-db-graph]))]]))]
+       [:section.b.flex.items-center.flex-col
+        [:p.flex
+         [:i.as-flex-center (ui/icon "zoom-question" {:style {:fontSize "22px"}})]
+         [:span.flex-1.flex.flex-col
+          [:strong (t :on-boarding/section-title)]
+          [:small.opacity-60 (t :on-boarding/section-desc)]]]
 
-       [:ul
-        (for [[title label icon]
-              [[(t :on-boarding/section-assets) "/assets" "whiteboard"]
-               [(t :on-boarding/section-journals) "/journals" "calendar-plus"]
-               [(t :on-boarding/section-pages) "/pages" "page"]
-               []
-               [(t :on-boarding/section-app) "/logseq" "tool"]
-               [(t :on-boarding/section-config) "/logseq/config.edn"]]]
-          (if-not title
-            [:li.hr]
-            [:li
-             {:key title}
-             [:i.as-flex-center
-              {:class (when (string/ends-with? label ".edn") "is-file")}
-              (when icon (ui/icon icon))]
-             [:span
-              [:strong.uppercase title]
-              [:small.opacity-50 label]]]))]]])))
+        [:p.text-sm.pt-5.tracking-wide
+         [:span (str (t :on-boarding/section-tip-1 DEVICE))]
+         [:br]
+         [:span (t :on-boarding/section-tip-2)]]
+
+        [:ul
+         (for [[title label icon]
+               [[(t :on-boarding/section-assets) "/assets" "whiteboard"]
+                [(t :on-boarding/section-journals) "/journals" "calendar-plus"]
+                [(t :on-boarding/section-pages) "/pages" "page"]
+                []
+                [(t :on-boarding/section-app) "/logseq" "tool"]
+                [(t :on-boarding/section-config) "/logseq/config.edn"]]]
+           (if-not title
+             [:li.hr]
+             [:li
+              {:key title}
+              [:i.as-flex-center
+               {:class (when (string/ends-with? label ".edn") "is-file")}
+               (when icon (ui/icon icon))]
+              [:span
+               [:strong.uppercase title]
+               [:small.opacity-50 label]]]))]]])))

@@ -84,4 +84,4 @@
     {:close-btn?      true
      :label           "user-login"
      :close-backdrop? false
-     :center?         true}))
+     :center?         false}))

@@ -35,21 +35,17 @@ http://ethanschoonover.com/lsradix/img/lsradix-palette.png
   rendering-intent: auto;
 }
 .cm-s-lsradix.cm-s-dark {
-  /* color: or(--lx-gray-09, #839496); */
-  color: or(--lx-gray-11, #839496);
-  background-color: or(--lx-gray-01, #002b36);
-  text-shadow: #002b36 0 1px;
+  background-color: var(--lx-gray-01, hsl(var(--secondary)/.7));
+  color: var(--lx-gray-10, hsl(var(--secondary-foreground)));
 }
 
 .dark .cm-s-lsradix.cm-s-dark {
-  background-color: or(--lx-gray-02, #002b36);
+  background-color: var(--lx-gray-02, hsl(var(--secondary)/.7));
 }
 
 .cm-s-lsradix.cm-s-light {
-  /* background-color: or(--lx-gray-12, #fdf6e3); */
-  background-color: or(--lx-gray-02, #fdf6e3);
-  color: or(--lx-gray-10, #657b83);
-  text-shadow: #eee8d5 0 1px;
+  background-color: var(--lx-gray-02, hsl(var(--secondary)/.7));
+  color: var(--lx-gray-10, hsl(var(--secondary-foreground)));
 }
 
 .cm-s-lsradix .CodeMirror-widget {
@@ -124,23 +120,20 @@ http://ethanschoonover.com/lsradix/img/lsradix-palette.png
 
 /* Dark */
 .cm-s-lsradix.cm-s-dark .CodeMirror-gutters {
-  background-color: or(--lx-gray-01, #073642);
+  background-color: var(--lx-gray-03, hsl(var(--secondary)));
 }
 
 .cm-s-lsradix.cm-s-dark .CodeMirror-linenumber {
-  color: or(--lx-gray-09, #586e75);
-  /* color: or(--lx-gray-03, #586e75); */
-  text-shadow: #021014 0 -1px;
+  color: var(--lx-gray-09, #586e75);
 }
 
 /* Light */
 .cm-s-lsradix.cm-s-light .CodeMirror-gutters {
-  background-color: or(--lx-gray-03, #eee8d5);
-  /* background-color: or(--lx-gray-11, #eee8d5); */
+  background-color: var(--lx-gray-03, hsl(var(--secondary)));
 }
 
 .cm-s-lsradix.cm-s-light .CodeMirror-linenumber {
-  color: or(--lx-gray-09, #839496);
+  color: var(--lx-gray-09, #839496);
 }
 
 /* Common */

@@ -51,16 +51,20 @@
        (<! (load-youtube-api))
        (register-player state))
      state)}
-  [state id {:keys [width height] :as _opts}]
+  [state id {:keys [width height start] :as _opts}]
   (let [width  (or width (min (- (util/get-width) 96)
                               560))
-        height (or height (int (* width (/ 315 560))))]
+        height (or height (int (* width (/ 315 560))))
+        url (str "https://www.youtube.com/embed/" id "?enablejsapi=1")
+        url (if start
+              (str url "&start=" start)
+              url)]
     [:iframe
      {:id                (str "youtube-player-" id)
       :allow-full-screen "allowfullscreen"
       :allow             "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
       :frame-border      "0"
-      :src               (str "https://www.youtube.com/embed/" id "?enablejsapi=1")
+      :src               url
       :height            height
       :width             width}]))
 
