@@ -395,7 +395,7 @@
                          (let [[rel-dir basename] (util/get-dir-and-basename href)
                                rel-dir (string/replace rel-dir #"^/+" "")
                                asset-url (path/path-join repo-dir rel-dir basename)]
-                           (mobile-intent/share-file asset-url))))]
+                           (mobile-intent/open-or-share-file asset-url))))]
 
         (cond
           (contains? config/audio-formats ext)

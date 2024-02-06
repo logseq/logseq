@@ -1,6 +1,7 @@
 (ns frontend.mobile.intent
   (:require ["@capacitor/filesystem" :refer [Filesystem]]
             ["@capacitor/share" :refer [^js Share]]
+            ["@capacitor/action-sheet" :refer [ActionSheet]]
             ["path" :as node-path]
             ["send-intent" :refer [^js SendIntent]]
             [clojure.pprint :as pprint]
@@ -23,21 +24,25 @@
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]))
 
-(defn share-file
+(defn open-or-share-file
   "Share file to mobile platform"
   [uri]
-  (cond
-    ;; using ACTION_VIEW to open file with system default app
-    (mobile-util/native-android?)
-    (.openFile mobile-util/folder-picker (clj->js {:uri uri}))
+  (p/let [options [{:title "Open"
+                    :style "DEFAULT"}
+                   {:title "Share"}
+                   {:title "Cancel"
+                    :style "CANCEL"}]
+          result (.showActions ActionSheet (clj->js {:title "File Options"
+                                                     :message "Select an option to perform"
+                                                     :options options}))
+          index (.-index result)]
 
-    (mobile-util/native-ios?)
-    (.share Share (clj->js {:url uri
-                            :dialogTitle "Open file with your favorite app"
-                            :title "Open file with your favorite app"}))
-
-    :else
-    (js/window.open uri "_blank")))
+    (when (not= index 2)
+      (if (and (= index 0) (mobile-util/native-android?))
+        (.openFile mobile-util/folder-picker (clj->js {:uri uri}))
+        (.share Share (clj->js {:url uri
+                                :dialogTitle "Open file with your favorite app"
+                                :title "Open file with your favorite app"}))))))
 
 (defn- is-link
   [url]
