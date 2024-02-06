@@ -287,6 +287,7 @@
  :settings-page/git-desc-1 "Sayfanın düzenleme geçmişini görüntülemek için sağ üst köşedeki üç yatay noktaya basın ve \"Sayfa geçmişini görüntüle\" ögesini seçin."
  :settings-page/git-desc-2 "Profesyonel kullanıcılar için Logseq, sürüm kontrolü için "
  :settings-page/git-desc-3 " kullanımını da destekler. Genel Git sorunları Logseq ekibi tarafından desteklenmediğinden Git'i kullanmanın riski size aittir."
+ :settings-page/git-commit-on-close "Pencere kapatıldığında git commit'i çalıştır"
  :settings-page/git-switcher-label "Otomatik git commit'i etkinleştir"
  :settings-page/git-commit-delay "Otomatik git commit saniyesi"
  :settings-page/edit-config-edn "config.edn dosyasını düzenle"

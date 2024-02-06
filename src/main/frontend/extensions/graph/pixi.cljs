@@ -10,6 +10,8 @@
 
 (defonce *graph-instance (atom nil))
 (defonce *simulation (atom nil))
+(defonce *simulation-paused?
+  (atom false))
 
 (def Graph (gobj/get graphology "Graph"))
 
@@ -56,22 +58,21 @@
 (defn layout!
   "Node forces documentation can be read in more detail here https://d3js.org/d3-force"
   [nodes links link-dist charge-strength charge-range]
-  (let [nodes-count (count nodes)
-        simulation (forceSimulation nodes)]
-    (-> simulation 
+  (let [simulation (forceSimulation nodes)]
+    (-> simulation
         (.force "link"
-                ;; The link force pushes linked nodes together or apart according to the desired link distance. 
-                ;; The strength of the force is proportional to the difference between the linked nodes distance 
+                ;; The link force pushes linked nodes together or apart according to the desired link distance.
+                ;; The strength of the force is proportional to the difference between the linked nodes distance
                 ;; and the target distance, similar to a spring force.
                 (-> (forceLink)
                     (.id (fn [d] (.-id d)))
                     (.distance link-dist)
                     (.links links)))
         (.force "charge"
-                ;; The many-body (or n-body) force applies mutually amongst all nodes. 
+                ;; The many-body (or n-body) force applies mutually amongst all nodes.
                 ;; It can be used to simulate gravity or electrostatic charge.
                 (-> (forceManyBody)
-                    ;; The minimum distance between nodes over which this force is considered. 
+                    ;; The minimum distance between nodes over which this force is considered.
                     ;; A minimum distance establishes an upper bound on the strength of the force between two nearby nodes, avoiding instability.
                     (.distanceMin 1)
                     ;; The maximum distance between nodes over which this force is considered.
@@ -80,7 +81,7 @@
                     ;; For a cluster of nodes that is far away, the charge force can be approximated by treating the cluster as a single, larger node.
                     ;; The theta parameter determines the accuracy of the approximation
                     (.theta 0.5)
-                    ;; A positive value causes nodes to attract each other, similar to gravity, 
+                    ;; A positive value causes nodes to attract each other, similar to gravity,
                     ;; while a negative value causes nodes to repel each other, similar to electrostatic charge.
                     (.strength charge-strength)))
         (.force "collision"
@@ -90,8 +91,8 @@
         (.force "x" (-> (forceX 0) (.strength 0.02)))
         (.force "y" (-> (forceY 0) (.strength 0.02)))
         (.force "center" (forceCenter))
-        ;; The decay factor is akin to atmospheric friction; after the application of any forces during a tick, 
-        ;; each node’s velocity is multiplied by 1 - decay. As with lowering the alpha decay rate, 
+        ;; The decay factor is akin to atmospheric friction; after the application of any forces during a tick,
+        ;; each node’s velocity is multiplied by 1 - decay. As with lowering the alpha decay rate,
         ;; less velocity decay may converge on a better solution, but risks numerical instabilities and oscillation.
         (.velocityDecay 0.5))
     (reset! *simulation simulation)
@@ -114,7 +115,20 @@
   (when-let [instance (:pixi @*graph-instance)]
     (.destroy instance)
     (reset! *graph-instance nil)
-    (reset! *simulation nil)))
+    (reset! *simulation nil))
+  (reset! *simulation-paused? false))
+
+(defn stop-simulation!
+  []
+  (when-let [^js simulation @*simulation]
+    (.stop simulation)
+    (reset! *simulation-paused? true)))
+
+(defn resume-simulation!
+  []
+  (when-let [^js simulation @*simulation]
+    (.restart simulation))
+  (reset! *simulation-paused? false))
 
 (defn- update-position!
   [node obj]
@@ -162,7 +176,8 @@
              #_:clj-kondo/ignore
              (when-let [node (.get nodes node-key)]
                (when-let [s @*simulation]
-                 (when-not (.-active event)
+                 (when-not (or (.-active event)
+                               @*simulation-paused?)
                    (-> (.alphaTarget s 0.3)
                        (.restart))
                    (js/setTimeout #(.alphaTarget s 0) 2000))
