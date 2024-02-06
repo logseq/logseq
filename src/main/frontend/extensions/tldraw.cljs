@@ -22,7 +22,8 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.ui :as ui]
-            [frontend.components.whiteboard :as whiteboard]))
+            [frontend.components.whiteboard :as whiteboard]
+            [cljs-bean.core :as bean]))
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
@@ -81,13 +82,14 @@
          (map (fn [k] (js->clj (gobj/get props k) {:keywordize-keys true})) ["id" "className" "options"])))
 
 (rum/defc keyboard-shortcut
-  [props]
-  (let [action (gobj/get props "action")
-        sequence (or (gobj/get props "sequence")
-                     (ui/keyboard-shortcut-from-config (keyword action)))]
-    (cond
-      (string? sequence) (ui/render-keyboard-shortcut sequence)
-      :else (interpose " | " (map ui/render-keyboard-shortcut sequence)))))
+  [^js props]
+  (when-let [props (bean/->clj props)]
+    (let [{:keys [action shortcut opts]} props
+          shortcut (if (string? action) (ui/keyboard-shortcut-from-config (keyword action)) shortcut)
+          opts (merge {:interactive? false} opts)]
+      (cond
+        (string? shortcut) (ui/render-keyboard-shortcut shortcut opts)
+        :else (interpose " | " (map #(ui/render-keyboard-shortcut % opts) shortcut))))))
 
 (def tldraw-renderers {:Page page-cp
                        :Block block-cp

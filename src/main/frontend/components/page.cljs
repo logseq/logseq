@@ -48,7 +48,8 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.extensions.graph.pixi :as pixi]))
 
 (defn- get-page-name
   [state]
@@ -63,13 +64,13 @@
     [state]
     ;; Only query if block name is in the route
     (when-let [route-name (get-in (first (:rum/args state))
-                                  [:parameters :path :block-route-name])]
+                            [:parameters :path :block-route-name])]
       (->> (model/get-block-by-page-name-and-block-route-name
-            (state/get-current-repo)
-            (get-page-name state)
-            route-name)
-           :block/uuid
-           str)))
+             (state/get-current-repo)
+             (get-page-name state)
+             route-name)
+        :block/uuid
+        str)))
   (def get-block-uuid-by-block-route-name (constantly nil)))
 
 (defn- get-block
@@ -82,11 +83,11 @@
   [state]
   (let [[_ block _ sidebar? preview?] (:rum/args state)]
     (when (and
-           (or preview?
-               (not (contains? #{:home :all-journals :whiteboard} (state/get-current-route))))
-           (not sidebar?))
+            (or preview?
+              (not (contains? #{:home :all-journals :whiteboard} (state/get-current-route))))
+            (not sidebar?))
       (when (and (string/blank? (:block/content block))
-                 (not preview?))
+              (not preview?))
         (editor-handler/edit-block! block :max (:block/uuid block)))))
   state)
 
@@ -97,8 +98,8 @@
     [:div.page-blocks-inner {:style {:margin-left (if (or sidebar? whiteboard?) 0 -20)}}
      (rum/with-key
        (content/content page-name
-                        {:hiccup   hiccup
-                         :sidebar? sidebar?})
+         {:hiccup   hiccup
+          :sidebar? sidebar?})
        (str page-name "-hiccup"))]))
 
 (declare page)
@@ -123,10 +124,10 @@
                                     _ (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false})]
                               (js/setTimeout #(let [target-block (db/pull (:db/id (db/get-page page-name)))]
                                                 (dnd/move-blocks event blocks target-block nil :sibling))
-                                             0)))]
+                                0)))]
       [:div.ls-block.flex-1.flex-col.rounded-sm
        {:style {:width "100%"
-              ;; The same as .dnd-separator
+                ;; The same as .dnd-separator
                 :border-top (if hover
                               "3px solid #ccc"
                               nil)}}
@@ -158,18 +159,18 @@
       (ui/icon "circle-plus")]]]])
 
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
-  {:will-mount (fn [state]
-                 (let [page-e (second (:rum/args state))
-                       page-name (:block/name page-e)]
-                   (when (and (db/journal-page? page-name)
-                              (>= (date/journal-title->int page-name)
-                                  (date/journal-title->int (date/today))))
-                     (state/pub-event! [:journal/insert-template page-name])))
-                 state)}
+                            {:will-mount (fn [state]
+                                           (let [page-e (second (:rum/args state))
+                                                 page-name (:block/name page-e)]
+                                             (when (and (db/journal-page? page-name)
+                                                     (>= (date/journal-title->int page-name)
+                                                       (date/journal-title->int (date/today))))
+                                               (state/pub-event! [:journal/insert-template page-name])))
+                                           state)}
   [state repo page-e {:keys [sidebar? whiteboard?] :as config}]
   (when page-e
     (let [page-name (or (:block/name page-e)
-                        (str (:block/uuid page-e)))
+                      (str (:block/uuid page-e)))
           block-id (parse-uuid page-name)
           block? (boolean block-id)
           block (get-block page-name)
@@ -180,8 +181,8 @@
         (ui/loading "Loading...")
 
         (and
-         (not block?)
-         (empty? children))
+          (not block?)
+          (empty? children))
         (dummy-block page-name)
 
         :else
@@ -189,13 +190,13 @@
               short-page? (when-not block?
                             (<= (count (:block/_page block)) 200))
               hiccup-config (merge
-                             {:id (if block? (str block-id) page-name)
-                              :db/id (:db/id block)
-                              :block? block?
-                              :editor-box editor/box
-                              :document/mode? document-mode?
-                              :disable-lazy-load? short-page?}
-                             config)
+                              {:id (if block? (str block-id) page-name)
+                               :db/id (:db/id block)
+                               :block? block?
+                               :editor-box editor/box
+                               :document/mode? document-mode?
+                               :disable-lazy-load? short-page?}
+                              config)
               config (common-handler/config-with-document-mode hiccup-config)
               blocks (if block? [block] (db/sort-by-left children block))]
           [:div
@@ -220,12 +221,12 @@
          (for [query queries]
            (rum/with-key
              (ui/catch-error
-              (ui/component-error "Failed default query:" {:content (pr-str query)})
-              (query/custom-query (component-block/wrap-query-components
-                                   {:attr {:class "mt-10"}
-                                    :editor-box editor/box
-                                    :page page})
-                                  query))
+               (ui/component-error "Failed default query:" {:content (pr-str query)})
+               (query/custom-query (component-block/wrap-query-components
+                                     {:attr {:class "mt-10"}
+                                      :editor-box editor/box
+                                      :page page})
+                 query))
              (str repo "-custom-query-" (:query query))))]))))
 
 (defn tagged-pages
@@ -235,21 +236,21 @@
       [:div.references.page-tags.mt-6.flex-1.flex-row
        [:div.content
         (ui/foldable
-         [:h2.font-bold.opacity-50 (util/format "Pages tagged with \"%s\"" tag-original-name)]
-         [:ul.mt-2
-          (for [[original-name name] (sort-by last pages)]
-            [:li {:key (str "tagged-page-" name)}
-             (component-block/page-cp {} {:block/name name :block/original-name original-name})])]
-         {:default-collapsed? false})]])))
+          [:h2.font-bold.opacity-50 (util/format "Pages tagged with \"%s\"" tag-original-name)]
+          [:ul.mt-2
+           (for [[original-name name] (sort-by last pages)]
+             [:li {:key (str "tagged-page-" name)}
+              (component-block/page-cp {} {:block/name name :block/original-name original-name})])]
+          {:default-collapsed? false})]])))
 
 (rum/defc page-title-editor < rum/reactive
   [page {:keys [*input-value *title-value *edit? untitled? page-name old-name whiteboard-page?]}]
   (let [input-ref (rum/create-ref)
         title (:block/original-name page)
         collide? #(and (not= (util/page-name-sanity-lc page-name)
-                             (util/page-name-sanity-lc @*title-value))
-                       (db/page-exists? page-name)
-                       (db/page-exists? @*title-value))
+                         (util/page-name-sanity-lc @*title-value))
+                    (db/page-exists? page-name)
+                    (db/page-exists? @*title-value))
         rename-fn (fn [old-name new-name]
                     (page-handler/rename! old-name new-name))
         rollback-fn #(let [old-name (if untitled? "" old-name)]
@@ -279,8 +280,8 @@
 
                     :else
                     (p/do!
-                     (rename-fn (or title page-name) @*title-value)
-                     (js/setTimeout #(reset! *edit? false) 100)))
+                      (rename-fn (or title page-name) @*title-value)
+                      (js/setTimeout #(reset! *edit? false) 100)))
                   (util/stop e))]
     [:input.edit-input.p-0.focus:outline-none.ring-none
      {:type          "text"
@@ -309,13 +310,13 @@
                   (when untitled? (reset! *title-value "")))}]))
 
 (rum/defcs ^:large-vars/cleanup-todo page-title < rum/reactive
-  (rum/local false ::edit?)
-  (rum/local "" ::input-value)
-  {:init (fn [state]
-           (let [page-name (first (:rum/args state))
-                 original-name (:block/original-name (db/entity [:block/name (util/page-name-sanity-lc page-name)]))
-                 *title-value (atom original-name)]
-             (assoc state ::title-value *title-value)))}
+                                                  (rum/local false ::edit?)
+                                                  (rum/local "" ::input-value)
+                                                  {:init (fn [state]
+                                                           (let [page-name (first (:rum/args state))
+                                                                 original-name (:block/original-name (db/entity [:block/name (util/page-name-sanity-lc page-name)]))
+                                                                 *title-value (atom original-name)]
+                                                             (assoc state ::title-value *title-value)))}
   [state page-name {:keys [fmt-journal? preview? *hover?]}]
   (when page-name
     (let [page (when page-name (db/entity [:block/name page-name]))
@@ -344,12 +345,12 @@
              [:div.page-icon {:on-mouse-down util/stop-propagation}
               (if (and (map? icon) db-based?)
                 (icon-component/icon-picker icon
-                                            {:on-chosen (fn [_e icon]
-                                                          (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-                                                            (db-property-handler/update-property!
-                                                             repo
-                                                             (:block/uuid page)
-                                                             {:properties {icon-property-id icon}})))})
+                  {:on-chosen (fn [_e icon]
+                                (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
+                                  (db-property-handler/update-property!
+                                    repo
+                                    (:block/uuid page)
+                                    {:properties {icon-property-id icon}})))})
                 icon)])
            [:h1.page-title.flex-1.cursor-pointer.gap-1
             {:class (when-not whiteboard-page? "title")
@@ -362,14 +363,14 @@
                            (if (gobj/get e "shiftKey")
                              (when-let [page (db/pull repo '[*] [:block/name page-name])]
                                (state/sidebar-add-block!
-                                repo
-                                (:db/id page)
-                                :page))
+                                 repo
+                                 (:db/id page)
+                                 :page))
                              (when (and (not hls-page?)
-                                        (not fmt-journal?)
-                                        (not config/publishing?)
-                                        (not (and (contains? (:block/type page) "property")
-                                                  (contains? db-property/built-in-properties-keys-str page-name))))
+                                     (not fmt-journal?)
+                                     (not config/publishing?)
+                                     (not (and (contains? (:block/type page) "property")
+                                            (contains? db-property/built-in-properties-keys-str page-name))))
                                (reset! *input-value (if untitled? "" old-name))
                                (reset! *edit? true)))))}
 
@@ -390,10 +391,10 @@
                 :data-ref   page-name
                 :style      {:opacity (when @*edit? 0)}}
                (let [nested? (and (string/includes? title page-ref/left-brackets)
-                                  (string/includes? title page-ref/right-brackets))]
+                               (string/includes? title page-ref/right-brackets))]
                  (cond untitled? [:span.opacity-50 (t :untitled)]
                        nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (mldoc/get-default-config
-                                                                                           (:block/format page))))
+                                                                                            (:block/format page))))
                        :else title))])]
 
            ;; (when (and db-based? (not whiteboard-page?))
@@ -413,8 +414,8 @@
   (reset! *control-show? true)
   (let [all-collapsed?
         (->> (editor-handler/all-blocks-with-level {:collapse? true})
-             (filter (fn [b] (editor-handler/collapsable? (:block/uuid b))))
-             (empty?))]
+          (filter (fn [b] (editor-handler/collapsable? (:block/uuid b))))
+          (empty?))]
     (reset! *all-collapsed? all-collapsed?)))
 
 (defn- page-mouse-leave
@@ -439,10 +440,10 @@
 (defn- get-path-page-name
   [state page-name]
   (or page-name
-      (get-block-uuid-by-block-route-name state)
-      ;; is page name or uuid
-      (get-page-name state)
-      (state/get-current-page)))
+    (get-block-uuid-by-block-route-name state)
+    ;; is page name or uuid
+    (get-page-name state)
+    (state/get-current-page)))
 
 (defn- get-page-entity
   [repo path-page-name page-name]
@@ -457,10 +458,10 @@
 
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive db-mixins/query
-  (rum/local false ::all-collapsed?)
-  (rum/local false ::control-show?)
-  (rum/local nil   ::current-page)
-  (rum/local false ::hover-title?)
+                                                  (rum/local false ::all-collapsed?)
+                                                  (rum/local false ::control-show?)
+                                                  (rum/local nil   ::current-page)
+                                                  (rum/local false ::hover-title?)
   [state {:keys [repo page-name preview? sidebar?] :as option}]
   (when-let [path-page-name (get-path-page-name state page-name)]
     (let [current-repo (state/sub :git/current-repo)
@@ -479,8 +480,8 @@
           page-original-name (:block/original-name page)
           title (or page-original-name page-name)
           today? (and
-                  journal?
-                  (= page-name (util/page-name-sanity-lc (date/journal-name))))
+                   journal?
+                   (= page-name (util/page-name-sanity-lc (date/journal-name))))
           *control-show? (::control-show? state)
           *all-collapsed? (::all-collapsed? state)
           *current-block-page (::current-page state)
@@ -493,8 +494,8 @@
                     {:data-page-tags (text-util/build-data-value page-names)})
                   {})
 
-                {:key path-page-name
-                 :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
+           {:key path-page-name
+            :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
 
          (if (and whiteboard-page? (not sidebar?))
            [:div ((state/get-component :whiteboard/tldraw-preview) page-name)] ;; FIXME: this is not reactive
@@ -535,7 +536,7 @@
              (when (and db-based? (not block?) (not preview?))
                (db-page/page-properties-react page {:configure? false}))
 
-           ;; blocks
+             ;; blocks
              (let [_ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
                    _ (when (and block? (not page))
                        (route-handler/redirect-to-page! @*current-block-page))]
@@ -550,7 +551,7 @@
          (when-not block?
            (tagged-pages repo page-name page-original-name))
 
-       ;; referenced blocks
+         ;; referenced blocks
          (when-not block-or-whiteboard?
            [:div {:key "page-references"}
             (rum/with-key
@@ -578,7 +579,7 @@
       (rum/with-key
         (page-inner option)
         (or (:page-name option)
-            (get-page-name state))))))
+          (get-page-name state))))))
 
 (defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
 
@@ -605,29 +606,58 @@
 (defonce *n-hops (atom nil))
 (defonce *focus-nodes (atom []))
 (defonce *graph-reset? (atom false))
+(defonce *graph-forcereset? (atom false))
 (defonce *journal? (atom nil))
 (defonce *orphan-pages? (atom true))
 (defonce *builtin-pages? (atom nil))
 (defonce *excluded-pages? (atom true))
 (defonce *show-journals-in-page-graph? (atom nil))
 (defonce *created-at-filter (atom nil))
+(defonce *link-dist (atom 70))
+(defonce *charge-strength (atom -600))
+(defonce *charge-range (atom 600))
+
+(rum/defcs simulation-switch < rum/reactive
+  [state]
+  (let [*simulation-paused? pixi/*simulation-paused?]
+    [:div.flex.flex-col.mb-2
+     [:p {:title "Pause simulation"}
+      "Pause simulation"]
+     (ui/toggle
+       (rum/react *simulation-paused?)
+       (fn []
+         (let [paused? @*simulation-paused?]
+           (if paused?
+             (pixi/resume-simulation!)
+             (pixi/stop-simulation!))))
+       true)]))
 
 (rum/defc ^:large-vars/cleanup-todo graph-filters < rum/reactive
-  [graph settings n-hops]
+  [graph settings forcesettings n-hops]
   (let [{:keys [journal? orphan-pages? builtin-pages? excluded-pages?]
          :or {orphan-pages? true}} settings
+        {:keys [link-dist charge-strength charge-range]} forcesettings
         journal?' (rum/react *journal?)
         orphan-pages?' (rum/react *orphan-pages?)
         builtin-pages?' (rum/react *builtin-pages?)
         excluded-pages?' (rum/react *excluded-pages?)
+        link-dist'  (rum/react *link-dist)
+        charge-strength'  (rum/react *charge-strength)
+        charge-range'  (rum/react *charge-range)
         journal? (if (nil? journal?') journal? journal?')
         orphan-pages? (if (nil? orphan-pages?') orphan-pages? orphan-pages?')
         builtin-pages? (if (nil? builtin-pages?') builtin-pages? builtin-pages?')
         excluded-pages? (if (nil? excluded-pages?') excluded-pages? excluded-pages?')
         created-at-filter (or (rum/react *created-at-filter) (:created-at-filter settings))
+        link-dist (if (nil? link-dist') link-dist link-dist')
+        charge-strength (if (nil? charge-strength') charge-strength charge-strength')
+        charge-range (if (nil? charge-range') charge-range charge-range')
         set-setting! (fn [key value]
                        (let [new-settings (assoc settings key value)]
                          (config-handler/set-config! :graph/settings new-settings)))
+        set-forcesetting! (fn [key value]
+                            (let [new-forcesettings (assoc forcesettings key value)]
+                              (config-handler/set-config! :graph/forcesettings new-forcesettings)))
         search-graph-filters (state/sub :search/graph-filters)
         focus-nodes (rum/react *focus-nodes)]
     [:div.absolute.top-4.right-4.graph-filters
@@ -635,180 +665,239 @@
       [:div.shadow-xl.rounded-sm
        [:ul
         (graph-filter-section
-         [:span.font-medium "Nodes"]
-         (fn [open?]
-           (filter-expand-area
-            open?
-            [:div
-             [:p.text-sm.opacity-70.px-4
-              (let [c1 (count (:nodes graph))
-                    s1 (if (> c1 1) "s" "")
-                    ;; c2 (count (:links graph))
-                    ;; s2 (if (> c2 1) "s" "")
-                    ]
-                ;; (util/format "%d page%s, %d link%s" c1 s1 c2 s2)
-                (util/format "%d page%s" c1 s1))]
-             [:div.p-6
-              ;; [:div.flex.items-center.justify-between.mb-2
-              ;;  [:span "Layout"]
-              ;;  (ui/select
-              ;;    (mapv
-              ;;     (fn [item]
-              ;;       (if (= (:label item) layout)
-              ;;         (assoc item :selected "selected")
-              ;;         item))
-              ;;     [{:label "gForce"}
-              ;;      {:label "dagre"}])
-              ;;    (fn [_e value]
-              ;;      (set-setting! :layout value))
-              ;;    {:class "graph-layout"})]
-              [:div.flex.items-center.justify-between.mb-2
-               [:span (t :settings-page/enable-journals)]
-               ;; FIXME: why it's not aligned well?
-               [:div.mt-1
-                (ui/toggle journal?
-                           (fn []
-                             (let [value (not journal?)]
-                               (reset! *journal? value)
-                               (set-setting! :journal? value)))
-                           true)]]
-              [:div.flex.items-center.justify-between.mb-2
-               [:span "Orphan pages"]
-               [:div.mt-1
-                (ui/toggle orphan-pages?
-                           (fn []
-                             (let [value (not orphan-pages?)]
-                               (reset! *orphan-pages? value)
-                               (set-setting! :orphan-pages? value)))
-                           true)]]
-              [:div.flex.items-center.justify-between.mb-2
-               [:span "Built-in pages"]
-               [:div.mt-1
-                (ui/toggle builtin-pages?
-                           (fn []
-                             (let [value (not builtin-pages?)]
-                               (reset! *builtin-pages? value)
-                               (set-setting! :builtin-pages? value)))
-                           true)]]
-              [:div.flex.items-center.justify-between.mb-2
-               [:span "Excluded pages"]
-               [:div.mt-1
-                (ui/toggle excluded-pages?
-                           (fn []
-                             (let [value (not excluded-pages?)]
-                               (reset! *excluded-pages? value)
-                               (set-setting! :excluded-pages? value)))
-                           true)]]
-              (when (config/db-based-graph? (state/get-current-repo))
-                [:div.flex.flex-col.mb-2
-                 [:p "Created before"]
-                 (when created-at-filter
-                   [:div (.toDateString (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))])
-                 (ui/tippy {:html [:div.pr-3 (str (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))]}
-                          ;; Slider keeps track off the range from min created-at to max created-at
-                          ;; because there were bugs with setting min and max directly
-                           (ui/slider created-at-filter
-                                      {:min 0
-                                       :max (- (get-in graph [:all-pages :created-at-max])
-                                               (get-in graph [:all-pages :created-at-min]))
-                                       :on-change #(do
-                                                     (reset! *created-at-filter (int %))
-                                                     (set-setting! :created-at-filter (int %)))}))])
-              (when (seq focus-nodes)
-                [:div.flex.flex-col.mb-2
-                 [:p {:title "N hops from selected nodes"}
-                  "N hops from selected nodes"]
-                 (ui/tippy {:html [:div.pr-3 n-hops]}
-                           (ui/slider (or n-hops 10)
-                                      {:min 1
-                                       :max 10
-                                       :on-change #(reset! *n-hops (int %))}))])
+          [:span.font-medium "Nodes"]
+          (fn [open?]
+            (filter-expand-area
+              open?
+              [:div
+               [:p.text-sm.opacity-70.px-4
+                (let [c1 (count (:nodes graph))
+                      s1 (if (> c1 1) "s" "")
+                      ;; c2 (count (:links graph))
+                      ;; s2 (if (> c2 1) "s" "")
+                      ]
+                  ;; (util/format "%d page%s, %d link%s" c1 s1 c2 s2)
+                  (util/format "%d page%s" c1 s1))]
+               [:div.p-6
+                ;; [:div.flex.items-center.justify-between.mb-2
+                ;;  [:span "Layout"]
+                ;;  (ui/select
+                ;;    (mapv
+                ;;     (fn [item]
+                ;;       (if (= (:label item) layout)
+                ;;         (assoc item :selected "selected")
+                ;;         item))
+                ;;     [{:label "gForce"}
+                ;;      {:label "dagre"}])
+                ;;    (fn [_e value]
+                ;;      (set-setting! :layout value))
+                ;;    {:class "graph-layout"})]
+                [:div.flex.items-center.justify-between.mb-2
+                 [:span (t :settings-page/enable-journals)]
+                 ;; FIXME: why it's not aligned well?
+                 [:div.mt-1
+                  (ui/toggle journal?
+                    (fn []
+                      (let [value (not journal?)]
+                        (reset! *journal? value)
+                        (set-setting! :journal? value)))
+                    true)]]
+                [:div.flex.items-center.justify-between.mb-2
+                 [:span "Orphan pages"]
+                 [:div.mt-1
+                  (ui/toggle orphan-pages?
+                    (fn []
+                      (let [value (not orphan-pages?)]
+                        (reset! *orphan-pages? value)
+                        (set-setting! :orphan-pages? value)))
+                    true)]]
+                [:div.flex.items-center.justify-between.mb-2
+                 [:span "Built-in pages"]
+                 [:div.mt-1
+                  (ui/toggle builtin-pages?
+                    (fn []
+                      (let [value (not builtin-pages?)]
+                        (reset! *builtin-pages? value)
+                        (set-setting! :builtin-pages? value)))
+                    true)]]
+                [:div.flex.items-center.justify-between.mb-2
+                 [:span "Excluded pages"]
+                 [:div.mt-1
+                  (ui/toggle excluded-pages?
+                    (fn []
+                      (let [value (not excluded-pages?)]
+                        (reset! *excluded-pages? value)
+                        (set-setting! :excluded-pages? value)))
+                    true)]]
+                (when (config/db-based-graph? (state/get-current-repo))
+                  [:div.flex.flex-col.mb-2
+                   [:p "Created before"]
+                   (when created-at-filter
+                     [:div (.toDateString (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))])
+                   (ui/tippy {:html [:div.pr-3 (str (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))]}
+                     ;; Slider keeps track off the range from min created-at to max created-at
+                     ;; because there were bugs with setting min and max directly
+                     (ui/slider created-at-filter
+                       {:min 0
+                        :max (- (get-in graph [:all-pages :created-at-max])
+                               (get-in graph [:all-pages :created-at-min]))
+                        :on-change #(do
+                                      (reset! *created-at-filter (int %))
+                                      (set-setting! :created-at-filter (int %)))}))])
+                (when (seq focus-nodes)
+                  [:div.flex.flex-col.mb-2
+                   [:p {:title "N hops from selected nodes"}
+                    "N hops from selected nodes"]
+                   (ui/tippy {:html [:div.pr-3 n-hops]}
+                     (ui/slider (or n-hops 10)
+                       {:min 1
+                        :max 10
+                        :on-change #(reset! *n-hops (int %))}))])
 
-              [:a.opacity-70.opacity-100 {:on-click (fn []
-                                                      (swap! *graph-reset? not)
-                                                      (reset! *focus-nodes [])
-                                                      (reset! *n-hops nil)
-                                                      (reset! *created-at-filter nil)
-                                                      (set-setting! :created-at-filter nil)
-                                                      (state/clear-search-filters!))}
-               "Reset Graph"]]]))
-         {})
+                [:a.opacity-70.opacity-100 {:on-click (fn []
+                                                        (swap! *graph-reset? not)
+                                                        (reset! *focus-nodes [])
+                                                        (reset! *n-hops nil)
+                                                        (reset! *created-at-filter nil)
+                                                        (set-setting! :created-at-filter nil)
+                                                        (state/clear-search-filters!))}
+                 "Reset Graph"]]]))
+          {})
         (graph-filter-section
-         [:span.font-medium "Search"]
-         (fn [open?]
-           (filter-expand-area
-            open?
-            [:div.p-6
-             (if (seq search-graph-filters)
-               [:div
-                (for [q search-graph-filters]
-                  [:div.flex.flex-row.justify-between.items-center.mb-2
-                   [:span.font-medium q]
-                   [:a.search-filter-close.opacity-70.opacity-100 {:on-click #(state/remove-search-filter! q)}
-                    svg/close]])
-
-                [:a.opacity-70.opacity-100 {:on-click state/clear-search-filters!}
-                 "Clear All"]]
-               [:a.opacity-70.opacity-100 {:on-click #(route-handler/go-to-search! :graph)}
-                "Click to search"])]))
-         {:search-filters search-graph-filters})
-        (graph-filter-section
-         [:span.font-medium "Export"]
-         (fn [open?]
-           (filter-expand-area
-            open?
-            (when-let [canvas (js/document.querySelector "#global-graph canvas")]
+          [:span.font-medium "Search"]
+          (fn [open?]
+            (filter-expand-area
+              open?
               [:div.p-6
-               ;; We'll get an empty image if we don't wrap this in a requestAnimationFrame
-               [:div [:a {:on-click #(.requestAnimationFrame js/window (fn [] (utils/canvasToImage canvas "graph" "png")))} "as PNG"]]])))
-         {:search-filters search-graph-filters})]]]]))
+               (if (seq search-graph-filters)
+                 [:div
+                  (for [q search-graph-filters]
+                    [:div.flex.flex-row.justify-between.items-center.mb-2
+                     [:span.font-medium q]
+                     [:a.search-filter-close.opacity-70.opacity-100 {:on-click #(state/remove-search-filter! q)}
+                      svg/close]])
+
+                  [:a.opacity-70.opacity-100 {:on-click state/clear-search-filters!}
+                   "Clear All"]]
+                 [:a.opacity-70.opacity-100 {:on-click #(route-handler/go-to-search! :graph)}
+                  "Click to search"])]))
+          {:search-filters search-graph-filters})
+        (graph-filter-section
+          [:span.font-medium "Forces"]
+          (fn [open?]
+            (filter-expand-area
+              open?
+              [:div
+               [:p.text-sm.opacity-70.px-4
+                (let [c2 (count (:links graph))
+                      s2 (if (> c2 1) "s" "")]
+                  (util/format "%d link%s" c2 s2))]
+               [:div.p-6
+                (simulation-switch)
+
+                [:div.flex.flex-col.mb-2
+                 [:p {:title "Link Distance"}
+                  "Link Distance"]
+                 (ui/tippy {:html [:div.pr-3 link-dist]}
+                   (ui/slider (/ link-dist 10)
+                     {:min 1   ;; 10
+                      :max 18  ;; 180
+                      :on-change #(let [value (int %)]
+                                    (reset! *link-dist (* value 10))
+                                    (set-forcesetting! :link-dist (* value 10)))}))]
+                [:div.flex.flex-col.mb-2
+                 [:p {:title "Charge Strength"}
+                  "Charge Strength"]
+                 (ui/tippy {:html [:div.pr-3 charge-strength]}
+                   (ui/slider (/ charge-strength 100)
+                     {:min -10  ;;-1000
+                      :max 10   ;;1000
+                      :on-change #(let [value (int %)]
+                                    (reset! *charge-strength (* value 100))
+                                    (set-forcesetting! :charge-strength (* value 100)))}))]
+                [:div.flex.flex-col.mb-2
+                 [:p {:title "Charge Range"}
+                  "Charge Range"]
+                 (ui/tippy {:html [:div.pr-3 charge-range]}
+                   (ui/slider (/ charge-range 100)
+                     {:min 5    ;;500
+                      :max 40   ;;4000
+                      :on-change #(let [value (int %)]
+                                    (reset! *charge-range (* value 100))
+                                    (set-forcesetting! :charge-range (* value 100)))}))]
+
+                [:a.opacity-70.opacity-100 {:on-click (fn []
+                                                        (swap! *graph-forcereset? not)
+                                                        (reset! *link-dist 70)
+                                                        (reset! *charge-strength -600)
+                                                        (reset! *charge-range 600))}
+                 "Reset Forces"]]]))
+          {})
+        (graph-filter-section
+          [:span.font-medium "Export"]
+          (fn [open?]
+            (filter-expand-area
+              open?
+              (when-let [canvas (js/document.querySelector "#global-graph canvas")]
+                [:div.p-6
+                 ;; We'll get an empty image if we don't wrap this in a requestAnimationFrame
+                 [:div [:a {:on-click #(.requestAnimationFrame js/window (fn [] (utils/canvasToImage canvas "graph" "png")))} "as PNG"]]])))
+          {:search-filters search-graph-filters})]]]]))
 
 (defonce last-node-position (atom nil))
 (defn- graph-register-handlers
   [graph focus-nodes n-hops dark?]
   (.on graph "nodeClick"
-       (fn [event node]
-         (let [x (.-x event)
-               y (.-y event)
-               drag? (not (let [[last-node last-x last-y] @last-node-position
-                                threshold 5]
-                            (and (= node last-node)
-                                 (<= (abs (- x last-x)) threshold)
-                                 (<= (abs (- y last-y)) threshold))))]
-           (graph/on-click-handler graph node event focus-nodes n-hops drag? dark?))))
+    (fn [event node]
+      (let [x (.-x event)
+            y (.-y event)
+            drag? (not (let [[last-node last-x last-y] @last-node-position
+                             threshold 5]
+                         (and (= node last-node)
+                           (<= (abs (- x last-x)) threshold)
+                           (<= (abs (- y last-y)) threshold))))]
+        (graph/on-click-handler graph node event focus-nodes n-hops drag? dark?))))
   (.on graph "nodeMousedown"
-       (fn [event node]
-         (reset! last-node-position [node (.-x event) (.-y event)]))))
+    (fn [event node]
+      (reset! last-node-position [node (.-x event) (.-y event)]))))
 
 (rum/defc global-graph-inner < rum/reactive
-  [graph settings theme]
+  [graph settings forcesettings theme]
   (let [[width height] (rum/react layout)
         dark? (= theme "dark")
         n-hops (rum/react *n-hops)
+        link-dist (rum/react *link-dist)
+        charge-strength (rum/react *charge-strength)
+        charge-range (rum/react *charge-range)
         reset? (rum/react *graph-reset?)
+        forcereset? (rum/react *graph-forcereset?)
         focus-nodes (when n-hops (rum/react *focus-nodes))
         graph (if (and (integer? n-hops)
-                       (seq focus-nodes)
-                       (not (:orphan-pages? settings)))
+                    (seq focus-nodes)
+                    (not (:orphan-pages? settings)))
                 (graph-handler/n-hops graph focus-nodes n-hops)
                 graph)
         graph (update graph :links (fn [links]
                                      (let [nodes (set (map :id (:nodes graph)))]
                                        (remove (fn [link]
                                                  (and (not (nodes (:source link)))
-                                                      (not (nodes (:target link)))))
-                                               links))))]
+                                                   (not (nodes (:target link)))))
+                                         links))))]
     [:div.relative#global-graph
      (graph/graph-2d {:nodes (:nodes graph)
                       :links (:links graph)
                       :width (- width 24)
                       :height (- height 48)
                       :dark? dark?
+                      :link-dist link-dist
+                      :charge-strength charge-strength
+                      :charge-range charge-range
                       :register-handlers-fn
                       (fn [graph]
                         (graph-register-handlers graph *focus-nodes *n-hops dark?))
-                      :reset? reset?})
-     (graph-filters graph settings n-hops)]))
+                      :reset? reset?
+                      :forcereset? forcereset?})
+     (graph-filters graph settings forcesettings n-hops)]))
 
 (defn- filter-graph-nodes
   [nodes filters]
@@ -818,28 +907,26 @@
     nodes))
 
 (rum/defcs global-graph < rum/reactive
-  (mixins/event-mixin
-   (fn [state]
-     (mixins/listen state js/window "resize"
-                    (fn [_e]
-                      (reset! layout [js/window.innerWidth js/window.innerHeight])))))
-  {:will-mount (fn [state]
-                 (state/set-search-mode! :graph)
-                 state)
-   :will-unmount (fn [state]
-                   (reset! *n-hops nil)
-                   (reset! *focus-nodes [])
-                   (state/set-search-mode! :global)
-                   state)}
+                          (mixins/event-mixin
+                            (fn [state]
+                              (mixins/listen state js/window "resize"
+                                (fn [_e]
+                                  (reset! layout [js/window.innerWidth js/window.innerHeight])))))
+                          {:will-unmount (fn [state]
+                                           (reset! *n-hops nil)
+                                           (reset! *focus-nodes [])
+                                           (state/set-search-mode! :global)
+                                           state)}
   [state]
   (let [settings (state/graph-settings)
+        forcesettings (state/graph-forcesettings)
         theme (state/sub :ui/theme)
         ;; Needed for query to retrigger after reset
         _reset? (rum/react *graph-reset?)
         graph (graph-handler/build-global-graph theme settings)
         search-graph-filters (state/sub :search/graph-filters)
         graph (update graph :nodes #(filter-graph-nodes % search-graph-filters))]
-    (global-graph-inner graph settings theme)))
+    (global-graph-inner graph settings forcesettings theme)))
 
 (rum/defc page-graph-inner < rum/reactive
   [_page graph dark?]
@@ -849,10 +936,10 @@
       [:span (t :right-side-bar/show-journals)]
       [:div.mt-1
        (ui/toggle show-journals-in-page-graph? ;my-val;
-                  (fn []
-                    (let [value (not show-journals-in-page-graph?)]
-                      (reset! *show-journals-in-page-graph? value)))
-                  true)]]
+         (fn []
+           (let [value (not show-journals-in-page-graph?)]
+             (reset! *show-journals-in-page-graph? value)))
+         true)]]
 
      (graph/graph-2d {:nodes (:nodes graph)
                       :links (:links graph)
@@ -866,9 +953,9 @@
 (rum/defc page-graph < db-mixins/query rum/reactive
   []
   (let [page (or
-              (and (= :page (state/sub [:route-match :data :name]))
-                   (state/sub [:route-match :path-params :name]))
-              (date/today))
+               (and (= :page (state/sub [:route-match :data :name]))
+                 (state/sub [:route-match :path-params :name]))
+               (date/today))
         theme (:ui/theme @state/state)
         dark? (= theme "dark")
         show-journals-in-page-graph (rum/react *show-journals-in-page-graph?)
@@ -893,8 +980,8 @@
         indeterminate? (boolean (:indeterminate opts))]
 
     (rum/use-effect!
-     #(set! (.-indeterminate (rum/deref *input)) indeterminate?)
-     [indeterminate?])
+      #(set! (.-indeterminate (rum/deref *input)) indeterminate?)
+      [indeterminate?])
 
     [:label {:for key}
      [:input.form-checkbox
@@ -951,26 +1038,26 @@
 
      [:div.pt-6.flex.justify-end.gap-4
       (ui/button
-       (t :cancel)
-       :theme :gray
-       :on-click close-fn)
+        (t :cancel)
+        :theme :gray
+        :on-click close-fn)
 
       (ui/button
-       (t :yes)
-       :on-click (fn []
-                   (close-fn)
-                   (let [failed-pages (atom [])]
-                     (doseq [page-name (map :block/name pages)]
-                       (page-handler/delete! page-name #()
-                                             {:error-handler
-                                              (fn [msg]
-                                                (js/console.error msg)
-                                                (swap! failed-pages conj page-name))}))
-                     (if (seq @failed-pages)
-                       (notification/show! (t :all-pages/failed-to-delete-pages (string/join ", " (map pr-str @failed-pages)))
-                                           :warning false)
-                       (notification/show! (t :tips/all-done) :success)))
-                   (js/setTimeout #(refresh-fn) 200)))]]))
+        (t :yes)
+        :on-click (fn []
+                    (close-fn)
+                    (let [failed-pages (atom [])]
+                      (doseq [page-name (map :block/name pages)]
+                        (page-handler/delete! page-name #()
+                          {:error-handler
+                           (fn [msg]
+                             (js/console.error msg)
+                             (swap! failed-pages conj page-name))}))
+                      (if (seq @failed-pages)
+                        (notification/show! (t :all-pages/failed-to-delete-pages (string/join ", " (map pr-str @failed-pages)))
+                          :warning false)
+                        (notification/show! (t :tips/all-done) :success)))
+                    (js/setTimeout #(refresh-fn) 200)))]]))
 
 (rum/defc pagination
   "Pagination component, like `<< <Prev 1/10 Next> >>`.
@@ -1003,16 +1090,16 @@
          (ui/icon "chevrons-right")]])]))
 
 (rum/defcs ^:large-vars/cleanup-todo all-pages < rum/reactive
-  (rum/local nil ::pages)
-  (rum/local nil ::search-key)
-  (rum/local nil ::results-all)
-  (rum/local nil ::results)
-  (rum/local {} ::checks)
-  (rum/local :block/updated-at ::sort-by-item)
-  (rum/local true ::desc?)
-  (rum/local {:journals? false :page-type ""} ::filters)
-  (rum/local nil ::filter-fn)
-  (rum/local 1 ::current-page)
+                                                 (rum/local nil ::pages)
+                                                 (rum/local nil ::search-key)
+                                                 (rum/local nil ::results-all)
+                                                 (rum/local nil ::results)
+                                                 (rum/local {} ::checks)
+                                                 (rum/local :block/updated-at ::sort-by-item)
+                                                 (rum/local true ::desc?)
+                                                 (rum/local {:journals? false :page-type ""} ::filters)
+                                                 (rum/local nil ::filter-fn)
+                                                 (rum/local 1 ::current-page)
   [state]
   (let [current-repo (state/sub :git/current-repo)
         per-page-num 40
@@ -1029,7 +1116,7 @@
         *search-input (rum/create-ref)
 
         *indeterminate (rum/derived-atom
-                        [*checks] ::indeterminate
+                         [*checks] ::indeterminate
                          (fn [checks]
                            (when-let [checks (vals checks)]
                              (if (every? true? checks)
@@ -1039,11 +1126,11 @@
         total-items (count @*results-all)
         ;; FIXME: "pages" is ambiguous here, it can be either "Logseq pages" or "result pages"
         total-pages (if-not @*results-all 0
-                            (js/Math.ceil (/ total-items per-page-num)))
+                                          (js/Math.ceil (/ total-items per-page-num)))
         to-page (fn [page]
                   (when (> total-pages 1)
                     (if (and (> page 0)
-                             (<= page total-pages))
+                          (<= page total-pages))
                       (reset! *current-page page)
                       (reset! *current-page 1))
                     (js/setTimeout #(util/scroll-to-top))))
@@ -1051,7 +1138,7 @@
         search-key (fn [key]
                      (when-let [key (and key (string/trim key))]
                        (if (and (not (string/blank? key))
-                                (seq @*results))
+                             (seq @*results))
                          (reset! *search-key key)
                          (reset! *search-key nil))))
 
@@ -1069,18 +1156,18 @@
        ;; all pages
        (when (nil? @*pages)
          (let [pages (->> (page-handler/get-all-pages current-repo)
-                          (map-indexed (fn [idx page] (assoc page
-                                                             :block/backlinks (count (:block/_refs (db/entity (:db/id page))))
-                                                             :block/idx idx))))]
+                       (map-indexed (fn [idx page] (assoc page
+                                                     :block/backlinks (count (:block/_refs (db/entity (:db/id page))))
+                                                     :block/idx idx))))]
            (reset! *filter-fn
-                   (memoize (fn [sort-by-item desc? {:keys [journal? page-type]}]
-                              (->> pages
-                                   (filter #(and
-                                             (or (boolean journal?)
-                                                 (= false (boolean (:block/journal? %))))
-                                             (or (empty? page-type)
-                                                 (contains? (set (:block/type %)) page-type))))
-                                   (sort-pages-by sort-by-item desc?)))))
+             (memoize (fn [sort-by-item desc? {:keys [journal? page-type]}]
+                        (->> pages
+                          (filter #(and
+                                     (or (boolean journal?)
+                                       (= false (boolean (:block/journal? %))))
+                                     (or (empty? page-type)
+                                       (contains? (set (:block/type %)) page-type))))
+                          (sort-pages-by sort-by-item desc?)))))
            (reset! *pages pages)))
 
        ;; filter results
@@ -1090,8 +1177,8 @@
                ;; search key
                pages (if-not (string/blank? @*search-key)
                        (search/fuzzy-search pages (util/page-name-sanity-lc @*search-key)
-                                            :limit 20
-                                            :extract-fn :block/name)
+                         :limit 20
+                         :extract-fn :block/name)
                        pages)
 
                _ (reset! *results-all pages)
@@ -1105,7 +1192,7 @@
        [:div.cp__all_pages-content
         [:div.actions.pt-4
          {:class (util/classnames [{:has-selected (or (nil? @*indeterminate)
-                                                      (not= 0 @*indeterminate))}])}
+                                                    (not= 0 @*indeterminate))}])}
          [:div.l.flex.items-center
           [:div.actions-wrap
            (ui/button
@@ -1135,9 +1222,9 @@
                               (reset! *search-key nil)))]
 
              [(ui/button (ui/icon "search")
-                         :on-click search-fn
-                         :variant :link
-                         :size :xs)
+                :on-click search-fn
+                :variant :link
+                :size :xs)
               [:input.form-input {:placeholder   (t :search/page-names)
                                   :on-key-up     (fn [^js e]
                                                    (let [^js target (.-target e)]
@@ -1158,63 +1245,63 @@
            (ui/select (->> (if (config/db-based-graph? current-repo)
                              ["" "class" "property" "whiteboard"]
                              ["" "whiteboard"])
-                           (map (fn [block-type]
-                                  {:label (if (seq block-type) (string/capitalize block-type) "Filter by page type")
-                                   :selected (= block-type type)
-                                   :disabled config/publishing?
-                                   :value block-type})))
-                      (fn [_e value]
-                        (swap! *filters assoc :page-type value)))]
+                        (map (fn [block-type]
+                               {:label (if (seq block-type) (string/capitalize block-type) "Filter by page type")
+                                :selected (= block-type type)
+                                :disabled config/publishing?
+                                :value block-type})))
+             (fn [_e value]
+               (swap! *filters assoc :page-type value)))]
           [:div
            (ui/tippy
-            {:html  [:small (t :page/show-journals)]
-             :arrow true}
-            [:a.button.journal
-             {:class    (util/classnames [{:active (boolean (:journal? @*filters))}])
-              :on-click #(swap! *filters update :journal? not)}
-             (ui/icon "calendar" {:size ui/icon-size})])]
+             {:html  [:small (t :page/show-journals)]
+              :arrow true}
+             [:a.button.journal
+              {:class    (util/classnames [{:active (boolean (:journal? @*filters))}])
+               :on-click #(swap! *filters update :journal? not)}
+              (ui/icon "calendar" {:size ui/icon-size})])]
 
           [:div.paginates
            (pagination :current @*current-page
-                       :total total-items
-                       :per-page per-page-num
-                       :on-change #(to-page %))]
+             :total total-items
+             :per-page per-page-num
+             :on-change #(to-page %))]
 
           (ui/dropdown-with-links
-           (fn [{:keys [toggle-fn]}]
-             [:a.button.fade-link
-              {:on-click toggle-fn}
-              (ui/icon "dots" {:size ui/icon-size})])
-           [{:title (t :remove-orphaned-pages)
-             :options {:on-click (fn []
-                                   (let [orphaned-pages (model/get-orphaned-pages {})
-                                         orphaned-pages? (seq orphaned-pages)]
-                                     (if orphaned-pages?
-                                       (state/set-modal!
-                                        (batch-delete-dialog
-                                         orphaned-pages  true
-                                         #(do
-                                            (reset! *checks nil)
-                                            (refresh-pages))))
-                                       (notification/show! "Congratulations, no orphaned pages in your graph!" :success))))}
-             :icon (ui/icon "file-x")}
-            {:title (t :all-files)
-             :options {:href (rfe/href :all-files)}
-             :icon (ui/icon "files")}]
-           {})]]
+            (fn [{:keys [toggle-fn]}]
+              [:a.button.fade-link
+               {:on-click toggle-fn}
+               (ui/icon "dots" {:size ui/icon-size})])
+            [{:title (t :remove-orphaned-pages)
+              :options {:on-click (fn []
+                                    (let [orphaned-pages (model/get-orphaned-pages {})
+                                          orphaned-pages? (seq orphaned-pages)]
+                                      (if orphaned-pages?
+                                        (state/set-modal!
+                                          (batch-delete-dialog
+                                            orphaned-pages  true
+                                            #(do
+                                               (reset! *checks nil)
+                                               (refresh-pages))))
+                                        (notification/show! "Congratulations, no orphaned pages in your graph!" :success))))}
+              :icon (ui/icon "file-x")}
+             {:title (t :all-files)
+              :options {:href (rfe/href :all-files)}
+              :icon (ui/icon "files")}]
+            {})]]
 
         [:table.table-auto.cp__all_pages_table
          [:thead
           [:tr
            [:th.selector
             (checkbox-opt "all-pages-select-all"
-                          (= 1 @*indeterminate)
-                          {:on-change     (fn []
-                                            (let [indeterminate? (= -1 @*indeterminate)
-                                                  all? (= 1 @*indeterminate)]
-                                              (doseq [{:block/keys [idx]} @*results]
-                                                (swap! *checks assoc idx (or indeterminate? (not all?))))))
-                           :indeterminate (when (= -1 @*indeterminate) "indeterminate")})]
+              (= 1 @*indeterminate)
+              {:on-change     (fn []
+                                (let [indeterminate? (= -1 @*indeterminate)
+                                      all? (= 1 @*indeterminate)]
+                                  (doseq [{:block/keys [idx]} @*results]
+                                    (swap! *checks assoc idx (or indeterminate? (not all?))))))
+               :indeterminate (when (= -1 @*indeterminate) "indeterminate")})]
            [:th.icon ""]
            (sortable-title (t :block/name) :block/name *sort-by-item *desc?)
            (when-not mobile?
@@ -1228,9 +1315,9 @@
               [:tr {:key name}
                [:td.selector
                 (checkbox-opt (str "label-" idx)
-                              (get @*checks idx)
-                              {:on-change (fn []
-                                            (swap! *checks update idx not))})]
+                  (get @*checks idx)
+                  {:on-change (fn []
+                                (swap! *checks update idx not))})]
                [:td.icon.w-4.p-0.overflow-hidden
                 (when-let [icon (pu/get-block-property-value page :icon)]
                   icon)]
@@ -1239,9 +1326,9 @@
                                           (let [repo (state/get-current-repo)]
                                             (when (gobj/get e "shiftKey")
                                               (state/sidebar-add-block!
-                                               repo
-                                               (:db/id page)
-                                               :page))))
+                                                repo
+                                                (:db/id page)
+                                                :page))))
                               :href     (rfe/href :page {:name (:block/name page)})}
                           (component-block/page-cp {} page)]]
 
@@ -1256,6 +1343,6 @@
 
         [:div.flex.justify-end.py-4
          (pagination :current @*current-page
-                     :total total-items
-                     :per-page per-page-num
-                     :on-change #(to-page %))]])]))
+           :total total-items
+           :per-page per-page-num
+           :on-change #(to-page %))]])]))

@@ -66,15 +66,15 @@ const css = (strings: TemplateStringsArray, ...args: unknown[]) =>
   )
 
 const defaultTheme: TLTheme = {
-  accent: 'rgb(255, 0, 0)',
+  accent: 'var(--lx-accent-09, hsl(var(--primary)))',
   brushFill: 'var(--ls-scrollbar-background-color, rgba(0, 0, 0, .05))',
   brushStroke: 'var(--ls-scrollbar-thumb-hover-color, rgba(0, 0, 0, .05))',
-  selectStroke: 'var(--color-selectedFill)',
-  selectFill: 'rgba(65, 132, 244, 0.05)',
-  binding: 'rgba(65, 132, 244, 0.5)',
-  background: 'var(--ls-primary-background-color)',
-  foreground: 'var(--ls-primary-text-color)',
-  grid: 'var(--ls-quaternary-background-color)',
+  selectStroke: 'var(--color-selectedStroke)',
+  selectFill: 'var(--color-selectedFill)',
+  binding: 'var(--color-binding, rgba(65, 132, 244, 0.5))',
+  background: 'var(--ls-primary-background-color, hsl(var(--background)))',
+  foreground: 'var(--ls-primary-text-color, hsl(var(--foreground)))',
+  grid: 'var(--ls-quaternary-background-color, hsl(var(--secondary)))',
 }
 
 const tlcss = css`
@@ -234,7 +234,7 @@ const tlcss = css`
 
   .tl-clone-handle:hover {
     fill: var(--tl-selectStroke);
-    cursor: pointer; 
+    cursor: pointer;
   }
 
   .tl-clone-handle:hover line {
