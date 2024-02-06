@@ -1,4 +1,4 @@
-(ns logseq.db.sqlite.db-test
+(ns logseq.db.sqlite.common-db-test
   (:require [cljs.test :refer [deftest async use-fixtures is testing]]
             ["fs" :as fs]
             ["path" :as node-path]
@@ -27,8 +27,7 @@
     (create-graph-dir "tmp/graphs" "test-db")
 
     (let [conn* (sqlite-db/open-db! "tmp/graphs" "test-db")
-          blocks [{:block/uuid (random-uuid)
-                   :file/path "logseq/config.edn"
+          blocks [{:file/path "logseq/config.edn"
                    :file/content "{:foo :bar}"}]
           _ (d/transact! conn* blocks)
           ;; Simulate getting data from sqlite and restoring it for frontend
