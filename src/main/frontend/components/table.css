@@ -14,7 +14,7 @@
     font-size: 14px;
     font-weight: 400;
     color: var(--ls-primary-text-color);
-    border-bottom: 2px solid var(--ls-border-color);
+    border-bottom: 2px solid var(--ls-border-color, var(--rx-gray-05));
     padding: 10px 8px;
   }
 
@@ -24,11 +24,11 @@
   }
 
   tr:nth-child(even) {
-    background: var(--ls-table-tr-even-background-color);
+    background: var(--ls-table-tr-even-background-color, var(--rx-gray-03));
   }
 
   tr:nth-child(odd) {
-    background: var(--ls-primary-background-color);
+    background: var(--ls-primary-background-color, var(--rx-gray-01));
   }
 
   caption {

@@ -5,6 +5,8 @@
   (:refer-clojure :exclude [run!])
   (:require ["@capacitor/filesystem" :refer [Directory Filesystem]]
             ["@sentry/react" :as Sentry]
+            [electron.ipc :as ipc]
+            [frontend.idb :as idb]
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
@@ -13,6 +15,8 @@
             [frontend.commands :as commands]
             [frontend.components.class :as class-component]
             [frontend.components.cmdk :as cmdk]
+            [frontend.components.conversion :as conversion-component]
+            [frontend.components.settings :as settings]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
             [frontend.components.file-sync :as file-sync]
@@ -341,6 +345,17 @@
 (defmethod handle :modal/show-themes-modal [_]
   (plugin/open-select-theme!))
 
+(defmethod handle :modal/toggle-accent-colors-modal [_]
+  (let [label "accent-colors-picker"]
+    (if (or (= label (state/get-modal-id))
+          (= label (some-> (state/get-sub-modals) (first) :modal/id)))
+      (state/close-sub-modal! label)
+      (state/set-sub-modal!
+        #(settings/modal-accent-colors-inner)
+        {:center? true
+         :id      label
+         :label   label}))))
+
 (rum/defc modal-output
   [content]
   content)
@@ -663,6 +678,53 @@
                                           :remote? true)
                                    r))
                                (state/get-repos)))))))
+
+(defmethod handle :graph/re-index [[_]]
+  ;; Ensure the graph only has ONE window instance
+  (async/go
+    (async/<! (sync/<sync-stop))
+    (repo-handler/re-index!
+     nfs-handler/rebuild-index!
+     #(do (page-handler/create-today-journal!)
+          (file-sync-restart!)))))
+
+;; FIXME: move
+(defn- clear-cache!
+  []
+  (notification/show! "Clearing..." :warning false)
+  (p/let [_ (when (util/electron?)
+              (ipc/ipc "clearCache"))
+          _ (idb/clear-local-storage-and-idb!)]
+    (js/setTimeout
+      (fn [] (if (util/electron?)
+               (ipc/ipc :reloadWindowPage)
+               (js/window.location.reload)))
+      2000)))
+
+(defmethod handle :graph/clear-cache! [[_]]
+  (clear-cache!))
+
+(defmethod handle :graph/ask-for-re-index [[_ *multiple-windows? ui]]
+  ;; *multiple-windows? - if the graph is opened in multiple windows, boolean atom
+  ;; ui - custom message to show on asking for re-index
+  (if (and (util/atom? *multiple-windows?) @*multiple-windows?)
+    (handle
+     [:modal/show
+      [:div
+       (when (not (nil? ui)) ui)
+       [:p (t :re-index-multiple-windows-warning)]]])
+    (handle
+     [:modal/show
+      [:div {:style {:max-width 700}}
+       (when (not (nil? ui)) ui)
+       [:p (t :re-index-discard-unsaved-changes-warning)]
+       (ui/button
+        (t :yes)
+        :autoFocus "on"
+        :class "ui__modal-enter"
+        :on-click (fn []
+                    (state/close-modal!)
+                    (state/pub-event! [:graph/re-index])))]])))
 
 (defmethod handle :modal/remote-encryption-input-pw-dialog [[_ repo-url remote-graph-info type opts]]
   (state/set-modal!

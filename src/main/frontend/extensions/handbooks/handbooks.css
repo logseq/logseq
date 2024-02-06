@@ -13,7 +13,7 @@
       @apply dark:text-white px-3 pt-3 pb-2 sticky top-0 left-0 z-[4]
       transition-shadow duration-200;
 
-      background-color: var(--ls-tertiary-background-color);
+      background-color: var(--ls-tertiary-background-color1);
 
       .title {
         text-align: left;
@@ -33,11 +33,11 @@
       > .input-wrap {
         @apply mx-4 mb-2 flex rounded-lg mt-1.5;
 
-        border: 3px solid var(--ls-primary-background-color);
-        background-color: var(--ls-primary-background-color);
+        border: 3px solid var(--ls-primary-background-color1);
+        background-color: var(--ls-primary-background-color1);
 
         &:focus-within {
-          border: 3px solid var(--ls-secondary-border-color);
+          border: 3px solid var(--ls-secondary-border-color, var(--rx-gray-06));
         }
 
         > input {
@@ -76,7 +76,7 @@
       @apply text-sm px-3 py-2.5 rounded-lg cursor-pointer
       mb-2 active:opacity-90 select-none items-center;
 
-      background-color: var(--ls-secondary-background-color);
+      background-color: var(--ls-secondary-background-color1);
       border: 1px solid var(--ls-border-color);
       transition: background-color .3s;
 
@@ -104,7 +104,7 @@
       }
 
       &:hover, &.active {
-        background-color: var(--ls-primary-background-color);
+        background-color: var(--ls-primary-background-color1);
         border-color: var(--ls-secondary-border-color);
 
         > .l {
@@ -133,15 +133,15 @@
     .category-card {
       @apply flex rounded px-2 py-3 active:opacity-90 cursor-pointer transition-colors items-end;
 
-      border-left: 4px solid var(--ls-secondary-background-color);
-      background-color: var(--ls-secondary-background-color);
+      border-left: 4px solid var(--ls-secondary-background-color1);
+      background-color: var(--ls-secondary-background-color1);
 
       &[data-total="0"] {
         @apply hidden;
       }
 
       &:hover, &:active {
-        background-color: var(--ls-primary-background-color);
+        background-color: var(--ls-primary-background-color1);
       }
 
       > .icon-wrap {
@@ -282,7 +282,7 @@
           @apply relative flex flex-col rounded py-2 px-3 leading-5 select-none z-[1];
 
           color: var(--ls-primary-text-color);
-          background-color: var(--ls-secondary-background-color);
+          background-color: var(--ls-secondary-background-color1);
 
           small {
             @apply text-[11px] opacity-50 pl-0.5;
@@ -305,7 +305,7 @@
           ul {
             @apply absolute top-[58px] left-0 w-full list-none m-0 rounded-b py-2;
 
-            background-color: var(--ls-secondary-background-color);
+            background-color: var(--ls-secondary-background-color1);
             transform: translateY(-5px);
             max-height: 300px;
             overflow: auto;
@@ -314,7 +314,7 @@
               @apply list-none px-3 py-1 transition-colors text-sm;
 
               &:hover {
-                background-color: var(--ls-tertiary-background-color);
+                background-color: var(--ls-tertiary-background-color1);
               }
             }
           }
@@ -336,11 +336,16 @@
   }
 
   &-popup {
-    @apply fixed rounded-lg overflow-hidden
+    --ls-primary-background-color1: var(--ls-primary-background-color, var(--lx-gray-01, var(--rx-gray-02)));
+    --ls-secondary-background-color1: var(--ls-secondary-background-color, var(--lx-gray-03, var(--rx-gray-03)));
+    --ls-tertiary-background-color1: var(--ls-tertiary-background-color, var(--lx-gray-05, var(--rx-gray-05)));
+    --ls-quaternary-background-color1: var(--ls-quaternary-background-color, var(--lx-gray-08, var(--rx-gray-08)));
+
+    @apply fixed rounded-lg overflow-hidden border
     z-[19] shadow-lg flex justify-center flex-col;
 
-    background-color: var(--ls-tertiary-background-color);
-    border: 1px solid var(--ls-tertiary-background-color);
+    background-color: var(--ls-tertiary-background-color1);
+    border: 1px solid var(--ls-tertiary-background-color1);
     touch-action: none;
     height: 686px;
     max-height: 86vh;
@@ -352,7 +357,7 @@
 
 html[data-theme="light"] {
   .cp__handbooks-popup {
-    background-color: var(--ls-primary-background-color);
+    background-color: var(--ls-primary-background-color1);
 
     .input-wrap {
       background-color: #f1f1f1;
@@ -364,7 +369,7 @@ html[data-theme="light"] {
 
     .topic-card, :not(.as-primary).link-card {
       &:hover, &.active {
-        background-color: var(--ls-tertiary-background-color);
+        background-color: var(--ls-tertiary-background-color1);
         border-color: var(--ls-secondary-border-color);
       }
     }
@@ -372,27 +377,27 @@ html[data-theme="light"] {
 
   .cp__handbooks-content {
     .hd {
-      background-color: var(--ls-primary-background-color);
+      background-color: var(--ls-primary-background-color1);
     }
 
     .ft {
-      background-color: var(--ls-primary-background-color);
+      background-color: var(--ls-primary-background-color1);
     }
 
     .search {
-      background-color: var(--ls-primary-background-color);
+      background-color: var(--ls-primary-background-color1);
     }
 
     .chapters-select {
       .select-trigger {
-        background-color: var(--ls-tertiary-background-color);
+        background-color: var(--ls-tertiary-background-color1);
       }
     }
 
     .categories-list {
       .category-card {
         &:hover, &:active {
-          background-color: var(--ls-tertiary-background-color);
+          background-color: var(--ls-tertiary-background-color1);
         }
       }
     }

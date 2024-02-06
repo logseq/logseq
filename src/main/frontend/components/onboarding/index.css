@@ -32,7 +32,6 @@ body[data-page=import] {
           &:first-child {
             display: block;
             text-align: center;
-            padding-bottom: 15px;
           }
         }
       }
@@ -53,7 +52,7 @@ body[data-page=import] {
           flex: 1;
 
           &.a {
-            background-color: var(--ls-tertiary-background-color);
+            background-color: var(--ls-tertiary-background-color, var(--rx-gray-03));
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -172,8 +171,7 @@ body[data-page=import] {
         }
 
         &.importer {
-          background-color: var(--ls-tertiary-background-color);
-          position: relative;
+          @apply relative bg-gray-03;
 
           > section {
             flex: unset;
@@ -298,16 +296,8 @@ body[data-page=import] {
     }
 
     label.action-input {
-      transition: none;
-      color: var(--ls-active-primary-color);
-      background-color: var(--ls-quaternary-background-color);
-      height: 68px;
-      width: 100%;
-      opacity: .8;
-      user-select: none;
-      border-radius: 12px;
-      overflow: hidden;
-      cursor: pointer;
+      @apply transition-none bg-gray-06 h-[68px] w-full opacity-80 select-none;
+      @apply rounded-xl overflow-hidden cursor-pointer;
 
       small {
         font-size: 11px;
@@ -413,7 +403,7 @@ body[data-page=import] {
 
     .shepherd-footer {
       button {
-        background-color: var(--lx-bg-override, var(--lx-accent-09, var(--ls-button-background)));
+        background-color: var(--lx-accent-09, var(--ls-button-background));
         padding: 4px 8px;
         border-radius: 6px;
         overflow: hidden;
@@ -431,7 +421,7 @@ body[data-page=import] {
       }
 
       button:hover {
-          background-color: var(--lx-bg-override, var(--lx-accent-10, var(--ls-button-background)));
+          background-color: var(--lx-accent-10, var(--ls-button-background));
       }
     }
   }

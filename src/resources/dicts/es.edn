@@ -224,8 +224,6 @@
  :command.sidebar/close-top                         "Cierra el elemento superior en la barra lateral derecha"
  :command.sidebar/open-today-page                   "Abrir la página de hoy en barra lateral derecha"
  :command.ui/clear-all-notifications                "Borrar todas las notificaciones"
- :command.ui/cycle-color                            "Ciclo de color"
- :command.ui/cycle-color-off                        "Ciclo de color desactivado"
  :command.ui/goto-plugins                           "Ir al panel de extensiones"
  :command.ui/install-plugins-from-file              "Instalar extensiones de plugins.edn"
  :command.ui/select-theme-color                     "Seleccionar temas de colores disponibles"

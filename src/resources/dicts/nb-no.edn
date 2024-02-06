@@ -756,8 +756,6 @@
 
  :command.command-palette/toggle "Søk kommandoer"
  :command.go/search-in-page "Søk blokker på side"
- :command.ui/cycle-color "Veksle farge"
- :command.ui/cycle-color-off "Veksle farge av"
  :command.whiteboard/clone-down "Klon ned"
  :command.whiteboard/clone-left "Klon venstre"
  :command.whiteboard/clone-right "Klon høyre"

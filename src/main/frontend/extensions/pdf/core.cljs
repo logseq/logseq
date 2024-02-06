@@ -808,8 +808,8 @@
 
     (let [^js viewer        (:viewer state)
           in-system-window? (some-> viewer (.-$inSystemWindow))]
-      [:div.extensions__pdf-viewer-cnt
-       [:div.extensions__pdf-viewer
+      [:div.extensions__pdf-viewer-cnt.visible-scrollbar
+       [:div.extensions__pdf-viewer.overflow-x-auto
         {:ref *el-ref :class (util/classnames [{:is-area-dashed area-dashed?}])}
         [:div.pdfViewer "viewer pdf"]
         [:div.pp-holder]

@@ -781,8 +781,6 @@
  :command.ui/toggle-help                 "Yardımı aç/kapat"
  :command.ui/toggle-theme                "Koyu ve açık tema arasında geçiş yap"
  :command.ui/toggle-contents             "Kenar çubuğundaki içeriği aç/kapat"
- :command.ui/cycle-color-off             "Renk değiştirmeyi kapat"
- :command.ui/cycle-color                 "Renk değiştir"
  :command.command/toggle-favorite        "Sık kullanılanlara ekle/çıkar"
  :command.editor/open-file-in-default-app "Dosyayı varsayılan uygulamada aç"
  :command.editor/open-file-in-directory   "Dosyayı üst dizinde aç"

@@ -12,11 +12,9 @@
 
 ;; shortcut
 (def shortcut shui.shortcut.v1/root)
-(def shortcut-v1 shui.shortcut.v1/root)
 
 ;; icon
 (def icon shui.icon.v2/root)
-(def icon-v2 shui.icon.v2/root)
 
 ;; list-item
 (def list-item shui.list-item.v1/root)
