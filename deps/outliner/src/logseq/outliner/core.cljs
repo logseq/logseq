@@ -234,7 +234,10 @@
     (let [refs (->> (rebuild-block-refs repo conn date-formatter block (:block/properties block)
                                         :skip-content-parsing? true)
                     (concat (:block/refs m))
-                    (concat (:block/tags m)))]
+                    (concat (if (seq (:block/tags m))
+                              (:block/tags m)
+                              (map :db/id (:block/tags (d/entity @conn [:block/uuid (:block/uuid block)])))))
+                    (remove nil?))]
       (swap! txs-state (fn [txs] (concat txs [{:db/id (:db/id block)
                                                :block/refs refs}]))))))
 
