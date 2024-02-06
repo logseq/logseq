@@ -269,6 +269,16 @@ html[data-theme='light'] {
   }
 }
 
+.tl-select-trigger {
+  @apply h-8 font-medium bg-transparent px-3;
+
+  border: 1px solid var(--ls-secondary-border-color);
+
+  &.compact {
+    @apply px-0 justify-center text-xs;
+  }
+}
+
 .tl-primary-tools {
   @apply absolute h-full top-0 flex items-center justify-center;
 
