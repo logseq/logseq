@@ -99,9 +99,7 @@
 
 (defn get-latest-journals
   [db n]
-  (let [date (js/Date.)
-        _ (.setDate date (- (.getDate date) (dec n)))
-        today (date-time-util/date->int (js/Date.))]
+  (let [today (date-time-util/date->int (js/Date.))]
     (->>
      (d/q '[:find [(pull ?page [*]) ...]
             :in $ ?today

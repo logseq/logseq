@@ -4,3 +4,5 @@ logseq.outliner.cli.pipeline/add-listener
 logseq.outliner.core/*transaction-opts*
 ;; API fn
 logseq.outliner.datascript/transact!
+;; API fn
+logseq.outliner.op/apply-ops!
