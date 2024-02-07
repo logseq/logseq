@@ -102,7 +102,6 @@
              frontend.idb idb
              frontend.loader loader
              frontend.mixins mixins
-             frontend.modules.outliner.op outliner-op
              frontend.modules.outliner.ui ui-outliner-tx
              frontend.mobile.util mobile-util
              frontend.page page
@@ -150,6 +149,7 @@
              logseq.graph-parser.property gp-property
              logseq.graph-parser.util.db db-util
              logseq.outliner.core outliner-core
+             logseq.outliner.op outliner-op
              logseq.outliner.pipeline outliner-pipeline
              logseq.outliner.datascript-report ds-report
              medley.core medley
