@@ -157,9 +157,9 @@
       {:auto-focus true
        :on-change (fn [e]
                     (reset! *input (util/evalue e)))
-       :on-key-press (fn [e]
-                       (when (= "Enter" (util/ekey e))
-                         (on-submit)))}]
+       :on-key-down (fn [e]
+                      (when (= "Enter" (util/ekey e))
+                        (on-submit)))}]
 
      [:div.mt-5.sm:mt-4.flex
       (ui/button "Submit"
