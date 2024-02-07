@@ -12,7 +12,7 @@
             [frontend.extensions.zotero :as zotero]
             [frontend.components.bug-report :as bug-report]
             [frontend.components.user.login :as login]
-            [logseq.shui.demo :as shui]
+            [logseq.shui.demo2 :as shui]
             [frontend.components.imports :as imports]))
 
 ;; http://localhost:3000/#?anchor=fn.1
