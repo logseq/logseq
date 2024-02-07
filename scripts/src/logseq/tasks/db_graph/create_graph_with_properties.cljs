@@ -3,7 +3,7 @@
    Also creates a page of queries that exercises most properties
    NOTE: This script is also used in CI to confirm graph creation works"
   (:require [logseq.tasks.db-graph.create-graph :as create-graph]
-            [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.db.frontend.property.type :as db-property-type]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -12,15 +12,9 @@
             [nbb.core :as nbb]))
 
 (defn- date-journal-title [date]
-  (let [title (.toLocaleString date "en-US" #js {:month "short" :day "numeric" :year "numeric"})
-        suffixes {1 "st" 21 "st" 31 "st" 2 "nd" 22 "nd" 3 "rd" 23 "rd" 33 "rd"}]
-    (common-util/page-name-sanity-lc
-     (string/replace-first title #"(\d+)" (str "$1" (suffixes (.getDate date) "th"))))))
+  (string/lower-case (date-time-util/int->journal-title (date-time-util/date->int date) "MMM do, yyyy")))
 
-(defn- date-journal-day [date]
-  (js/parseInt (str (.toLocaleString date "en-US" #js {:year "numeric"})
-                    (.toLocaleString date "en-US" #js {:month "2-digit"})
-                    (.toLocaleString date "en-US" #js {:day "2-digit"}))))
+(def date-journal-day date-time-util/date->int)
 
 (defn- subtract-days
   [date days]
