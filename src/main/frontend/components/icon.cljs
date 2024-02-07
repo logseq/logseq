@@ -69,14 +69,16 @@
 (rum/defc emoji-cp < rum/static
   [{:keys [id name] :as emoji} {:keys [on-chosen hover]}]
   [:button.text-2xl.w-9.h-9.transition-opacity
-   {:tabIndex "0"
-    :title name
-    :on-click (fn [e]
-                (on-chosen e {:type :emoji
-                              :id id
-                              :name name}))
-    :on-mouse-over #(reset! hover emoji)
-    :on-mouse-out #(reset! hover nil)}
+   (cond->
+     {:tabIndex "0"
+      :title name
+      :on-click (fn [e]
+                  (on-chosen e {:type :emoji
+                                :id id
+                                :name name}))}
+     (not (nil? hover))
+     (assoc :on-mouse-over #(reset! hover emoji)
+            :on-mouse-out #(reset! hover nil)))
    [:em-emoji {:id id}]])
 
 (rum/defc emojis-cp < rum/static

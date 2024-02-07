@@ -1,7 +1,8 @@
 (ns logseq.shui.demo2
   (:require [rum.core :as rum]
             [logseq.shui.ui :as ui]
-            [frontend.rum :refer [use-atom]]))
+            [frontend.rum :refer [use-atom]]
+            [frontend.components.icon :refer [emojis-cp emojis]]))
 
 (defonce *x-popup-state
   (atom {:open? false :content nil :position [0 0]}))
@@ -16,8 +17,11 @@
 
 (defn hide-x-popup!
   []
-  (reset! *x-popup-state
-    {:open? false :content nil :position [0 0] :as-menu? false}))
+  (when (true? (:open? @*x-popup-state))
+    (swap! *x-popup-state assoc :open? false)
+    (js/setTimeout
+      #(reset! *x-popup-state
+         {:open? false :content nil :position [0 0] :as-menu? false}) 128)))
 
 (rum/defc x-popup []
   (let [[{:keys [open? content position as-menu? root-props content-props]} _] (use-atom *x-popup-state)]
@@ -43,17 +47,31 @@
 
    (rum/portal (x-popup) js/document.body)
 
-   [:<>
-    [:div.w-full.p-4.border.rounded.dotted.h-96.mt-8.bg-gray-02
-     {:on-click #(show-x-popup! %
-                   (->> (range 8)
-                     (map (fn [it]
-                            (ui/dropdown-menu-item
-                              {:on-select (fn []
-                                            (ui/toast! it)
-                                            (hide-x-popup!)) }
-                              [:strong it]))))
-                   {:as-menu? true
-                    :content-props {:class "w-48"}})
-      :on-context-menu #(show-x-popup! %
-                          [:h1.text-3xl.font-bold "hi x popup for custom context menu!"])}]]])
+   (let [[emoji set-emoji!] (rum/use-state nil)]
+     [:<>
+      [:p.py-4
+       "Choose a inline "
+       [:a.underline
+        {:on-click #(show-x-popup! %
+                      [:div.max-h-72.overflow-auto.p-1
+                       (emojis-cp (take 80 emojis)
+                         {:on-chosen
+                          (fn [_ t]
+                            (set-emoji! t)
+                            (hide-x-popup!))})]
+                      {:content-props {:class "p-0"}})}
+        (if emoji [:strong.px-1.text-6xl [:em-emoji emoji]]  "emoji :O")] "."]
+
+      [:div.w-full.p-4.border.rounded.dotted.h-48.mt-8.bg-gray-02
+       {:on-click        #(show-x-popup! %
+                            (->> (range 8)
+                              (map (fn [it]
+                                     (ui/dropdown-menu-item
+                                       {:on-select (fn []
+                                                     (ui/toast! it)
+                                                     (hide-x-popup!)) }
+                                       [:strong it]))))
+                            {:as-menu? true
+                             :content-props {:class "w-48"}})
+        :on-context-menu #(show-x-popup! %
+                            [:h1.text-3xl.font-bold "hi x popup for custom context menu!"])}]])])
