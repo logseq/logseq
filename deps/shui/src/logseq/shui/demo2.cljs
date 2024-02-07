@@ -12,7 +12,7 @@
   (let [x (.-clientX event)
         y (.-clientY event)]
     (reset! *x-popup-state
-      {:open? true :content content :position [x y]
+      {:open?    true :content content :position [x y]
        :as-menu? as-menu? :root-props root-props :content-props content-props})))
 
 (defn hide-x-popup!
@@ -47,20 +47,32 @@
 
    (rum/portal (x-popup) js/document.body)
 
-   (let [[emoji set-emoji!] (rum/use-state nil)]
+   (let [[emoji set-emoji!] (rum/use-state nil)
+         emoji-picker (fn [_nested?]
+                        [:p.py-4
+                         "Choose a inline "
+                         [:a.underline
+                          {:on-click #(show-x-popup! %
+                                        [:div.max-h-72.overflow-auto.p-1
+                                         (emojis-cp (take 80 emojis)
+                                           {:on-chosen
+                                            (fn [_ t]
+                                              (set-emoji! t)
+                                              (hide-x-popup!))})]
+                                        {:content-props {:class "w-72 p-0"}
+                                         :as-menu?      true})}
+                          (if emoji [:strong.px-1.text-6xl [:em-emoji emoji]] "emoji :O")] "."])]
      [:<>
+      (emoji-picker nil)
+
       [:p.py-4
-       "Choose a inline "
-       [:a.underline
-        {:on-click #(show-x-popup! %
-                      [:div.max-h-72.overflow-auto.p-1
-                       (emojis-cp (take 80 emojis)
-                         {:on-chosen
-                          (fn [_ t]
-                            (set-emoji! t)
-                            (hide-x-popup!))})]
-                      {:content-props {:class "p-0"}})}
-        (if emoji [:strong.px-1.text-6xl [:em-emoji emoji]]  "emoji :O")] "."]
+       (ui/button
+         {:variant  :secondary
+          :on-click #(show-x-popup! %
+                       (fn []
+                         [:p.p-4
+                          (emoji-picker true)]))}
+         "Play a nested x popup.")]
 
       [:div.w-full.p-4.border.rounded.dotted.h-48.mt-8.bg-gray-02
        {:on-click        #(show-x-popup! %
@@ -69,9 +81,9 @@
                                      (ui/dropdown-menu-item
                                        {:on-select (fn []
                                                      (ui/toast! it)
-                                                     (hide-x-popup!)) }
+                                                     (hide-x-popup!))}
                                        [:strong it]))))
-                            {:as-menu? true
+                            {:as-menu?      true
                              :content-props {:class "w-48"}})
         :on-context-menu #(show-x-popup! %
                             [:h1.text-3xl.font-bold "hi x popup for custom context menu!"])}]])])
