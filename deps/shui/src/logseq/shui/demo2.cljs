@@ -5,9 +5,6 @@
             [logseq.shui.util :refer [use-atom]]
             [frontend.components.icon :refer [emojis-cp emojis]]))
 
-(defonce *x-popup-state
-  (atom {:open? false :content nil :position [0 0]}))
-
 ;; {:id "" :open? false :content nil :position [0 0] :root-props nil :content-props nil}
 (defonce ^:private *popups (atom []))
 (defonce ^:private *id (atom 0))
@@ -21,8 +18,10 @@
 
 (defn upsert-popup!
   [config]
-  (when-let [_id (:id config)]
-    (swap! *popups conj config)))
+  (when-let [id (:id config)]
+    (if-let [[index config'] (get-popup id)]
+      (swap! *popups assoc index (merge config' config))
+      (swap! *popups conj config))))
 
 (defn update-popup!
   [id ks val]
@@ -39,12 +38,17 @@
     (swap! *popups #(->> % (medley/remove-nth index) (vec)))))
 
 (defn show-x-popup!
-  [^js event content & {:keys [id as-menu? root-props content-props]}]
-  (let [x (.-clientX event)
-        y (.-clientY event)]
+  [^js event content & {:keys [id as-menu? root-props content-props] :as opts}]
+  (let [position (cond
+                   (vector? event) event
+                   (instance? js/MouseEvent (or (.-nativeEvent event) event)) [(.-clientX event) (.-clientY event)]
+                   :else [0 0])]
+    (js/console.log event)
     (upsert-popup!
-      {:id (or id (gen-id)) :open? true :content content :position [x y]
-       :as-menu? as-menu? :root-props root-props :content-props content-props})))
+      (merge opts
+        {:id       (or id (gen-id))
+         :open?    true :content content :position position
+         :as-menu? as-menu? :root-props root-props :content-props content-props}))))
 
 (defn hide-x-popup!
   [id]
@@ -95,6 +99,7 @@
      js/document.body)
 
    (let [[emoji set-emoji!] (rum/use-state nil)
+         [q set-q!] (rum/use-state "")
          emoji-picker (fn [_nested?]
                         [:p.py-4
                          "Choose a inline "
@@ -120,6 +125,16 @@
                          [:p.p-4
                           (emoji-picker true)]))}
          "Play a nested x popup.")]
+
+      [:p.py-4
+       (ui/input
+         {:placeholder "Select a fruit."
+          :value       q
+          :on-change   #(set-q! (.-value (.-target %)))
+          :class       "w-1/5"
+          :on-focus    #(js/console.log (.getBoundingClientRect (.-target %)))
+          :on-blur     #(js/console.log %)
+          })]
 
       [:div.w-full.p-4.border.rounded.dotted.h-48.mt-8.bg-gray-02
        {:on-click        #(show-x-popup! %
