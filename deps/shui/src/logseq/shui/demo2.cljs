@@ -140,6 +140,7 @@
              (fn [q]
                [:p.x-input-popup-content.bg-green-rx-06
                 (ui/button {:on-click #(ui/toast! "Just a joke :)")} "play a magic")
+                (emoji-picker true)
                 [:strong.px-1.text-6xl q]])]
          (ui/input
            {:placeholder "Select a fruit."
