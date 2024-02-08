@@ -56,3 +56,19 @@
     content
     tags)
    (string/trim)))
+
+(defn replace-tags-with-page-refs
+  "Replace tags in content with page-ref ids"
+  [content tags]
+  (reduce
+   (fn [content tag]
+     (string/replace content
+                     (str "#" (:block/original-name tag))
+                     (str page-ref/left-brackets
+                                ;; TODO: Use uuid when it becomes available
+                                ;; page-ref-special-chars
+                                ;; (:block/uuid tag)
+                          (:block/original-name tag)
+                          page-ref/right-brackets)))
+   content
+   tags))
