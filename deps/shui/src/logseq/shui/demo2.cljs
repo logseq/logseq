@@ -41,9 +41,17 @@
   [^js event content & {:keys [id as-menu? root-props content-props] :as opts}]
   (let [position (cond
                    (vector? event) event
-                   (instance? js/MouseEvent (or (.-nativeEvent event) event)) [(.-clientX event) (.-clientY event)]
+
+                   (instance? js/MouseEvent (or (.-nativeEvent event) event))
+                   [(.-clientX event) (.-clientY event)]
+
+                   (instance? js/Element event)
+                   (let [^js rect (.getBoundingClientRect event)
+                         left (.-left rect)
+                         width (.-width rect)
+                         bottom (.-bottom rect)]
+                     [(+ left (/ width 2)) bottom])
                    :else [0 0])]
-    (js/console.log event)
     (upsert-popup!
       (merge opts
         {:id       (or id (gen-id))
@@ -100,6 +108,7 @@
 
    (let [[emoji set-emoji!] (rum/use-state nil)
          [q set-q!] (rum/use-state "")
+         *q-ref (rum/use-ref nil)
          emoji-picker (fn [_nested?]
                         [:p.py-4
                          "Choose a inline "
@@ -127,14 +136,51 @@
          "Play a nested x popup.")]
 
       [:p.py-4
-       (ui/input
-         {:placeholder "Select a fruit."
-          :value       q
-          :on-change   #(set-q! (.-value (.-target %)))
-          :class       "w-1/5"
-          :on-focus    #(js/console.log (.getBoundingClientRect (.-target %)))
-          :on-blur     #(js/console.log %)
-          })]
+       (let [gen-content
+             (fn [q]
+               [:p.x-input-popup-content.bg-green-rx-06
+                (ui/button {:on-click #(ui/toast! "Just a joke :)")} "play a magic")
+                [:strong.px-1.text-6xl q]])]
+         (ui/input
+           {:placeholder "Select a fruit."
+            :ref         *q-ref
+            :value       q
+            :on-change   (fn [^js e]
+                           (let [val (.-value (.-target e))]
+                             (set-q! val)
+                             (update-popup! :select-a-fruit-input [:content] (gen-content val))))
+            :class       "w-1/5"
+            :on-focus    (fn [^js e]
+                           (let [id :select-a-fruit-input
+                                 [_ popup] (get-popup id)]
+                             (if (not popup)
+                               (show-x-popup! (.-target e)
+                                 (gen-content q)
+                                 {:id id
+                                  :content-props
+                                  {:class "x-input-popup-content"
+                                   :onPointerDownOutside
+                                   (fn [^js e]
+                                     (js/console.log "===>> onPointerDownOutside:" e (rum/deref *q-ref))
+                                     (when-let [q-ref (rum/deref *q-ref)]
+                                       (let [^js target (or (.-relatedTarget e)
+                                                          (.-target e))]
+                                         (js/console.log "t:" target)
+                                         (when (and
+                                                 (not (.contains q-ref target))
+                                                 (not (.closest target ".x-input-popup-content")))
+                                           (hide-x-popup! id)))))
+                                   :onOpenAutoFocus #(.preventDefault %)}})
+
+                               ;; update content
+                               (update-popup! id [:content]
+                                 (gen-content q)))))
+            ;:on-blur     (fn [^js e]
+            ;               (let [^js target (.-relatedTarget e)]
+            ;                 (js/console.log "==>>>" target)
+            ;                 (when-not (.closest target ".x-input-popup-content")
+            ;                   (hide-x-popup! :select-a-fruit-input))))
+            }))]
 
       [:div.w-full.p-4.border.rounded.dotted.h-48.mt-8.bg-gray-02
        {:on-click        #(show-x-popup! %
