@@ -24,6 +24,10 @@
           :schema {:type :page
                    :cardinality :many
                    :classes #{:logseq.class}}}
+   :pagetags {:original-name "pageTags"
+              :visible true
+              :schema {:type :page
+                       :cardinality :many}}
    :background-color {:schema {:type :default :hide? true}
                       :visible true}
    :background-image {:schema {:type :default :hide? true}
