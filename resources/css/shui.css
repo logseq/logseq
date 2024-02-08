@@ -204,6 +204,10 @@ html[data-theme=dark] {
         @apply opacity-60 hover:opacity-90;
       }
     }
+
+    .form-input {
+      @apply border-accent-01;
+    }
   }
 }
 
