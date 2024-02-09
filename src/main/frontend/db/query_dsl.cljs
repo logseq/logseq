@@ -12,10 +12,10 @@
             [frontend.db.utils :as db-utils]
             [frontend.db.conn :as conn]
             [datascript.core :as d]
-            [logseq.graph-parser.util.db :as db-util]
             [logseq.db.frontend.rules :as rules]
             [frontend.template :as template]
             [logseq.graph-parser.text :as text]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.util :as common-util]
             [frontend.util.text :as text-util]
@@ -57,13 +57,13 @@
   (let [input (string/lower-case (name input))]
     (cond
       (= "today" input)
-      (db-util/date->int (t/today))
+      (date-time-util/date->int (t/today))
 
       (= "yesterday" input)
-      (db-util/date->int (t/yesterday))
+      (date-time-util/date->int (t/yesterday))
 
       (= "tomorrow" input)
-      (db-util/date->int (t/plus (t/today) (t/days 1)))
+      (date-time-util/date->int (t/plus (t/today) (t/days 1)))
 
       (page-ref/page-ref? input)
       (let [input (-> (page-ref/get-page-name input)
@@ -80,7 +80,7 @@
                  "m" t/months
                  "w" t/weeks
                  t/days)]
-        (db-util/date->int (t/plus (t/today) (tf duration)))))))
+        (date-time-util/date->int (t/plus (t/today) (tf duration)))))))
 
 (defn- ->timestamp [input]
   (let [input (string/lower-case (name input))]

@@ -8,3 +8,5 @@ logseq.db.frontend.rules/extract-rules
 logseq.db.frontend.property.type/type-or-closed-value?
 ;; Internal API
 logseq.db.frontend.rules/rules
+;; API
+logseq.db.frontend.inputs/resolve-input
