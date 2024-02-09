@@ -16,15 +16,17 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.common.util :as common-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
-            [logseq.graph-parser.date-time-util :as date-time-util]
+            [logseq.common.util.date-time :as date-time-util]
             [frontend.handler.page :as page-handler]
             [frontend.handler.editor :as editor]
             [frontend.handler.notification :as notification]
             [frontend.util :as util]
             [clojure.core.async :as async]
+            [cljs.core.async.interop :refer [p->c]]
             [medley.core :as medley]
             [frontend.persist-db :as persist-db]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.db.async :as db-async]))
 
 (defn index-files!
   "Create file structure, then parse into DB (client only)"
@@ -195,9 +197,9 @@
               (async/<! (async/timeout 10))
               (create-page-with-exported-tree! block)
               (recur))
-            (do
-              (editor/set-blocks-id! (db/get-all-referenced-blocks-uuid))
-              (async/offer! imported-chan true)))))
+            (let [result (async/<! (p->c (db-async/<get-all-referenced-blocks-uuid (state/get-current-repo))))]
+                (editor/set-blocks-id! result)
+                (async/offer! imported-chan true)))))
 
       (catch :default e
         (notification/show! (str "Error happens when importing:\n" e) :error)

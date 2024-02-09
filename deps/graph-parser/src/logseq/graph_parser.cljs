@@ -16,7 +16,7 @@
   (mapcat (fn [{uuid :block/uuid eid :db/id}]
             (if (and uuid (contains? retain-uuids uuid))
               (map (fn [attr] [:db.fn/retractAttribute eid attr]) db-schema/retract-attributes)
-              [[:db.fn/retractEntity eid]]))
+              (when eid [[:db.fn/retractEntity eid]])))
           blocks))
 
 (defn- get-file-page
@@ -135,23 +135,60 @@ Options available:
                 (assoc :block/created-at updated-at))]
     block))
 
-(defn- update-block-with-invalid-tags
-  [block]
+(defn- update-page-tags
+  [block tag-classes names-uuids page-tags-uuid]
   (if (seq (:block/tags block))
-    (update block :block/tags
+    (let [page-tags (->> (:block/tags block)
+                         (remove #(contains? tag-classes (:block/name %)))
+                         (map #(or (get names-uuids (:block/name %))
+                                   (throw (ex-info (str "No uuid found for tag " (pr-str (:block/name %)))
+                                                   {:tag %}))))
+                         set)]
+      (cond-> block
+        true
+        (update :block/tags
+                (fn [tags]
+                  (keep #(when (contains? tag-classes (:block/name %))
+                           (-> %
+                               add-missing-timestamps
+                               ;; don't use build-new-class b/c of timestamps
+                               (merge {:block/journal? false
+                                       :block/format :markdown
+                                       :block/type "class"
+                                       :block/uuid (d/squuid)})))
+                        tags)))
+        (seq page-tags)
+        (assoc :block/properties {page-tags-uuid page-tags})))
+    block))
+
+(defn- update-block-tags
+  [block tag-classes]
+  (if (seq (:block/tags block))
+    (-> block
+        (update :block/content
+                db-content/content-without-tags
+                (->> (:block/tags block)
+                     (filter #(tag-classes (:block/name %)))
+                     (map :block/original-name)))
+        (update :block/content
+                db-content/replace-tags-with-page-refs
+                (remove #(tag-classes (:block/name %))
+                        (:block/tags block)))
+        (update :block/tags
             (fn [tags]
-              (mapv #(-> %
-                         add-missing-timestamps
-                         ;; don't use build-new-class b/c of timestamps
-                         (merge {:block/journal? false
-                                 :block/format :markdown
-                                 :block/type "class"
-                                 :block/uuid (d/squuid)}))
-                    tags)))
+              (keep #(when (contains? tag-classes (:block/name %))
+                       (-> %
+                           add-missing-timestamps
+                           ;; don't use build-new-class b/c of timestamps
+                           (merge {:block/journal? false
+                                   :block/format :markdown
+                                   :block/type "class"
+                                   :block/uuid (d/squuid)})))
+                    tags))))
     block))
 
 (defn- update-imported-block
-  [conn block]
+  [conn block tag-classes]
   (prn ::block block)
   (let [remove-keys (fn [m pred] (into {} (remove (comp pred key) m)))]
     (-> block
@@ -180,14 +217,7 @@ Options available:
                                                new-key
                                                k)))
                               (remove-keys keyword?)))))))
-        update-block-with-invalid-tags
-        ((fn [block']
-           (if (seq (:block/tags block'))
-             (update block :block/content
-                     db-content/content-without-tags
-                     (map :block/original-name (:block/tags block')))
-             block)))
-
+        (update-block-tags tag-classes)
         ((fn [block']
            (if (seq (:block/refs block'))
              (update block' :block/refs
@@ -209,9 +239,10 @@ Options available:
 
 (defn import-file-to-db-graph
   "Parse file and save parsed data to the given db graph."
-  [conn file content {:keys [extract-options]
+  [conn file content {:keys [extract-options user-options page-tags-uuid]
                       :as options}]
   (let [format (common-util/get-format file)
+        tag-classes (set (map string/lower-case (:tag-classes user-options)))
         {:keys [tx ast]}
         (let [extract-options' (merge {:block-pattern (common-config/get-block-pattern format)
                                        :date-formatter "MMM do, yyyy"
@@ -242,6 +273,8 @@ Options available:
                                   (seq))
                  ;; To prevent "unique constraint" on datascript
               block-ids (set/union (set block-ids) (set block-refs-ids))
+              pages* (extract/with-ref-pages pages blocks)
+              names-uuids (into {} (map (juxt :block/name :block/uuid) pages*))
               pages (map #(-> (merge {:block/journal? false} %)
                               ;; Fix pages missing :block/original-name. Shouldn't happen
                               ((fn [m]
@@ -253,10 +286,10 @@ Options available:
                               (assoc :block/format :markdown)
                               (dissoc :block/properties-text-values :block/properties-order :block/invalid-properties
                                       :block/whiteboard?)
-                              update-block-with-invalid-tags
                               ;; FIXME: Remove when properties are supported
-                              (assoc :block/properties {}))
-                         (extract/with-ref-pages pages blocks))
+                              (assoc :block/properties {})
+                              (update-page-tags tag-classes names-uuids page-tags-uuid))
+                         pages*)
 
               ;; post-handling
               whiteboard-pages (->> pages
@@ -267,7 +300,7 @@ Options available:
                                                       :block/format :markdown
                                                       ;; fixme: missing properties
                                                       :block/properties {(get-pid @conn :ls-type) :whiteboard-page})))))
-              blocks (map #(update-imported-block conn %) blocks)
+              blocks (map #(update-imported-block conn % tag-classes) blocks)
               pages-index (map #(select-keys % [:block/name]) pages)]
 
           {:tx (concat refs whiteboard-pages pages-index pages block-ids blocks)

@@ -6,7 +6,6 @@
             [datascript.core :as d]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [shadow.cljs.modern :refer [defclass]]
-            [datascript.transit :as dt]
             ["@logseq/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [clojure.string :as string]
@@ -24,14 +23,15 @@
             [clojure.core.async :as async]
             [frontend.worker.async-util :include-macros true :refer [<?]]
             [frontend.worker.util :as worker-util]
-            [frontend.worker.handler.page.rename :as worker-page-rename]))
+            [frontend.worker.handler.page.rename :as worker-page-rename]
+            [frontend.worker.handler.page :as worker-page]
+            [logseq.outliner.op :as outliner-op]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
 (defonce *datascript-conns worker-state/*datascript-conns)
 (defonce *opfs-pools worker-state/*opfs-pools)
 (defonce *publishing? (atom false))
-(defonce *store-jobs (atom #{}))
 
 (defn- get-pool-name
   [graph-name]
@@ -109,11 +109,8 @@
                   (fn [[addr data]]
                     #js {:$addr addr
                          :$content (pr-str data)})
-                  addr+data-seq)
-            p (p/do! (upsert-addr-content! repo data delete-addrs))]
-        (swap! *store-jobs conj p)
-        (p/then p (fn [] (swap! *store-jobs disj p)))
-        p))
+                  addr+data-seq)]
+        (upsert-addr-content! repo data delete-addrs)))
 
     (-restore [_ addr]
       (restore-data-from-addr repo addr))))
@@ -264,12 +261,6 @@
    [_this repo & {:keys [close-other-db?]
                   :or {close-other-db? true}}]
    (p/do!
-    ;; Store the current db if store jobs not finished yet
-    (when (seq @*store-jobs)
-      (-> (p/all @*store-jobs)
-          (p/then (fn [_]
-                    (reset! *store-jobs #{})
-                    (println "DB store job finished")))))
     (when close-other-db?
       (close-other-dbs! repo))
     (create-or-open-db! repo)))
@@ -282,9 +273,62 @@
   (q [_this repo inputs-str]
      "Datascript q"
      (when-let [conn (worker-state/get-datascript-conn repo)]
-       (let [inputs (edn/read-string inputs-str)]
-         (let [result (apply d/q (first inputs) @conn (rest inputs))]
-           (bean/->js result)))))
+       (let [inputs (edn/read-string inputs-str)
+             result (apply d/q (first inputs) @conn (rest inputs))]
+         (pr-str result))))
+
+  (pull
+   [_this repo selector-str id-str]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (let [selector (edn/read-string selector-str)
+           id (edn/read-string id-str)
+           result (->> (d/pull @conn selector id)
+                       (sqlite-common-db/with-parent-and-left @conn))]
+       (pr-str result))))
+
+  (pull-many
+   [_this repo selector-str ids-str]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (let [selector (edn/read-string selector-str)
+           ids (edn/read-string ids-str)
+           result (d/pull-many @conn selector ids)]
+       (pr-str result))))
+
+  (get-right-sibling
+   [_this repo db-id]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (let [result (ldb/get-right-sibling @conn db-id)]
+       (pr-str result))))
+
+  (get-block-and-children
+   [_this repo name children?]
+   (assert (string? name))
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (pr-str (sqlite-common-db/get-block-and-children @conn name children?))))
+
+  (get-block-refs
+   [_this repo id]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (pr-str (ldb/get-block-refs @conn id))))
+
+  (get-block-refs-count
+   [_this repo id]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (ldb/get-block-refs-count @conn id)))
+
+  (get-block-parents
+   [_this repo id depth]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (let [block-id (:block/uuid (d/entity @conn id))
+           parents (->> (ldb/get-block-parents @conn block-id {:depth (or depth 3)})
+                        (map (fn [b] (d/pull @conn '[*] (:db/id b)))))]
+       (pr-str parents))))
+
+  (get-page-unlinked-refs
+   [_this repo page-id search-result-eids-str]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (let [search-result-eids (edn/read-string search-result-eids-str)]
+       (pr-str (ldb/get-page-unlinked-refs @conn page-id search-result-eids)))))
 
   (transact
    [_this repo tx-data tx-meta context]
@@ -333,8 +377,22 @@
   (getInitialData
    [_this repo]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (->> (sqlite-common-db/get-initial-data @conn)
-          dt/write-transit-str)))
+     (pr-str (sqlite-common-db/get-initial-data @conn))))
+
+  (fetch-all-pages
+   [_this repo]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (async/go
+       (let [all-pages (sqlite-common-db/get-all-pages @conn)
+             partitioned-data (map-indexed (fn [idx p] [idx p]) (partition-all 2000 all-pages))]
+         (doseq [[idx tx-data] partitioned-data]
+           (worker-util/post-message :sync-db-changes (pr-str
+                                                       {:repo repo
+                                                        :tx-data tx-data
+                                                        :tx-meta {:initial-pages? true
+                                                                  :end? (= idx (dec (count partitioned-data)))}}))
+           (async/<! (async/timeout 100)))))
+     nil))
 
   (closeDB
    [_this repo]
@@ -401,6 +459,7 @@
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (search/build-blocks-indice repo @conn)))
 
+  ;; page ops
   (page-search
    [this repo q limit]
    (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -412,6 +471,29 @@
      (let [config (worker-state/get-config repo)
            result (worker-page-rename/rename! repo conn config old-name new-name)]
        (bean/->js {:result result}))))
+
+  (page-delete
+   [this repo page-name]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (let [result (worker-page/delete! repo conn page-name nil {})]
+       (bean/->js {:result result}))))
+
+  (apply-outliner-ops
+   [this repo ops-str opts-str]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (let [ops (edn/read-string ops-str)
+           opts (edn/read-string opts-str)
+           start-tx (:max-tx @conn)
+           result (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts)
+           end-tx (:max-tx @conn)]
+       (when (= start-tx end-tx)        ; nothing changes
+         ;; remove task from ldb/*request-id->response
+         (worker-util/post-message :sync-db-changes (pr-str
+                                                     {:request-id (:request-id opts)
+                                                      :repo repo
+                                                      :tx-data []
+                                                      :tx-meta nil})))
+       (pr-str result))))
 
   (file-writes-finished?
    [this repo]

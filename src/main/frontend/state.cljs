@@ -15,14 +15,18 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
+            [logseq.db :as ldb]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.rum :as r]))
 
 (defonce *profile-state
   (atom {}))
 
 (defonce *editor-editing-ref (atom nil))
+
+(defonce *db-worker (atom nil))
 
 ;; Stores main application state
 (defonce ^:large-vars/data-var state
@@ -308,8 +312,8 @@
       :system/info                           {}
       ;; Whether block is selected
       :ui/select-query-cache                 (atom {})
-
-      :favorites/updated?                    (atom 0)})))
+      :favorites/updated?                    (atom 0)
+      :db/async-queries                      (atom #{})})))
 
 ;; Block ast state
 ;; ===============
@@ -694,8 +698,8 @@ Similar to re-frame subscriptions"
   (let [*cache (:ui/select-query-cache @state)
         keys [::select-block block-uuid]
         atom (or (get @*cache keys)
-                 (let [result (rum/derived-atom
-                               [(:selection/blocks @state)]
+                 (let [result (r/cached-derived-atom
+                               (:selection/blocks @state)
                                keys
                                (fn [s]
                                  (contains? (set (get-selected-block-ids s)) block-uuid)))]
@@ -2309,19 +2313,12 @@ Similar to re-frame subscriptions"
   []
   (storage/remove :user-groups))
 
-(defn sub-block-unloaded?
-  [repo block-uuid]
+(defn sub-async-query-loading
+  [k]
+  (assert (some? k))
   (rum/react
-   (rum/derived-atom [(rum/cursor-in state [repo :restore/unloaded-blocks])] [::block-unloaded repo block-uuid]
-     (fn [s]
-       (contains? s (str block-uuid))))))
-
-(defn sub-page-unloaded?
-  [repo page-name]
-  (rum/react
-   (rum/derived-atom [(rum/cursor-in state [repo :unloaded-pages])] [::page-unloaded repo page-name]
-                     (fn [s]
-                       (contains? s page-name)))))
+   (r/cached-derived-atom (:db/async-queries @state) [(get-current-repo) ::async-query (str k)]
+                          (fn [s] (contains? s (str k))))))
 
 (defn get-color-accent []
   (get @state :ui/radix-color))
@@ -2372,3 +2369,6 @@ Similar to re-frame subscriptions"
 (defn update-favorites-updated!
   []
   (update-state! :favorites/updated? inc))
+
+(def get-worker-next-request-id ldb/get-next-request-id)
+(def add-worker-request! ldb/add-request!)

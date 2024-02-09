@@ -2,7 +2,7 @@
   "Db util fns that are useful for the frontend and nbb-logseq. This may be used
   by the graph-parser soon but if not, it should be in its own library"
   (:require [cljs-time.core :as t]
-            [logseq.graph-parser.date-time-util :as date-time-util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [datascript.core :as d]
@@ -17,11 +17,7 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
   ([date hours mins secs millisecs]
    (.setHours (js/Date. date) hours mins secs millisecs)))
 
-(defn date->int
-  "Given a date object, returns its journal page integer"
-  [date]
-  (parse-long
-   (string/replace (date-time-util/ymd date) "/" "")))
+(def date->int date-time-util/date->int)
 
 (defn old->new-relative-date-format [input]
   (let [count (re-find #"^\d+" (name input))

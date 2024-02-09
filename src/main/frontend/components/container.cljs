@@ -84,11 +84,45 @@
                            (state/sidebar-add-block!
                              (state/get-current-repo)
                              (:db/id page-entity)
-                             :page))]
+                             :page))
+        x-menu-content (fn [type opts]
+                         (let [dropdown? (= type :dropdown)
+                               x-menu-content (if dropdown? shui/dropdown-menu-content shui/context-menu-content)
+                               x-menu-item (if dropdown? shui/dropdown-menu-item shui/context-menu-item)
+                               x-menu-shortcut (if dropdown? shui/dropdown-menu-shortcut shui/context-menu-shortcut)]
+                           (x-menu-content
+                             (merge {:class "w-60"} opts)
+                             (when-not recent?
+                               (x-menu-item
+                                 {:on-click #(page-handler/<unfavorite-page! original-name)}
+                                 (ctx-icon "star-off")
+                                 (t :page/unfavorite)
+                                 (x-menu-shortcut (some-> (shortcut-dh/shortcut-binding :command/toggle-favorite) (first)
+                                                               (shortcut-utils/decorate-binding)))))
+
+                             (when-let [page-fpath (and (util/electron?) file-rpath
+                                                     (config/get-repo-fpath (state/get-current-repo) file-rpath))]
+                               [:<>
+                                (x-menu-item
+                                  {:on-click #(ipc/ipc :openFileInFolder page-fpath)}
+                                  (ctx-icon "folder")
+                                  (t :page/open-in-finder))
+
+                                (x-menu-item
+                                  {:on-click #(js/window.apis.openPath page-fpath)}
+                                  (ctx-icon "file")
+                                  (t :page/open-with-default-app))])
+
+                             (x-menu-item
+                               {:on-click open-in-sidebar}
+                               (ctx-icon "layout-sidebar-right")
+                               (t :content/open-in-sidebar)
+                               (x-menu-shortcut (shortcut-utils/decorate-binding "shift+click"))))))]
+
     ;; TODO: move to standalone component
     (shui/context-menu
       (shui/context-menu-trigger
-        [:a.flex.items-center
+        [:a.flex.items-center.justify-between.relative.group
          {:on-click
           (fn [e]
             (let [name (if (empty? source-page) name (:block/name source-page))]
@@ -100,34 +134,22 @@
          [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
          [:span.page-title {:class (when untitled? "opacity-50")}
           (if untitled? (t :untitled)
-                        (pdf-utils/fix-local-asset-pagename original-name))]]
-        (shui/context-menu-content
-          {:class "w-60"}
-          (when-not recent?
-            (shui/context-menu-item
-              {:on-click #(page-handler/<unfavorite-page! original-name)}
-              (ctx-icon "star-off")
-              (t :page/unfavorite)
-              (shui/context-menu-shortcut (some-> (shortcut-dh/shortcut-binding :command/toggle-favorite) (first)
-                                            (shortcut-utils/decorate-binding)))))
-          (when-let [page-fpath (and (util/electron?) file-rpath
-                                  (config/get-repo-fpath (state/get-current-repo) file-rpath))]
-            [:<>
-             (shui/context-menu-item
-               {:on-click #(ipc/ipc :openFileInFolder page-fpath)}
-               (ctx-icon "folder")
-               (t :page/open-in-finder))
+                        (pdf-utils/fix-local-asset-pagename original-name))]
 
-             (shui/context-menu-item
-               {:on-click #(js/window.apis.openPath page-fpath)}
-               (ctx-icon "file")
-               (t :page/open-with-default-app))])
+         ;; dots trigger
+         (shui/dropdown-menu
+           (shui/dropdown-menu-trigger
+             (shui/button
+               {:size     :sm
+                :variant  :ghost
+                :class    "absolute right-2 top-0 px-1.5 scale-75 opacity-30 hidden group-hover:block hover:opacity-80 active:opacity-100"
+                :on-click #(util/stop %)}
+               [:i.relative {:style {:top "1px"}} (shui/tabler-icon "dots")]))
+           ;; menu content
+           (x-menu-content :dropdown {:align "start"}))]
 
-          (shui/context-menu-item
-            {:on-click open-in-sidebar}
-            (ctx-icon "layout-sidebar-right")
-            (t :content/open-in-sidebar)
-            (shui/context-menu-shortcut (shortcut-utils/decorate-binding "shift+click"))))))))
+        ;; menu content
+        (x-menu-content :context nil)))))
 
  ;; Fall back to default if icon is undefined or empty
 
@@ -581,9 +603,15 @@
          nil
 
          db-restoring?
-         [:div.mt-20
-          [:div.ls-center
-           (ui/loading)]]
+         (if config/publishing?
+           [:div.space-y-2
+            (shui/skeleton {:class "h-8 w-1/3 mb-8 bg-gray-400"})
+            (shui/skeleton {:class "h-6 w-full bg-gray-400"})
+            (shui/skeleton {:class "h-6 w-full bg-gray-400"})]
+           [:div.space-y-2
+            (shui/skeleton {:class "h-8 w-1/3 mb-8"})
+            (shui/skeleton {:class "h-6 w-full"})
+            (shui/skeleton {:class "h-6 w-full"})])
 
          :else
          [:div

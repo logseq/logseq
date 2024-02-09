@@ -31,6 +31,25 @@ properties. Read the docs in
 [logseq.tasks.db-graph.create-graph](src/logseq/tasks/db_graph/create_graph.cljs)
 for specifics on the EDN map.
 
+To create large graphs with varying size:
+
+```
+$ yarn -s nbb-logseq src/logseq/tasks/db_graph/create_graph_with_large_sizes.cljs large
+Building tx ...
+Built 21000 tx, 1000 pages and 20000 blocks ...
+Transacting chunk 1 of 21 starting with block: #:block{:name "page-0"}
+...
+Created graph large with 187810 datoms!
+
+# To see options available
+$ yarn -s nbb-logseq src/logseq/tasks/db_graph/create_graph_with_large_sizes.cljs -h
+Usage: $0 GRAPH-NAME [OPTIONS]
+Options:
+  -h, --help        Print help
+  -p, --pages  1000 Number of pages to create
+  -b, --blocks 20   Number of blocks to create
+```
+
 Another example is the `create_graph_with_schema_org.cljs` script which creates a graph
 with the https://schema.org/ ontology with as many of the classes and properties as possible:
 

@@ -21,7 +21,7 @@
             [frontend.db.conn :as conn]
             [datascript.core :as d]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [logseq.outliner.core :as outliner-core]))
+            [frontend.modules.outliner.op :as outliner-op]))
 
 (defn build-hidden-page-tx-data
   [page-name]
@@ -126,41 +126,41 @@
 (defn <favorite-page!-v2
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
-  (let [repo (state/get-current-repo)
-        favorites-page (d/entity (conn/get-db) [:block/name favorites-page-name])
+  (let [favorites-page (d/entity (conn/get-db) [:block/name favorites-page-name])
         favorites-page-tx-data (build-hidden-page-tx-data "favorites")]
     (when (d/entity (conn/get-db) [:block/uuid page-block-uuid])
       (p/do!
        (when-not favorites-page (ldb/transact! nil [favorites-page-tx-data]))
        (ui-outliner-tx/transact!
         {:outliner-op :insert-blocks}
-        (outliner-core/insert-blocks! repo (conn/get-db false) [{:block/link [:block/uuid page-block-uuid]
-                                                                 :block/content ""
-                                                                 :block/format :markdown}]
-                                      (d/entity (conn/get-db) [:block/name favorites-page-name])
-                                      {}))))))
+        (outliner-op/insert-blocks! [{:block/link [:block/uuid page-block-uuid]
+                                      :block/content ""
+                                      :block/format :markdown}]
+                                    (d/entity (conn/get-db) [:block/name favorites-page-name])
+                                    {}))))))
 
 (defn <unfavorite-page!-v2
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
-  (let [repo (state/get-current-repo)]
-    (when-let [block (find-block-in-favorites-page page-block-uuid)]
-      (ui-outliner-tx/transact!
-       {:outliner-op :delete-blocks}
-       (outliner-core/delete-blocks! repo (conn/get-db false) (state/get-date-formatter) [block] {})))))
+  (when-let [block (find-block-in-favorites-page page-block-uuid)]
+    (ui-outliner-tx/transact!
+     {:outliner-op :delete-blocks}
+     (outliner-op/delete-blocks! [block] {}))))
 
 
 ;; favorites fns end ================
 
 
-(defn delete!
+(defn <delete!
   "Deletes a page and then either calls the ok-handler or the error-handler if unable to delete"
-  [page-name ok-handler & {:keys [_persist-op? _error-handler]
-                           :as opts}]
+  [page-name ok-handler & {:keys [error-handler]}]
   (when page-name
-    (when-let [repo (state/get-current-repo)]
-      (let [conn (db/get-db repo false)]
-        (worker-page/delete! repo conn page-name ok-handler opts)))))
+    (when-let [^Object worker @state/*db-worker]
+      (-> (p/let [repo (state/get-current-repo)
+                  _ (.page-delete worker repo page-name)]
+            (when ok-handler (ok-handler)))
+          (p/catch (fn [error]
+                     (when error-handler (error-handler error))))))))
 
 ;; other fns
 ;; =========

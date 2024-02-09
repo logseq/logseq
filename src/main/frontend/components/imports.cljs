@@ -35,7 +35,8 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [logseq.common.config :as common-config]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.handler.db-based.property.util :as db-pu]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
@@ -157,18 +158,18 @@
       {:auto-focus true
        :on-change (fn [e]
                     (reset! *input (util/evalue e)))
-       :on-key-press (fn [e]
-                       (when (= "Enter" (util/ekey e))
-                         (on-submit)))}]
+       :on-key-down (fn [e]
+                      (when (= "Enter" (util/ekey e))
+                        (on-submit)))}]
 
      [:div.mt-5.sm:mt-4.flex
       (ui/button "Submit"
                  {:on-click on-submit})]]))
 
-
 (defn- import-from-doc-files!
-  [db-conn repo config doc-files]
-  (let [imported-chan (async/promise-chan)]
+  [db-conn repo config doc-files user-options]
+  (let [imported-chan (async/promise-chan)
+        page-tags-uuid (db-pu/get-built-in-property-uuid repo :pagetags)]
     (try
       (let [docs-chan (async/to-chan! (medley/indexed doc-files))]
         (state/set-state! [:graph/importing-state :total] (count doc-files))
@@ -189,7 +190,13 @@
                                   (p/then (fn [m]
                                             ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
                                             (let [{:keys [tx-report]}
-                                                  (graph-parser/import-file-to-db-graph db-conn (:file/path m) (:file/content m) {:extract-options extract-options})]
+                                                  (graph-parser/import-file-to-db-graph
+                                                   db-conn
+                                                   (:file/path m)
+                                                   (:file/content m)
+                                                   {:extract-options extract-options
+                                                    :user-options user-options
+                                                    :page-tags-uuid page-tags-uuid})]
                                               (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report)))
                                             m)))))
               (recur))
@@ -286,11 +293,11 @@
                 (outliner-core/insert-blocks! repo db-conn (build-hidden-favorites-page-blocks page-block-uuid-coll)
                                               page-entity {}))))))))))
 
-
-(rum/defc confirm-graph-name-dialog
+(rum/defc import-file-graph-dialog
   [initial-name on-graph-name-confirmed]
-  (let [[input set-input!] (rum/use-state initial-name)
-        on-submit #(do (on-graph-name-confirmed input)
+  (let [[graph-input set-graph-input!] (rum/use-state initial-name)
+        [tags-input set-tags-input!] (rum/use-state "")
+        on-submit #(do (on-graph-name-confirmed {:graph-name graph-input :tags tags-input})
                        (state/close-modal!))]
     [:div.container
      [:div.sm:flex.sm:items-start
@@ -300,19 +307,32 @@
 
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
       {:auto-focus true
-       :default-value input
+       :default-value graph-input
        :on-change (fn [e]
-                    (set-input! (util/evalue e)))
+                    (set-graph-input! (util/evalue e)))
+       :on-key-down (fn [e]
+                      (when (= "Enter" (util/ekey e))
+                        (on-submit)))}]
+     [:div.sm:flex.sm:items-start
+      [:div.mt-3.text-center.sm:mt-0.sm:text-left
+       [:h3#modal-headline.leading-6.font-medium
+        "(Optional) Tags to import as tag classes:"]
+       [:span.text-xs
+        "Tags are case insensitive and separated by commas"]]]
+     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
+      {:default-value tags-input
+       :on-change (fn [e]
+                    (set-tags-input! (util/evalue e)))
        :on-key-down (fn [e]
                       (when (= "Enter" (util/ekey e))
                         (on-submit)))}]
 
      [:div.mt-5.sm:mt-4.flex
-      (ui/button "Confirm"
+      (ui/button "Submit"
                  {:on-click on-submit})]]))
 
 (defn- import-file-graph
-  [*files graph-name config-file]
+  [*files {:keys [graph-name tags]} config-file]
   (state/set-state! :graph/importing :folder)
   (state/set-state! [:graph/importing-state :current-page] (str graph-name " Assets"))
   (async/go
@@ -325,7 +345,8 @@
           asset-files (filter #(string/starts-with? (:rpath %) "assets/") files)]
       (async/<! (p->c (import-logseq-files (filter #(string/starts-with? (:rpath %) "logseq/") files))))
       (async/<! (import-from-asset-files! asset-files))
-      (async/<! (import-from-doc-files! db-conn repo config doc-files))
+      (async/<! (import-from-doc-files! db-conn repo config doc-files
+                                        {:tag-classes (set (string/split tags #",\s*"))}))
       (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))
       (state/set-state! :graph/importing nil)
       (state/set-state! :graph/importing-state nil)
@@ -335,14 +356,14 @@
                             :info false))
       (finished-cb))))
 
-(defn graph-folder-to-db-import-handler
+(defn import-file-to-db-handler
   "Import from a graph folder as a DB-based graph.
 
 - Page name, journal name creation"
   [ev _opts]
   (let [^js file-objs (array-seq (.-files (.-target ev)))
         original-graph-name (string/replace (.-webkitRelativePath (first file-objs)) #"/.*" "")
-        import-graph-fn (fn [graph-name]
+        import-graph-fn (fn [user-inputs]
                           (let [files (->> file-objs
                                            (map #(hash-map :file-object %
                                                            :rpath (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %))))
@@ -350,24 +371,24 @@
                                                          ;; TODO: Update this when supporting more formats as this aggressively excludes most formats
                                                          (fs-util/ignored-path? original-graph-name (.-webkitRelativePath (:file-object %))))))]
                             (if-let [config-file (first (filter #(= (:rpath %) "logseq/config.edn") files))]
-                              (import-file-graph files graph-name config-file)
+                              (import-file-graph files user-inputs config-file)
                               (notification/show! "Import failed as the file 'logseq/config.edn' was not found for a Logseq graph."
                                                   :error))))]
     (state/set-modal!
-     #(confirm-graph-name-dialog original-graph-name
-                                 (fn [graph-name]
-                                   (cond
-                                     (repo/invalid-graph-name? graph-name)
-                                     (repo/invalid-graph-name-warning)
+     #(import-file-graph-dialog original-graph-name
+                                (fn [{:keys [graph-name] :as user-inputs}]
+                                  (cond
+                                    (repo/invalid-graph-name? graph-name)
+                                    (repo/invalid-graph-name-warning)
 
-                                     (string/blank? graph-name)
-                                     (notification/show! "Empty graph name." :error)
+                                    (string/blank? graph-name)
+                                    (notification/show! "Empty graph name." :error)
 
-                                     (repo-handler/graph-already-exists? graph-name)
-                                     (notification/show! "Please specify another name as another graph with this name already exists!" :error)
+                                    (repo-handler/graph-already-exists? graph-name)
+                                    (notification/show! "Please specify another name as another graph with this name already exists!" :error)
 
-                                     :else
-                                     (import-graph-fn graph-name)))))))
+                                    :else
+                                    (import-graph-fn user-inputs)))))))
 
 
   (rum/defc importer < rum/reactive
@@ -410,11 +431,11 @@
             [[:strong "File to DB graph"]
              [:small  "Import a file-based Logseq graph folder into a new DB graph"]]]
            [:input.absolute.hidden
-            {:id        "import-graph-folder"
+            {:id        "import-file-graph"
              :type      "file"
              :webkitdirectory "true"
              :on-change (debounce (fn [e]
-                                    (graph-folder-to-db-import-handler e {}))
+                                    (import-file-to-db-handler e {}))
                                   1000)}]])
 
          [:label.action-input.flex.items-center.mx-2.my-2
