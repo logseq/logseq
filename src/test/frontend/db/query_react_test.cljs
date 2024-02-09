@@ -4,7 +4,7 @@
             [clojure.string :as string]
             [frontend.state :as state]
             [frontend.date :as date]
-            [logseq.graph-parser.util.db :as db-util]
+            [logseq.db.frontend.inputs :as db-inputs]
             [frontend.test.helper :as test-helper :refer [load-test-files]]
             [frontend.db.query-custom :as query-custom]
             [frontend.db.utils :as db-utils]
@@ -64,6 +64,7 @@ adds rules that users often use"
                                                      [?t :block/name ?tag-name]]}
                                     {:current-page-fn (constantly current-page)})))
 
+;; TODO: Move most resolve-input tests to deps/db when a load-test-files helper is available for deps
 (deftest resolve-input-for-page-and-block-inputs
   (load-test-files [{:file/path "pages/page1.md"
                      :file/content
@@ -183,16 +184,16 @@ created-at:: %s
 created-at:: %s
 - +1y
 created-at:: %s"
-                                                   (db-util/date-at-local-ms (t/minus (t/today) (t/years 1)) 0 0 0 0)
-                                                   (db-util/date-at-local-ms (t/minus (t/today) (t/months 1)) 0 0 0 0)
-                                                   (db-util/date-at-local-ms (t/minus (t/today) (t/weeks 1)) 0 0 0 0)
-                                                   (db-util/date-at-local-ms (t/minus (t/today) (t/days 1)) 0 0 0 0)
-                                                   (db-util/date-at-local-ms (t/today) 12 0 0 0)
-                                                   (db-util/date-at-local-ms (t/today) 18 0 0 0)
-                                                   (db-util/date-at-local-ms (t/plus (t/today) (t/days 1)) 0 0 0 0)
-                                                   (db-util/date-at-local-ms (t/plus (t/today) (t/weeks 1)) 0 0 0 0)
-                                                   (db-util/date-at-local-ms (t/plus (t/today) (t/months 1)) 0 0 0 0)
-                                                   (db-util/date-at-local-ms (t/plus (t/today) (t/years 1)) 0 0 0 0))}])
+                                                   (db-inputs/date-at-local-ms (t/minus (t/today) (t/years 1)) 0 0 0 0)
+                                                   (db-inputs/date-at-local-ms (t/minus (t/today) (t/months 1)) 0 0 0 0)
+                                                   (db-inputs/date-at-local-ms (t/minus (t/today) (t/weeks 1)) 0 0 0 0)
+                                                   (db-inputs/date-at-local-ms (t/minus (t/today) (t/days 1)) 0 0 0 0)
+                                                   (db-inputs/date-at-local-ms (t/today) 12 0 0 0)
+                                                   (db-inputs/date-at-local-ms (t/today) 18 0 0 0)
+                                                   (db-inputs/date-at-local-ms (t/plus (t/today) (t/days 1)) 0 0 0 0)
+                                                   (db-inputs/date-at-local-ms (t/plus (t/today) (t/weeks 1)) 0 0 0 0)
+                                                   (db-inputs/date-at-local-ms (t/plus (t/today) (t/months 1)) 0 0 0 0)
+                                                   (db-inputs/date-at-local-ms (t/plus (t/today) (t/years 1)) 0 0 0 0))}])
 
   (is (= ["today" "tonight"] (blocks-created-between-inputs :-0d-ms :+0d-ms))
       ":+0d-ms and :-0d-ms resolve to correct datetime range")
