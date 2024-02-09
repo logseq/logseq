@@ -5,7 +5,7 @@
             [datascript.core :as d]
             [malli.core :as m]))
 
-(def op-schema
+(def ^:private op-schema
   [:multi {:dispatch first}
    [:save-block
     [:catn
@@ -32,14 +32,15 @@
      [:op :keyword]
      [:args [:tuple ::ids :boolean ::option]]]]])
 
-(def ops-schema [:schema {:registry {::id int?
-                                     ::block map?
-                                     ::option [:maybe map?]
-                                     ::blocks [:sequential ::block]
-                                     ::ids [:sequential ::id]}}
-                 [:sequential op-schema]])
+(def ^:private ops-schema
+  [:schema {:registry {::id int?
+                       ::block map?
+                       ::option [:maybe map?]
+                       ::blocks [:sequential ::block]
+                       ::ids [:sequential ::id]}}
+   [:sequential op-schema]])
 
-(def ops-validator (m/validator ops-schema))
+(def ^:private ops-validator (m/validator ops-schema))
 
 (defn apply-ops!
   [repo conn ops date-formatter opts]
