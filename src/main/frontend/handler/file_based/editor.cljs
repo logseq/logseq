@@ -6,8 +6,8 @@
             [frontend.format.block :as block]
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
-            [logseq.outliner.core :as outliner-core]
             [frontend.state :as state]
+            [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.util :as util]
             [frontend.util.clock :as clock]
@@ -195,9 +195,7 @@
    {:outliner-op :save-block}
    (doseq [block-id block-ids]
      (when-let [block (set-heading-aux! block-id heading)]
-       (outliner-core/save-block! (state/get-current-repo) (db/get-db false)
-                                  (state/get-date-formatter)
-                                  block)))))
+       (outliner-op/save-block! block)))))
 
 (defn set-blocks-id!
   "Persist block uuid to file if the uuid is valid, and it's not persisted in file.

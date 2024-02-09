@@ -12,14 +12,11 @@
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
-            [frontend.util.drawer :as drawer]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.content :as db-content]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util.db :as db-util]
             [logseq.common.util :as common-util]
-            [cljs-time.core :as t]
-            [cljs-time.format :as tf]
             [frontend.config :as config]
             [logseq.db :as ldb]))
 
@@ -116,18 +113,6 @@
   [repo alias]
   (when-let [db (conn/get-db repo)]
     (ldb/get-alias-source-page db alias)))
-
-(defn get-files
-  [repo]
-  (when-let [db (conn/get-db repo)]
-    (->> (d/q
-          '[:find ?path ?modified-at
-            :where
-            [?file :file/path ?path]
-            [(get-else $ ?file :file/last-modified-at 0) ?modified-at]]
-          db)
-         (seq)
-         (reverse))))
 
 (defn get-files-blocks
   [repo-url paths]
@@ -274,15 +259,7 @@ independent of format as format specific heading characters are stripped"
   [repo-url page]
   (when-let [page-id (:db/id (db-utils/entity repo-url [:block/name (util/safe-page-name-sanity-lc page)]))]
     (->>
-     (d/q '[:find ?e
-            :in $ ?page-name %
-            :where
-            [?page :block/name ?page-name]
-            (alias ?page ?e)]
-          (conn/get-db repo-url)
-          (util/safe-page-name-sanity-lc page)
-          (:alias rules/rules))
-     db-utils/seq-flatten
+     (ldb/get-page-alias (conn/get-db repo-url) page-id)
      (set)
      (set/union #{page-id}))))
 
@@ -336,25 +313,8 @@ independent of format as format specific heading characters are stripped"
     (->
      (react/q repo [:frontend.worker.react/block id]
               {:query-fn (fn [_]
-                           (let [e (db-utils/entity id)
-                                 children (map :db/id (sort-by-left (:block/_parent e) e))]
-                             [e {:name (:block/name e)
-                                 :original-name (:block/original-name e)
-                                 :link (:block/link e)
-                                 :namespace (:block/namespace e)
-                                 :types (:block/type e)
-                                 :schema (:block/schema e)
-                                 :content (:block/content e)
-                                 :marker (:block/marker e)
-                                 :priority (:block/priority e)
-                                 :properties (:block/properties e)
-                                 :properties-values (:block/properties-text-values e)
-                                 :alias (:block/alias e)
-                                 :tags (:block/tags e)
-                                 :children children
-                                 :collapsed? (:block/collapsed? e)
-                                 :collapsed-properties (:block/collapsed-properties e)
-                                 :refs-count (count (:block/_refs e))}]))}
+                           (let [e (db-utils/entity id)]
+                             [e (:block/tx-id e)]))}
               nil)
      react
      first)))
@@ -825,92 +785,26 @@ independent of format as format specific heading characters are stripped"
    (when repo
      (when (conn/get-db repo)
        (let [page-id (:db/id (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)]))
-             pages (page-alias-set repo page)
-             aliases (set/difference pages #{page-id})]
+             pages (page-alias-set repo page)]
          (->>
           (react/q repo
-            [:frontend.worker.react/refs page-id]
-            {:use-cache? false
-             :query-fn (fn []
-                         (let [entities (mapcat (fn [id]
-                                                  (:block/_path-refs (db-utils/entity id))) pages)
-                               blocks (map (fn [e]
-                                             {:block/parent (:block/parent e)
-                                              :block/left (:block/left e)
-                                              :block/page (:block/page e)
-                                              :block/collapsed? (:block/collapsed? e)}) entities)]
-                           {:entities entities
-                            :blocks blocks}))}
-            nil)
+                   [:frontend.worker.react/refs page-id]
+                   {:query-fn (fn []
+                                (let [entities (mapcat (fn [id]
+                                                         (:block/_path-refs (db-utils/entity id))) pages)
+                                      blocks (map (fn [e]
+                                                    {:block/parent (:block/parent e)
+                                                     :block/left (:block/left e)
+                                                     :block/page (:block/page e)
+                                                     :block/collapsed? (:block/collapsed? e)}) entities)]
+                                  {:entities entities
+                                   :blocks blocks}))}
+                   nil)
           react
           :entities
-          (remove (fn [block] (= page-id (:db/id (:block/page block)))))))))))
-
-(defn get-date-scheduled-or-deadlines
-  [journal-title]
-  (when-let [date (date/journal-title->int journal-title)]
-    (let [future-days (state/get-scheduled-future-days)
-          date-format (tf/formatter "yyyyMMdd")
-          current-day (tf/parse date-format (str date))
-          future-day (some->> (t/plus current-day (t/days future-days))
-                              (tf/unparse date-format)
-                              (parse-long))]
-      (when future-day
-        (when-let [repo (state/get-current-repo)]
-          (->> (react/q repo [:custom :scheduled-deadline journal-title]
-                 {:use-cache? false}
-                 '[:find [(pull ?block ?block-attrs) ...]
-                   :in $ ?day ?future ?block-attrs
-                   :where
-                   (or
-                    [?block :block/scheduled ?d]
-                    [?block :block/deadline ?d])
-                   [(get-else $ ?block :block/repeated? false) ?repeated]
-                   [(get-else $ ?block :block/marker "NIL") ?marker]
-                   [(not= ?marker "DONE")]
-                   [(not= ?marker "CANCELED")]
-                   [(not= ?marker "CANCELLED")]
-                   [(<= ?d ?future)]
-                   (or-join [?repeated ?d ?day]
-                            [(true? ?repeated)]
-                            [(>= ?d ?day)])]
-                 date
-                 future-day
-                 block-attrs)
-               react
-               (sort-by-left-recursive)
-               db-utils/group-by-page))))))
-
-(defn- pattern [name]
-  (re-pattern (str "(?i)(^|[^\\[#0-9a-zA-Z]|((^|[^\\[])\\[))"
-                   (util/regex-escape name)
-                   "($|[^0-9a-zA-Z])")))
-
-(defn get-page-unlinked-references
-  [page]
-  (when-let [repo (state/get-current-repo)]
-    (let [page (util/safe-page-name-sanity-lc page)
-          page-id     (:db/id (db-utils/entity [:block/name page]))
-          alias-names (get-page-alias-names repo page)
-          patterns    (->> (conj alias-names page)
-                           (map pattern))
-          filter-fn   (fn [datom]
-                        (some (fn [p]
-                                (re-find p (->> (:v datom)
-                                                (drawer/remove-logbook))))
-                              patterns))]
-      (->> (react/q repo [:frontend.worker.react/page-unlinked-refs page-id]
-             {:query-fn (fn [db _result]
-                          (let [ids
-                                (->> (d/datoms db :aevt :block/content)
-                                     (filter filter-fn)
-                                     (map :e))
-                                result (db-utils/pull-many repo block-attrs ids)]
-                            (remove (fn [block] (= page-id (:db/id (:block/page block)))) result)))}
-             nil)
-           react
-           (sort-by-left-recursive)
-           db-utils/group-by-page))))
+          (remove (fn [block]
+                    (= page-id (:db/id (:block/page block)))))
+          (util/distinct-by :db/id)))))))
 
 (defn get-block-referenced-blocks
   ([block-uuid]
@@ -948,21 +842,6 @@ independent of format as format specific heading characters are stripped"
   [property-uuid]
   (ldb/get-classes-with-property (conn/get-db) property-uuid))
 
-(defn get-template-by-name
-  [name]
-  (when (string? name)
-    (->> (d/q
-          '[:find [(pull ?b [*]) ...]
-            :in $ ?name
-            :where
-            [?b :block/properties ?p]
-            [(get ?p :template) ?t]
-            [(= ?t ?name)]]
-          (conn/get-db)
-          name)
-         (sort-by :block/name)
-         (first))))
-
 (defn get-all-referenced-blocks-uuid
   "Get all uuids of blocks with any back link exists."
   []
@@ -976,7 +855,8 @@ independent of format as format specific heading characters are stripped"
 (defn delete-blocks
   [repo-url files _delete-page?]
   (when (seq files)
-    (let [blocks (get-files-blocks repo-url files)]
+    (let [blocks (->> (get-files-blocks repo-url files)
+                      (remove nil?))]
       (mapv (fn [eid] [:db.fn/retractEntity eid]) blocks))))
 
 (defn delete-files
@@ -999,6 +879,7 @@ independent of format as format specific heading characters are stripped"
                     :file/content content}]
        (db-utils/transact! repo [tx-data] (merge opts {:skip-refresh? true}))))))
 
+;; TODO: check whether this works when adding pdf back on Web
 (defn get-pre-block
   [repo page-id]
   (-> (d/q '[:find (pull ?b [*])

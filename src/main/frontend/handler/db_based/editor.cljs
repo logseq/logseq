@@ -14,8 +14,8 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.repo-config :as repo-config-handler]
-            [logseq.outliner.core :as outliner-core]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.modules.outliner.op :as outliner-op]
             [frontend.schema.handler.repo-config :as repo-config-schema]
             [promesa.core :as p]
             [logseq.db.frontend.content :as db-content]))
@@ -161,6 +161,6 @@
   [repo block-ids heading]
   (ui-outliner-tx/transact!
    {:outliner-op :save-block}
-   (doseq [block-tx (keep #(set-heading-aux! % heading) block-ids)]
-     (outliner-core/save-block! repo (db/get-db false) (state/get-date-formatter) block-tx))
+   (doseq [block (keep #(set-heading-aux! % heading) block-ids)]
+     (outliner-op/save-block! block))
    (property-handler/batch-set-block-property! repo block-ids :heading heading)))

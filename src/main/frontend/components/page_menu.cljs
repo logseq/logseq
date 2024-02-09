@@ -22,7 +22,7 @@
 
 (defn- delete-page!
   [page-name]
-  (page-handler/delete! page-name
+  (page-handler/<delete! page-name
                         (fn []
                           (notification/show! (str "Page " page-name " was deleted successfully!")
                                               :success))

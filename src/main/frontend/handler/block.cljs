@@ -8,6 +8,7 @@
    [frontend.mobile.haptics :as haptics]
    [logseq.outliner.core :as outliner-core]
    [frontend.modules.outliner.ui :as ui-outliner-tx]
+   [frontend.modules.outliner.op :as outliner-op]
    [frontend.state :as state]
    [frontend.util :as util]
    [frontend.util.drawer :as drawer]
@@ -326,17 +327,18 @@
                                      last)]
        (get-original-block-by-dom last-block-node)))))
 
-(defn indent-outdent-block!
-  [block direction]
-  (ui-outliner-tx/transact!
-   {:outliner-op :move-blocks
-    :real-outliner-op :indent-outdent}
-   (outliner-core/indent-outdent-blocks! (state/get-current-repo)
-                                         (db/get-db false)
-                                         (get-top-level-blocks [block])
-                                         (= direction :right)
-                                         {:get-first-block-original get-first-block-original
-                                          :logical-outdenting? (state/logical-outdenting?)})))
+(defn indent-outdent-blocks!
+  [blocks indent? save-current-block]
+  (when (seq blocks)
+    (let [blocks (get-top-level-blocks blocks)]
+      (ui-outliner-tx/transact!
+       {:outliner-op :move-blocks
+        :real-outliner-op :indent-outdent}
+       (when save-current-block (save-current-block))
+       (outliner-op/indent-outdent-blocks! (get-top-level-blocks blocks)
+                                           indent?
+                                           {:parent-original (get-first-block-original)
+                                            :logical-outdenting? (state/logical-outdenting?)})))))
 
 (def *swipe (atom nil))
 
@@ -461,13 +463,13 @@
             (and left-menu (>= (.-clientWidth left-menu) 40))
             (when (indentable? block)
               (haptics/with-haptics-impact
-                (indent-outdent-block! block :right)
+                (indent-outdent-blocks! [block] true nil)
                 :light))
 
             (and right-menu (<= 40 (.-clientWidth right-menu) 79))
             (when (outdentable? block)
               (haptics/with-haptics-impact
-                (indent-outdent-block! block :left)
+                (indent-outdent-blocks! [block] false nil)
                 :light))
 
             (and right-menu (>= (.-clientWidth right-menu) 80))

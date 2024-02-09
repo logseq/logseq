@@ -8,7 +8,8 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.history :as history]
             [logseq.db :as ldb]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.util :as util]))
 
 (defn store-undo-data!
   [{:keys [tx-meta] :as opts}]
@@ -17,10 +18,6 @@
               (:outliner-op tx-meta)
               (:whiteboard/transact? tx-meta))
       (undo-redo/listen-db-changes! opts))))
-
-(defn- mark-pages-as-loaded!
-  [repo page-names]
-  (state/update-state! [repo :unloaded-pages] #(remove page-names %)))
 
 (defn- get-tx-id
   [tx-report]
@@ -45,52 +42,54 @@
   ;;      :request-id request-id
   ;;      :tx-meta tx-meta
   ;;      :tx-data tx-data)
-  (let [{:keys [from-disk? new-graph? local-tx? undo? redo?]} tx-meta
+  (let [{:keys [from-disk? new-graph? local-tx? undo? redo? initial-pages? end?]} tx-meta
         repo (state/get-current-repo)
         tx-report {:tx-meta tx-meta
-                   :tx-data tx-data}]
-
-    (let [conn (db/get-db repo false)
-          tx-report (d/transact! conn tx-data tx-meta)]
-      (when local-tx?
-        (let [tx-id (get-tx-id tx-report)]
-          (store-undo-data! (assoc opts :tx-id tx-id))))
-      (when-not (or undo? redo?)
-        (update-current-tx-editor-cursor! tx-report)))
-
-    (let [new-datoms (filter (fn [datom]
-                               (and
-                                (= :block/uuid (:a datom))
-                                (true? (:added datom)))) tx-data)]
-      (when (seq new-datoms)
-        (state/set-state! :editor/new-created-blocks (set (map :v new-datoms)))))
-
-    (let [pages (set (keep #(when (= :block/name (:a %)) (:v %)) tx-data))]
-      (when (seq pages)
-        (mark-pages-as-loaded! repo pages)))
-
-    (if (or from-disk? new-graph?)
+                   :tx-data tx-data}
+        conn (db/get-db repo false)]
+    (if initial-pages?
       (do
-        (react/clear-query-state!)
-        (ui-handler/re-render-root!))
-      (when-not (:graph/importing @state/state)
-        (react/refresh! repo tx-report affected-keys)
+        (util/profile "transact initial-pages" (d/transact! conn tx-data tx-meta))
+        (when end?
+          (state/pub-event! [:init/commands])
+          (ui-handler/re-render-root!)))
+      (do
+        (let [tx-report (d/transact! conn tx-data tx-meta)]
+          (when local-tx?
+            (let [tx-id (get-tx-id tx-report)]
+              (store-undo-data! (assoc opts :tx-id tx-id))))
+          (when-not (or undo? redo?)
+            (update-current-tx-editor-cursor! tx-report)))
 
-        (when-let [state (:ui/restore-cursor-state @state/state)]
-          (when (or undo? redo?)
-            (restore-cursor-and-app-state! state undo?)
-            (state/set-state! :ui/restore-cursor-state nil)))
+        (let [new-datoms (filter (fn [datom]
+                                   (and
+                                    (= :block/uuid (:a datom))
+                                    (true? (:added datom)))) tx-data)]
+          (when (seq new-datoms)
+            (state/set-state! :editor/new-created-blocks (set (map :v new-datoms)))))
 
-        (state/set-state! :editor/start-pos nil)
+        (if (or from-disk? new-graph?)
+          (do
+            (react/clear-query-state!)
+            (ui-handler/re-render-root!))
+          (when-not (:graph/importing @state/state)
+            (react/refresh! repo tx-report affected-keys)
 
-        (when (and state/lsp-enabled?
-                   (seq blocks)
-                   (<= (count blocks) 1000))
-          (state/pub-event! [:plugin/hook-db-tx
-                             {:blocks  blocks
-                              :deleted-block-uuids deleted-block-uuids
-                              :tx-data (:tx-data tx-report)
-                              :tx-meta (:tx-meta tx-report)}]))))
+            (when-let [state (:ui/restore-cursor-state @state/state)]
+              (when (or undo? redo?)
+                (restore-cursor-and-app-state! state undo?)
+                (state/set-state! :ui/restore-cursor-state nil)))
+
+            (state/set-state! :editor/start-pos nil)
+
+            (when (and state/lsp-enabled?
+                       (seq blocks)
+                       (<= (count blocks) 1000))
+              (state/pub-event! [:plugin/hook-db-tx
+                                 {:blocks  blocks
+                                  :deleted-block-uuids deleted-block-uuids
+                                  :tx-data (:tx-data tx-report)
+                                  :tx-meta (:tx-meta tx-report)}]))))))
 
     (when (= (:outliner-op tx-meta) :delete-page)
       (state/pub-event! [:page/deleted repo (:deleted-page tx-meta) (:file-path tx-meta) tx-meta]))
@@ -107,6 +106,6 @@
 
     (when request-id
       (when-let [deferred (ldb/get-deferred-response request-id)]
-        (p/resolve! deferred {:tx-meta tx-meta
-                              :tx-data tx-data})
-        (swap! ldb/*request-id->response dissoc request-id)))))
+        (when (p/promise? deferred)
+          (p/resolve! deferred {:tx-meta tx-meta :tx-data tx-data})))
+      (swap! ldb/*request-id->response dissoc request-id))))

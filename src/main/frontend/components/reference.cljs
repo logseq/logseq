@@ -16,7 +16,9 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [rum.core :as rum]
-            [frontend.modules.outliner.tree :as tree]))
+            [frontend.modules.outliner.tree :as tree]
+            [frontend.db.async :as db-async]
+            [promesa.core :as p]))
 
 (defn- frequencies-sort
   [references]
@@ -96,23 +98,29 @@
     (filter-dialog-inner filters-atom *references page-name)))
 
 (rum/defc block-linked-references < rum/reactive db-mixins/query
+  {:init (fn [state]
+           (when-let [e (db/entity [:block/uuid (first (:rum/args state))])]
+             (db-async/<get-block-refs (state/get-current-repo) (:db/id e)))
+           state)}
   [block-id]
-  (let [e (db/entity [:block/uuid block-id])
-        page? (some? (:block/name e))
-        ref-blocks (if page?
-                     (-> (db/get-page-referenced-blocks (:block/name e))
-                         db-utils/group-by-page)
-                     (db/get-block-referenced-blocks block-id))
-        ref-hiccup (block/->hiccup ref-blocks
-                                   {:id (str block-id)
-                                    :ref? true
-                                    :breadcrumb-show? true
-                                    :group-by-page? true
-                                    :editor-box editor/box}
-                                   {})]
-    [:div.references-blocks
-     (content/content block-id
-                      {:hiccup ref-hiccup})]))
+  (when-let [e (db/entity [:block/uuid block-id])]
+    (when-not (state/sub-async-query-loading (str (:db/id e) "-refs"))
+      (let [page? (some? (:block/name e))
+            ref-blocks (if page?
+                         (-> (db/get-page-referenced-blocks (:block/name e))
+                             db-utils/group-by-page)
+                         (db/get-block-referenced-blocks block-id))]
+        (when (> (count ref-blocks) 0)
+          (let [ref-hiccup (block/->hiccup ref-blocks
+                                           {:id (str block-id)
+                                            :ref? true
+                                            :breadcrumb-show? true
+                                            :group-by-page? true
+                                            :editor-box editor/box}
+                                           {})]
+            [:div.references-blocks
+             (content/content block-id
+                              {:hiccup ref-hiccup})]))))))
 
 (rum/defc references-inner
   [page-name filters filtered-ref-blocks]
@@ -191,59 +199,65 @@
 (rum/defcs references* < rum/reactive db-mixins/query
   (rum/local nil ::ref-pages)
   {:init (fn [state]
-           (let [page-name (first (:rum/args state))
+           (let [page-name (->> (first (:rum/args state))
+                                util/page-name-sanity-lc)
+                 page (db/entity [:block/name page-name])
                  filters (when page-name (atom nil))]
+             (when page (db-async/<get-block-refs (state/get-current-repo) (:db/id page)))
              (assoc state ::filters filters)))}
   [state page-name]
   (when page-name
-    (let [page-name (util/page-name-sanity-lc page-name)
-          page-props-v (state/sub-page-properties-changed page-name)
-          *ref-pages (::ref-pages state)
-          repo (state/get-current-repo)
-          filters-atom (get state ::filters)
-          filter-state (rum/react filters-atom)
-          ref-blocks (db/get-page-referenced-blocks page-name)
-          page-id (:db/id (db/entity repo [:block/name page-name]))
-          aliases (db/page-alias-set repo page-name)
-          aliases-exclude-self (set (remove #{page-id} aliases))
-          top-level-blocks (filter (fn [b] (some aliases (set (map :db/id (:block/refs b))))) ref-blocks)
-          top-level-blocks-ids (set (map :db/id top-level-blocks))
-          filters (when (seq filter-state)
-                    (-> (group-by second filter-state)
-                        (update-vals #(map first %))))
-          filtered-ref-blocks (->> (block-handler/filter-blocks ref-blocks filters)
-                                   (block-handler/get-filtered-ref-blocks-with-parents ref-blocks))
-          total (count top-level-blocks)
-          filtered-top-blocks (filter (fn [b] (top-level-blocks-ids (:db/id b))) filtered-ref-blocks)
-          filter-n (count filtered-top-blocks)
-          parent->blocks (group-by (fn [x] (:db/id (x :block/parent))) filtered-ref-blocks)
-          result (->> (group-by :block/page filtered-top-blocks)
-                      (map (fn [[page blocks]]
-                             (let [blocks (sort-by (fn [b] (not= (:db/id page) (:db/id (:block/parent b)))) blocks)
-                                   result (map (fn [block]
-                                                 (let [filtered-children (get-filtered-children block parent->blocks)
-                                                       refs (when-not (contains? top-level-blocks-ids (:db/id (:block/parent block)))
-                                                              (block-handler/get-blocks-refed-pages aliases (cons block filtered-children)))
-                                                       block' (assoc (tree/block-entity->map block) :block/children filtered-children)]
-                                                   [block' refs])) blocks)
-                                   blocks' (map first result)
-                                   page' (if (contains? aliases-exclude-self (:db/id page))
-                                           {:db/id (:db/id page)
-                                            :block/alias? true
-                                            :block/journal-day (:block/journal-day page)}
-                                           page)]
-                               [[page' blocks'] (mapcat second result)]))))
-          filtered-ref-blocks' (map first result)
-          ref-pages (->>
-                     (mapcat second result)
-                     (map :block/original-name)
-                     frequencies)]
-      (reset! *ref-pages ref-pages)
-      (when (or (seq filter-state) (> filter-n 0))
-        [:div.references.page-linked.flex-1.flex-row
-         (sub-page-properties-changed page-name page-props-v filters-atom)
-         [:div.content.pt-6
-          (references-cp page-name filters filters-atom filter-state total filter-n filtered-ref-blocks' *ref-pages)]]))))
+    (let [repo (state/get-current-repo)
+          page-name (util/page-name-sanity-lc page-name)
+          page-entity (db/entity repo [:block/name page-name])]
+      (when page-entity
+        (when-not (state/sub-async-query-loading (str (:db/id page-entity) "-refs"))
+          (let [page-props-v (state/sub-page-properties-changed page-name)
+                *ref-pages (::ref-pages state)
+                filters-atom (get state ::filters)
+                filter-state (rum/react filters-atom)
+                ref-blocks (db/get-page-referenced-blocks page-name)
+                page-id (:db/id page-entity)
+                aliases (db/page-alias-set repo page-name)
+                aliases-exclude-self (set (remove #{page-id} aliases))
+                top-level-blocks (filter (fn [b] (some aliases (set (map :db/id (:block/refs b))))) ref-blocks)
+                top-level-blocks-ids (set (map :db/id top-level-blocks))
+                filters (when (seq filter-state)
+                          (-> (group-by second filter-state)
+                              (update-vals #(map first %))))
+                filtered-ref-blocks (->> (block-handler/filter-blocks ref-blocks filters)
+                                         (block-handler/get-filtered-ref-blocks-with-parents ref-blocks))
+                total (count top-level-blocks)
+                filtered-top-blocks (filter (fn [b] (top-level-blocks-ids (:db/id b))) filtered-ref-blocks)
+                filter-n (count filtered-top-blocks)
+                parent->blocks (group-by (fn [x] (:db/id (x :block/parent))) filtered-ref-blocks)
+                result (->> (group-by :block/page filtered-top-blocks)
+                            (map (fn [[page blocks]]
+                                   (let [blocks (sort-by (fn [b] (not= (:db/id page) (:db/id (:block/parent b)))) blocks)
+                                         result (map (fn [block]
+                                                       (let [filtered-children (get-filtered-children block parent->blocks)
+                                                             refs (when-not (contains? top-level-blocks-ids (:db/id (:block/parent block)))
+                                                                    (block-handler/get-blocks-refed-pages aliases (cons block filtered-children)))
+                                                             block' (assoc (tree/block-entity->map block) :block/children filtered-children)]
+                                                         [block' refs])) blocks)
+                                         blocks' (map first result)
+                                         page' (if (contains? aliases-exclude-self (:db/id page))
+                                                 {:db/id (:db/id page)
+                                                  :block/alias? true
+                                                  :block/journal-day (:block/journal-day page)}
+                                                 page)]
+                                     [[page' blocks'] (mapcat second result)]))))
+                filtered-ref-blocks' (map first result)
+                ref-pages (->>
+                           (mapcat second result)
+                           (map :block/original-name)
+                           frequencies)]
+            (reset! *ref-pages ref-pages)
+            (when (or (seq filter-state) (> filter-n 0))
+              [:div.references.page-linked.flex-1.flex-row
+               (sub-page-properties-changed page-name page-props-v filters-atom)
+               [:div.content.pt-6
+                (references-cp page-name filters filters-atom filter-state total filter-n filtered-ref-blocks' *ref-pages)]])))))))
 
 (rum/defc references
   [page-name]
@@ -258,27 +272,26 @@
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query
-  {:wrap-render
-   (fn [render-fn]
-     (fn [state]
-       (reset! (second (:rum/args state))
-               (apply +
-                      (for [[_ rfs]
-                            (db/get-page-unlinked-references
-                             (first (:rum/args state)))]
-                        (count rfs))))
-       (render-fn state)))}
+  {:init
+   (fn [state]
+     (let [*result (atom nil)
+           [page-name *n-ref] (:rum/args state)]
+       (p/let [result (search/get-page-unlinked-refs page-name)]
+         (reset! *n-ref (count result))
+         (reset! *result result))
+       (assoc state ::result *result)))}
   [state page-name _n-ref]
-  (let [ref-blocks (db/get-page-unlinked-references page-name)]
-    [:div.references-blocks
-     (let [ref-hiccup (block/->hiccup ref-blocks
-                                      {:id (str page-name "-unlinked-")
-                                       :ref? true
-                                       :group-by-page? true
-                                       :editor-box editor/box}
-                                      {})]
-       (content/content page-name
-                        {:hiccup ref-hiccup}))]))
+  (let [ref-blocks (rum/react (::result state))]
+    (when (seq ref-blocks)
+      [:div.references-blocks
+       (let [ref-hiccup (block/->hiccup ref-blocks
+                                        {:id (str page-name "-unlinked-")
+                                         :ref? true
+                                         :group-by-page? true
+                                         :editor-box editor/box}
+                                        {})]
+         (content/content page-name
+                          {:hiccup ref-hiccup}))])))
 
 (rum/defcs unlinked-references < rum/reactive
   (rum/local nil ::n-ref)

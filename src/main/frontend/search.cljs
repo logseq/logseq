@@ -14,7 +14,11 @@
             [frontend.config :as config]
             [logseq.db.frontend.property :as db-property]
             [frontend.handler.file-based.property.util :as property-util]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.db :as db]
+            [frontend.db.model :as db-model]
+            [frontend.db.utils :as db-utils]
+            [clojure.edn :as edn]))
 
 (def fuzzy-search fuzzy/fuzzy-search)
 
@@ -128,3 +132,22 @@
   [repo data]
   (when-let [engine (get-engine repo)]
     (protocol/transact-blocks! engine data)))
+
+(defn get-page-unlinked-refs
+  "Get matched result from search first, and then filter by worker db"
+  [page]
+  (when-let [repo (state/get-current-repo)]
+    (p/let [page-name (util/safe-page-name-sanity-lc page)
+            page (db/entity [:block/name page-name])
+            alias-names (conj (set (map util/safe-page-name-sanity-lc
+                                        (db/get-page-alias-names repo page-name))) page-name)
+            q (string/join " " alias-names)
+            result (block-search repo q {:limit 100})
+            eids (map (fn [b] [:block/uuid (:block/uuid b)]) result)
+            result (when (seq eids)
+                     (.get-page-unlinked-refs ^Object @state/*db-worker repo (:db/id page) (pr-str eids)))
+            result' (when result (edn/read-string result))]
+      (when result' (db/transact! repo result'))
+      (some->> result'
+               db-model/sort-by-left-recursive
+               db-utils/group-by-page))))

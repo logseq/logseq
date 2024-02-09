@@ -3,6 +3,7 @@
                   logseq.common.util.page-ref
                   logseq.common.util.block-ref
                   logseq.common.util
+                  logseq.common.util.date-time
                   logseq.common.marker
                   logseq.common.config]
  :report {:format :ignore}}

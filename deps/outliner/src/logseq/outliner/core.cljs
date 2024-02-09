@@ -152,7 +152,7 @@
                                   ;; Only delete if last reference
                                   (keep #(when (<= (count (:block/_macros (d/entity db (:db/id %))))
                                                    1)
-                                           (vector :db.fn/retractEntity (:db/id %)))
+                                           (when (:db/id %) (vector :db.fn/retractEntity (:db/id %))))
                                         (:block/macros block-entity)))))))
 
 (comment
@@ -233,7 +233,10 @@
     (let [refs (->> (rebuild-block-refs repo conn date-formatter block (:block/properties block)
                                         :skip-content-parsing? true)
                     (concat (:block/refs m))
-                    (concat (:block/tags m)))]
+                    (concat (if (seq (:block/tags m))
+                              (:block/tags m)
+                              (map :db/id (:block/tags (d/entity @conn [:block/uuid (:block/uuid block)])))))
+                    (remove nil?))]
       (swap! txs-state (fn [txs] (concat txs [{:db/id (:db/id block)
                                                :block/refs refs}]))))))
 
@@ -340,7 +343,7 @@
                   data)
           m (-> data'
                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom? :block/unordered
-                        :block/title :block/body :block/level)
+                        :block/title :block/body :block/level :block.temp/fully-loaded?)
                 common-util/remove-nils
                 block-with-updated-at
                 fix-tag-ids)
@@ -355,11 +358,12 @@
               (db-marker-handle conn))]
 
       ;; Ensure block UUID never changes
-      (when (and db-id block-uuid)
-        (let [uuid-not-changed? (= block-uuid (:block/uuid (d/entity db db-id)))]
-          (when-not uuid-not-changed?
-            (js/console.error "Block UUID shouldn't be changed once created"))
-          (assert uuid-not-changed? "Block UUID changed")))
+      (let [e (d/entity db db-id)]
+        (when (and e block-uuid)
+          (let [uuid-not-changed? (= block-uuid (:block/uuid e))]
+            (when-not uuid-not-changed?
+              (js/console.error "Block UUID shouldn't be changed once created"))
+            (assert uuid-not-changed? "Block UUID changed"))))
 
       (when eid
         ;; Retract attributes to prepare for tx which rewrites block attributes
@@ -398,11 +402,13 @@
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
     (let [block-id (otree/-get-id this conn)
-          ids (set (if children?
-                     (let [children (ldb/get-block-children @conn block-id)
-                           children-ids (map :block/uuid children)]
-                       (conj children-ids block-id))
-                     [block-id]))
+          ids (->>
+               (if children?
+                 (let [children (ldb/get-block-children @conn block-id)
+                       children-ids (map :block/uuid children)]
+                   (conj children-ids block-id))
+                 [block-id])
+               (remove nil?))
           txs (map (fn [id] [:db.fn/retractEntity [:block/uuid id]]) ids)
           txs (if-not children?
                 (let [immediate-children (ldb/get-block-immediate-children @conn block-id)]
@@ -1050,7 +1056,7 @@
 
 (defn- ^:large-vars/cleanup-todo indent-outdent-blocks
   "Indent or outdent `blocks`."
-  [repo conn blocks indent? & {:keys [get-first-block-original logical-outdenting?]}]
+  [repo conn blocks indent? & {:keys [parent-original logical-outdenting?]}]
   {:pre [(seq blocks) (boolean? indent?)]}
   (let [db @conn
         top-level-blocks (map (fn [b] (d/entity db (:db/id b))) blocks)
@@ -1083,34 +1089,33 @@
                     (concat-tx-fn result collapsed-tx))
                   (move-blocks repo conn blocks' left (merge opts {:sibling? false
                                                                    :indent? true}))))))
-          (let [parent-original (when get-first-block-original (get-first-block-original))]
-            (if parent-original
+          (if parent-original
+            (let [blocks' (take-while (fn [b]
+                                        (not= (:db/id (:block/parent b))
+                                              (:db/id (:block/parent parent))))
+                                      top-level-blocks)]
+              (move-blocks repo conn blocks' parent-original (merge opts {:outliner-op :indent-outdent-blocks
+                                                                          :sibling? true
+                                                                          :indent? false})))
+
+            (when (and parent (not (page-block? (d/entity db (:db/id parent)))))
               (let [blocks' (take-while (fn [b]
                                           (not= (:db/id (:block/parent b))
                                                 (:db/id (:block/parent parent))))
-                                        top-level-blocks)]
-                (move-blocks repo conn blocks' parent-original (merge opts {:outliner-op :indent-outdent-blocks
-                                                                            :sibling? true
-                                                                            :indent? false})))
-
-              (when (and parent (not (page-block? (d/entity db (:db/id parent)))))
-                (let [blocks' (take-while (fn [b]
-                                            (not= (:db/id (:block/parent b))
-                                                  (:db/id (:block/parent parent))))
-                                          top-level-blocks)
-                      result (move-blocks repo conn blocks' parent (merge opts {:sibling? true}))]
-                  (if logical-outdenting?
-                    result
+                                        top-level-blocks)
+                    result (move-blocks repo conn blocks' parent (merge opts {:sibling? true}))]
+                (if logical-outdenting?
+                  result
                   ;; direct outdenting (default behavior)
-                    (let [last-top-block (d/entity db (:db/id (last blocks')))
-                          right-siblings (->> (get-right-siblings conn (block db last-top-block))
-                                              (map :data))]
-                      (if (seq right-siblings)
-                        (let [result2 (if-let [last-direct-child-id (ldb/get-block-last-direct-child-id db (:db/id last-top-block))]
-                                        (move-blocks repo conn right-siblings (d/entity db last-direct-child-id) (merge opts {:sibling? true}))
-                                        (move-blocks repo conn right-siblings last-top-block (merge opts {:sibling? false})))]
-                          (concat-tx-fn result result2))
-                        result))))))))))))
+                  (let [last-top-block (d/entity db (:db/id (last blocks')))
+                        right-siblings (->> (get-right-siblings conn (block db last-top-block))
+                                            (map :data))]
+                    (if (seq right-siblings)
+                      (let [result2 (if-let [last-direct-child-id (ldb/get-block-last-direct-child-id db (:db/id last-top-block))]
+                                      (move-blocks repo conn right-siblings (d/entity db last-direct-child-id) (merge opts {:sibling? true}))
+                                      (move-blocks repo conn right-siblings last-top-block (merge opts {:sibling? false})))]
+                        (concat-tx-fn result result2))
+                      result)))))))))))
 
 ;;; ### write-operations have side-effects (do transactions) ;;;;;;;;;;;;;;;;
 
@@ -1122,10 +1127,6 @@
 (def ^:private ^:dynamic #_:clj-kondo/ignore *transaction-opts*
   "Stores transaction opts that are generated by one or more write-operations,
   see also `logseq.outliner.transaction/transact!`"
-  nil)
-
-(def ^:private ^:dynamic #_:clj-kondo/ignore *transaction-args*
-  "Stores transaction args which can be fetched in all op-transact functions."
   nil)
 
 (defn- op-transact!

@@ -79,7 +79,7 @@
          (when-not (str/blank? page-name)
            (if (db/page-exists? (str/lower-case page-name))
              (if (setting/setting :overwrite-mode?)
-               (page-handler/delete!
+               (page-handler/<delete!
                 page-name
                 (fn [] (create-page page-name properties)))
                (editor-handler/api-insert-new-block!

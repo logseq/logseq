@@ -394,7 +394,7 @@
   [repo conn remove-page-ops]
   (doseq [op remove-page-ops]
     (when-let [page-name (:block/name (d/entity @conn [:block/uuid (:block-uuid op)]))]
-      (worker-page/delete! repo conn page-name nil {:redirect-to-home? false :persist-op? false}))))
+      (worker-page/delete! repo conn page-name nil {:persist-op? false}))))
 
 (defn filter-remote-data-by-local-unpushed-ops
   "when remote-data request client to move/update/remove/... blocks,

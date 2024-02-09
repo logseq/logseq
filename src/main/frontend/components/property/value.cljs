@@ -20,7 +20,8 @@
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
             [frontend.handler.property.util :as pu]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.db.async :as db-async]))
 
 (defn- select-type?
   [property type]
@@ -443,9 +444,13 @@
                            :editor-box editor-box})])))
 
 (rum/defc property-template-value < rum/reactive
+  {:init (fn [state]
+           (let [block-id (second (:rum/args state))]
+             (db-async/<get-block (state/get-current-repo) block-id :children? false))
+           state)}
   [config value opts]
   (when value
-    (if (state/sub-block-unloaded? (state/get-current-repo) value)
+    (if (state/sub-async-query-loading value)
       [:div.text-sm.opacity-70 "loading"]
       (when-let [entity (db/sub-block (:db/id (db/entity [:block/uuid value])))]
         (let [properties-cp (:properties-cp opts)]
@@ -461,11 +466,15 @@
 
 (rum/defcs property-block-value < rum/reactive
   (rum/local nil ::template-instance)
+  {:init (fn [state]
+           (let [block-id (first (:rum/args state))]
+             (db-async/<get-block (state/get-current-repo) block-id :children? false))
+           state)}
   [state value block property block-cp editor-box opts page-cp editor-id]
   (let [*template-instance (::template-instance state)
         template-instance @*template-instance]
     (when value
-      (if (state/sub-block-unloaded? (state/get-current-repo) value)
+      (if (state/sub-async-query-loading value)
         [:div.text-sm.opacity-70 "loading"]
         (when-let [v-block (db/sub-block (:db/id (db/entity [:block/uuid value])))]
           (let [class? (contains? (:block/type v-block) "class")
@@ -493,9 +502,13 @@
               invalid-warning)))))))
 
 (rum/defc closed-value-item < rum/reactive
+  {:init (fn [state]
+           (let [block-id (first (:rum/args state))]
+             (db-async/<get-block (state/get-current-repo) block-id :children? false))
+           state)}
   [value {:keys [page-cp inline-text icon?]}]
   (when value
-    (if (state/sub-block-unloaded? (state/get-current-repo) value)
+    (if (state/sub-async-query-loading value)
       [:div.text-sm.opacity-70 "loading"]
       (when-let [block (db/sub-block (:db/id (db/entity [:block/uuid value])))]
         (let [value' (get-in block [:block/schema :value])

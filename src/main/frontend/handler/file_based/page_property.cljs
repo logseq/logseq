@@ -2,7 +2,7 @@
   "Page property fns for file graphs"
   (:require [clojure.string :as string]
             [frontend.db :as db]
-            [logseq.outliner.core :as outliner-core]
+            [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]))
@@ -85,4 +85,4 @@
             (ui-outliner-tx/transact!
              {:outliner-op :insert-blocks
               :additional-tx page-properties-tx}
-             (outliner-core/insert-blocks! repo (db/get-db false) block page {:sibling? false}))))))))
+             (outliner-op/insert-blocks! block page {:sibling? false}))))))))

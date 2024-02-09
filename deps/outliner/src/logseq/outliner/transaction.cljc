@@ -44,8 +44,7 @@
                                  (get opts*# :persist-op? true)
                                  (assoc :persist-op? true))]
          (binding [logseq.outliner.core/*transaction-data* (transient [])
-                   logseq.outliner.core/*transaction-opts* (transient [])
-                   logseq.outliner.core/*transaction-args* transaction-args#]
+                   logseq.outliner.core/*transaction-opts* (transient [])]
            (conj! logseq.outliner.core/*transaction-opts* opts#)
            ~@body
            (let [r# (persistent! logseq.outliner.core/*transaction-data*)

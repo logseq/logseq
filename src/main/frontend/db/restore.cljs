@@ -6,27 +6,10 @@
             [frontend.persist-db :as persist-db]
             [promesa.core :as p]
             [cljs-time.core :as t]
-            [datascript.transit :as dt]
-            [logseq.db.sqlite.common-db :as sqlite-common-db]))
-
-(comment
-  (defn- old-schema?
-    "Requires migration if the schema version is older than db-schema/version"
-    [db]
-    (let [v (db-migrate/get-schema-version db)
-        ;; backward compatibility
-          v (if (integer? v) v 0)]
-      (cond
-        (= db-schema/version v)
-        false
-
-        (< db-schema/version v)
-        (do
-          (js/console.error "DB schema version is newer than the app, please update the app. " ":db-version" v)
-          false)
-
-        :else
-        true))))
+            [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [clojure.edn :as edn]
+            [frontend.db.async :as db-async]
+            [clojure.core.async :as async]))
 
 (defn restore-graph!
   "Restore db from SQLite"
@@ -35,23 +18,18 @@
   (p/let [start-time (t/now)
           data (persist-db/<fetch-init-data repo)
           _ (assert (some? data) "No data found when reloading db")
-          datoms (dt/read-transit-str data)
-          datoms-count (count datoms)
+          data' (edn/read-string data)
           db-schema (db-conn/get-schema repo)
-          conn (sqlite-common-db/restore-initial-data datoms db-schema)
+          conn (sqlite-common-db/restore-initial-data data' db-schema)
           db-name (db-conn/datascript-db repo)
           _ (swap! db-conn/conns assoc db-name conn)
           end-time (t/now)]
 
-    (println :restore-graph-from-sqlite!-prepare (t/in-millis (t/interval start-time end-time)) "ms"
-             " Datoms in total: " datoms-count)
+    (println ::restore-graph! "loads" (count data') "txs in" (t/in-millis (t/interval start-time end-time)) "ms")
 
-    ;; FIXME:
-    ;; (db-migrate/migrate attached-db)
-
-    (p/let [_ (p/delay 150)]          ; More time for UI refresh
-      (state/set-state! [repo :restore/unloaded-blocks] nil)
-      (state/set-state! [repo :restore/unloaded-pages] nil)
-      (state/set-state! :graph/loading? false)
-      (react/clear-query-state!)
-      (state/pub-event! [:ui/re-render-root]))))
+    (state/set-state! :graph/loading? false)
+    (react/clear-query-state!)
+    (state/pub-event! [:ui/re-render-root])
+    (async/go
+      (async/<! (async/timeout 100))
+      (db-async/<fetch-all-pages repo))))
