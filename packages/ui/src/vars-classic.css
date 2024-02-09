@@ -23,6 +23,9 @@
   --ls-highlight-color-blue: var(--rx-blue-05);
   --ls-highlight-color-purple: var(--rx-purple-05);
   --ls-highlight-color-pink: var(--rx-pink-05);
+
+  /* NOTE: For compatible. Will be deprecated*/
+  --ls-block-bullet-color: var(--lx-gray-08, var(--rx-gray-08));
 }
 
 .white-theme,

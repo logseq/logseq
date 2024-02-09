@@ -1,0 +1,6 @@
+.cp__cmdk {
+  > .hints {
+    @apply flex w-full px-3 py-2 gap-2 justify-between
+    bg-gray-03 border-t border-gray-05;
+  }
+}

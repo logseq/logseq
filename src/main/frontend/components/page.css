@@ -175,9 +175,7 @@
       }
 
       .form-input {
-        padding: 3px;
-        padding-left: 30px;
-        padding-right: 8px;
+        padding: 3px 8px 3px 30px;
       }
 
       .cancel {
