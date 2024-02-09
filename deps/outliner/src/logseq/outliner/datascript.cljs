@@ -2,7 +2,6 @@
   "Provides fns related to wrapping datascript's transact!"
   (:require [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.property :as gp-property]
             [datascript.core :as d]
             [clojure.string :as string]
@@ -65,7 +64,7 @@
                               ;; Only delete if last reference
                               (keep #(when (<= (count (:block/_macros (d/entity db (:db/id %))))
                                                1)
-                                       (vector :db.fn/retractEntity (:db/id %)))
+                                       (when (:db/id %) (vector :db.fn/retractEntity (:db/id %))))
                                     (:block/macros b)))
                             retracted-blocks)]
       (when (and (seq retracted-tx') (fn? set-state-fn))
@@ -76,9 +75,8 @@
     txs))
 
 (defn transact!
-  [txs tx-meta {:keys [repo conn unlinked-graph? set-state-fn]}]
-  (let [db-based? (and repo (sqlite-util/db-based-graph? repo))
-        txs (map (fn [m]
+  [txs tx-meta {:keys [repo conn set-state-fn]}]
+  (let [txs (map (fn [m]
                    (if (map? m)
                      (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
                              :block/title :block/body :block/level :block/container :db/other-tx
@@ -92,10 +90,7 @@
               true
               (distinct))]
 
-    (when (and (seq txs)
-               (or db-based?
-                   (and (fn? unlinked-graph?) (not (unlinked-graph?)))
-                   (some? js/process)))
+    (when (seq txs)
 
       ;; (prn :debug "DB transact")
       ;; (cljs.pprint/pprint txs)

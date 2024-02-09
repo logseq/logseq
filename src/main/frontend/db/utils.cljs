@@ -12,12 +12,6 @@
 (defn db->string [db]
   (dt/write-transit-str db))
 
-(defn db->json [db]
-  (js/JSON.stringify
-   (into-array
-    (for [d (d/datoms db :eavt)]
-      #js [(:e d) (name (:a d)) (:v d)]))))
-
 (defn db->edn-str [db]
   (pr-str db))
 

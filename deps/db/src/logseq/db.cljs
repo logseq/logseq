@@ -70,6 +70,14 @@
                (when-let [callback (:callback (get new request-id))]
                  (callback)))))
 
+(defn get-next-request-id
+  []
+  (swap! *request-id inc))
+
+(defn add-request!
+  [request-id data]
+  (swap! *request-id->response assoc request-id (if (map? data) data {:response data})))
+
 (defn transact!
   "`repo-or-conn`: repo for UI thread and conn for worker/node"
   ([repo-or-conn tx-data]
@@ -87,7 +95,7 @@
 
        (let [f (or @*transact-fn d/transact!)
              sync? (= f d/transact!)
-             request-id (when-not sync? (swap! *request-id inc))
+             request-id (when-not sync? (get-next-request-id))
              tx-meta' (cond-> tx-meta
                         (not sync?)
                         (assoc :request-id request-id))]
@@ -100,7 +108,7 @@
                            {:response resp}
                            {:response resp
                             :callback #(f repo-or-conn tx-data tx-meta')})]
-               (swap! *request-id->response assoc request-id value))
+               (add-request! request-id value))
              resp)))))))
 
 (defn build-default-pages-tx
@@ -342,6 +350,7 @@
         parents))))
 
 (defn get-block-children-ids
+  "Returns children UUIDs"
   [db block-uuid]
   (when-let [eid (:db/id (d/entity db [:block/uuid block-uuid]))]
     (let [seen   (volatile! [])]
@@ -526,6 +535,60 @@
         (d/pull-many db
                      '[:db/id :block/name :block/original-name]
                      ids)))))
+
+(defn get-page-alias
+  [db page-id]
+  (->>
+   (d/q
+    '[:find [?e ...]
+      :in $ ?page %
+      :where
+      (alias ?page ?e)]
+    db
+    page-id
+    (:alias rules/rules))
+   distinct))
+
+(defn get-page-refs
+  [db id]
+  (let [alias (->> (get-page-alias db id)
+                   (cons id)
+                   distinct)
+        refs (->> (mapcat (fn [id] (:block/_path-refs (d/entity db id))) alias)
+                  distinct)]
+    (when (seq refs)
+      (d/pull-many db '[*] (map :db/id refs)))))
+
+(defn get-block-refs
+  [db id]
+  (let [block (d/entity db id)]
+    (if (:block/name block)
+      (get-page-refs db id)
+      (let [refs (:block/_refs (d/entity db id))]
+        (when (seq refs)
+          (d/pull-many db '[*] (map :db/id refs)))))))
+
+(defn get-block-refs-count
+  [db id]
+  (some-> (d/entity db id)
+          :block/_refs
+          count))
+
+(defn get-page-unlinked-refs
+  "Get unlinked refs from search result"
+  [db page-id search-result-eids]
+  (let [alias (->> (get-page-alias db page-id)
+                   (cons page-id)
+                   set)
+        eids (remove
+              (fn [eid]
+                (when-let [e (d/entity db eid)]
+                  (or (some alias (map :db/id (:block/refs e)))
+                      (:block/link e)
+                      (nil? (:block/content e)))))
+              search-result-eids)]
+    (when (seq eids)
+      (d/pull-many db '[*] eids))))
 
 (comment
   (defn db-based-graph?

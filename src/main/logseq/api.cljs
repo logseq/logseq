@@ -7,7 +7,6 @@
             [logseq.sdk.ui :as sdk-ui]
             [logseq.sdk.assets :as sdk-assets]
             [clojure.string :as string]
-            [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.components.plugins :as plugins]
@@ -52,6 +51,17 @@
             [logseq.api.block :as api-block]))
 
 ;; Alert: this namespace shouldn't invoke any reactive queries
+
+(defn- <pull-block
+  [id-or-name]
+  (when id-or-name
+    (let [eid (cond
+                (uuid? id-or-name) [:block/uuid id-or-name]
+                (and (vector? id-or-name) (= (count id-or-name) 2)) id-or-name
+                (number? id-or-name) id-or-name
+                (and (string? id-or-name) (util/uuid-string? id-or-name)) [:block/uuid (uuid id-or-name)]
+                :else [:block/name (util/page-name-sanity-lc id-or-name)])]
+      (db-async/<pull (state/get-current-repo) eid))))
 
 ;; helpers
 (defn ^:export install-plugin-hook
@@ -142,7 +152,6 @@
     (when-let [repo (state/get-current-repo)]
       (p/let [templates (db-async/<get-all-templates repo)]
         (some-> templates
-                (update-vals db/pull)
                 (sdk-utils/normalize-keyword-for-json)
                 (bean/->js))))))
 
@@ -538,16 +547,21 @@
 (def ^:export get_current_page
   (fn []
     (when-let [page (state/get-current-page)]
-      (when-let [page (db-model/get-page page)]
+      (p/let [page (<pull-block page)]
         (bean/->js (sdk-utils/normalize-keyword-for-json (db-utils/pull (:db/id page))))))))
 
 (def ^:export get_page
   (fn [id-or-page-name]
-    (when-let [page (cond
-                      (number? id-or-page-name) (db-utils/pull id-or-page-name)
-                      (string? id-or-page-name) (db-model/get-page id-or-page-name))]
-      (when-not (contains? page :block/left)
-        (bean/->js (sdk-utils/normalize-keyword-for-json (db-utils/pull (:db/id page))))))))
+    (p/let [page (db-async/<pull (state/get-current-repo)
+                                 (cond
+                                   (number? id-or-page-name)
+                                   id-or-page-name
+                                   (util/uuid-string? id-or-page-name)
+                                   [:block/uuid (uuid id-or-page-name)]
+                                   :else
+                                   [:block/name (util/page-name-sanity-lc id-or-page-name)]))]
+      (when (:block/name page)
+        (bean/->js (sdk-utils/normalize-keyword-for-json page))))))
 
 (def ^:export get_all_pages
   (fn [repo]
@@ -558,7 +572,7 @@
   (fn [name ^js properties ^js opts]
     (let [properties (bean/->clj properties)
           {:keys [redirect createFirstBlock format journal]} (bean/->clj opts)]
-      (p/let [page (db-model/get-page name)
+      (p/let [page (<pull-block name)
               new-page (when-not page
                          (page-handler/<create!
                           name
@@ -575,7 +589,7 @@
 
 (def ^:export delete_page
   (fn [name]
-    (p/create (fn [ok] (page-handler/delete! name ok)))))
+    (page-handler/<delete! name nil)))
 
 (def ^:export rename_page
   page-handler/rename!)
@@ -602,100 +616,124 @@
         (let [{:keys [pos] :or {pos :max}} (bean/->clj opts)]
           (editor-handler/edit-block! block pos block-uuid))))))
 
+;; TODO: perf improvement, some operations such as delete-block doesn't need to load the full page
+;; instead, the db worker should provide those calls
+(defn- <ensure-page-loaded
+  [block-uuid-or-page-name]
+  (p/let [repo (state/get-current-repo)
+          result (db-async/<get-block repo (str block-uuid-or-page-name))
+          block (if (:block result) (:block result) result)
+          _ (when-let [page-id (:db/id (:block/page block))]
+              (when-let [page-uuid (:block/uuid (db/entity page-id))]
+                (db-async/<get-block repo page-uuid)))]
+    block))
+
 (def ^:export insert_block
   (fn [block-uuid-or-page-name content ^js opts]
     (when (string/blank? block-uuid-or-page-name)
       (throw (js/Error. "Page title or block UUID shouldn't be empty.")))
-    (p/let [{:keys [before sibling focus customUUID properties autoOrderedList]} (bean/->clj opts)
-            [page-name block-uuid] (if (util/uuid-string? block-uuid-or-page-name)
-                                     [nil (uuid block-uuid-or-page-name)]
-                                     [block-uuid-or-page-name nil])
-            page-name              (when page-name (util/page-name-sanity-lc page-name))
-            _                      (when (and page-name (not (db/entity [:block/name page-name])))
-                                     (page-handler/<create! block-uuid-or-page-name {:create-first-block? false}))
-            custom-uuid            (or customUUID (:id properties))
-            custom-uuid            (when custom-uuid (sdk-utils/uuid-or-throw-error custom-uuid))
-            edit-block?            (if (nil? focus) true focus)
-            _                      (when (and custom-uuid (db-model/query-block-by-uuid custom-uuid))
-                                     (throw (js/Error.
-                                             (util/format "Custom block UUID already exists (%s)." custom-uuid))))
-            block-uuid'            (if (and (not sibling) before block-uuid)
-                                     (let [block       (db/entity [:block/uuid block-uuid])
-                                           first-child (db-model/get-by-parent-&-left (db/get-db)
-                                                                                      (:db/id block)
-                                                                                      (:db/id block))]
-                                       (if first-child
-                                         (:block/uuid first-child)
-                                         block-uuid))
-                                     block-uuid)
-            insert-at-first-child? (not= block-uuid' block-uuid)
-            [sibling? before?] (if insert-at-first-child?
-                                 [true true]
-                                 [sibling before])
-            before?                (if (and (false? sibling?) before? (not insert-at-first-child?))
-                                     false
-                                     before?)
-            new-block              (editor-handler/api-insert-new-block!
-                                    content
-                                    {:block-uuid  block-uuid'
-                                     :sibling?    sibling?
-                                     :before?     before?
-                                     :edit-block? edit-block?
-                                     :page        page-name
-                                     :custom-uuid custom-uuid
-                                     :ordered-list? (if (boolean? autoOrderedList) autoOrderedList false)
-                                     :properties  (merge properties
-                                                         (when custom-uuid {:id custom-uuid}))})]
-      (bean/->js (sdk-utils/normalize-keyword-for-json new-block)))))
+    (p/let [block? (util/uuid-string? (str block-uuid-or-page-name))
+            block (<pull-block (str block-uuid-or-page-name))]
+      (if (and block? (not block))
+        (throw (js/Error. "Block not exists"))
+        (p/let [{:keys [before sibling focus customUUID properties autoOrderedList]} (bean/->clj opts)
+                [page-name block-uuid] (if (util/uuid-string? block-uuid-or-page-name)
+                                         [nil (uuid block-uuid-or-page-name)]
+                                         [block-uuid-or-page-name nil])
+                page-name              (when page-name (util/page-name-sanity-lc page-name))
+                _                      (when (and page-name (not (db/entity [:block/name page-name])))
+                                         (page-handler/<create! block-uuid-or-page-name {:create-first-block? false}))
+                custom-uuid            (or customUUID (:id properties))
+                custom-uuid            (when custom-uuid (sdk-utils/uuid-or-throw-error custom-uuid))
+                edit-block?            (if (nil? focus) true focus)
+                _                      (when (and custom-uuid (db-model/query-block-by-uuid custom-uuid))
+                                         (throw (js/Error.
+                                                 (util/format "Custom block UUID already exists (%s)." custom-uuid))))
+                block-uuid'            (if (and (not sibling) before block-uuid)
+                                         (let [block       (db/entity [:block/uuid block-uuid])
+                                               first-child (db-model/get-by-parent-&-left (db/get-db)
+                                                                                          (:db/id block)
+                                                                                          (:db/id block))]
+                                           (if first-child
+                                             (:block/uuid first-child)
+                                             block-uuid))
+                                         block-uuid)
+                insert-at-first-child? (not= block-uuid' block-uuid)
+                [sibling? before?] (if insert-at-first-child?
+                                     [true true]
+                                     [sibling before])
+                before?                (if (and (false? sibling?) before? (not insert-at-first-child?))
+                                         false
+                                         before?)
+                new-block              (editor-handler/api-insert-new-block!
+                                        content
+                                        {:block-uuid  block-uuid'
+                                         :sibling?    sibling?
+                                         :before?     before?
+                                         :edit-block? edit-block?
+                                         :page        page-name
+                                         :custom-uuid custom-uuid
+                                         :ordered-list? (if (boolean? autoOrderedList) autoOrderedList false)
+                                         :properties  (merge properties
+                                                             (when custom-uuid {:id custom-uuid}))})]
+          (bean/->js (sdk-utils/normalize-keyword-for-json new-block)))))))
 
 (def ^:export insert_batch_block
   (fn [block-uuid ^js batch-blocks ^js opts]
-    (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
-      (when-let [bb (bean/->clj batch-blocks)]
-        (let [bb (if-not (vector? bb) (vector bb) bb)
-              {:keys [sibling keepUUID before]} (bean/->clj opts)
-              keep-uuid? (or keepUUID false)
-              _ (when keep-uuid? (doseq
-                                  [block (outliner-core/tree-vec-flatten bb :children)]
-                                   (let [uuid (:id (:properties block))]
-                                     (when (and uuid (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error uuid)))
-                                       (throw (js/Error.
-                                                (util/format "Custom block UUID already exists (%s)." uuid)))))))
-              block (if (and before sibling)
-                      (db/pull (:db/id (:block/left block))) block)
-              _ (editor-handler/insert-block-tree-after-target
-                  (:db/id block) sibling bb (:block/format block) keep-uuid?)]
-          nil)))))
+    (p/let [block (<ensure-page-loaded block-uuid)]
+      (when block
+        (when-let [bb (bean/->clj batch-blocks)]
+          (let [bb (if-not (vector? bb) (vector bb) bb)
+                {:keys [sibling keepUUID before]} (bean/->clj opts)
+                keep-uuid? (or keepUUID false)
+                _ (when keep-uuid? (doseq
+                                    [block (outliner-core/tree-vec-flatten bb :children)]
+                                     (let [uuid (:id (:properties block))]
+                                       (when (and uuid (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error uuid)))
+                                         (throw (js/Error.
+                                                 (util/format "Custom block UUID already exists (%s)." uuid)))))))
+                block (if (and before sibling)
+                        (db/pull (:db/id (:block/left block))) block)
+                _ (editor-handler/insert-block-tree-after-target
+                   (:db/id block) sibling bb (:block/format block) keep-uuid?)]
+            nil))))))
 
 (def ^:export remove_block
   (fn [block-uuid ^js _opts]
-    (let [repo            (state/get-current-repo)]
+    (p/let [repo            (state/get-current-repo)
+            _ (<pull-block  block-uuid)]
       (editor-handler/delete-block-aux!
        {:block/uuid (sdk-utils/uuid-or-throw-error block-uuid) :repo repo} true))))
 
 (def ^:export update_block
   (fn [block-uuid content ^js opts]
-    (let [repo (state/get-current-repo)]
+    (p/let [repo (state/get-current-repo)
+            _ (<pull-block block-uuid)]
       (editor-handler/save-block! repo
-        (sdk-utils/uuid-or-throw-error block-uuid) content (bean/->clj opts)))))
+                                  (sdk-utils/uuid-or-throw-error block-uuid) content (bean/->clj opts)))))
 
 (def ^:export move_block
   (fn [src-block-uuid target-block-uuid ^js opts]
-    (let [{:keys [before children]} (bean/->clj opts)
-          move-to      (cond
-                         (boolean before)
-                         :top
+    (p/let [_ (<pull-block src-block-uuid)
+            _ (<pull-block target-block-uuid)]
+      (let [{:keys [before children]} (bean/->clj opts)
+           move-to      (cond
+                          (boolean before)
+                          :top
 
-                         (boolean children)
-                         :nested
+                          (boolean children)
+                          :nested
 
-                         :else
-                         nil)
-          src-block    (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error src-block-uuid))
-          target-block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error target-block-uuid))]
-      (editor-dnd-handler/move-blocks nil [src-block] target-block nil move-to))))
+                          :else
+                          nil)
+           src-block    (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error src-block-uuid))
+           target-block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error target-block-uuid))]
+       (editor-dnd-handler/move-blocks nil [src-block] target-block nil move-to)))))
 
-(def ^:export get_block api-block/get_block)
+(def ^:export get_block
+  (fn [id ^js opts]
+    (p/let [_ (db-async/<get-block (state/get-current-repo) id)]
+      (api-block/get_block id opts))))
 
 (def ^:export get_current_block
   (fn [^js opts]
@@ -709,21 +747,27 @@
 
 (def ^:export get_previous_sibling_block
   (fn [block-uuid]
-    (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
-      (let [{:block/keys [parent left]} block
-            block (when-not (= parent left) (db-utils/pull (:db/id left)))]
-        (and block (bean/->js (sdk-utils/normalize-keyword-for-json block)))))))
+    (p/let [id (sdk-utils/uuid-or-throw-error block-uuid)
+            block (<pull-block id)]
+      (when block
+       (p/let [{:block/keys [parent left]} block
+               block (when-not (= parent left) (<pull-block (:db/id left)))]
+         (when block
+           (bean/->js (sdk-utils/normalize-keyword-for-json block))))))))
 
 (def ^:export get_next_sibling_block
   (fn [block-uuid]
-    (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
-      (when-let [right-sibling (outliner-core/get-right-sibling (db/get-db) (:db/id block))]
-        (let [block (db/pull (:db/id right-sibling))]
-          (bean/->js (sdk-utils/normalize-keyword-for-json block)))))))
+    (p/let [id (sdk-utils/uuid-or-throw-error block-uuid)
+            block (<pull-block id)]
+      (when block
+        (p/let [sibling (db-async/<get-right-sibling (state/get-current-repo) (:db/id block))]
+          (when sibling
+            (bean/->js (sdk-utils/normalize-keyword-for-json sibling))))))))
 
 (def ^:export set_block_collapsed
   (fn [block-uuid ^js opts]
-    (let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)]
+    (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
+            _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)]
       (when-let [block (db-model/get-block-by-uuid block-uuid)]
         (let [opts (bean/->clj opts)
               opts (if (or (string? opts) (boolean? opts)) {:flag opts} opts)
@@ -732,34 +776,42 @@
                      (not (util/collapsed? block))
                      (boolean flag))]
           (if flag (editor-handler/collapse-block! block-uuid)
-                   (editor-handler/expand-block! block-uuid))
+              (editor-handler/expand-block! block-uuid))
           nil)))))
 
 (def ^:export upsert_block_property
   (fn [block-uuid key value]
-    (property-handler/set-block-property!
-     (state/get-current-repo)
-     (sdk-utils/uuid-or-throw-error block-uuid) key value)))
+    (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
+            _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)]
+      (property-handler/set-block-property!
+       (state/get-current-repo)
+       block-uuid key value))))
 
 (def ^:export remove_block_property
   (fn [block-uuid key]
-    (property-handler/remove-block-property!
-     (state/get-current-repo)
-     (sdk-utils/uuid-or-throw-error block-uuid) key)))
+    (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
+            _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)]
+      (property-handler/remove-block-property!
+      (state/get-current-repo)
+      block-uuid key))))
 
 (def ^:export get_block_property
   (fn [block-uuid key]
-    (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
-      (let [property-id (pu/get-pid key)]
-        (get (:block/properties block) (if (string? property-id) (keyword property-id) property-id))))))
+    (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
+            _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)]
+      (when-let [block (db-model/query-block-by-uuid block-uuid)]
+        (let [property-id (pu/get-pid key)]
+          (get (:block/properties block) (if (string? property-id) (keyword property-id) property-id)))))))
 
 (def ^:export get_block_properties
   (fn [block-uuid]
-    (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
-      (let [properties (if (config/db-based-graph? (state/get-current-repo))
-                         (db-pu/readable-properties (:block/properties block))
-                         (:block/properties block))]
-        (bean/->js (sdk-utils/normalize-keyword-for-json properties))))))
+    (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
+            _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)]
+      (when-let [block (db-model/query-block-by-uuid block-uuid)]
+        (let [properties (if (config/db-based-graph? (state/get-current-repo))
+                           (db-pu/readable-properties (:block/properties block))
+                           (:block/properties block))]
+          (bean/->js (sdk-utils/normalize-keyword-for-json properties)))))))
 
 (def ^:export get_current_page_blocks_tree
   (fn []
@@ -772,21 +824,25 @@
 
 (def ^:export get_page_blocks_tree
   (fn [id-or-page-name]
-    (when-let [page-name (:block/name (db-model/get-page id-or-page-name))]
-      (let [blocks (db-model/get-page-blocks-no-cache page-name)
-            blocks (outliner-tree/blocks->vec-tree blocks page-name)
-            blocks (sdk-utils/normalize-keyword-for-json blocks)]
-        (bean/->js blocks)))))
+    (p/let [_ (<ensure-page-loaded id-or-page-name)]
+      (when-let [page-name (:block/name (db-model/get-page id-or-page-name))]
+        (let [blocks (db-model/get-page-blocks-no-cache page-name)
+              blocks (outliner-tree/blocks->vec-tree blocks page-name)
+              blocks (sdk-utils/normalize-keyword-for-json blocks)]
+          (bean/->js blocks))))))
 
 (defn ^:export get_page_linked_references
   [page-name-or-uuid]
-  (when-let [page (and page-name-or-uuid (db-model/get-page page-name-or-uuid))]
-    (let [page-name  (:block/name page)
+  (p/let [repo (state/get-current-repo)
+          block (db-async/<get-block repo page-name-or-uuid :children? false)
+          ;; load refs to db
+          _ (when-let [id (:db/id block)] (db-async/<get-block-refs repo id))
+          page-name (:block/name block)
           ref-blocks (if page-name
                        (db-model/get-page-referenced-blocks-full page-name)
-                       (db-model/get-block-referenced-blocks (:block/uuid page)))
+                       (db-model/get-block-referenced-blocks (:block/uuid block)))
           ref-blocks (and (seq ref-blocks) (into [] ref-blocks))]
-      (bean/->js (sdk-utils/normalize-keyword-for-json ref-blocks)))))
+    (bean/->js (sdk-utils/normalize-keyword-for-json ref-blocks))))
 
 (defn ^:export get_pages_from_namespace
   [ns]
@@ -800,16 +856,6 @@
     (when-let [pages (db-model/get-namespace-hierarchy repo ns)]
       (bean/->js (sdk-utils/normalize-keyword-for-json pages)))))
 
-(defn first-child-of-block
-  [block]
-  (when-let [children (:block/_parent block)]
-    (first (db-model/sort-by-left children block))))
-
-(defn second-child-of-block
-  [block]
-  (when-let [children (:block/_parent block)]
-    (second (db-model/sort-by-left children block))))
-
 (defn last-child-of-block
   [block]
   (when-let [children (:block/_parent block)]
@@ -817,36 +863,32 @@
 
 (defn ^:export prepend_block_in_page
   [uuid-or-page-name content ^js opts]
-  (p/let [page?           (not (util/uuid-string? uuid-or-page-name))
+  (p/let [_               (<pull-block uuid-or-page-name)
+          page?           (not (util/uuid-string? uuid-or-page-name))
           page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
           _               (and page-not-exist? (page-handler/<create! uuid-or-page-name
                                                                       {:redirect?           false
-                                                                       :create-first-block? true
+                                                                       :create-first-block? false
                                                                        :format              (state/get-preferred-format)}))]
     (when-let [block (db-model/get-page uuid-or-page-name)]
-      (let [block'   (if page? (second-child-of-block block) (first-child-of-block block))
-            sibling? (and page? (not (nil? block')))
-            opts     (bean/->clj opts)
-            opts     (merge opts {:sibling sibling? :before sibling?})
-            src      (if sibling? (str (:block/uuid block')) uuid-or-page-name)]
-        (insert_block src content (bean/->js opts))))))
+      (let [opts     (bean/->clj opts)
+            target   (str (:block/uuid block))]
+        (insert_block target content (bean/->js opts))))))
 
 (defn ^:export append_block_in_page
   [uuid-or-page-name content ^js opts]
-  (p/let [page?           (not (util/uuid-string? uuid-or-page-name))
+  (p/let [_               (<ensure-page-loaded uuid-or-page-name)
+          page?           (not (util/uuid-string? uuid-or-page-name))
           page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
           _               (and page-not-exist? (page-handler/<create! uuid-or-page-name
                                                                       {:redirect?           false
-                                                                       :create-first-block? true
+                                                                       :create-first-block? false
                                                                        :format              (state/get-preferred-format)}))]
     (when-let [block (db-model/get-page uuid-or-page-name)]
-      (let [block'   (last-child-of-block block)
-            sibling? (not (nil? block'))
+      (let [block    (or (last-child-of-block block) block)
             opts     (bean/->clj opts)
-            opts     (merge opts {:sibling sibling?}
-                            (when sibling? {:before false}))
-            src      (if sibling? (str (:block/uuid block')) uuid-or-page-name)]
-        (insert_block src content (bean/->js opts))))))
+            target   (str (:block/uuid block))]
+        (insert_block target content (bean/->js opts))))))
 
 ;; plugins
 (defn ^:export validate_external_plugins [urls]
@@ -863,34 +905,36 @@
 (defn ^:export q
   [query-string]
   (when-let [repo (state/get-current-repo)]
-    (when-let [result (query-dsl/query repo query-string
-                        {:disable-reactive? true})]
+    (p/let [result (query-dsl/query repo query-string
+                                    {:disable-reactive? true
+                                     :return-promise? true})]
       (bean/->js (sdk-utils/normalize-keyword-for-json (flatten @result))))))
 
 (defn ^:export datascript_query
   [query & inputs]
   (when-let [repo (state/get-current-repo)]
     (when-let [db (db/get-db repo)]
-      (let [query           (cljs.reader/read-string query)
-            resolved-inputs (map #(cond
-                                    (string? %)
-                                    (some->> % (cljs.reader/read-string) (query-react/resolve-input db))
+      (p/let [query           (cljs.reader/read-string query)
+              resolved-inputs (map #(cond
+                                      (string? %)
+                                      (some->> % (cljs.reader/read-string) (query-react/resolve-input db))
 
-                                    (fn? %)
-                                    (fn [& args]
-                                      (.apply % nil (clj->js (mapv bean/->js args))))
+                                      (fn? %)
+                                      (fn [& args]
+                                        (.apply % nil (clj->js (mapv bean/->js args))))
 
-                                    :else %)
-                                 inputs)
-            result          (apply d/q query db resolved-inputs)]
+                                      :else %)
+                                   inputs)
+              result          (apply db-async/<q repo (cons query resolved-inputs))]
         (bean/->js (sdk-utils/normalize-keyword-for-json result false))))))
 
 (defn ^:export custom_query
   [query-string]
-  (let [result (let [query (cljs.reader/read-string query-string)]
-                 (db/custom-query {:query query
-                                   :disable-reactive? true}))]
-    (bean/->js (sdk-utils/normalize-keyword-for-json (flatten @result)))))
+  (p/let [result (let [query (cljs.reader/read-string query-string)]
+                   (db/custom-query {:query query
+                                     :disable-reactive? true
+                                     :return-promise? true}))]
+    (bean/->js (sdk-utils/normalize-keyword-for-json (flatten result)))))
 
 (defn ^:export download_graph_db
   []
@@ -963,10 +1007,10 @@
 ;; templates
 (defn ^:export get_template
   [name]
-  (some-> name
-          (db-model/get-template-by-name)
-          (sdk-utils/normalize-keyword-for-json)
-          (bean/->js)))
+  (p/let [block (when name (db-async/<get-template-by-name name))]
+    (some-> block
+            (sdk-utils/normalize-keyword-for-json)
+            (bean/->js))))
 
 (defn ^:export insert_template
   [target-uuid template-name]
@@ -983,20 +1027,21 @@
   [target-uuid template-name ^js opts]
   (when (and template-name (db-model/get-block-by-uuid target-uuid))
     (p/let [{:keys [overwrite]} (bean/->clj opts)
-            exist? (page-handler/<template-exists? template-name)
+            block (db-async/<get-template-by-name template-name)
             repo (state/get-current-repo)]
-      (if (or (not exist?) (true? overwrite))
-        (do (when-let [old-target (and exist? (db-model/get-template-by-name template-name))]
+      (if (or (not block) (true? overwrite))
+        (do (when-let [old-target block]
               (property-handler/remove-block-property! repo (:block/uuid old-target) :template))
             (property-handler/set-block-property! repo target-uuid :template template-name))
         (throw (js/Error. "Template already exists!"))))))
 
 (defn ^:export remove_template
   [name]
-  (when-let [target (db-model/get-template-by-name name)]
-    (property-handler/remove-block-property!
-     (state/get-current-repo)
-     (:block/uuid target) :template)))
+  (p/let [block (when name (db-async/<get-template-by-name name))]
+    (when block
+      (property-handler/remove-block-property!
+       (state/get-current-repo)
+       (:block/uuid block) :template))))
 
 ;; search
 (defn ^:export search

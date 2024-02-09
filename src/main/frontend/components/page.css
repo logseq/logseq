@@ -231,11 +231,15 @@
 .ls-page-title {
   @apply rounded-sm;
 
-  padding: 5px 8px;
+  padding: 5px 8px 12px 8px;
   margin: 0 -6px;
 
   &.title {
     margin-bottom: 12px;
+  }
+
+  h1.page-title {
+    margin-bottom: 0;
   }
 
   .edit-input {
@@ -250,6 +254,10 @@
         background-color: var(--ls-secondary-background-color);
       }
     }
+  }
+
+  .page-icon {
+      font-size: 48px;
   }
 }
 
@@ -377,4 +385,13 @@ html.is-native-ios {
 
 .references {
   user-select: none;
+}
+
+.page-info {
+    min-height: 46px;
+    margin-left: -21px;
+}
+
+.page-info-title-placeholder {
+    min-height: 28px;
 }

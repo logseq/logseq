@@ -3,7 +3,7 @@
   (:require [frontend.db :as db]
             [frontend.handler.block :as block-handler]
             [frontend.handler.file-based.property.util :as property-util]
-            [logseq.outliner.core :as outliner-core]
+            [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [logseq.common.util :as common-util]
@@ -55,9 +55,7 @@
                          :block/properties-order property-ks
                          :block/properties-text-values properties-text-values
                          :block/content content}]
-              (outliner-core/save-block! (state/get-current-repo) (db/get-db false)
-                                         (state/get-date-formatter)
-                                         block))))))
+              (outliner-op/save-block! block))))))
      (let [block-id (ffirst col)
            block-id (if (string? block-id) (uuid block-id) block-id)
            input-pos (or (state/get-edit-pos) :max)]

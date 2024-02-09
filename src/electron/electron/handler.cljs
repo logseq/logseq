@@ -580,11 +580,6 @@
     (f window graph-name)
     (state/set-state! :window/once-graph-ready nil)))
 
-(defmethod handle :reloadWindowPage [^js win]
-  (logger/warn ::reload-window-page)
-  (when-let [web-content (.-webContents win)]
-    (.reload web-content)))
-
 (defmethod handle :window-minimize [^js win]
   (.minimize win))
 

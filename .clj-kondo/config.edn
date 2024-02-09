@@ -102,7 +102,7 @@
              frontend.idb idb
              frontend.loader loader
              frontend.mixins mixins
-             frontend.modules.outliner.core outliner-core
+             frontend.modules.outliner.ui ui-outliner-tx
              frontend.mobile.util mobile-util
              frontend.page page
              frontend.persist-db persist-db
@@ -127,9 +127,13 @@
              frontend.worker.handler.page.rename worker-page-rename
              frontend.worker.handler.file.util wfu
              lambdaisland.glogi log
-             logseq.common.path path
-             logseq.common.graph common-graph
              logseq.common.config common-config
+             logseq.common.graph common-graph
+             logseq.common.date-time-util date-time-util
+             logseq.common.path path
+             logseq.common.util common-util
+             logseq.common.util.page-ref page-ref
+             logseq.common.util.block-ref block-ref
              logseq.db ldb
              logseq.db.frontend.property db-property
              logseq.db.frontend.property.type db-property-type
@@ -142,12 +146,10 @@
              logseq.graph-parser.text text
              logseq.graph-parser.block gp-block
              logseq.graph-parser.mldoc gp-mldoc
-             logseq.common.util common-util
              logseq.graph-parser.property gp-property
-             logseq.common.util.page-ref page-ref
-             logseq.common.util.block-ref block-ref
              logseq.graph-parser.util.db db-util
-             logseq.graph-parser.date-time-util date-time-util
+             logseq.outliner.core outliner-core
+             logseq.outliner.op outliner-op
              logseq.outliner.pipeline outliner-pipeline
              logseq.outliner.datascript-report ds-report
              medley.core medley
@@ -170,7 +172,6 @@
            clojure.test.check.clojure-test/defspec clojure.core/def
            clojure.test.check.properties/for-all clojure.core/for
            ;; src/main
-           frontend.modules.outliner.datascript/auto-transact! clojure.core/let
            frontend.namespaces/import-vars potemkin/import-vars
            ;; src/test
            frontend.test.helper/deftest-async clojure.test/deftest

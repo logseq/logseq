@@ -1,6 +1,7 @@
 (ns frontend.worker.state
   "State hub for worker"
-  (:require [logseq.common.util :as common-util]))
+  (:require [logseq.common.util :as common-util]
+            [logseq.common.config :as common-config]))
 
 (defonce *state (atom {:worker/object nil
 
@@ -79,3 +80,7 @@
 (defn get-worker-object
   []
   (:worker/object @*state))
+
+(defn get-date-formatter
+  [repo]
+  (common-config/get-date-formatter (get-config repo)))

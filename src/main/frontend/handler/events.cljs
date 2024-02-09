@@ -75,6 +75,7 @@
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
             [rum.core :as rum]
+            [frontend.rum :as r]
             [frontend.persist-db.browser :as db-browser]
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [frontend.modules.outliner.pipeline :as pipeline]
@@ -189,6 +190,9 @@
     (state/set-state! :sync-graph/init? false)))
 
 (defmethod handle :graph/switch [[_ graph opts]]
+  (state/set-state! :db/async-queries #{})
+  (reset! r/*key->atom {})
+
   (let [^js sqlite @db-browser/*worker]
     (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite (state/get-current-repo)))
             request-finished? (ldb/request-finished?)]
@@ -405,14 +409,12 @@
       (when (and (not dir-exists?)
               (not util/nfs?))
         (state/pub-event! [:graph/dir-gone dir]))))
-  (p/let [loaded-homepage-files (when-not (config/db-based-graph? repo)
-                                  (fs-watcher/preload-graph-homepage-files!))
-          ;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
+  (p/let [;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
           _ (js/setTimeout #(mobile/mobile-postinit) 1000)
           ;; FIXME: an ugly implementation for redirecting to page on new window is restored
           _ (repo-handler/graph-ready! repo)
           _ (when-not (config/db-based-graph? repo)
-              (fs-watcher/load-graph-files! repo loaded-homepage-files))]))
+              (fs-watcher/load-graph-files! repo))]))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))

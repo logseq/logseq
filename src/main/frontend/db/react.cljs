@@ -4,13 +4,15 @@
   It'll be great if we can find an automatically resolving and performant
   solution.
   "
-  (:require [datascript.core :as d]
-            [frontend.date :as date]
+  (:require [frontend.date :as date]
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
-            [clojure.core.async :as async]))
+            [clojure.core.async :as async]
+            [frontend.db.async.util :as db-async-util]
+            [promesa.core :as p]
+            [datascript.core :as d]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
@@ -43,15 +45,13 @@
   (reset! query-state {}))
 
 (defn add-q!
-  [k query time inputs result-atom transform-fn query-fn inputs-fn]
-  (let [time' (int (util/safe-parse-float time))] ;; for robustness. `time` should already be float
-    (swap! query-state assoc k {:query query
-                                :query-time time'
-                                :inputs inputs
-                                :result result-atom
-                                :transform-fn transform-fn
-                                :query-fn query-fn
-                                :inputs-fn inputs-fn}))
+  [k query inputs result-atom transform-fn query-fn inputs-fn]
+  (swap! query-state assoc k {:query query
+                              :inputs inputs
+                              :result result-atom
+                              :transform-fn transform-fn
+                              :query-fn query-fn
+                              :inputs-fn inputs-fn})
   result-atom)
 
 (defn remove-q!
@@ -85,16 +85,40 @@
   (when-let [result (get @query-state k)]
     (when (satisfies? IWithMeta @(:result result))
       (set! (.-state (:result result))
-           (with-meta @(:result result) {:query-time (:query-time result)})))
+            @(:result result)))
     (:result result)))
 
+(defn- <q-aux
+  [repo db query-fn inputs-fn k query inputs]
+  (let [kv? (and (vector? k) (= :kv (second k)))
+        journals? (and (vector? k) (= :frontend.worker.react/journals (last k)))
+        q (if (or journals? util/node-test?)
+            (fn [query inputs] (apply d/q query db inputs))
+            (fn [query inputs] (apply db-async-util/<q repo (cons query inputs))))]
+    (when (or query-fn query kv?)
+      (cond
+        query-fn
+        (query-fn db nil)
+
+        kv?
+        (db-utils/entity db (last k))
+
+        inputs-fn
+        (let [inputs (inputs-fn)]
+          (q query inputs))
+
+        (seq inputs)
+        (q query inputs)
+
+        :else
+        (q query nil)))))
+
 (defn q
-  [repo k {:keys [use-cache? transform-fn query-fn inputs-fn disable-reactive?]
+  [repo k {:keys [use-cache? transform-fn query-fn inputs-fn disable-reactive? return-promise?]
            :or {use-cache? true
                 transform-fn identity}} query & inputs]
   ;; {:pre [(s/valid? :frontend.worker.react/block k)]}
-  (let [kv? (and (vector? k) (= :kv (first k)))
-        origin-key k
+  (let [origin-key k
         k (vec (cons repo k))]
     (when-let [db (conn/get-db repo)]
       (let [result-atom (get-query-cached-result k)]
@@ -104,30 +128,26 @@
           (swap! queries conj origin-key))
         (if (and use-cache? result-atom)
           result-atom
-          (let [{:keys [result time]} (util/with-time
-                                        (-> (cond
-                                              query-fn
-                                              (query-fn db nil)
+          (let [result-atom (or result-atom (atom nil))
+                p-or-value (<q-aux repo db query-fn inputs-fn k query inputs)]
+            (when-not disable-reactive?
+              (add-q! k query inputs result-atom transform-fn query-fn inputs-fn))
+            (cond
+              return-promise?
+              p-or-value
 
-                                              inputs-fn
-                                              (let [inputs (inputs-fn)]
-                                                (apply d/q query db inputs))
+              (p/promise? p-or-value)
+              (do
+                (p/let [result p-or-value
+                        result' (transform-fn result)]
+                  (reset! result-atom result'))
+                result-atom)
 
-                                              kv?
-                                              (db-utils/entity db (last k))
-
-                                              (seq inputs)
-                                              (apply d/q query db inputs)
-
-                                              :else
-                                              (d/q query db))
-                                            transform-fn))
-                result-atom (or result-atom (atom nil))]
-            ;; Don't notify watches now
-            (set! (.-state result-atom) result)
-            (if disable-reactive?
-              result-atom
-              (add-q! k query time inputs result-atom transform-fn query-fn inputs-fn))))))))
+              :else
+              (let [result' (transform-fn p-or-value)]
+                ;; Don't notify watches now
+                (set! (.-state result-atom) result')
+                result-atom))))))))
 
 (defn get-current-page
   []
@@ -146,37 +166,14 @@
         (db-utils/entity [:block/name page-name])))))
 
 (defn- execute-query!
-  [graph db k {:keys [query _query-time inputs transform-fn query-fn inputs-fn result]}
-   {:keys [_skip-query-time-check?]}]
-  ;; FIXME:
-  (when true
-      ;; (or skip-query-time-check?
-      ;;       (<= (or query-time 0) 80))
-    (let [new-result (->
-                      (cond
-                        query-fn
-                        (let [result (query-fn db result)]
-                          (if (coll? result)
-                            (doall result)
-                            result))
+  [graph db k {:keys [query inputs transform-fn query-fn inputs-fn result]
+               :or {transform-fn identity}}]
+  (p/let [p-or-value (<q-aux graph db query-fn inputs-fn k query inputs)
+          result' (transform-fn p-or-value)]
+    (when-not (= result' result)
+      (set-new-result! k result'))))
 
-                        inputs-fn
-                        (let [inputs (inputs-fn)]
-                          (apply d/q query db inputs))
-
-                        (keyword? query)
-                        (db-utils/get-key-value graph query)
-
-                        (seq inputs)
-                        (apply d/q query db inputs)
-
-                        :else
-                        (d/q query db))
-                      transform-fn)]
-      (when-not (= new-result result)
-       (set-new-result! k new-result)))))
-
-(defn- refresh-affected-queries!
+(defn refresh-affected-queries!
   [repo-url affected-keys]
   (util/profile
    "refresh!"
@@ -198,7 +195,7 @@
                {:keys [custom-query?]} (state/edit-in-query-or-refs-component)]
            (when (or query query-fn)
              (try
-               (let [f #(execute-query! repo-url db (vec (cons repo-url k)) cache {:skip-query-time-check? custom-query?})]
+               (let [f #(execute-query! repo-url db (vec (cons repo-url k)) cache)]
                        ;; Detects whether user is editing in a custom query, if so, execute the query immediately
                  (if (and custom? (not custom-query?))
                    (async/put! (state/get-reactive-custom-queries-chan) [f query])

@@ -603,9 +603,15 @@
          nil
 
          db-restoring?
-         [:div.mt-20
-          [:div.ls-center
-           (ui/loading)]]
+         (if config/publishing?
+           [:div.space-y-2
+            (shui/skeleton {:class "h-8 w-1/3 mb-8 bg-gray-400"})
+            (shui/skeleton {:class "h-6 w-full bg-gray-400"})
+            (shui/skeleton {:class "h-6 w-full bg-gray-400"})]
+           [:div.space-y-2
+            (shui/skeleton {:class "h-8 w-1/3 mb-8"})
+            (shui/skeleton {:class "h-6 w-full"})
+            (shui/skeleton {:class "h-6 w-full"})])
 
          :else
          [:div
