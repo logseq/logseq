@@ -441,6 +441,7 @@
 
 (rum/defcs new-property < rum/reactive
   (rum/local false ::new-property?)
+  (rum/local nil ::property-key)
   (rum/local nil ::property-value)
   {:will-unmount (fn [state]
                    (state/set-state! :editor/new-property-key nil)
@@ -452,7 +453,8 @@
 
     (when-not (and (:in-block-container? opts) (not keyboard-triggered?))
       [:div.ls-new-property
-       (let [*property-key (:editor/new-property-key @state/state)
+       (let [global-property-key (:editor/new-property-key @state/state)
+             *property-key (if @global-property-key global-property-key (::property-key state))
              *property-value (::property-value state)]
          (cond
            new-property?
