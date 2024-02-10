@@ -43,7 +43,7 @@ public class FolderPicker extends Plugin {
             startActivityForResult(call, i, "folderPickerResult");
         } else {
             Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
-            Uri uri = Uri.fromParts("package", BuildConfig.APPLICATION_ID, null);
+            Uri uri = Uri.fromParts("package", this.getContext().getPackageName(), null);
             intent.setData(uri);
             startActivityForResult(call, intent, 20);
         }

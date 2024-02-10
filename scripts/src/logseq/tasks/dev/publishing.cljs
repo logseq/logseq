@@ -12,7 +12,7 @@
 
 (defn -main
   [& args]
-  (when-not (= 3 (count args))
+  (when (< (count args) 3)
     (println "Usage: $0 STATIC-DIR GRAPH-DIR OUT-DIR")
     (js/process.exit 1))
   (let [[static-dir graph-dir output-path]
@@ -23,4 +23,4 @@
                        static-dir
                        graph-dir
                        output-path
-                       {:repo-config repo-config})))
+                       {:repo-config repo-config :ui/theme "dark" :ui/radix-color :purple :dev? (contains? (set args) "--dev")})))

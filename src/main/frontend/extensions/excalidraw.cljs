@@ -74,7 +74,8 @@
    :did-update update-draw-content-width
    :will-unmount (fn [state] (.disconnect @(::resize-observer state)))}
   [state data option]
-  (let [*draw-width (get state ::draw-width)
+  (let [ref (rum/create-ref)
+        *draw-width (get state ::draw-width)
         *zen-mode? (get state ::zen-mode?)
         *view-mode? (get state ::view-mode?)
         *grid-mode? (get state ::grid-mode?)
@@ -96,7 +97,8 @@
                                (editor-handler/edit-block! block :max block-uuid))}
          "Edit Block"]]
        [:div.draw-wrap
-        {:on-mouse-down (fn [e]
+        {:ref ref
+         :on-mouse-down (fn [e]
                           (util/stop e)
                           (state/set-block-component-editing-mode! true))
          :on-blur #(state/set-block-component-editing-mode! false)
@@ -104,7 +106,7 @@
                  :height (if wide-mode? 650 500)}}
         (excalidraw
          (merge
-          {:on-change (fn [elements app-state]
+          {:on-change (fn [elements app-state files]
                         (when-not (or (= "down" (gobj/get app-state "cursorButton"))
                                       (gobj/get app-state "draggingElement")
                                       (gobj/get app-state "editingElement")
@@ -116,11 +118,12 @@
                               (reset! *elements elements->clj)
                               (draw/save-excalidraw!
                                file
-                               (serializeAsJSON elements app-state))))))
+                               (serializeAsJSON elements app-state files "local"))))))
 
            :zen-mode-enabled @*zen-mode?
            :view-mode-enabled @*view-mode?
            :grid-mode-enabled @*grid-mode?
+           :on-pointer-down #(.. (rum/deref ref) -firstChild focus)
            :initial-data data
            :theme (excalidraw-theme (state/sub :ui/theme))}))]])))
 

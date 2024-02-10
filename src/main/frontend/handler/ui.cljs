@@ -68,11 +68,7 @@
 
 (defn toggle-help!
   []
-  (when-let [current-repo (state/get-current-repo)]
-    (let [id "help"]
-      (if (state/sidebar-block-exists? id)
-        (state/sidebar-remove-block! id)
-        (state/sidebar-add-block! current-repo id :help)))))
+  (state/toggle! :ui/help-open?))
 
 (defn toggle-settings-modal!
   []
@@ -289,7 +285,7 @@
 
 (defn toggle-cards!
   []
-  (if (:modal/show? @state/state)
+  (if (and (= :srs (:modal/id @state/state)) (:modal/show? @state/state))
     (state/close-modal!)
     (state/pub-event! [:modal/show-cards])))
 

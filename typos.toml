@@ -3,7 +3,7 @@
 edn = "edn"
 datas = "datas"
 juxt = "juxt"
-Ded = "Ded"  # Shows up in ANDed
+Ded = "Ded"         # Shows up in ANDed
 referer = "referer" # This is a misspelling in the http spec so not much we can do
 
 # False positives
@@ -12,5 +12,8 @@ BA = "BA"
 fo = "fo"
 aks = "aks"
 Mannor = "Mannor"
+deleteable = "deleteable"
+fom = "fom"
+tne = "tne"
 [files]
 extend-exclude = ["resources/*", "src/resources/*"]

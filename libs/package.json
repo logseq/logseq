@@ -1,6 +1,6 @@
 {
   "name": "@logseq/libs",
-  "version": "0.0.15",
+  "version": "0.0.17",
   "description": "Logseq SDK libraries",
   "main": "dist/lsplugin.user.js",
   "typings": "index.d.ts",
@@ -18,6 +18,7 @@
   "dependencies": {
     "csstype": "3.1.0",
     "debug": "4.3.4",
+    "deepmerge": "4.3.1",
     "dompurify": "2.3.8",
     "eventemitter3": "4.0.7",
     "fast-deep-equal": "3.1.3",

@@ -3,6 +3,7 @@
             [frontend.db.model :as model]
             [frontend.extensions.graph.pixi :as pixi]
             [frontend.handler.route :as route-handler]
+            [frontend.colors :as colors]
             [goog.object :as gobj]
             [rum.core :as rum]))
 
@@ -13,10 +14,11 @@
    (fn [node attributes]
      (when-not (contains? focus-nodes node)
        (let [attributes (bean/->clj attributes)
+             accent-color (or (colors/get-accent-color) "#6366F1")
              attributes (assoc attributes
-                               :color "#6366F1"
+                               :color accent-color
                                :border {:width 2
-                                        :color "#6366F1"})]
+                                        :color accent-color})]
          (.resetNodeStyle graph node (bean/->js attributes)))))))
 
 (defn- highlight-edges!
@@ -49,9 +51,9 @@
   {:did-update pixi/render!
    :should-update (fn [old-state new-state]
                     (not= (select-keys (first (:rum/args old-state))
-                                       [:nodes :links :dark?])
+                                       [:nodes :links :dark? :link-dist :charge-strength :charge-range])
                           (select-keys (first (:rum/args new-state))
-                                       [:nodes :links :dark?])))
+                                       [:nodes :links :dark? :link-dist :charge-strength :charge-range])))
    :will-unmount (fn [state]
                    (reset! pixi/*graph-instance nil)
                    state)}

@@ -1,6 +1,5 @@
 (ns frontend.components.repo
-  (:require [clojure.string :as string]
-            [frontend.components.widgets :as widgets]
+  (:require [frontend.components.widgets :as widgets]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -18,15 +17,6 @@
             [cljs.core.async :as async :refer [go <!]]
             [frontend.handler.file-sync :as file-sync]
             [reitit.frontend.easy :as rfe]))
-
-(rum/defc add-repo
-  [args]
-  (if-let [graph-types (get-in args [:query-params :graph-types])]
-    (let [graph-types-s (->> (string/split graph-types #",")
-                             (mapv keyword))]
-      (when (seq graph-types-s)
-        (widgets/add-graph :graph-types graph-types-s)))
-    (widgets/add-graph)))
 
 (rum/defc normalized-graph-label
   [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]
@@ -209,27 +199,30 @@
                              (let [remote? (:remote? (first (filter #(= current-repo (:url %)) repos)))
                                    repo-name (db/get-repo-name current-repo)
                                    short-repo-name (if repo-name
-                                                    (db/get-short-repo-name repo-name)
-                                                    "Select a Graph")]
+                                                     (db/get-short-repo-name repo-name)
+                                                     "Select a Graph")]
                                [:a.item.group.flex.items-center.p-2.text-sm.font-medium.rounded-md
 
                                 {:on-click (fn []
                                              (check-multiple-windows? state)
                                              (toggle-fn))
                                  :title    repo-name}       ;; show full path on hover
-                                [:span.flex.relative
-                                 {:style {:top 1}}
-                                 (ui/icon "database" {:size 16 :id "database-icon"})]
-                                [:div.graphs
-                                 [:span#repo-switch.block.pr-2.whitespace-nowrap
-                                  [:span [:span#repo-name.font-medium
-                                          (if (= config/local-repo short-repo-name) "Demo" short-repo-name)
-                                          (when remote? [:span.pl-1 (ui/icon "cloud")])]]
-                                  [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]))
+                                [:div.flex.flex-row.items-center
+                                 [:div.flex.relative.graph-icon.rounded
+                                  (let [icon "database"
+                                        opts {:size 14}]
+                                    (ui/icon icon opts))]
+
+                                 [:div.graphs
+                                  [:span#repo-switch.block.pr-2.whitespace-nowrap
+                                   [:span [:span#repo-name.font-medium
+                                           [:span.overflow-hidden.text-ellipsis (if (= config/local-repo short-repo-name) "Demo" short-repo-name)]
+                                           (when remote? [:span.pl-1 (ui/icon "cloud")])]]
+                                   [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]]))
             links-header (cond->
-                           {:z-index 1000
-                            :modal-class (util/hiccup->class
-                                           "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")}
+                          {:z-index 1000
+                           :modal-class (util/hiccup->class
+                                         "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")}
                            (> (count repos) 1)              ; show switch to if there are multiple repos
                            (assoc :links-header [:div.font-medium.text-sm.opacity-70.px-4.pt-2.pb-1.flex.flex-row.justify-between.items-center
                                                  [:div (t :left-side-bar/switch)]

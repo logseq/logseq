@@ -1,0 +1,174 @@
+:root {
+  --ls-tag-text-opacity: 0.8;
+  --ls-tag-text-hover-opacity: 1;
+  --ls-page-text-size: 1em;
+  --ls-page-title-size: 36px;
+  --ls-main-content-max-width: 810px;
+  --ls-main-content-max-width-wide: 1280px;
+  --ls-font-family: Inter;
+  --ls-scrollbar-width: 6px;
+  --ls-border-radius-low: 4px;
+  --ls-border-radius-medium: 8px;
+  --ls-headbar-height: 3rem;
+  --ls-headbar-inner-top-padding: 0px;
+  --ls-left-sidebar-width: 246px;
+  --ls-left-sidebar-sm-width: 74vw;
+  --ls-left-sidebar-nav-btn-size: 38px;
+  --ls-native-kb-height: 0px;
+
+  --ls-highlight-color-gray: var(--rx-gray-05);
+  --ls-highlight-color-red: var(--rx-red-05);
+  --ls-highlight-color-yellow: var(--rx-yellow-05);
+  --ls-highlight-color-green: var(--rx-green-05);
+  --ls-highlight-color-blue: var(--rx-blue-05);
+  --ls-highlight-color-purple: var(--rx-purple-05);
+  --ls-highlight-color-pink: var(--rx-pink-05);
+
+  /* NOTE: For compatible. Will be deprecated*/
+  --ls-block-bullet-color: var(--lx-gray-08, var(--rx-gray-08));
+}
+
+.white-theme,
+.light-theme,
+html[data-theme='light'] {
+  --color-level-1: var(--rx-gray-02);
+  --color-level-2: var(--rx-gray-03);
+  --color-level-3: var(--rx-gray-04);
+  --color-level-4: var(--rx-gray-05);
+  --color-level-5: var(--rx-gray-06);
+  --color-level-6: var(--rx-gray-07);
+}
+
+html[data-theme=light][data-color=logseq] {
+  --ls-primary-background-color: #ffffff;
+  --ls-secondary-background-color: #f7f7f7;
+  --ls-tertiary-background-color: #eaeaea;
+  --ls-quaternary-background-color: #dcdcdc;
+  --ls-table-tr-even-background-color: var(--ls-secondary-background-color);
+  --ls-active-primary-color: rgb(0, 105, 182);
+  --ls-active-secondary-color: #00477c;
+  --ls-block-properties-background-color: var(--ls-secondary-background-color);
+  --ls-page-properties-background-color: var(--ls-secondary-background-color);
+  --ls-block-ref-link-text-color: #d8e1e8;
+  --ls-border-color: #ccc;
+  --ls-secondary-border-color: #e2e2e2;
+  --ls-tertiary-border-color: rgba(200, 200, 200, 0.3);
+  --ls-guideline-color: rgba(46, 27, 5, 0.08);
+  --ls-menu-hover-color: var(--ls-a-chosen-bg);
+  --ls-primary-text-color: #433f38;
+  --ls-secondary-text-color: #161e2e;
+  --ls-title-text-color: var(--ls-header-button-background);
+  --ls-link-text-color: #106ba3;
+  --ls-link-text-hover-color: #1a537c;
+  --ls-link-ref-text-color: var(--ls-link-text-color);
+  --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
+  --ls-tag-text-color: var(--ls-link-ref-text-color);
+  --ls-tag-text-hover-color: var(--ls-link-ref-text-hover-color);
+  --ls-slide-background-color: #fff;
+  --ls-block-bullet-border-color: #dedede;
+  --ls-block-bullet-color: rgba(67, 63, 56, 0.25);
+  --ls-block-highlight-color: #c0e6fd;
+  --ls-selection-background-color: #e4f2ff;
+  --ls-selection-text-color: var(--ls-secondary-text-color);
+  --ls-page-checkbox-color: #9dbbd8;
+  --ls-page-checkbox-border-color: var(--ls-page-checkbox-color);
+  --ls-page-blockquote-color: var(--ls-primary-text-color);
+  --ls-page-blockquote-bg-color: var(--lx-gray-03, #fbfaf8);
+  --ls-page-blockquote-border-color: var(--lx-gray-08, #799bbc);
+  --ls-page-mark-color: #262626;
+  --ls-page-mark-bg-color: #fef3ac;
+  --ls-page-inline-code-bg-color: var(--ls-secondary-background-color);
+  --ls-page-inline-code-color: var(--ls-primary-text-color);
+  --ls-scrollbar-foreground-color: rgba(0, 0, 0, 0.1);
+  --ls-scrollbar-background-color: rgba(0, 0, 0, 0.05);
+  --ls-scrollbar-thumb-hover-color: rgba(0, 0, 0, 0.2);
+  --ls-cloze-text-color: #0000cd;
+  --ls-icon-color: #646464;
+  --ls-search-icon-color: var(--ls-primary-text-color);
+  --ls-search-icon-hover-color: var(--ls-secondary-text-color);
+  --ls-a-chosen-bg: var(--ls-quaternary-background-color);
+  --ls-pie-bg-color: #e1e1e1;
+  --ls-pie-fg-color: #0a4a5d;
+
+  --ls-error-text-color: var(--color-red-700);
+  --ls-error-background-color: var(--color-red-100);
+  --ls-warning-text-color: var(--color-yellow-700);
+  --ls-warning-background-color: var(--color-yellow-100);
+  --ls-success-text-color: var(--color-green-800);
+  --ls-success-background-color: var(--color-green-100);
+  --ls-focus-ring-color: rgba(66, 133, 244, 0.5);
+  --ls-header-button-background: rgba(15, 20, 25, 1);
+  --ls-left-sidebar-text-color: var(--lx-gray-12);
+  --ls-button-background-hsl: 200 98% 35%;
+  --ls-button-background: hsl(var(--ls-button-background-hsl));
+}
+
+html[data-theme=dark][data-color=logseq] {
+  --ls-primary-background-color: #002b36;
+  --ls-secondary-background-color: #023643;
+  --ls-tertiary-background-color: #08404f;
+  --ls-quaternary-background-color: #094b5a;
+  --ls-table-tr-even-background-color: #03333f;
+  --ls-active-primary-color: #8ec2c2;
+  --ls-active-secondary-color: #d0e8e8;
+  --ls-block-properties-background-color: #06323e;
+  --ls-page-properties-background-color: #06323e;
+  --ls-block-ref-link-text-color: #1a6376;
+  --ls-border-color: #0e5263;
+  --ls-secondary-border-color: #126277;
+  --ls-tertiary-border-color: rgba(0, 2, 0, 0.1);
+  --ls-guideline-color: #0b4a5a;
+  --ls-menu-hover-color: var(--ls-secondary-background-color);
+  --ls-primary-text-color: #a4b5b6;
+  --ls-secondary-text-color: #dfdfdf;
+  --ls-title-text-color: #93a1a1;
+  --ls-link-text-color: rgb(138, 187, 187);
+  --ls-link-text-hover-color: var(--ls-active-secondary-color);
+  --ls-link-ref-text-color: var(--ls-link-text-color);
+  --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
+  --ls-tag-text-color: var(--ls-link-text-color);
+  --ls-tag-text-hover-color: var(--ls-link-text-hover-color);
+  --ls-slide-background-color: var(--ls-primary-background-color);
+  --ls-block-bullet-border-color: #0f4958;
+  --ls-block-bullet-color: #608e91;
+  --ls-block-highlight-color: #0a3d4b;
+  --ls-selection-background-color: #338fff;
+  --ls-selection-text-color: #fff;
+  --ls-page-checkbox-color: #6093a0;
+  --ls-page-checkbox-border-color: var(--ls-primary-background-color);
+  --ls-page-blockquote-color: var(--ls-primary-text-color);
+  --ls-page-blockquote-bg-color: var(--ls-secondary-background-color);
+  --ls-page-blockquote-border-color: var(--ls-border-color);
+  --ls-page-mark-color: #262626;
+  --ls-page-mark-bg-color: #fef3ac;
+  --ls-page-inline-code-color: var(--ls-primary-text-color);
+  --ls-page-inline-code-bg-color: #01222a;
+  --ls-scrollbar-foreground-color: #11505f;
+  --ls-scrollbar-background-color: rgba(30, 60, 67, 0.1);
+  --ls-scrollbar-thumb-hover-color: rgba(255, 255, 255, 0.2);
+  --ls-cloze-text-color: #8fbc8f;
+  --ls-icon-color: var(--ls-link-text-color);
+  --ls-search-icon-color: var(--ls-primary-text-color);
+  --ls-search-icon-hover-color: var(--ls-secondary-text-color);
+  --ls-a-chosen-bg: var(--ls-quaternary-background-color);
+  --ls-pie-bg-color: #01303b;
+  --ls-pie-fg-color: #0b5869;
+
+  --ls-error-text-color: var(--color-red-400);
+  --ls-error-background-color: var(--color-red-900);
+  --ls-warning-text-color: var(--color-yellow-400);
+  --ls-warning-background-color: var(--color-yellow-900);
+  --ls-success-text-color: var(--color-green-100);
+  --ls-success-background-color: var(--color-green-900);
+  --ls-focus-ring-color: rgba(18, 98, 119, 0.5);
+  --ls-header-button-background: #dee4ea;
+  --ls-left-sidebar-text-color: var(--lx-gray-11);
+  --ls-button-background-hsl: 200 98% 35%;
+  --ls-button-background: hsl(var(--ls-button-background-hsl));
+  --color-level-1: var(--ls-secondary-background-color);
+  --color-level-2: var(--ls-tertiary-background-color);
+  --color-level-3: var(--ls-quaternary-background-color);
+  --color-level-4: #195d6c;
+  --color-level-5: #266c7d;
+  --color-level-6: #3a7e8e;
+}

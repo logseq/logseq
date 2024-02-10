@@ -1,5 +1,5 @@
 (ns frontend.handler.dnd
-  "Provides fns for drag n drop"
+  "Provides fns for drag and drop"
   (:require [frontend.handler.editor :as editor-handler]
             [frontend.handler.editor.property :as editor-property]
             [frontend.modules.outliner.core :as outliner-core]

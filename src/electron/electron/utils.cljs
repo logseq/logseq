@@ -26,7 +26,8 @@
 (defonce *fetchAgent (atom nil))
 
 (defonce open (js/require "open"))
-(defonce HttpsProxyAgent (js/require "https-proxy-agent"))
+(defonce HttpsProxyAgent (.-HttpsProxyAgent (js/require "https-proxy-agent")))
+(defonce SocksProxyAgent (.-SocksProxyAgent (js/require "socks-proxy-agent")))
 (defonce _fetch (js/require "node-fetch"))
 (defonce extract-zip (js/require "extract-zip"))
 
@@ -40,6 +41,14 @@
   (when (not-empty path)
     (if win32?
       (string/replace path "\\" "/")
+      path)))
+
+(defn to-native-win-path!
+  "Convert path to native win path"
+  [path]
+  (when (not-empty path)
+    (if win32?
+      (string/replace path "/" "\\")
       path)))
 
 (defn get-ls-dotdir-root
@@ -67,7 +76,12 @@
   [{:keys [protocol host port]}]
   (if (and protocol host port (or (= protocol "http") (= protocol "socks5")))
     (let [proxy-url (str protocol "://" host ":" port)]
-      (reset! *fetchAgent (new HttpsProxyAgent proxy-url)))
+      (condp = protocol
+        "http"
+        (reset! *fetchAgent (new HttpsProxyAgent proxy-url))
+        "socks5"
+        (reset! *fetchAgent (new SocksProxyAgent proxy-url))
+        (logger/error "Unknown proxy protocol:" protocol)))
     (reset! *fetchAgent nil)))
 
 (defn- set-rsapi-proxy

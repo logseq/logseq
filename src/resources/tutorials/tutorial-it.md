@@ -11,8 +11,8 @@ Digita `/` per mostrare tutti i comandi.
 - 1. Creiamo una pagina chiamata [[Come prendere appunti fittizi?]]. Puoi fare clic su di esso per andare a quella pagina, oppure puoi "Maiusc + clic" per aprirlo nella barra laterale destra! Ora dovresti vedere sia _Riferimenti collegati_ che _Riferimenti non collegati_.
 - 2. Facciamo riferimento ad alcuni blocchi su [[Come prendere appunti fittizi?]], puoi fare `Maiusc+Clic` su qualsiasi riferimento di blocco per aprirlo nella barra laterale destra. Prova a fare
 alcune modifiche sulla barra laterale destra, verranno modificati anche quei blocchi di riferimento!
-    - ((5f713e91-8a3c-4b04-a33a-c39482428e2d)) : This is a block reference.
-    - ((5f713ea8-8cba-403d-ac00-9964b1ec7190)) : This is another block reference.
+    - ((5f713e91-8a3c-4b04-a33a-c39482428e2d)) : Questo è un riferimento ad un blocco.
+    - ((5f713ea8-8cba-403d-ac00-9964b1ec7190)) : Questo è un altro riferimento ad un blocco.
 - 3. Supportate i tag?
     - Naturalmente, questo è un tag #falso.
 - 4. Supportate le azioni come todo/doing/done e le priorità?

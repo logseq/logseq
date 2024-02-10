@@ -25,7 +25,6 @@
  :export-save-to-file "Als Datei speichern"
  :export-transparent-background "Transparenter Hintergrund"
  :graph "Graph"
- :graph-search "Graph durchsuchen"
  :heading "Überschrift {1}"
  :highlight "Hervorhebung"
  :home "Startseite"
@@ -40,13 +39,10 @@
  :login "Einloggen"
  :logout "Ausloggen"
  :logout-user "Ausloggen ({1})"
- :more "Mehr"
  :new-graph "Neuen Graphen hinzufügen"
  :new-page "Neue Seite:"
- :new-whiteboard "Neues Whiteboard:"
  :open-a-directory "Öffne ein lokales Verzeichnis"
  :open-new-window "Neues Fenster"
- :page-search "In der aktuellen Seite suchen"
  :parsing-files "Dateien analysieren"
  :port "Port"
  :re-index "Neu indizieren"
@@ -58,7 +54,6 @@
  :remove-heading "Überschrift entfernen"
  :remove-orphaned-pages "Nie referenzierte Seiten löschen?"
  :save "Speichern"
- :search "Suchen oder Seite erstellen"
  :settings "Einstellungen"
  :settings-of-plugins "Plugins"
  :strikethrough "Durchstreichung"
@@ -83,7 +78,7 @@
  :asset/show-in-folder "Bild im Ordner anzeigen"
 
  :block/name "Seitenname"
- 
+
  :bug-report/main-title "Bug melden"
  :bug-report/clipboard-inspector-title "Untersuchung der Zwischenablage"
  :bug-report/main-desc "Können Sie uns mit einer Fehlermeldung helfen? Wir werden es schnellstmöglich beheben."
@@ -114,8 +109,6 @@
  :color/blue "Blau"
  :color/purple "Violett"
  :color/pink "Rosa"
-
- :command-palette/prompt "Befehl eingeben"
 
  :content/click-to-edit "Klicken zum bearbeiten"
  :editor/copy "Kopieren"
@@ -192,7 +185,7 @@
  :graph/save "Speichern..."
  :graph/save-error "Speichern fehlgeschlagen"
  :graph/save-success "Erfolgreich gespeichert"
- 
+
  :header/go-back "Zurück"
  :header/go-forward "Vorwärts"
  :header/more "Weitere Optionen"
@@ -200,7 +193,6 @@
  :header/toggle-left-sidebar "Linke Seitenleiste umschalten"
 
  :help/about "Über Logseq"
- :help/block-content-autocomplete "Blockinhalt (Quelltext, Zitate, Abfragen, etc.) Autovervollständigung"
  :help/block-reference "Blockverweis"
  :help/blog "Logseq Blog"
  :help/bug "Fehlerbericht"
@@ -388,7 +380,7 @@
  :plugin.install-from-file/title "Plugins aus plugins.edn installieren"
  :plugin.install-from-file/notice "Die folgenden Plugins werden Ihre Plugins ersetzen:"
  :plugin.install-from-file/success "Alle Plugins installiert!"
- 
+
  :query/config-property-settings "Einstellungen für diese Query:"
 
  :right-side-bar/all-pages "Alle Seiten"
@@ -408,9 +400,9 @@
  :right-side-bar/show-journals "Zeige Journale"
  :right-side-bar/switch-theme "Zu {1} Thema wechseln"
  :right-side-bar/toggle-right-sidebar "Rechte Seitenleiste umschalten"
- 
+
  :select/default-select-multiple "Ein oder mehrere auswählen"
- 
+
  :settings-page/app-updated "Ihre Version ist aktuell 🎉"
  :settings-page/auto-expand-block-refs "Automatisch beim Heranzoomen Blockreferenzen erweitern..."
  :settings-page/auto-expand-block-refs-tip "Diese Option steuert, ob Blockreferenzen beim Heranzoomen automatisch ausgeklappt werden."
@@ -439,9 +431,9 @@
  :settings-page/update-available "Neue Version gefunden: "
  :settings-page/update-error-1 "⚠️ Ups, Etwas ist schiefgelaufen!"
  :settings-page/update-error-2 " Überprüfen Sie den "
- 
+
  :settings-permission/start-granting "Erlauben"
- 
+
  :tips/all-done "Alles erledigt!"
 
  :tutorial/text #resource "tutorials/tutorial-de.md"
@@ -489,7 +481,6 @@
  :whiteboard/large "Gross"
  :whiteboard/link "Verknüpfung"
  :whiteboard/link-to-any-page-or-block "Auf Seiten oder Blöcke verlinken"
- :whiteboard/link-whiteboard-or-block "Whiteboard/Seite/Block verknüpfen"
  :whiteboard/lock "Sperren"
  :whiteboard/medium "Normal"
  :whiteboard/move-to-back "In den Hintergrund"
@@ -536,25 +527,14 @@
  :whiteboard/zoom-in "Heranzoomen"
  :whiteboard/zoom-out "Herauszoomen"
  :whiteboard/zoom-to-fit "Zoom an Zeichnung anpassen"
- 
+
  :window/minimize "Minimieren"
  :window/maximize "Maximieren"
  :window/restore "Wiederherstellen"
  :window/close "Schliessen"
  :window/exit-fullscreen "Vollbild verlassen"
 
- :search/blocks-in-page "Suche nach Blöcken auf der Seite:"
- :search/cache-outdated "Der Cache ist veraltet. Klicken Sie auf 'Neu indizieren' im Dropdown-Menu des Graphen."
- :search/command-palette-tip-1 "Tipp: "
- :search/command-palette-tip-2 " um die Befehlspalette zu öffnen"
- :search/items "Einträge"
  :search/page-names "In Seitennamen suchen"
- :search/publishing "Suchen"
- :search/recent "Kürzlich gesucht:"
- :search/result-for "Suchergebnisse für"
-
- :search-item/block "Block"
- :search-item/file "Datei"
  :search-item/no-result "Keine übereinstimmenden Treffer"
  :search-item/page "Seite"
 
@@ -576,7 +556,6 @@
  :settings-page/custom-date-format-warning "Neuindizierung erforderlich! Vorhandene Journal-Verweise würden nicht mehr funktionieren!"
  :settings-page/custom-global-configuration "Benutzerdefinierte globale Konfiguration"
  :settings-page/custom-theme "Individuelles Theme"
- :settings-page/customize-shortcuts "Tastaturbefehle"
  :settings-page/developer-mode "Entwicklermodus"
  :settings-page/developer-mode-desc "Der Entwicklermodus hilft Mitwirkenden und Entwicklern von Erweiterungen, ihre Integration mit Logseq effizienter zu testen."
  :settings-page/disable-sentry "Nutzungs- und Diagnostik-Daten an Logseq senden"
@@ -596,7 +575,6 @@
  :settings-page/export-theme "Theme exportieren"
  :settings-page/filename-format "Dateinamen-Format"
  :settings-page/git-commit-delay "Anzahl Sekunden für Git Auto Commit"
- :settings-page/git-confirm "Sie müssen die App neu starten, nachdem Sie die Git-Einstellungen angepasst haben."
  :settings-page/git-switcher-label "Git Auto Commit aktivieren"
  :settings-page/home-default-page "Standard-Homepage einrichten"
  :settings-page/login-prompt "Um vor allen anderen auf neue Funktionen zugreifen zu können, müssen Sie ein Open Collective Sponsor oder Backer von Logseq sein und sich daher zuerst anmelden."
@@ -605,7 +583,6 @@
  :settings-page/preferred-outdenting "Logische Ausrückung"
  :settings-page/preferred-pasting-file "Einfügen der Datei bevorzugen"
  :settings-page/preferred-workflow "Bevorzugter Workflow"
- :settings-page/shortcut-settings "Verknüpfungen anpassen"
  :settings-page/show-brackets "Klammern anzeigen"
  :settings-page/show-full-blocks "Alle Zeilen einer Blockreferenz anzeigen"
  :settings-page/spell-checker "Rechtschreibprüfung"
@@ -653,7 +630,6 @@
  :command.cards/recall                   "Karten: Nehmen Sie sich eine Weile Zeit, um sich zu erinnern"
  :command.cards/remembered               "Karten: Gemerkt"
  :command.cards/toggle-answers           "Karten: Antworten/Lücken ein-/ausblenden"
- :command.command-palette/toggle         "Befehlspalette umschalten"
  :command.command/run                    "Git-Befehl ausführen"
  :command.command/toggle-favorite        "Zu Favoriten hinzufügen/entfernen"
  :command.date-picker/complete           "Datumsauswahl: Den gewünschten Tag wählen"
@@ -739,7 +715,6 @@
  :command.go/next-journal                "Zum nächsten Journal springen"
  :command.go/prev-journal                "Zum vorherigen Journal springen"
  :command.go/search                      "Volltextsuche"
- :command.go/search-in-page              "Blöcke auf der aktuellen Seite suchen"
  :command.go/tomorrow                    "Zu morgen springen"
  :command.go/whiteboards                 "Zu Whiteboards springen"
  :command.graph/add                      "Einen Graph hinzufügen"
@@ -762,7 +737,6 @@
  :command.ui/install-plugins-from-file   "Plugins aus plugins.edn installieren"
  :command.ui/select-theme-color          "Verfügbare Themenfarben auswählen"
  :command.ui/toggle-brackets             "Umschalten, ob Klammern angezeigt werden sollen"
- :command.ui/toggle-cards                "Karten umschalten"
  :command.ui/toggle-contents             "Inhalt in Seitenleiste umschalten"
  :command.ui/toggle-document-mode        "Dokumentenmodus umschalten"
  :command.ui/toggle-help                 "Hilfe aktivieren"

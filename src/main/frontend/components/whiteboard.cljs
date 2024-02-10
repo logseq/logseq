@@ -188,7 +188,7 @@
     (fn [e]
       (util/stop e)
       (whiteboard-handler/create-new-whiteboard-and-redirect!))}
-   (ui/icon "plus")
+   (ui/icon "plus" {:size 32})
    [:span.dashboard-create-card-caption.select-none
     (t :whiteboard/dashboard-card-new-whiteboard)]])
 
@@ -217,19 +217,16 @@
           (str " · " total-whiteboards)]]
         [:div.flex-1]
         (when has-checked?
-          [:button.ui__button.m-0.py-1.inline-flex.items-center.bg-red-800
-           {:on-click
+          (ui/button
+           (count checked-page-names)
+           {:icon "trash"
+            :on-click
             (fn []
               (state/set-modal! (page/batch-delete-dialog
                                  (map (fn [name]
                                         (some (fn [w] (when (= (:block/name w) name) w)) whiteboards))
                                       checked-page-names)
-                                 false route-handler/redirect-to-whiteboard-dashboard!)))}
-           [:span.flex.gap-2.items-center
-            [:span.opacity-50 (ui/icon "trash" {:style {:font-size 15}})]
-            (t :delete)
-            [:span.opacity-50
-             (str " · " (count checked-page-names))]]])]
+                                 false route-handler/redirect-to-whiteboard-dashboard!)))}))]
        [:div
         {:ref ref}
         [:div.gap-8.grid.grid-rows-auto
@@ -286,13 +283,13 @@
                          "text-md px-3 py-2 cursor-default whiteboard-page-refs-count"
                          {:hover? true
                           :render-fn (fn [open? refs-count] [:span.whiteboard-page-refs-count-label
-                                                             (if (> refs-count 1) "References" "Reference")
+                                                             (t :whiteboard/reference-count refs-count)
                                                              (ui/icon (if open? "references-hide" "references-show")
                                                                       {:extension? true})])})]]
      (tldraw-app page-name block-id)]))
 
 (rum/defc whiteboard-route <
-(shortcut/mixin :shortcut.handler/whiteboard)
+(shortcut/mixin :shortcut.handler/whiteboard false)
   [route-match]
   (let [name (get-in route-match [:parameters :path :name])
         {:keys [block-id]} (get-in route-match [:parameters :query])]
@@ -309,7 +306,10 @@
    [:p (t :on-boarding/welcome-whiteboard-modal-description)]
 
    [:div.pt-6.flex.justify-center.space-x-2.sm:justify-end
-    (ui/button (t :on-boarding/welcome-whiteboard-modal-skip) :on-click close-fn :background "gray" :class "opacity-60")
+    (ui/button (t :on-boarding/welcome-whiteboard-modal-skip)
+               :on-click close-fn
+               :background "gray"
+               :class "opacity-60 skip-welcome")
     (ui/button (t :on-boarding/welcome-whiteboard-modal-start)
                :on-click (fn []
                            (quick-tour/ready

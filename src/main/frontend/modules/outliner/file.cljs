@@ -56,7 +56,7 @@
                    (not (state/input-idle? repo {:diff 3000}))) ;; long page
               ;; when this whiteboard page is just being updated
               (and whiteboard? (not (state/whiteboard-idle? repo))))
-        (async/put! (state/get-file-write-chan) [repo page-db-id outliner-op])
+        (async/put! (state/get-file-write-chan) [repo page-db-id outliner-op (tc/to-long (t/now))])
         (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
               blocks (model/get-page-blocks-no-cache repo (:block/name page-block) {:pull-keys pull-keys})
               blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)]
@@ -73,7 +73,7 @@
   [pages]
   (when (seq pages)
     (when-not config/publishing?
-      (doseq [[repo page-id outliner-op] (set pages)]
+      (doseq [[repo page-id outliner-op] (set (map #(take 3 %) pages))] ; remove time to dedupe pages to write
         (try (do-write-file! repo page-id outliner-op)
              (catch :default e
                (notification/show!
@@ -101,17 +101,17 @@
 (defn <ratelimit-file-writes!
   []
   (util/<ratelimit (state/get-file-write-chan) batch-write-interval
-                 :filter-fn
-                 (fn [[repo _ time]]
-                   (swap! *writes-finished? assoc repo {:time time
-                                                        :value false})
-                   true)
-                 :flush-fn
-                 (fn [col]
-                   (let [start-time (tc/to-long (t/now))
-                         repos (distinct (map first col))]
-                     (write-files! col)
-                     (doseq [repo repos]
-                       (let [last-write-time (get-in @*writes-finished? [repo :time])]
-                         (when (> start-time last-write-time)
-                           (swap! *writes-finished? assoc repo {:value true}))))))))
+                   :filter-fn
+                   (fn [[repo _ _ time]]
+                     (swap! *writes-finished? assoc repo {:time time
+                                                          :value false})
+                     true)
+                   :flush-fn
+                   (fn [col]
+                     (let [start-time (tc/to-long (t/now))
+                           repos (distinct (map first col))]
+                       (write-files! col)
+                       (doseq [repo repos]
+                         (let [last-write-time (get-in @*writes-finished? [repo :time])]
+                           (when (> start-time last-write-time)
+                             (swap! *writes-finished? assoc repo {:value true}))))))))

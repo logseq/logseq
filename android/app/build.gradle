@@ -1,19 +1,26 @@
+
+plugins {
+    id 'io.sentry.android.gradle' version '4.1.1'
+}
+
 apply plugin: 'com.android.application'
 
 android {
+    namespace "com.logseq.app"
     compileSdkVersion rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "com.logseq.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 66
-        versionName "0.9.13"
+        versionCode 80
+        versionName "0.10.6"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
+        manifestPlaceholders = [LOGSEQ_SENTRY_DSN: "$System.env.LOGSEQ_SENTRY_DSN"]
     }
     buildTypes {
         release {
@@ -51,4 +58,14 @@ try {
     }
 } catch(Exception e) {
     logger.warn("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
+
+
+sentry {
+    org = "logseq"
+    projectName = "logseq"
+
+    // this will upload your source code to Sentry to show it as part of the stack traces
+    // disable if you don't want to expose your sources
+    includeSourceContext = false
 }

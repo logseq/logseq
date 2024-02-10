@@ -5,10 +5,16 @@ export function LSAuthenticator({ termsLink, children }: any) {
     <Authenticator
       formFields={{
         signUp: {
-          email: { order: 1 },
-          username: { order: 2 },
+          email: { order: 1, isRequired: true },
+          username: { order: 2, isRequired: true },
           password: { order: 3 },
           confirm_password: { order: 4 },
+        },
+        signIn: {
+          username: {
+            placeholder: 'Enter your Username or Email',
+            label: 'Username or Email'
+          }
         }
       }}
       loginMechanisms={['username']}

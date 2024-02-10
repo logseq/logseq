@@ -172,7 +172,7 @@
   {:init (fn [state]
            (reset! *internal-model (first (:rum/args state)))
            state)}
-  (shortcut/mixin :shortcut.handler/date-picker)
+  (shortcut/mixin :shortcut.handler/date-picker false)
   [_model {:keys [on-change disabled? start-of-week class style attr]
            :or   {start-of-week (state/get-start-of-week)} ;; Default to Sunday
            :as   args}]

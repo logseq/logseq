@@ -11,7 +11,7 @@ on:
       - '*.md'
 
 env:
-  CLOJURE_VERSION: '1.10.1.763'
+  CLOJURE_VERSION: '1.11.1.1413'
   JAVA_VERSION: '11'
   # This is the latest node version we can run.
   NODE_VERSION: '18'
@@ -25,7 +25,7 @@ jobs:
       - name: Checkout Actions Repository
         uses: actions/checkout@v3
       - name: Check spelling with custom config file
-        uses: crate-ci/typos@v1.13.10
+        uses: crate-ci/typos@v1.16.8
         with:
           config: ./typos.toml
 

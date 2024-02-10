@@ -47,7 +47,7 @@ on:
     - cron: '0 14 * * MON-FRI'
 
 env:
-  CLOJURE_VERSION: '1.10.1.763'
+  CLOJURE_VERSION: '1.11.1.1413'
   NODE_VERSION: '18'
   JAVA_VERSION: '11'
 
@@ -312,15 +312,16 @@ jobs:
       - name: Build/Release Electron app
         run: yarn electron:make
         working-directory: ./static
-        env:
-          CODE_SIGN_CERTIFICATE_FILE: ../codesign.pfx
-          CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
+        #env:
+        #  CODE_SIGN_CERTIFICATE_FILE: ../codesign.pfx
+        #  CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
 
       - name: Save Artifact
         run: |
           mkdir builds
           mv static\out\make\squirrel.windows\x64\*.exe    builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
           mv static\out\make\squirrel.windows\x64\*.nupkg  builds\Logseq-win-x64-${{ steps.ref.outputs.version }}-full.nupkg
+          mv static\out\make\zip\win32\x64\*.zip           builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.zip
           mv static\out\make\squirrel.windows\x64\RELEASES builds\RELEASES
 
       - name: Upload Artifact
@@ -353,6 +354,11 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
 
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
@@ -433,6 +439,11 @@ jobs:
           key: ${{ runner.os }}-arm64-yarn-${{ hashFiles('**/yarn.lock') }}
           restore-keys: |
             ${{ runner.os }}-arm64-yarn-
+
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
 
       - name: Signing By Apple Developer ID
         if: ${{ github.repository == 'logseq/logseq' }}

@@ -4,8 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [0.0.15]
+## [0.0.16]
+### Added
+- Support api of `logseq.UI.queryElementRect: (selector: string) => Promise<DOMRectReadOnly | null>`
+- Support api of `logseq.UI.queryElementById: (id: string) => Promise<string | boolean>`
+- Support api of `logseq.UI.checkSlotValid: (slot: UISlotIdentity['slot']) => Promise<boolean>`
+- Support api of `logseq.UI.resolveThemeCssPropsVals: (props: string | Array<string>) => Promise<any>`
+- Support api of `logseq.Assets.builtInOpen(path: string): Promise<boolean | undefined>`
 
+### Fixed
+- fix Plugin can't register command shortcut with editing mode [#10392](https://github.com/logseq/logseq/issues/10392)
+- fix [Plugin API] [Keymap] Command without keybinding can't be present in Keymap [#10466](https://github.com/logseq/logseq/issues/10466)
+- fix [Possible DATA LOSS] [Plugin API] [Keymap] Any plugin could break the global config.edn [#10465](https://github.com/logseq/logseq/issues/10465)
+ 
+## [0.0.15]
 ### Added
 - Support a plug-in flag for the plugin slash commands item
 - Support api of `logseq.App.setCurrentGraphConfigs: (configs: {}) => Promise<void>`

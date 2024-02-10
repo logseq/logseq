@@ -18,6 +18,20 @@ function getFilePathFromClipboard () {
   }
 }
 
+/**
+ * Read the contents of the clipboard for a custom format.
+ * @param  {string} format The custom format to read.
+ * @returns Buffer containing the contents of the clipboard for the specified format, or null if not available.
+ */
+function getClipboardData (format) {
+  if (clipboard.has(format, "clipboard")) {
+    return clipboard.readBuffer(format)
+  }
+  else {
+    return null;
+  }
+}
+
 contextBridge.exposeInMainWorld('apis', {
   doAction: async (arg) => {
     return await ipcRenderer.invoke('main', arg)
@@ -76,14 +90,6 @@ contextBridge.exposeInMainWorld('apis', {
     await shell.openPath(path)
   },
 
-  showItemInFolder (fullpath) {
-    if (IS_WIN32) {
-      shell.openPath(path.dirname(fullpath).replaceAll("/", "\\"))
-    } else {
-      shell.showItemInFolder(fullpath)
-    }
-  },
-
   /**
    * save all publish assets to disk
    *
@@ -116,15 +122,21 @@ contextBridge.exposeInMainWorld('apis', {
 
     const dest = path.join(repoPathRoot, to)
     const assetsRoot = path.dirname(dest)
-    
+
     await fs.promises.mkdir(assetsRoot, { recursive: true })
 
-    from = from && decodeURIComponent(from || getFilePathFromClipboard())
+    from = from || getFilePathFromClipboard()
 
     if (from) {
-      // console.debug('copy file: ', from, dest)
-      await fs.promises.copyFile(from, dest)
-      return path.basename(from)
+      try {
+        // console.debug('copy file: ', from, dest)
+        await fs.promises.copyFile(from, dest)
+        return path.basename(from)
+      } catch (e) {
+        from = decodeURIComponent(from)
+        await fs.promises.copyFile(from, dest)
+        return path.basename(from)
+      }
     }
 
     // support image
@@ -165,6 +177,8 @@ contextBridge.exposeInMainWorld('apis', {
   },
 
   getFilePathFromClipboard,
+
+  getClipboardData,
 
   setZoomFactor (factor) {
     webFrame.setZoomFactor(factor)

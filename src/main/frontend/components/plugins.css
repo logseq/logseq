@@ -4,7 +4,6 @@
 
 .cp__plugins {
   &-page {
-    background-color: var(--ls-primary-background-color);
     margin: -2rem;
     padding: 1.5rem 2rem;
     outline: none;
@@ -30,7 +29,6 @@
 
     .tabs {
       .ui__button {
-        background-color: transparent;
         margin: 0 8px;
 
         > span {
@@ -45,7 +43,6 @@
         }
 
         &.active {
-          background-color: var(--ls-tertiary-background-color);
         }
       }
     }
@@ -64,8 +61,11 @@
         }
 
         &.active {
-          background: var(--ls-secondary-background-color);
-          color: var(--ls-link-text-color);
+          @apply !text-primary;
+        }
+
+        &:hover {
+          @apply text-accent-10;
         }
       }
     }
@@ -75,10 +75,6 @@
 
       &.scrolled {
         box-shadow: 0 4px 6px -6px #ccc;
-      }
-
-      .ti, .tie {
-        margin-right: 4px;
       }
 
       .ui__dropdown-trigger {
@@ -124,7 +120,7 @@
       }
 
       &.sort-or-filter-by, &.more-do {
-        padding: 0 4px;
+        padding: 0 6px;
       }
 
       &.picked {
@@ -148,7 +144,7 @@
       position: relative;
 
       small.s1 {
-        left: 6px;
+        left: 8px;
         top: 6px;
       }
 
@@ -162,7 +158,7 @@
 
       .form-input {
         background-color: var(--ls-primary-background-color);
-        padding: 5px 7px 5px 22px;
+        padding: 6px 7px 5px 29px;
         opacity: .5;
 
         &:focus {
@@ -201,7 +197,7 @@
   &-item-card {
     @apply flex py-3 px-1 rounded-md;
 
-    background-color: var(--ls-secondary-background-color);
+    background-color: var(--ls-tertiary-background-color, hsl(var(--muted)));
     height: 150px;
 
     li {
@@ -609,17 +605,21 @@
 
     .cp__settings-inner {
       aside {
-        @apply max-h-[70vh] overflow-auto mb-[-17px] p-3;
+        @apply max-h-[70vh] overflow-auto p-3;
 
         ul {
           @apply list-none p-0 m-0;
 
           img.icon {
-            @apply w-[24px] h-[24px];
+            @apply w-[20px] h-[20px];
           }
 
           li {
             @apply p-1.5 rounded;
+
+            a {
+              @apply mb-0 text-gray-11;
+            }
 
             strong {
               @apply overflow-hidden text-ellipsis whitespace-nowrap;
@@ -649,11 +649,10 @@
   &-installed {
     margin: -2rem;
     outline: none;
-    padding: 1rem;
+    padding: .5rem;
 
     .it {
       user-select: none;
-      background-color: var(--ls-secondary-background-color);
       border: 1px solid transparent;
       margin-bottom: 4px;
       cursor: pointer;
@@ -663,18 +662,12 @@
         font-weight: 600;
       }
 
-      &.is-active {
-        background-color: var(--ls-tertiary-background-color);
-        border: 1px solid var(--ls-quaternary-background-color);
-        opacity: 1;
+      &:hover, &.is-active {
+        @apply opacity-100 bg-gray-06;
       }
 
       &.is-selected {
-        opacity: 1;
-      }
-
-      &:hover {
-        opacity: 1;
+        @apply opacity-100;
       }
     }
   }
@@ -862,11 +855,10 @@
       }
 
       .menu-link {
-        padding: 3px 5px;
+        @apply px-[5px] py-1.5;
 
         &.extra-item {
-          padding: 4px 15px;
-          opacity: .8;
+          @apply opacity-80 px-4 py-1.5;
 
           .title-wrap {
             margin-left: 8px !important;
@@ -880,7 +872,7 @@
 
       .item-wrap {
         padding-right: 28px;
-        font-size: 13px;
+        font-size: 14px;
         position: relative;
 
         div[data-injected-ui] :is(.ti, .tie) {
@@ -899,6 +891,16 @@
         &.pinned {
           color: var(--ls-link-ref-text-color);
           opacity: 90;
+        }
+      }
+
+      .menu-links-wrapper {
+        a {
+          @apply !text-popover-foreground/80;
+
+          &.button {
+            @apply h-auto hover:bg-transparent scale-95;
+          }
         }
       }
     }
@@ -991,7 +993,7 @@ html[data-theme='dark'] {
 .ui__modal[label=plugins-dashboard] {
   .panel-content {
     overflow-y: auto;
-    max-height: calc(100vh - 100px);
+    max-height: calc(100vh - 50px);
   }
 }
 

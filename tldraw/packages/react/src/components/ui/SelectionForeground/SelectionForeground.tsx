@@ -1,16 +1,17 @@
-import { TLResizeCorner, TLResizeEdge, TLRotateCorner } from '@tldraw/core'
+import { TLCloneDirection, TLResizeCorner, TLResizeEdge, TLRotateCorner } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import { useApp } from '../../../hooks'
 import type { TLReactShape } from '../../../lib'
 import type { TLSelectionComponentProps } from '../../../types'
 import { SVGContainer } from '../../SVGContainer'
-import { CornerHandle, EdgeHandle } from './handles'
+import { CornerHandle, EdgeHandle, CloneHandle } from './handles'
 import { RotateCornerHandle } from './handles/RotateCornerHandle'
 
 export const SelectionForeground = observer(function SelectionForeground<S extends TLReactShape>({
   bounds,
   showResizeHandles,
   showRotateHandles,
+  showCloneHandles,
   shapes,
 }: TLSelectionComponentProps<S>) {
   const app = useApp()
@@ -19,6 +20,8 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
 
   const size = 8 / zoom
   const targetSize = 6 / zoom
+  const clonePadding = 30 / zoom
+  const cloneHandleSize = size * 2
 
   const canResize = shapes.length === 1 ? shapes[0].canResize : [true, true]
 
@@ -106,6 +109,27 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
             targetSize={targetSize}
             corner={TLRotateCorner.BottomLeft}
             isHidden={!showRotateHandles}
+          />
+          <CloneHandle
+            cx={- clonePadding}
+            cy={height / 2}
+            size={cloneHandleSize}
+            direction={TLCloneDirection.Left}
+            isHidden={!showCloneHandles}
+          />
+          <CloneHandle
+            cx={width + clonePadding}
+            cy={height / 2}
+            size={cloneHandleSize}
+            direction={TLCloneDirection.Right}
+            isHidden={!showCloneHandles}
+          />
+          <CloneHandle
+            cx={width / 2}
+            cy={height + clonePadding}
+            size={cloneHandleSize}
+            direction={TLCloneDirection.Down}
+            isHidden={!showCloneHandles}
           />
           {canResize?.every(r => r) && (
             <>

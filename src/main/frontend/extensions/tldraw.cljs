@@ -7,12 +7,12 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db.model :as model]
+            [frontend.db :as db]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.history :as history]
-            [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.rum :as r]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -21,7 +21,8 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.ui :as ui]
-            [frontend.components.whiteboard :as whiteboard]))
+            [frontend.components.whiteboard :as whiteboard]
+            [cljs-bean.core :as bean]))
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
@@ -67,7 +68,7 @@
 
 (defn save-asset-handler
   [file]
-  (-> (editor-handler/save-assets! nil (state/get-current-repo) [(js->clj file)])
+  (-> (editor-handler/save-assets! (state/get-current-repo) [(js->clj file)])
       (p/then
        (fn [res]
          (when-let [[asset-file-name _ full-file-path] (and (seq res) (first res))]
@@ -79,9 +80,14 @@
          (map (fn [k] (js->clj (gobj/get props k) {:keywordize-keys true})) ["id" "className" "options"])))
 
 (rum/defc keyboard-shortcut
-  [props]
-  (let [shortcut (shortcut-helper/gen-shortcut-seq (keyword (gobj/get props "action")))]
-    (ui/render-keyboard-shortcut shortcut)))
+  [^js props]
+  (when-let [props (bean/->clj props)]
+    (let [{:keys [action shortcut opts]} props
+          shortcut (if (string? action) (ui/keyboard-shortcut-from-config (keyword action)) shortcut)
+          opts (merge {:interactive? false} opts)]
+      (cond
+        (string? shortcut) (ui/render-keyboard-shortcut shortcut opts)
+        :else (interpose " | " (map #(ui/render-keyboard-shortcut % opts) shortcut))))))
 
 (def tldraw-renderers {:Page page-cp
                        :Block block-cp
@@ -100,7 +106,10 @@
    :queryBlockByUUID (fn [block-uuid]
                        (clj->js
                         (model/query-block-by-uuid (parse-uuid block-uuid))))
-   :getBlockPageName #(:block/name (model/get-block-page (state/get-current-repo) (parse-uuid %)))
+   :getBlockPageName #(let [block-id-str %]
+                        (if (util/uuid-string? block-id-str)
+                          (:block/name (model/get-block-page (state/get-current-repo) (parse-uuid block-id-str)))
+                          (:block/name (db/entity [:block/name (util/page-name-sanity-lc block-id-str)]))))
    :exportToImage (fn [page-name options] (state/set-modal! #(export/export-blocks page-name (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))
    :isWhiteboardPage model/whiteboard-page?
    :isMobile util/mobile?
@@ -162,9 +171,9 @@
 
        (when
         (and populate-onboarding? (not loaded-app))
-         [:div.absolute.inset-0.flex.items-center.justify-center
-          {:style {:z-index 200}}
-          (ui/loading "Loading onboarding whiteboard ...")])
+        [:div.absolute.inset-0.flex.items-center.justify-center
+         {:style {:z-index 200}}
+         (ui/loading "Loading onboarding whiteboard ...")])
        (tldraw {:renderers tldraw-renderers
                 :handlers (get-tldraw-handlers page-name)
                 :onMount on-mount

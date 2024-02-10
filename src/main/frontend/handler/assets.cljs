@@ -76,8 +76,9 @@
 
                     (str "assets://" (string/replace rpath' (str "@" (:name alias)) (:dir alias)))
 
-                    (if has-schema? (path/path-join graph-root rpath)
-                        (path/path-join "file://" graph-root rpath))))]
+                    (if has-schema?
+                      (path/path-join graph-root rpath)
+                      (path/prepend-protocol "file:" (path/path-join graph-root rpath)))))]
         (convert-platform-protocol ret)))))
 
 (defn normalize-asset-resource-url
@@ -112,6 +113,19 @@
                    (some #(string/ends-with? ext %) exts))
                  (get-alias-dirs))]
       alias)))
+
+(defn get-asset-file-link
+  "Link text for inserting to markdown/org"
+  [format url file-name image?]
+  (let [pdf?   (and url (string/ends-with? (string/lower-case url) ".pdf"))
+        media? (and url (or (config/ext-of-audio? url)
+                            (config/ext-of-video? url)))]
+    (case (keyword format)
+      :markdown (util/format (str (when (or image? media? pdf?) "!") "[%s](%s)") file-name url)
+      :org (if image?
+             (util/format "[[%s]]" url)
+             (util/format "[[%s][%s]]" url file-name))
+      nil)))
 
 (comment
  (normalize-asset-resource-url "https://x.com/a.pdf")

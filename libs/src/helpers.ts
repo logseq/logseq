@@ -2,7 +2,7 @@ import { SettingSchemaDesc, StyleString, UIOptions } from './LSPlugin'
 import { PluginLocal } from './LSPlugin.core'
 import * as nodePath from 'path'
 import DOMPurify from 'dompurify'
-import { merge } from 'lodash-es'
+import merge from 'deepmerge'
 import { snakeCase } from 'snake-case'
 import * as callables from './callable.apis'
 import EventEmitter from 'eventemitter3'
@@ -52,7 +52,10 @@ export function isObject(item: any) {
   return item === Object(item) && !Array.isArray(item)
 }
 
-export const deepMerge = merge
+export function deepMerge<T>(a: Partial<T>, b: Partial<T>): T {
+  const overwriteArrayMerge = (destinationArray, sourceArray) => sourceArray
+  return merge(a, b, { arrayMerge: overwriteArrayMerge })
+}
 
 export class PluginLogger extends EventEmitter<'change'> {
   private _logs: Array<[type: string, payload: any]> = []
@@ -67,7 +70,7 @@ export class PluginLogger extends EventEmitter<'change'> {
   }
 
   write(type: string, payload: any[], inConsole?: boolean) {
-    if (payload?.length && (true === payload[payload.length - 1])) {
+    if (payload?.length && true === payload[payload.length - 1]) {
       inConsole = true
       payload.pop()
     }
@@ -117,9 +120,13 @@ export class PluginLogger extends EventEmitter<'change'> {
 }
 
 export function isValidUUID(s: string) {
-  return (typeof s === 'string' &&
-    (s.length === 36) &&
-    (/^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/gi).test(s))
+  return (
+    typeof s === 'string' &&
+    s.length === 36 &&
+    /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/gi.test(
+      s
+    )
+  )
 }
 
 export function genID() {
@@ -204,12 +211,23 @@ export function deferred<T = any>(timeout?: number, tag?: string) {
 
 export function invokeHostExportedApi(method: string, ...args: Array<any>) {
   method = method?.startsWith('_call') ? method : method?.replace(/^[_$]+/, '')
-  const method1 = safeSnakeCase(method)
+  let method1 = safeSnakeCase(method)
+
+  // @ts-ignore
+  const nsSDK = window.logseq?.sdk
+  const supportedNS = nsSDK && Object.keys(nsSDK)
+  let nsTarget = {}
+  const ns0 = method1?.split('_')?.[0]
+
+  if (ns0 && supportedNS.includes(ns0)) {
+    method1 = method1.replace(new RegExp(`^${ns0}_`), '')
+    nsTarget = nsSDK?.[ns0]
+  }
 
   const logseqHostExportedApi = Object.assign(
     // @ts-ignore
-    window.logseq?.api || {},
-    callables
+    {}, window.logseq?.api,
+    nsTarget, callables
   )
 
   const fn =
@@ -306,7 +324,7 @@ export function setupInjectedUI(
     console.error(
       `${this.debugTag} can not resolve selector target ${selector}`
     )
-    return
+    return false
   }
 
   if (ui.template) {
@@ -424,7 +442,7 @@ export function setupInjectedUI(
     'keydown',
     'change',
     'input',
-    'contextmenu'
+    'contextmenu',
   ].forEach((type) => {
     el.addEventListener(
       type,
@@ -435,7 +453,8 @@ export function setupInjectedUI(
 
         const { preventDefault } = trigger.dataset
         const msgType = trigger.dataset[`on${ucFirst(type)}`]
-        if (msgType) pl.caller?.callUserModel(msgType, transformableEvent(trigger, e))
+        if (msgType)
+          pl.caller?.callUserModel(msgType, transformableEvent(trigger, e))
         if (preventDefault?.toLowerCase() === 'true') e.preventDefault()
       },
       false
@@ -455,12 +474,12 @@ export function setupInjectedUI(
   return teardownUI
 }
 
-export function cleanInjectedUI(
-  id: string
-) {
+export function cleanInjectedUI(id: string) {
   if (!injectedUIEffects.has(id)) return
   const clean = injectedUIEffects.get(id)
-  try { clean() } catch (e) {
+  try {
+    clean()
+  } catch (e) {
     console.warn('[CLEAN Injected UI] ', id, e)
   }
 }
@@ -533,4 +552,9 @@ export function mergeSettingsWithSchema(
 
   // shadow copy
   return Object.assign(defaults, settings)
+}
+
+export function normalizeKeyStr(s: string) {
+  if (typeof s !== 'string') return
+  return s.trim().replace(/\s/g, '_').toLowerCase()
 }

@@ -400,47 +400,47 @@
   resolved "https://registry.yarnpkg.com/@gar/promisify/-/promisify-1.1.3.tgz#555193ab2e3bb3b6adc3d551c9c030d9e860daf6"
   integrity sha512-k2Ty1JcVojjJFwrg/ThKi2ujJ7XNLYaFGNB/bWT9wGR+oSMJHMa5w+CUq6p/pVrKeNNgA7pCqEcjSnHVoqJQFw==
 
-"@logseq/rsapi-darwin-arm64@0.0.73":
-  version "0.0.73"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-darwin-arm64/-/rsapi-darwin-arm64-0.0.73.tgz#4753f05e2dc70f37a31dfb7440e9b2601acb7696"
-  integrity sha512-TvFwh3/fnwRAZwourk1UUgptcNN7FqmOcL07F373M2rWhTIOba/u1eBwjW9wNMRcXtgLWacaXzBmC4ENvAKDpg==
+"@logseq/rsapi-darwin-arm64@0.0.81":
+  version "0.0.81"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-darwin-arm64/-/rsapi-darwin-arm64-0.0.81.tgz#1ac2660fb54d313e6aa8553c75e3b31415356e4f"
+  integrity sha512-f6Npp9kUWC0nV9g6THWl60VrVbWRuQjsixYBq8a0/4MwruHamFqauVWkCk4iUNw6htw8wZfHVHUIgiwAg3hibw==
 
-"@logseq/rsapi-darwin-x64@0.0.73":
-  version "0.0.73"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-darwin-x64/-/rsapi-darwin-x64-0.0.73.tgz#44180532e3ccf62a7fe597e385ee85a700b14bea"
-  integrity sha512-tnOSgQ1qgerwDTnR5v1TMbHnVXVabzZf9i3bxon0y9ItwlIY7j7OW80+1AfNoHu9Fbo/e+3bFg5Muq3/Gm7Yrw==
+"@logseq/rsapi-darwin-x64@0.0.81":
+  version "0.0.81"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-darwin-x64/-/rsapi-darwin-x64-0.0.81.tgz#8879b16db494cc67902a21eb5136d67b9bba6141"
+  integrity sha512-LTqyXSpbWJlAAJ8NtNzT/t+8gL/wgU+PXFtw8VAwD9TrsKl8I+gjzmTJf0Y6Ej8BACRGTusyelh7BAGoeLKHqg==
 
-"@logseq/rsapi-freebsd-x64@0.0.73":
-  version "0.0.73"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-freebsd-x64/-/rsapi-freebsd-x64-0.0.73.tgz#3ff4f720eb05d9ffd32a5391ddf33034a05f42e0"
-  integrity sha512-YAjggQHzVCZYhXDybR/37Y5czTQbYDE5A5piwsg09Xt4/m5REFSVKqdeQpnOb2LX7wBGbnPxMhsg6QUV/y/eHA==
+"@logseq/rsapi-freebsd-x64@0.0.81":
+  version "0.0.81"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-freebsd-x64/-/rsapi-freebsd-x64-0.0.81.tgz#99d7c8de99f8ffa9b4fd33d972fda971d137298c"
+  integrity sha512-e+MAt8K0uztIk7FtAHRsKFX9bqqBr2zJEZBCMUnguBB9ezx/dCF2OJXPB38Aw6Is8lJcfb8ZxewJj0AsIwBPJw==
 
-"@logseq/rsapi-linux-arm64-gnu@0.0.73":
-  version "0.0.73"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-linux-arm64-gnu/-/rsapi-linux-arm64-gnu-0.0.73.tgz#1f423e296ca69e6e92a06afbb25f9f2f0e452b69"
-  integrity sha512-t5W9SBraKYU2iGPzBgUhSzVPtH98RwuE1tLW2MpAJh0QNb2DI4/axbc9nrC1IVc1dqAmTkuL8GGGN80VONisUA==
+"@logseq/rsapi-linux-arm64-gnu@0.0.81":
+  version "0.0.81"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-linux-arm64-gnu/-/rsapi-linux-arm64-gnu-0.0.81.tgz#9de9bf394dfdc26545a4537506f8498a5cc06fdd"
+  integrity sha512-m5H1xFcovCbp2fs47dICxA5pZCQUV0t5lJfeHZjNsYniXKADIdEry9U6jef8GTAI73ABXTpjQ3L1oq2W7QsmBA==
 
-"@logseq/rsapi-linux-x64-gnu@0.0.73":
-  version "0.0.73"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-linux-x64-gnu/-/rsapi-linux-x64-gnu-0.0.73.tgz#d33e621d7ea24089a9b863809e6dfbe4362443d5"
-  integrity sha512-WidDZv4mnG6Ys90KYLzJl0fwMWj/kEItGHjfR3FoDAVKkvu3mezNDWCsd+I2kMrh1dlIpPqcP+BJ9evI4Gbwkw==
+"@logseq/rsapi-linux-x64-gnu@0.0.81":
+  version "0.0.81"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-linux-x64-gnu/-/rsapi-linux-x64-gnu-0.0.81.tgz#f5a090fa34892cd7ec2ea81fcf67b4f4fb1e9ade"
+  integrity sha512-QW7QRkkaB9CUP4tgbv2hUbSBd/wTd5FWSg+qoKe/k0hydtaD6JsP1uMQuTdkvwxbi8735PMvuB4Q5p01+cGpRQ==
 
-"@logseq/rsapi-win32-x64-msvc@0.0.73":
-  version "0.0.73"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-win32-x64-msvc/-/rsapi-win32-x64-msvc-0.0.73.tgz#7734187c1b56da6373c947680a65b21551134bec"
-  integrity sha512-YQTE4ZMtlrbuDVfD/6DWtnsiC2uUZpNDqcy6LIN6Ui98yeZ88ktOsEV/lQJF4+4cAflrzW7Xr8ejl2SWSdX6EQ==
+"@logseq/rsapi-win32-x64-msvc@0.0.81":
+  version "0.0.81"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-win32-x64-msvc/-/rsapi-win32-x64-msvc-0.0.81.tgz#baa0f4ac5978ed27d3771a01f7b4ee7cc5bfd15d"
+  integrity sha512-hTdE8H6URdN0Y6B2gEnCDeEFDlgpEMydvnCDiJEOBNugsuue0AGB5phGn/DaxQ7t9S1KH+YPBRzxb+oPU6hMrQ==
 
-"@logseq/rsapi@0.0.73":
-  version "0.0.73"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi/-/rsapi-0.0.73.tgz#b02fc017bb12df3afa0fce60ba13e1b01bbf4342"
-  integrity sha512-ppQCCzc1pAgqlxkYg2CprcU5RTz01fWqba9lhEVg2FpeF9l8IVVCXhbBIUnWPEFTqkoySiwXpMU8kbkTgvEPIg==
+"@logseq/rsapi@0.0.81":
+  version "0.0.81"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi/-/rsapi-0.0.81.tgz#665b3a87a2bca08b2755865c9cc9d5e584b17e8d"
+  integrity sha512-tzUk2y9TVJlY6ZlA6tSDOQ+/n2bdbrNPX+A7SintnJXhsyJLXhszLcnWJU1dIj2pf7pcAcYoPv1aZYfp4re5qw==
   optionalDependencies:
-    "@logseq/rsapi-darwin-arm64" "0.0.73"
-    "@logseq/rsapi-darwin-x64" "0.0.73"
-    "@logseq/rsapi-freebsd-x64" "0.0.73"
-    "@logseq/rsapi-linux-arm64-gnu" "0.0.73"
-    "@logseq/rsapi-linux-x64-gnu" "0.0.73"
-    "@logseq/rsapi-win32-x64-msvc" "0.0.73"
+    "@logseq/rsapi-darwin-arm64" "0.0.81"
+    "@logseq/rsapi-darwin-x64" "0.0.81"
+    "@logseq/rsapi-freebsd-x64" "0.0.81"
+    "@logseq/rsapi-linux-arm64-gnu" "0.0.81"
+    "@logseq/rsapi-linux-x64-gnu" "0.0.81"
+    "@logseq/rsapi-win32-x64-msvc" "0.0.81"
 
 "@malept/cross-spawn-promise@^1.0.0", "@malept/cross-spawn-promise@^1.1.0":
   version "1.1.1"
@@ -757,6 +757,13 @@ agent-base@6, agent-base@^6.0.2:
   dependencies:
     debug "4"
 
+agent-base@^7.0.2:
+  version "7.1.0"
+  resolved "https://registry.yarnpkg.com/agent-base/-/agent-base-7.1.0.tgz#536802b76bc0b34aa50195eb2442276d613e3434"
+  integrity sha512-o/zjMZRhJxny7OyEF+Op8X+efiELC7k7yOjMzgfzVqOzXqkBkWI79YoTdOtsuWd5BWhAGAuOY/Xa6xpiaWXiNg==
+  dependencies:
+    debug "^4.3.4"
+
 agentkeepalive@^4.2.1:
   version "4.2.1"
   resolved "https://registry.yarnpkg.com/agentkeepalive/-/agentkeepalive-4.2.1.tgz#a7975cbb9f83b367f06c90cc51ff28fe7d499717"
@@ -1061,13 +1068,13 @@ base64-js@^1.3.1, base64-js@^1.5.1:
   resolved "https://registry.yarnpkg.com/base64-js/-/base64-js-1.5.1.tgz#1b1b440160a5bf7ad40b650f095963481903930a"
   integrity sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==
 
-better-sqlite3@8.0.1:
-  version "8.0.1"
-  resolved "https://registry.yarnpkg.com/better-sqlite3/-/better-sqlite3-8.0.1.tgz#3a596d21fbcefadf36f94e126c5cf24d5697d0b8"
-  integrity sha512-JhTZjpyapA1icCEjIZB4TSSgkGdFgpWZA2Wszg7Cf4JwJwKQmbvuNnJBeR+EYG/Z29OXvR4G//Rbg31BW/Z7Yg==
+better-sqlite3@9.3.0:
+  version "9.3.0"
+  resolved "https://registry.yarnpkg.com/better-sqlite3/-/better-sqlite3-9.3.0.tgz#2a8aaad65fa0210a4df5e8a0bcbc9156f6138d56"
+  integrity sha512-ww73jVpQhRRdS9uMr761ixlkl4bWoXi8hMQlBGhoN6vPNlUHpIsNmw4pKN6kjknlt/wopdvXHvLk1W75BI+n0Q==
   dependencies:
     bindings "^1.5.0"
-    prebuild-install "^7.1.0"
+    prebuild-install "^7.1.1"
 
 binary-extensions@^2.0.0:
   version "2.2.0"
@@ -2086,10 +2093,10 @@ electron-winstaller@^5.0.0:
     lodash.template "^4.2.2"
     temp "^0.9.0"
 
-electron@*, electron@24.6.3:
-  version "24.6.3"
-  resolved "https://registry.yarnpkg.com/electron/-/electron-24.6.3.tgz#fc41279a5ec7b0aa3d48128df61fa29ca8a21199"
-  integrity sha512-hWy2ot0987DRzhOxIyv9tgybd0yrAcc9MRFYZ+znjXgdmbvcSveXdcGKGdtpgw1EW/TKUonJMH3VfDNeAmdPUg==
+electron@*, electron@27.1.3:
+  version "27.1.3"
+  resolved "https://registry.yarnpkg.com/electron/-/electron-27.1.3.tgz#3fd6decda95c1dd0a7e51a9ac77ee0ba37b7c5c6"
+  integrity sha512-7eD8VMhhlL5J531OOawn00eMthUkX1e3qN5Nqd7eMK8bg5HxQBrn8bdPlvUEnCano9KhrVwaDnGeuzWoDOGpjQ==
   dependencies:
     "@electron/get" "^2.0.0"
     "@types/node" "^18.11.18"
@@ -2840,12 +2847,12 @@ http2-wrapper@^1.0.0-beta.5.2:
     quick-lru "^5.1.1"
     resolve-alpn "^1.0.0"
 
-https-proxy-agent@5.0.0:
-  version "5.0.0"
-  resolved "https://registry.yarnpkg.com/https-proxy-agent/-/https-proxy-agent-5.0.0.tgz#e2a90542abb68a762e0a0850f6c9edadfd8506b2"
-  integrity sha512-EkYm5BcKUGiduxzSt3Eppko+PiNWNEpa4ySk9vTC6wDsQJW9rHSa+UhGNJoRYp7bz6Ht1eaRIa6QaJqO5rCFbA==
+https-proxy-agent@7.0.2:
+  version "7.0.2"
+  resolved "https://registry.yarnpkg.com/https-proxy-agent/-/https-proxy-agent-7.0.2.tgz#e2645b846b90e96c6e6f347fb5b2e41f1590b09b"
+  integrity sha512-NmLNjm6ucYwtcUmL7JQC1ZQ57LmHP4lT15FQ8D61nak1rO6DH+fz5qNK2Ap5UN4ZapYICE3/0KodcLYSPsPbaA==
   dependencies:
-    agent-base "6"
+    agent-base "^7.0.2"
     debug "4"
 
 https-proxy-agent@^5.0.0:
@@ -3627,10 +3634,10 @@ nice-try@^1.0.4:
   resolved "https://registry.yarnpkg.com/nice-try/-/nice-try-1.0.5.tgz#a3378a7696ce7d223e88fc9b764bd7ef1089e366"
   integrity sha512-1nh45deeb5olNY7eX82BkPO7SSxR5SSYJiPTrTdFUVYwAl8CKMA5N9PjTYkHiRjisVcxcQ1HXdLhx2qxxJzLNQ==
 
-node-abi@^3.0.0, node-abi@^3.3.0:
-  version "3.40.0"
-  resolved "https://registry.npmjs.org/node-abi/-/node-abi-3.40.0.tgz#51d8ed44534f70ff1357dfbc3a89717b1ceac1b4"
-  integrity sha512-zNy02qivjjRosswoYmPi8hIKJRr8MpQyeKT6qlcq/OnOgA3Rhoae+IYOqsM9V5+JnHWmxKnWOT2GxvtqdtOCXA==
+node-abi@3.51.0, node-abi@^3.0.0, node-abi@^3.3.0:
+  version "3.51.0"
+  resolved "https://registry.yarnpkg.com/node-abi/-/node-abi-3.51.0.tgz#970bf595ef5a26a271307f8a4befa02823d4e87d"
+  integrity sha512-SQkEP4hmNWjlniS5zdnfIXTk1x7Ome85RDzHlTbBtzE97Gfwz/Ipw4v/Ryk20DWIy3yCNVLVlGKApCnmvYoJbA==
   dependencies:
     semver "^7.3.5"
 
@@ -4027,7 +4034,7 @@ posthog-js@1.10.2:
   dependencies:
     fflate "^0.4.1"
 
-prebuild-install@^7.1.0:
+prebuild-install@^7.1.1:
   version "7.1.1"
   resolved "https://registry.yarnpkg.com/prebuild-install/-/prebuild-install-7.1.1.tgz#de97d5b34a70a0c81334fd24641f2a1702352e45"
   integrity sha512-jAXscXWMcCK8GgCoHOfIr0ODh5ai8mj63L2nWrjuAgXE6tDyYGnx4/8o/rCgU+B4JSyZBKbeZqzhtwtC3ovxjw==
@@ -4444,10 +4451,10 @@ semver-diff@^3.1.1:
   resolved "https://registry.yarnpkg.com/semver/-/semver-5.7.1.tgz#a954f931aeba508d307bbf069eff0c01c96116f7"
   integrity sha512-sauaDf/PZdVgrLTNYHRtpXa1iRiKcaebiKQ1BJdpQlWH2lCvexQdX55snPFyK7QzpudqbCI0qXFfOasHdyNDGQ==
 
-semver@7.3.5:
-  version "7.3.5"
-  resolved "https://registry.yarnpkg.com/semver/-/semver-7.3.5.tgz#0b621c879348d8998e4b0e4be94b3f12e6018ef7"
-  integrity sha512-PoeGJYh8HK4BTO/a9Tf6ZG3veo/A7ZVsYrSA6J8ny9nb3B1VrpkuN+z9OE5wfE5p6H4LchYZsegiQgbJD94ZFQ==
+semver@7.5.2:
+  version "7.5.2"
+  resolved "https://registry.npmjs.org/semver/-/semver-7.5.2.tgz#5b851e66d1be07c1cdaf37dfc856f543325a2beb"
+  integrity sha512-SoftuTROv/cRjCze/scjGyiDtcUyxw1rgYQSZY7XTmtR5hX+dm76iDbTH8TkLPHCQmlbQVSSbNZCPM2hb0knnQ==
   dependencies:
     lru-cache "^6.0.0"
 
@@ -4553,6 +4560,15 @@ smart-buffer@^4.0.2, smart-buffer@^4.2.0:
   resolved "https://registry.yarnpkg.com/smart-buffer/-/smart-buffer-4.2.0.tgz#6e1d71fa4f18c05f7d0ff216dd16a481d0e8d9ae"
   integrity sha512-94hK0Hh8rPqQl2xXc3HsaBoOXKV20MToPkcXvwbISWLEs+64sBq5kFgn2kJDHb1Pry9yrP0dxrCI9RRci7RXKg==
 
+socks-proxy-agent@8.0.2:
+  version "8.0.2"
+  resolved "https://registry.yarnpkg.com/socks-proxy-agent/-/socks-proxy-agent-8.0.2.tgz#5acbd7be7baf18c46a3f293a840109a430a640ad"
+  integrity sha512-8zuqoLv1aP/66PHF5TqwJ7Czm3Yv32urJQHrVyhD7mmA6d61Zv8cIXQYPTWwmg6qlupnPvs/QKDmfa4P/qct2g==
+  dependencies:
+    agent-base "^7.0.2"
+    debug "^4.3.4"
+    socks "^2.7.1"
+
 socks-proxy-agent@^7.0.0:
   version "7.0.0"
   resolved "https://registry.yarnpkg.com/socks-proxy-agent/-/socks-proxy-agent-7.0.0.tgz#dc069ecf34436621acb41e3efa66ca1b5fed15b6"
@@ -4566,6 +4582,14 @@ socks@^2.6.2:
   version "2.7.0"
   resolved "https://registry.yarnpkg.com/socks/-/socks-2.7.0.tgz#f9225acdb841e874dca25f870e9130990f3913d0"
   integrity sha512-scnOe9y4VuiNUULJN72GrM26BNOjVsfPXI+j+98PkyEfsIXroa5ofyjT+FzGvn/xHs73U2JtoBYAVx9Hl4quSA==
+  dependencies:
+    ip "^2.0.0"
+    smart-buffer "^4.2.0"
+
+socks@^2.7.1:
+  version "2.7.1"
+  resolved "https://registry.yarnpkg.com/socks/-/socks-2.7.1.tgz#d8e651247178fde79c0663043e07240196857d55"
+  integrity sha512-7maUZy1N7uo6+WVEX6psASxtNlKaNVMlGQKkG/63nEDdLOWNbiUMoLK7X4uYoLhQstau72mLgfEWcXcwsaHbYQ==
   dependencies:
     ip "^2.0.0"
     smart-buffer "^4.2.0"

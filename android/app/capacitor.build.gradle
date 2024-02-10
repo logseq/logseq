@@ -2,8 +2,8 @@
 
 android {
   compileOptions {
-      sourceCompatibility JavaVersion.VERSION_11
-      targetCompatibility JavaVersion.VERSION_11
+      sourceCompatibility JavaVersion.VERSION_17
+      targetCompatibility JavaVersion.VERSION_17
   }
 }
 
@@ -19,7 +19,7 @@ dependencies {
     implementation project(':capacitor-splash-screen')
     implementation project(':capacitor-status-bar')
     implementation project(':capawesome-capacitor-background-task')
-    implementation project(':hugotomazi-capacitor-navigation-bar')
+    implementation project(':capgo-capacitor-navigation-bar')
     implementation project(':logseq-capacitor-file-sync')
     implementation project(':capacitor-voice-recorder')
     implementation project(':send-intent')
