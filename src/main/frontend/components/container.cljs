@@ -105,9 +105,10 @@
                                  {:on-click #(page-handler/unfavorite-page! original-name)}
                                  (ctx-icon "star-off")
                                  (t :page/unfavorite)
-                                 (x-menu-shortcut (some-> (shortcut-dh/shortcut-binding :command/toggle-favorite) (first)
-                                                               (shortcut-utils/decorate-binding)))))
-
+                                 (x-menu-shortcut (when-let [binding (shortcut-dh/shortcut-binding :command/toggle-favorite)]
+                                                    (some-> binding
+                                                            (first)
+                                                            (shortcut-utils/decorate-binding))))))
                              (when-let [page-fpath (and (util/electron?) file-rpath
                                                      (config/get-repo-fpath (state/get-current-repo) file-rpath))]
                                [:<>
