@@ -189,7 +189,7 @@
                                              :file/content content}))
                                   (p/then (fn [m]
                                             ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
-                                            (let [{:keys [tx-report]}
+                                            (let [tx-report
                                                   (gp-exporter/add-file-to-db-graph
                                                    db-conn
                                                    (:file/path m)
