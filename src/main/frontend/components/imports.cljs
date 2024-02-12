@@ -29,7 +29,7 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.graph-parser :as graph-parser]
+            [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.core :as outliner-core]
             [medley.core :as medley]
             [promesa.core :as p]
@@ -190,7 +190,7 @@
                                   (p/then (fn [m]
                                             ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
                                             (let [{:keys [tx-report]}
-                                                  (graph-parser/import-file-to-db-graph
+                                                  (gp-exporter/add-file-to-db-graph
                                                    db-conn
                                                    (:file/path m)
                                                    (:file/content m)
