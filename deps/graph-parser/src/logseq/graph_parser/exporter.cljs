@@ -160,55 +160,47 @@
 * :extract-options - Options map to pass to extract/extract
 * :user-options - User provided options that alter how a file is converted to db graph
 * :page-tags-uuid - uuid of pageTags property"
-  [conn file content {:keys [extract-options user-options page-tags-uuid]
-                      :as options}]
+  [conn file content {:keys [extract-options user-options page-tags-uuid]}]
   (let [format (common-util/get-format file)
         tag-classes (set (map string/lower-case (:tag-classes user-options)))
-        {:keys [tx ast]}
-        (let [extract-options' (merge {:block-pattern (common-config/get-block-pattern format)
-                                       :date-formatter "MMM do, yyyy"
-                                       :uri-encoded? false
-                                       :db-graph-mode? true
-                                       :filename-format :legacy}
-                                      extract-options
-                                      {:db @conn})
-              {:keys [pages blocks ast refs]
-               :or   {pages []
-                      blocks []
-                      ast []}}
-              (cond (contains? common-config/mldoc-support-formats format)
-                    (extract/extract file content extract-options')
+        extract-options' (merge {:block-pattern (common-config/get-block-pattern format)
+                                 :date-formatter "MMM do, yyyy"
+                                 :uri-encoded? false
+                                 :db-graph-mode? true
+                                 :filename-format :legacy}
+                                extract-options
+                                {:db @conn})
+        {:keys [refs] :as extracted}
+        (cond (contains? common-config/mldoc-support-formats format)
+              (extract/extract file content extract-options')
 
-                    (common-config/whiteboard? file)
-                    (extract/extract-whiteboard-edn file content extract-options')
+              (common-config/whiteboard? file)
+              (extract/extract-whiteboard-edn file content extract-options')
 
-                    :else
-                    (println "Skipped file since its format is not supported:" file))
-              ;; Build page and block txs
-              pages (build-pages-tx conn pages blocks tag-classes page-tags-uuid)
-              whiteboard-pages (->> pages
-                                    (filter #(= "whiteboard" (:block/type %)))
-                                    (map (fn [page-block]
-                                           (-> page-block
-                                               (assoc :block/journal? false
-                                                      :block/format :markdown
+              :else
+              (println "Skipped file since its format is not supported:" file))
+        ;; Build page and block txs
+        pages (build-pages-tx conn (:pages extracted) (:blocks extracted) tag-classes page-tags-uuid)
+        whiteboard-pages (->> pages
+                              (filter #(= "whiteboard" (:block/type %)))
+                              (map (fn [page-block]
+                                     (-> page-block
+                                         (assoc :block/journal? false
+                                                :block/format :markdown
                                                       ;; fixme: missing properties
-                                                      :block/properties {(get-pid @conn :ls-type) :whiteboard-page})))))
-              blocks (map #(update-imported-block conn % tag-classes) blocks)
-              ;; Build indices
-              pages-index (map #(select-keys % [:block/name]) pages)
-              block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
-              block-refs-ids (->> (mapcat :block/refs blocks)
-                                  (filter (fn [ref] (and (vector? ref)
-                                                         (= :block/uuid (first ref)))))
-                                  (map (fn [ref] {:block/uuid (second ref)}))
-                                  (seq))
-              ;; To prevent "unique constraint" on datascript
-              block-ids (set/union (set block-ids) (set block-refs-ids))]
-
-          {:tx (concat refs whiteboard-pages pages-index pages block-ids blocks)
-           :ast ast})
+                                                :block/properties {(get-pid @conn :ls-type) :whiteboard-page})))))
+        blocks (map #(update-imported-block conn % tag-classes) (:blocks extracted))
+        ;; Build indices
+        pages-index (map #(select-keys % [:block/name]) pages)
+        block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
+        block-refs-ids (->> (mapcat :block/refs blocks)
+                            (filter (fn [ref] (and (vector? ref)
+                                                   (= :block/uuid (first ref)))))
+                            (map (fn [ref] {:block/uuid (second ref)}))
+                            (seq))
+        ;; To prevent "unique constraint" on datascript
+        block-ids (set/union (set block-ids) (set block-refs-ids))
+        tx (concat refs whiteboard-pages pages-index pages block-ids blocks)
         tx' (common-util/fast-remove-nils tx)
-        result (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?]))]
-    {:tx-report result
-     :ast ast}))
+        result (d/transact! conn tx')]
+    result))

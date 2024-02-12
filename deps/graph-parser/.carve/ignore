@@ -22,3 +22,5 @@ logseq.graph-parser.block/extract-refs-from-text
 logseq.graph-parser.text/get-page-name
 ;; API
 logseq.graph-parser.whiteboard/shape->block
+;; API
+logseq.graph-parser.exporter/add-file-to-db-graph
