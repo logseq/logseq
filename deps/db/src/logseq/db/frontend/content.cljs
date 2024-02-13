@@ -34,6 +34,22 @@
    content
    refs))
 
+(defn page-ref->special-id-ref
+  "Convert page ref to special id refs e.g. `[[page name]] -> [[~^...]]"
+  [content refs]
+  (reduce
+   (fn [content ref]
+     (string/replace content
+                     (str page-ref/left-brackets
+                          (:block/original-name ref)
+                          page-ref/right-brackets)
+                     (str page-ref/left-brackets
+                          page-ref-special-chars
+                          (:block/uuid ref)
+                          page-ref/right-brackets)))
+   content
+   refs))
+
 (defn update-block-content
   "Replace `[[internal-id]]` with `[[page name]]`"
   [repo db item eid]
@@ -65,10 +81,8 @@
      (string/replace content
                      (str "#" (:block/original-name tag))
                      (str page-ref/left-brackets
-                                ;; TODO: Use uuid when it becomes available
-                                ;; page-ref-special-chars
-                                ;; (:block/uuid tag)
-                          (:block/original-name tag)
+                          page-ref-special-chars
+                          (:block/uuid tag)
                           page-ref/right-brackets)))
    content
    tags))

@@ -50,8 +50,16 @@
         (assoc :block/properties {page-tags-uuid page-tags})))
     block))
 
+(defn- add-uuid-to-page-map [m page-names-to-uuids]
+  (assoc m
+         :block/uuid
+         (or (get page-names-to-uuids (:block/name m))
+             (throw (ex-info (str "No uuid found for page " (pr-str (:block/name m)))
+                             {:page m})))))
+
+
 (defn- update-block-tags
-  [block tag-classes]
+  [block tag-classes page-names-to-uuids]
   (if (seq (:block/tags block))
     (-> block
         (update :block/content
@@ -61,8 +69,9 @@
                      (map :block/original-name)))
         (update :block/content
                 db-content/replace-tags-with-page-refs
-                (remove #(tag-classes (:block/name %))
-                        (:block/tags block)))
+                (->> (:block/tags block)
+                     (remove #(tag-classes (:block/name %)))
+                     (map #(add-uuid-to-page-map % page-names-to-uuids))))
         (update :block/tags
                 (fn [tags]
                   (keep #(when (contains? tag-classes (:block/name %))
@@ -76,8 +85,8 @@
                         tags))))
     block))
 
-(defn- update-imported-block
-  [conn block tag-classes]
+(defn- convert-to-db-block
+  [conn block tag-classes page-names-to-uuids]
   (prn ::block block)
   (let [remove-keys (fn [m pred] (into {} (remove (comp pred key) m)))]
     (-> block
@@ -106,16 +115,25 @@
                                                new-key
                                                k)))
                               (remove-keys keyword?)))))))
-        (update-block-tags tag-classes)
+        (update-block-tags tag-classes page-names-to-uuids)
         ((fn [block']
            (if (seq (:block/refs block'))
-             (update block' :block/refs
-                     (fn [refs]
-                       (mapv (fn [ref]
-                               (if (and (vector? ref) (= :block/uuid (first ref)))
-                                 ref
-                                 (assoc ref :block/format :markdown)))
-                             refs)))
+             (cond-> block'
+               true
+               (update :block/refs
+                       (fn [refs]
+                         (mapv (fn [ref]
+                                 (if (and (vector? ref) (= :block/uuid (first ref)))
+                                   ref
+                                   (assoc ref :block/format :markdown)))
+                               refs)))
+               ;; check for now until :block/pre-block? is removed
+               (:block/content block')
+               (update :block/content
+                       db-content/page-ref->special-id-ref
+                       (->> (:block/refs block)
+                            (remove #(and (vector? %) (= :block/uuid (first %))))
+                            (map #(add-uuid-to-page-map % page-names-to-uuids)))))
              block')))
         add-missing-timestamps
         ;; FIXME: Remove when properties are supported
@@ -135,8 +153,8 @@
         existing-pages (keep #(d/entity @conn [:block/name (:block/name %)]) all-pages)
         existing-page-names (set (map :block/name existing-pages))
         new-pages (remove #(contains? existing-page-names (:block/name %)) all-pages)
-        names-uuids (into {} (map (juxt :block/name :block/uuid)
-                                  (concat new-pages existing-pages)))
+        page-names-to-uuids (into {} (map (juxt :block/name :block/uuid)
+                                          (concat new-pages existing-pages)))
         pages (map #(-> (merge {:block/journal? false} %)
                               ;; Fix pages missing :block/original-name. Shouldn't happen
                         ((fn [m]
@@ -150,9 +168,10 @@
                                 :block/whiteboard?)
                         ;; FIXME: Remove when properties are supported
                         (assoc :block/properties {})
-                        (update-page-tags tag-classes names-uuids page-tags-uuid))
+                        (update-page-tags tag-classes page-names-to-uuids page-tags-uuid))
                    new-pages)]
-                   pages))
+    {:pages pages
+     :page-names-to-uuids page-names-to-uuids}))
 
 (defn add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
@@ -180,7 +199,8 @@
               :else
               (println "Skipped file since its format is not supported:" file))
         ;; Build page and block txs
-        pages (build-pages-tx conn (:pages extracted) (:blocks extracted) tag-classes page-tags-uuid)
+        {:keys [pages page-names-to-uuids]}
+        (build-pages-tx conn (:pages extracted) (:blocks extracted) tag-classes page-tags-uuid)
         whiteboard-pages (->> pages
                               (filter #(= "whiteboard" (:block/type %)))
                               (map (fn [page-block]
@@ -189,7 +209,7 @@
                                                 :block/format :markdown
                                                       ;; fixme: missing properties
                                                 :block/properties {(get-pid @conn :ls-type) :whiteboard-page})))))
-        blocks (map #(update-imported-block conn % tag-classes) (:blocks extracted))
+        blocks (map #(convert-to-db-block conn % tag-classes page-names-to-uuids) (:blocks extracted))
         ;; Build indices
         pages-index (map #(select-keys % [:block/name]) pages)
         block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
