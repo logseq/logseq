@@ -198,7 +198,11 @@
                                                     :user-options user-options
                                                     :page-tags-uuid page-tags-uuid})]
                                               (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report)))
-                                            m)))))
+                                            m))
+                                  (p/catch (fn [error]
+                                             (notification/show! (str "Import failed on " (pr-str rpath) " with error:\n" error)
+                                                                 :error)
+                                             (log/error :import-error {:path rpath :error error}))))))
               (recur))
             (async/offer! imported-chan true))))
       (catch :default e
