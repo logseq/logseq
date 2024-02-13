@@ -85,10 +85,52 @@
                         tags))))
     block))
 
+(defn- update-block-refs [block page-names-to-uuids {:keys [whiteboard?]}]
+  (let [ref-to-ignore? (if whiteboard?
+                         #(and (map? %) (:block/uuid %))
+                         #(and (vector? %) (= :block/uuid (first %))))]
+    (if (seq (:block/refs block))
+      (cond-> block
+        true
+        (update :block/refs
+                (fn [refs]
+                  (mapv (fn [ref]
+                          (if (ref-to-ignore? ref)
+                            ref
+                            (assoc ref :block/format :markdown)))
+                        refs)))
+       ;; check for now until :block/pre-block? is removed
+        (:block/content block)
+        (update :block/content
+                db-content/page-ref->special-id-ref
+               ;; TODO: Handle refs for whiteboard block which has none
+                (->> (:block/refs block)
+                     (remove ref-to-ignore?)
+                     (map #(add-uuid-to-page-map % page-names-to-uuids)))))
+      block)))
+
+(defn- update-block-properties [props db page-names-to-uuids {:keys [whiteboard?]}]
+  (let [prop-name->uuid (if whiteboard?
+                          (fn prop-name->uuid [k]
+                            (or (get-pid db k)
+                                (throw (ex-info (str "No uuid found for page " (pr-str k))
+                                                {:page k}))))
+                          (fn prop-name->uuid [k]
+                            (or (get page-names-to-uuids (name k))
+                                (get-pid db k)
+                                (throw (ex-info (str "No uuid found for page " (pr-str k))
+                                                {:page k})))))]
+    ;; TODO: Add support for all these dissoced built-in properties
+    (update-keys (dissoc props :title :id :created-at :updated-at :template :template-including-parent
+                         :card-last-interval :card-repeats :card-last-reviewed :card-next-schedule
+                         :card-ease-factor :card-last-score)
+                 prop-name->uuid)))
+
 (defn- convert-to-db-block
-  [conn block tag-classes page-names-to-uuids]
+  [db block tag-classes page-names-to-uuids {:keys [whiteboard?] :as options}]
   (prn ::block block)
-  (let [remove-keys (fn [m pred] (into {} (remove (comp pred key) m)))]
+  (let [update-block-props (fn update-block-props [props]
+                             (update-block-properties props db page-names-to-uuids options))]
     (-> block
         ((fn [block']
            (cond
@@ -97,9 +139,7 @@
                      (fn [macros]
                        (mapv (fn [m]
                                (-> m
-                                   (update :block/properties
-                                           (fn [props]
-                                             (update-keys props #(get-pid @conn %))))
+                                   (update :block/properties update-block-props)
                                    (assoc :block/uuid (d/squuid))))
                              macros)))
 
@@ -107,37 +147,15 @@
              block'
 
              :else
-             (update-in block' [:block/properties]
-                        (fn [props]
-                          (-> props
-                              (update-keys (fn [k]
-                                             (if-let [new-key (get-pid @conn k)]
-                                               new-key
-                                               k)))
-                              (remove-keys keyword?)))))))
+             (update-in block' [:block/properties] update-block-props))))
         (update-block-tags tag-classes page-names-to-uuids)
-        ((fn [block']
-           (if (seq (:block/refs block'))
-             (cond-> block'
-               true
-               (update :block/refs
-                       (fn [refs]
-                         (mapv (fn [ref]
-                                 (if (and (vector? ref) (= :block/uuid (first ref)))
-                                   ref
-                                   (assoc ref :block/format :markdown)))
-                               refs)))
-               ;; check for now until :block/pre-block? is removed
-               (:block/content block')
-               (update :block/content
-                       db-content/page-ref->special-id-ref
-                       (->> (:block/refs block)
-                            (remove #(and (vector? %) (= :block/uuid (first %))))
-                            (map #(add-uuid-to-page-map % page-names-to-uuids)))))
-             block')))
+        (update-block-refs page-names-to-uuids options)
         add-missing-timestamps
-        ;; FIXME: Remove when properties are supported
-        (assoc :block/properties {})
+        ((fn [block']
+           (if whiteboard?
+             block'
+             ;; FIXME: Remove when properties are supported
+             (assoc block' :block/properties {}))))
         ;; TODO: org-mode content needs to be handled
         (assoc :block/format :markdown)
         ;; TODO: pre-block? can be removed once page properties are imported
@@ -189,7 +207,7 @@
                                  :filename-format :legacy}
                                 extract-options
                                 {:db @conn})
-        {:keys [refs] :as extracted}
+        extracted
         (cond (contains? common-config/mldoc-support-formats format)
               (extract/extract file content extract-options')
 
@@ -202,14 +220,16 @@
         {:keys [pages page-names-to-uuids]}
         (build-pages-tx conn (:pages extracted) (:blocks extracted) tag-classes page-tags-uuid)
         whiteboard-pages (->> pages
-                              (filter #(= "whiteboard" (:block/type %)))
+                              ;; support old and new whiteboards
+                              (filter #(#{"whiteboard" ["whiteboard"]} (:block/type %)))
                               (map (fn [page-block]
                                      (-> page-block
                                          (assoc :block/journal? false
                                                 :block/format :markdown
-                                                      ;; fixme: missing properties
+                                                 ;; fixme: missing properties
                                                 :block/properties {(get-pid @conn :ls-type) :whiteboard-page})))))
-        blocks (map #(convert-to-db-block conn % tag-classes page-names-to-uuids) (:blocks extracted))
+        blocks (map #(convert-to-db-block @conn % tag-classes page-names-to-uuids {:whiteboard? (some? (seq whiteboard-pages))})
+                    (:blocks extracted))
         ;; Build indices
         pages-index (map #(select-keys % [:block/name]) pages)
         block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
@@ -220,7 +240,7 @@
                             (seq))
         ;; To prevent "unique constraint" on datascript
         block-ids (set/union (set block-ids) (set block-refs-ids))
-        tx (concat refs whiteboard-pages pages-index pages block-ids blocks)
+        tx (concat whiteboard-pages pages-index pages block-ids blocks)
         tx' (common-util/fast-remove-nils tx)
         result (d/transact! conn tx')]
     result))
