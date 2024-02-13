@@ -152,7 +152,7 @@ Logseq is also made possible by the following projects:
 * [Clojure & ClojureScript](https://clojure.org/) - A dynamic, functional, general-purpose programming language
 * [DataScript](https://github.com/tonsky/datascript) - An immutable database and Datalog query-engine for Clojure,
 ClojureScript and JS
-* [OCaml](https://ocaml.org/) & [Angstrom](https://github.com/inhabitedtype/angstrom), for the document parser [maldoc](https://github.com/mldoc/mldoc)
+* [OCaml](https://ocaml.org/) & [Angstrom](https://github.com/inhabitedtype/angstrom), for the document parser [mldoc](https://github.com/logseq/mldoc)
 * [isomorphic-git](https://isomorphic-git.org/) - A pure JavaScript implementation of Git for NodeJS and web browsers
 * [SCI](https://github.com/borkdude/sci) - A Small Clojure Interpreter
 
