@@ -2,11 +2,14 @@
   "Exports a file graph to DB graph. Used by the File to DB graph importer"
   (:require [clojure.set :as set]
             [clojure.string :as string]
+            [clojure.edn :as edn]
             [datascript.core :as d]
             [logseq.graph-parser.extract :as extract]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
-            [logseq.db.frontend.content :as db-content]))
+            [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.type :as db-property-type]))
 
 (defn- get-pid
   "Get a property's id (name or uuid) given its name. For db graphs"
@@ -85,6 +88,11 @@
                         tags))))
     block))
 
+(def ignored-built-in-properties
+  "Marker timestamp properties are not imported because they have not been
+  supported for a long time and cause invalid built-in pages"
+  [:now :later :doing :done :canceled :cancelled :in-progress :todo :wait :waiting])
+
 (defn- update-block-refs [block page-names-to-uuids {:keys [whiteboard?]}]
   (let [ref-to-ignore? (if whiteboard?
                          #(and (map? %) (:block/uuid %))
@@ -97,7 +105,17 @@
                   (mapv (fn [ref]
                           (if (ref-to-ignore? ref)
                             ref
-                            (assoc ref :block/format :markdown)))
+                            (let [prop-val (get (apply dissoc (:block/properties block) ignored-built-in-properties)
+                                                (keyword (:block/name ref)))
+                                  get-property-type (fn get-property-type [prop prop-val]
+                                                      (when (get db-property/built-in-properties prop)
+                                                        (throw (ex-info (str "Must not set :block/schema for built-in property: " prop) {}
+                                                                        {:property prop})))
+                                                      (db-property-type/infer-property-type-from-value prop-val))]
+                              (cond-> (assoc ref :block/format :markdown)
+                                prop-val
+                                (merge {:block/type "property"
+                                        :block/schema {:type (get-property-type (keyword (:block/name ref)) prop-val)}})))))
                         refs)))
        ;; check for now until :block/pre-block? is removed
         (:block/content block)
@@ -119,22 +137,32 @@
                             (or (get page-names-to-uuids (name k))
                                 (get-pid db k)
                                 (throw (ex-info (str "No uuid found for page " (pr-str k))
-                                                {:page k})))))]
-    ;; TODO: Add support for all these dissoced built-in properties
-    (update-keys (dissoc props :title :id :created-at :updated-at :template :template-including-parent
-                         :card-last-interval :card-repeats :card-last-reviewed :card-next-schedule
-                         :card-ease-factor :card-last-score)
-                 prop-name->uuid)))
+                                                {:page k})))))
+        dissoced-props (into ignored-built-in-properties
+                             ;; TODO: Add support for these dissoced built-in properties
+                             [:title :id :created-at :updated-at :template :template-including-parent
+                              :card-last-interval :card-repeats :card-last-reviewed :card-next-schedule
+                              :card-ease-factor :card-last-score])]
+    (cond-> (apply dissoc props dissoced-props)
+      (:query-properties props)
+      (update :query-properties
+              (fn [val]
+                (try
+                  (edn/read-string val)
+                  (catch :default e
+                    (js/console.error "Parsing query properties failed with:" e)
+                    []))))
+      true
+      (update-keys prop-name->uuid))))
 
 (defn- convert-to-db-block
-  [db block tag-classes page-names-to-uuids {:keys [whiteboard?] :as options}]
+  [db block tag-classes page-names-to-uuids options]
   (prn ::block block)
   (let [update-block-props (fn update-block-props [props]
                              (update-block-properties props db page-names-to-uuids options))]
     (-> block
         ((fn [block']
-           (cond
-             (seq (:block/macros block'))
+           (if (seq (:block/macros block'))
              (update block' :block/macros
                      (fn [macros]
                        (mapv (fn [m]
@@ -142,20 +170,16 @@
                                    (update :block/properties update-block-props)
                                    (assoc :block/uuid (d/squuid))))
                              macros)))
-
-             (:block/pre-block? block')
-             block'
-
-             :else
+             block')))
+        ;; needs to come before properties are updated
+        (update-block-refs page-names-to-uuids options)
+        ((fn [block']
+           (if (:block/pre-block? block')
+              ;; FIXME: Remove when page properties are supported
+             (assoc block' :block/properties {})
              (update-in block' [:block/properties] update-block-props))))
         (update-block-tags tag-classes page-names-to-uuids)
-        (update-block-refs page-names-to-uuids options)
         add-missing-timestamps
-        ((fn [block']
-           (if whiteboard?
-             block'
-             ;; FIXME: Remove when properties are supported
-             (assoc block' :block/properties {}))))
         ;; TODO: org-mode content needs to be handled
         (assoc :block/format :markdown)
         ;; TODO: pre-block? can be removed once page properties are imported
