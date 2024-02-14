@@ -137,3 +137,13 @@
   [property-type schema-attribute]
   (contains? (get user-built-in-allowed-schema-attributes property-type)
              schema-attribute))
+
+(defn infer-property-type-from-value
+  "Infers a user defined built-in :type from property value(s)"
+  [*val]
+  (let [val (if (coll? *val) (first *val) *val)]
+    (cond
+      (number? val) :number
+      (url? val) :url
+      (contains? #{true false} val) :checkbox
+      :else :default)))
