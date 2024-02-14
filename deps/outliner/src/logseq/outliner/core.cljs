@@ -81,8 +81,22 @@
     (assoc block :block/updated-at updated-at)))
 
 (defn- remove-orphaned-page-refs!
-  [db db-id txs-state old-refs new-refs]
-  (let [old-refs (remove #(some #{"class" "property"} (:block/type %)) old-refs)]
+  [db {db-id :db/id :as block-entity} txs-state *old-refs new-refs {:keys [db-graph?]}]
+  (let [old-refs (if db-graph?
+                   ;; remove class and property related refs because this fn is only meant
+                   ;; to cleanup refs in content
+                   (let [prop-value-ref-uuids (->> (:block/properties block-entity)
+                                                   (mapcat (fn [[_k v]]
+                                                             (cond
+                                                               (and (set? v) (uuid? (first v)))
+                                                               v
+                                                               (uuid? v)
+                                                               [v])))
+                                                   set)]
+                     (remove #(or (some #{"class" "property"} (:block/type %))
+                                  (contains? prop-value-ref-uuids (:block/uuid %)))
+                             *old-refs))
+                   *old-refs)]
     (when (not= old-refs new-refs)
       (let [new-refs (set (map (fn [ref]
                                  (or (:block/name ref)
@@ -129,12 +143,12 @@
       (swap! txs-state into txs))))
 
 (defn- remove-orphaned-refs-when-save
-  [db txs-state block-entity m]
+  [db txs-state block-entity m opts]
   (let [remove-self-page #(remove (fn [b]
                                     (= (:db/id b) (:db/id (:block/page block-entity)))) %)
         old-refs (remove-self-page (:block/refs block-entity))
         new-refs (remove-self-page (:block/refs m))]
-    (remove-orphaned-page-refs! db (:db/id block-entity) txs-state old-refs new-refs)))
+    (remove-orphaned-page-refs! db block-entity txs-state old-refs new-refs opts)))
 
 (defn- get-last-child-or-self
   [db block]
@@ -384,7 +398,7 @@
         (remove-macros-when-save db txs-state block-entity)
         ;; Remove orphaned refs from block
         (when (and (:block/content m) (not= (:block/content m) (:block/content block-entity)))
-          (remove-orphaned-refs-when-save @conn txs-state block-entity m)))
+          (remove-orphaned-refs-when-save @conn txs-state block-entity m {:db-graph? db-based?})))
 
       ;; handle others txs
       (let [other-tx (:db/other-tx m)]
