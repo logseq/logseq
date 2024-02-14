@@ -6,6 +6,8 @@ logseq.db.frontend.rules/db-query-dsl-rules
 logseq.db.frontend.rules/extract-rules
 ;; API
 logseq.db.frontend.property.type/type-or-closed-value?
+;; API
+logseq.db.frontend.property.type/infer-property-type-from-value
 ;; Internal API
 logseq.db.frontend.rules/rules
 ;; API
