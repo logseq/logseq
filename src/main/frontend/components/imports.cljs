@@ -345,9 +345,12 @@
           db-conn (db/get-db repo false)
           config (async/<! (p->c (import-config-file! config-file)))
           files (common-config/remove-hidden-files *files config :rpath)
-          doc-files (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:rpath %))) files)
+          logseq-file? #(string/starts-with? (:rpath %) "logseq/")
+          doc-files (->> files
+                         (remove logseq-file?)
+                         (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:rpath %)))))
           asset-files (filter #(string/starts-with? (:rpath %) "assets/") files)]
-      (async/<! (p->c (import-logseq-files (filter #(string/starts-with? (:rpath %) "logseq/") files))))
+      (async/<! (p->c (import-logseq-files (filter logseq-file? files))))
       (async/<! (import-from-asset-files! asset-files))
       (async/<! (import-from-doc-files! db-conn repo config doc-files
                                         {:tag-classes (set (string/split tags #",\s*"))}))
