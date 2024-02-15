@@ -122,6 +122,28 @@
                      (map #(add-uuid-to-page-map % page-names-to-uuids)))))
       block)))
 
+(defn- update-built-in-property-values
+  [props db]
+  (->> props
+       (map (fn [[prop val]]
+              [prop
+               (case prop
+                 :query-properties
+                 (try
+                   (mapv #(if (#{:page :block :created-at :updated-at} %) % (get-pid db %))
+                         (edn/read-string val))
+                   (catch :default e
+                     (js/console.error "Translating query properties failed with:" e)
+                     []))
+                 :query-sort-by
+                 (if (#{:page :block :created-at :updated-at} val) val (get-pid db val))
+                 (:logseq.color :logseq.table.headers :logseq.table.hover)
+                 (:block/uuid (db-property/get-closed-value-entity-by-name db prop val))
+                 :logseq.table.version
+                 (parse-long val)
+                 val)]))
+       (into {})))
+
 (defn- update-block-properties [props db page-names-to-uuids {:keys [whiteboard?]}]
   (let [prop-name->uuid (if whiteboard?
                           (fn prop-name->uuid [k]
@@ -139,17 +161,8 @@
                               :card-last-interval :card-repeats :card-last-reviewed :card-next-schedule
                               :card-ease-factor :card-last-score])]
     (cond-> (apply dissoc props dissoced-props)
-      (:query-properties props)
-      (update :query-properties
-              (fn [val]
-                (try
-                  (mapv #(if (#{:page :block :created-at :updated-at} %) % (get-pid db %))
-                        (edn/read-string val))
-                  (catch :default e
-                    (js/console.error "Translating query properties failed with:" e)
-                    []))))
-      (:query-sort-by props)
-      (update :query-sort-by #(if (#{:page :block :created-at :updated-at} %) % (get-pid db %)))
+      (seq (select-keys props db-property/built-in-properties-keys))
+      (update-built-in-property-values db)
       true
       (update-keys prop-name->uuid))))
 
