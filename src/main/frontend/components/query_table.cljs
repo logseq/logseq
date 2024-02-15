@@ -16,6 +16,7 @@
             [logseq.shui.core :as shui]
             [medley.core :as medley]
             [rum.core :as rum]
+            [promesa.core :as p]
             [logseq.graph-parser.text :as text]
             [logseq.db.frontend.property :as db-property]
             [frontend.handler.property.util :as pu]
@@ -91,8 +92,9 @@
   (let [repo (state/get-current-repo)]
     [:th.whitespace-nowrap
      [:a {:on-click (fn []
-                      (property-handler/set-block-property! repo block-id :query-sort-by (if (uuid? column) column (name column)))
-                      (property-handler/set-block-property! repo block-id :query-sort-desc (not sort-desc?)))}
+                      (p/do!
+                       (property-handler/set-block-property! repo block-id :query-sort-by (if (uuid? column) column (name column)))
+                       (property-handler/set-block-property! repo block-id :query-sort-desc (not sort-desc?))))}
       [:div.flex.items-center
        [:span.mr-1 title]
        (when (= sort-by-column column)
