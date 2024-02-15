@@ -172,3 +172,16 @@
 (defn shape-block?
   [repo db block]
   (= :whiteboard-shape (get-block-property-value repo db block :ls-type)))
+
+(defn get-closed-property-values
+  [db property-name]
+  (when-let [property (get-property db property-name)]
+    (get-in property [:block/schema :values])))
+
+(defn get-closed-value-entity-by-name
+  [db property-name value-name]
+  (let [values (get-closed-property-values db property-name)]
+    (some (fn [id]
+            (let [e (d/entity db [:block/uuid id])]
+              (when (= (get-in e [:block/schema :value]) value-name)
+                e))) values)))
