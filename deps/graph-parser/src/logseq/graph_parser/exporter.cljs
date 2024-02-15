@@ -106,16 +106,11 @@
                           (if (ref-to-ignore? ref)
                             ref
                             (let [prop-val (get (apply dissoc (:block/properties block) ignored-built-in-properties)
-                                                (keyword (:block/name ref)))
-                                  get-property-type (fn get-property-type [prop prop-val]
-                                                      (when (get db-property/built-in-properties prop)
-                                                        (throw (ex-info (str "Must not set :block/schema for built-in property: " prop) {}
-                                                                        {:property prop})))
-                                                      (db-property-type/infer-property-type-from-value prop-val))]
+                                                (keyword (:block/name ref)))]
                               (cond-> (assoc ref :block/format :markdown)
-                                prop-val
+                                (and prop-val (not (get db-property/built-in-properties (keyword (:block/name ref)))))
                                 (merge {:block/type "property"
-                                        :block/schema {:type (get-property-type (keyword (:block/name ref)) prop-val)}})))))
+                                        :block/schema {:type (db-property-type/infer-property-type-from-value prop-val)}})))))
                         refs)))
        ;; check for now until :block/pre-block? is removed
         (:block/content block)
@@ -148,12 +143,27 @@
       (update :query-properties
               (fn [val]
                 (try
-                  (edn/read-string val)
+                  (mapv #(if (#{:page :block :created-at :updated-at} %) % (get-pid db %))
+                        (edn/read-string val))
                   (catch :default e
-                    (js/console.error "Parsing query properties failed with:" e)
+                    (js/console.error "Translating query properties failed with:" e)
                     []))))
+      (:query-sort-by props)
+      (update :query-sort-by #(if (#{:page :block :created-at :updated-at} %) % (get-pid db %)))
       true
       (update-keys prop-name->uuid))))
+
+(defn- update-block-macros
+  [block db page-names-to-uuids options]
+  (if (seq (:block/macros block))
+    (update block :block/macros
+            (fn [macros]
+              (mapv (fn [m]
+                      (-> m
+                          (update :block/properties #(update-block-properties % db page-names-to-uuids options))
+                          (assoc :block/uuid (d/squuid))))
+                    macros)))
+    block))
 
 (defn- convert-to-db-block
   [db block tag-classes page-names-to-uuids options]
@@ -161,16 +171,7 @@
   (let [update-block-props (fn update-block-props [props]
                              (update-block-properties props db page-names-to-uuids options))]
     (-> block
-        ((fn [block']
-           (if (seq (:block/macros block'))
-             (update block' :block/macros
-                     (fn [macros]
-                       (mapv (fn [m]
-                               (-> m
-                                   (update :block/properties update-block-props)
-                                   (assoc :block/uuid (d/squuid))))
-                             macros)))
-             block')))
+        (update-block-macros db page-names-to-uuids options)
         ;; needs to come before properties are updated
         (update-block-refs page-names-to-uuids options)
         ((fn [block']

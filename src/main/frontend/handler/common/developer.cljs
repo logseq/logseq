@@ -19,16 +19,18 @@
         result (cond-> result*
                  (and (seq (:block/properties result*)) (config/db-based-graph? (state/get-current-repo)))
                  (assoc :block.debug/properties
-                        (-> (:block/properties result*)
-                            (update-keys db-pu/get-property-name)
-                            (update-vals (fn [v]
-                                           (cond
-                                             (and (set? v) (uuid? (first v)))
-                                             (set (map db-pu/get-property-name v))
-                                             (uuid? v)
-                                             (db-pu/get-property-name v)
-                                             :else
-                                             v)))))
+                        (->> (update-keys (:block/properties result*) db-pu/get-property-name)
+                             (map (fn [[k v]]
+                                    [k
+                                     (cond
+                                       (and (set? v) (uuid? (first v)))
+                                       (set (map db-pu/get-property-name v))
+                                       (uuid? v)
+                                       (or (db-pu/get-property-name v)
+                                           (get-in (db/entity [:block/uuid v]) [:block/schema :value]))
+                                       :else
+                                       v)]))
+                             (into {})))
                  (seq (:block/refs result*))
                  (assoc :block.debug/refs
                         (mapv #(or (:block/original-name (db/entity (:db/id %))) %) (:block/refs result*))))
