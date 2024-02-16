@@ -1810,7 +1810,7 @@
         [:span {:class (if (or (and control-show?
                                     (or collapsed?
                                         (editor-handler/collapsable? uuid {:semantic? true})))
-                               (and collapsed? order-list?))
+                               (and collapsed? (or order-list? config/publishing?)))
                          "control-show cursor-pointer"
                          "control-hide")}
          (ui/rotating-arrow collapsed?)]])
