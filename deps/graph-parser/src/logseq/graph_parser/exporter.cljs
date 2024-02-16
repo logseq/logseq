@@ -93,7 +93,27 @@
   supported for a long time and cause invalid built-in pages"
   [:now :later :doing :done :canceled :cancelled :in-progress :todo :wait :waiting])
 
-(defn- update-block-refs [block page-names-to-uuids {:keys [whiteboard?]}]
+(defn- infer-property-schema [prop-val prop refs]
+  ;; Explicitly fail an unexpected case rather cause silent downstream failures
+  (when (and (coll? prop-val) (not (every? string? prop-val)))
+    (throw (ex-info "Import cannot infer schema of unknown property value"
+                    {:value prop-val :property prop})))
+  (let [prop-type (if (and (coll? prop-val)
+                           (seq prop-val)
+                           (set/subset? prop-val
+                                        (set (keep #(when (:block/journal? %) (:block/original-name %)) refs))))
+                    :date
+                    (db-property-type/infer-property-type-from-value prop-val))]
+    (cond-> {:type prop-type}
+      (#{:page :date} prop-type)
+      ;; Assume :many for now as detecting that detecting property values across files are consistent
+      ;; isn't possible yet
+      (assoc :cardinality :many))))
+
+(defn- update-block-refs
+  "Updates the attributes of a block ref as this is where a new page is defined. Also
+   updates block content effected by refs"
+  [block page-names-to-uuids {:keys [whiteboard?]}]
   (let [ref-to-ignore? (if whiteboard?
                          #(and (map? %) (:block/uuid %))
                          #(and (vector? %) (= :block/uuid (first %))))]
@@ -110,7 +130,7 @@
                               (cond-> (assoc ref :block/format :markdown)
                                 (and prop-val (not (get db-property/built-in-properties (keyword (:block/name ref)))))
                                 (merge {:block/type "property"
-                                        :block/schema {:type (db-property-type/infer-property-type-from-value prop-val)}})))))
+                                        :block/schema (infer-property-schema prop-val (keyword (:block/name ref)) refs)})))))
                         refs)))
        ;; check for now until :block/pre-block? is removed
         (:block/content block)
@@ -144,7 +164,19 @@
                  val)]))
        (into {})))
 
-(defn- update-block-properties [props db page-names-to-uuids {:keys [whiteboard?]}]
+(defn- update-user-property-values [props user-page-properties prop-name->uuid]
+  (->> props
+       (map (fn [[prop val]]
+              [prop
+               (if (contains? user-page-properties prop)
+                 ;; assume for now a ref's :block/name can always be translated by lc helper
+                 (set (map (comp prop-name->uuid common-util/page-name-sanity-lc) val))
+                 val)]))
+       (into {})))
+
+(defn- update-block-properties
+  "Updates block property names and values and removes old built-in properties"
+  [*props db page-names-to-uuids {:keys [whiteboard?]}]
   (let [prop-name->uuid (if whiteboard?
                           (fn prop-name->uuid [k]
                             (or (get-pid db k)
@@ -159,10 +191,14 @@
                              ;; TODO: Add support for these dissoced built-in properties
                              [:title :id :created-at :updated-at :template :template-including-parent
                               :card-last-interval :card-repeats :card-last-reviewed :card-next-schedule
-                              :card-ease-factor :card-last-score])]
-    (cond-> (apply dissoc props dissoced-props)
+                              :card-ease-factor :card-last-score])
+        props (apply dissoc *props dissoced-props)
+        user-page-properties (set (keep (fn [[k v]] (when (set? v) k)) (apply dissoc props db-property/built-in-properties-keys)))]
+    (cond-> props
       (seq (select-keys props db-property/built-in-properties-keys))
       (update-built-in-property-values db)
+      (seq user-page-properties)
+      (update-user-property-values user-page-properties prop-name->uuid)
       true
       (update-keys prop-name->uuid))))
 
