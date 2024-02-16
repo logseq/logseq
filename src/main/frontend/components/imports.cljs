@@ -337,7 +337,7 @@
 
 (defn- import-file-graph
   [*files {:keys [graph-name tags]} config-file]
-  (state/set-state! :graph/importing :folder)
+  (state/set-state! :graph/importing :file-graph)
   (state/set-state! [:graph/importing-state :current-page] (str graph-name " Assets"))
   (async/go
     (async/<! (p->c (repo-handler/new-db! graph-name {:file-graph-import? true})))

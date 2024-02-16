@@ -55,7 +55,6 @@
 (defn- watch-for-date!
   []
   (let [f (fn []
-            #_:clj-kondo/ignore
             (let [repo (state/get-current-repo)]
               (when (or
                      (config/db-based-graph? repo)
