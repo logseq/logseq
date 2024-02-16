@@ -128,7 +128,11 @@
                             (let [prop-val (get (apply dissoc (:block/properties block) ignored-built-in-properties)
                                                 (keyword (:block/name ref)))]
                               (cond-> (assoc ref :block/format :markdown)
-                                (and prop-val (not (get db-property/built-in-properties (keyword (:block/name ref)))))
+                                (and prop-val
+                                     (not (get db-property/built-in-properties (keyword (:block/name ref))))
+                                     ;; Ignore templates as they don't directly map to properties and don't
+                                     ;; have representative property values
+                                     (not (contains? (:block/properties block) :template)))
                                 (merge {:block/type "property"
                                         :block/schema (infer-property-schema prop-val (keyword (:block/name ref)) refs)})))))
                         refs)))
@@ -188,19 +192,22 @@
                                 (throw (ex-info (str "No uuid found for page " (pr-str k))
                                                 {:page k})))))
         dissoced-props (into ignored-built-in-properties
-                             ;; TODO: Add support for these dissoced built-in properties
-                             [:title :id :created-at :updated-at :template :template-including-parent
+                             ;; TODO: Add import support for these dissoced built-in properties
+                             [:title :id :created-at :updated-at
                               :card-last-interval :card-repeats :card-last-reviewed :card-next-schedule
                               :card-ease-factor :card-last-score])
         props (apply dissoc *props dissoced-props)
         user-page-properties (set (keep (fn [[k v]] (when (set? v) k)) (apply dissoc props db-property/built-in-properties-keys)))]
-    (cond-> props
-      (seq (select-keys props db-property/built-in-properties-keys))
-      (update-built-in-property-values db)
-      (seq user-page-properties)
-      (update-user-property-values user-page-properties prop-name->uuid)
-      true
-      (update-keys prop-name->uuid))))
+    ;; TODO: Add import support for :template. Ignore for now as they cause invalid property types
+    (if (contains? *props :template)
+      {}
+      (cond-> props
+        (seq (select-keys props db-property/built-in-properties-keys))
+        (update-built-in-property-values db)
+        (seq user-page-properties)
+        (update-user-property-values user-page-properties prop-name->uuid)
+        true
+        (update-keys prop-name->uuid)))))
 
 (defn- update-block-macros
   [block db page-names-to-uuids options]
