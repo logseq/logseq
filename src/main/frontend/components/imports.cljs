@@ -169,7 +169,8 @@
 (defn- import-from-doc-files!
   [db-conn repo config doc-files user-options]
   (let [imported-chan (async/promise-chan)
-        page-tags-uuid (db-pu/get-built-in-property-uuid repo :pagetags)]
+        page-tags-uuid (db-pu/get-built-in-property-uuid repo :pagetags)
+        property-schemas (atom {})]
     (try
       (let [docs-chan (async/to-chan! (medley/indexed doc-files))]
         (state/set-state! [:graph/importing-state :total] (count doc-files))
@@ -196,7 +197,8 @@
                                                    (:file/content m)
                                                    {:extract-options extract-options
                                                     :user-options user-options
-                                                    :page-tags-uuid page-tags-uuid})]
+                                                    :page-tags-uuid page-tags-uuid
+                                                    :property-schemas property-schemas})]
                                               (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report)))
                                             m))
                                   (p/catch (fn [error]
