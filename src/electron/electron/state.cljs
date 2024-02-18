@@ -8,9 +8,6 @@
 (defonce state
   (atom {:config (config/get-config)
 
-         ;; FIXME: replace with :window/graph
-         :graph/current nil
-
          ;; window -> current graph
          :window/graph {}
 
@@ -39,14 +36,15 @@
   []
   (get-in @state [:config :git/commit-on-close?] false))
 
-(defn get-graph-path
-  []
-  (:graph/current @state))
-
 (defn get-window-graph-path
   "Get the path of the graph of a window (might be `nil`)"
   [window]
   (get (:window/graph @state) window))
+
+(defn get-all-graph-paths
+  "Get the paths of all graphs currently open in all windows."
+  []
+  (set (vals (:window/graph @state))))
 
 (defn get-active-window-graph-path
   "Get the path of the graph of the currently focused window (might be `nil`)"
