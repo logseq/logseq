@@ -1,7 +1,7 @@
 :root {
-  --ls-color-file-sync-error: var(--ls-error-color);
-  --ls-color-file-sync-pending: var(--color-yellow-500);
-  --ls-color-file-sync-idle: var(--ls-success-color);
+  --ls-color-file-sync-error: var(--color-red-600);
+  --ls-color-file-sync-pending: var(--color-yellow-600);
+  --ls-color-file-sync-idle: var(--color-green-600);
 }
 
 .cp__file-sync {
@@ -95,11 +95,6 @@
         word-break: break-all;
         font-size: 13px;
         padding: 6px 20px;
-
-        > div.flex > div {
-          margin: 0 !important;
-          flex: 1;
-        }
 
         &.is-first-placeholder {
           padding: 0 !important;

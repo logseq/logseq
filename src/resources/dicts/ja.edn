@@ -798,8 +798,6 @@
  :command.ui/toggle-help "ヘルプの表示／非表示"
  :command.ui/toggle-theme "テーマの切り替え"
  :command.ui/toggle-contents "目次の開閉"
- :command.ui/cycle-color-off "循環させた色を元に戻す"
- :command.ui/cycle-color "色を循環させる"
 
  :command.command/toggle-favorite "お気に入りへ追加／削除"
  :command.editor/open-file-in-default-app "ファイルを既定のアプリで開く"
