@@ -289,7 +289,7 @@
                 (cond-> b-ent
                   (and (contains? key-set :content)
                        (not= (:content op-value)
-                             (:block/content b-ent))) (assoc :block/content (:content op-value))
+                             (:block/raw-content b-ent))) (assoc :block/content (:content op-value))
                   (contains? key-set :updated-at)     (assoc :block/updated-at (:updated-at op-value))
                   (contains? key-set :created-at)     (assoc :block/created-at (:created-at op-value))
                   (contains? key-set :alias)          (assoc :block/alias (some->> (seq (:alias op-value))
@@ -549,8 +549,8 @@
               attr-tags-map                   (assoc :tags attr-tags-map)
               attr-properties-map             (assoc :properties attr-properties-map)
               (and (contains? attr-map :content)
-                   (:block/content block))
-              (assoc :content (:block/content block))
+                   (:block/raw-content block))
+              (assoc :content (:block/raw-content block))
               (and (contains? attr-map :link)
                    (:block/uuid (:block/link block)))
               (assoc :link (:block/uuid (:block/link block)))
@@ -728,14 +728,14 @@
                                              :ops ops-for-remote :t-before (or local-tx 1)}))]
           (if-let [remote-ex (:ex-data r)]
             (case (:type remote-ex)
-            ;; conflict-update remote-graph, keep these local-pending-ops
-            ;; and try to send ops later
+              ;; conflict-update remote-graph, keep these local-pending-ops
+              ;; and try to send ops later
               :graph-lock-failed
               (do (prn :graph-lock-failed)
                   (op-mem-layer/rollback! repo)
                   nil)
-            ;; this case means something wrong in remote-graph data,
-            ;; nothing to do at client-side
+              ;; this case means something wrong in remote-graph data,
+              ;; nothing to do at client-side
               :graph-lock-missing
               (do (prn :graph-lock-missing)
                   (op-mem-layer/rollback! repo)
@@ -745,7 +745,7 @@
               (do (prn ::get-s3-object-failed r)
                   (op-mem-layer/rollback! repo)
                   nil)
-            ;; else
+              ;; else
               (do (op-mem-layer/rollback! repo)
                   (throw (ex-info "Unavailable" {:remote-ex remote-ex}))))
             (do (assert (pos? (:t r)) r)
