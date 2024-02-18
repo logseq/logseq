@@ -42,7 +42,8 @@
           }
         }
 
-        &.active {}
+        &.active {
+        }
       }
     }
 
@@ -196,7 +197,7 @@
   &-item-card {
     @apply flex py-3 px-1 rounded-md;
 
-    background-color: var(--ls-tertiary-background-color);
+    background-color: var(--ls-tertiary-background-color, hsl(var(--muted)));
     height: 150px;
 
     li {
@@ -648,11 +649,10 @@
   &-installed {
     margin: -2rem;
     outline: none;
-    padding: 1rem;
+    padding: .5rem;
 
     .it {
       user-select: none;
-      background-color: var(--ls-secondary-background-color);
       border: 1px solid transparent;
       margin-bottom: 4px;
       cursor: pointer;
@@ -662,18 +662,12 @@
         font-weight: 600;
       }
 
-      &.is-active {
-        background-color: var(--ls-tertiary-background-color);
-        border: 1px solid var(--ls-quaternary-background-color);
-        opacity: 1;
+      &:hover, &.is-active {
+        @apply opacity-100 bg-gray-06;
       }
 
       &.is-selected {
-        opacity: 1;
-      }
-
-      &:hover {
-        opacity: 1;
+        @apply opacity-100;
       }
     }
   }
@@ -861,11 +855,10 @@
       }
 
       .menu-link {
-        padding: 3px 5px;
+        @apply px-[5px] py-1.5;
 
         &.extra-item {
-          padding: 4px 15px;
-          opacity: .8;
+          @apply opacity-80 px-4 py-1.5;
 
           .title-wrap {
             margin-left: 8px !important;
@@ -879,7 +872,7 @@
 
       .item-wrap {
         padding-right: 28px;
-        font-size: 13px;
+        font-size: 14px;
         position: relative;
 
         div[data-injected-ui] :is(.ti, .tie) {
@@ -898,6 +891,16 @@
         &.pinned {
           color: var(--ls-link-ref-text-color);
           opacity: 90;
+        }
+      }
+
+      .menu-links-wrapper {
+        a {
+          @apply !text-popover-foreground/80;
+
+          &.button {
+            @apply h-auto hover:bg-transparent scale-95;
+          }
         }
       }
     }

@@ -14,7 +14,7 @@
     }
 
     aside {
-      @apply bg-gray-400/5 p-4 outline-0;
+      @apply bg-gray-03-alpha p-4;
 
       > ul > li {
         > a {
@@ -365,6 +365,17 @@
       pointer-events: none;
     }
   }
+
+  &-accent-colors-modal-inner {
+    & > .it {
+      grid-template-columns: auto;
+      margin: -8px;
+    }
+
+    label[for=toggle_radix_theme] {
+      @apply text-xl font-semibold opacity-90;
+    }
+  }
 }
 
 .cp__assets {
@@ -535,6 +546,22 @@ body[data-settings-tab=keymap] {
       > header {
         @apply px-4 pt-[22px] pb-2 h-auto;
       }
+    }
+  }
+}
+
+.ui__modal[label=accent-colors-picker] {
+  .panel-content {
+    @apply sm:min-w-[520px];
+  }
+}
+
+.cp__accent-colors {
+  &-list-wrap {
+    @apply grid grid-cols-8 gap-2 max-w-[250px];
+
+    &.as-modal-picker {
+      @apply grid-cols-8 gap-3 pt-1 pb-2 ml-8 max-w-none;
     }
   }
 }
