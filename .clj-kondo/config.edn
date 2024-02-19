@@ -142,6 +142,7 @@
              logseq.db.frontend.property.util db-property-util
              logseq.db.frontend.rules rules
              logseq.db.frontend.schema db-schema
+             logseq.db.frontend.validate db-validate
              logseq.db.sqlite.db sqlite-db
              logseq.db.sqlite.util sqlite-util
              logseq.graph-parser graph-parser
