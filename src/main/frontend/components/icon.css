@@ -1,16 +1,27 @@
-.icon-search {
-    width: 300px;
-}
+.cp__emoji-icon-picker {
+  @apply w-[320px] max-h-[346px] relative;
 
-.emojis button:hover, .icons button:hover {
+  .search-result {
+    @apply overflow-y-scroll max-h-80;
+  }
+
+  .emojis button:hover, .icons button:hover {
     background-color: var(--ls-quaternary-background-color);
     border-radius: 100%;
-}
+  }
 
-.icons .ui__icon {
+  .icons .ui__icon {
     vertical-align: middle;
+  }
+
+  .hover-preview {
+    @apply flex flex-1 flex-row items-center gap-2 shadow-lg;
+    @apply absolute bottom-0 left-0 right-0 bg-gray-01 m-[-16px] p-2;
+
+    > strong {
+      @apply opacity-75 text-lg whitespace-nowrap font-normal
+      overflow-ellipsis overflow-hidden;
+    }
+  }
 }
 
-.search-result {
-    @apply overflow-y-scroll max-h-80;
-}

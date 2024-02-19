@@ -78,7 +78,10 @@
                                 :name name}))}
      (not (nil? hover))
      (assoc :on-mouse-over #(reset! hover emoji)
-            :on-mouse-out #(reset! hover nil)))
+            :on-mouse-out #(js/setTimeout
+                             (fn []
+                               (when (and @hover (= id (:id @hover)))
+                                 (reset! hover nil))) 1000)))
    [:em-emoji {:id id}]])
 
 (rum/defc emojis-cp < rum/static
@@ -123,7 +126,7 @@
         result @*result
         emoji-tab? (= @*tab :emoji)
         opts (assoc opts :hover *hover)]
-    [:div.icon-search.flex.flex-1.flex-col.gap-2
+    [:div.cp__emoji-icon-picker.flex.flex-1.flex-col.gap-2
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5
       {:auto-focus    true
        :placeholder   "Select icon"
@@ -159,8 +162,8 @@
            (emojis-cp emojis opts)
            (icons-cp (get-tabler-icons) opts))])]
 
-     (if @*hover
-       [:div.flex.flex-1.flex-row.items-center.gap-2
+     (when @*hover
+       [:div.hover-preview
         [:button.transition-opacity
          {:style {:font-size 32}
           :key (:id @*hover)
@@ -169,8 +172,7 @@
            (ui/icon (:icon @*hover) {:size 32})
            (:native (first (:skins @*hover))))]
 
-        (:name @*hover)]
-       [:div {:style {:padding-bottom 32}}])]))
+        [:strong (:name @*hover)]])]))
 
 (rum/defc icon-picker
   [icon-value {:keys [disabled? on-chosen]}]
