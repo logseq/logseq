@@ -181,13 +181,13 @@
                  val)]))
        (into {})))
 
-(defn- update-user-property-values [props user-page-properties prop-name->uuid property-changes]
+(defn- update-user-property-values [props user-page-properties prop-name->uuid properties-text-values property-changes]
   (->> props
        (map (fn [[prop val]]
               [prop
                (cond
                  (= :default (get-in @property-changes [prop :type :from]))
-                 (str val)
+                 (or (get properties-text-values prop) (str val))
                  (contains? user-page-properties prop)
                  ;; assume for now a ref's :block/name can always be translated by lc helper
                  (set (map (comp prop-name->uuid common-util/page-name-sanity-lc) val))
@@ -203,7 +203,7 @@
 
 (defn- update-block-properties*
   "Updates block property names and values and removes old built-in properties"
-  [*props db page-names-to-uuids {:keys [whiteboard? property-changes]}]
+  [*props db page-names-to-uuids properties-text-values {:keys [whiteboard? property-changes]}]
   (let [prop-name->uuid (if whiteboard?
                           (fn prop-name->uuid [k]
                             (or (get-pid db k)
@@ -225,7 +225,7 @@
         (seq (select-keys props db-property/built-in-properties-keys))
         (update-built-in-property-values db)
         (or (seq user-page-properties) (seq @property-changes))
-        (update-user-property-values user-page-properties prop-name->uuid property-changes)
+        (update-user-property-values user-page-properties prop-name->uuid properties-text-values property-changes)
         true
         (update-keys prop-name->uuid)))))
 
@@ -247,7 +247,8 @@
   (if (:block/pre-block? block)
   ;; FIXME: Remove when page properties are supported
     (assoc block :block/properties {})
-    (update-in block [:block/properties] #(update-block-properties* % db page-names-to-uuids options))))
+    (update-in block [:block/properties]
+               #(update-block-properties* % db page-names-to-uuids (:block/properties-text-values block) options))))
 
 (defn- convert-to-db-block
   [db block tag-classes page-names-to-uuids options]

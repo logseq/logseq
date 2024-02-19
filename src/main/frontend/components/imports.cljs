@@ -4,6 +4,7 @@
             [clojure.core.async :as async]
             [clojure.edn :as edn]
             [clojure.string :as string]
+            [cljs-time.core :as t]
             [datascript.core :as d]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
@@ -342,8 +343,9 @@
   (state/set-state! :graph/importing :file-graph)
   (state/set-state! [:graph/importing-state :current-page] (str graph-name " Assets"))
   (async/go
-    (async/<! (p->c (repo-handler/new-db! graph-name {:file-graph-import? true})))
-    (let [repo (state/get-current-repo)
+    (let [start-time (t/now)
+          _ (async/<! (p->c (repo-handler/new-db! graph-name {:file-graph-import? true})))
+          repo (state/get-current-repo)
           db-conn (db/get-db repo false)
           config (async/<! (p->c (import-config-file! config-file)))
           files (common-config/remove-hidden-files *files config :rpath)
@@ -357,6 +359,7 @@
       (async/<! (import-from-doc-files! db-conn repo config doc-files
                                         {:tag-classes (set (string/split tags #",\s*"))}))
       (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))
+      (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
       (state/set-state! :graph/importing nil)
       (state/set-state! :graph/importing-state nil)
       (when-let [org-files (seq (filter #(= "org" (path/file-ext (:rpath %))) files))]
