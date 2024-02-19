@@ -5,6 +5,7 @@
             [clojure.edn :as edn]
             [clojure.string :as string]
             [cljs-time.core :as t]
+            [cljs.pprint :as pprint]
             [datascript.core :as d]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
@@ -37,7 +38,8 @@
             [rum.core :as rum]
             [logseq.common.config :as common-config]
             [lambdaisland.glogi :as log]
-            [frontend.handler.db-based.property.util :as db-pu]))
+            [frontend.handler.db-based.property.util :as db-pu]
+            [logseq.db.frontend.validate :as db-validate]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
@@ -338,6 +340,31 @@
       (ui/button "Submit"
                  {:on-click on-submit})]]))
 
+(defn- counts-from-entities
+  [entities]
+  {:entities (count entities)
+   :pages (count (filter :block/name entities))
+   :blocks (count (filter :block/content entities))
+   :classes (count (filter #(contains? (:block/type %) "class") entities))
+   :properties (count (filter #(contains? (:block/type %) "property") entities))
+   :property-values (count (mapcat :block/properties entities))})
+
+(defn- validate-imported-data
+  [db files]
+  (when-let [org-files (seq (filter #(= "org" (path/file-ext (:rpath %))) files))]
+    (log/info :org-files (mapv :rpath org-files))
+    (notification/show! (str "Imported " (count org-files) " org file(s) as markdown. Support for org files will be added later.")
+                        :info false))
+  (let [{:keys [errors datom-count entities]} (db-validate/validate-db! db)]
+    (when errors
+      (log/error :import-errors {:msg (str "Import detected " (count errors) " invalid block(s):")
+                                 :counts (assoc (counts-from-entities entities) :datoms datom-count)})
+      (pprint/pprint (map :entity errors))
+      (notification/show! (str "Import detected " (count errors) " invalid block(s). These blocks may be buggy when you interact with them. See the javascript console for more.")
+                          :warning false))
+    (log/info :import-valid {:msg "Valid import!"
+                             :counts (assoc (counts-from-entities entities) :datoms datom-count)})))
+
 (defn- import-file-graph
   [*files {:keys [graph-name tags]} config-file]
   (state/set-state! :graph/importing :file-graph)
@@ -362,10 +389,7 @@
       (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
       (state/set-state! :graph/importing nil)
       (state/set-state! :graph/importing-state nil)
-      (when-let [org-files (seq (filter #(= "org" (path/file-ext (:rpath %))) files))]
-        (log/info :org-files (mapv :rpath org-files))
-        (notification/show! (str "Imported " (count org-files) " org file(s) as markdown. Support for org files will be added later")
-                            :info false))
+      (validate-imported-data @db-conn files)
       (finished-cb))))
 
 (defn import-file-to-db-handler

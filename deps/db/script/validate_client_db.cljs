@@ -3,62 +3,27 @@
    NOTE: This script is also used in CI to confirm our db's schema is up to date"
   (:require [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
+            [logseq.db.frontend.validate :as db-validate]
             [datascript.core :as d]
             [clojure.string :as string]
             [nbb.core :as nbb]
             [malli.core :as m]
-            [malli.util :as mu]
             [babashka.cli :as cli]
             ["path" :as node-path]
             ["os" :as os]
             [cljs.pprint :as pprint]))
 
-(defn- build-grouped-errors [db full-maps errors]
-  (->> errors
-       (group-by #(-> % :in first))
-       (map (fn [[idx errors']]
-              {:entity (cond-> (get full-maps idx)
-                         ;; Provide additional page info for debugging
-                         (:block/page (get full-maps idx))
-                         (update :block/page
-                                 (fn [id] (select-keys (d/entity db id)
-                                                       [:block/name :block/type :db/id :block/created-at]))))
-               ;; Group by type to reduce verbosity
-               :errors-by-type
-               (->> (group-by :type errors')
-                    (map (fn [[type' type-errors]]
-                           [type'
-                            {:in-value-distinct (->> type-errors
-                                                     (map #(select-keys % [:in :value]))
-                                                     distinct
-                                                     vec)
-                             :schema-distinct (->> (map :schema type-errors)
-                                                   (map m/form)
-                                                   distinct
-                                                   vec)}]))
-                    (into {}))}))))
-
-(defn- update-schema
-  "Updates the db schema to add a datascript db for property validations
-   and to optionally close maps"
-  [db-schema db {:keys [closed-maps]}]
-  (cond-> db-schema
-    true
-    (db-malli-schema/update-properties-in-schema db)
-    closed-maps
-    mu/closed-schema))
-
 (defn validate-client-db
   "Validate datascript db as a vec of entity maps"
-  [db ent-maps* {:keys [verbose group-errors] :as options}]
+  [db ent-maps* {:keys [verbose group-errors closed-maps]}]
   (let [ent-maps (vec (db-malli-schema/update-properties-in-ents (vals ent-maps*)))
-        schema (update-schema db-malli-schema/DB db options)]
+        schema (db-validate/update-schema db-malli-schema/DB db {:closed-schema? closed-maps})]
     (if-let [errors (->> ent-maps
                          (m/explain schema)
                          :errors)]
       (do
         (if group-errors
-          (let [ent-errors (build-grouped-errors db ent-maps errors)]
+          (let [ent-errors (db-validate/group-errors-by-entity db ent-maps errors)]
             (println "Found" (count ent-errors) "entities in errors:")
             (if verbose
               (pprint/pprint ent-errors)
