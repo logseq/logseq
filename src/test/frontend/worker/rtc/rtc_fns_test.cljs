@@ -8,7 +8,11 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
             [frontend.state :as state]
-            [frontend.test.helper :as test-helper]))
+            [frontend.test.helper :as test-helper]
+            [logseq.common.config :as common-config]
+            [frontend.worker.state :as worker-state]
+            [frontend.worker.rtc.const :as rtc-const]
+            [logseq.db :as ldb]))
 
 
 (deftest filter-remote-data-by-local-unpushed-ops-test
@@ -83,10 +87,10 @@
       [{:block/uuid uuid2 :block/content "uuid2-block"}
        {:block/uuid uuid3 :block/content "uuid3-block"
         :block/left [:block/uuid uuid2]
-        :block/parent [:block/uuid (:block/uuid uuid1)]}
+        :block/parent [:block/uuid uuid1]}
        {:block/uuid uuid4 :block/content "uuid4-block"
         :block/left [:block/uuid uuid3]
-        :block/parent [:block/uuid (:block/uuid uuid1)]}]
+        :block/parent [:block/uuid uuid1]}]
       (d/pull @conn '[*] [:block/name "gen-remote-ops-test"])
       {:sibling? true :keep-uuid? true}))
 
@@ -108,3 +112,51 @@
     (op-mem-layer/remove-ops-store! test-helper/test-db))
   (state/set-current-repo! nil)
   (test-helper/destroy-test-db!))
+
+
+(deftest apply-remote-move-ops-test1
+  (state/set-current-repo! test-helper/test-db)
+  (test-helper/reset-test-db!)
+  (let [page-name "apply-remote-move-ops-test1"
+        conn (conn/get-db test-helper/test-db false)
+        repo test-helper/test-db
+        opts {:persist-op? false
+              :transact-opts {:repo test-helper/test-db
+                              :conn conn}}
+        [page-uuid
+         uuid1-client uuid2-client
+         uuid1-remote] (repeatedly random-uuid)
+        data-from-ws {:req-id "req-id"
+                      :t 1
+                      :t-before 0
+                      :affected-blocks
+                      {uuid1-remote {:op :move
+                                     :self uuid1-remote
+                                     :parents [page-uuid]
+                                     :left page-uuid
+                                     :content "uuid1-remote"}}}
+        move-ops (#'rtc-core/move-ops-map->sorted-move-ops
+                  (:move-ops-map
+                   (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
+    (is (rtc-const/data-from-ws-validator data-from-ws))
+    (page-handler/create! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
+    (outliner-tx/transact!
+     opts
+     (outliner-core/insert-blocks!
+      test-helper/test-db
+      conn
+      [{:block/uuid uuid1-client :block/content "uuid1-client"
+        :block/left [:block/uuid page-uuid]
+        :block/parent [:block/uuid page-uuid]}
+       {:block/uuid uuid2-client :block/content "uuid2-client"
+        :block/left [:block/uuid uuid1-client]
+        :block/parent [:block/uuid page-uuid]}]
+      (d/pull @conn '[*] [:block/name page-name])
+      {:sibling? true :keep-uuid? true}))
+    (rtc-core/apply-remote-move-ops repo conn
+                                    (common-config/get-date-formatter (worker-state/get-config test-helper/test-db))
+                                    move-ops)
+    (let [sorted-page-blocks (ldb/sort-by-left
+                              (ldb/get-page-blocks @conn page-name {})
+                              (d/entity @conn [:block/uuid page-uuid]))]
+      (is (= [uuid1-remote uuid1-client uuid2-client] (map :block/uuid sorted-page-blocks))))))
