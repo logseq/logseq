@@ -50,7 +50,7 @@
                                        :block/uuid (d/squuid)})))
                         tags)))
         (seq page-tags)
-        (assoc :block/properties {page-tags-uuid page-tags})))
+        (update :block/properties merge {page-tags-uuid page-tags})))
     block))
 
 (defn- add-uuid-to-page-map [m page-names-to-uuids]
@@ -88,9 +88,11 @@
     block))
 
 (def ignored-built-in-properties
-  "Marker timestamp properties are not imported because they have not been
-  supported for a long time and cause invalid built-in pages"
-  [:now :later :doing :done :canceled :cancelled :in-progress :todo :wait :waiting])
+  "Ignore built-in properties that are already imported or not supported in db graphs"
+  ;; Already imported via a datascript attribute i.e. have :attribute on property config
+  [:tags :alias
+   ;; Not supported as they have been ignored for a long time and cause invalid built-in pages
+   :now :later :doing :done :canceled :cancelled :in-progress :todo :wait :waiting])
 
 (defn- infer-property-schema
   "Return inferred :block/schema map. nil means don't set schema"
@@ -119,7 +121,17 @@
               (prn "Import detected property value change it can't fix" {:old prev-type :new prop-type :property prop})))
           nil)
       (do (swap! property-schemas assoc prop schema)
-          schema))))
+        schema))))
+
+(defn- infer-property-schemas
+  [props refs options]
+  (->> props
+       (keep (fn [[prop val]]
+               ;; TODO: Also remove all skipped properties
+               (when-not (get db-property/built-in-properties prop)
+                 [prop
+                  (infer-property-schema val prop refs options)])))
+       (into {})))
 
 (defn- update-block-refs
   "Updates the attributes of a block ref as this is where a new page is defined. Also
@@ -149,7 +161,6 @@
                                   {:block/type "property"
                                    :block/schema schema}))))))
                  refs)))
-        ;; check for now until :block/pre-block? is removed
         (:block/content block)
         (update :block/content
                 db-content/page-ref->special-id-ref
@@ -201,7 +212,7 @@
       (throw (ex-info (str "No uuid found for page " (pr-str k))
                       {:page k}))))
 
-(defn- update-block-properties*
+(defn- update-properties
   "Updates block property names and values and removes old built-in properties"
   [*props db page-names-to-uuids properties-text-values {:keys [whiteboard? property-changes]}]
   (let [prop-name->uuid (if whiteboard?
@@ -244,19 +255,29 @@
     block))
 
 (defn- update-block-properties [block db page-names-to-uuids options]
-  (if (:block/pre-block? block)
-  ;; FIXME: Remove when page properties are supported
-    (assoc block :block/properties {})
+  (if (seq (:block/properties block))
     (update-in block [:block/properties]
-               #(update-block-properties* % db page-names-to-uuids (:block/properties-text-values block) options))))
+               #(update-properties % db page-names-to-uuids (:block/properties-text-values block) options))
+    block))
+
+(defn- fix-pre-block-references
+  [{:block/keys [left parent page] :as block} pre-blocks]
+  (cond-> block
+    (and (vector? left) (contains? pre-blocks (second left)))
+    (assoc :block/left page)
+    ;; Children blocks of pre-blocks get lifted up to the next level which can cause conflicts
+    ;; TODO: Detect sibling blocks to avoid parent-left conflicts
+    (and (vector? parent) (contains? pre-blocks (second parent)))
+    (assoc :block/parent page)))
 
 (defn- convert-to-db-block
-  [db block tag-classes page-names-to-uuids options]
+  [db block pre-blocks tag-classes page-names-to-uuids options]
   (prn ::block block)
   (let [options' (assoc options
                         ;; map of detected property-changes
                         :property-changes (atom {}))]
     (-> block
+        (fix-pre-block-references pre-blocks)
         (update-block-macros db page-names-to-uuids)
         ;; needs to come before update-block-properties
         (update-block-refs page-names-to-uuids options')
@@ -266,37 +287,50 @@
         ;; ((fn [x] (prn :BLOCKZ x) x))
         ;; TODO: org-mode content needs to be handled
         (assoc :block/format :markdown)
-        ;; TODO: pre-block? can be removed once page properties are imported
-        (dissoc :block/pre-block? :block/properties-text-values :block/properties-order
-                :block/invalid-properties))))
+        (dissoc :block/properties-text-values :block/properties-order :block/invalid-properties))))
+
+(defn- update-page-properties [{:block/keys [properties] :as block} db page-names-to-uuids refs options]
+  (if (seq properties)
+    (let [property-changes (atom {})
+          options' (assoc options :property-changes property-changes)
+          _schemas (infer-property-schemas properties refs options')]
+      (update-in block [:block/properties]
+                 #(update-properties % db page-names-to-uuids (:block/properties-text-values block) options')))
+    block))
 
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return all non-whiteboard pages to be transacted"
-  [conn *pages blocks tag-classes page-tags-uuid]
+  [conn pages blocks tag-classes {:keys [page-tags-uuid property-schemas] :as options}]
   (let [;; remove file path relative
-        pages (map #(dissoc % :block/file :block/properties) *pages)
-        all-pages (extract/with-ref-pages pages blocks)
+        all-pages (extract/with-ref-pages (map #(dissoc % :block/file) pages) blocks)
         existing-pages (keep #(d/entity @conn [:block/name (:block/name %)]) all-pages)
         existing-page-names (set (map :block/name existing-pages))
         new-pages (remove #(contains? existing-page-names (:block/name %)) all-pages)
-        page-names-to-uuids (into {} (map (juxt :block/name :block/uuid)
-                                          (concat new-pages existing-pages)))
-        pages (map #(-> (merge {:block/journal? false} %)
-                              ;; Fix pages missing :block/original-name. Shouldn't happen
-                        ((fn [m]
-                           (if-not (:block/original-name m)
-                             (assoc m :block/original-name (:block/name m))
-                             m)))
-                        add-missing-timestamps
-                        ;; TODO: org-mode content needs to be handled
-                        (assoc :block/format :markdown)
-                        (dissoc :block/properties-text-values :block/properties-order :block/invalid-properties
-                                :block/whiteboard?)
-                        ;; FIXME: Remove when properties are supported
-                        (assoc :block/properties {})
-                        (update-page-tags tag-classes page-names-to-uuids page-tags-uuid))
-                   new-pages)]
-    {:pages pages
+        page-names-to-uuids (into {}
+                                  (map (juxt :block/name :block/uuid) (concat new-pages existing-pages)))
+        previous-property-schemas @property-schemas
+        new-pages' (mapv #(update-page-properties % @conn page-names-to-uuids new-pages options) new-pages)
+        new-property-schemas (apply dissoc @property-schemas (keys previous-property-schemas))
+        pages-tx (->> new-pages'
+                      (map #(-> (merge {:block/journal? false} %)
+                                ;; Fix pages missing :block/original-name. Shouldn't happen
+                                ((fn [m]
+                                   (if-not (:block/original-name m)
+                                     (assoc m :block/original-name (:block/name m))
+                                     m)))
+                                (merge (when-let [schema (get new-property-schemas (keyword (:block/name %)))]
+                                         {:block/type "property"
+                                          :block/schema schema}))
+                                add-missing-timestamps
+                                ;; TODO: org-mode content needs to be handled
+                                (assoc :block/format :markdown)
+                                (dissoc :block/properties-text-values :block/properties-order :block/invalid-properties
+                                        :block/whiteboard?)
+                                (update-page-tags tag-classes page-names-to-uuids page-tags-uuid)))
+                      (concat (keep #(when-let [schema (get new-property-schemas (keyword %))]
+                                       {:block/name % :block/type "property" :block/schema schema})
+                                    existing-page-names)))]
+    {:pages pages-tx
      :page-names-to-uuids page-names-to-uuids}))
 
 (defn add-file-to-db-graph
@@ -307,8 +341,9 @@
 * :page-tags-uuid - uuid of pageTags property
 * :property-schemas - atom of property schemas inferred. Useful for tracking property schema changes
    across files"
-  [conn file content {:keys [extract-options user-options page-tags-uuid property-schemas]
-                      :or {property-schemas (atom {})}}]
+  [conn file content {:keys [extract-options user-options property-schemas]
+                      :or {property-schemas (atom {})}
+                      :as options}]
   (let [format (common-util/get-format file)
         tag-classes (set (map string/lower-case (:tag-classes user-options)))
         extract-options' (merge {:block-pattern (common-config/get-block-pattern format)
@@ -329,7 +364,7 @@
               (println "Skipped file since its format is not supported:" file))
         ;; Build page and block txs
         {:keys [pages page-names-to-uuids]}
-        (build-pages-tx conn (:pages extracted) (:blocks extracted) tag-classes page-tags-uuid)
+        (build-pages-tx conn (:pages extracted) (:blocks extracted) tag-classes (select-keys options [:page-tags-uuid :property-schemas]))
         whiteboard-pages (->> pages
                               ;; support old and new whiteboards
                               (filter #(#{"whiteboard" ["whiteboard"]} (:block/type %)))
@@ -339,10 +374,12 @@
                                                 :block/format :markdown
                                                  ;; fixme: missing properties
                                                 :block/properties {(get-pid @conn :ls-type) :whiteboard-page})))))
-        blocks (map #(convert-to-db-block @conn % tag-classes page-names-to-uuids
-                                          {:whiteboard? (some? (seq whiteboard-pages))
-                                           :property-schemas property-schemas})
-                    (:blocks extracted))
+        pre-blocks (->> (:blocks extracted) (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
+        blocks (->> (:blocks extracted)
+                    (remove :block/pre-block?)
+                    (map #(convert-to-db-block @conn % pre-blocks tag-classes page-names-to-uuids
+                                               {:whiteboard? (some? (seq whiteboard-pages))
+                                                :property-schemas property-schemas})))
         ;; Build indices
         pages-index (map #(select-keys % [:block/name]) pages)
         block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
