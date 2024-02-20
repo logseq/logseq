@@ -108,11 +108,13 @@
          (into {}))))
 
 (defn- fix-parent-left-conflicts
-  [db conflicts]
+  [db conflicts page-id]
   (when (seq conflicts)
     (prn :debug "Parent left id conflicts:")
     (worker-util/post-message :notification (pr-str [[:div
-                                               (str "Parent-left conflicts detected:\n"
+                                               (str "Parent-left conflicts detected on page "
+                                                    (pr-str (:block/original-name (d/entity db page-id)))
+                                                    ":\n"
                                                     conflicts)]
                                               :error])))
   (mapcat
@@ -141,7 +143,7 @@
   (let [db @conn
         conflicts (get-conflicts db page-id)
         fix-conflicts-tx (when (seq conflicts)
-                           (fix-parent-left-conflicts db conflicts))]
+                           (fix-parent-left-conflicts db conflicts page-id))]
     (when (seq fix-conflicts-tx)
       (prn :debug :conflicts-tx)
       (pprint/pprint fix-conflicts-tx)

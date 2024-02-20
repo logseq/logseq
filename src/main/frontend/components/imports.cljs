@@ -356,14 +356,15 @@
     (notification/show! (str "Imported " (count org-files) " org file(s) as markdown. Support for org files will be added later.")
                         :info false))
   (let [{:keys [errors datom-count entities]} (db-validate/validate-db! db)]
-    (when errors
-      (log/error :import-errors {:msg (str "Import detected " (count errors) " invalid block(s):")
-                                 :counts (assoc (counts-from-entities entities) :datoms datom-count)})
-      (pprint/pprint (map :entity errors))
-      (notification/show! (str "Import detected " (count errors) " invalid block(s). These blocks may be buggy when you interact with them. See the javascript console for more.")
-                          :warning false))
-    (log/info :import-valid {:msg "Valid import!"
-                             :counts (assoc (counts-from-entities entities) :datoms datom-count)})))
+    (if errors
+      (do
+        (log/error :import-errors {:msg (str "Import detected " (count errors) " invalid block(s):")
+                                   :counts (assoc (counts-from-entities entities) :datoms datom-count)})
+        (pprint/pprint (map :entity errors))
+        (notification/show! (str "Import detected " (count errors) " invalid block(s). These blocks may be buggy when you interact with them. See the javascript console for more.")
+                            :warning false))
+      (log/info :import-valid {:msg "Valid import!"
+                               :counts (assoc (counts-from-entities entities) :datoms datom-count)}))))
 
 (defn- import-file-graph
   [*files {:keys [graph-name tags]} config-file]
