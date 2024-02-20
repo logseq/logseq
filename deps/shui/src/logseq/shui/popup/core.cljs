@@ -1,8 +1,29 @@
 (ns logseq.shui.popup.core
   (:require [rum.core :as rum]
-            [logseq.shui.ui :as ui]
+            [logseq.shui.util :as util]
             [medley.core :as medley]
             [logseq.shui.util :refer [use-atom]]))
+
+;; ui
+(def button (util/lsui-wrap "Button"))
+(def popover (util/lsui-wrap "Popover"))
+(def popover-trigger (util/lsui-wrap "PopoverTrigger"))
+(def popover-content (util/lsui-wrap "PopoverContent"))
+(def dropdown-menu (util/lsui-wrap "DropdownMenu"))
+(def dropdown-menu-trigger (util/lsui-wrap "DropdownMenuTrigger"))
+(def dropdown-menu-content (util/lsui-wrap "DropdownMenuContent"))
+(def dropdown-menu-group (util/lsui-wrap "DropdownMenuGroup"))
+(def dropdown-menu-item (util/lsui-wrap "DropdownMenuItem"))
+(def dropdown-menu-checkbox-item (util/lsui-wrap "DropdownMenuCheckboxItem"))
+(def dropdown-menu-radio-group (util/lsui-wrap "DropdownMenuRadioGroup"))
+(def dropdown-menu-radio-item (util/lsui-wrap "DropdownMenuRadioItem"))
+(def dropdown-menu-label (util/lsui-wrap "DropdownMenuLabel"))
+(def dropdown-menu-separator (util/lsui-wrap "DropdownMenuSeparator"))
+(def dropdown-menu-shortcut (util/lsui-wrap "DropdownMenuShortcut"))
+(def dropdown-menu-portal (util/lsui-wrap "DropdownMenuPortal"))
+(def dropdown-menu-sub (util/lsui-wrap "DropdownMenuSub"))
+(def dropdown-menu-sub-content (util/lsui-wrap "DropdownMenuSubContent"))
+(def dropdown-menu-sub-trigger (util/lsui-wrap "DropdownMenuSubTrigger"))
 
 ;; {:id :open? false :content nil :position [0 0] :root-props nil :content-props nil}
 (defonce ^:private *popups (atom []))
@@ -77,15 +98,15 @@
     [open?])
 
   (when-let [[x y] position]
-    (let [popup-root (if as-menu? ui/dropdown-menu ui/popover)
-          popup-trigger (if as-menu? ui/dropdown-menu-trigger ui/popover-trigger)
-          popup-content (if as-menu? ui/dropdown-menu-content ui/popover-content)]
+    (let [popup-root (if as-menu? dropdown-menu popover)
+          popup-trigger (if as-menu? dropdown-menu-trigger popover-trigger)
+          popup-content (if as-menu? dropdown-menu-content popover-content)]
       (popup-root
         (merge root-props {:open open?})
         (popup-trigger
           {:as-child true}
-          (ui/button {:class "w-1 h-1 overflow-hidden fixed p-0 opacity-0"
-                      :style {:top y :left x}} ""))
+          (button {:class "w-1 h-1 overflow-hidden fixed p-0 opacity-0"
+                   :style {:top y :left x}} ""))
         (popup-content
           (merge {:onEscapeKeyDown      #(hide! id)
                   :onPointerDownOutside #(hide! id)} content-props)
