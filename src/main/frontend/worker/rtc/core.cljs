@@ -427,6 +427,24 @@
        affected-blocks-map))
    affected-blocks-map local-unpushed-ops))
 
+(defn- affected-blocks->diff-type-ops
+  [repo affected-blocks]
+  (let [unpushed-ops (op-mem-layer/get-all-ops repo)
+        affected-blocks-map* (if unpushed-ops
+                               (filter-remote-data-by-local-unpushed-ops
+                                affected-blocks unpushed-ops)
+                               affected-blocks)
+        {remove-ops-map :remove move-ops-map :move update-ops-map :update-attrs
+         update-page-ops-map :update-page remove-page-ops-map :remove-page}
+        (update-vals
+         (group-by (fn [[_ env]] (get env :op)) affected-blocks-map*)
+         (partial into {}))]
+    {:remove-ops-map remove-ops-map
+     :move-ops-map move-ops-map
+     :update-ops-map update-ops-map
+     :update-page-ops-map update-page-ops-map
+     :remove-page-ops-map remove-page-ops-map}))
+
 (defn <apply-remote-data
   [repo conn date-formatter data-from-ws]
   (assert (rtc-const/data-from-ws-validator data-from-ws) data-from-ws)
@@ -448,16 +466,8 @@
 
         (<= remote-t-before local-tx remote-t)
         (let [affected-blocks-map (:affected-blocks data-from-ws)
-              unpushed-ops (op-mem-layer/get-all-ops repo)
-              affected-blocks-map* (if unpushed-ops
-                                     (filter-remote-data-by-local-unpushed-ops
-                                      affected-blocks-map unpushed-ops)
-                                     affected-blocks-map)
-              {remove-ops-map :remove move-ops-map :move update-ops-map :update-attrs
-               update-page-ops-map :update-page remove-page-ops-map :remove-page}
-              (update-vals
-               (group-by (fn [[_ env]] (get env :op)) affected-blocks-map*)
-               (partial into {}))
+              {:keys [remove-ops-map move-ops-map update-ops-map update-page-ops-map remove-page-ops-map]}
+              (affected-blocks->diff-type-ops repo affected-blocks-map)
               remove-ops (vals remove-ops-map)
               sorted-move-ops (move-ops-map->sorted-move-ops move-ops-map)
               update-ops (vals update-ops-map)
