@@ -170,10 +170,9 @@
                  {:on-click on-submit})]]))
 
 (defn- import-from-doc-files!
-  [db-conn repo config doc-files user-options]
+  [db-conn repo config doc-files import-state user-options]
   (let [imported-chan (async/promise-chan)
-        page-tags-uuid (db-pu/get-built-in-property-uuid repo :pagetags)
-        property-schemas (atom {})]
+        page-tags-uuid (db-pu/get-built-in-property-uuid repo :pagetags)]
     (try
       (let [docs-chan (async/to-chan! (medley/indexed doc-files))]
         (state/set-state! [:graph/importing-state :total] (count doc-files))
@@ -201,7 +200,7 @@
                                                    {:extract-options extract-options
                                                     :user-options user-options
                                                     :page-tags-uuid page-tags-uuid
-                                                    :property-schemas property-schemas})]
+                                                    :import-state import-state})]
                                               (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report)))
                                             m))
                                   (p/catch (fn [error]
@@ -350,11 +349,27 @@
    :property-values (count (mapcat :block/properties entities))})
 
 (defn- validate-imported-data
-  [db files]
+  [db import-state files]
   (when-let [org-files (seq (filter #(= "org" (path/file-ext (:rpath %))) files))]
     (log/info :org-files (mapv :rpath org-files))
     (notification/show! (str "Imported " (count org-files) " org file(s) as markdown. Support for org files will be added later.")
                         :info false))
+  (when-let [ignored-props (seq @(:ignored-properties import-state))]
+    (notification/show!
+     [:.mb-2
+      [:.text-lg.mb-2 (str "Import ignored " (count ignored-props) " "
+                           (if (= 1 (count ignored-props)) "property" "properties"))]
+      [:span.text-xs
+       "To fix this, change these property values to have the correct type and reimport the graph"]
+      (->> ignored-props
+           (map (fn [{:keys [property value schema]}]
+                  [(str "Property " (pr-str property) " with value " (pr-str value))
+                   (str "Property value has type " (get-in schema [:type :to]) " instead of type " (get-in schema [:type :from]))]))
+           (map (fn [[k v]]
+                  [:dl.my-2.mb-0
+                   [:dt.m-0 [:strong (str k)]]
+                   [:dd {:class "text-warning"} v]])))]
+     :warning false))
   (let [{:keys [errors datom-count entities]} (db-validate/validate-db! db)]
     (if errors
       (do
@@ -372,6 +387,7 @@
   (state/set-state! [:graph/importing-state :current-page] (str graph-name " Assets"))
   (async/go
     (let [start-time (t/now)
+          import-state (gp-exporter/new-import-state)
           _ (async/<! (p->c (repo-handler/new-db! graph-name {:file-graph-import? true})))
           repo (state/get-current-repo)
           db-conn (db/get-db repo false)
@@ -384,13 +400,13 @@
           asset-files (filter #(string/starts-with? (:rpath %) "assets/") files)]
       (async/<! (p->c (import-logseq-files (filter logseq-file? files))))
       (async/<! (import-from-asset-files! asset-files))
-      (async/<! (import-from-doc-files! db-conn repo config doc-files
+      (async/<! (import-from-doc-files! db-conn repo config doc-files import-state
                                         {:tag-classes (set (string/split tags #",\s*"))}))
       (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))
       (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
       (state/set-state! :graph/importing nil)
       (state/set-state! :graph/importing-state nil)
-      (validate-imported-data @db-conn files)
+      (validate-imported-data @db-conn import-state files)
       (finished-cb))))
 
 (defn import-file-to-db-handler
