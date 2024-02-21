@@ -187,7 +187,7 @@
               (async/<! (async/timeout 10))
               (async/<! (p->c (-> (.text (:file-object file))
                                   (p/then (fn [content]
-                                            (prn :import rpath)
+                                            (prn :import-file rpath i)
                                             {:file/path rpath
                                              :file/content content}))
                                   (p/then (fn [m]
