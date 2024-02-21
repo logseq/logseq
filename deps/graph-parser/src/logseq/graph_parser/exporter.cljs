@@ -121,17 +121,7 @@
               (prn "Import detected property value change it can't fix" {:old prev-type :new prop-type :property prop})))
           nil)
       (do (swap! property-schemas assoc prop schema)
-        schema))))
-
-(defn- infer-property-schemas
-  [props refs options]
-  (->> props
-       (keep (fn [[prop val]]
-               ;; TODO: Also remove all skipped properties
-               (when-not (get db-property/built-in-properties prop)
-                 [prop
-                  (infer-property-schema val prop refs options)])))
-       (into {})))
+          schema))))
 
 (defn- update-block-refs
   "Updates the attributes of a block ref as this is where a new page is defined. Also
@@ -291,12 +281,38 @@
 
 (defn- update-page-properties [{:block/keys [properties] :as block} db page-names-to-uuids refs options]
   (if (seq properties)
-    (let [property-changes (atom {})
-          options' (assoc options :property-changes property-changes)
-          _schemas (infer-property-schemas properties refs options')]
-      (update-in block [:block/properties]
-                 #(update-properties % db page-names-to-uuids (:block/properties-text-values block) options')))
+    (let [dissoced-props (into ignored-built-in-properties
+                             ;; TODO: Add import support for these dissoced built-in properties
+                               [:title :id :created-at :updated-at
+                                :card-last-interval :card-repeats :card-last-reviewed :card-next-schedule
+                                :card-ease-factor :card-last-score])
+          properties' (apply dissoc properties dissoced-props)
+          options' (assoc options :property-changes (atom {}))]
+      (doseq [[prop val] properties']
+        ;; Only infer user properties
+        (when-not (get db-property/built-in-properties prop)
+          (infer-property-schema val prop refs options')))
+      (assoc-in block [:block/properties]
+                (update-properties properties' db page-names-to-uuids (:block/properties-text-values block) options')))
     block))
+
+(defn- build-new-page
+  [m new-property-schemas tag-classes page-names-to-uuids page-tags-uuid]
+  (-> (merge {:block/journal? false} m)
+      ;; Fix pages missing :block/original-name. Shouldn't happen
+      ((fn [m']
+         (if-not (:block/original-name m')
+           (assoc m' :block/original-name (:block/name m'))
+           m')))
+      (merge (when-let [schema (get new-property-schemas (keyword (:block/name m)))]
+               {:block/type "property"
+                :block/schema schema}))
+      add-missing-timestamps
+      ;; TODO: org-mode content needs to be handled
+      (assoc :block/format :markdown)
+      (dissoc :block/properties-text-values :block/properties-order :block/invalid-properties
+              :block/whiteboard?)
+      (update-page-tags tag-classes page-names-to-uuids page-tags-uuid)))
 
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return all non-whiteboard pages to be transacted"
@@ -308,28 +324,18 @@
         new-pages (remove #(contains? existing-page-names (:block/name %)) all-pages)
         page-names-to-uuids (into {}
                                   (map (juxt :block/name :block/uuid) (concat new-pages existing-pages)))
-        previous-property-schemas @property-schemas
-        new-pages' (mapv #(update-page-properties % @conn page-names-to-uuids new-pages options) new-pages)
-        new-property-schemas (apply dissoc @property-schemas (keys previous-property-schemas))
-        pages-tx (->> new-pages'
-                      (map #(-> (merge {:block/journal? false} %)
-                                ;; Fix pages missing :block/original-name. Shouldn't happen
-                                ((fn [m]
-                                   (if-not (:block/original-name m)
-                                     (assoc m :block/original-name (:block/name m))
-                                     m)))
-                                (merge (when-let [schema (get new-property-schemas (keyword (:block/name %)))]
-                                         {:block/type "property"
-                                          :block/schema schema}))
-                                add-missing-timestamps
-                                ;; TODO: org-mode content needs to be handled
-                                (assoc :block/format :markdown)
-                                (dissoc :block/properties-text-values :block/properties-order :block/invalid-properties
-                                        :block/whiteboard?)
-                                (update-page-tags tag-classes page-names-to-uuids page-tags-uuid)))
-                      (concat (keep #(when-let [schema (get new-property-schemas (keyword %))]
-                                       {:block/name % :block/type "property" :block/schema schema})
-                                    existing-page-names)))]
+        old-property-schemas @property-schemas
+        ;; update-page-properties must come before building tx to detect new-property-schemas
+        all-pages' (mapv #(update-page-properties % @conn page-names-to-uuids all-pages options) all-pages)
+        new-property-schemas (apply dissoc @property-schemas (keys old-property-schemas))
+        pages-tx (keep #(if (existing-page-names (:block/name %))
+                          (let [schema (get new-property-schemas (keyword (:block/name %)))]
+                            (when (or schema (seq (:block/properties %)))
+                              (cond-> (select-keys % [:block/name :block/properties])
+                                schema
+                                (assoc :block/type "property" :block/schema schema))))
+                          (build-new-page % new-property-schemas tag-classes page-names-to-uuids page-tags-uuid))
+                       all-pages')]
     {:pages pages-tx
      :page-names-to-uuids page-names-to-uuids}))
 
