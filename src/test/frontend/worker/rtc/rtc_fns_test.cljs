@@ -200,7 +200,8 @@
         page-name "apply-remote-move-ops-test"
         [page-uuid
          uuid1-client uuid2-client
-         uuid1-remote uuid2-remote] (repeatedly random-uuid)]
+         uuid1-remote
+         uuid1-not-exist] (repeatedly random-uuid)]
     (page-handler/create! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
     (outliner-tx/transact!
      opts
@@ -236,6 +237,29 @@
         (let [page-blocks (ldb/get-page-blocks @conn page-name {})]
           (is (= #{uuid1-client uuid2-client uuid1-remote} (set (map :block/uuid page-blocks))))
           (is (= [uuid1-client #{"property"}]
-                 ((juxt (comp :block/uuid :block/link) :block/type) (d/entity @conn [:block/uuid uuid1-remote]))))))))
+                 ((juxt (comp :block/uuid :block/link) :block/type) (d/entity @conn [:block/uuid uuid1-remote])))))))
+
+    (testing "apply-remote-update-ops-test2"
+      (let [data-from-ws {:req-id "req-id"
+                          :t 1 ;; not used
+                          :t-before 0
+                          :affected-blocks
+                          {uuid1-remote {:op :update-attrs
+                                         :self uuid1-remote
+                                         :parents [uuid1-client]
+                                         :left uuid1-client
+                                         :content "uuid2-remote"
+                                         :created-at 1
+                                         :link nil
+                                         :type nil}}}
+            update-ops (vals
+                        (:update-ops-map
+                         (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
+        (is (rtc-const/data-from-ws-validator data-from-ws))
+        (rtc-core/apply-remote-update-ops repo conn date-formatter update-ops)
+        (let [page-blocks (ldb/get-page-blocks @conn page-name {})]
+          (is (= #{uuid1-client uuid2-client uuid1-remote} (set (map :block/uuid page-blocks))))
+          (is (= [nil nil] ((juxt :block/link :block/type) (d/entity @conn [:block/uuid uuid1-remote]))))))))
+
   (state/set-current-repo! nil)
   (test-helper/destroy-test-db!))
