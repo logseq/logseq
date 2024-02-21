@@ -432,12 +432,14 @@
     [{:keys [query-params]}]
     (if (state/sub :graph/importing)
       (let [{:keys [total current-idx current-page]} (state/sub :graph/importing-state)
-            left-label [:div.flex.flex-row.font-bold
-                        (t :importing)
-                        [:div.hidden.md:flex.flex-row
-                         [:span.mr-1 ": "]
-                         [:div.text-ellipsis-wrapper {:style {:max-width 300}}
-                          current-page]]]
+            left-label (if (and current-idx total (= current-idx total))
+                         [:div.flex.flex-row.font-bold "Loading UI ..."]
+                         [:div.flex.flex-row.font-bold
+                          (t :importing)
+                          [:div.hidden.md:flex.flex-row
+                           [:span.mr-1 ": "]
+                           [:div.text-ellipsis-wrapper {:style {:max-width 300}}
+                            current-page]]])
             width (js/Math.round (* (.toFixed (/ current-idx total) 2) 100))
             process (when (and total current-idx)
                       (str current-idx "/" total))]
