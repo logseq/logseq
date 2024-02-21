@@ -3611,6 +3611,43 @@
                (doseq [{:block/keys [uuid]} blocks-to-collapse]
                  (collapse-block! uuid))))))))))
 
+(defn toggle-collapse!
+  ([e] (toggle-collapse! e false))
+  ([e clear-selection?]
+    (when e (util/stop e))
+    (cond
+      (state/editing?)
+      (when-let [block (state/get-edit-block)]
+        ;; get-edit-block doesn't track the latest collapsed state, so we need to reload from db.
+        (let [block-id (:block/uuid block)
+              block (db/pull [:block/uuid block-id])]
+          (if (:block/collapsed? block)
+            (expand! e clear-selection?)
+            (collapse! e clear-selection?))))
+
+      (state/selection?)
+      (do
+        (let [block-ids (map #(-> % (dom/attr "blockid") uuid) (get-selected-blocks))
+              first-block-id (first block-ids)]
+          (when first-block-id
+            ;; If multiple blocks are selected, they may not have all the same collapsed state.
+            ;; For simplicity, use the first block's state to decide whether to collapse/expand all.
+            (let [first-block (db/pull [:block/uuid first-block-id])]
+              (if (:block/collapsed? first-block)
+                (doseq [block-id block-ids] (expand-block! block-id))
+                (doseq [block-id block-ids] (collapse-block! block-id))))))
+        (and clear-selection? (clear-selection!)))
+
+      (whiteboard?)
+      ;; TODO: Looks like detecting the whiteboard selection's collapse state will take more work.
+      ;; Leaving unimplemented for now.
+      nil
+
+      :else
+      ;; If no block is being edited or selected, the "toggle" action doesn't make sense,
+      ;; so we no-op here, unlike in the expand! & collapse! functions.
+      nil)))
+
 (defn collapse-all!
   ([]
    (collapse-all! nil {}))
