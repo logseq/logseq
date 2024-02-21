@@ -94,9 +94,11 @@
    ;; Not supported as they have been ignored for a long time and cause invalid built-in pages
    :now :later :doing :done :canceled :cancelled :in-progress :todo :wait :waiting])
 
-(defn- infer-property-schema
-  "Return inferred :block/schema map. nil means don't set schema"
-  [prop-val prop refs {:keys [property-schemas property-changes]}]
+(defn- infer-property-schema-and-get-property-change
+  "Infers a property's schema from the given _user_ property value and adds new ones to
+  the property-schemas atom. If a property's :type changes, returns a map of
+  the schema attribute changed and how it changed e.g. `{:type {:from :default :to :url}}`"
+  [prop-val prop refs property-schemas]
   ;; Explicitly fail an unexpected case rather cause silent downstream failures
   (when (and (coll? prop-val) (not (every? string? prop-val)))
     (throw (ex-info "Import cannot infer schema of unknown property value"
@@ -107,58 +109,16 @@
                                         (set (keep #(when (:block/journal? %) (:block/original-name %)) refs))))
                     :date
                     (db-property-type/infer-property-type-from-value prop-val))
-        schema (cond-> {:type prop-type}
-                 (#{:page :date} prop-type)
-                 ;; Assume :many for now as detecting that detecting property values across files are consistent
-                 ;; isn't possible yet
-                 (assoc :cardinality :many))]
-    (if-let [prev-type (get-in @property-schemas [prop :type])]
-      (do (when-not (= prev-type prop-type)
-            (prn :PROP-TYPE-CHANGE prev-type :-> prop-type prop)
-            (swap! property-changes assoc prop {:type {:from prev-type :to prop-type}})
-            (when (not= prev-type :default)
-              ;; TODO: Throw error or notification when all are fixed that can be
-              (prn "Import detected property value change it can't fix" {:old prev-type :new prop-type :property prop})))
-          nil)
-      (do (swap! property-schemas assoc prop schema)
-          schema))))
-
-(defn- update-block-refs
-  "Updates the attributes of a block ref as this is where a new page is defined. Also
-   updates block content effected by refs"
-  [block page-names-to-uuids {:keys [whiteboard?] :as options}]
-  (let [ref-to-ignore? (if whiteboard?
-                         #(and (map? %) (:block/uuid %))
-                         #(and (vector? %) (= :block/uuid (first %))))]
-    (if (seq (:block/refs block))
-      (cond-> block
-        true
-        (update
-         :block/refs
-         (fn [refs]
-           (mapv (fn [ref]
-                   (if (ref-to-ignore? ref)
-                     ref
-                     (let [prop-val (get (apply dissoc (:block/properties block) ignored-built-in-properties)
-                                         (keyword (:block/name ref)))]
-                       (cond-> (assoc ref :block/format :markdown)
-                         (and prop-val
-                              (not (get db-property/built-in-properties (keyword (:block/name ref))))
-                              ;; Ignore templates as they don't directly map to properties and don't
-                              ;; have representative property values
-                              (not (contains? (:block/properties block) :template)))
-                         (merge (when-let [schema (infer-property-schema prop-val (keyword (:block/name ref)) refs options)]
-                                  {:block/type "property"
-                                   :block/schema schema}))))))
-                 refs)))
-        (:block/content block)
-        (update :block/content
-                db-content/page-ref->special-id-ref
-               ;; TODO: Handle refs for whiteboard block which has none
-                (->> (:block/refs block)
-                     (remove ref-to-ignore?)
-                     (map #(add-uuid-to-page-map % page-names-to-uuids)))))
-      block)))
+        prev-type (get-in @property-schemas [prop :type])]
+    (when-not prev-type
+      (let [schema (cond-> {:type prop-type}
+                     (#{:page :date} prop-type)
+                     ;; Assume :many for now as detecting that detecting property values across files are consistent
+                     ;; isn't possible yet
+                     (assoc :cardinality :many))]
+        (swap! property-schemas assoc prop schema)))
+    (when (and prev-type (not= prev-type prop-type))
+      {:type {:from prev-type :to prop-type}})))
 
 (defn- update-built-in-property-values
   [props db]
@@ -182,14 +142,29 @@
                  val)]))
        (into {})))
 
-(defn- update-user-property-values [props user-page-properties prop-name->uuid properties-text-values property-changes]
+(defn- handle-changed-property [val prop prop-name->uuid properties-text-values property-changes]
+  (let [type-change (get-in property-changes [prop :type])]
+    (cond
+      ;; ignore :to as any property value gets stringified
+      (= :default (:from type-change))
+      (or (get properties-text-values prop) (str val))
+      (= {:from :page :to :date} type-change)
+      ;; treat it the same as a :page
+      (set (map (comp prop-name->uuid common-util/page-name-sanity-lc) val))
+      :else
+      (do
+         ;; TODO: Throw error or notification when all are fixed that can be
+        (prn :PROP-CHANGE-UNHANDLED {:property prop :val val :change type-change})
+        val))))
+
+(defn- update-user-property-values [props prop-name->uuid properties-text-values property-changes]
   (->> props
        (map (fn [[prop val]]
               [prop
                (cond
-                 (= :default (get-in @property-changes [prop :type :from]))
-                 (or (get properties-text-values prop) (str val))
-                 (contains? user-page-properties prop)
+                 (get-in property-changes [prop :type])
+                 (handle-changed-property val prop prop-name->uuid properties-text-values property-changes)
+                 (set? val)
                  ;; assume for now a ref's :block/name can always be translated by lc helper
                  (set (map (comp prop-name->uuid common-util/page-name-sanity-lc) val))
                  :else
@@ -203,8 +178,8 @@
                       {:page k}))))
 
 (defn- update-properties
-  "Updates block property names and values and removes old built-in properties"
-  [*props db page-names-to-uuids properties-text-values {:keys [whiteboard? property-changes]}]
+  "Updates block property names and values"
+  [props db page-names-to-uuids properties-text-values {:keys [whiteboard? property-changes]}]
   (let [prop-name->uuid (if whiteboard?
                           (fn prop-name->uuid [k]
                             (or (get-pid db k)
@@ -212,23 +187,70 @@
                                                 {:page k}))))
                           (fn prop-name->uuid [k]
                             (cached-prop-name->uuid db page-names-to-uuids k)))
-        dissoced-props (into ignored-built-in-properties
-                             ;; TODO: Add import support for these dissoced built-in properties
-                             [:title :id :created-at :updated-at
-                              :card-last-interval :card-repeats :card-last-reviewed :card-next-schedule
-                              :card-ease-factor :card-last-score])
-        props (apply dissoc *props dissoced-props)
-        user-page-properties (set (keep (fn [[k v]] (when (set? v) k)) (apply dissoc props db-property/built-in-properties-keys)))]
+        user-properties (apply dissoc props db-property/built-in-properties-keys)]
     ;; TODO: Add import support for :template. Ignore for now as they cause invalid property types
-    (if (contains? *props :template)
+    (if (contains? props :template)
       {}
-      (cond-> props
-        (seq (select-keys props db-property/built-in-properties-keys))
-        (update-built-in-property-values db)
-        (or (seq user-page-properties) (seq @property-changes))
-        (update-user-property-values user-page-properties prop-name->uuid properties-text-values property-changes)
+      (-> (update-built-in-property-values (select-keys props db-property/built-in-properties-keys) db)
+          (merge (update-user-property-values user-properties prop-name->uuid properties-text-values property-changes))
+          (update-keys prop-name->uuid)))))
+
+(defn- infer-property-schemas-and-update-properties
+  "Infers property schemas and update properties. Only infers property schemas on
+   user properties as built-in ones shouldn't change"
+  [{:block/keys [properties] :as block} db page-names-to-uuids refs {:keys [property-schemas] :as options}]
+  (if (seq properties)
+    (let [dissoced-props (into ignored-built-in-properties
+                               ;; TODO: Add import support for these dissoced built-in properties
+                               [:title :id :created-at :updated-at
+                                :card-last-interval :card-repeats :card-last-reviewed :card-next-schedule
+                                :card-ease-factor :card-last-score])
+          properties' (apply dissoc properties dissoced-props)
+          properties-to-infer (if (:template properties')
+                                ;; Ignore template properties as they don't consistently have representative property values
+                                {}
+                                (apply dissoc properties' db-property/built-in-properties-keys))
+          property-changes (->> properties-to-infer
+                                (keep (fn [[prop val]]
+                                        (when-let [property-change (infer-property-schema-and-get-property-change val prop refs property-schemas)]
+                                          [prop property-change])))
+                                (into {}))
+          _ (when (seq property-changes) (prn :PROP-CHANGES property-changes))
+          options' (assoc options :property-changes property-changes)]
+      (assoc-in block [:block/properties]
+                (update-properties properties' db page-names-to-uuids (:block/properties-text-values block) options')))
+    block))
+
+(defn- update-block-refs
+  "Updates the attributes of a block ref as this is where a new page is defined. Also
+   updates block content effected by refs"
+  [block page-names-to-uuids old-property-schemas {:keys [whiteboard? property-schemas]}]
+  (let [ref-to-ignore? (if whiteboard?
+                         #(and (map? %) (:block/uuid %))
+                         #(and (vector? %) (= :block/uuid (first %))))
+        new-property-schemas (apply dissoc @property-schemas (keys old-property-schemas))]
+    (if (seq (:block/refs block))
+      (cond-> block
         true
-        (update-keys prop-name->uuid)))))
+        (update
+         :block/refs
+         (fn [refs]
+           (mapv (fn [ref]
+                   (if (ref-to-ignore? ref)
+                     ref
+                     (merge (assoc ref :block/format :markdown)
+                            (when-let [schema (get new-property-schemas (keyword (:block/name ref)))]
+                              {:block/type "property"
+                               :block/schema schema}))))
+                 refs)))
+        (:block/content block)
+        (update :block/content
+                db-content/page-ref->special-id-ref
+                ;; TODO: Handle refs for whiteboard block which has none
+                (->> (:block/refs block)
+                     (remove ref-to-ignore?)
+                     (map #(add-uuid-to-page-map % page-names-to-uuids)))))
+      block)))
 
 (defn- update-block-macros
   [block db page-names-to-uuids]
@@ -244,12 +266,6 @@
                     macros)))
     block))
 
-(defn- update-block-properties [block db page-names-to-uuids options]
-  (if (seq (:block/properties block))
-    (update-in block [:block/properties]
-               #(update-properties % db page-names-to-uuids (:block/properties-text-values block) options))
-    block))
-
 (defn- fix-pre-block-references
   [{:block/keys [left parent page] :as block} pre-blocks]
   (cond-> block
@@ -263,38 +279,19 @@
 (defn- convert-to-db-block
   [db block pre-blocks tag-classes page-names-to-uuids options]
   (prn ::block block)
-  (let [options' (assoc options
-                        ;; map of detected property-changes
-                        :property-changes (atom {}))]
+  (let [old-property-schemas @(:property-schemas options)]
     (-> block
         (fix-pre-block-references pre-blocks)
         (update-block-macros db page-names-to-uuids)
-        ;; needs to come before update-block-properties
-        (update-block-refs page-names-to-uuids options')
-        (update-block-properties db page-names-to-uuids options')
+        ;; needs to come before update-block-refs to detect new property schemas
+        (infer-property-schemas-and-update-properties db page-names-to-uuids (:block/refs block) options)
+        (update-block-refs page-names-to-uuids old-property-schemas options)
         (update-block-tags tag-classes page-names-to-uuids)
         add-missing-timestamps
         ;; ((fn [x] (prn :BLOCKZ x) x))
         ;; TODO: org-mode content needs to be handled
         (assoc :block/format :markdown)
         (dissoc :block/properties-text-values :block/properties-order :block/invalid-properties))))
-
-(defn- update-page-properties [{:block/keys [properties] :as block} db page-names-to-uuids refs options]
-  (if (seq properties)
-    (let [dissoced-props (into ignored-built-in-properties
-                             ;; TODO: Add import support for these dissoced built-in properties
-                               [:title :id :created-at :updated-at
-                                :card-last-interval :card-repeats :card-last-reviewed :card-next-schedule
-                                :card-ease-factor :card-last-score])
-          properties' (apply dissoc properties dissoced-props)
-          options' (assoc options :property-changes (atom {}))]
-      (doseq [[prop val] properties']
-        ;; Only infer user properties
-        (when-not (get db-property/built-in-properties prop)
-          (infer-property-schema val prop refs options')))
-      (assoc-in block [:block/properties]
-                (update-properties properties' db page-names-to-uuids (:block/properties-text-values block) options')))
-    block))
 
 (defn- build-new-page
   [m new-property-schemas tag-classes page-names-to-uuids page-tags-uuid]
@@ -317,7 +314,7 @@
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return all non-whiteboard pages to be transacted"
   [conn pages blocks tag-classes {:keys [page-tags-uuid property-schemas] :as options}]
-  (let [;; remove file path relative
+  (let [;; remove file path relative from pages before extraction
         all-pages (extract/with-ref-pages (map #(dissoc % :block/file) pages) blocks)
         existing-pages (keep #(d/entity @conn [:block/name (:block/name %)]) all-pages)
         existing-page-names (set (map :block/name existing-pages))
@@ -325,8 +322,9 @@
         page-names-to-uuids (into {}
                                   (map (juxt :block/name :block/uuid) (concat new-pages existing-pages)))
         old-property-schemas @property-schemas
-        ;; update-page-properties must come before building tx to detect new-property-schemas
-        all-pages' (mapv #(update-page-properties % @conn page-names-to-uuids all-pages options) all-pages)
+        ;; must come before building tx to detect new-property-schemas
+        all-pages' (mapv #(infer-property-schemas-and-update-properties % @conn page-names-to-uuids all-pages options)
+                         all-pages)
         new-property-schemas (apply dissoc @property-schemas (keys old-property-schemas))
         pages-tx (keep #(if (existing-page-names (:block/name %))
                           (let [schema (get new-property-schemas (keyword (:block/name %)))]
