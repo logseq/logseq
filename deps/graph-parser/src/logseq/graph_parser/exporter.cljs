@@ -142,7 +142,10 @@
                  val)]))
        (into {})))
 
-(defn- handle-changed-property [val prop prop-name->uuid properties-text-values property-changes]
+(defn- handle-changed-property
+  "Handles converting a property value whose :type has changed. Returns the changed
+   value or nil if the property is to be ignored"
+  [val prop prop-name->uuid properties-text-values property-changes ignored-properties]
   (let [type-change (get-in property-changes [prop :type])]
     (cond
       ;; ignore :to as any property value gets stringified
@@ -153,22 +156,23 @@
       (set (map (comp prop-name->uuid common-util/page-name-sanity-lc) val))
       :else
       (do
-         ;; TODO: Throw error or notification when all are fixed that can be
-        (prn :PROP-CHANGE-UNHANDLED {:property prop :val val :change type-change})
-        val))))
+        (js/console.log :prop-change-ignored {:property prop :val val :change type-change})
+        (swap! ignored-properties conj {:property prop :value val :schema (get property-changes prop)})
+        nil))))
 
-(defn- update-user-property-values [props prop-name->uuid properties-text-values property-changes]
+(defn- update-user-property-values [props prop-name->uuid properties-text-values property-changes ignored-properties]
   (->> props
-       (map (fn [[prop val]]
-              [prop
-               (cond
-                 (get-in property-changes [prop :type])
-                 (handle-changed-property val prop prop-name->uuid properties-text-values property-changes)
-                 (set? val)
-                 ;; assume for now a ref's :block/name can always be translated by lc helper
-                 (set (map (comp prop-name->uuid common-util/page-name-sanity-lc) val))
-                 :else
-                 val)]))
+       (keep (fn [[prop val]]
+               (if (get-in property-changes [prop :type])
+                 (when-let [val' (handle-changed-property val prop prop-name->uuid properties-text-values property-changes ignored-properties)]
+                   [prop val'])
+                 [prop
+                  (cond
+                    (set? val)
+                   ;; assume for now a ref's :block/name can always be translated by lc helper
+                    (set (map (comp prop-name->uuid common-util/page-name-sanity-lc) val))
+                    :else
+                    val)])))
        (into {})))
 
 (defn- cached-prop-name->uuid [db page-names-to-uuids k]
@@ -179,7 +183,7 @@
 
 (defn- update-properties
   "Updates block property names and values"
-  [props db page-names-to-uuids properties-text-values {:keys [whiteboard? property-changes]}]
+  [props db page-names-to-uuids properties-text-values {:keys [whiteboard? property-changes import-state]}]
   (let [prop-name->uuid (if whiteboard?
                           (fn prop-name->uuid [k]
                             (or (get-pid db k)
@@ -192,13 +196,13 @@
     (if (contains? props :template)
       {}
       (-> (update-built-in-property-values (select-keys props db-property/built-in-properties-keys) db)
-          (merge (update-user-property-values user-properties prop-name->uuid properties-text-values property-changes))
+          (merge (update-user-property-values user-properties prop-name->uuid properties-text-values property-changes (:ignored-properties import-state)))
           (update-keys prop-name->uuid)))))
 
 (defn- infer-property-schemas-and-update-properties
   "Infers property schemas and update properties. Only infers property schemas on
    user properties as built-in ones shouldn't change"
-  [{:block/keys [properties] :as block} db page-names-to-uuids refs {:keys [property-schemas] :as options}]
+  [{:block/keys [properties] :as block} db page-names-to-uuids refs {:keys [import-state] :as options}]
   (if (seq properties)
     (let [dissoced-props (into ignored-built-in-properties
                                ;; TODO: Add import support for these dissoced built-in properties
@@ -212,7 +216,7 @@
                                 (apply dissoc properties' db-property/built-in-properties-keys))
           property-changes (->> properties-to-infer
                                 (keep (fn [[prop val]]
-                                        (when-let [property-change (infer-property-schema-and-get-property-change val prop refs property-schemas)]
+                                        (when-let [property-change (infer-property-schema-and-get-property-change val prop refs (:property-schemas import-state))]
                                           [prop property-change])))
                                 (into {}))
           _ (when (seq property-changes) (prn :PROP-CHANGES property-changes))
@@ -224,11 +228,11 @@
 (defn- update-block-refs
   "Updates the attributes of a block ref as this is where a new page is defined. Also
    updates block content effected by refs"
-  [block page-names-to-uuids old-property-schemas {:keys [whiteboard? property-schemas]}]
+  [block page-names-to-uuids old-property-schemas {:keys [whiteboard? import-state]}]
   (let [ref-to-ignore? (if whiteboard?
                          #(and (map? %) (:block/uuid %))
                          #(and (vector? %) (= :block/uuid (first %))))
-        new-property-schemas (apply dissoc @property-schemas (keys old-property-schemas))]
+        new-property-schemas (apply dissoc @(:property-schemas import-state) (keys old-property-schemas))]
     (if (seq (:block/refs block))
       (cond-> block
         true
@@ -276,10 +280,10 @@
     (and (vector? parent) (contains? pre-blocks (second parent)))
     (assoc :block/parent page)))
 
-(defn- convert-to-db-block
-  [db block pre-blocks tag-classes page-names-to-uuids options]
+(defn- build-block-tx
+  [db block pre-blocks tag-classes page-names-to-uuids {:keys [import-state] :as options}]
   (prn ::block block)
-  (let [old-property-schemas @(:property-schemas options)]
+  (let [old-property-schemas @(:property-schemas import-state)]
     (-> block
         (fix-pre-block-references pre-blocks)
         (update-block-macros db page-names-to-uuids)
@@ -313,7 +317,7 @@
 
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return all non-whiteboard pages to be transacted"
-  [conn pages blocks tag-classes {:keys [page-tags-uuid property-schemas] :as options}]
+  [conn pages blocks tag-classes {:keys [page-tags-uuid import-state] :as options}]
   (let [;; remove file path relative from pages before extraction
         all-pages (extract/with-ref-pages (map #(dissoc % :block/file) pages) blocks)
         existing-pages (keep #(d/entity @conn [:block/name (:block/name %)]) all-pages)
@@ -321,11 +325,11 @@
         new-pages (remove #(contains? existing-page-names (:block/name %)) all-pages)
         page-names-to-uuids (into {}
                                   (map (juxt :block/name :block/uuid) (concat new-pages existing-pages)))
-        old-property-schemas @property-schemas
+        old-property-schemas @(:property-schemas import-state)
         ;; must come before building tx to detect new-property-schemas
         all-pages' (mapv #(infer-property-schemas-and-update-properties % @conn page-names-to-uuids all-pages options)
                          all-pages)
-        new-property-schemas (apply dissoc @property-schemas (keys old-property-schemas))
+        new-property-schemas (apply dissoc @(:property-schemas import-state) (keys old-property-schemas))
         pages-tx (keep #(if (existing-page-names (:block/name %))
                           (let [schema (get new-property-schemas (keyword (:block/name %)))]
                             (when (or schema (seq (:block/properties %)))
@@ -337,16 +341,22 @@
     {:pages pages-tx
      :page-names-to-uuids page-names-to-uuids}))
 
+(defn new-import-state
+  "New import state that is used in add-file-to-db-graph. State is atom per
+   key to make code more readable and encourage local mutations"
+  []
+  {:ignored-properties (atom [])
+   :property-schemas (atom {})})
+
 (defn add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
   
 * :extract-options - Options map to pass to extract/extract
 * :user-options - User provided options that alter how a file is converted to db graph
 * :page-tags-uuid - uuid of pageTags property
-* :property-schemas - atom of property schemas inferred. Useful for tracking property schema changes
-   across files"
-  [conn file content {:keys [extract-options user-options property-schemas]
-                      :or {property-schemas (atom {})}
+* :import-state - useful import state to maintain across files e.g. property schemas or ignored properties"
+  [conn file content {:keys [extract-options user-options import-state]
+                      :or {import-state (new-import-state)}
                       :as options}]
   (let [format (common-util/get-format file)
         tag-classes (set (map string/lower-case (:tag-classes user-options)))
@@ -368,7 +378,7 @@
               (println "Skipped file since its format is not supported:" file))
         ;; Build page and block txs
         {:keys [pages page-names-to-uuids]}
-        (build-pages-tx conn (:pages extracted) (:blocks extracted) tag-classes (select-keys options [:page-tags-uuid :property-schemas]))
+        (build-pages-tx conn (:pages extracted) (:blocks extracted) tag-classes (select-keys options [:page-tags-uuid :import-state]))
         whiteboard-pages (->> pages
                               ;; support old and new whiteboards
                               (filter #(#{"whiteboard" ["whiteboard"]} (:block/type %)))
@@ -381,9 +391,9 @@
         pre-blocks (->> (:blocks extracted) (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
         blocks (->> (:blocks extracted)
                     (remove :block/pre-block?)
-                    (map #(convert-to-db-block @conn % pre-blocks tag-classes page-names-to-uuids
-                                               {:whiteboard? (some? (seq whiteboard-pages))
-                                                :property-schemas property-schemas})))
+                    (map #(build-block-tx @conn % pre-blocks tag-classes page-names-to-uuids
+                                          {:whiteboard? (some? (seq whiteboard-pages))
+                                           :import-state import-state})))
         ;; Build indices
         pages-index (map #(select-keys % [:block/name]) pages)
         block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
