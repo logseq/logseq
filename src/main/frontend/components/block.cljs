@@ -2,7 +2,6 @@
   (:refer-clojure :exclude [range])
   (:require-macros [hiccups.core])
   (:require ["/frontend/utils" :as utils]
-            ["@capacitor/share" :refer [^js Share]]
             [cljs-bean.core :as bean]
             [cljs.core.match :refer [match]]
             [cljs.reader :as reader]
@@ -48,6 +47,7 @@
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.export.common :as export-common-handler]
             [frontend.mobile.util :as mobile-util]
+            [frontend.mobile.intent :as mobile-intent]
             [frontend.modules.outliner.tree :as tree]
             [frontend.security :as security]
             [frontend.shui :refer [get-shui-component-version make-shui-context]]
@@ -395,8 +395,7 @@
                          (let [[rel-dir basename] (util/get-dir-and-basename href)
                                rel-dir (string/replace rel-dir #"^/+" "")
                                asset-url (path/path-join repo-dir rel-dir basename)]
-                           (.share Share (clj->js {:url asset-url
-                                                   :title "Open file with your favorite app"})))))]
+                           (mobile-intent/open-or-share-file asset-url))))]
 
         (cond
           (contains? config/audio-formats ext)
