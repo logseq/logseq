@@ -360,11 +360,15 @@
       [:.text-lg.mb-2 (str "Import ignored " (count ignored-props) " "
                            (if (= 1 (count ignored-props)) "property" "properties"))]
       [:span.text-xs
-       "To fix this, change these property values to have the correct type and reimport the graph"]
+       "To fix a property type, change the property value to the correct type and reimport the graph"]
       (->> ignored-props
-           (map (fn [{:keys [property value schema]}]
+           (map (fn [{:keys [property value schema location]}]
                   [(str "Property " (pr-str property) " with value " (pr-str value))
-                   (str "Property value has type " (get-in schema [:type :to]) " instead of type " (get-in schema [:type :from]))]))
+                   (if (= property :icon)
+                     (if (:page location)
+                       (str "Page icons can't be imported. Go to the page " (pr-str (:page location)) " to manually import it.")
+                       (str "Block icons can't be imported. Manually import it at the block: " (pr-str (:block location))))
+                     (str "Property value has type " (get-in schema [:type :to]) " instead of type " (get-in schema [:type :from])))]))
            (map (fn [[k v]]
                   [:dl.my-2.mb-0
                    [:dt.m-0 [:strong (str k)]]
