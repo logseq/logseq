@@ -200,7 +200,8 @@
         page-name "apply-remote-update-ops-test"
         [page-uuid
          uuid1-client uuid2-client
-         uuid1-remote] (repeatedly random-uuid)]
+         uuid1-remote
+         uuid1-not-exist] (repeatedly random-uuid)]
     (page-handler/create! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
     (outliner-tx/transact!
      opts
