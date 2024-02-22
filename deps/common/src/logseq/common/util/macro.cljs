@@ -1,4 +1,5 @@
 (ns logseq.common.util.macro
+  "Core vars and util fns for user macros e.g. {{foo}}"
   (:require [clojure.string :as string]))
 
 (def left-braces "Opening characters for block-ref" "{{")
