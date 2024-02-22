@@ -21,7 +21,8 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.property.util :as pu]
             [promesa.core :as p]
-            [frontend.db.async :as db-async]))
+            [frontend.db.async :as db-async]
+            [logseq.common.util.macro :as macro-util]))
 
 (defn- select-type?
   [property type]
@@ -548,7 +549,7 @@
       [:span.number (str value)]
 
       :else
-      (inline-text {} :markdown (str value)))))
+      (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros))))))
 
 (rum/defc single-value-select
   [block property value value-f select-opts {:keys [editing?] :as opts}]
@@ -677,7 +678,7 @@
                     :block
                     (property-block-value value block property block-cp editor-box opts page-cp editor-id)
 
-                    (inline-text {} :markdown (str value)))))]))]))))
+                    (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros))))))]))]))))
 
 (rum/defc multiple-values < rum/reactive
   [block property v {:keys [on-chosen dropdown? editing?]
