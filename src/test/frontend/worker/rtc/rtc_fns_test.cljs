@@ -240,7 +240,7 @@
 
     (testing "apply-remote-update-ops-test2"
       (let [data-from-ws {:req-id "req-id"
-                          :t 1 ;; not used
+                          :t 1
                           :t-before 0
                           :affected-blocks
                           {uuid1-remote {:op :update-attrs
@@ -251,6 +251,23 @@
                                          :created-at 1
                                          :link nil
                                          :type nil}}}
+            update-ops (vals
+                        (:update-ops-map
+                         (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
+        (is (rtc-const/data-from-ws-validator data-from-ws))
+        (rtc-core/apply-remote-update-ops repo conn date-formatter update-ops)
+        (let [page-blocks (ldb/get-page-blocks @conn page-name {})]
+          (is (= #{uuid1-client uuid2-client uuid1-remote} (set (map :block/uuid page-blocks))))
+          (is (= [nil nil] ((juxt :block/link :block/type) (d/entity @conn [:block/uuid uuid1-remote])))))))
+    (testing "apply-remote-update-ops-test3"
+      (let [data-from-ws {:req-id "req-id"
+                          :t 1 :t-before 0
+                          :affected-blocks
+                          {uuid1-remote {:op :update-attrs
+                                         :self uuid1-remote
+                                         :parents [uuid2-client]
+                                         :left uuid2-client
+                                         :link uuid1-not-exist}}}
             update-ops (vals
                         (:update-ops-map
                          (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
