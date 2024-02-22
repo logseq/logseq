@@ -77,6 +77,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.common.util.macro :as macro-util]
             [logseq.shui.core :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
@@ -1464,7 +1465,7 @@
                             macro-content)
 
                           (and (seq arguments) macro-content)
-                          (block/macro-subs macro-content arguments)
+                          (macro-util/macro-subs macro-content arguments)
 
                           :else
                           macro-content)
