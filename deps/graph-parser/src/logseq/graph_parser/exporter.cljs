@@ -121,25 +121,35 @@
       {:type {:from prev-type :to prop-type}})))
 
 (defn- update-built-in-property-values
-  [props db]
+  [props db ignored-properties {:block/keys [content name]}]
   (->> props
-       (map (fn [[prop val]]
-              [prop
-               (case prop
-                 :query-properties
-                 (try
-                   (mapv #(if (#{:page :block :created-at :updated-at} %) % (get-pid db %))
-                         (edn/read-string val))
-                   (catch :default e
-                     (js/console.error "Translating query properties failed with:" e)
-                     []))
-                 :query-sort-by
-                 (if (#{:page :block :created-at :updated-at} val) val (get-pid db val))
-                 (:logseq.color :logseq.table.headers :logseq.table.hover)
-                 (:block/uuid (db-property/get-closed-value-entity-by-name db prop val))
-                 :logseq.table.version
-                 (parse-long val)
-                 val)]))
+       (keep (fn [[prop val]]
+               (if (= :icon prop)
+                 (do (swap! ignored-properties
+                            conj
+                            {:property prop :value val :location (if name {:page name} {:block content})})
+                     nil)
+                 [prop
+                  (case prop
+                    :query-properties
+                    (try
+                      (mapv #(if (#{:page :block :created-at :updated-at} %) % (get-pid db %))
+                            (edn/read-string val))
+                      (catch :default e
+                        (js/console.error "Translating query properties failed with:" e)
+                        []))
+                    :query-sort-by
+                    (if (#{:page :block :created-at :updated-at} val) val (get-pid db val))
+                    (:logseq.color :logseq.table.headers :logseq.table.hover)
+                    (:block/uuid (db-property/get-closed-value-entity-by-name db prop val))
+                    :logseq.table.version
+                    (parse-long val)
+                    :filters
+                    (try (edn/read-string val)
+                         (catch :default e
+                           (js/console.error "Translating filters failed with:" e)
+                           {}))
+                    val)])))
        (into {})))
 
 (defn- handle-changed-property
@@ -183,7 +193,9 @@
 
 (defn- update-properties
   "Updates block property names and values"
-  [props db page-names-to-uuids properties-text-values {:keys [whiteboard? property-changes import-state]}]
+  [props db page-names-to-uuids
+   {:block/keys [properties-text-values] :as block}
+   {:keys [whiteboard? property-changes import-state]}]
   (let [prop-name->uuid (if whiteboard?
                           (fn prop-name->uuid [k]
                             (or (get-pid db k)
@@ -195,7 +207,11 @@
     ;; TODO: Add import support for :template. Ignore for now as they cause invalid property types
     (if (contains? props :template)
       {}
-      (-> (update-built-in-property-values (select-keys props db-property/built-in-properties-keys) db)
+      (-> (update-built-in-property-values
+           (select-keys props db-property/built-in-properties-keys)
+           db
+           (:ignored-properties import-state)
+           (select-keys block [:block/name :block/content]))
           (merge (update-user-property-values user-properties prop-name->uuid properties-text-values property-changes (:ignored-properties import-state)))
           (update-keys prop-name->uuid)))))
 
@@ -206,13 +222,13 @@
   [{:block/keys [properties] :as block} db page-names-to-uuids refs {:keys [import-state] :as options}]
   (-> (if (seq properties)
         (let [dissoced-props (into ignored-built-in-properties
-                               ;; TODO: Add import support for these dissoced built-in properties
+                                   ;; TODO: Add import support for these dissoced built-in properties
                                    [:title :id :created-at :updated-at
                                     :card-last-interval :card-repeats :card-last-reviewed :card-next-schedule
                                     :card-ease-factor :card-last-score])
               properties' (apply dissoc properties dissoced-props)
               properties-to-infer (if (:template properties')
-                                ;; Ignore template properties as they don't consistently have representative property values
+              ;; Ignore template properties as they don't consistently have representative property values
                                     {}
                                     (apply dissoc properties' db-property/built-in-properties-keys))
               property-changes (->> properties-to-infer
@@ -223,7 +239,9 @@
               _ (when (seq property-changes) (prn :PROP-CHANGES property-changes))
               options' (assoc options :property-changes property-changes)]
           (assoc-in block [:block/properties]
-                    (update-properties properties' db page-names-to-uuids (:block/properties-text-values block) options')))
+                    (update-properties properties' db page-names-to-uuids
+                                       (select-keys block [:block/properties-text-values :block/name :block/content])
+                                       options')))
         block)
         (dissoc :block/properties-text-values :block/properties-order :block/invalid-properties)))
 
