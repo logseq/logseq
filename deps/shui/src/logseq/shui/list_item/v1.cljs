@@ -9,20 +9,26 @@
 
 (def to-string shortcut/to-string)
 
-(defn normalize-text [app-config text]
+(defn- normalize-text [app-config text]
   (cond-> (to-string text)
-    :lower-case (string/lower-case)
+    ;; :lower-case (string/lower-case)
     :normalize (.normalize "NFKC")
     (:feature/enable-search-remove-accents? app-config) (remove-accents)))
 
 (defn highlight-query* [app-config query text]
-  (if (vector? text)                    ; hiccup
+  (cond
+    (vector? text)                    ; hiccup
     text
+
+    (string/blank? query)
+    [:span (to-string text)]
+
+    :else
     (when-let [text-string (not-empty (to-string text))]
       (let [normal-text (normalize-text app-config text-string)
             normal-query (normalize-text app-config query)
             query-terms (string/replace (gstring/regExpEscape normal-query) #"\s+" "|")
-            query-re (re-pattern (str "(" query-terms ")"))
+            query-re (js/RegExp. (str "(" query-terms ")") "i")
             highlighted-text (string/replace normal-text query-re "<:hlmarker>$1<:hlmarker>")
             segs (string/split highlighted-text #"<:hlmarker>")]
         (if (seq segs)
@@ -32,7 +38,7 @@
                                  [:span seg]
                                  [:span {:class "ui__list-item-highlighted-span"} seg]))
                              segs))
-          [:span text-string])))))
+          [:span normal-text])))))
 
 (rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value
                         title highlighted on-highlight on-highlight-dep header on-click
