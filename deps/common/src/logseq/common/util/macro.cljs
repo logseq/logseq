@@ -6,7 +6,7 @@
 
 (defn macro?
   [*s]
-  (let [s (string/trim (str *s))]
+  (when-let [s (and (string? *s) (string/trim *s))]
     (and (string/starts-with? s left-braces) (string/ends-with? s right-braces))))
 
 (defn macro-subs

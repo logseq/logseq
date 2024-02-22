@@ -200,7 +200,8 @@
                                                    {:extract-options extract-options
                                                     :user-options user-options
                                                     :page-tags-uuid page-tags-uuid
-                                                    :import-state import-state})]
+                                                    :import-state import-state
+                                                    :macros (state/get-macros)})]
                                               (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report)))
                                             m))
                                   (p/catch (fn [error]

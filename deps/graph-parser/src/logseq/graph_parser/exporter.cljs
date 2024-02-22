@@ -9,7 +9,8 @@
             [logseq.common.config :as common-config]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]))
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.common.util.macro :as macro-util]))
 
 (defn- get-pid
   "Get a property's id (name or uuid) given its name. For db graphs"
@@ -98,7 +99,7 @@
   "Infers a property's schema from the given _user_ property value and adds new ones to
   the property-schemas atom. If a property's :type changes, returns a map of
   the schema attribute changed and how it changed e.g. `{:type {:from :default :to :url}}`"
-  [prop-val prop refs property-schemas]
+  [prop-val prop refs property-schemas macros]
   ;; Explicitly fail an unexpected case rather cause silent downstream failures
   (when (and (coll? prop-val) (not (every? string? prop-val)))
     (throw (ex-info "Import cannot infer schema of unknown property value"
@@ -108,7 +109,8 @@
                            (set/subset? prop-val
                                         (set (keep #(when (:block/journal? %) (:block/original-name %)) refs))))
                     :date
-                    (db-property-type/infer-property-type-from-value prop-val))
+                    (db-property-type/infer-property-type-from-value
+                     (macro-util/expand-value-if-macro prop-val macros)))
         prev-type (get-in @property-schemas [prop :type])]
     (when-not prev-type
       (let [schema (cond-> {:type prop-type}
@@ -219,7 +221,7 @@
   "Infers property schemas, update :block/properties and remove deprecated
   property attributes. Only infers property schemas on user properties as
   built-in ones shouldn't change"
-  [{:block/keys [properties] :as block} db page-names-to-uuids refs {:keys [import-state] :as options}]
+  [{:block/keys [properties] :as block} db page-names-to-uuids refs {:keys [import-state macros] :as options}]
   (-> (if (seq properties)
         (let [dissoced-props (into ignored-built-in-properties
                                    ;; TODO: Add import support for these dissoced built-in properties
@@ -228,14 +230,15 @@
                                     :card-ease-factor :card-last-score])
               properties' (apply dissoc properties dissoced-props)
               properties-to-infer (if (:template properties')
-              ;; Ignore template properties as they don't consistently have representative property values
+                                    ;; Ignore template properties as they don't consistently have representative property values
                                     {}
                                     (apply dissoc properties' db-property/built-in-properties-keys))
-              property-changes (->> properties-to-infer
-                                    (keep (fn [[prop val]]
-                                            (when-let [property-change (infer-property-schema-and-get-property-change val prop refs (:property-schemas import-state))]
-                                              [prop property-change])))
-                                    (into {}))
+              property-changes
+              (->> properties-to-infer
+                   (keep (fn [[prop val]]
+                           (when-let [property-change (infer-property-schema-and-get-property-change val prop refs (:property-schemas import-state) macros)]
+                             [prop property-change])))
+                   (into {}))
               _ (when (seq property-changes) (prn :PROP-CHANGES property-changes))
               options' (assoc options :property-changes property-changes)]
           (assoc-in block [:block/properties]
@@ -381,7 +384,8 @@
 * :extract-options - Options map to pass to extract/extract
 * :user-options - User provided options that alter how a file is converted to db graph
 * :page-tags-uuid - uuid of pageTags property
-* :import-state - useful import state to maintain across files e.g. property schemas or ignored properties"
+* :import-state - useful import state to maintain across files e.g. property schemas or ignored properties
+* :macros - map of macros for use with macro expansion"
   [conn file content {:keys [extract-options user-options import-state]
                       :or {import-state (new-import-state)}
                       :as options}]
@@ -405,7 +409,7 @@
               (println "Skipped file since its format is not supported:" file))
         ;; Build page and block txs
         {:keys [pages page-names-to-uuids]}
-        (build-pages-tx conn (:pages extracted) (:blocks extracted) tag-classes (select-keys options [:page-tags-uuid :import-state]))
+        (build-pages-tx conn (:pages extracted) (:blocks extracted) tag-classes (select-keys options [:page-tags-uuid :import-state :macros]))
         whiteboard-pages (->> pages
                               ;; support old and new whiteboards
                               (filter #(#{"whiteboard" ["whiteboard"]} (:block/type %)))
@@ -420,7 +424,8 @@
                     (remove :block/pre-block?)
                     (map #(build-block-tx @conn % pre-blocks tag-classes page-names-to-uuids
                                           {:whiteboard? (some? (seq whiteboard-pages))
-                                           :import-state import-state})))
+                                           :import-state import-state
+                                           :macros (:macros options)})))
         ;; Build indices
         pages-index (map #(select-keys % [:block/name]) pages)
         block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
