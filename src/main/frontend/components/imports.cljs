@@ -343,7 +343,7 @@
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.leading-6.font-medium
-        "(Optional) Properties to import as tag classes e.g. 'type':"]
+        "(Optional) Properties whose values are imported as tag classes e.g. 'type':"]
        [:span.text-xs
         "Properties are case insensitive and separated by commas"]]]
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
