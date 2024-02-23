@@ -54,7 +54,13 @@
           (state/pub-event! [:init/commands])
           (ui-handler/re-render-root!)))
       (do
-        (let [tx-report (d/transact! conn tx-data tx-meta)]
+        (let [tx-data' (if (= (:outliner-op tx-meta) :insert-blocks)
+                         (let [update-blocks-fully-loaded (keep (fn [datom] (when (= :block/uuid (:a datom))
+                                                                              {:db/id (:e datom)
+                                                                               :block.temp/fully-loaded? true})) tx-data)]
+                           (concat update-blocks-fully-loaded tx-data))
+                         tx-data)
+              tx-report (d/transact! conn tx-data' tx-meta)]
           (when local-tx?
             (let [tx-id (get-tx-id tx-report)]
               (store-undo-data! (assoc opts :tx-id tx-id))))
