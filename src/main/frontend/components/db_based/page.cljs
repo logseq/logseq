@@ -29,7 +29,7 @@
         has-viewable-properties? (db-property-handler/block-has-viewable-properties? page)
         has-class-properties? (seq (:properties (:block/schema page)))]
     (when (or configure? has-viewable-properties? has-class-properties? property?)
-      [:div.ls-page-properties.mb-4
+      [:div.ls-page-properties
        (cond
          (= mode :class)
          (if (and config/publishing? (not configure?))
@@ -171,9 +171,9 @@
       [:div.page-info {:on-mouse-over #(reset! *hover? true)
                        :on-mouse-leave #(reset! *hover? false)}
        (when (or hover-or-expanded? has-tags? has-properties? class?)
-         [:div.p-2 {:class (if (or @*hover? (not collapsed?))
-                                     "border rounded"
-                                     "border rounded border-transparent")}
+         [:div.py-2 {:class (if (or @*hover? (not collapsed?))
+                              "border rounded"
+                              "border rounded border-transparent")}
           [:div.info-title.cursor {:on-click
                                    (if config/publishing?
                                      (fn [_]

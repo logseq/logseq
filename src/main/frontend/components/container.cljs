@@ -44,6 +44,7 @@
             [logseq.shui.ui :as shui]
             [logseq.shui.toaster.core :as shui-toaster]
             [logseq.shui.dialog.core :as shui-dialog]
+            [logseq.shui.popup.core :as shui-popup]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.components.window-controls :as window-controls]
@@ -943,6 +944,8 @@
       (ui/sub-modal)
       (shui-toaster/install-toaster)
       (shui-dialog/install-modals)
+      (shui-popup/install-popups)
+
       (select/select-modal)
       (custom-context-menu)
       (plugins/custom-js-installer {:t t

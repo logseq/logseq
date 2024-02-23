@@ -8,9 +8,9 @@
   [:div.sm:p-10
    [:h1.text-3xl.font-bold.border-b.pb-4 "UI X Popup"]
 
-   (rum/portal
-     (install-popups)
-     js/document.body)
+   ;(rum/portal
+   ;  (install-popups)
+   ;  js/document.body)
 
    (let [[emoji set-emoji!] (rum/use-state nil)
          [q set-q!] (rum/use-state "")
