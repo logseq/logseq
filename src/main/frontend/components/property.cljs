@@ -20,6 +20,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.shui.ui :as shui]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [rum.core :as rum]
@@ -503,6 +504,7 @@
                          :else
                          "control-hide")}
          (ui/rotating-arrow collapsed?)]])
+
      (ui/dropdown
       (fn [{:keys [toggle-fn]}]
         [:button.flex {:on-click toggle-fn}
@@ -523,31 +525,31 @@
                  (toggle-fn))))})])
       {:modal-class (util/hiccup->class
                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
-     (ui/dropdown
-      (if config/publishing?
-        (fn [_opts]
-          [:a.property-k
-           {:on-click #(route-handler/redirect-to-page! (:block/name property))}
-           [:div {:style {:padding-left 6}} (:block/original-name property)]])
-        (fn [{:keys [toggle-fn]}]
-          [:a.property-k
-           {:title (str "Configure property: " (:block/original-name property))
-            :on-mouse-down (fn [e]
-                             (when (util/meta-key? e)
-                               (route-handler/redirect-to-page! (:block/name property))
-                               (.preventDefault e)))
-            :on-click toggle-fn}
-           [:div {:style {:padding-left 6}} (:block/original-name property)]]))
-      (fn [{:keys [toggle-fn]}]
-        [:div.p-8 {:style {:min-width 700}}
-         [:h2.title "Configure property"]
-         (property-config block property
-                          {:toggle-fn toggle-fn
-                           :inline-text inline-text
-                           :page-cp page-cp
-                           :class-schema? class-schema?})])
-      {:modal-class (util/hiccup->class
-                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg")})]))
+
+     (if config/publishing?
+       [:a.property-k
+        {:on-click #(route-handler/redirect-to-page! (:block/name property))}
+        [:div {:style {:padding-left 6}} (:block/original-name property)]]
+
+       [:a.property-k
+        {:title         (str "Configure property: " (:block/original-name property))
+         :on-mouse-down (fn [^js e]
+                          (when (util/meta-key? e)
+                            (route-handler/redirect-to-page! (:block/name property))
+                            (.preventDefault e)))
+         :on-click      (fn [^js e]
+                          (shui/popup-show! (.-target e)
+                            (fn [{:keys [id]}]
+                              [:div.p-2
+                               [:h2.text-lg.font-bold.mb-1 "Configure property"]
+                               (property-config block property
+                                 {:inline-text inline-text
+                                  :page-cp page-cp
+                                  :class-schema? class-schema?
+                                  :toggle-fn #(shui/popup-hide! id)})])
+                            {:content-props {:class "property-configure-popup-content"}
+                             :as-menu? true}))}
+        [:div {:style {:padding-left 6}} (:block/original-name property)]])]))
 
 (defn- resolve-linked-block-if-exists
   "Properties will be updated for the linked page instead of the refed block.

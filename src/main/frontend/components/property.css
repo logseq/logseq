@@ -12,6 +12,13 @@
     min-height: 24px;
 }
 
+.property-configure-popup-content {
+    @apply min-w-[700px] p-2 overflow-auto;
+
+    /*noinspection CssUnresolvedCustomProperty*/
+    max-height: var(--radix-dropdown-menu-content-available-height);
+}
+
 /* .property-value-content:hover { */
 /*     background: var(--ls-secondary-background-color); */
 /* } */
