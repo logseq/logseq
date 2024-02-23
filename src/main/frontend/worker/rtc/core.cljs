@@ -359,7 +359,7 @@
 (defn- move-all-blocks-to-another-page
   [repo conn from-page-name to-page-name]
   (let [blocks (ldb/get-page-blocks @conn from-page-name {})
-        target-page-block (first (ldb/get-page-blocks @conn to-page-name {}))]
+        target-page-block (d/entity @conn [:block/name to-page-name])]
     (when (and (seq blocks) target-page-block)
       (outliner-tx/transact!
        {:persist-op? true
