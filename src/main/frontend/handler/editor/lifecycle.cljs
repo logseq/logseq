@@ -36,10 +36,12 @@
 
 (defn will-unmount
   [state]
-  (let [{:keys [value block] :as state} (editor-handler/get-state)]
+  (let [{:keys [value block] :as state} (editor-handler/get-state)
+        editor-op (state/get-editor-op)]
     (editor-handler/clear-when-saved!)
+    (state/set-editor-op! nil)
     (when (db/entity [:block/uuid (:block/uuid block)]) ; block still exists
-      (when-not (or (contains? #{:undo :redo} (state/get-editor-op))
+      (when-not (or (contains? #{:undo :redo} editor-op)
                     (state/editor-in-composition?))
         (editor-handler/save-block! state value))))
   state)

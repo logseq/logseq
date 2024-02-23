@@ -158,8 +158,7 @@
 
        (when (= :rename-page (:outliner-op tx-meta))
          (when-let [old-page (:old-name (:data tx-meta))]
-           (route-handler/redirect-to-page! old-page)))
-       (util/schedule #(state/set-editor-op! nil)))
+           (route-handler/redirect-to-page! old-page))))
       (assoc e
              :txs-op new-txs
              :editor-cursor editor-cursor))))
@@ -180,9 +179,7 @@
 
        (when (= :rename-page (:outliner-op tx-meta))
          (when-let [new-page (:new-name (:data tx-meta))]
-           (route-handler/redirect-to-page! new-page)))
-
-       (util/schedule #(state/set-editor-op! :nil)))
+           (route-handler/redirect-to-page! new-page))))
 
       (assoc e
              :txs-op new-txs
