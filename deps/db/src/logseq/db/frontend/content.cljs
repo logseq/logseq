@@ -3,9 +3,20 @@
   (:require [clojure.string :as string]
             [logseq.common.util.page-ref :as page-ref]
             [datascript.core :as d]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.common.util :as common-util]))
 
 (defonce page-ref-special-chars "~^")
+
+(defonce special-id-ref-pattern
+  (re-pattern
+   (str
+    "(?i)"
+    "\\[\\[~\\^"
+    "("
+    common-util/uuid-pattern
+    ")"
+    "\\]\\]")))
 
 (defn special-id->page
   "Convert special id backs to page name."

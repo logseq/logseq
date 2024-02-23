@@ -208,7 +208,7 @@
      (reset! (:editor/create-page? @state/state) false))))
 
 (defn ^:api rebuild-block-refs
-  [repo conn date-formatter block new-properties & {:keys [skip-content-parsing?]}]
+  [repo conn date-formatter block new-properties]
   (let [db @conn
         property-key-refs (keys new-properties)
         property-value-refs (->> (vals new-properties)
@@ -236,16 +236,14 @@
         property-refs (->> (concat property-key-refs property-value-refs)
                            (map (fn [id-or-map] (if (uuid? id-or-map) {:block/uuid id-or-map} id-or-map)))
                            (remove (fn [b] (nil? (d/entity db [:block/uuid (:block/uuid b)])))))
-        content-refs (when-not skip-content-parsing?
-                       (when-let [content (:block/content block)]
-                         (gp-block/extract-refs-from-text repo db content date-formatter)))]
+        content-refs (when-let [content (:block/content block)]
+                       (gp-block/extract-refs-from-text repo db content date-formatter))]
     (concat property-refs content-refs)))
 
 (defn- rebuild-refs
   [repo conn date-formatter txs-state block m]
   (when (sqlite-util/db-based-graph? repo)
-    (let [refs (->> (rebuild-block-refs repo conn date-formatter block (:block/properties block)
-                                        :skip-content-parsing? true)
+    (let [refs (->> (rebuild-block-refs repo conn date-formatter block (:block/properties block))
                     (concat (:block/refs m))
                     (concat (if (seq (:block/tags m))
                               (:block/tags m)

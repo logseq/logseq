@@ -19,13 +19,15 @@
      (lookup-entity e :block/content default-value)
 
      (= k :block/content)
-     (let [result (lookup-entity e k default-value)
-           refs (:block/refs e)
-           tags (:block/tags e)]
-       (or
-        (when (string? result)
-          (db-content/special-id->page result (distinct (concat refs tags))))
-        default-value))
+     (or
+      (get (.-kv e) k)
+      (let [result (lookup-entity e k default-value)
+            refs (:block/refs e)
+            tags (:block/tags e)]
+        (or
+         (when (string? result)
+           (db-content/special-id->page result (distinct (concat refs tags))))
+         default-value)))
 
      :else
      (or (get (.-kv e) k)
