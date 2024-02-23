@@ -33,19 +33,17 @@
   "Converts a tag block with class or returns nil if this tag should be removed
    because it has been moved"
   [tag-block tag-classes]
-  (if-let [new-tag (:block.temp/new-class tag-block)]
+  (if-let [new-class (:block.temp/new-class tag-block)]
     (sqlite-util/build-new-class
-     {:block/original-name new-tag
-      :block/name (common-util/page-name-sanity-lc new-tag)
-      :block/uuid (d/squuid)})
+     {:block/original-name new-class
+      :block/name (common-util/page-name-sanity-lc new-class)})
     (when (contains? tag-classes (:block/name tag-block))
       (-> tag-block
           add-missing-timestamps
           ;; don't use build-new-class b/c of timestamps
           (merge {:block/journal? false
                   :block/format :markdown
-                  :block/type "class"
-                  :block/uuid (d/squuid)})))))
+                  :block/type "class"})))))
 
 (defn- update-page-tags
   [block tag-classes names-uuids page-tags-uuid]
@@ -256,7 +254,11 @@
                                                options'))
             (seq classes-from-properties)
             ;; Add a map of {:block.temp/new-class TAG} to be processed later
-            (update :block/tags (fnil into []) (map #(hash-map :block.temp/new-class %) classes-from-properties))))
+            (update :block/tags
+                    (fnil into [])
+                    (map #(hash-map :block.temp/new-class %
+                                    :block/uuid (or (get-pid db %) (d/squuid)))
+                         classes-from-properties))))
         block)
       (dissoc :block/properties-text-values :block/properties-order :block/invalid-properties)))
 
