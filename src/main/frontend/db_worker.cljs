@@ -110,7 +110,9 @@
                     #js {:$addr addr
                          :$content (pr-str data)})
                   addr+data-seq)]
-        (upsert-addr-content! repo data delete-addrs)))
+        (if (worker-state/rtc-downloading-graph?)
+          (upsert-addr-content! repo data delete-addrs) ; sync writes when downloading whole graph
+          (async/go (upsert-addr-content! repo data delete-addrs)))))
 
     (-restore [_ addr]
       (restore-data-from-addr repo addr))))

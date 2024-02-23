@@ -144,8 +144,10 @@
      (if (not= 200 status)
        (ex-info "<download-graph failed" r)
        (let [all-blocks (transit/read transit-r body)]
+         (worker-state/set-rtc-downloading-graph! true)
          (op-mem-layer/init-empty-ops-store! repo)
          (<? (<transact-remote-all-blocks-to-sqlite all-blocks repo))
          (op-mem-layer/update-graph-uuid! repo graph-uuid)
          (prn ::download-graph repo (@@#'op-mem-layer/*ops-store repo))
-         (<! (op-mem-layer/<sync-to-idb-layer! repo)))))))
+         (<! (op-mem-layer/<sync-to-idb-layer! repo))
+         (worker-state/set-rtc-downloading-graph! false))))))
