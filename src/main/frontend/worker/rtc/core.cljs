@@ -6,6 +6,7 @@
             [cljs-time.core :as t]
             [cljs.core.async :as async :refer [<! >! chan go go-loop]]
             [clojure.set :as set]
+            [clojure.string :as string]
             [cognitect.transit :as transit]
             [frontend.worker.async-util :include-macros true :refer [<?]]
             [logseq.outliner.core :as outliner-core]
@@ -27,7 +28,9 @@
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.rtc.asset-sync :as asset-sync]
             [promesa.core :as p]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [logseq.db.frontend.content :as db-content]
+            [logseq.common.util.page-ref :as page-ref]))
 
 ;;                     +-------------+
 ;;                     |             |
@@ -97,6 +100,7 @@
 (defmethod transact-db! :delete-blocks [_ & args]
   (outliner-tx/transact!
    {:persist-op? false
+    :outliner-op :delete-blocks
     :transact-opts {:repo (first args)
                     :conn (second args)}}
    (apply outliner-core/delete-blocks! args)))
@@ -104,6 +108,7 @@
 (defmethod transact-db! :move-blocks [_ & args]
   (outliner-tx/transact!
    {:persist-op? false
+    :outliner-op :move-blocks
     :transact-opts {:repo (first args)
                     :conn (second args)}}
    (apply outliner-core/move-blocks! args)))
@@ -111,6 +116,7 @@
 (defmethod transact-db! :insert-blocks [_ & args]
   (outliner-tx/transact!
    {:persist-op? false
+    :outliner-op :insert-blocks
     :transact-opts {:repo (first args)
                     :conn (second args)}}
    (apply outliner-core/insert-blocks! args)))
@@ -118,6 +124,7 @@
 (defmethod transact-db! :save-block [_ & args]
   (outliner-tx/transact!
    {:persist-op? false
+    :outliner-op :save-block
     :transact-opts {:repo (first args)
                     :conn (second args)}}
    (apply outliner-core/save-block! args)))
@@ -269,6 +276,20 @@
         (assert (some? shape) properties*)
         (transact-db! :upsert-whiteboard-block conn [(gp-whiteboard/shape->block repo db shape page-name)])))))
 
+(defn- special-id-ref->page
+  "Convert special id ref backs to page name."
+  [db content]
+  (let [matches (distinct (re-seq db-content/special-id-ref-pattern content))]
+    (if (seq matches)
+      (reduce (fn [content [full-text id]]
+                (if-let [page (d/entity db [:block/uuid (uuid id)])]
+                  (string/replace content full-text
+                                  (str page-ref/left-brackets
+                                       (:block/original-name page)
+                                       page-ref/right-brackets))
+                  content)) content matches)
+      content)))
+
 (defn- update-block-attrs
   [repo conn date-formatter block-uuid {:keys [parents properties _content] :as op-value}]
   (let [key-set (set/intersection
@@ -289,7 +310,8 @@
                 (cond-> b-ent
                   (and (contains? key-set :content)
                        (not= (:content op-value)
-                             (:block/raw-content b-ent))) (assoc :block/content (:content op-value))
+                             (:block/raw-content b-ent))) (assoc :block/content
+                                                                 (special-id-ref->page @conn (:content op-value)))
                   (contains? key-set :updated-at)     (assoc :block/updated-at (:updated-at op-value))
                   (contains? key-set :created-at)     (assoc :block/created-at (:created-at op-value))
                   (contains? key-set :alias)          (assoc :block/alias (some->> (seq (:alias op-value))
