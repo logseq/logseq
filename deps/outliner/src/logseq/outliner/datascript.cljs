@@ -98,8 +98,8 @@
 
       (try
         (.time js/console "DB transact")
-        (p/let [result (ldb/transact! conn txs (assoc tx-meta :outliner/transact? true))]
-          (.timeEnd js/console "DB transact")
+        (let [result (ldb/transact! conn txs (assoc tx-meta :outliner/transact? true))]
+          (p/then result (fn [] (.timeEnd js/console "DB transact")))
           result)
         (catch :default e
           (js/console.error e)
