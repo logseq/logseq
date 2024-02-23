@@ -267,9 +267,10 @@ independent of format as format specific heading characters are stripped"
   ([ids]
    (get-page-names-by-ids (state/get-current-repo) ids))
   ([repo ids]
-   (when repo
-     (->> (db-utils/pull-many repo '[:block/name] ids)
-          (map :block/name)))))
+   (let [ids (remove nil? ids)]
+     (when repo
+       (->> (db-utils/pull-many repo '[:block/name] ids)
+            (map :block/name))))))
 
 (defn get-page-alias-names
   [repo page-name]
