@@ -2540,6 +2540,7 @@
                                                  (let [select? (and (= event :esc)
                                                                     (not (string/includes? value "```")))]
                                                    (p/do!
+                                                    (state/set-editor-op! :escape)
                                                     (editor-handler/save-block! (editor-handler/get-state) value)
                                                     (editor-handler/escape-editing select?))))}
                                      edit-input-id
