@@ -10,7 +10,8 @@
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.common.util.macro :as macro-util]))
+            [logseq.common.util.macro :as macro-util]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn- get-pid
   "Get a property's id (name or uuid) given its name. For db graphs"
@@ -28,11 +29,29 @@
                 (assoc :block/created-at updated-at))]
     block))
 
+(defn- convert-tag-to-class
+  "Converts a tag block with class or returns nil if this tag should be removed
+   because it has been moved"
+  [tag-block tag-classes]
+  (if-let [new-tag (:block.temp/new-class tag-block)]
+    (sqlite-util/build-new-class
+     {:block/original-name new-tag
+      :block/name (common-util/page-name-sanity-lc new-tag)
+      :block/uuid (d/squuid)})
+    (when (contains? tag-classes (:block/name tag-block))
+      (-> tag-block
+          add-missing-timestamps
+          ;; don't use build-new-class b/c of timestamps
+          (merge {:block/journal? false
+                  :block/format :markdown
+                  :block/type "class"
+                  :block/uuid (d/squuid)})))))
+
 (defn- update-page-tags
   [block tag-classes names-uuids page-tags-uuid]
   (if (seq (:block/tags block))
     (let [page-tags (->> (:block/tags block)
-                         (remove #(contains? tag-classes (:block/name %)))
+                         (remove #(or (:block.temp/new-class %) (contains? tag-classes (:block/name %))))
                          (map #(or (get names-uuids (:block/name %))
                                    (throw (ex-info (str "No uuid found for tag " (pr-str (:block/name %)))
                                                    {:tag %}))))
@@ -41,15 +60,7 @@
         true
         (update :block/tags
                 (fn [tags]
-                  (keep #(when (contains? tag-classes (:block/name %))
-                           (-> %
-                               add-missing-timestamps
-                               ;; don't use build-new-class b/c of timestamps
-                               (merge {:block/journal? false
-                                       :block/format :markdown
-                                       :block/type "class"
-                                       :block/uuid (d/squuid)})))
-                        tags)))
+                  (keep #(convert-tag-to-class % tag-classes) tags)))
         (seq page-tags)
         (update :block/properties merge {page-tags-uuid page-tags})))
     block))
@@ -64,28 +75,21 @@
 (defn- update-block-tags
   [block tag-classes page-names-to-uuids]
   (if (seq (:block/tags block))
-    (-> block
-        (update :block/content
-                db-content/content-without-tags
-                (->> (:block/tags block)
-                     (filter #(tag-classes (:block/name %)))
-                     (map :block/original-name)))
-        (update :block/content
-                db-content/replace-tags-with-page-refs
-                (->> (:block/tags block)
-                     (remove #(tag-classes (:block/name %)))
-                     (map #(add-uuid-to-page-map % page-names-to-uuids))))
-        (update :block/tags
-                (fn [tags]
-                  (keep #(when (contains? tag-classes (:block/name %))
-                           (-> %
-                               add-missing-timestamps
-                               ;; don't use build-new-class b/c of timestamps
-                               (merge {:block/journal? false
-                                       :block/format :markdown
-                                       :block/type "class"
-                                       :block/uuid (d/squuid)})))
-                        tags))))
+    (let [original-tags (remove :block.temp/new-class (:block/tags block))]
+      (-> block
+          (update :block/content
+                  db-content/content-without-tags
+                  (->> original-tags
+                       (filter #(tag-classes (:block/name %)))
+                       (map :block/original-name)))
+          (update :block/content
+                  db-content/replace-tags-with-page-refs
+                  (->> original-tags
+                       (remove #(tag-classes (:block/name %)))
+                       (map #(add-uuid-to-page-map % page-names-to-uuids))))
+          (update :block/tags
+                  (fn [tags]
+                    (keep #(convert-tag-to-class % tag-classes) tags)))))
     block))
 
 (def ignored-built-in-properties
@@ -217,17 +221,21 @@
           (merge (update-user-property-values user-properties prop-name->uuid properties-text-values property-changes (:ignored-properties import-state)))
           (update-keys prop-name->uuid)))))
 
-(defn- handle-property-attributes
+(defn- handle-page-properties
   "Infers property schemas, update :block/properties and remove deprecated
   property attributes. Only infers property schemas on user properties as
   built-in ones shouldn't change"
-  [{:block/keys [properties] :as block} db page-names-to-uuids refs {:keys [import-state macros] :as options}]
+  [{:block/keys [properties] :as block} db page-names-to-uuids refs {:keys [import-state macros property-classes] :as options}]
   (-> (if (seq properties)
-        (let [dissoced-props (into ignored-built-in-properties
-                                   ;; TODO: Add import support for these dissoced built-in properties
-                                   [:title :id :created-at :updated-at
-                                    :card-last-interval :card-repeats :card-last-reviewed :card-next-schedule
-                                    :card-ease-factor :card-last-score])
+        (let [classes-from-properties (->> (select-keys properties property-classes)
+                                           (mapcat (fn [[_k v]] (if (coll? v) v [v])))
+                                           distinct)
+              dissoced-props (concat ignored-built-in-properties
+                                     ;; TODO: Add import support for these dissoced built-in properties
+                                     [:title :id :created-at :updated-at
+                                      :card-last-interval :card-repeats :card-last-reviewed :card-next-schedule
+                                      :card-ease-factor :card-last-score]
+                                     property-classes)
               properties' (apply dissoc properties dissoced-props)
               properties-to-infer (if (:template properties')
                                     ;; Ignore template properties as they don't consistently have representative property values
@@ -241,12 +249,27 @@
                    (into {}))
               _ (when (seq property-changes) (prn :PROP-CHANGES property-changes))
               options' (assoc options :property-changes property-changes)]
-          (assoc-in block [:block/properties]
-                    (update-properties properties' db page-names-to-uuids
-                                       (select-keys block [:block/properties-text-values :block/name :block/content])
-                                       options')))
+          (prn :classes-from-properties classes-from-properties (:block/name block))
+          (cond-> (assoc-in block [:block/properties]
+                            (update-properties properties' db page-names-to-uuids
+                                               (select-keys block [:block/properties-text-values :block/name :block/content])
+                                               options'))
+            (seq classes-from-properties)
+            ;; Add a map of {:block.temp/new-class TAG} to be processed later
+            (update :block/tags (fnil into []) (map #(hash-map :block.temp/new-class %) classes-from-properties))))
         block)
-        (dissoc :block/properties-text-values :block/properties-order :block/invalid-properties)))
+      (dissoc :block/properties-text-values :block/properties-order :block/invalid-properties)))
+
+(defn- handle-block-properties
+  "Does everything page properties does and updates a couple of block specific attributes"
+  [block db page-names-to-uuids refs {:keys [property-classes] :as options}]
+  (cond-> (handle-page-properties block db page-names-to-uuids refs options)
+    (and (seq property-classes) (seq (:block/refs block)))
+    ;; remove unused, nonexistent property page
+    (update :block/refs (fn [refs] (remove #(property-classes (keyword (:block/name %))) refs)))
+    (and (seq property-classes) (seq (:block/path-refs block)))
+    ;; remove unused, nonexistent property page
+    (update :block/path-refs (fn [refs] (remove #(property-classes (keyword (:block/name %))) refs)))))
 
 (defn- update-block-refs
   "Updates the attributes of a block ref as this is where a new page is defined. Also
@@ -304,14 +327,14 @@
     (assoc :block/parent page)))
 
 (defn- build-block-tx
-  [db block pre-blocks tag-classes page-names-to-uuids {:keys [import-state] :as options}]
+  [db block pre-blocks page-names-to-uuids {:keys [import-state tag-classes] :as options}]
   (prn ::block block)
   (let [old-property-schemas @(:property-schemas import-state)]
     (-> block
         (fix-pre-block-references pre-blocks)
         (update-block-macros db page-names-to-uuids)
         ;; needs to come before update-block-refs to detect new property schemas
-        (handle-property-attributes db page-names-to-uuids (:block/refs block) options)
+        (handle-block-properties db page-names-to-uuids (:block/refs block) options)
         (update-block-refs page-names-to-uuids old-property-schemas options)
         (update-block-tags tag-classes page-names-to-uuids)
         add-missing-timestamps
@@ -338,9 +361,13 @@
 
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return all non-whiteboard pages to be transacted"
-  [conn pages blocks tag-classes {:keys [page-tags-uuid import-state] :as options}]
-  (let [;; remove file path relative from pages before extraction
-        all-pages (extract/with-ref-pages (map #(dissoc % :block/file) pages) blocks)
+  [conn pages blocks {:keys [page-tags-uuid import-state tag-classes property-classes] :as options}]
+  (let [all-pages (->> (extract/with-ref-pages pages blocks)
+                       ;; remove unused property pages unless the page has content
+                       (remove #(and (contains? property-classes (keyword (:block/name %)))
+                                     (not (:block/file %))))
+                       ;; remove file path relative
+                       (map #(dissoc % :block/file)))
         existing-pages (keep #(d/entity @conn [:block/name (:block/name %)]) all-pages)
         existing-page-names (set (map :block/name existing-pages))
         new-pages (remove #(contains? existing-page-names (:block/name %)) all-pages)
@@ -348,7 +375,7 @@
                                   (map (juxt :block/name :block/uuid) (concat new-pages existing-pages)))
         old-property-schemas @(:property-schemas import-state)
         ;; must come before building tx to detect new-property-schemas
-        all-pages' (mapv #(handle-property-attributes % @conn page-names-to-uuids all-pages options)
+        all-pages' (mapv #(handle-page-properties % @conn page-names-to-uuids all-pages options)
                          all-pages)
         new-property-schemas (apply dissoc @(:property-schemas import-state) (keys old-property-schemas))
         pages-tx (keep #(if (existing-page-names (:block/name %))
@@ -368,7 +395,7 @@
                                 (assoc :block/type "property" :block/schema schema))))
                           (build-new-page % new-property-schemas tag-classes page-names-to-uuids page-tags-uuid))
                        all-pages')]
-    {:pages pages-tx
+    {:pages-tx pages-tx
      :page-names-to-uuids page-names-to-uuids}))
 
 (defn new-import-state
@@ -382,15 +409,13 @@
   "Parse file and save parsed data to the given db graph. Options available:
   
 * :extract-options - Options map to pass to extract/extract
-* :user-options - User provided options that alter how a file is converted to db graph
+* :user-options - User provided options maps that alter how a file is converted to db graph. Current options
+   are :tag-classes (set) and :property-classes (set).
 * :page-tags-uuid - uuid of pageTags property
 * :import-state - useful import state to maintain across files e.g. property schemas or ignored properties
 * :macros - map of macros for use with macro expansion"
-  [conn file content {:keys [extract-options user-options import-state]
-                      :or {import-state (new-import-state)}
-                      :as options}]
+  [conn file content {:keys [extract-options user-options] :as options}]
   (let [format (common-util/get-format file)
-        tag-classes (set (map string/lower-case (:tag-classes user-options)))
         extract-options' (merge {:block-pattern (common-config/get-block-pattern format)
                                  :date-formatter "MMM do, yyyy"
                                  :uri-encoded? false
@@ -398,7 +423,7 @@
                                  :filename-format :legacy}
                                 extract-options
                                 {:db @conn})
-        extracted
+        {:keys [pages blocks]}
         (cond (contains? common-config/mldoc-support-formats format)
               (extract/extract file content extract-options')
 
@@ -407,10 +432,16 @@
 
               :else
               (println "Skipped file since its format is not supported:" file))
+        tx-options (merge
+                    (dissoc options :extract-options :user-options)
+                    {:import-state (or (:import-state options) (new-import-state))
+                     :tag-classes (set (map string/lower-case (:tag-classes user-options)))
+                     :property-classes (set/difference
+                                      (set (map (comp keyword string/lower-case) (:property-classes user-options)))
+                                      db-property/built-in-properties-keys)})
         ;; Build page and block txs
-        {:keys [pages page-names-to-uuids]}
-        (build-pages-tx conn (:pages extracted) (:blocks extracted) tag-classes (select-keys options [:page-tags-uuid :import-state :macros]))
-        whiteboard-pages (->> pages
+        {:keys [pages-tx page-names-to-uuids]} (build-pages-tx conn pages blocks tx-options)
+        whiteboard-pages (->> pages-tx
                               ;; support old and new whiteboards
                               (filter #(#{"whiteboard" ["whiteboard"]} (:block/type %)))
                               (map (fn [page-block]
@@ -419,24 +450,22 @@
                                                 :block/format :markdown
                                                  ;; fixme: missing properties
                                                 :block/properties {(get-pid @conn :ls-type) :whiteboard-page})))))
-        pre-blocks (->> (:blocks extracted) (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
-        blocks (->> (:blocks extracted)
-                    (remove :block/pre-block?)
-                    (map #(build-block-tx @conn % pre-blocks tag-classes page-names-to-uuids
-                                          {:whiteboard? (some? (seq whiteboard-pages))
-                                           :import-state import-state
-                                           :macros (:macros options)})))
+        pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
+        blocks-tx (->> blocks
+                       (remove :block/pre-block?)
+                       (map #(build-block-tx @conn % pre-blocks page-names-to-uuids
+                                             (assoc tx-options :whiteboard? (some? (seq whiteboard-pages))))))
         ;; Build indices
-        pages-index (map #(select-keys % [:block/name]) pages)
-        block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
-        block-refs-ids (->> (mapcat :block/refs blocks)
+        pages-index (map #(select-keys % [:block/name]) pages-tx)
+        block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks-tx)
+        block-refs-ids (->> (mapcat :block/refs blocks-tx)
                             (filter (fn [ref] (and (vector? ref)
                                                    (= :block/uuid (first ref)))))
                             (map (fn [ref] {:block/uuid (second ref)}))
                             (seq))
         ;; To prevent "unique constraint" on datascript
         block-ids (set/union (set block-ids) (set block-refs-ids))
-        tx (concat whiteboard-pages pages-index pages block-ids blocks)
+        tx (concat whiteboard-pages pages-index pages-tx block-ids blocks-tx)
         tx' (common-util/fast-remove-nils tx)
         result (d/transact! conn tx')]
     result))

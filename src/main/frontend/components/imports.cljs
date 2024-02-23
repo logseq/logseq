@@ -305,15 +305,18 @@
 (rum/defc import-file-graph-dialog
   [initial-name on-graph-name-confirmed]
   (let [[graph-input set-graph-input!] (rum/use-state initial-name)
-        [tags-input set-tags-input!] (rum/use-state "")
-        on-submit #(do (on-graph-name-confirmed {:graph-name graph-input :tags tags-input})
+        [tag-classes-input set-tag-classes-input!] (rum/use-state "")
+        [property-classes-input set-property-classes-input!] (rum/use-state "")
+        on-submit #(do (on-graph-name-confirmed
+                        {:graph-name graph-input
+                         :tag-classes tag-classes-input
+                         :property-classes property-classes-input})
                        (state/close-modal!))]
     [:div.container
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.leading-6.font-medium
         "New graph name:"]]]
-
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
       {:auto-focus true
        :default-value graph-input
@@ -322,6 +325,7 @@
        :on-key-down (fn [e]
                       (when (= "Enter" (util/ekey e))
                         (on-submit)))}]
+
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.leading-6.font-medium
@@ -329,9 +333,23 @@
        [:span.text-xs
         "Tags are case insensitive and separated by commas"]]]
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
-      {:default-value tags-input
+      {:default-value tag-classes-input
        :on-change (fn [e]
-                    (set-tags-input! (util/evalue e)))
+                    (set-tag-classes-input! (util/evalue e)))
+       :on-key-down (fn [e]
+                      (when (= "Enter" (util/ekey e))
+                        (on-submit)))}]
+
+     [:div.sm:flex.sm:items-start
+      [:div.mt-3.text-center.sm:mt-0.sm:text-left
+       [:h3#modal-headline.leading-6.font-medium
+        "(Optional) Properties to import as tag classes e.g. 'type':"]
+       [:span.text-xs
+        "Properties are case insensitive and separated by commas"]]]
+     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
+      {:default-value property-classes-input
+       :on-change (fn [e]
+                    (set-property-classes-input! (util/evalue e)))
        :on-key-down (fn [e]
                       (when (= "Enter" (util/ekey e))
                         (on-submit)))}]
@@ -387,7 +405,7 @@
                                :counts (assoc (counts-from-entities entities) :datoms datom-count)}))))
 
 (defn- import-file-graph
-  [*files {:keys [graph-name tags]} config-file]
+  [*files {:keys [graph-name tag-classes property-classes]} config-file]
   (state/set-state! :graph/importing :file-graph)
   (state/set-state! [:graph/importing-state :current-page] (str graph-name " Assets"))
   (async/go
@@ -406,7 +424,8 @@
       (async/<! (p->c (import-logseq-files (filter logseq-file? files))))
       (async/<! (import-from-asset-files! asset-files))
       (async/<! (import-from-doc-files! db-conn repo config doc-files import-state
-                                        {:tag-classes (set (string/split tags #",\s*"))}))
+                                        {:tag-classes (set (string/split tag-classes #",\s*"))
+                                         :property-classes (set (string/split property-classes #",\s*")) }))
       (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))
       (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
       (state/set-state! :graph/importing nil)
