@@ -356,7 +356,21 @@
                               (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
         (is (rtc-const/data-from-ws-validator data-from-ws))
         (rtc-core/apply-remote-update-page-ops repo conn date-formatter update-page-ops)
-        (is (= page1-uuid (:block/uuid (d/entity @conn [:block/uuid page1-uuid])))))))
+        (is (= page1-uuid (:block/uuid (d/entity @conn [:block/uuid page1-uuid]))))))
+
+    (testing "apply-remote-update-page-ops-test2"
+      (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
+                          :affected-blocks
+                          {page1-uuid {:op :update-page
+                                       :self page1-uuid
+                                       :page-name (str page1-uuid "-rename")
+                                       :original-name (str page1-uuid "-rename")}}}
+            update-page-ops (vals
+                             (:update-page-ops-map
+                              (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
+        (is (rtc-const/data-from-ws-validator data-from-ws))
+        (rtc-core/apply-remote-update-page-ops repo conn date-formatter update-page-ops)
+        (is (= (str page1-uuid "-rename") (:block/name (d/entity @conn [:block/uuid page1-uuid])))))))
 
   (state/set-current-repo! nil)
   (test-helper/destroy-test-db!))
