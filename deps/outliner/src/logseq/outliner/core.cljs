@@ -241,12 +241,21 @@
                        (gp-block/extract-refs-from-text repo db content date-formatter))]
     (concat property-refs content-refs
             (when (sqlite-util/db-based-graph? repo)
-              (:block/tags block)))))
+              (map (fn [t]
+                     (cond
+                       (de/entity? t)
+                       (:db/id t)
+                       (and (vector? t) (= (count t) 2) (= :block/uuid (first t)))
+                       [:block/uuid (second t)]
+                       (map? t)
+                       [:block/uuid (:block/uuid t)]))
+                (:block/tags block))))))
 
 (defn- rebuild-refs
   [repo conn date-formatter txs-state block m]
   (when (sqlite-util/db-based-graph? repo)
-    (let [refs (->> (rebuild-block-refs repo conn date-formatter block (:block/properties block))
+    (let [refs' (rebuild-block-refs repo conn date-formatter block (:block/properties block))
+          refs (->> refs'
                     (concat (:block/refs m))
                     (remove nil?))
           add-tag-type (map
@@ -257,6 +266,9 @@
                              :block/type "class"}
                             (and (vector? t) (= (count t) 2) (= :block/uuid (first t)))
                             {:block/uuid (second t)
+                             :block/type "class"}
+                            (map? t)
+                            {:block/uuid (:block/uuid t)
                              :block/type "class"}
                             :else
                             (throw (js/Error. (str "Wrong tag: " t)))))
