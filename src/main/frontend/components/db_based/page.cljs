@@ -185,8 +185,10 @@
              (if collapsed?
                (if (or has-tags? @*hover? config/publishing?)
                  [:<>
-                  (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
-                                  (ui/icon "tags"))
+                  (if has-tags?
+                    [:div.px-1]
+                    (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
+                      (ui/icon "tags")))
                   (if (and config/publishing? (seq (set/intersection #{"class" "property"} types)))
                     [:div
                      [:div.opacity-50.pointer.text-sm "Expand for more info"]]
