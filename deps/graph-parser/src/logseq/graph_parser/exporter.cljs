@@ -247,7 +247,6 @@
                    (into {}))
               _ (when (seq property-changes) (prn :PROP-CHANGES property-changes))
               options' (assoc options :property-changes property-changes)]
-          (prn :classes-from-properties classes-from-properties (:block/name block))
           (cond-> (assoc-in block [:block/properties]
                             (update-properties properties' db page-names-to-uuids
                                                (select-keys block [:block/properties-text-values :block/name :block/content])
