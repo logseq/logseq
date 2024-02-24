@@ -68,11 +68,19 @@
 
   dev:db-query
   {:doc "Query a DB graph's datascript db"
-   :task (apply shell {:dir "deps/db"} "yarn -s nbb-logseq script/query.cljs" *command-line-args*)}
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq script/query.cljs" *command-line-args*)}
 
   dev:db-transact
   {:doc "Transact against a DB graph's datascript db"
    :task (apply shell {:dir "deps/outliner"} "yarn -s nbb-logseq script/transact.cljs" *command-line-args*)}
+
+  dev:db-import
+  {:doc "Import a file graph to db graph"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/graph-parser" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq -cp src:../outliner/src:../../scripts/src script/db_import.cljs" *command-line-args*)}
 
   dev:db-datoms
   {:doc "Write db's datoms to a file"
