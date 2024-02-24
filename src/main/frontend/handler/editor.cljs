@@ -784,8 +784,11 @@
                        nil
 
                        concat-prev-block?
-                       (let [new-properties (merge (:block/properties (db/entity (:db/id prev-block)))
-                                                   (:block/properties (db/entity (:db/id block))))]
+                       (let [prev-e (db/entity (:db/id prev-block))
+                             current-e (db/entity (:db/id block))
+                             new-properties (merge (:block/properties prev-e)
+                                                   (:block/properties current-e))
+                             new-tags (->> (concat (:block/tags prev-e) (:block/tags current-e)))]
                          (if (seq (:block/_refs (db/entity (:db/id block))))
                            (do
                              (delete-block-fn prev-block)
@@ -798,9 +801,9 @@
                              ;; block->right needs to point its `left` to block->left
                              (let [block-right (outliner-core/get-right-sibling db (:db/id block))]
                                (when (and block-right (not= (:db/id (:block/parent prev-block))
-                                                           (:db/id (:block/parent block))))
-                                (outliner-save-block! {:db/id (:db/id block-right)
-                                                       :block/left (:db/id (:block/left block))})))
+                                                            (:db/id (:block/parent block))))
+                                 (outliner-save-block! {:db/id (:db/id block-right)
+                                                        :block/left (:db/id (:block/left block))})))
 
                              ;; update prev-block's children to point to the refed block
                              (when (or (:block/collapsed? prev-block)
@@ -820,14 +823,16 @@
 
                              (when db-based?
                                (outliner-save-block! {:db/id (:db/id block)
-                                                      :block/properties new-properties})))
+                                                      :block/properties new-properties
+                                                      :block/tags new-tags})))
 
                            (do
                              (delete-block-fn block)
                              (save-block! repo prev-block new-content {})
                              (when db-based?
                                (outliner-save-block! {:db/id (:db/id prev-block)
-                                                      :block/properties new-properties})))))
+                                                      :block/properties new-properties
+                                                      :block/tags new-tags})))))
 
                        :else
                        (delete-block-fn block)))))))))))))
@@ -2725,12 +2730,17 @@
               (outliner-save-block! {:db/id (:db/id next-block-right)
                                      :block/left (:db/id (:block/left next-block))})))
           (when db-based?
-            (let [new-properties (merge
-                                  (:block/properties (db/entity (:db/id edit-block)))
-                                  (:block/properties (db/entity (:db/id next-block))))]
-              (when-not (= new-properties (:block/properties keep-block))
+            (let [next-e (db/entity (:db/id next-block))
+                  current-e (db/entity (:db/id edit-block))
+                  new-properties (merge
+                                  (:block/properties current-e)
+                                  (:block/properties next-e))
+                  new-tags (->> (concat (:block/tags next-e) (:block/tags current-e)))]
+              (when (or (not= new-properties (:block/properties keep-block))
+                        (not= (map :db/id new-tags) (map :db/id (:block/tags keep-block))))
                 (outliner-save-block! {:db/id (:db/id keep-block)
-                                       :block/properties new-properties})))))
+                                       :block/properties new-properties
+                                       :block/tags new-tags})))))
          (let [block (if next-block-has-refs? next-block edit-block)]
            (edit-block! block current-pos nil)))))))
 
