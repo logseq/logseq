@@ -390,6 +390,10 @@ html.is-native-ios {
 .page-info {
     min-height: 46px;
     margin-left: -15px;
+
+    .info-title {
+        min-height: 28px;
+    }
 }
 
 .sidebar-item .page-info {
