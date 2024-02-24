@@ -1111,11 +1111,14 @@
   []
   (when-let [page (get-nearest-page-or-url)]
     (when-not (string/blank? page)
-      (if (re-find url-regex page)
-        (js/window.open page)
-        (let [page-name (db-model/get-redirect-page-name page)]
-          (state/clear-edit!)
-          (insert-first-page-block-if-not-exists! page-name))))))
+      (p/do!
+       (state/clear-editor-action!)
+       (save-current-block!)
+       (if (re-find url-regex page)
+         (js/window.open page)
+         (let [page-name (db-model/get-redirect-page-name page)]
+           (state/clear-edit!)
+           (insert-first-page-block-if-not-exists! page-name)))))))
 
 (defn open-link-in-sidebar!
   []
