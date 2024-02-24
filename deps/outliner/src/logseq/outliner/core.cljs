@@ -111,8 +111,9 @@
                              (ldb/get-orphaned-pages db {:pages old-pages
                                                          :empty-ref-f (fn [page]
                                                                         (let [refs (:block/_refs page)]
-                                                                          (or (zero? (count refs))
-                                                                              (= #{db-id} (set (map :db/id refs))))))}))]
+                                                                          (and (or (zero? (count refs))
+                                                                                   (= #{db-id} (set (map :db/id refs))))
+                                                                               (not (some #{"class" "property"} (:block/type page))))))}))]
         (when (seq orphaned-pages)
           (let [tx (mapv (fn [page] [:db/retractEntity (:db/id page)]) orphaned-pages)]
             (swap! txs-state (fn [state] (vec (concat state tx))))))))))
@@ -245,12 +246,23 @@
   (when (sqlite-util/db-based-graph? repo)
     (let [refs (->> (rebuild-block-refs repo conn date-formatter block (:block/properties block))
                     (concat (:block/refs m))
-                    (concat (if (seq (:block/tags m))
-                              (:block/tags m)
-                              (map :db/id (:block/tags (d/entity @conn [:block/uuid (:block/uuid block)])))))
-                    (remove nil?))]
+                    (concat (:block/tags m))
+                    (remove nil?))
+          add-tag-type (map
+                        (fn [t]
+                          (cond
+                            (integer? t)
+                            {:db/id t
+                             :block/type "class"}
+                            (and (vector? t) (= (count t) 2) (= :block/uuid (first t)))
+                            {:block/uuid (second t)
+                             :block/type "class"}
+                            :else
+                            (throw (js/Error. (str "Wrong tag: " t)))))
+                        (:block/tags m))]
       (swap! txs-state (fn [txs] (concat txs [{:db/id (:db/id block)
-                                               :block/refs refs}]))))))
+                                               :block/refs refs}]
+                                         add-tag-type))))))
 
 (defn- fix-tag-ids
   [m]
@@ -367,7 +379,14 @@
           block-entity (d/entity db eid)
           m (cond->> m
               db-based?
-              (db-marker-handle conn))]
+              (db-marker-handle conn))
+          m (if db-based?
+              (update m :block/tags (fn [tags]
+                                      (->>
+                                       (concat (map :db/id (:block/tags block-entity))
+                                               (map (fn [t] (or (:db/id t) [:block/uuid (:block/uuid t)])) tags))
+                                       (remove nil?))))
+              m)]
 
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
@@ -381,7 +400,7 @@
         ;; Retract attributes to prepare for tx which rewrites block attributes
         (when (:block/content m)
           (let [retract-attributes (if db-based?
-                                     db-schema/db-version-retract-attributes
+                                     (conj db-schema/db-version-retract-attributes :block/tags)
                                      db-schema/retract-attributes)]
             (swap! txs-state (fn [txs]
                                (vec

@@ -2042,11 +2042,9 @@
          ;; highlight ref block (inline)
          (when-not area? [(hl-ref)])
 
-         (if title
-           (conj
-            (map-inline config title)
-            (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})]))
-           [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]])
+         (conj
+          (map-inline config title)
+          (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})]))
 
          ;; highlight ref block (area)
          (when area? [(hl-ref)])))))))
@@ -2420,11 +2418,8 @@
                 (icon/get-page-icon block {})
                 (page-cp config block)]
 
-               (or (seq title) (:block/marker block))
-               (build-block-title config block)
-
                :else
-               nil)
+               (build-block-title config block))
 
              [:div.flex.flex-row.items-center.gap-1
               (when (and db-based? (seq block-tags))
