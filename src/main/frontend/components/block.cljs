@@ -2540,10 +2540,10 @@
                                                     (editor-handler/escape-editing select?))))}
                                      edit-input-id
                                      config))]
-          (if (and named? (seq (:block/tags block)) db-based?)
-            [:div.flex.flex-1.flex-row.justify-between
+          (if (and (seq (:block/tags block)) db-based?)
+            [:div.flex.flex-1.flex-row.gap-1.items-start
              editor-cp
-             (tags config block)]
+             [:div {:style {:margin-top 2}} (tags config block)]]
             editor-cp))]
        (let [refs-count (if (seq (:block/_refs block))
                           (count (:block/_refs block))
