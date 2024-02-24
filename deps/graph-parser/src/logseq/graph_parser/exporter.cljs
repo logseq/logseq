@@ -223,7 +223,8 @@
   "Infers property schemas, update :block/properties and remove deprecated
   property attributes. Only infers property schemas on user properties as
   built-in ones shouldn't change"
-  [{:block/keys [properties] :as block} db page-names-to-uuids refs {:keys [import-state macros property-classes] :as options}]
+  [{:block/keys [properties] :as block} db page-names-to-uuids refs
+   {:keys [import-state macros property-classes log-fn] :as options}]
   (-> (if (seq properties)
         (let [classes-from-properties (->> (select-keys properties property-classes)
                                            (mapcat (fn [[_k v]] (if (coll? v) v [v])))
@@ -245,7 +246,7 @@
                            (when-let [property-change (infer-property-schema-and-get-property-change val prop refs (:property-schemas import-state) macros)]
                              [prop property-change])))
                    (into {}))
-              _ (when (seq property-changes) (prn :PROP-CHANGES property-changes))
+              _ (when (seq property-changes) (log-fn :PROP-CHANGES property-changes))
               options' (assoc options :property-changes property-changes)]
           (cond-> (assoc-in block [:block/properties]
                             (update-properties properties' db page-names-to-uuids
@@ -329,7 +330,7 @@
 
 (defn- build-block-tx
   [db block pre-blocks page-names-to-uuids {:keys [import-state tag-classes] :as options}]
-  (prn ::block block)
+  ;; (prn ::block-in block)
   (let [old-property-schemas @(:property-schemas import-state)]
     (-> block
         (fix-pre-block-references pre-blocks)
@@ -339,7 +340,7 @@
         (update-block-refs page-names-to-uuids old-property-schemas options)
         (update-block-tags tag-classes page-names-to-uuids)
         add-missing-timestamps
-        ;; ((fn [x] (prn :BLOCKZ x) x))
+        ;; ((fn [x] (prn :block-out x) x))
         ;; TODO: org-mode content needs to be handled
         (assoc :block/format :markdown))))
 
@@ -362,7 +363,7 @@
 
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return all non-whiteboard pages to be transacted"
-  [conn pages blocks {:keys [page-tags-uuid import-state tag-classes property-classes] :as options}]
+  [conn pages blocks {:keys [page-tags-uuid import-state tag-classes property-classes notify-user] :as options}]
   (let [all-pages (->> (extract/with-ref-pages pages blocks)
                        ;; remove unused property pages unless the page has content
                        (remove #(and (contains? property-classes (keyword (:block/name %)))
@@ -385,9 +386,9 @@
                                 disallowed-attributes [:block/name :block/uuid :block/format :block/journal? :block/original-name :block/journal-day]
                                 allowed-attributes [:block/properties :block/tags :block/alias :block/namespace]
                                 block-changes (select-keys % allowed-attributes)]
-                            ;; TODO: Warn user when this is more stable
-                            (when (seq (apply dissoc % (into disallowed-attributes allowed-attributes)))
-                              (prn :PAGE-UNHANDLED! (:block/name %) (apply dissoc % (into disallowed-attributes allowed-attributes))))
+                            (when-let [ignored-attrs (not-empty (apply dissoc % (into disallowed-attributes allowed-attributes)))]
+                              (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/original-name %)) ": "
+                                                      ignored-attrs)}))
                             (when (or schema (seq block-changes))
                               (cond-> (merge {:block/name (:block/name %)} block-changes)
                                 (:block/tags %)
@@ -414,8 +415,13 @@
    are :tag-classes (set) and :property-classes (set).
 * :page-tags-uuid - uuid of pageTags property
 * :import-state - useful import state to maintain across files e.g. property schemas or ignored properties
-* :macros - map of macros for use with macro expansion"
-  [conn file content {:keys [extract-options user-options] :as options}]
+* :macros - map of macros for use with macro expansion
+* :notify-user - Displays warnings to user without failing the import. Fn receives a map with :msg
+* :log-fn - Logs messages for development. Defaults to prn"
+  [conn file content {:keys [extract-options user-options notify-user log-fn]
+                      :or {notify-user #(println "[WARNING]" (:msg %))
+                           log-fn prn}
+                      :as options}]
   (let [format (common-util/get-format file)
         extract-options' (merge {:block-pattern (common-config/get-block-pattern format)
                                  :date-formatter "MMM do, yyyy"
@@ -432,14 +438,16 @@
               (extract/extract-whiteboard-edn file content extract-options')
 
               :else
-              (println "Skipped file since its format is not supported:" file))
+              (notify-user {:msg (str "Skipped file since its format is not supported: " file)}))
         tx-options (merge
                     (dissoc options :extract-options :user-options)
                     {:import-state (or (:import-state options) (new-import-state))
+                     :notify-user notify-user
+                     :log-fn log-fn
                      :tag-classes (set (map string/lower-case (:tag-classes user-options)))
                      :property-classes (set/difference
-                                      (set (map (comp keyword string/lower-case) (:property-classes user-options)))
-                                      db-property/built-in-properties-keys)})
+                                        (set (map (comp keyword string/lower-case) (:property-classes user-options)))
+                                        db-property/built-in-properties-keys)})
         ;; Build page and block txs
         {:keys [pages-tx page-names-to-uuids]} (build-pages-tx conn pages blocks tx-options)
         whiteboard-pages (->> pages-tx
