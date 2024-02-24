@@ -13,18 +13,20 @@
     (p/let [result (.q sqlite graph (pr-str inputs))]
       (when result
         (let [result' (edn/read-string result)]
-          (when (seq result')
+          (when (and (seq result') (coll? result'))
             (when-let [conn (db-conn/get-db graph false)]
-              (let [tx-data (if (and (coll? result')
-                                     (coll? (first result'))
-                                     (not (map? (first result'))))
-                              (apply concat result')
-                              result')]
-                (try
-                  (d/transact! conn tx-data)
-                  (catch :default e
-                    (js/console.error "<q failed with:" e)
-                    nil)))))
+              (let [tx-data (->>
+                             (if (and (coll? (first result'))
+                                      (not (map? (first result'))))
+                               (apply concat result')
+                               result')
+                             (remove nil?))]
+                (when (every? map? tx-data)
+                  (try
+                    (d/transact! conn tx-data)
+                    (catch :default e
+                      (js/console.error "<q failed with:" e)
+                      nil))))))
           result')))))
 
 (defn <pull
