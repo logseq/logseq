@@ -17,7 +17,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.util :as sqlite-util]
             [cljs.pprint :as pprint]
-            [logseq.common.marker :as common-marker]))
+            [logseq.common.marker :as common-marker]
+            [frontend.config :as config]))
 
 (def ^:private block-map
   (mu/optional-keys
@@ -239,14 +240,15 @@
                            (remove (fn [b] (nil? (d/entity db [:block/uuid (:block/uuid b)])))))
         content-refs (when-let [content (:block/content block)]
                        (gp-block/extract-refs-from-text repo db content date-formatter))]
-    (concat property-refs content-refs)))
+    (concat property-refs content-refs
+            (when (config/db-based-graph? repo)
+              (:block/tags block)))))
 
 (defn- rebuild-refs
   [repo conn date-formatter txs-state block m]
   (when (sqlite-util/db-based-graph? repo)
     (let [refs (->> (rebuild-block-refs repo conn date-formatter block (:block/properties block))
                     (concat (:block/refs m))
-                    (concat (:block/tags m))
                     (remove nil?))
           add-tag-type (map
                         (fn [t]
