@@ -1267,7 +1267,7 @@
                 (ui-outliner-tx/transact!
                  opts
                  (outliner-save-block! {:db/id (:db/id block)
-                                             :block/tags tag-pages})))))
+                                        :block/tags tag-pages})))))
           (save-block-if-changed! block value opts))))))
 
 (defn save-block!
