@@ -310,8 +310,10 @@
                 (cond-> b-ent
                   (and (contains? key-set :content)
                        (not= (:content op-value)
-                             (:block/raw-content b-ent))) (assoc :block/content
-                                                                 (special-id-ref->page @conn (:content op-value)))
+                             (:block/raw-content b-ent)))
+                  (assoc :block/content
+                         (special-id-ref->page @conn (:content op-value)))
+
                   (contains? key-set :updated-at)     (assoc :block/updated-at (:updated-at op-value))
                   (contains? key-set :created-at)     (assoc :block/created-at (:created-at op-value))
                   (contains? key-set :alias)          (assoc :block/alias (some->> (seq (:alias op-value))
@@ -319,17 +321,27 @@
                                                                                    (d/pull-many @conn [:db/id])
                                                                                    (keep :db/id)))
                   (contains? key-set :type)           (assoc :block/type (:type op-value))
-                  (contains? key-set :schema)         (assoc :block/schema (transit/read transit-r (:schema op-value)))
+                  (and (contains? key-set :schema)
+                       (some? (:schema op-value)))
+                  (assoc :block/schema (transit/read transit-r (:schema op-value)))
+
                   (contains? key-set :tags)           (assoc :block/tags (some->> (seq (:tags op-value))
                                                                                   (map (partial vector :block/uuid))
                                                                                   (d/pull-many @conn [:db/id])
                                                                                   (keep :db/id)))
                   (contains? key-set :properties)     (assoc :block/properties
                                                              (transit/read transit-r (:properties op-value)))
-                  (contains? key-set :link)           (assoc :block/link (some->> (:link op-value)
-                                                                                  (vector :block/uuid)
-                                                                                  (d/pull @conn [:db/id])
-                                                                                  :db/id)))
+                  (and (contains? key-set :link)
+                       (some? (:link op-value)))
+                  (assoc :block/link (some->> (:link op-value)
+                                              (vector :block/uuid)
+                                              (d/pull @conn [:db/id])
+                                              :db/id))
+
+                  (and (contains? key-set :journal-day)
+                       (some? (:journal-day op-value)))
+                  (assoc :block/journal-day (:journal-day op-value)
+                         :block/journal? true))
                 *other-tx-data (atom [])]
             ;; 'save-block' dont handle card-many attrs well?
             (when (contains? key-set :alias)
@@ -344,6 +356,10 @@
               (swap! *other-tx-data conj [:db/retract db-id :block/schema]))
             (when (and (contains? key-set :properties) (nil? (:properties op-value)))
               (swap! *other-tx-data conj [:db/retract db-id :block/properties]))
+            (when (and (contains? key-set :journal-day) (nil? (:journal-day op-value)))
+              (swap! *other-tx-data conj
+                     [:db/retract db-id :block/journal-day]
+                     [:db/retract db-id :block/journal?]))
             (when (seq @*other-tx-data)
               (ldb/transact! conn @*other-tx-data {:persist-op? false}))
             (transact-db! :save-block repo conn date-formatter new-block)))))))
@@ -580,6 +596,7 @@
     (swap! *remote-ops conj
            [:update
             (cond-> {:block-uuid block-uuid}
+              (:block/journal-day block)      (assoc :journal-day (:block/journal-day block))
               (:block/updated-at block)       (assoc :updated-at (:block/updated-at block))
               (:block/created-at block)       (assoc :created-at (:block/created-at block))
               (contains? attr-map :schema)    (assoc :schema
