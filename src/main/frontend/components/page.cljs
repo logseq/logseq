@@ -387,18 +387,7 @@
                  (cond untitled? [:span.opacity-50 (t :untitled)]
                        nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (mldoc/get-default-config
                                                                                             (:block/format page))))
-                       :else title))])]
-
-           ;; (when (and db-based? (not whiteboard-page?))
-           ;;   [:div.absolute.bottom-2.left-0
-           ;;    [:div.page-add-tags.flex.flex-row.items-center.flex-wrap.gap-2.ml-2
-           ;;     (when (and (empty? (:block/tags page)) @*hover? (not config/publishing?))
-           ;;       (db-page/page-tags page tags-property *hover? *configuring?))
-
-           ;;     (when (or (some #(contains? #{"class" "property"} %) (:block/type page))
-           ;;               (not (db-property-handler/block-has-viewable-properties? page)))
-           ;;       (db-page/page-configure page *hover? *configuring?))]])
-           ])))))
+                       :else title))])]])))))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
