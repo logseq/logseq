@@ -201,7 +201,8 @@
                                                     :user-options user-options
                                                     :page-tags-uuid page-tags-uuid
                                                     :import-state import-state
-                                                    :macros (state/get-macros)})]
+                                                    :macros (state/get-macros)
+                                                    :notify-user #(notification/show! (:msg %) :warning false)})]
                                               (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report)))
                                             m))
                                   (p/catch (fn [error]
