@@ -74,7 +74,7 @@
                   (let [updated-general-attrs (seq (set/intersection
                                                     updated-key-set
                                                     #{:block/tags :block/alias :block/type :block/schema :block/content
-                                                      :block/properties :block/link}))
+                                                      :block/properties :block/link :block/journal-day}))
                         ops (cond-> []
                               (or add3? add4?)
                               (conj [:move])
@@ -86,7 +86,7 @@
                                        (keep
                                         (fn [attr-name]
                                           (case attr-name
-                                            (:block/link :block/schema :block/content)
+                                            (:block/link :block/schema :block/content :block/journal-day)
                                             {(keyword (name attr-name)) nil}
 
                                             :block/alias
