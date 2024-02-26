@@ -81,8 +81,9 @@
          :as-menu? as-menu? :root-props root-props :content-props content-props}))))
 
 (defn hide!
-  [id]
-  (update-popup! id :open? false))
+  ([] (when-let [id (some-> (get-popups) (last) :id)] (hide! id)))
+  ([id]
+   (update-popup! id :open? false)))
 
 (defn hide-all!
   []
