@@ -14,6 +14,7 @@
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
@@ -80,38 +81,39 @@
                    (tc/to-local-date value)
                    (catch :default e
                      (js/console.error e))))]
-    (ui/dropdown
-     (fn [{:keys [toggle-fn]}]
-       [:a.flex
-        {:tabIndex "0"
-         ;; meta-click or just click in publishing to navigate to date's page
-         :on-click (if config/publishing? #(navigate-to-date-page value) toggle-fn)
-         :on-mouse-down (fn [e]
-                          (.preventDefault e)
-                          (when (util/meta-key? e)
-                            (navigate-to-date-page value)))
-         :on-key-down (fn [e]
-                        (when (= (util/ekey e) "Enter")
-                          toggle-fn))}
-        [:span.inline-flex.items-center
-         (when title
-           (when-not multiple-values? [:span.mr-1 title]))
-         (when-not title (ui/icon "calendar" {:size 15}))]])
-     (fn [{:keys [toggle-fn]}]
-       (ui/datepicker value' {:on-change (fn [_e date]
-                                           (let [journal (date/js-date->journal-title date)]
-                                             (p/do!
-                                              (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
-                                                (page-handler/<create! journal {:redirect? false
-                                                                                :create-first-block? false}))
-                                              (when (fn? on-change)
-                                                (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
-                                              (exit-edit-property)
-                                              (toggle-fn)
-                                              (when-let [toggle (:toggle-fn opts)]
-                                                (toggle)))))}))
-     {:modal-class (util/hiccup->class
-                    "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})))
+
+    (let [content-fn
+          (fn [{:keys [id]}]
+            (ui/datepicker value'
+              {:on-change (fn [_e date]
+                            (let [journal (date/js-date->journal-title date)]
+                              (p/do!
+                                (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
+                                  (page-handler/<create! journal {:redirect?           false
+                                                                  :create-first-block? false}))
+                                (when (fn? on-change)
+                                  (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
+                                (exit-edit-property)
+                                (shui/popup-hide! id)
+                                (when-let [toggle (:toggle-fn opts)]
+                                  (toggle)))))}))]
+      [:a.flex
+       {:tabIndex      "0"
+        ;; meta-click or just click in publishing to navigate to date's page
+        :on-click      (if config/publishing?
+                         #(navigate-to-date-page value)
+                         #(shui/popup-show! % content-fn {:as-menu? true}))
+        :on-mouse-down (fn [e]
+                         (.preventDefault e)
+                         (when (util/meta-key? e)
+                           (navigate-to-date-page value)))
+        :on-key-down   (fn [e]
+                         (when (= (util/ekey e) "Enter")
+                           (shui/popup-hide!)))}
+       [:span.inline-flex.items-center
+        (when title
+          (when-not multiple-values? [:span.mr-1 title]))
+        (when-not title (ui/icon "calendar" {:size 15}))]])))
 
 
 (rum/defc property-value-date-picker
