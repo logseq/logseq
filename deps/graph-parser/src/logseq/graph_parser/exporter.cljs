@@ -11,7 +11,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.common.util.macro :as macro-util]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [promesa.core :as p]))
 
 (defn- get-pid
   "Get a property's id (name or uuid) given its name. For db graphs"
@@ -159,7 +160,7 @@
 (defn- handle-changed-property
   "Handles converting a property value whose :type has changed. Returns the changed
    value or nil if the property is to be ignored"
-  [val prop prop-name->uuid properties-text-values property-changes ignored-properties]
+  [val prop prop-name->uuid properties-text-values ignored-properties {:keys [property-changes log-fn]}]
   (let [type-change (get-in property-changes [prop :type])]
     (cond
       ;; ignore :to as any property value gets stringified
@@ -170,15 +171,15 @@
       (set (map (comp prop-name->uuid common-util/page-name-sanity-lc) val))
       :else
       (do
-        (js/console.log :prop-change-ignored {:property prop :val val :change type-change})
+        (log-fn :prop-change-ignored {:property prop :val val :change type-change})
         (swap! ignored-properties conj {:property prop :value val :schema (get property-changes prop)})
         nil))))
 
-(defn- update-user-property-values [props prop-name->uuid properties-text-values property-changes ignored-properties]
+(defn- update-user-property-values [props prop-name->uuid properties-text-values ignored-properties {:keys [property-changes] :as options}]
   (->> props
        (keep (fn [[prop val]]
                (if (get-in property-changes [prop :type])
-                 (when-let [val' (handle-changed-property val prop prop-name->uuid properties-text-values property-changes ignored-properties)]
+                 (when-let [val' (handle-changed-property val prop prop-name->uuid properties-text-values ignored-properties options)]
                    [prop val'])
                  [prop
                   (cond
@@ -199,7 +200,7 @@
   "Updates block property names and values"
   [props db page-names-to-uuids
    {:block/keys [properties-text-values] :as block}
-   {:keys [whiteboard? property-changes import-state]}]
+   {:keys [whiteboard? import-state] :as options}]
   (let [prop-name->uuid (if whiteboard?
                           (fn prop-name->uuid [k]
                             (or (get-pid db k)
@@ -216,7 +217,7 @@
            db
            (:ignored-properties import-state)
            (select-keys block [:block/name :block/content]))
-          (merge (update-user-property-values user-properties prop-name->uuid properties-text-values property-changes (:ignored-properties import-state)))
+          (merge (update-user-property-values user-properties prop-name->uuid properties-text-values (:ignored-properties import-state) options))
           (update-keys prop-name->uuid)))))
 
 (defn- handle-page-properties
@@ -478,3 +479,53 @@
         tx' (common-util/fast-remove-nils tx)
         result (d/transact! conn tx')]
     result))
+
+;; UI facing fns
+;; =============
+
+(defn setup-import-options
+  [db config user-options {:keys [macros notify-user]}]
+  (cond-> {:extract-options {:date-formatter (common-config/get-date-formatter config)
+                             :user-config config
+                             :filename-format (or (:file/name-format config) :legacy)}
+           :user-options user-options
+           :page-tags-uuid (:block/uuid (d/entity db [:block/name "pagetags"]))
+           :import-state (new-import-state)
+           :macros (or macros (:macros config))}
+    notify-user
+    (assoc :notify-user notify-user)))
+
+(defn- import-doc-file
+  [{:keys [rpath idx] :as file} conn <read-file
+   {:keys [notify-user set-ui-state import-file]
+    :or {set-ui-state (constantly nil)
+         import-file (fn import-file [conn m opts]
+                       (add-file-to-db-graph conn (:file/path m) (:file/content m) opts))}
+    :as import-options}]
+  ;; (prn :import-doc-file rpath idx)
+  (-> (p/let [_ (set-ui-state [:graph/importing-state :current-idx] (inc idx))
+              _ (set-ui-state [:graph/importing-state :current-page] rpath)
+              content (<read-file file)
+              m {:file/path rpath :file/content content}]
+        (import-file conn m (dissoc import-options :set-ui-state :import-file))
+        ;; returning val results in smoother ui updates
+        m)
+      (p/catch (fn [error]
+                 (notify-user {:msg (str "Import failed on " (pr-str rpath) " with error:\n" error)
+                               :level :error
+                               :ex-data {:path rpath :error error}})))))
+
+(defn import-from-doc-files!
+  [conn *doc-files <read-file {:keys [notify-user set-ui-state]
+                                      :or {set-ui-state (constantly nil) notify-user prn}
+                                      :as import-options}]
+  (set-ui-state [:graph/importing-state :total] (count *doc-files))
+  (let [doc-files (mapv #(assoc %1 :idx %2) *doc-files (range 0 (count *doc-files)))]
+    (-> (p/loop [_file-map (import-doc-file (get doc-files 0) conn <read-file import-options)
+                 i 0]
+          (when-not (>= i (dec (count doc-files)))
+            (p/recur (import-doc-file (get doc-files (inc i)) conn <read-file import-options)
+                     (inc i))))
+        (p/catch (fn [e]
+                   (notify-user {:msg (str "Import has unexpected error:\n" e)
+                                 :level :error}))))))

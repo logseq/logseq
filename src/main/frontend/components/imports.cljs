@@ -33,12 +33,10 @@
             [logseq.db :as ldb]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.core :as outliner-core]
-            [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]
             [logseq.common.config :as common-config]
             [lambdaisland.glogi :as log]
-            [frontend.handler.db-based.property.util :as db-pu]
             [logseq.db.frontend.validate :as db-validate]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
@@ -168,52 +166,6 @@
      [:div.mt-5.sm:mt-4.flex
       (ui/button "Submit"
                  {:on-click on-submit})]]))
-
-(defn- import-from-doc-files!
-  [db-conn repo config doc-files import-state user-options]
-  (let [imported-chan (async/promise-chan)
-        page-tags-uuid (db-pu/get-built-in-property-uuid repo :pagetags)]
-    (try
-      (let [docs-chan (async/to-chan! (medley/indexed doc-files))]
-        (state/set-state! [:graph/importing-state :total] (count doc-files))
-        (async/go-loop []
-          (if-let [[i {:keys [rpath] :as file}] (async/<! docs-chan)]
-            (let [extract-options {:date-formatter (common-config/get-date-formatter config)
-                                   :user-config config
-                                   :filename-format (or (:file/name-format config) :legacy)
-                                   :block-pattern (common-config/get-block-pattern (common-util/get-format rpath))}]
-              (state/set-state! [:graph/importing-state :current-idx] (inc i))
-              (state/set-state! [:graph/importing-state :current-page] rpath)
-              (async/<! (async/timeout 10))
-              (async/<! (p->c (-> (.text (:file-object file))
-                                  (p/then (fn [content]
-                                            (prn :import-file rpath i)
-                                            {:file/path rpath
-                                             :file/content content}))
-                                  (p/then (fn [m]
-                                            ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
-                                            (let [tx-report
-                                                  (gp-exporter/add-file-to-db-graph
-                                                   db-conn
-                                                   (:file/path m)
-                                                   (:file/content m)
-                                                   {:extract-options extract-options
-                                                    :user-options user-options
-                                                    :page-tags-uuid page-tags-uuid
-                                                    :import-state import-state
-                                                    :macros (state/get-macros)
-                                                    :notify-user #(notification/show! (:msg %) :warning false)})]
-                                              (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report)))
-                                            m))
-                                  (p/catch (fn [error]
-                                             (notification/show! (str "Import failed on " (pr-str rpath) " with error:\n" error)
-                                                                 :error)
-                                             (log/error :import-error {:path rpath :error error}))))))
-              (recur))
-            (async/offer! imported-chan true))))
-      (catch :default e
-        (notification/show! (str "Error happens when importing:\n" e) :error)
-        (async/offer! imported-chan true)))))
 
 (defn- import-from-asset-files!
   [asset-files]
@@ -365,6 +317,7 @@
    :pages (count (filter :block/name entities))
    :blocks (count (filter :block/content entities))
    :classes (count (filter #(contains? (:block/type %) "class") entities))
+   :objects (count (filter #(seq (:block/tags %)) entities))
    :properties (count (filter #(contains? (:block/type %) "property") entities))
    :property-values (count (mapcat :block/properties entities))})
 
@@ -404,14 +357,12 @@
                             :warning false))
       (log/info :import-valid {:msg "Valid import!"
                                :counts (assoc (counts-from-entities entities) :datoms datom-count)}))))
-
 (defn- import-file-graph
   [*files {:keys [graph-name tag-classes property-classes]} config-file]
   (state/set-state! :graph/importing :file-graph)
   (state/set-state! [:graph/importing-state :current-page] (str graph-name " Assets"))
   (async/go
     (let [start-time (t/now)
-          import-state (gp-exporter/new-import-state)
           _ (async/<! (p->c (repo-handler/new-db! graph-name {:file-graph-import? true})))
           repo (state/get-current-repo)
           db-conn (db/get-db repo false)
@@ -421,17 +372,35 @@
           doc-files (->> files
                          (remove logseq-file?)
                          (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:rpath %)))))
-          asset-files (filter #(string/starts-with? (:rpath %) "assets/") files)]
+          asset-files (filter #(string/starts-with? (:rpath %) "assets/") files)
+          import-options (merge
+                          (gp-exporter/setup-import-options
+                           @db-conn
+                           config
+                           {:tag-classes (set (string/split tag-classes #",\s*"))
+                            :property-classes (set (string/split property-classes #",\s*"))}
+                           {:macros (state/get-macros)
+                            :notify-user #(if (= :error (:level %))
+                                            (do
+                                              (notification/show! (:msg %) :error)
+                                              (when (:ex-data %)
+                                                (log/error :import-error (:ex-data %))))
+                                            (notification/show! (:msg %) :warning false))})
+                          {:set-ui-state state/set-state!
+                           ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
+                           :import-file (fn import-file [conn m opts]
+                                          (let [tx-report
+                                                  (gp-exporter/add-file-to-db-graph conn (:file/path m) (:file/content m) opts)]
+                                              (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report))))})
+          <read-file (fn [file] (.text (:file-object file)))]
       (async/<! (p->c (import-logseq-files (filter logseq-file? files))))
       (async/<! (import-from-asset-files! asset-files))
-      (async/<! (import-from-doc-files! db-conn repo config doc-files import-state
-                                        {:tag-classes (set (string/split tag-classes #",\s*"))
-                                         :property-classes (set (string/split property-classes #",\s*")) }))
+      (async/<! (p->c (gp-exporter/import-from-doc-files! db-conn doc-files <read-file import-options)))
       (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))
       (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
       (state/set-state! :graph/importing nil)
       (state/set-state! :graph/importing-state nil)
-      (validate-imported-data @db-conn import-state files)
+      (validate-imported-data @db-conn (:import-state import-options) files)
       (finished-cb))))
 
 (defn import-file-to-db-handler
