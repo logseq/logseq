@@ -2538,7 +2538,7 @@
                                                    (p/do!
                                                     (state/set-editor-op! :escape)
                                                     (editor-handler/save-block! (editor-handler/get-state) value)
-                                                    (editor-handler/escape-editing select?))))}
+                                                    (js/setTimeout #(editor-handler/escape-editing select?) 10))))}
                                      edit-input-id
                                      config))]
           (if (and (seq (:block/tags block)) db-based?)
