@@ -89,6 +89,7 @@ import { Link } from '@/components/ui/link'
 import { Separator } from '@/components/ui/separator'
 import { Toggle } from '@/components/ui/toggle'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
 
 declare global {
   var LSUI: any
@@ -180,7 +181,8 @@ const shadui = {
   AlertDialogCancel,
   Tooltip, TooltipTrigger, TooltipArrow,
   TooltipContent, TooltipProvider,
-  Toggle, ToggleGroup, ToggleGroupItem
+  Toggle, ToggleGroup, ToggleGroupItem,
+  ResizablePanelGroup, ResizablePanel, ResizableHandle
 }
 
 function setupGlobals() {
