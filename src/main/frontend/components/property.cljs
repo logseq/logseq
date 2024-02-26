@@ -664,7 +664,7 @@
         root-block? (= (:id opts) (str (:block/uuid block)))
         ;; This section produces own-properties and full-hidden-properties
         hide-with-property-id (fn [property-id]
-                                (if root-block?
+                                (if (or root-block? page-configure?)
                                   false
                                   (let [eid (if (uuid? property-id) [:block/uuid property-id] property-id)]
                                     (:hide? (:block/schema (db/entity eid))))))
