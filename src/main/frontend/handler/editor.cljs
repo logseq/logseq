@@ -1940,6 +1940,11 @@
            (not db-based?))
       (state/clear-editor-action!)
 
+      (or (= last-input-char last-prev-input-char commands/hashtag)
+          (and (= last-prev-input-char commands/hashtag)
+               (= last-input-char " ")))
+      (state/clear-editor-action!)
+
       ;; Open "Search page or New page" auto-complete
       (and (= last-input-char commands/hashtag)
            ;; Only trigger at beginning of a line or before whitespace
