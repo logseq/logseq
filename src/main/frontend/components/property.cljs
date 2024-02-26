@@ -356,25 +356,22 @@
 
   (let [*el-ref (rum/use-ref nil)]
     (rum/use-effect!
-      (fn []
-        (let [content-fn
-              (fn [{:keys [id]}]
-                (property-config entity property
-                  (merge opts {:toggle-fn         #(shui/popup-hide! id)
-                               :block             entity
-                               :add-new-property? true})))]
-          (js/setTimeout
-            (fn []
-              (when-let [^js target (rum/deref *el-ref)]
-                (shui/popup-show! target content-fn
-                  {:content-props {:onOpenAutoFocus #(.preventDefault %) :class "w-auto"}})))
-            100)))
-      [])
+     (fn []
+       (let [content-fn
+             (fn [{:keys [id]}]
+               (property-config entity property
+                                (merge opts {:toggle-fn         #(shui/popup-hide! id)
+                                             :block             entity
+                                             :add-new-property? true})))]
+         (when-let [^js target (rum/deref *el-ref)]
+           (shui/popup-show! target content-fn
+                             {:content-props {:onOpenAutoFocus #(.preventDefault %) :class "w-auto"}}))))
+     [])
 
     [:div.is-new-editing-property-input
      {:ref *el-ref}
      (pv/property-value entity property property-value
-       (assoc opts :editing? true))]))
+                        (assoc opts :editing? true))]))
 
 (rum/defc property-select
   [exclude-properties on-chosen input-opts]
