@@ -471,7 +471,7 @@
   (rum/local nil ::template-instance)
   {:init (fn [state]
            (let [block-id (first (:rum/args state))]
-             (db-async/<get-block (state/get-current-repo) block-id :children? false))
+             (db-async/<get-block (state/get-current-repo) block-id :children? true))
            state)}
   [state value block property block-cp editor-box opts page-cp editor-id]
   (let [*template-instance (::template-instance state)
