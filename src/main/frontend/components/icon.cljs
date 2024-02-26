@@ -8,6 +8,7 @@
             [frontend.search :as search]
             [rum.core :as rum]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [goog.object :as gobj]
             [goog.functions :refer [debounce]]
@@ -176,20 +177,22 @@
 
 (rum/defc icon-picker
   [icon-value {:keys [disabled? on-chosen]}]
-  (ui/dropdown
-   (fn [{:keys [toggle-fn]}]
-     [:button.flex {:on-click #(when-not disabled? (toggle-fn))}
-      (if icon-value
-        (icon icon-value)
-        [:div.opacity-50.text-sm
-         "Empty"])])
-   (if config/publishing?
-     (constantly [])
-     (fn [{:keys [toggle-fn]}]
-       [:div.p-4
-        (icon-search
-         {:on-chosen (fn [e icon-value]
-                       (on-chosen e icon-value)
-                       (toggle-fn))})]))
-   {:modal-class (util/hiccup->class
-                  "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}))
+  (let [content-fn
+        (if config/publishing?
+          (constantly [])
+          (fn [{:keys [id]}]
+            [:div.p-2
+             (icon-search
+               {:on-chosen (fn [e icon-value]
+                             (on-chosen e icon-value)
+                             (shui/popup-hide! id))})]))]
+    ;; trigger
+    [:button.flex
+     {:on-click #(when-not disabled?
+                   (shui/popup-show! % content-fn
+                     {:as-menu? true
+                      :content-props {:class "w-auto"}}))}
+     (if icon-value
+       (icon icon-value)
+       [:div.opacity-50.text-sm
+        "Empty"])]))

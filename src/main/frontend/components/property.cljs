@@ -351,6 +351,31 @@
         (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
             (pv/exit-edit-property))))))
 
+(rum/defc property-value-new
+  [entity property property-value opts]
+
+  (let [*el-ref (rum/use-ref nil)]
+    (rum/use-effect!
+      (fn []
+        (let [content-fn
+              (fn [{:keys [id]}]
+                (property-config entity property
+                  (merge opts {:toggle-fn         #(shui/popup-hide! id)
+                               :block             entity
+                               :add-new-property? true})))]
+          (js/setTimeout
+            (fn []
+              (when-let [^js target (rum/deref *el-ref)]
+                (shui/popup-show! target content-fn
+                  {:content-props {:onOpenAutoFocus #(.preventDefault %) :class "w-auto"}})))
+            100)))
+      [])
+
+    [:div.is-new-editing-property-input
+     {:ref *el-ref}
+     (pv/property-value entity property property-value
+       (assoc opts :editing? true))]))
+
 (rum/defc property-select
   [exclude-properties on-chosen input-opts]
   (let [[properties set-properties!] (rum/use-state nil)]
@@ -408,21 +433,8 @@
             [:div.col-span-3.flex.flex-row {:on-mouse-down (fn [e] (util/stop-propagation e))}
              (when-not class-schema?
                (if @*show-new-property-config?
-                 (ui/dropdown
-                  (fn [_opts]
-                    (pv/property-value entity property @*property-value
-                                       (assoc opts
-                                              :editing? true
-                                              :*show-new-property-config? *show-new-property-config?)))
-                  (fn [{:keys [toggle-fn]}]
-                    [:div.p-6
-                     (property-config entity property (merge opts {:toggle-fn toggle-fn
-                                                                   :block entity
-                                                                   :add-new-property? true
-                                                                   :*show-new-property-config? *show-new-property-config?}))])
-                  {:initial-open? true
-                   :modal-class (util/hiccup->class
-                                 "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
+                 (property-value-new entity property @*property-value
+                   (assoc opts :*show-new-property-config? *show-new-property-config?))
                  (pv/property-value entity property @*property-value (assoc opts :editing? true))))])])
 
        (let [on-chosen (fn [{:keys [value]}]
