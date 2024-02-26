@@ -425,3 +425,10 @@
      (util/copy-to-clipboard!
       (url-util/get-logseq-graph-page-url nil (state/get-current-repo) page-name))
      (notification/show! "No page found to copy" :warning))))
+
+(defn toggle-properties!
+  [page-entity]
+  (let [current-value (get-in page-entity [:block/metadata :hide-properties?])]
+    (db/transact! [{:db/id (:db/id page-entity)
+                    :block/metadata (assoc (:block/metadata page-entity)
+                                           :hide-properties? (not current-value))}])))

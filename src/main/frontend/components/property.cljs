@@ -638,7 +638,7 @@
 (rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive
   {:init (fn [state]
            (assoc state ::id (str (random-uuid))))}
-  [state target-block edit-input-id {:keys [in-block-container? page-configure? class-schema?] :as opts}]
+  [state target-block edit-input-id {:keys [in-block-container? page? page-configure? class-schema?] :as opts}]
   (let [id (::id state)
         block (resolve-linked-block-if-exists target-block)
         block-properties (:block/properties block)
@@ -664,7 +664,7 @@
         root-block? (= (:id opts) (str (:block/uuid block)))
         ;; This section produces own-properties and full-hidden-properties
         hide-with-property-id (fn [property-id]
-                                (if (or root-block? page-configure?)
+                                (if (or root-block? page? page-configure?)
                                   false
                                   (let [eid (if (uuid? property-id) [:block/uuid property-id] property-id)]
                                     (boolean (:hide? (:block/schema (db/entity eid)))))))
