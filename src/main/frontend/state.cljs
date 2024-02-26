@@ -1544,6 +1544,10 @@ Similar to re-frame subscriptions"
               :modal/style style)))
    nil))
 
+(defn dropdown-opened?
+  []
+  (seq (:modal/dropdowns @state)))
+
 (defn close-dropdowns!
   []
   (let [close-fns (vals (:modal/dropdowns @state))]

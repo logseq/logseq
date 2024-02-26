@@ -184,7 +184,8 @@
                             "border rounded border-transparent")}
         [:div.info-title.cursor
          {:on-mouse-over  #(reset! *hover? true)
-          :on-mouse-leave #(reset! *hover? false)
+          :on-mouse-leave #(when-not (state/dropdown-opened?)
+                             (reset! *hover? false))
           :on-click (if config/publishing?
                       (fn [_]
                         (when (seq (set/intersection #{"class" "property"} types))
