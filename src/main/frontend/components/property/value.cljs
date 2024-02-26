@@ -313,7 +313,8 @@
                                                (string/trim new-value)))
 
        (when (= js/document.activeElement (gdom/getElement editor-id))
-         (exit-edit-property false))))))
+         (exit-edit-property false)
+         (shui/popup-hide!))))))
 
 (defn <create-new-block!
   [block property value]
