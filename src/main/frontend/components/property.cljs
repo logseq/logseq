@@ -667,7 +667,7 @@
                                 (if root-block?
                                   false
                                   (let [eid (if (uuid? property-id) [:block/uuid property-id] property-id)]
-                                    (boolean (:hide? (:block/schema (db/entity eid)))))))
+                                    (:hide? (:block/schema (db/entity eid))))))
         property-hide-f (cond
                           config/publishing?
                           ;; Publishing is read only so hide all blank properties as they
@@ -701,7 +701,9 @@
                                                         (remove hide-with-property-id))]
                                 (recur (rest classes)
                                        (set/union properties (set cur-properties))
-                                       (conj result [class cur-properties])))
+                                       (if (seq cur-properties)
+                                         (conj result [class cur-properties])
+                                         result)))
                               result))
         keyboard-triggered? (= (state/sub :editor/new-property-input-id) edit-input-id)]
     (when-not (and (empty? block-own-properties')
@@ -715,9 +717,6 @@
                                  (:selected? opts)
                                  (update :class conj "select-none"))
        (properties-section block (if class-schema? properties own-properties) opts)
-
-       ;; (when (and (seq full-hidden-properties) (not class-schema?) (not config/publishing?))
-       ;;   (hidden-properties block full-hidden-properties opts))
 
        (rum/with-key (new-property block id keyboard-triggered? opts) (str id "-add-property"))
 
