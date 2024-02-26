@@ -16,7 +16,7 @@
 (defn validate-client-db
   "Validate datascript db as a vec of entity maps"
   [db ent-maps* {:keys [verbose group-errors closed-maps]}]
-  (let [ent-maps (vec (db-malli-schema/update-properties-in-ents (vals ent-maps*)))
+  (let [ent-maps (vec (db-malli-schema/update-properties-in-ents ent-maps*))
         schema (db-validate/update-schema db-malli-schema/DB db {:closed-schema? closed-maps})]
     (if-let [errors (->> ent-maps
                          (m/explain schema)
@@ -62,10 +62,15 @@
                     (println "Error: For graph" (str (pr-str graph-dir) ":") (str e))
                     (js/process.exit 1)))
         datoms (d/datoms @conn :eavt)
-        ent-maps (db-malli-schema/datoms->entity-maps datoms)]
+        ent-maps (vals (db-malli-schema/datoms->entity-maps datoms))]
     (println "Read graph" (str db-name " with " (count datoms) " datoms, "
-                               (count ent-maps) " entities and "
-                               (count (mapcat :block/properties (vals ent-maps))) " properties"))
+                               (count ent-maps) " entities, "
+                               (count (filter :block/name ent-maps)) " pages, "
+                               (count (filter :block/content ent-maps)) " blocks, "
+                               (count (filter #(contains? (:block/type %) "class") ent-maps)) " classes, "
+                               (count (filter #(seq (:block/tags %)) ent-maps)) " objects, "
+                               (count (filter #(contains? (:block/type %) "property") ent-maps)) " properties and "
+                               (count (mapcat :block/properties ent-maps)) " property values"))
     (validate-client-db @conn ent-maps options)))
 
 (defn -main [argv]
