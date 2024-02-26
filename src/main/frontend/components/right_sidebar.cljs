@@ -334,93 +334,6 @@
   (let [match (:route-match @state/state)]
     (get-page match)))
 
-(rum/defc sidebar-resizer
-  [sidebar-open? sidebar-id handler-position]
-  (let [el-ref (rum/use-ref nil)
-        min-px-width 320 ; Custom window controls width
-        min-ratio 0.1
-        max-ratio 0.7
-        keyboard-step 5
-        add-resizing-class #(.. js/document.documentElement -classList (add "is-resizing-buf"))
-        remove-resizing-class (fn []
-                                (.. js/document.documentElement -classList (remove "is-resizing-buf"))
-                                (reset! ui-handler/*right-sidebar-resized-at (js/Date.now)))
-        set-width! (fn [ratio]
-                     (when el-ref
-                       (let [value (* ratio 100)
-                             width (str value "%")]
-                         (.setAttribute (rum/deref el-ref) "aria-valuenow" value)
-                         (ui-handler/persist-right-sidebar-width! width))))]
-    (rum/use-effect!
-     (fn []
-       (when-let [el (and (fn? js/window.interact) (rum/deref el-ref))]
-         (-> (js/interact el)
-             (.draggable
-              (bean/->js
-               {:listeners
-                {:move
-                 (fn [^js/MouseEvent e]
-                   (let [width js/document.documentElement.clientWidth
-                         min-ratio (max min-ratio (/ min-px-width width))
-                         sidebar-el (js/document.getElementById sidebar-id)
-                         offset (.-pageX e)
-                         ratio (.toFixed (/ offset width) 6)
-                         ratio (if (= handler-position :west) (- 1 ratio) ratio)
-                         cursor-class (str "cursor-" (first (name handler-position)) "-resize")]
-                     (if (= (.getAttribute el "data-expanded") "true")
-                       (cond
-                         (< ratio (/ min-ratio 2))
-                         (state/hide-right-sidebar!)
-
-                         (< ratio min-ratio)
-                         (.. js/document.documentElement -classList (add cursor-class))
-
-                         (and (< ratio max-ratio) sidebar-el)
-                         (when sidebar-el
-                           (#(.. js/document.documentElement -classList (remove cursor-class))
-                            (set-width! ratio)))
-                         :else
-                         #(.. js/document.documentElement -classList (remove cursor-class)))
-                       (when (> ratio (/ min-ratio 2)) (state/open-right-sidebar!)))))}}))
-             (.styleCursor false)
-             (.on "dragstart" add-resizing-class)
-             (.on "dragend" remove-resizing-class)
-             (.on "keydown" (fn [e]
-                              (when-let [sidebar-el (js/document.getElementById sidebar-id)]
-                                (let [width js/document.documentElement.clientWidth
-                                      min-ratio (max min-ratio (/ min-px-width width))
-                                      keyboard-step (case (.-code e)
-                                                      "ArrowLeft" (- keyboard-step)
-                                                      "ArrowRight" keyboard-step
-                                                      0)
-                                      offset (+ (.-x (.getBoundingClientRect sidebar-el)) keyboard-step)
-                                      ratio (.toFixed (/ offset width) 6)
-                                      ratio (if (= handler-position :west) (- 1 ratio) ratio)]
-                                  (when (and (> ratio min-ratio) (< ratio max-ratio) (not (zero? keyboard-step)))
-                                    (do (add-resizing-class)
-                                        (set-width! ratio)))))))
-             (.on "keyup" remove-resizing-class)))
-       #())
-     [])
-
-    (rum/use-effect!
-      (fn []
-        ;; sidebar animation duration
-        (js/setTimeout
-          #(reset! ui-handler/*right-sidebar-resized-at (js/Date.now)) 300))
-      [sidebar-open?])
-
-    [:.resizer
-     {:ref              el-ref
-      :role             "separator"
-      :aria-orientation "vertical"
-      :aria-label       (t :right-side-bar/separator)
-      :aria-valuemin    (* min-ratio 100)
-      :aria-valuemax    (* max-ratio 100)
-      :aria-valuenow    50
-      :tabIndex         "0"
-      :data-expanded    sidebar-open?}]))
-
 (rum/defcs sidebar-inner <
   (rum/local false ::anim-finished?)
   {:will-mount (fn [state]
@@ -482,11 +395,16 @@
                  [[(state/get-current-repo) "contents" :contents nil]]
                  blocks)
         sidebar-open? (state/sub :ui/sidebar-open?)
-        width (state/sub :ui/sidebar-width)
         repo (state/sub :git/current-repo)]
-    [:div#right-sidebar.cp__right-sidebar.h-screen
-     {:class (if sidebar-open? "open" "closed")
-      :style {:width width}}
-     (sidebar-resizer sidebar-open? "right-sidebar" :west)
-     (when sidebar-open?
-       (sidebar-inner repo t blocks))]))
+    (when sidebar-open?
+      [:<>
+       (shui/resizable-handle
+        {:class "resizer-handle"
+         :id "right-sidebar-handle"})
+       (shui/resizable-panel
+        {:id "right-sidebar"
+         :class "cp__right-sidebar h-screen"
+         :order 2
+         :minSize 10 
+         :defaultSize 40}
+        (sidebar-inner repo t blocks))])))

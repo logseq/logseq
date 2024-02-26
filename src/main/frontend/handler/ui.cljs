@@ -21,16 +21,6 @@
 ;; sidebars
 (def *right-sidebar-resized-at (atom (js/Date.now)))
 
-(defn persist-right-sidebar-width!
-  [width]
-  (state/set-state! :ui/sidebar-width width)
-  (storage/set "ls-right-sidebar-width" width))
-
-(defn restore-right-sidebar-width!
-  []
-  (when-let [width (storage/get "ls-right-sidebar-width")]
-    (state/set-state! :ui/sidebar-width width)))
-
 (defn close-left-sidebar!
   []
   (when-let [elem (gdom/getElement "close-left-bar")]
@@ -38,7 +28,6 @@
 
 (defn toggle-right-sidebar!
   []
-  (when-not (:ui/sidebar-open? @state/state) (restore-right-sidebar-width!))
   (state/toggle-sidebar-open?!))
 
 (defn persist-right-sidebar-state!
@@ -56,8 +45,7 @@
       (when open?
         (state/set-state! :ui/sidebar-open? open?)
         (state/set-state! :sidebar/blocks blocks)
-        (state/set-state! :ui/sidebar-collapsed-blocks collapsed)
-        (restore-right-sidebar-width!)))))
+        (state/set-state! :ui/sidebar-collapsed-blocks collapsed)))))
 
 (defn toggle-contents!
   []
