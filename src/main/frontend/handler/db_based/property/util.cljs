@@ -4,7 +4,8 @@
             [frontend.state :as state]
             [logseq.db.frontend.property :as db-property]
             [logseq.common.util :as common-util]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [frontend.db :as db]))
 
 (defn get-property-name
   "Get a property's name given its uuid"
@@ -23,17 +24,17 @@
   ([repo property-name]
    (:block/uuid (db-utils/entity repo [:block/name (common-util/page-name-sanity-lc (name property-name))]))))
 
-(defonce *hidden-built-in-properties (atom #{}))
-
-(defn all-hidden-built-in-properties?
-  "Checks if the given properties are all hidden built-in properties"
+(defn all-hidden-properties?
+  "Checks if the given properties are all hidden properties"
   [properties]
-  (let [repo (state/get-current-repo)]
-    (when (empty? @*hidden-built-in-properties)
-      (let [built-in-properties (set (map #(get-built-in-property-uuid repo (name %))
-                                          db-property/hidden-built-in-properties))]
-        (reset! *hidden-built-in-properties built-in-properties)))
-    (set/subset? (set properties) @*hidden-built-in-properties)))
+  (every? (fn [id]
+            (:hide? (:block/schema (db/entity [:block/uuid id])))) properties))
+
+(defn has-hidden-properties?
+  "Checks if the given properties has any hidden properties"
+  [properties]
+  (some (fn [id]
+          (:hide? (:block/schema (db/entity [:block/uuid id])))) properties))
 
 (defn readable-properties
   "Given a DB graph's properties, returns a readable properties map with keys as

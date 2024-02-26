@@ -634,18 +634,6 @@
         (for [[k v] properties]
           (property-cp block k v opts))))))
 
-(rum/defcs hidden-properties < (rum/local true ::hide?)
-  [state block hidden-properties opts]
-  (let [*hide? (::hide? state)]
-    [:div.hidden-properties.flex.flex-col.gap-1
-     [:a.text-sm.flex.flex-row.items-center.fade-link.select-none
-      {:on-click #(swap! *hide? not)}
-      [:span {:style {:margin-left -1}}
-       (ui/rotating-arrow @*hide?)]
-      [:div {:style {:margin-left 3}} "Hidden properties"]]
-     (when-not @*hide?
-       (properties-section block hidden-properties opts))]))
-
 ;; TODO: Remove :page-configure? as it only ever seems to be set to true
 (rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive
   {:init (fn [state]
@@ -673,10 +661,13 @@
                                           (seq properties))
                                   remove-built-in-properties
                                   (remove (fn [[id _]] ((set classes-properties) id))))
+        root-block? (= (:id opts) (str (:block/uuid block)))
         ;; This section produces own-properties and full-hidden-properties
         hide-with-property-id (fn [property-id]
-                                (let [eid (if (uuid? property-id) [:block/uuid property-id] property-id)]
-                                  (boolean (:hide? (:block/schema (db/entity eid))))))
+                                (if root-block?
+                                  false
+                                  (let [eid (if (uuid? property-id) [:block/uuid property-id] property-id)]
+                                    (boolean (:hide? (:block/schema (db/entity eid)))))))
         property-hide-f (cond
                           config/publishing?
                           ;; Publishing is read only so hide all blank properties as they
@@ -692,16 +683,15 @@
                               (nil? property-value)))
                           :else
                           (comp hide-with-property-id first))
-        {block-hidden-properties true
+        {_block-hidden-properties true
          block-own-properties' false} (group-by property-hide-f block-own-properties)
-        {class-hidden-properties true
+        {_class-hidden-properties true
          class-own-properties false} (group-by property-hide-f
                                                (map (fn [id] [id (get block-properties id)]) classes-properties))
         own-properties (->>
                         (if one-class?
                           (concat block-own-properties' class-own-properties)
                           block-own-properties'))
-        full-hidden-properties (concat block-hidden-properties class-hidden-properties)
         class->properties (loop [classes all-classes
                                  properties #{}
                                  result []]
@@ -714,7 +704,7 @@
                                        (conj result [class cur-properties])))
                               result))
         keyboard-triggered? (= (state/sub :editor/new-property-input-id) edit-input-id)]
-    (when-not (and (empty? block-own-properties)
+    (when-not (and (empty? block-own-properties')
                    (empty? class->properties)
                    (not (:page-configure? opts))
                    (not keyboard-triggered?))
@@ -726,8 +716,8 @@
                                  (update :class conj "select-none"))
        (properties-section block (if class-schema? properties own-properties) opts)
 
-       (when (and (seq full-hidden-properties) (not class-schema?) (not config/publishing?))
-         (hidden-properties block full-hidden-properties opts))
+       ;; (when (and (seq full-hidden-properties) (not class-schema?) (not config/publishing?))
+       ;;   (hidden-properties block full-hidden-properties opts))
 
        (rum/with-key (new-property block id keyboard-triggered? opts) (str id "-add-property"))
 

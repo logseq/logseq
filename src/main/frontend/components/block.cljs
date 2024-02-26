@@ -2130,7 +2130,8 @@
                                         :page-cp page-cp
                                         :block-cp blocks-container
                                         :properties-cp db-properties-cp
-                                        :editor-box (get config :editor-box)}
+                                        :editor-box (get config :editor-box)
+                                        :id (:id config)}
                                        opts)))
 
 (rum/defc invalid-properties-cp
