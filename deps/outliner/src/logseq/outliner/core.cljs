@@ -81,8 +81,22 @@
     (assoc block :block/updated-at updated-at)))
 
 (defn- remove-orphaned-page-refs!
-  [db db-id txs-state old-refs new-refs]
-  (let [old-refs (remove #(some #{"class" "property"} (:block/type %)) old-refs)]
+  [db {db-id :db/id :as block-entity} txs-state *old-refs new-refs {:keys [db-graph?]}]
+  (let [old-refs (if db-graph?
+                   ;; remove class and property related refs because this fn is only meant
+                   ;; to cleanup refs in content
+                   (let [prop-value-ref-uuids (->> (:block/properties block-entity)
+                                                   (mapcat (fn [[_k v]]
+                                                             (cond
+                                                               (and (set? v) (uuid? (first v)))
+                                                               v
+                                                               (uuid? v)
+                                                               [v])))
+                                                   set)]
+                     (remove #(or (some #{"class" "property"} (:block/type %))
+                                  (contains? prop-value-ref-uuids (:block/uuid %)))
+                             *old-refs))
+                   *old-refs)]
     (when (not= old-refs new-refs)
       (let [new-refs (set (map (fn [ref]
                                  (or (:block/name ref)
@@ -97,8 +111,9 @@
                              (ldb/get-orphaned-pages db {:pages old-pages
                                                          :empty-ref-f (fn [page]
                                                                         (let [refs (:block/_refs page)]
-                                                                          (or (zero? (count refs))
-                                                                              (= #{db-id} (set (map :db/id refs))))))}))]
+                                                                          (and (or (zero? (count refs))
+                                                                                   (= #{db-id} (set (map :db/id refs))))
+                                                                               (not (some #{"class" "property"} (:block/type page))))))}))]
         (when (seq orphaned-pages)
           (let [tx (mapv (fn [page] [:db/retractEntity (:db/id page)]) orphaned-pages)]
             (swap! txs-state (fn [state] (vec (concat state tx))))))))))
@@ -129,12 +144,12 @@
       (swap! txs-state into txs))))
 
 (defn- remove-orphaned-refs-when-save
-  [db txs-state block-entity m]
+  [db txs-state block-entity m opts]
   (let [remove-self-page #(remove (fn [b]
                                     (= (:db/id b) (:db/id (:block/page block-entity)))) %)
         old-refs (remove-self-page (:block/refs block-entity))
         new-refs (remove-self-page (:block/refs m))]
-    (remove-orphaned-page-refs! db (:db/id block-entity) txs-state old-refs new-refs)))
+    (remove-orphaned-page-refs! db block-entity txs-state old-refs new-refs opts)))
 
 (defn- get-last-child-or-self
   [db block]
@@ -194,7 +209,7 @@
      (reset! (:editor/create-page? @state/state) false))))
 
 (defn ^:api rebuild-block-refs
-  [repo conn date-formatter block new-properties & {:keys [skip-content-parsing?]}]
+  [repo conn date-formatter block new-properties]
   (let [db @conn
         property-key-refs (keys new-properties)
         property-value-refs (->> (vals new-properties)
@@ -222,23 +237,45 @@
         property-refs (->> (concat property-key-refs property-value-refs)
                            (map (fn [id-or-map] (if (uuid? id-or-map) {:block/uuid id-or-map} id-or-map)))
                            (remove (fn [b] (nil? (d/entity db [:block/uuid (:block/uuid b)])))))
-        content-refs (when-not skip-content-parsing?
-                       (when-let [content (:block/content block)]
-                         (gp-block/extract-refs-from-text repo db content date-formatter)))]
-    (concat property-refs content-refs)))
+        content-refs (when-let [content (:block/content block)]
+                       (gp-block/extract-refs-from-text repo db content date-formatter))]
+    (concat property-refs content-refs
+            (when (sqlite-util/db-based-graph? repo)
+              (map (fn [t]
+                     (cond
+                       (de/entity? t)
+                       (:db/id t)
+                       (and (vector? t) (= (count t) 2) (= :block/uuid (first t)))
+                       [:block/uuid (second t)]
+                       (map? t)
+                       [:block/uuid (:block/uuid t)]))
+                (:block/tags block))))))
 
 (defn- rebuild-refs
   [repo conn date-formatter txs-state block m]
   (when (sqlite-util/db-based-graph? repo)
-    (let [refs (->> (rebuild-block-refs repo conn date-formatter block (:block/properties block)
-                                        :skip-content-parsing? true)
+    (let [refs' (rebuild-block-refs repo conn date-formatter block (:block/properties block))
+          refs (->> refs'
                     (concat (:block/refs m))
-                    (concat (if (seq (:block/tags m))
-                              (:block/tags m)
-                              (map :db/id (:block/tags (d/entity @conn [:block/uuid (:block/uuid block)])))))
-                    (remove nil?))]
+                    (remove nil?))
+          add-tag-type (map
+                        (fn [t]
+                          (cond
+                            (integer? t)
+                            {:db/id t
+                             :block/type "class"}
+                            (and (vector? t) (= (count t) 2) (= :block/uuid (first t)))
+                            {:block/uuid (second t)
+                             :block/type "class"}
+                            (map? t)
+                            {:block/uuid (:block/uuid t)
+                             :block/type "class"}
+                            :else
+                            (throw (js/Error. (str "Wrong tag: " t)))))
+                        (:block/tags m))]
       (swap! txs-state (fn [txs] (concat txs [{:db/id (:db/id block)
-                                               :block/refs refs}]))))))
+                                               :block/refs refs}]
+                                         add-tag-type))))))
 
 (defn- fix-tag-ids
   [m]
@@ -355,7 +392,14 @@
           block-entity (d/entity db eid)
           m (cond->> m
               db-based?
-              (db-marker-handle conn))]
+              (db-marker-handle conn))
+          m (if db-based?
+              (update m :block/tags (fn [tags]
+                                      (->>
+                                       (concat (map :db/id (:block/tags block-entity))
+                                               (map (fn [t] (or (:db/id t) [:block/uuid (:block/uuid t)])) tags))
+                                       (remove nil?))))
+              m)]
 
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
@@ -369,7 +413,7 @@
         ;; Retract attributes to prepare for tx which rewrites block attributes
         (when (:block/content m)
           (let [retract-attributes (if db-based?
-                                     db-schema/db-version-retract-attributes
+                                     (conj db-schema/db-version-retract-attributes :block/tags)
                                      db-schema/retract-attributes)]
             (swap! txs-state (fn [txs]
                                (vec
@@ -384,7 +428,7 @@
         (remove-macros-when-save db txs-state block-entity)
         ;; Remove orphaned refs from block
         (when (and (:block/content m) (not= (:block/content m) (:block/content block-entity)))
-          (remove-orphaned-refs-when-save @conn txs-state block-entity m)))
+          (remove-orphaned-refs-when-save @conn txs-state block-entity m {:db-graph? db-based?})))
 
       ;; handle others txs
       (let [other-tx (:db/other-tx m)]

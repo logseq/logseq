@@ -144,18 +144,6 @@ and handles unexpected failure."
            (state/add-block-ast-cache! block-uuid content result)
            result))))))
 
-(defn macro-subs
-  [macro-content arguments]
-  (loop [s macro-content
-         args arguments
-         n 1]
-    (if (seq args)
-      (recur
-       (string/replace s (str "$" n) (first args))
-       (rest args)
-       (inc n))
-      s)))
-
 (defn break-line-paragraph?
   [[typ break-lines]]
   (and (= typ "Paragraph")

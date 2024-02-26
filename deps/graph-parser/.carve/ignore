@@ -7,8 +7,6 @@ logseq.graph-parser.mldoc/link?
 ;; API
 logseq.graph-parser/get-blocks-to-delete
 ;; API
-logseq.graph-parser.util.db/resolve-input
-;; API
 logseq.graph-parser.text/get-file-basename
 ;; API
 logseq.graph-parser.mldoc/mldoc-link?
@@ -24,3 +22,5 @@ logseq.graph-parser.block/extract-refs-from-text
 logseq.graph-parser.text/get-page-name
 ;; API
 logseq.graph-parser.whiteboard/shape->block
+;; API
+logseq.graph-parser.exporter/add-file-to-db-graph

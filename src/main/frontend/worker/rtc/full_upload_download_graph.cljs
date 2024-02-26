@@ -100,6 +100,12 @@
            parent
            (page-of-block id->block-map parent)))))))
 
+(defn- convert-block-fields
+  [block]
+  (cond-> block
+    (:block/journal-day block) (assoc :block/journal? true)
+    true                       (assoc :block/format :markdown)))
+
 (defn- fill-block-fields
   [blocks]
   (let [groups (group-by #(boolean (:block/name %)) blocks)
@@ -108,7 +114,7 @@
         id->block (into {} (map (juxt :db/id identity) blocks))
         block-id->page-id (into {} (map (fn [b] [(:db/id b) (:db/id (page-of-block id->block b))]) other-blocks))]
     (mapv (fn [b]
-            (let [b (assoc b :block/format :markdown)]
+            (let [b (convert-block-fields b)]
               (if-let [page-id (block-id->page-id (:db/id b))]
                 (assoc b :block/page page-id)
                 b)))
@@ -144,8 +150,10 @@
      (if (not= 200 status)
        (ex-info "<download-graph failed" r)
        (let [all-blocks (transit/read transit-r body)]
+         (worker-state/set-rtc-downloading-graph! true)
          (op-mem-layer/init-empty-ops-store! repo)
          (<? (<transact-remote-all-blocks-to-sqlite all-blocks repo))
          (op-mem-layer/update-graph-uuid! repo graph-uuid)
          (prn ::download-graph repo (@@#'op-mem-layer/*ops-store repo))
-         (<! (op-mem-layer/<sync-to-idb-layer! repo)))))))
+         (<! (op-mem-layer/<sync-to-idb-layer! repo))
+         (worker-state/set-rtc-downloading-graph! false))))))

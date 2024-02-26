@@ -1135,7 +1135,7 @@
    (lazy-visible content-fn nil))
   ([content-fn {:keys [initial-state trigger-once? fade-in? root-margin _debug-id]
                 :or {initial-state false
-                     trigger-once? false
+                     trigger-once? true
                      fade-in? true
                      root-margin 100}}]
    (let [[visible? set-visible!] (rum/use-state initial-state)

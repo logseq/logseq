@@ -18,7 +18,22 @@
   (let [result* (apply db/pull pull-args)
         result (cond-> result*
                  (and (seq (:block/properties result*)) (config/db-based-graph? (state/get-current-repo)))
-                 (assoc :block.debug/properties (update-keys (:block/properties result*) db-pu/get-property-name)))
+                 (assoc :block.debug/properties
+                        (->> (update-keys (:block/properties result*) db-pu/get-property-name)
+                             (map (fn [[k v]]
+                                    [k
+                                     (cond
+                                       (and (set? v) (uuid? (first v)))
+                                       (set (map db-pu/get-property-name v))
+                                       (uuid? v)
+                                       (or (db-pu/get-property-name v)
+                                           (get-in (db/entity [:block/uuid v]) [:block/schema :value]))
+                                       :else
+                                       v)]))
+                             (into {})))
+                 (seq (:block/refs result*))
+                 (assoc :block.debug/refs
+                        (mapv #(or (:block/original-name (db/entity (:db/id %))) %) (:block/refs result*))))
         pull-data (with-out-str (pprint/pprint result))]
     (println pull-data)
     (notification/show!

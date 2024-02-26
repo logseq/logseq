@@ -71,7 +71,7 @@
     (assoc block :block/content content')))
 
 (defn wrap-parse-block
-  [{:block/keys [content left level tags] :as block}]
+  [{:block/keys [content left level] :as block}]
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
         block (if (nil? content)
                 block
@@ -79,8 +79,11 @@
                       first-elem-type (first (ffirst ast))
                       block-with-title? (mldoc/block-with-title? first-elem-type)
                       content' (str (config/get-block-pattern :markdown) (if block-with-title? " " "\n") content)
-                      block (merge block (block/parse-block (assoc block :block/content content')))]
-                  (update block :block/refs remove-non-existed-refs!)))
+                      block' (merge block (block/parse-block (assoc block :block/content content')))
+                      block' (if (seq (:block/properties block))
+                               (update block' :block/properties (fn [m] (merge m (:block/properties block))))
+                               block')]
+                  (update block' :block/refs remove-non-existed-refs!)))
         block (if (and left (not= (:block/left block) left)) (assoc block :block/left left) block)
         result (-> block
                    (merge (if level {:block/level level} {}))
@@ -95,12 +98,8 @@
                   (fn [tag]
                     (when (:block/uuid tag)
                       (str db-content/page-ref-special-chars (:block/uuid tag))))
-                  (:block/tags result))
-                 (remove nil?))))
-        ;; Remove :block/tags built from mldoc
-        (dissoc :block/tags)
-        ;; Add tags back
-        (assoc :block/tags tags))))
+                  (concat (:block/tags result) (:block/tags block)))
+                 (remove nil?)))))))
 
 (defn save-file!
   "This fn is the db version of file-handler/alter-file"

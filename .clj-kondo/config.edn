@@ -134,12 +134,16 @@
              logseq.common.util common-util
              logseq.common.util.page-ref page-ref
              logseq.common.util.block-ref block-ref
+             logseq.common.util.macro macro-util
              logseq.db ldb
+             logseq.db.frontend.content db-content
+             logseq.db.frontend.inputs db-inputs
              logseq.db.frontend.property db-property
              logseq.db.frontend.property.type db-property-type
              logseq.db.frontend.property.util db-property-util
              logseq.db.frontend.rules rules
              logseq.db.frontend.schema db-schema
+             logseq.db.frontend.validate db-validate
              logseq.db.sqlite.db sqlite-db
              logseq.db.sqlite.util sqlite-util
              logseq.graph-parser graph-parser
@@ -147,7 +151,6 @@
              logseq.graph-parser.block gp-block
              logseq.graph-parser.mldoc gp-mldoc
              logseq.graph-parser.property gp-property
-             logseq.graph-parser.util.db db-util
              logseq.outliner.core outliner-core
              logseq.outliner.op outliner-op
              logseq.outliner.pipeline outliner-pipeline

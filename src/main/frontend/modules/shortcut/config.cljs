@@ -320,6 +320,9 @@
    :editor/collapse-block-children          {:binding "mod+up"
                                              :fn      editor-handler/collapse!}
 
+   :editor/toggle-block-children            {:binding "mod+;"
+                                             :fn      editor-handler/toggle-collapse!}
+
    :editor/indent                           {:binding "tab"
                                              :fn      (editor-handler/keydown-tab-handler :right)}
 
@@ -702,6 +705,7 @@
             :editor/delete-selection
             :editor/expand-block-children
             :editor/collapse-block-children
+            :editor/toggle-block-children
             :editor/indent
             :editor/outdent
             :editor/copy
@@ -819,6 +823,7 @@
       :editor/right
       :editor/collapse-block-children
       :editor/expand-block-children
+      :editor/toggle-block-children
       :editor/toggle-open-blocks
       :go/backward
       :go/forward

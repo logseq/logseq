@@ -81,6 +81,7 @@
         "postinstall": "yarn tldraw:build && yarn amplify:build && yarn ui:build"
     },
     "dependencies": {
+        "@capacitor/action-sheet": "^5.0.7",
         "@capacitor/android": "^5.0.0",
         "@capacitor/app": "^5.0.0",
         "@capacitor/camera": "^5.0.0",

@@ -1,6 +1,5 @@
-(ns logseq.graph-parser.util.db
-  "Db util fns that are useful for the frontend and nbb-logseq. This may be used
-  by the graph-parser soon but if not, it should be in its own library"
+(ns logseq.db.frontend.inputs
+  "Handles :inputs in queries"
   (:require [cljs-time.core :as t]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util :as common-util]
@@ -17,9 +16,7 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
   ([date hours mins secs millisecs]
    (.setHours (js/Date. date) hours mins secs millisecs)))
 
-(def date->int date-time-util/date->int)
-
-(defn old->new-relative-date-format [input]
+(defn- old->new-relative-date-format [input]
   (let [count (re-find #"^\d+" (name input))
         plus-minus (if (re-find #"after" (name input)) "+" "-")
         ms? (string/ends-with? (name input) "-ms")]
@@ -33,11 +30,11 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
   (old->new-relative-date-format "1d-after-ms")
   (old->new-relative-date-format "1w-after-ms"))
 
-(defn get-relative-date [input]
+(defn- get-relative-date [input]
   (case (or (namespace input) "today")
     "today" (t/today)))
 
-(defn get-offset-date [relative-date direction amount unit]
+(defn- get-offset-date [relative-date direction amount unit]
   (let [offset-fn (case direction "+" t/plus "-" t/minus)
         offset-amount (parse-long amount)
         offset-unit-fn (case unit
@@ -47,7 +44,7 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
                          "y" t/years)]
     (offset-fn (offset-fn relative-date (offset-unit-fn offset-amount)))))
 
-(defn get-ts-units
+(defn- get-ts-units
   "There are currently several time suffixes being used in inputs:
   - ms: milliseconds, will return a time relative to the direction the date is being adjusted
   - start: will return the time at the start of the day [00:00:00.000]
@@ -69,7 +66,7 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
        (min 59  (parse-long (str s1 s2)))
        (min 999 (parse-long (str ms1 ms2 ms3)))])))
 
-(defn keyword-input-dispatch [input]
+(defn- keyword-input-dispatch [input]
   (cond
     (#{:current-page :query-page :current-block :parent-block :today :yesterday :tomorrow :right-now-ms} input) input
 
@@ -101,13 +98,13 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
     (:db/id (:block/parent (d/entity db [:block/uuid current-block-uuid])))))
 
 (defmethod resolve-keyword-input :today [_ _ _]
-  (date->int (t/today)))
+  (date-time-util/date->int (t/today)))
 
 (defmethod resolve-keyword-input :yesterday [_ _ _]
-  (date->int (t/minus (t/today) (t/days 1))))
+  (date-time-util/date->int (t/minus (t/today) (t/days 1))))
 
 (defmethod resolve-keyword-input :tomorrow [_ _ _]
-  (date->int (t/plus (t/today) (t/days 1))))
+  (date-time-util/date->int (t/plus (t/today) (t/days 1))))
 
 (defmethod resolve-keyword-input :right-now-ms [_ _ _]
   (common-util/time-ms))
@@ -125,7 +122,7 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
   (let [relative-to (get-relative-date input)
         [_ offset-direction offset offset-unit] (re-find #"^([+-])(\d+)([dwmy])$" (name input))
         offset-date (get-offset-date relative-to offset-direction offset offset-unit)]
-    (date->int offset-date)))
+    (date-time-util/date->int offset-date)))
 
 ;; relative-date-time returns an epoch int
 (defmethod resolve-keyword-input :relative-date-time [_ input _]

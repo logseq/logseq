@@ -784,8 +784,11 @@
                        nil
 
                        concat-prev-block?
-                       (let [new-properties (merge (:block/properties (db/entity (:db/id prev-block)))
-                                                   (:block/properties (db/entity (:db/id block))))]
+                       (let [prev-e (db/entity (:db/id prev-block))
+                             current-e (db/entity (:db/id block))
+                             new-properties (merge (:block/properties prev-e)
+                                                   (:block/properties current-e))
+                             new-tags (->> (concat (:block/tags prev-e) (:block/tags current-e)))]
                          (if (seq (:block/_refs (db/entity (:db/id block))))
                            (do
                              (delete-block-fn prev-block)
@@ -798,9 +801,9 @@
                              ;; block->right needs to point its `left` to block->left
                              (let [block-right (outliner-core/get-right-sibling db (:db/id block))]
                                (when (and block-right (not= (:db/id (:block/parent prev-block))
-                                                           (:db/id (:block/parent block))))
-                                (outliner-save-block! {:db/id (:db/id block-right)
-                                                       :block/left (:db/id (:block/left block))})))
+                                                            (:db/id (:block/parent block))))
+                                 (outliner-save-block! {:db/id (:db/id block-right)
+                                                        :block/left (:db/id (:block/left block))})))
 
                              ;; update prev-block's children to point to the refed block
                              (when (or (:block/collapsed? prev-block)
@@ -820,14 +823,16 @@
 
                              (when db-based?
                                (outliner-save-block! {:db/id (:db/id block)
-                                                      :block/properties new-properties})))
+                                                      :block/properties new-properties
+                                                      :block/tags new-tags})))
 
                            (do
                              (delete-block-fn block)
                              (save-block! repo prev-block new-content {})
                              (when db-based?
                                (outliner-save-block! {:db/id (:db/id prev-block)
-                                                      :block/properties new-properties})))))
+                                                      :block/properties new-properties
+                                                      :block/tags new-tags})))))
 
                        :else
                        (delete-block-fn block)))))))))))))
@@ -1111,11 +1116,14 @@
   []
   (when-let [page (get-nearest-page-or-url)]
     (when-not (string/blank? page)
-      (if (re-find url-regex page)
-        (js/window.open page)
-        (let [page-name (db-model/get-redirect-page-name page)]
-          (state/clear-edit!)
-          (insert-first-page-block-if-not-exists! page-name))))))
+      (p/do!
+       (state/clear-editor-action!)
+       (save-current-block!)
+       (if (re-find url-regex page)
+         (js/window.open page)
+         (let [page-name (db-model/get-redirect-page-name page)]
+           (state/clear-edit!)
+           (insert-first-page-block-if-not-exists! page-name)))))))
 
 (defn open-link-in-sidebar!
   []
@@ -1264,7 +1272,7 @@
                 (ui-outliner-tx/transact!
                  opts
                  (outliner-save-block! {:db/id (:db/id block)
-                                             :block/tags tag-pages})))))
+                                        :block/tags tag-pages})))))
           (save-block-if-changed! block value opts))))))
 
 (defn save-block!
@@ -1863,7 +1871,11 @@
     (reset! *auto-save-timeout
             (js/setTimeout
              (fn []
-               (when (state/input-idle? repo :diff 450)
+               (when (and (state/input-idle? repo :diff 450)
+                          ;; don't auto-save block if it has tags
+                          (not (and
+                                (config/db-based-graph? repo)
+                                (re-find #"#\S+" value))))
                  ; don't auto-save for page's properties block
                  (save-current-block! {:skip-properties? true})))
              450))))
@@ -2718,12 +2730,17 @@
               (outliner-save-block! {:db/id (:db/id next-block-right)
                                      :block/left (:db/id (:block/left next-block))})))
           (when db-based?
-            (let [new-properties (merge
-                                  (:block/properties (db/entity (:db/id edit-block)))
-                                  (:block/properties (db/entity (:db/id next-block))))]
-              (when-not (= new-properties (:block/properties keep-block))
+            (let [next-e (db/entity (:db/id next-block))
+                  current-e (db/entity (:db/id edit-block))
+                  new-properties (merge
+                                  (:block/properties current-e)
+                                  (:block/properties next-e))
+                  new-tags (->> (concat (:block/tags next-e) (:block/tags current-e)))]
+              (when (or (not= new-properties (:block/properties keep-block))
+                        (not= (map :db/id new-tags) (map :db/id (:block/tags keep-block))))
                 (outliner-save-block! {:db/id (:db/id keep-block)
-                                       :block/properties new-properties})))))
+                                       :block/properties new-properties
+                                       :block/tags new-tags})))))
          (let [block (if next-block-has-refs? next-block edit-block)]
            (edit-block! block current-pos nil)))))))
 
@@ -3427,7 +3444,7 @@
                (valid-custom-query-block? block)
                (and db-based?
                     (seq (:block/properties block))
-                    (not (db-pu/all-hidden-built-in-properties? (keys (:block/properties block)))))
+                    (not (db-pu/all-hidden-properties? (keys (:block/properties block)))))
                (and db-based? (seq tags)
                     (some (fn [t] (seq (:properties (:block/schema t)))) tags))
                (and
@@ -3610,6 +3627,43 @@
                (recur (dec level))
                (doseq [{:block/keys [uuid]} blocks-to-collapse]
                  (collapse-block! uuid))))))))))
+
+(defn toggle-collapse!
+  ([e] (toggle-collapse! e false))
+  ([e clear-selection?]
+    (when e (util/stop e))
+    (cond
+      (state/editing?)
+      (when-let [block (state/get-edit-block)]
+        ;; get-edit-block doesn't track the latest collapsed state, so we need to reload from db.
+        (let [block-id (:block/uuid block)
+              block (db/pull [:block/uuid block-id])]
+          (if (:block/collapsed? block)
+            (expand! e clear-selection?)
+            (collapse! e clear-selection?))))
+
+      (state/selection?)
+      (do
+        (let [block-ids (map #(-> % (dom/attr "blockid") uuid) (get-selected-blocks))
+              first-block-id (first block-ids)]
+          (when first-block-id
+            ;; If multiple blocks are selected, they may not have all the same collapsed state.
+            ;; For simplicity, use the first block's state to decide whether to collapse/expand all.
+            (let [first-block (db/pull [:block/uuid first-block-id])]
+              (if (:block/collapsed? first-block)
+                (doseq [block-id block-ids] (expand-block! block-id))
+                (doseq [block-id block-ids] (collapse-block! block-id))))))
+        (and clear-selection? (clear-selection!)))
+
+      (whiteboard?)
+      ;; TODO: Looks like detecting the whiteboard selection's collapse state will take more work.
+      ;; Leaving unimplemented for now.
+      nil
+
+      :else
+      ;; If no block is being edited or selected, the "toggle" action doesn't make sense,
+      ;; so we no-op here, unlike in the expand! & collapse! functions.
+      nil)))
 
 (defn collapse-all!
   ([]

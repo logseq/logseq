@@ -5,7 +5,8 @@
             [logseq.graph-parser.property :as gp-property]
             [datascript.core :as d]
             [clojure.string :as string]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [promesa.core :as p]))
 
 (defn new-outliner-txs-state [] (atom []))
 
@@ -96,7 +97,10 @@
       ;; (cljs.pprint/pprint txs)
 
       (try
-        (ldb/transact! conn txs (assoc tx-meta :outliner/transact? true))
+        (.time js/console "DB transact")
+        (let [result (ldb/transact! conn txs (assoc tx-meta :outliner/transact? true))]
+          (p/then result (fn [] (.timeEnd js/console "DB transact")))
+          result)
         (catch :default e
           (js/console.error e)
           (throw e))))))

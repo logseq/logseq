@@ -6,6 +6,7 @@
             [cljs-time.core :as t]
             [cljs.core.async :as async :refer [<! >! chan go go-loop]]
             [clojure.set :as set]
+            [clojure.string :as string]
             [cognitect.transit :as transit]
             [frontend.worker.async-util :include-macros true :refer [<?]]
             [logseq.outliner.core :as outliner-core]
@@ -27,7 +28,9 @@
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.rtc.asset-sync :as asset-sync]
             [promesa.core :as p]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [logseq.db.frontend.content :as db-content]
+            [logseq.common.util.page-ref :as page-ref]))
 
 ;;                     +-------------+
 ;;                     |             |
@@ -97,6 +100,7 @@
 (defmethod transact-db! :delete-blocks [_ & args]
   (outliner-tx/transact!
    {:persist-op? false
+    :outliner-op :delete-blocks
     :transact-opts {:repo (first args)
                     :conn (second args)}}
    (apply outliner-core/delete-blocks! args)))
@@ -104,6 +108,7 @@
 (defmethod transact-db! :move-blocks [_ & args]
   (outliner-tx/transact!
    {:persist-op? false
+    :outliner-op :move-blocks
     :transact-opts {:repo (first args)
                     :conn (second args)}}
    (apply outliner-core/move-blocks! args)))
@@ -111,6 +116,7 @@
 (defmethod transact-db! :insert-blocks [_ & args]
   (outliner-tx/transact!
    {:persist-op? false
+    :outliner-op :insert-blocks
     :transact-opts {:repo (first args)
                     :conn (second args)}}
    (apply outliner-core/insert-blocks! args)))
@@ -118,6 +124,7 @@
 (defmethod transact-db! :save-block [_ & args]
   (outliner-tx/transact!
    {:persist-op? false
+    :outliner-op :save-block
     :transact-opts {:repo (first args)
                     :conn (second args)}}
    (apply outliner-core/save-block! args)))
@@ -269,6 +276,20 @@
         (assert (some? shape) properties*)
         (transact-db! :upsert-whiteboard-block conn [(gp-whiteboard/shape->block repo db shape page-name)])))))
 
+(defn- special-id-ref->page
+  "Convert special id ref backs to page name."
+  [db content]
+  (let [matches (distinct (re-seq db-content/special-id-ref-pattern content))]
+    (if (seq matches)
+      (reduce (fn [content [full-text id]]
+                (if-let [page (d/entity db [:block/uuid (uuid id)])]
+                  (string/replace content full-text
+                                  (str page-ref/left-brackets
+                                       (:block/original-name page)
+                                       page-ref/right-brackets))
+                  content)) content matches)
+      content)))
+
 (defn- update-block-attrs
   [repo conn date-formatter block-uuid {:keys [parents properties _content] :as op-value}]
   (let [key-set (set/intersection
@@ -289,7 +310,10 @@
                 (cond-> b-ent
                   (and (contains? key-set :content)
                        (not= (:content op-value)
-                             (:block/content b-ent))) (assoc :block/content (:content op-value))
+                             (:block/raw-content b-ent)))
+                  (assoc :block/content
+                         (special-id-ref->page @conn (:content op-value)))
+
                   (contains? key-set :updated-at)     (assoc :block/updated-at (:updated-at op-value))
                   (contains? key-set :created-at)     (assoc :block/created-at (:created-at op-value))
                   (contains? key-set :alias)          (assoc :block/alias (some->> (seq (:alias op-value))
@@ -297,23 +321,45 @@
                                                                                    (d/pull-many @conn [:db/id])
                                                                                    (keep :db/id)))
                   (contains? key-set :type)           (assoc :block/type (:type op-value))
-                  (contains? key-set :schema)         (assoc :block/schema (transit/read transit-r (:schema op-value)))
+                  (and (contains? key-set :schema)
+                       (some? (:schema op-value)))
+                  (assoc :block/schema (transit/read transit-r (:schema op-value)))
+
                   (contains? key-set :tags)           (assoc :block/tags (some->> (seq (:tags op-value))
                                                                                   (map (partial vector :block/uuid))
                                                                                   (d/pull-many @conn [:db/id])
                                                                                   (keep :db/id)))
                   (contains? key-set :properties)     (assoc :block/properties
                                                              (transit/read transit-r (:properties op-value)))
-                  (contains? key-set :link)           (assoc :block/link (some->> (:link op-value)
-                                                                                  (vector :block/uuid)
-                                                                                  (d/pull @conn [:db/id])
-                                                                                  :db/id)))
+                  (and (contains? key-set :link)
+                       (some? (:link op-value)))
+                  (assoc :block/link (some->> (:link op-value)
+                                              (vector :block/uuid)
+                                              (d/pull @conn [:db/id])
+                                              :db/id))
+
+                  (and (contains? key-set :journal-day)
+                       (some? (:journal-day op-value)))
+                  (assoc :block/journal-day (:journal-day op-value)
+                         :block/journal? true))
                 *other-tx-data (atom [])]
             ;; 'save-block' dont handle card-many attrs well?
             (when (contains? key-set :alias)
               (swap! *other-tx-data conj [:db/retract db-id :block/alias]))
             (when (contains? key-set :tags)
               (swap! *other-tx-data conj [:db/retract db-id :block/tags]))
+            (when (contains? key-set :type)
+              (swap! *other-tx-data conj [:db/retract db-id :block/type]))
+            (when (and (contains? key-set :link) (nil? (:link op-value)))
+              (swap! *other-tx-data conj [:db/retract db-id :block/link]))
+            (when (and (contains? key-set :schema) (nil? (:schema op-value)))
+              (swap! *other-tx-data conj [:db/retract db-id :block/schema]))
+            (when (and (contains? key-set :properties) (nil? (:properties op-value)))
+              (swap! *other-tx-data conj [:db/retract db-id :block/properties]))
+            (when (and (contains? key-set :journal-day) (nil? (:journal-day op-value)))
+              (swap! *other-tx-data conj
+                     [:db/retract db-id :block/journal-day]
+                     [:db/retract db-id :block/journal?]))
             (when (seq @*other-tx-data)
               (ldb/transact! conn @*other-tx-data {:persist-op? false}))
             (transact-db! :save-block repo conn date-formatter new-block)))))))
@@ -351,7 +397,7 @@
 (defn- move-all-blocks-to-another-page
   [repo conn from-page-name to-page-name]
   (let [blocks (ldb/get-page-blocks @conn from-page-name {})
-        target-page-block (first (ldb/get-page-blocks @conn to-page-name {}))]
+        target-page-block (d/entity @conn [:block/name to-page-name])]
     (when (and (seq blocks) target-page-block)
       (outliner-tx/transact!
        {:persist-op? true
@@ -427,6 +473,24 @@
        affected-blocks-map))
    affected-blocks-map local-unpushed-ops))
 
+(defn- affected-blocks->diff-type-ops
+  [repo affected-blocks]
+  (let [unpushed-ops (op-mem-layer/get-all-ops repo)
+        affected-blocks-map* (if unpushed-ops
+                               (filter-remote-data-by-local-unpushed-ops
+                                affected-blocks unpushed-ops)
+                               affected-blocks)
+        {remove-ops-map :remove move-ops-map :move update-ops-map :update-attrs
+         update-page-ops-map :update-page remove-page-ops-map :remove-page}
+        (update-vals
+         (group-by (fn [[_ env]] (get env :op)) affected-blocks-map*)
+         (partial into {}))]
+    {:remove-ops-map remove-ops-map
+     :move-ops-map move-ops-map
+     :update-ops-map update-ops-map
+     :update-page-ops-map update-page-ops-map
+     :remove-page-ops-map remove-page-ops-map}))
+
 (defn <apply-remote-data
   [repo conn date-formatter data-from-ws]
   (assert (rtc-const/data-from-ws-validator data-from-ws) data-from-ws)
@@ -448,16 +512,8 @@
 
         (<= remote-t-before local-tx remote-t)
         (let [affected-blocks-map (:affected-blocks data-from-ws)
-              unpushed-ops (op-mem-layer/get-all-ops repo)
-              affected-blocks-map* (if unpushed-ops
-                                     (filter-remote-data-by-local-unpushed-ops
-                                      affected-blocks-map unpushed-ops)
-                                     affected-blocks-map)
-              {remove-ops-map :remove move-ops-map :move update-ops-map :update-attrs
-               update-page-ops-map :update-page remove-page-ops-map :remove-page}
-              (update-vals
-               (group-by (fn [[_ env]] (get env :op)) affected-blocks-map*)
-               (partial into {}))
+              {:keys [remove-ops-map move-ops-map update-ops-map update-page-ops-map remove-page-ops-map]}
+              (affected-blocks->diff-type-ops repo affected-blocks-map)
               remove-ops (vals remove-ops-map)
               sorted-move-ops (move-ops-map->sorted-move-ops move-ops-map)
               update-ops (vals update-ops-map)
@@ -540,6 +596,7 @@
     (swap! *remote-ops conj
            [:update
             (cond-> {:block-uuid block-uuid}
+              (:block/journal-day block)      (assoc :journal-day (:block/journal-day block))
               (:block/updated-at block)       (assoc :updated-at (:block/updated-at block))
               (:block/created-at block)       (assoc :created-at (:block/created-at block))
               (contains? attr-map :schema)    (assoc :schema
@@ -549,8 +606,8 @@
               attr-tags-map                   (assoc :tags attr-tags-map)
               attr-properties-map             (assoc :properties attr-properties-map)
               (and (contains? attr-map :content)
-                   (:block/content block))
-              (assoc :content (:block/content block))
+                   (:block/raw-content block))
+              (assoc :content (:block/raw-content block))
               (and (contains? attr-map :link)
                    (:block/uuid (:block/link block)))
               (assoc :link (:block/uuid (:block/link block)))
@@ -728,14 +785,14 @@
                                              :ops ops-for-remote :t-before (or local-tx 1)}))]
           (if-let [remote-ex (:ex-data r)]
             (case (:type remote-ex)
-            ;; conflict-update remote-graph, keep these local-pending-ops
-            ;; and try to send ops later
+              ;; conflict-update remote-graph, keep these local-pending-ops
+              ;; and try to send ops later
               :graph-lock-failed
               (do (prn :graph-lock-failed)
                   (op-mem-layer/rollback! repo)
                   nil)
-            ;; this case means something wrong in remote-graph data,
-            ;; nothing to do at client-side
+              ;; this case means something wrong in remote-graph data,
+              ;; nothing to do at client-side
               :graph-lock-missing
               (do (prn :graph-lock-missing)
                   (op-mem-layer/rollback! repo)
@@ -745,7 +802,7 @@
               (do (prn ::get-s3-object-failed r)
                   (op-mem-layer/rollback! repo)
                   nil)
-            ;; else
+              ;; else
               (do (op-mem-layer/rollback! repo)
                   (throw (ex-info "Unavailable" {:remote-ex remote-ex}))))
             (do (assert (pos? (:t r)) r)

@@ -1,16 +1,16 @@
 (ns logseq.shui.demo2
   (:require [rum.core :as rum]
             [logseq.shui.ui :as ui]
-            [logseq.shui.popup.core :refer [get-popup] :as popup-core]
+            [logseq.shui.popup.core :refer [install-popups update-popup! get-popup]]
             [frontend.components.icon :refer [emojis-cp emojis]]))
 
 (rum/defc page []
   [:div.sm:p-10
    [:h1.text-3xl.font-bold.border-b.pb-4 "UI X Popup"]
 
-   (rum/portal
-     (popup-core/install-popups)
-     js/document.body)
+   ;(rum/portal
+   ;  (install-popups)
+   ;  js/document.body)
 
    (let [[emoji set-emoji!] (rum/use-state nil)
          [q set-q!] (rum/use-state "")
@@ -22,14 +22,14 @@
             "Choose a inline "
             [:a.underline
              {:on-click
-              #(popup-core/show! %
+              #(ui/popup-show! %
                  (fn [_config]
                    [:div.max-h-72.overflow-auto.p-1
                     (emojis-cp (take 80 emojis)
                       {:on-chosen
                        (fn [_ t]
                          (set-emoji! t)
-                         (popup-core/hide-all!))})])
+                         (ui/popup-hide-all!))})])
                  {:content-props {:class "w-72 p-0"}
                   :as-menu?      true})}
              (if emoji [:strong.px-1.text-6xl [:em-emoji emoji]] "emoji :O")] "."])]
@@ -39,7 +39,7 @@
       [:p.py-4
        (ui/button
          {:variant  :secondary
-          :on-click #(popup-core/show! %
+          :on-click #(ui/popup-show! %
                        (fn []
                          [:p.p-4
                           (emoji-picker true)]))}
@@ -59,13 +59,13 @@
             :on-change   (fn [^js e]
                            (let [val (.-value (.-target e))]
                              (set-q! val)
-                             (popup-core/update-popup! :select-a-fruit-input [:content] (gen-content val))))
+                             (update-popup! :select-a-fruit-input [:content] (gen-content val))))
             :class       "w-1/5"
             :on-focus    (fn [^js e]
                            (let [id :select-a-fruit-input
                                  [_ popup] (get-popup id)]
                              (if (not popup)
-                               (popup-core/show! (.-target e)
+                               (ui/popup-show! (.-target e)
                                  (gen-content q)
                                  {:id id
                                   :content-props
@@ -80,11 +80,11 @@
                                          (when (and
                                                  (not (.contains q-ref target))
                                                  (not (.closest target ".x-input-popup-content")))
-                                           (popup-core/hide! id)))))
+                                           (ui/popup-hide! id)))))
                                    :onOpenAutoFocus #(.preventDefault %)}})
 
                                ;; update content
-                               (popup-core/update-popup! id [:content]
+                               (update-popup! id [:content]
                                  (gen-content q)))))
             ;:on-blur     (fn [^js e]
             ;               (let [^js target (.-relatedTarget e)]
@@ -94,15 +94,15 @@
             }))]
 
       [:div.w-full.p-4.border.rounded.dotted.h-48.mt-8.bg-gray-02
-       {:on-click        #(popup-core/show! %
+       {:on-click        #(ui/popup-show! %
                             (->> (range 8)
                               (map (fn [it]
                                      (ui/dropdown-menu-item
                                        {:on-select (fn []
                                                      (ui/toast! it)
-                                                     (popup-core/hide-all!))}
+                                                     (ui/popup-hide-all!))}
                                        [:strong it]))))
                             {:as-menu?      true
                              :content-props {:class "w-48"}})
-        :on-context-menu #(popup-core/show! %
+        :on-context-menu #(ui/popup-show! %
                             [:h1.text-3xl.font-bold "hi x popup for custom context menu!"])}]])])

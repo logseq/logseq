@@ -29,7 +29,7 @@
         has-viewable-properties? (db-property-handler/block-has-viewable-properties? page)
         has-class-properties? (seq (:properties (:block/schema page)))]
     (when (or configure? has-viewable-properties? has-class-properties? property?)
-      [:div.ls-page-properties.mb-4
+      [:div.ls-page-properties
        (cond
          (= mode :class)
          (if (and config/publishing? (not configure?))
@@ -162,31 +162,35 @@
         collapsed? (rum/react *collapsed?)
         has-tags? (seq (:block/tags page))
         has-properties? (seq (:block/properties page))
-        hover-or-expanded? (or @*hover? hover-title? (not collapsed?))]
+        hover-or-expanded? (or @*hover? hover-title? (not collapsed?))
+        show-info? (or hover-or-expanded? has-tags? has-properties? class?)]
     (when (if config/publishing?
             ;; Since publishing is read-only, hide this component if it has no info to show
             ;; as it creates a fair amount of empty vertical space
             (or has-tags? (some? types))
             true)
-      [:div.page-info {:on-mouse-over #(reset! *hover? true)
-                       :on-mouse-leave #(reset! *hover? false)}
-       (when (or hover-or-expanded? has-tags? has-properties? class?)
-         [:div.p-2 {:class (if (or @*hover? (not collapsed?))
-                                     "border rounded"
-                                     "border rounded border-transparent")}
-          [:div.info-title.cursor {:on-click
-                                   (if config/publishing?
-                                     (fn [_]
-                                       (when (seq (set/intersection #{"class" "property"} types))
-                                         (swap! *collapsed? not)))
-                                     #(swap! *collapsed? not))}
+      [:div.page-info
+       [:div.py-2 {:class (if (or @*hover? (not collapsed?))
+                            "border rounded"
+                            "border rounded border-transparent")}
+        [:div.info-title.cursor
+         {:on-mouse-over  #(reset! *hover? true)
+          :on-mouse-leave #(reset! *hover? false)
+          :on-click (if config/publishing?
+                      (fn [_]
+                        (when (seq (set/intersection #{"class" "property"} types))
+                          (swap! *collapsed? not)))
+                      #(swap! *collapsed? not))}
+         (when show-info?
            [:div.flex.flex-row.items-center.gap-2.justify-between.pl-1
             [:div.flex.flex-row.items-center.gap-2
              (if collapsed?
                (if (or has-tags? @*hover? config/publishing?)
                  [:<>
-                  (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
-                                  (ui/icon "tags"))
+                  (if has-tags?
+                    [:div.px-1 {:style {:min-height 28}}]
+                    (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
+                                    (ui/icon "tags")))
                   (if (and config/publishing? (seq (set/intersection #{"class" "property"} types)))
                     [:div
                      [:div.opacity-50.pointer.text-sm "Expand for more info"]]
@@ -204,11 +208,12 @@
                {:variant :ghost :size :sm :class "fade-link"}
                (ui/icon (if collapsed?
                           "chevron-down"
-                          "chevron-up"))))]]
+                          "chevron-up"))))])]
+        (when show-info?
           (if collapsed?
             (when (or (seq (:block/properties page))
                       (and class? (seq (:properties (:block/schema page)))))
               [:div.py-2.px-4
                (page-properties page {:mode (if class? :class :page)})])
             [:div.py-2.px-4
-             (page-configure page *mode)])])])))
+             (page-configure page *mode)]))]])))

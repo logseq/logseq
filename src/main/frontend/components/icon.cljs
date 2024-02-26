@@ -8,6 +8,7 @@
             [frontend.search :as search]
             [rum.core :as rum]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [goog.object :as gobj]
             [goog.functions :refer [debounce]]
@@ -78,7 +79,10 @@
                                 :name name}))}
      (not (nil? hover))
      (assoc :on-mouse-over #(reset! hover emoji)
-            :on-mouse-out #(reset! hover nil)))
+            :on-mouse-out #(js/setTimeout
+                             (fn []
+                               (when (and @hover (= id (:id @hover)))
+                                 (reset! hover nil))) 1000)))
    [:em-emoji {:id id}]])
 
 (rum/defc emojis-cp < rum/static
@@ -123,7 +127,7 @@
         result @*result
         emoji-tab? (= @*tab :emoji)
         opts (assoc opts :hover *hover)]
-    [:div.icon-search.flex.flex-1.flex-col.gap-2
+    [:div.cp__emoji-icon-picker.flex.flex-1.flex-col.gap-2
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5
       {:auto-focus    true
        :placeholder   "Select icon"
@@ -159,8 +163,8 @@
            (emojis-cp emojis opts)
            (icons-cp (get-tabler-icons) opts))])]
 
-     (if @*hover
-       [:div.flex.flex-1.flex-row.items-center.gap-2
+     (when @*hover
+       [:div.hover-preview
         [:button.transition-opacity
          {:style {:font-size 32}
           :key (:id @*hover)
@@ -169,25 +173,26 @@
            (ui/icon (:icon @*hover) {:size 32})
            (:native (first (:skins @*hover))))]
 
-        (:name @*hover)]
-       [:div {:style {:padding-bottom 32}}])]))
+        [:strong (:name @*hover)]])]))
 
 (rum/defc icon-picker
   [icon-value {:keys [disabled? on-chosen]}]
-  (ui/dropdown
-   (fn [{:keys [toggle-fn]}]
-     [:button.flex {:on-click #(when-not disabled? (toggle-fn))}
-      (if icon-value
-        (icon icon-value)
-        [:div.opacity-50.text-sm
-         "Empty"])])
-   (if config/publishing?
-     (constantly [])
-     (fn [{:keys [toggle-fn]}]
-       [:div.p-4
-        (icon-search
-         {:on-chosen (fn [e icon-value]
-                       (on-chosen e icon-value)
-                       (toggle-fn))})]))
-   {:modal-class (util/hiccup->class
-                  "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}))
+  (let [content-fn
+        (if config/publishing?
+          (constantly [])
+          (fn [{:keys [id]}]
+            [:div.p-2
+             (icon-search
+               {:on-chosen (fn [e icon-value]
+                             (on-chosen e icon-value)
+                             (shui/popup-hide! id))})]))]
+    ;; trigger
+    [:button.flex
+     {:on-click #(when-not disabled?
+                   (shui/popup-show! % content-fn
+                     {:as-menu? true
+                      :content-props {:class "w-auto"}}))}
+     (if icon-value
+       (icon icon-value)
+       [:div.opacity-50.text-sm
+        "Empty"])]))

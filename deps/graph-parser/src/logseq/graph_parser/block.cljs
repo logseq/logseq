@@ -349,7 +349,8 @@
          form))
      (concat title body))
     (swap! *refs #(remove string/blank? %))
-    (let [ref->map-fn (fn [*col _tag?]
+    (let [*name->id (atom {})
+          ref->map-fn (fn [*col _tag?]
                         (let [col (remove string/blank? @*col)
                               children-pages (->> (mapcat (fn [p]
                                                             (let [p (if (map? p)
@@ -369,7 +370,14 @@
                              (let [macro? (and (map? item)
                                                (= "macro" (:type item)))]
                                (when-not macro?
-                                 (page-name->map item with-id? db true date-formatter)))) col)))]
+                                 (let [result (page-name->map item with-id? db true date-formatter)
+                                       page-name (:block/name result)
+                                       id (get @*name->id page-name)]
+                                   (when (and with-id? (nil? id))
+                                     (swap! *name->id assoc page-name (:block/uuid result)))
+                                   (if id
+                                     (assoc result :block/uuid id)
+                                     result))))) col)))]
       (assoc block
              :refs (ref->map-fn *refs false)
              :tags (ref->map-fn *structured-tags true)))))

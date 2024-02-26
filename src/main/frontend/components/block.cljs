@@ -2,7 +2,6 @@
   (:refer-clojure :exclude [range])
   (:require-macros [hiccups.core])
   (:require ["/frontend/utils" :as utils]
-            ["@capacitor/share" :refer [^js Share]]
             [cljs-bean.core :as bean]
             [cljs.core.match :refer [match]]
             [cljs.reader :as reader]
@@ -54,6 +53,7 @@
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.db-based.property.util :as db-pu]
             [frontend.mobile.util :as mobile-util]
+            [frontend.mobile.intent :as mobile-intent]
             [frontend.modules.outliner.tree :as tree]
             [frontend.security :as security]
             [frontend.shui :refer [get-shui-component-version make-shui-context]]
@@ -77,6 +77,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.common.util.macro :as macro-util]
             [logseq.shui.core :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
@@ -400,8 +401,7 @@
                          (let [[rel-dir basename] (util/get-dir-and-basename href)
                                rel-dir (string/replace rel-dir #"^/+" "")
                                asset-url (path/path-join repo-dir rel-dir basename)]
-                           (.share Share (clj->js {:url asset-url
-                                                   :title "Open file with your favorite app"})))))]
+                           (mobile-intent/open-or-share-file asset-url))))]
 
         (cond
           (contains? config/audio-formats ext)
@@ -1465,7 +1465,7 @@
                             macro-content)
 
                           (and (seq arguments) macro-content)
-                          (block/macro-subs macro-content arguments)
+                          (macro-util/macro-subs macro-content arguments)
 
                           :else
                           macro-content)
@@ -1810,7 +1810,7 @@
         [:span {:class (if (or (and control-show?
                                     (or collapsed?
                                         (editor-handler/collapsable? uuid {:semantic? true})))
-                               (and collapsed? order-list?))
+                               (and collapsed? (or order-list? config/publishing?)))
                          "control-show cursor-pointer"
                          "control-hide")}
          (ui/rotating-arrow collapsed?)]])
@@ -2042,11 +2042,9 @@
          ;; highlight ref block (inline)
          (when-not area? [(hl-ref)])
 
-         (if title
-           (conj
-            (map-inline config title)
-            (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})]))
-           [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]])
+         (conj
+          (map-inline config title)
+          (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})]))
 
          ;; highlight ref block (area)
          (when area? [(hl-ref)])))))))
@@ -2132,7 +2130,8 @@
                                         :page-cp page-cp
                                         :block-cp blocks-container
                                         :properties-cp db-properties-cp
-                                        :editor-box (get config :editor-box)}
+                                        :editor-box (get config :editor-box)
+                                        :id (:id config)}
                                        opts)))
 
 (rum/defc invalid-properties-cp
@@ -2420,11 +2419,8 @@
                 (icon/get-page-icon block {})
                 (page-cp config block)]
 
-               (or (seq title) (:block/marker block))
-               (build-block-title config block)
-
                :else
-               nil)
+               [:div.flex-1 (build-block-title config block)])
 
              [:div.flex.flex-row.items-center.gap-1
               (when (and db-based? (seq block-tags))
@@ -2540,14 +2536,15 @@
                                                  (let [select? (and (= event :esc)
                                                                     (not (string/includes? value "```")))]
                                                    (p/do!
+                                                    (state/set-editor-op! :escape)
                                                     (editor-handler/save-block! (editor-handler/get-state) value)
                                                     (editor-handler/escape-editing select?))))}
                                      edit-input-id
                                      config))]
-          (if (and named? (seq (:block/tags block)) db-based?)
-            [:div.flex.flex-1.flex-row.justify-between
+          (if (and (seq (:block/tags block)) db-based?)
+            [:div.flex.flex-1.flex-row.gap-1.items-start
              editor-cp
-             (tags config block)]
+             [:div {:style {:margin-top 2}} (tags config block)]]
             editor-cp))]
        (let [refs-count (if (seq (:block/_refs block))
                           (count (:block/_refs block))

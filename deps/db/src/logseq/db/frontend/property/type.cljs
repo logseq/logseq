@@ -2,7 +2,8 @@
   "Provides property types and related helper fns e.g. property value validation
   fns and their allowed schema attributes"
   (:require [datascript.core :as d]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [logseq.common.util.macro :as macro-util]))
 
 ;; Config vars
 ;; ===========
@@ -53,6 +54,11 @@
          (not (contains? #{nil "null"} (.-origin (js/URL. s))))
          (catch :default _e
            false))))
+
+(defn macro-url?
+  [s]
+  ;; TODO: Confirm that macro expanded value is url when it's easier to pass data into validations
+  (macro-util/macro? s))
 
 (defn- logseq-page?
   [db id]
@@ -107,7 +113,7 @@
    :checkbox boolean?
    :url      [:fn
               {:error/message "should be a URL"}
-              (some-fn url? uuid?)]
+              (some-fn url? uuid? macro-url?)]
    :page     [:fn
               {:error/message "should be a page"}
               logseq-page?]
@@ -137,3 +143,13 @@
   [property-type schema-attribute]
   (contains? (get user-built-in-allowed-schema-attributes property-type)
              schema-attribute))
+
+(defn infer-property-type-from-value
+  "Infers a user defined built-in :type from property value(s)"
+  [val]
+  (cond
+    (coll? val) :page
+    (number? val) :number
+    (url? val) :url
+    (contains? #{true false} val) :checkbox
+    :else :default))

@@ -6,7 +6,7 @@
             [frontend.worker.react :as worker-react]
             [frontend.worker.file :as file]
             [frontend.worker.util :as worker-util]
-            [logseq.db.frontend.validate :as validate]
+            [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util]
             [frontend.worker.db.fix :as db-fix]
             [logseq.db :as ldb]))
@@ -62,8 +62,8 @@
 
 (defn validate-and-fix-db!
   [repo conn tx-report context]
-  (when (and (:dev? context) (sqlite-util/db-based-graph? repo))
-    (let [valid? (validate/validate-db! tx-report (:validate-db-options context))]
+  (when (and (:dev? context) (not (:importing? context)) (sqlite-util/db-based-graph? repo))
+    (let [valid? (db-validate/validate-tx-report! tx-report (:validate-db-options context))]
       (when (and (get-in context [:validate-db-options :fail-invalid?]) (not valid?))
         (worker-util/post-message :notification
                                   (pr-str [["Invalid DB!"] :error])))))

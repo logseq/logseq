@@ -55,13 +55,12 @@
 
 (defn get-closed-property-values
   [property-name]
-  (when-let [property (get-property property-name)]
-    (get-in property [:block/schema :values])))
+  (let [repo (state/get-current-repo)
+        db (db/get-db repo)]
+    (db-property/get-closed-property-values db property-name)))
 
 (defn get-closed-value-entity-by-name
   [property-name value-name]
-  (let [values (get-closed-property-values property-name)]
-    (some (fn [id]
-            (let [e (db/entity [:block/uuid id])]
-              (when (= (get-in e [:block/schema :value]) value-name)
-                e))) values)))
+  (let [repo (state/get-current-repo)
+        db (db/get-db repo)]
+    (db-property/get-closed-value-entity-by-name db property-name value-name)))

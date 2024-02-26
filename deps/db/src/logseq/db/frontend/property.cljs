@@ -24,15 +24,15 @@
           :schema {:type :page
                    :cardinality :many
                    :classes #{:logseq.class}}}
+   ;; TODO: why need :pagetags?
    :pagetags {:original-name "pageTags"
               :visible true
               :schema {:type :page
                        :cardinality :many}}
-   :background-color {:schema {:type :default :hide? true}
-                      :visible true}
+   :background-color {:schema {:type :default :hide? true}}
    :background-image {:schema {:type :default :hide? true}
                       :visible true}
-   :heading {:schema {:type :any}}      ; number (1-6) or boolean for auto heading
+   :heading {:schema {:type :any :hide? true}}      ; number (1-6) or boolean for auto heading
    :query-table {:schema {:type :checkbox}}
    ;; query-properties is a coll of property uuids and keywords where keywords are special frontend keywords
    :query-properties {:schema {:type :coll}}
@@ -172,3 +172,16 @@
 (defn shape-block?
   [repo db block]
   (= :whiteboard-shape (get-block-property-value repo db block :ls-type)))
+
+(defn get-closed-property-values
+  [db property-name]
+  (when-let [property (get-property db property-name)]
+    (get-in property [:block/schema :values])))
+
+(defn get-closed-value-entity-by-name
+  [db property-name value-name]
+  (let [values (get-closed-property-values db property-name)]
+    (some (fn [id]
+            (let [e (d/entity db [:block/uuid id])]
+              (when (= (get-in e [:block/schema :value]) value-name)
+                e))) values)))

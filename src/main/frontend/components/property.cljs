@@ -20,6 +20,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.shui.ui :as shui]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [rum.core :as rum]
@@ -350,6 +351,31 @@
         (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
             (pv/exit-edit-property))))))
 
+(rum/defc property-value-new
+  [entity property property-value opts]
+
+  (let [*el-ref (rum/use-ref nil)]
+    (rum/use-effect!
+      (fn []
+        (let [content-fn
+              (fn [{:keys [id]}]
+                (property-config entity property
+                  (merge opts {:toggle-fn         #(shui/popup-hide! id)
+                               :block             entity
+                               :add-new-property? true})))]
+          (js/setTimeout
+            (fn []
+              (when-let [^js target (rum/deref *el-ref)]
+                (shui/popup-show! target content-fn
+                  {:content-props {:onOpenAutoFocus #(.preventDefault %) :class "w-auto"}})))
+            100)))
+      [])
+
+    [:div.is-new-editing-property-input
+     {:ref *el-ref}
+     (pv/property-value entity property property-value
+       (assoc opts :editing? true))]))
+
 (rum/defc property-select
   [exclude-properties on-chosen input-opts]
   (let [[properties set-properties!] (rum/use-state nil)]
@@ -407,21 +433,8 @@
             [:div.col-span-3.flex.flex-row {:on-mouse-down (fn [e] (util/stop-propagation e))}
              (when-not class-schema?
                (if @*show-new-property-config?
-                 (ui/dropdown
-                  (fn [_opts]
-                    (pv/property-value entity property @*property-value
-                                       (assoc opts
-                                              :editing? true
-                                              :*show-new-property-config? *show-new-property-config?)))
-                  (fn [{:keys [toggle-fn]}]
-                    [:div.p-6
-                     (property-config entity property (merge opts {:toggle-fn toggle-fn
-                                                                   :block entity
-                                                                   :add-new-property? true
-                                                                   :*show-new-property-config? *show-new-property-config?}))])
-                  {:initial-open? true
-                   :modal-class (util/hiccup->class
-                                 "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
+                 (property-value-new entity property @*property-value
+                   (assoc opts :*show-new-property-config? *show-new-property-config?))
                  (pv/property-value entity property @*property-value (assoc opts :editing? true))))])])
 
        (let [on-chosen (fn [{:keys [value]}]
@@ -441,6 +454,7 @@
 
 (rum/defcs new-property < rum/reactive
   (rum/local false ::new-property?)
+  (rum/local nil ::property-key)
   (rum/local nil ::property-value)
   {:will-unmount (fn [state]
                    (state/set-state! :editor/new-property-key nil)
@@ -452,7 +466,8 @@
 
     (when-not (and (:in-block-container? opts) (not keyboard-triggered?))
       [:div.ls-new-property
-       (let [*property-key (:editor/new-property-key @state/state)
+       (let [global-property-key (:editor/new-property-key @state/state)
+             *property-key (if @global-property-key global-property-key (::property-key state))
              *property-value (::property-value state)]
          (cond
            new-property?
@@ -501,6 +516,7 @@
                          :else
                          "control-hide")}
          (ui/rotating-arrow collapsed?)]])
+
      (ui/dropdown
       (fn [{:keys [toggle-fn]}]
         [:button.flex {:on-click toggle-fn}
@@ -521,31 +537,31 @@
                  (toggle-fn))))})])
       {:modal-class (util/hiccup->class
                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
-     (ui/dropdown
-      (if config/publishing?
-        (fn [_opts]
-          [:a.property-k
-           {:on-click #(route-handler/redirect-to-page! (:block/name property))}
-           [:div {:style {:padding-left 6}} (:block/original-name property)]])
-        (fn [{:keys [toggle-fn]}]
-          [:a.property-k
-           {:title (str "Configure property: " (:block/original-name property))
-            :on-mouse-down (fn [e]
-                             (when (util/meta-key? e)
-                               (route-handler/redirect-to-page! (:block/name property))
-                               (.preventDefault e)))
-            :on-click toggle-fn}
-           [:div {:style {:padding-left 6}} (:block/original-name property)]]))
-      (fn [{:keys [toggle-fn]}]
-        [:div.p-8 {:style {:min-width 700}}
-         [:h2.title "Configure property"]
-         (property-config block property
-                          {:toggle-fn toggle-fn
-                           :inline-text inline-text
-                           :page-cp page-cp
-                           :class-schema? class-schema?})])
-      {:modal-class (util/hiccup->class
-                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg")})]))
+
+     (if config/publishing?
+       [:a.property-k
+        {:on-click #(route-handler/redirect-to-page! (:block/name property))}
+        [:div {:style {:padding-left 6}} (:block/original-name property)]]
+
+       [:a.property-k
+        {:title         (str "Configure property: " (:block/original-name property))
+         :on-mouse-down (fn [^js e]
+                          (when (util/meta-key? e)
+                            (route-handler/redirect-to-page! (:block/name property))
+                            (.preventDefault e)))
+         :on-click      (fn [^js e]
+                          (shui/popup-show! (.-target e)
+                            (fn [{:keys [id]}]
+                              [:div.p-2
+                               [:h2.text-lg.font-bold.mb-1 "Configure property"]
+                               (property-config block property
+                                 {:inline-text inline-text
+                                  :page-cp page-cp
+                                  :class-schema? class-schema?
+                                  :toggle-fn #(shui/popup-hide! id)})])
+                            {:content-props {:class "property-configure-popup-content"}
+                             :as-menu? true}))}
+        [:div {:style {:padding-left 6}} (:block/original-name property)]])]))
 
 (defn- resolve-linked-block-if-exists
   "Properties will be updated for the linked page instead of the refed block.
@@ -618,18 +634,6 @@
         (for [[k v] properties]
           (property-cp block k v opts))))))
 
-(rum/defcs hidden-properties < (rum/local true ::hide?)
-  [state block hidden-properties opts]
-  (let [*hide? (::hide? state)]
-    [:div.hidden-properties.flex.flex-col.gap-1
-     [:a.text-sm.flex.flex-row.items-center.fade-link.select-none
-      {:on-click #(swap! *hide? not)}
-      [:span {:style {:margin-left -1}}
-       (ui/rotating-arrow @*hide?)]
-      [:div {:style {:margin-left 3}} "Hidden properties"]]
-     (when-not @*hide?
-       (properties-section block hidden-properties opts))]))
-
 ;; TODO: Remove :page-configure? as it only ever seems to be set to true
 (rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive
   {:init (fn [state]
@@ -657,10 +661,13 @@
                                           (seq properties))
                                   remove-built-in-properties
                                   (remove (fn [[id _]] ((set classes-properties) id))))
+        root-block? (= (:id opts) (str (:block/uuid block)))
         ;; This section produces own-properties and full-hidden-properties
         hide-with-property-id (fn [property-id]
-                                (let [eid (if (uuid? property-id) [:block/uuid property-id] property-id)]
-                                  (boolean (:hide? (:block/schema (db/entity eid))))))
+                                (if (or root-block? page-configure?)
+                                  false
+                                  (let [eid (if (uuid? property-id) [:block/uuid property-id] property-id)]
+                                    (:hide? (:block/schema (db/entity eid))))))
         property-hide-f (cond
                           config/publishing?
                           ;; Publishing is read only so hide all blank properties as they
@@ -676,16 +683,15 @@
                               (nil? property-value)))
                           :else
                           (comp hide-with-property-id first))
-        {block-hidden-properties true
+        {_block-hidden-properties true
          block-own-properties' false} (group-by property-hide-f block-own-properties)
-        {class-hidden-properties true
+        {_class-hidden-properties true
          class-own-properties false} (group-by property-hide-f
                                                (map (fn [id] [id (get block-properties id)]) classes-properties))
         own-properties (->>
                         (if one-class?
                           (concat block-own-properties' class-own-properties)
                           block-own-properties'))
-        full-hidden-properties (concat block-hidden-properties class-hidden-properties)
         class->properties (loop [classes all-classes
                                  properties #{}
                                  result []]
@@ -695,10 +701,12 @@
                                                         (remove hide-with-property-id))]
                                 (recur (rest classes)
                                        (set/union properties (set cur-properties))
-                                       (conj result [class cur-properties])))
+                                       (if (seq cur-properties)
+                                         (conj result [class cur-properties])
+                                         result)))
                               result))
         keyboard-triggered? (= (state/sub :editor/new-property-input-id) edit-input-id)]
-    (when-not (and (empty? block-own-properties)
+    (when-not (and (empty? block-own-properties')
                    (empty? class->properties)
                    (not (:page-configure? opts))
                    (not keyboard-triggered?))
@@ -709,9 +717,6 @@
                                  (:selected? opts)
                                  (update :class conj "select-none"))
        (properties-section block (if class-schema? properties own-properties) opts)
-
-       (when (and (seq full-hidden-properties) (not class-schema?) (not config/publishing?))
-         (hidden-properties block full-hidden-properties opts))
 
        (rum/with-key (new-property block id keyboard-triggered? opts) (str id "-add-property"))
 

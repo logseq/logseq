@@ -15,8 +15,8 @@
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.content :as db-content]
             [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.util.db :as db-util]
             [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
             [frontend.config :as config]
             [logseq.db :as ldb]))
 
@@ -267,9 +267,10 @@ independent of format as format specific heading characters are stripped"
   ([ids]
    (get-page-names-by-ids (state/get-current-repo) ids))
   ([repo ids]
-   (when repo
-     (->> (db-utils/pull-many repo '[:block/name] ids)
-          (map :block/name)))))
+   (let [ids (remove nil? ids)]
+     (when repo
+       (->> (db-utils/pull-many repo '[:block/name] ids)
+            (map :block/name))))))
 
 (defn get-page-alias-names
   [repo page-name]
@@ -601,7 +602,7 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-journals-length
   []
-  (let [today (db-util/date->int (js/Date.))]
+  (let [today (date-time-util/date->int (js/Date.))]
     (d/q '[:find (count ?page) .
            :in $ ?today
            :where
@@ -618,7 +619,7 @@ independent of format as format specific heading characters are stripped"
    (when (conn/get-db repo-url)
      (let [date (js/Date.)
            _ (.setDate date (- (.getDate date) (dec n)))
-           today (db-util/date->int (js/Date.))]
+           today (date-time-util/date->int (js/Date.))]
        (->>
         (react/q repo-url [:frontend.worker.react/journals] {:use-cache? false}
                  '[:find [(pull ?page [*]) ...]

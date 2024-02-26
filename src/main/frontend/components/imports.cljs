@@ -4,6 +4,8 @@
             [clojure.core.async :as async]
             [clojure.edn :as edn]
             [clojure.string :as string]
+            [cljs-time.core :as t]
+            [cljs.pprint :as pprint]
             [datascript.core :as d]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
@@ -29,14 +31,15 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.graph-parser :as graph-parser]
+            [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.core :as outliner-core]
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]
             [logseq.common.config :as common-config]
             [lambdaisland.glogi :as log]
-            [frontend.handler.db-based.property.util :as db-pu]))
+            [frontend.handler.db-based.property.util :as db-pu]
+            [logseq.db.frontend.validate :as db-validate]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
@@ -167,7 +170,7 @@
                  {:on-click on-submit})]]))
 
 (defn- import-from-doc-files!
-  [db-conn repo config doc-files user-options]
+  [db-conn repo config doc-files import-state user-options]
   (let [imported-chan (async/promise-chan)
         page-tags-uuid (db-pu/get-built-in-property-uuid repo :pagetags)]
     (try
@@ -184,21 +187,28 @@
               (async/<! (async/timeout 10))
               (async/<! (p->c (-> (.text (:file-object file))
                                   (p/then (fn [content]
-                                            (prn :import rpath)
+                                            (prn :import-file rpath i)
                                             {:file/path rpath
                                              :file/content content}))
                                   (p/then (fn [m]
                                             ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
-                                            (let [{:keys [tx-report]}
-                                                  (graph-parser/import-file-to-db-graph
+                                            (let [tx-report
+                                                  (gp-exporter/add-file-to-db-graph
                                                    db-conn
                                                    (:file/path m)
                                                    (:file/content m)
                                                    {:extract-options extract-options
                                                     :user-options user-options
-                                                    :page-tags-uuid page-tags-uuid})]
+                                                    :page-tags-uuid page-tags-uuid
+                                                    :import-state import-state
+                                                    :macros (state/get-macros)
+                                                    :notify-user #(notification/show! (:msg %) :warning false)})]
                                               (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report)))
-                                            m)))))
+                                            m))
+                                  (p/catch (fn [error]
+                                             (notification/show! (str "Import failed on " (pr-str rpath) " with error:\n" error)
+                                                                 :error)
+                                             (log/error :import-error {:path rpath :error error}))))))
               (recur))
             (async/offer! imported-chan true))))
       (catch :default e
@@ -296,15 +306,18 @@
 (rum/defc import-file-graph-dialog
   [initial-name on-graph-name-confirmed]
   (let [[graph-input set-graph-input!] (rum/use-state initial-name)
-        [tags-input set-tags-input!] (rum/use-state "")
-        on-submit #(do (on-graph-name-confirmed {:graph-name graph-input :tags tags-input})
+        [tag-classes-input set-tag-classes-input!] (rum/use-state "")
+        [property-classes-input set-property-classes-input!] (rum/use-state "")
+        on-submit #(do (on-graph-name-confirmed
+                        {:graph-name graph-input
+                         :tag-classes tag-classes-input
+                         :property-classes property-classes-input})
                        (state/close-modal!))]
     [:div.container
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.leading-6.font-medium
         "New graph name:"]]]
-
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
       {:auto-focus true
        :default-value graph-input
@@ -313,6 +326,7 @@
        :on-key-down (fn [e]
                       (when (= "Enter" (util/ekey e))
                         (on-submit)))}]
+
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.leading-6.font-medium
@@ -320,9 +334,23 @@
        [:span.text-xs
         "Tags are case insensitive and separated by commas"]]]
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
-      {:default-value tags-input
+      {:default-value tag-classes-input
        :on-change (fn [e]
-                    (set-tags-input! (util/evalue e)))
+                    (set-tag-classes-input! (util/evalue e)))
+       :on-key-down (fn [e]
+                      (when (= "Enter" (util/ekey e))
+                        (on-submit)))}]
+
+     [:div.sm:flex.sm:items-start
+      [:div.mt-3.text-center.sm:mt-0.sm:text-left
+       [:h3#modal-headline.leading-6.font-medium
+        "(Optional) Properties whose values are imported as tag classes e.g. 'type':"]
+       [:span.text-xs
+        "Properties are case insensitive and separated by commas"]]]
+     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
+      {:default-value property-classes-input
+       :on-change (fn [e]
+                    (set-property-classes-input! (util/evalue e)))
        :on-key-down (fn [e]
                       (when (= "Enter" (util/ekey e))
                         (on-submit)))}]
@@ -331,29 +359,79 @@
       (ui/button "Submit"
                  {:on-click on-submit})]]))
 
+(defn- counts-from-entities
+  [entities]
+  {:entities (count entities)
+   :pages (count (filter :block/name entities))
+   :blocks (count (filter :block/content entities))
+   :classes (count (filter #(contains? (:block/type %) "class") entities))
+   :properties (count (filter #(contains? (:block/type %) "property") entities))
+   :property-values (count (mapcat :block/properties entities))})
+
+(defn- validate-imported-data
+  [db import-state files]
+  (when-let [org-files (seq (filter #(= "org" (path/file-ext (:rpath %))) files))]
+    (log/info :org-files (mapv :rpath org-files))
+    (notification/show! (str "Imported " (count org-files) " org file(s) as markdown. Support for org files will be added later.")
+                        :info false))
+  (when-let [ignored-props (seq @(:ignored-properties import-state))]
+    (notification/show!
+     [:.mb-2
+      [:.text-lg.mb-2 (str "Import ignored " (count ignored-props) " "
+                           (if (= 1 (count ignored-props)) "property" "properties"))]
+      [:span.text-xs
+       "To fix a property type, change the property value to the correct type and reimport the graph"]
+      (->> ignored-props
+           (map (fn [{:keys [property value schema location]}]
+                  [(str "Property " (pr-str property) " with value " (pr-str value))
+                   (if (= property :icon)
+                     (if (:page location)
+                       (str "Page icons can't be imported. Go to the page " (pr-str (:page location)) " to manually import it.")
+                       (str "Block icons can't be imported. Manually import it at the block: " (pr-str (:block location))))
+                     (str "Property value has type " (get-in schema [:type :to]) " instead of type " (get-in schema [:type :from])))]))
+           (map (fn [[k v]]
+                  [:dl.my-2.mb-0
+                   [:dt.m-0 [:strong (str k)]]
+                   [:dd {:class "text-warning"} v]])))]
+     :warning false))
+  (let [{:keys [errors datom-count entities]} (db-validate/validate-db! db)]
+    (if errors
+      (do
+        (log/error :import-errors {:msg (str "Import detected " (count errors) " invalid block(s):")
+                                   :counts (assoc (counts-from-entities entities) :datoms datom-count)})
+        (pprint/pprint (map :entity errors))
+        (notification/show! (str "Import detected " (count errors) " invalid block(s). These blocks may be buggy when you interact with them. See the javascript console for more.")
+                            :warning false))
+      (log/info :import-valid {:msg "Valid import!"
+                               :counts (assoc (counts-from-entities entities) :datoms datom-count)}))))
+
 (defn- import-file-graph
-  [*files {:keys [graph-name tags]} config-file]
-  (state/set-state! :graph/importing :folder)
+  [*files {:keys [graph-name tag-classes property-classes]} config-file]
+  (state/set-state! :graph/importing :file-graph)
   (state/set-state! [:graph/importing-state :current-page] (str graph-name " Assets"))
   (async/go
-    (async/<! (p->c (repo-handler/new-db! graph-name {:file-graph-import? true})))
-    (let [repo (state/get-current-repo)
+    (let [start-time (t/now)
+          import-state (gp-exporter/new-import-state)
+          _ (async/<! (p->c (repo-handler/new-db! graph-name {:file-graph-import? true})))
+          repo (state/get-current-repo)
           db-conn (db/get-db repo false)
           config (async/<! (p->c (import-config-file! config-file)))
           files (common-config/remove-hidden-files *files config :rpath)
-          doc-files (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:rpath %))) files)
+          logseq-file? #(string/starts-with? (:rpath %) "logseq/")
+          doc-files (->> files
+                         (remove logseq-file?)
+                         (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:rpath %)))))
           asset-files (filter #(string/starts-with? (:rpath %) "assets/") files)]
-      (async/<! (p->c (import-logseq-files (filter #(string/starts-with? (:rpath %) "logseq/") files))))
+      (async/<! (p->c (import-logseq-files (filter logseq-file? files))))
       (async/<! (import-from-asset-files! asset-files))
-      (async/<! (import-from-doc-files! db-conn repo config doc-files
-                                        {:tag-classes (set (string/split tags #",\s*"))}))
+      (async/<! (import-from-doc-files! db-conn repo config doc-files import-state
+                                        {:tag-classes (set (string/split tag-classes #",\s*"))
+                                         :property-classes (set (string/split property-classes #",\s*")) }))
       (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))
+      (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
       (state/set-state! :graph/importing nil)
       (state/set-state! :graph/importing-state nil)
-      (when-let [org-files (seq (filter #(= "org" (path/file-ext (:rpath %))) files))]
-        (log/info :org-files (mapv :rpath org-files))
-        (notification/show! (str "Imported " (count org-files) " org file(s) as markdown. Support for org files will be added later")
-                            :info false))
+      (validate-imported-data @db-conn import-state files)
       (finished-cb))))
 
 (defn import-file-to-db-handler
@@ -395,12 +473,14 @@
     [{:keys [query-params]}]
     (if (state/sub :graph/importing)
       (let [{:keys [total current-idx current-page]} (state/sub :graph/importing-state)
-            left-label [:div.flex.flex-row.font-bold
-                        (t :importing)
-                        [:div.hidden.md:flex.flex-row
-                         [:span.mr-1 ": "]
-                         [:div.text-ellipsis-wrapper {:style {:max-width 300}}
-                          current-page]]]
+            left-label (if (and current-idx total (= current-idx total))
+                         [:div.flex.flex-row.font-bold "Loading UI ..."]
+                         [:div.flex.flex-row.font-bold
+                          (t :importing)
+                          [:div.hidden.md:flex.flex-row
+                           [:span.mr-1 ": "]
+                           [:div.text-ellipsis-wrapper {:style {:max-width 300}}
+                            current-page]]])
             width (js/Math.round (* (.toFixed (/ current-idx total) 2) 100))
             process (when (and total current-idx)
                       (str current-idx "/" total))]

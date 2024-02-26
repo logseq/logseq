@@ -10,7 +10,8 @@
 
                        :config {}
                        :git/current-repo nil
-                       :rtc/remote-batch-txs nil}))
+                       :rtc/remote-batch-txs nil
+                       :rtc/downloading-graph? false}))
 
 (defonce *rtc-ws-url (atom nil))
 
@@ -84,3 +85,11 @@
 (defn get-date-formatter
   [repo]
   (common-config/get-date-formatter (get-config repo)))
+
+(defn set-rtc-downloading-graph!
+  [value]
+  (swap! *state assoc :rtc/downloading-graph? value))
+
+(defn rtc-downloading-graph?
+  []
+  (:rtc/downloading-graph? @*state))
