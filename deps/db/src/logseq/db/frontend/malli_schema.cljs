@@ -114,7 +114,10 @@
      [:block/schema
       {:optional true}
       [:map
-       [:properties {:optional true} [:vector :uuid]]]]]
+       [:properties {:optional true} [:vector :uuid]]]]
+     [:block/metadata {:optional true}
+      [:map
+       [:hide-properties? {:optional true} :boolean]]]]
     page-attrs
     page-or-block-attrs)))
 

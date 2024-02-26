@@ -1,5 +1,5 @@
 (ns db-import
-  "Imports given file(s) to a db graph. This script is primarly for
+  "Imports given file(s) to a db graph. This script is primarily for
    developing the import feature and for engineers who want to customize
    the import process"
   (:require [clojure.string :as string]
