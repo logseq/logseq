@@ -3446,7 +3446,10 @@
                     (seq (:block/properties block))
                     (not (db-pu/all-hidden-properties? (keys (:block/properties block)))))
                (and db-based? (seq tags)
-                    (some (fn [t] (seq (:properties (:block/schema t)))) tags))
+                    (some (fn [t]
+                            (let [properties (:properties (:block/schema t))]
+                              (and (seq properties)
+                                   (not (db-pu/all-hidden-properties? properties))))) tags))
                (and
                 (:outliner/block-title-collapse-enabled? (state/get-config))
                 (block-with-title? (:block/format block)

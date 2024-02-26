@@ -667,7 +667,7 @@
                                 (if (or root-block? page-configure?)
                                   false
                                   (let [eid (if (uuid? property-id) [:block/uuid property-id] property-id)]
-                                    (:hide? (:block/schema (db/entity eid))))))
+                                    (boolean (:hide? (:block/schema (db/entity eid)))))))
         property-hide-f (cond
                           config/publishing?
                           ;; Publishing is read only so hide all blank properties as they
