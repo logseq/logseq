@@ -97,12 +97,12 @@
                                 (shui/popup-hide! id)
                                 (when-let [toggle (:toggle-fn opts)]
                                   (toggle)))))}))]
-      [:a.flex
+      [:a.w-fit
        {:tabIndex      "0"
         ;; meta-click or just click in publishing to navigate to date's page
         :on-click      (if config/publishing?
                          #(navigate-to-date-page value)
-                         #(shui/popup-show! % content-fn {:as-menu? true}))
+                         #(shui/popup-show! (.-target %) content-fn {:as-menu? true :content-props {}}))
         :on-mouse-down (fn [e]
                          (.preventDefault e)
                          (when (util/meta-key? e)
