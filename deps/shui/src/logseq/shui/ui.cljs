@@ -114,6 +114,6 @@
 (def popup-hide! popup-core/hide!)
 (def popup-hide-all! popup-core/hide-all!)
 
-(def resizable-panel-group (resizable/resizable-panel-group "ResizablePanelGroup"))
-(def resizable-panel (resizable/resizable-panel "ResizablePanel"))
-(def resizable-handle (resizable/resizable-handle "ResizableHandle"))
+(def resizable-panel-group resizable/resizable-panel-group)
+(def resizable-panel resizable/resizable-panel)
+(def resizable-handle resizable/resizable-handle)
