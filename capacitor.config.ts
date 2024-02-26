@@ -7,7 +7,7 @@ const config: CapacitorConfig = {
   appId: 'com.logseq.app',
   appName: 'Logseq',
   bundledWebRuntime: false,
-  webDir: 'public/static',
+  webDir: 'public',
   loggingBehavior: 'debug',
   server: {
     // https://capacitorjs.com/docs/updating/5-0#update-androidscheme
