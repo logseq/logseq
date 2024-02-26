@@ -3444,7 +3444,7 @@
                (valid-custom-query-block? block)
                (and db-based?
                     (seq (:block/properties block))
-                    (not (db-pu/all-hidden-built-in-properties? (keys (:block/properties block)))))
+                    (not (db-pu/all-hidden-properties? (keys (:block/properties block)))))
                (and db-based? (seq tags)
                     (some (fn [t] (seq (:properties (:block/schema t)))) tags))
                (and
