@@ -5,6 +5,7 @@
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.util :as util]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.components.dnd :as dnd]
             [frontend.components.icon :as icon-component]
             [frontend.components.property.util :as pu-component]
@@ -27,17 +28,26 @@
 
 (rum/defc item-value
   [type *value]
-  (case type
-    ;; :page
-    :date
-    (let [value (if (string/blank? @*value) nil @*value)]
-      (property-value/date-picker value
-                                  {:on-change (fn [page]
-                                                (reset! *value (:block/uuid page)))}))
-    [:input.form-input.col-span-3
-     {:default-value @*value
-      :auto-focus true
-      :on-change #(reset! *value (util/evalue %))}]))
+  (let [*input-ref (rum/use-ref nil)]
+    (rum/use-effect!
+      (fn []
+        (when-let [^js el (rum/deref *input-ref)]
+          (js/setTimeout #(.focus el) 100)))
+      [])
+    (case type
+      ;; :page
+      :date
+      (let [value (if (string/blank? @*value) nil @*value)]
+        (property-value/date-picker value
+          {:on-change (fn [page]
+                        (reset! *value (:block/uuid page)))}))
+
+      (shui/input
+        {:default-value @*value
+         :class         "col-span-3"
+         :auto-focus    true
+         :ref           *input-ref
+         :on-change     #(reset! *value (util/evalue %))}))))
 
 (rum/defcs item-config < rum/reactive
   shortcut/disable-all-shortcuts
@@ -88,13 +98,11 @@
        [:div.grid.grid-cols-5.gap-1.items-start.leading-8
         [:label.col-span-2 "Description:"]
         [:div.col-span-3
-         (ui/ls-textarea
+         (shui/textarea
           {:on-change #(reset! *description (util/evalue %))
            :default-value @*description})]])
-     [:div
-      (ui/button
-       "Save"
-       {:on-click save-handler})]]))
+     [:div.flex.justify-end
+      (shui/button {:on-click save-handler :size :sm} "Save")]]))
 
 (rum/defcs choice-with-close <
   (rum/local false ::hover?)
@@ -120,34 +128,35 @@
         (ui/icon "X")])]))
 
 (rum/defc choice-item-content
-  [property *property-schema block dropdown-opts parent-opts]
+  [property *property-schema block parent-opts]
   (let [{:block/keys [uuid]} block]
-    (ui/dropdown
-     (fn [opts]
-       (choice-with-close
+    (let [content-fn
+          (if config/publishing?
+            (constantly [])
+            (fn [{:keys [id]}]
+              (let [opts {:toggle-fn #(shui/popup-hide! id)}]
+                (item-config
+                  property
+                  block
+                  (assoc opts :on-save
+                              (fn [value icon description]
+                                (<upsert-closed-value! property {:id          uuid
+                                                                 :value       value
+                                                                 :description description
+                                                                 :icon        icon})))))))
+          opts {:toggle-fn #(shui/popup-show! % content-fn {:as-menu? true})}]
+
+      (choice-with-close
         block
         (assoc opts
-               :delete-choice
-               (fn []
-                 (db-property-handler/delete-closed-value! property block)
-                 (swap! *property-schema update :values (fn [vs] (vec (remove #(= uuid %) vs)))))
-               :update-icon
-               (fn [icon]
-                 (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :icon icon)))
-        parent-opts))
-     (if config/publishing?
-       (constantly [])
-       (fn [opts]
-         (item-config
-          property
-          block
-          (assoc opts :on-save
-                 (fn [value icon description]
-                   (<upsert-closed-value! property {:id uuid
-                                                    :value value
-                                                    :description description
-                                                    :icon icon}))))))
-     dropdown-opts)))
+          :delete-choice
+          (fn []
+            (db-property-handler/delete-closed-value! property block)
+            (swap! *property-schema update :values (fn [vs] (vec (remove #(= uuid %) vs)))))
+          :update-icon
+          (fn [icon]
+            (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :icon icon)))
+        parent-opts))))
 
 (rum/defc add-existing-values
   [property *property-schema values {:keys [toggle-fn]}]
@@ -184,37 +193,38 @@
                                   (when (seq new-values)
                                     (swap! *property-schema assoc :values new-values)
                                     (pu-component/update-property! property @*property-name @*property-schema)))}))
-     (ui/dropdown
-      (if config/publishing?
-        (constantly [])
-        (fn [{:keys [toggle-fn]}]
-          [:a.fade-link.flex.flex-row.items-center.gap-1.leading-8 {:on-click toggle-fn}
-           (ui/icon "plus" {:size 16})
-           "Add choice"]))
-      (fn [opts]
-        (if (= :page property-type)
-          (property-value/select-page property
-                                      {:multiple-choices? false
-                                       :dropdown? false
-                                       :close-modal? false
-                                       :on-chosen (fn [chosen]
-                                                    (p/let [closed-value (<upsert-closed-value! property {:value chosen})]
-                                                      (swap! *property-schema update :values (fnil conj []) closed-value)))})
-          (let [values (->> (model/get-block-property-values (:block/uuid property))
-                            (map second)
-                            (remove uuid?)
-                            (remove string/blank?)
-                            distinct)]
+     (if config/publishing?
+       (constantly [])
+       [:a.fade-link.flex.flex-row.items-center.gap-1.leading-8
+        {:on-click
+         #(shui/popup-show! %
+            (fn [{:keys [id]}]
+              (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}]
+                (if (= :page property-type)
+                  (property-value/select-page property
+                    {:multiple-choices? false
+                     :dropdown?         false
+                     :close-modal?      false
+                     :on-chosen         (fn [chosen]
+                                          (p/let [closed-value (<upsert-closed-value! property {:value chosen})]
+                                            (swap! *property-schema update :values (fnil conj []) closed-value)))})
+                  (let [values (->> (model/get-block-property-values (:block/uuid property))
+                                 (map second)
+                                 (remove uuid?)
+                                 (remove string/blank?)
+                                 distinct)]
 
-            (if (seq values)
-              (add-existing-values property *property-schema values opts)
-              (item-config
-               property
-               nil
-               (assoc opts :on-save
-                      (fn [value icon description]
-                        (p/let [closed-value (<upsert-closed-value! property {:value value
-                                                                              :description description
-                                                                              :icon icon})]
-                          (swap! *property-schema update :values (fnil conj []) closed-value)))))))))
-      dropdown-opts)]))
+                    (if (seq values)
+                      (add-existing-values property *property-schema values opts)
+                      (item-config
+                        property
+                        nil
+                        (assoc opts :on-save
+                                    (fn [value icon description]
+                                      (p/let [closed-value (<upsert-closed-value! property {:value       value
+                                                                                            :description description
+                                                                                            :icon        icon})]
+                                        (swap! *property-schema update :values (fnil conj []) closed-value))))))))))
+            {:as-menu? true})}
+        (ui/icon "plus" {:size 16})
+        "Add choice"])]))

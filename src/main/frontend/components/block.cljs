@@ -2419,7 +2419,7 @@
                 (page-cp config block)]
 
                :else
-               (build-block-title config block))
+               [:div.flex-1 (build-block-title config block)])
 
              [:div.flex.flex-row.items-center.gap-1
               (when (and db-based? (seq block-tags))
