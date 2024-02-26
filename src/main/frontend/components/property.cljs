@@ -551,16 +551,17 @@
                             (.preventDefault e)))
          :on-click      (fn [^js e]
                           (shui/popup-show! (.-target e)
-                            (fn [{:keys [id]}]
-                              [:div.p-2
-                               [:h2.text-lg.font-bold.mb-1 "Configure property"]
-                               (property-config block property
-                                 {:inline-text inline-text
-                                  :page-cp page-cp
-                                  :class-schema? class-schema?
-                                  :toggle-fn #(shui/popup-hide! id)})])
-                            {:content-props {:class "property-configure-popup-content"}
-                             :as-menu? true}))}
+                                            (fn [{:keys [id]}]
+                                              [:div.p-2
+                                               [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
+                                               (property-config block property
+                                                                {:inline-text inline-text
+                                                                 :page-cp page-cp
+                                                                 :class-schema? class-schema?
+                                                                 :toggle-fn #(shui/popup-hide! id)})])
+                                            {:content-props {:class "property-configure-popup-content"
+                                                             :align "start"}
+                                             :as-menu? true}))}
         [:div {:style {:padding-left 6}} (:block/original-name property)]])]))
 
 (defn- resolve-linked-block-if-exists
