@@ -5,7 +5,8 @@
             [logseq.shui.select.core :as select-core]
             [logseq.shui.dialog.core :as dialog-core]
             [logseq.shui.popup.core :as popup-core]
-            [logseq.shui.form.core :as form-core]))
+            [logseq.shui.form.core :as form-core]
+            [logseq.shui.resizable.core :as resizable]))
 
 (def button (util/lsui-wrap "Button" {:static? false}))
 (def link (util/lsui-wrap "Link"))
@@ -112,3 +113,7 @@
 (def popup-show! popup-core/show!)
 (def popup-hide! popup-core/hide!)
 (def popup-hide-all! popup-core/hide-all!)
+
+(def resizable-panel-group (resizable/resizable-panel-group "ResizablePanelGroup"))
+(def resizable-panel (resizable/resizable-panel "ResizablePanel"))
+(def resizable-handle (resizable/resizable-handle "ResizableHandle"))
