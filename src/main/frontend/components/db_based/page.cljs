@@ -27,8 +27,16 @@
         configure-opts {:selected? false
                         :page-configure? true}
         has-viewable-properties? (db-property-handler/block-has-viewable-properties? page)
-        has-class-properties? (seq (:properties (:block/schema page)))]
-    (when (or configure? has-viewable-properties? has-class-properties? property?)
+        has-class-properties? (seq (:properties (:block/schema page)))
+        has-tags? (seq (:block/tags page))
+        hide-properties? (get-in page [:block/metadata :hide-properties?])]
+    (when (or configure?
+              (and
+               (not hide-properties?)
+               (or has-viewable-properties?
+                   has-class-properties?
+                   property?
+                   has-tags?)))
       [:div.ls-page-properties
        (cond
          (= mode :class)
@@ -46,7 +54,7 @@
          (component-block/db-properties-cp {:editor-box editor/box}
                                            page
                                            (str edit-input-id-prefix "-page")
-                                           (assoc configure-opts :class-schema? false)))])))
+                                           (assoc configure-opts :class-schema? false :page? true)))])))
 
 (rum/defc icon-row < rum/reactive
   [page]
@@ -138,9 +146,10 @@
     [:div.flex.flex-row.items-center.gap-1
      (for [mode modes]
        (let [mode' (keyword (string/lower-case mode))
-             selected? (= mode' current-mode)]
+             selected? (and (= mode' current-mode) (> (count modes) 1))]
          (shui-ui/button {:class (when-not selected? "opacity-70")
-                          :variant (if selected? :outline :ghost) :size :sm
+                          :variant (if selected? :outline :ghost)
+                          :size :sm
                           :on-click (fn [e]
                                       (util/stop-propagation e)
                                       (reset! *mode mode'))}
@@ -189,8 +198,7 @@
                  [:<>
                   (if has-tags?
                     [:div.px-1 {:style {:min-height 28}}]
-                    (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
-                                    (ui/icon "tags")))
+                    [:a.flex.fade-link.ml-2 (ui/icon "tags")])
                   (if (and config/publishing? (seq (set/intersection #{"class" "property"} types)))
                     [:div
                      [:div.opacity-50.pointer.text-sm "Expand for more info"]]
@@ -198,22 +206,20 @@
                      (tags page)])]
                  [:div.page-info-title-placeholder])
                [:div.flex.flex-row.items-center.gap-1
-                (shui-ui/button {:variant :ghost :size :sm :class "fade-link"}
-                                (ui/icon "info-circle"))
-                [:a.text-sm.font-medium.fade-link
-                 "Configure:"]
+                [:a.flex.fade-link.ml-3 (ui/icon "info-circle")]
                 (mode-switch types *mode)])]
             (when (or @*hover? (not collapsed?))
-              (shui-ui/button
-               {:variant :ghost :size :sm :class "fade-link"}
-               (ui/icon (if collapsed?
-                          "chevron-down"
-                          "chevron-up"))))])]
+              [:div.px-1
+               (shui-ui/button
+                {:variant :ghost :size :sm :class "fade-link"}
+                (if collapsed?
+                  [:span.text-xs.font-normal "Configure"]
+                  (ui/icon "x")))])])]
         (when show-info?
           (if collapsed?
             (when (or (seq (:block/properties page))
                       (and class? (seq (:properties (:block/schema page)))))
-              [:div.py-2.px-4
+              [:div.px-4
                (page-properties page {:mode (if class? :class :page)})])
             [:div.py-2.px-4
              (page-configure page *mode)]))]])))

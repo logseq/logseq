@@ -81,7 +81,8 @@
                                     (file-sync-handler/current-graph-sync-on?)
                                     (file-sync-handler/get-current-graph-uuid))
           built-in-property? (and (contains? (:block/type page) "property")
-                                  (contains? db-property/built-in-properties-keys-str page-name))]
+                                  (contains? db-property/built-in-properties-keys-str page-name))
+          db-based? (config/db-based-graph? repo)]
       (when (and page (not block?))
         (->>
          [(when-not config/publishing?
@@ -116,7 +117,7 @@
 
           (when-not (or contents?
                         config/publishing?
-                        (and (config/db-based-graph? repo)
+                        (and db-based?
                              built-in-property?))
             {:title   (t :page/delete)
              :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
@@ -170,6 +171,11 @@
                :options {:on-click #(commands/exec-plugin-simple-command!
                                      pid (assoc cmd :page page-name) action)}}))
 
+          (when db-based?
+            {:title (t :page/toggle-properties)
+             :options {:on-click (fn []
+                                   (page-handler/toggle-properties! page))}})
+
           (when developer-mode?
             {:title   (t :dev/show-page-data)
              :options {:on-click (fn []
@@ -177,7 +183,7 @@
 
           (when (and developer-mode?
                      ;; Remove when we have an easy way to fetch file content for a DB graph
-                     (not (config/db-based-graph? repo)))
+                     (not db-based?))
             {:title   (t :dev/show-page-ast)
              :options {:on-click (fn []
                                    (let [page (db/pull '[:block/format {:block/file [:file/content]}] (:db/id page))]
