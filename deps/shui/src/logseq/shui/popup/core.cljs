@@ -71,8 +71,9 @@
                    (let [^js rect (.getBoundingClientRect event)
                          left (.-left rect)
                          width (.-width rect)
+                         height (.-height rect)
                          bottom (.-bottom rect)]
-                     [(+ left (/ width 2)) bottom])
+                     [(+ left (/ width 2)) (- bottom height) width height])
                    :else [0 0])]
     (upsert-popup!
       (merge opts
@@ -98,7 +99,7 @@
         (js/setTimeout #(detach-popup! id) 128)))
     [open?])
 
-  (when-let [[x y] position]
+  (when-let [[x y _ height] position]
     (let [popup-root (if as-menu? dropdown-menu popover)
           popup-trigger (if as-menu? dropdown-menu-trigger popover-trigger)
           popup-content (if as-menu? dropdown-menu-content popover-content)]
@@ -106,8 +107,13 @@
         (merge root-props {:open open?})
         (popup-trigger
           {:as-child true}
-          (button {:class "w-1 h-1 overflow-hidden fixed p-0 opacity-0"
-                   :style {:top y :left x}} ""))
+          (button {:class "overflow-hidden fixed p-0 opacity-0"
+                   :style {:height (if (and (number? height)
+                                         (> height 0))
+                                     height 1)
+                           :width 1
+                           :top    y
+                           :left   x}} ""))
         (popup-content
           (merge {:onEscapeKeyDown      #(hide! id)
                   :onPointerDownOutside #(hide! id)} content-props)
