@@ -9,7 +9,7 @@
             [goog.object :as gobj]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.shui.ui :as ui]))
+            [logseq.shui.ui :as shui]))
 
 (defn- commit-all!
   []
@@ -64,9 +64,9 @@
           [:h3#modal-headline.text-lg.leading-6.font-medium
            "No changes to commit!"]]]
         [:div.mt-5.sm:mt-4.flex
-         (ui/button
+         (shui/button
           {:on-click state/close-modal!}
-           "Close")]]
+          "Close")]]
 
        [:<>
         [:div.sm:flex.sm:items-start
@@ -84,9 +84,9 @@
          {:auto-focus true
           :default-value ""}]
         [:div.mt-5.sm:mt-4.flex.justify-end.pt-4
-         (ui/button
-           {:on-click commit-all!}
-           "Commit")]])]))
+         (shui/button
+          {:on-click commit-all!}
+          "Commit")]])]))
 
 (defn show-commit-modal! [e]
   (state/set-modal! add-commit-message)
