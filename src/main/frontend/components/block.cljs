@@ -775,8 +775,8 @@
 
 (rum/defc page-reference < rum/reactive
   "Component for page reference"
-  [html-export? s {:keys [nested-link? id] :as config} label]
-  (let [show-brackets? (state/show-brackets?)
+  [html-export? s {:keys [nested-link? show-brackets? id] :as config} label]
+  (let [show-brackets? (if (some? show-brackets?) show-brackets? (state/show-brackets?))
         block-uuid (:block/uuid config)
         contents-page? (= "contents" (string/lower-case (str id)))]
     (if (string/ends-with? s ".excalidraw")

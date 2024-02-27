@@ -6,7 +6,8 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.components.block :as block]))
 
 (rum/defc class-select
   [page class on-select]
@@ -100,3 +101,27 @@
                                    [:span class-name]
                                    [:a {:on-click #(route-handler/redirect-to-page! class-name)} class-name]))
                                class-ancestors))]])))])))
+
+(defn class-children-aux
+  [class]
+  (let [children (:class/_parent class)]
+    (when (seq children)
+      [:ul
+       (for [child children]
+         (let [title [:li.ml-2 (block/page-reference false (:block/original-name child) {:show-brackets? false} nil)]]
+           (if (seq (:class/_parent child))
+             (ui/foldable
+              title
+              (class-children-aux child)
+              {:default-collapsed? false})
+             title)))])))
+
+(rum/defc class-children
+  [class]
+  (when (seq (:class/_parent class))
+    [:div.mt-4
+     (ui/foldable
+      [:h2.font-medium "Child classes"]
+      [:div.mt-2.ml-1 (class-children-aux class)]
+      {:default-collapsed? false
+       :title-trigger? true})]))
