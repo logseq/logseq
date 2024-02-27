@@ -912,31 +912,32 @@
          :autoSaveId "app-container-group"}
         (shui/resizable-panel
          {:id "left-container"
-          :order 1}
-         [:div#left-container
-          {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
-          (header/header {:open-fn        open-fn
-                          :light?         light?
-                          :current-repo   current-repo
-                          :logged?        logged?
-                          :page?          page?
-                          :route-match    route-match
-                          :default-home   default-home
-                          :new-block-mode new-block-mode})
-          (when (util/electron?)
-            (find-in-page/search))
+          :order 1
+          :minSize 50
+          :class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
+          [:<>
+           (header/header {:open-fn        open-fn
+                           :light?         light?
+                           :current-repo   current-repo
+                           :logged?        logged?
+                           :page?          page?
+                           :route-match    route-match
+                           :default-home   default-home
+                           :new-block-mode new-block-mode})
+           (when (util/electron?)
+             (find-in-page/search))
 
-          (main {:route-match         route-match
-                 :margin-less-pages?  margin-less-pages?
-                 :logged?             logged?
-                 :home?               home?
-                 :route-name          route-name
-                 :indexeddb-support?  indexeddb-support?
-                 :light?              light?
-                 :db-restoring?       db-restoring?
-                 :main-content        main-content
-                 :show-action-bar?    show-action-bar?
-                 :show-recording-bar? show-recording-bar?})])
+           (main {:route-match         route-match
+                  :margin-less-pages?  margin-less-pages?
+                  :logged?             logged?
+                  :home?               home?
+                  :route-name          route-name
+                  :indexeddb-support?  indexeddb-support?
+                  :light?              light?
+                  :db-restoring?       db-restoring?
+                  :main-content        main-content
+                  :show-action-bar?    show-action-bar?
+                  :show-recording-bar? show-recording-bar?})])
 
         (when window-controls?
           (window-controls/container))
