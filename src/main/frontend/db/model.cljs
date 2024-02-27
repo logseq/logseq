@@ -465,15 +465,6 @@ independent of format as format specific heading characters are stripped"
   (when-let [db (conn/get-db repo)]
     (ldb/page-empty? db page-id)))
 
-(defn page-empty-or-dummy?
-  [repo page-id]
-  (or
-   (page-empty? repo page-id)
-   (when-let [db (conn/get-db repo)]
-     (let [datoms (d/datoms db :avet :block/page page-id)]
-       (and (= (count datoms) 1)
-            (= "" (:block/content (db-utils/pull (:e (first datoms))))))))))
-
 (defn parents-collapsed?
   [repo block-uuid]
   (when-let [block (:block/parent (get-block-parents-v2 repo block-uuid))]
@@ -585,13 +576,10 @@ independent of format as format specific heading characters are stripped"
            (util/page-name-sanity-lc journal-name)
            page-name)
 
-         (page-empty-or-dummy? (state/get-current-repo) (:db/id page-entity))
+         :else
          (let [source-page (get-alias-source-page (state/get-current-repo) page-name')]
            (or (when source-page (:block/name source-page))
-               page-name'))
-
-         :else
-         page-name')))))
+               page-name')))))))
 
 (defn get-page-original-name
   [page-name]
