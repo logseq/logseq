@@ -121,8 +121,10 @@
    (dissoc schema
            :block/properties-text-values :block/pre-block? :recent/pages :file/handle :block/file
            :block/properties-order)
-   {:file/last-modified-at {}}
-   {:asset/uuid {:db/unique :db.unique/identity}
+   {:class/parent {:db/valueType :db.type/ref
+                   :db/index true}
+    :file/last-modified-at {}
+    :asset/uuid {:db/unique :db.unique/identity}
     :asset/meta {}}))
 
 (def retract-attributes

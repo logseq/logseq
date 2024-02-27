@@ -11,7 +11,7 @@
 (rum/defc class-select
   [page class on-select]
   (let [repo (state/get-current-repo)
-        children-pages (model/get-namespace-children repo (:db/id page))
+        children-pages (model/get-class-children repo (:db/id page))
         ;; Disallows cyclic hierarchies
         exclude-ids (-> (set (map (fn [id] (:block/uuid (db/entity id))) children-pages))
                         (conj (:block/uuid page))) ; break cycle
@@ -53,9 +53,9 @@
                                       (if (seq value)
                                         (db/transact!
                                          [{:db/id (:db/id page)
-                                           :block/namespace [:block/uuid (uuid value)]}])
+                                           :class/parent [:block/uuid (uuid value)]}])
                                         (db/transact!
-                                         [[:db.fn/retractAttribute (:db/id page) :block/namespace]]))))]
+                                          [[:db.fn/retractAttribute (:db/id page) :class/parent]]))))]
       [:div.opacity-50.pointer.text-sm.cursor-pointer {:on-click #(reset! *show? true)}
        "Empty"])))
 
@@ -73,22 +73,22 @@
         [:div.col-span-2 "Parent class:"]
         (if config/publishing?
           [:div.col-span-3
-           (if-let [parent-class (some-> (:db/id (:block/namespace page))
+           (if-let [parent-class (some-> (:db/id (:class/parent page))
                                          db/entity
                                          :block/original-name)]
              [:a {:on-click #(route-handler/redirect-to-page! parent-class)}
               parent-class]
              "None")]
           [:div.col-span-3
-           (let [parent (some-> (:db/id (:block/namespace page))
+           (let [parent (some-> (:db/id (:class/parent page))
                                 db/entity)]
              (page-parent page parent))])]
 
-       (when (:block/namespace page)
-         (let [ancestor-pages (loop [namespaces [page]]
-                                (if-let [parent (:block/namespace (last namespaces))]
-                                  (recur (conj namespaces parent))
-                                  namespaces))
+       (when (:class/parent page)
+         (let [ancestor-pages (loop [parents [page]]
+                                (if-let [parent (:class/parent (last parents))]
+                                  (recur (conj parents parent))
+                                  parents))
                class-ancestors (map :block/original-name (reverse ancestor-pages))]
            (when (> (count class-ancestors) 2)
              [:div.grid.grid-cols-5.gap-1.items-center.class-ancestors
