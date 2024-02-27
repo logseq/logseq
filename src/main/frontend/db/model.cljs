@@ -1012,6 +1012,7 @@ independent of format as format specific heading characters are stripped"
         (:namespace rules/rules))
    distinct))
 
+;; FIXME: async query
 (defn get-class-objects
   [repo class-id]
   (when-let [class (db-utils/entity repo class-id)]

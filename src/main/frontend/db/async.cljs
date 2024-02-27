@@ -117,6 +117,17 @@
     (<get-db-based-property-values graph property)
     (file-async/<get-file-based-property-values graph property)))
 
+(defn <get-block-property-values
+  [graph property-uuid]
+  (<q graph
+      '[:find ?b ?v
+        :in $ ?property-uuid
+        :where
+        [?b :block/properties ?p]
+        [(get ?p ?property-uuid) ?v]
+        [(some? ?v)]]
+      property-uuid))
+
 ;; TODO: batch queries for better performance and UX
 (defn <get-block
   [graph name-or-uuid & {:keys [children?]

@@ -67,7 +67,7 @@
                                   {:disabled? config/publishing?
                                    :on-chosen (fn [_e icon]
                                                 (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-                                                  (db-property-handler/update-property!
+                                                  (db-property-handler/<update-property!
                                                    (state/get-current-repo)
                                                    (:block/uuid page)
                                                    {:properties {icon-property-id icon}})))})

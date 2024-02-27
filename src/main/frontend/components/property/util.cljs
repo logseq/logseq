@@ -5,7 +5,7 @@
 
 (defn update-property!
   [property property-name property-schema]
-  (db-property-handler/update-property!
+  (db-property-handler/<update-property!
    (state/get-current-repo)
    (:block/uuid property)
    {:property-name property-name

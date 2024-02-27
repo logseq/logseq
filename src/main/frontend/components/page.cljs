@@ -339,7 +339,7 @@
                 (icon-component/icon-picker icon
                   {:on-chosen (fn [_e icon]
                                 (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-                                  (db-property-handler/update-property!
+                                  (db-property-handler/<update-property!
                                     repo
                                     (:block/uuid page)
                                     {:properties {icon-property-id icon}})))
