@@ -99,22 +99,46 @@
    ;; Not supported as they have been ignored for a long time and cause invalid built-in pages
    :now :later :doing :done :canceled :cancelled :in-progress :todo :wait :waiting])
 
+(defn- text-with-refs?
+  "Detects if a property value has text with refs e.g. `#Logseq is #awesome`
+  instead of `#Logseq #awesome`. If so the property type is :default instead of :page"
+  [vals val-text]
+  (let [replace-regex (re-pattern
+                       ;; Regex removes all characters of a tag or page-ref
+                       ;; so that only ref chars are left
+                       (str "([#[])"
+                            "("
+                            ;; Sorts ref names in descending order so that longer names
+                            ;; come first. Order matters since (foo-bar|foo) correctly replaces
+                            ;; "foo-bar" whereas (foo|foo-bar) does not
+                            (->> vals (sort >) (map common-util/escape-regex-chars) (string/join "|"))
+                            ")"))
+        remaining-text (string/replace val-text replace-regex "$1")
+        non-ref-char (some #(if (or (string/blank? %) (#{"[" "]" "," "#"} %))
+                              false
+                              %)
+                           remaining-text)]
+    (some? non-ref-char)))
+
 (defn- infer-property-schema-and-get-property-change
   "Infers a property's schema from the given _user_ property value and adds new ones to
   the property-schemas atom. If a property's :type changes, returns a map of
   the schema attribute changed and how it changed e.g. `{:type {:from :default :to :url}}`"
-  [prop-val prop refs property-schemas macros]
+  [prop-val prop prop-val-text refs property-schemas macros]
   ;; Explicitly fail an unexpected case rather cause silent downstream failures
   (when (and (coll? prop-val) (not (every? string? prop-val)))
     (throw (ex-info "Import cannot infer schema of unknown property value"
                     {:value prop-val :property prop})))
-  (let [prop-type (if (and (coll? prop-val)
-                           (seq prop-val)
-                           (set/subset? prop-val
-                                        (set (keep #(when (:block/journal? %) (:block/original-name %)) refs))))
-                    :date
-                    (db-property-type/infer-property-type-from-value
-                     (macro-util/expand-value-if-macro prop-val macros)))
+  (let [prop-type (cond (and (coll? prop-val)
+                             (seq prop-val)
+                             (set/subset? prop-val
+                                          (set (keep #(when (:block/journal? %) (:block/original-name %)) refs))))
+                        :date
+                        (and (coll? prop-val) (seq prop-val) (text-with-refs? prop-val prop-val-text))
+                        :default
+                        :else
+                        (db-property-type/infer-property-type-from-value
+                         (macro-util/expand-value-if-macro prop-val macros)))
         prev-type (get-in @property-schemas [prop :type])]
     (when-not prev-type
       (let [schema (cond-> {:type prop-type}
@@ -245,7 +269,8 @@
               property-changes
               (->> properties-to-infer
                    (keep (fn [[prop val]]
-                           (when-let [property-change (infer-property-schema-and-get-property-change val prop refs (:property-schemas import-state) macros)]
+                           (when-let [property-change
+                                      (infer-property-schema-and-get-property-change val prop (get (:block/properties-text-values block) prop) refs (:property-schemas import-state) macros)]
                              [prop property-change])))
                    (into {}))
               _ (when (seq property-changes) (log-fn :PROP-CHANGES property-changes))
