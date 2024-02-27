@@ -1000,33 +1000,33 @@ independent of format as format specific heading characters are stripped"
      [?page :block/uuid ?id]]
     (conn/get-db repo)))
 
-(defn get-namespace-children
+(defn get-class-children
   [repo eid]
   (->>
    (d/q '[:find [?children ...]
           :in $ ?parent %
           :where
-          (namespace ?parent ?children)]
+          (class-parent ?parent ?children)]
         (conn/get-db repo)
         eid
-        (:namespace rules/rules))
+        (:class-parent rules/rules))
    distinct))
 
 ;; FIXME: async query
 (defn get-class-objects
   [repo class-id]
   (when-let [class (db-utils/entity repo class-id)]
-    (if (first (:block/_namespace class))        ; has children classes
+    (if (first (:class/_parent class))        ; has children classes
       (d/q
        '[:find [?object ...]
          :in $ % ?parent
          :where
-         (namespace ?parent ?c)
+         (class-parent ?parent ?c)
          (or-join [?object ?c]
           [?object :block/tags ?parent]
           [?object :block/tags ?c])]
        (conn/get-db repo)
-       (:namespace rules/rules)
+       (:class-parent rules/rules)
        class-id)
       (map :db/id (:block/_tags class)))))
 

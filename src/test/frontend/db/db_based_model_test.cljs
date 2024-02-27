@@ -63,7 +63,7 @@
       ;; set class2's parent to class1
         (let [class2 (db/entity [:block/name "class2"])]
           (db/transact! [{:db/id (:db/id class2)
-                          :block/namespace (:db/id class)}]))
+                          :class/parent (:db/id class)}]))
         (test-helper/save-block! repo sbid "Block 2" {:tags ["class2"]})
         (is (= (model/get-class-objects repo (:db/id class))
                [(:db/id (db/entity [:block/uuid fbid]))
@@ -99,7 +99,7 @@
     (is (false? (model/hidden-page? "$$$test")))
     (is (true? (model/hidden-page? (str "$$$" (random-uuid)))))))
 
-(deftest get-namespace-children-test
+(deftest get-class-children-test
   (let [opts {:redirect? false :create-first-block? false :class? true}
         _ (page-handler/create! "class1" opts)
         _ (page-handler/create! "class2" opts)
@@ -108,9 +108,9 @@
         class2 (db/entity [:block/name "class2"])
         class3 (db/entity [:block/name "class3"])
         _ (db/transact! [{:db/id (:db/id class2)
-                          :block/namespace (:db/id class1)}
+                          :class/parent (:db/id class1)}
                          {:db/id (:db/id class3)
-                          :block/namespace (:db/id class2)}])]
+                          :class/parent (:db/id class2)}])]
     (is
-     (= (model/get-namespace-children repo (:db/id (db/entity [:block/name "class1"])))
+     (= (model/get-class-children repo (:db/id (db/entity [:block/name "class1"])))
         [(:db/id class2) (:db/id class3)]))))
