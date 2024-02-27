@@ -2080,12 +2080,11 @@
                    :else
                    true)]
 
-    (when has-unsaved-edits
-      (ui-outliner-tx/transact!
-       {:outliner-op :save-block}
-       (outliner-save-block! editing-block)))
-
-    (p/let [result (ui-outliner-tx/transact!
+    (p/let [_ (when has-unsaved-edits
+                (ui-outliner-tx/transact!
+                 {:outliner-op :save-block}
+                 (outliner-save-block! editing-block)))
+            result (ui-outliner-tx/transact!
                     {:outliner-op :insert-blocks
                      :additional-tx revert-cut-txs}
                     (when target-block'

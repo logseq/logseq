@@ -5,7 +5,8 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.handler.block :as block-handler]))
 
 (defn did-mount!
   [state]
@@ -30,7 +31,13 @@
   state)
 
 (defn will-remount!
-  [_old-state state]
+  [old-state state]
+  (let [old-block (:block (first (:rum/args old-state)))
+        new-block (:block (first (:rum/args state)))
+        repo (state/get-current-repo)]
+    (when (not= (:block/content old-block) (:block/content new-block))
+      (util/set-change-value (state/get-input)
+                             (block-handler/sanity-block-content repo (get new-block :block/format :markdown) (:block/content new-block)))))
   (keyboards-handler/esc-save! state)
   state)
 
