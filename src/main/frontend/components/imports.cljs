@@ -186,34 +186,6 @@
           (recur))
         true))))
 
-(defn- import-logseq-files
-  [logseq-files]
-  (let [custom-css (first (filter #(= (:rpath %) "logseq/custom.css") logseq-files))
-        custom-js (first (filter #(= (:rpath %) "logseq/custom.js") logseq-files))]
-    (p/do!
-     (some-> (:file-object custom-css)
-             (.text)
-             (p/then #(db-editor-handler/save-file! "logseq/custom.css" %)))
-     (some-> (:file-object custom-js)
-             (.text)
-             (p/then #(db-editor-handler/save-file! "logseq/custom.js" %))))))
-
-(defn- import-config-file!
-  [{:keys [file-object]}]
-  (-> (.text file-object)
-      (p/then (fn [content]
-                (let [migrated-content (repo-handler/migrate-db-config content)]
-                  (p/do!
-                   (db-editor-handler/save-file! "logseq/config.edn" migrated-content))
-                  ;; Return original config as import process depends on original config e.g. :hidden
-                  (edn/read-string content))))
-      (p/catch (fn [err]
-                 (log/error :import-config-file err)
-                 (notification/show! "Import may have mistakes due to an invalid config.edn. Recommend re-importing with a valid config.edn"
-                                     :warning
-                                     false)
-                 (edn/read-string config/config-default-content)))))
-
 (defn- build-hidden-favorites-page-blocks
   [page-block-uuid-coll]
   (map
@@ -357,6 +329,15 @@
                             :warning false))
       (log/info :import-valid {:msg "Valid import!"
                                :counts (assoc (counts-from-entities entities) :datoms datom-count)}))))
+
+(defn- show-notification [{:keys [msg level ex-data]}]
+  (if (= :error level)
+    (do
+      (notification/show! msg :error)
+      (when ex-data
+        (log/error :import-error ex-data)))
+    (notification/show! msg :warning false)))
+
 (defn- import-file-graph
   [*files {:keys [graph-name tag-classes property-classes]} config-file]
   (state/set-state! :graph/importing :file-graph)
@@ -366,7 +347,14 @@
           _ (async/<! (p->c (repo-handler/new-db! graph-name {:file-graph-import? true})))
           repo (state/get-current-repo)
           db-conn (db/get-db repo false)
-          config (async/<! (p->c (import-config-file! config-file)))
+          <read-file (fn [file] (.text (:file-object file)))
+          config (async/<! (p->c (gp-exporter/import-config-file!
+                                  repo config-file <read-file
+                                  {:notify-user show-notification
+                                   :default-config config/config-default-content
+                                   :<save-file (fn [_ path content]
+                                                 (let [migrated-content (repo-handler/migrate-db-config content)]
+                                                   (db-editor-handler/save-file! path migrated-content)))})))
           files (common-config/remove-hidden-files *files config :rpath)
           logseq-file? #(string/starts-with? (:rpath %) "logseq/")
           doc-files (->> files
@@ -379,21 +367,20 @@
                            config
                            {:tag-classes (set (string/split tag-classes #",\s*"))
                             :property-classes (set (string/split property-classes #",\s*"))}
-                           {:macros (state/get-macros)
-                            :notify-user #(if (= :error (:level %))
-                                            (do
-                                              (notification/show! (:msg %) :error)
-                                              (when (:ex-data %)
-                                                (log/error :import-error (:ex-data %))))
-                                            (notification/show! (:msg %) :warning false))})
+                           {:macros (:macros config)
+                            :notify-user show-notification})
                           {:set-ui-state state/set-state!
                            ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
                            :import-file (fn import-file [conn m opts]
                                           (let [tx-report
-                                                  (gp-exporter/add-file-to-db-graph conn (:file/path m) (:file/content m) opts)]
-                                              (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report))))})
-          <read-file (fn [file] (.text (:file-object file)))]
-      (async/<! (p->c (import-logseq-files (filter logseq-file? files))))
+                                                (gp-exporter/add-file-to-db-graph conn (:file/path m) (:file/content m) opts)]
+                                            (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report))))})]
+      (async/<! (p->c (gp-exporter/import-logseq-files (state/get-current-repo)
+                                                       (filter logseq-file? files)
+                                                       <read-file
+                                                       {:<save-file (fn [_ path content]
+                                                                      (db-editor-handler/save-file! path content))
+                                                        :notify-user show-notification})))
       (async/<! (import-from-asset-files! asset-files))
       (async/<! (p->c (gp-exporter/import-from-doc-files! db-conn doc-files <read-file import-options)))
       (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))

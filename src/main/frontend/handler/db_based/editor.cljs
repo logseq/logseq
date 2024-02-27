@@ -110,15 +110,16 @@
                       true)]
 
     (when file-valid?
-      (db/transact! [{:file/path path
-                      :file/content content
-                      :file/last-modified-at (js/Date.)}])
+      (p/do!
+       (db/transact! [{:file/path path
+                       :file/content content
+                       :file/last-modified-at (js/Date.)}])
       ;; Post save
-      (cond (= path "logseq/config.edn")
-            (p/let [_ (repo-config-handler/restore-repo-config! (state/get-current-repo) content)]
-              (state/pub-event! [:shortcut/refresh]))
-            (= path "logseq/custom.css")
-            (ui-handler/add-style-if-exists!)))))
+       (cond (= path "logseq/config.edn")
+             (p/let [_ (repo-config-handler/restore-repo-config! (state/get-current-repo) content)]
+               (state/pub-event! [:shortcut/refresh]))
+             (= path "logseq/custom.css")
+             (ui-handler/add-style-if-exists!))))))
 
 (defn- set-heading-aux!
   [block-id heading]
