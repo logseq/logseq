@@ -97,7 +97,7 @@
                                 (shui/popup-hide! id)
                                 (when-let [toggle (:toggle-fn opts)]
                                   (toggle)))))}))]
-      [:a.w-fit
+      [:a.w-fit.flex.items-center
        {:tabIndex      "0"
         ;; meta-click or just click in publishing to navigate to date's page
         :on-click      (if config/publishing?
@@ -113,7 +113,7 @@
        [:span.inline-flex.items-center
         (when title
           (when-not multiple-values? [:span.mr-1 title]))
-        (when-not title (ui/icon "calendar" {:size 15}))]])))
+        (when-not title (ui/icon "calendar" {:size 16}))]])))
 
 
 (rum/defc property-value-date-picker

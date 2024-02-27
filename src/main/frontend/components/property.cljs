@@ -148,27 +148,29 @@
      [:div.grid.gap-2.p-1
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Name:"]
-       [:input.form-input.col-span-2
-        {:on-change #(reset! *property-name (util/evalue %))
-         :on-blur save-property-fn
-         :on-key-press (fn [e]
-                         (when (= "Enter" (util/ekey e))
-                           (save-property-fn)))
-         :disabled disabled?
-         :default-value @*property-name}]]
+       (shui/input
+         {:class         "col-span-2 !px-2 !py-0 !h-8"
+          :on-change     #(reset! *property-name (util/evalue %))
+          :on-blur       save-property-fn
+          :on-key-press  (fn [e]
+                           (when (= "Enter" (util/ekey e))
+                             (save-property-fn)))
+          :disabled      disabled?
+          :default-value @*property-name})]
 
       [:div.grid.grid-cols-4.gap-1.items-center.leading-8
        [:label.col-span-1 "Icon:"]
        (let [icon-value (pu/get-block-property-value property :icon)]
          [:div.col-span-3.flex.flex-row.items-center.gap-2
           (icon-component/icon-picker icon-value
-                                      {:disabled? disabled?
-                                       :on-chosen (fn [_e icon]
-                                                    (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-                                                      (db-property-handler/update-property!
-                                                       (state/get-current-repo)
-                                                       (:block/uuid property)
-                                                       {:properties {icon-property-id icon}})))})
+            {:disabled? disabled?
+             :on-chosen (fn [_e icon]
+                          (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
+                            (db-property-handler/update-property!
+                              (state/get-current-repo)
+                              (:block/uuid property)
+                              {:properties {icon-property-id icon}})))})
+
           (when (and icon-value (not disabled?))
             [:a.fade-link.flex {:on-click (fn [_e]
                                             (db-property-handler/remove-block-property!
@@ -223,11 +225,12 @@
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
          [:label "Multiple values:"]
          (let [many? (boolean (= :many (:cardinality @*property-schema)))]
-           (ui/checkbox {:checked many?
-                         :disabled disabled?
-                         :on-change (fn []
-                                      (swap! *property-schema assoc :cardinality (if many? :one :many))
-                                      (save-property-fn))}))])
+           (shui/checkbox
+             {:checked           many?
+              :disabled          disabled?
+              :on-checked-change (fn []
+                                   (swap! *property-schema assoc :cardinality (if many? :one :many))
+                                   (save-property-fn))}))])
 
       (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :classes)
         (case (:type @*property-schema)
@@ -285,11 +288,12 @@
       (let [hide? (:hide? @*property-schema)]
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
          [:label "Hide by default:"]
-         (ui/checkbox {:checked hide?
-                       :disabled disabled?
-                       :on-change (fn []
-                                    (swap! *property-schema assoc :hide? (not hide?))
-                                    (save-property-fn))})])
+         (shui/checkbox
+           {:checked           hide?
+            :disabled          disabled?
+            :on-checked-change (fn []
+                                 (swap! *property-schema assoc :hide? (not hide?))
+                                 (save-property-fn))})])
 
       [:div.grid.grid-cols-4.gap-1.items-start.leading-8
        [:label "Description:"]
@@ -297,29 +301,29 @@
         (if (and disabled? inline-text)
           (inline-text {} :markdown (:description @*property-schema))
           [:div.mt-1
-           (ui/ls-textarea
-            {:on-change (fn [e]
-                          (swap! *property-schema assoc :description (util/evalue e)))
-             :on-blur save-property-fn
-             :disabled disabled?
-             :default-value (:description @*property-schema)})])]]
+           (shui/textarea
+             {:on-change     (fn [e]
+                               (swap! *property-schema assoc :description (util/evalue e)))
+              :on-blur       save-property-fn
+              :disabled      disabled?
+              :default-value (:description @*property-schema)})])]]
 
       (when-not hide-delete?
-        [:hr])
-
-      (when-not hide-delete?
-        [:a.fade-link {:on-click (fn [e]
-                                   (util/stop e)
-                                   (when (or (not (and class? class-schema?))
-                                             ;; Only ask for confirmation on class schema properties
-                                             (js/confirm "Are you sure you want to delete this property?"))
-                                     (let [repo (state/get-current-repo)
-                                           f (if (and class? class-schema?)
-                                               db-property-handler/class-remove-property!
-                                               property-handler/remove-block-property!)]
-                                       (f repo (:block/uuid block) (:block/uuid property))
-                                       (when toggle-fn (toggle-fn)))))}
-         "Delete property from this block"])]]))
+        (shui/button
+          {:variant :secondary
+           :class "mt-4 hover:text-red-700"
+           :on-click (fn [e]
+                       (util/stop e)
+                       (when (or (not (and class? class-schema?))
+                               ;; Only ask for confirmation on class schema properties
+                               (js/confirm "Are you sure you want to delete this property?"))
+                         (let [repo (state/get-current-repo)
+                               f (if (and class? class-schema?)
+                                   db-property-handler/class-remove-property!
+                                   property-handler/remove-block-property!)]
+                           (f repo (:block/uuid block) (:block/uuid property))
+                           (when toggle-fn (toggle-fn)))))}
+          "Delete property from this block"))]]))
 
 (defn- get-property-from-db [name]
   (when-not (string/blank? name)
@@ -548,17 +552,17 @@
                             (.preventDefault e)))
          :on-click      (fn [^js e]
                           (shui/popup-show! (.-target e)
-                                            (fn [{:keys [id]}]
-                                              [:div.p-2
-                                               [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
-                                               (property-config block property
-                                                                {:inline-text inline-text
-                                                                 :page-cp page-cp
-                                                                 :class-schema? class-schema?
-                                                                 :toggle-fn #(shui/popup-hide! id)})])
-                                            {:content-props {:class "property-configure-popup-content"
-                                                             :align "start"}
-                                             :as-menu? true}))}
+                            (fn [{:keys [id]}]
+                              [:div.p-2
+                               [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
+                               (property-config block property
+                                 {:inline-text   inline-text
+                                  :page-cp       page-cp
+                                  :class-schema? class-schema?
+                                  :toggle-fn     #(shui/popup-hide! id)})])
+                            {:content-props {:class "property-configure-popup-content"
+                                             :align "start"}
+                             :as-menu?      true}))}
         [:div {:style {:padding-left 6}} (:block/original-name property)]])]))
 
 (defn- resolve-linked-block-if-exists
