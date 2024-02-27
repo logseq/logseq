@@ -1,7 +1,7 @@
 (ns frontend.components.settings
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
-            [logseq.shui.ui :as shui-ui]
+            [logseq.shui.ui :as shui]
             [frontend.colors :as colors]
             [frontend.components.assets :as assets]
             [frontend.components.file-sync :as fs]
@@ -163,12 +163,12 @@
    [:div.mt-1.sm:mt-0.sm:col-span-2.flex.items-center
     {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
     [:div {:style (when stretch {:width "100%"})}
-     (if action action (shui-ui/button
-                         {:as-child (not (string/blank? href))
-                          :size     :sm
-                          :on-click on-click}
-                         (if (string/blank? href) button-label
-                           (shui-ui/link {:href href} button-label))))]
+     (if action action (shui/button
+                        {:as-child (not (string/blank? href))
+                         :size     :sm
+                         :on-click on-click}
+                        (if (string/blank? href) button-label
+                            (shui/link {:href href} button-label))))]
     (when-not (or (util/mobile?)
                   (mobile-util/native-platform?))
       [:div.text-sm.flex desc])]])
@@ -340,27 +340,27 @@
                                 none? (= color :none)]]
                       [:div.flex.items-center {:style {:height 28}}
                        (ui/tippy
-                         {:html (case color
-                                  :none [:p {:style {:max-width "300px"}}
-                                         "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."]
-                                  :logseq "Logseq classical color"
-                                  (str (name color) " color") )
-                          :delay [1000, 100]}
-                         (shui-ui/button
-                           {:class      "w-5 h-5 px-1 rounded-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"
-                            :auto-focus (and _in-modal? active?)
-                            :style      {:background-color (colors/variable color :09)
-                                         :outline-color    (colors/variable color (if active? :07 :06))
-                                         :outline-width    (if active? "4px" "1px")
-                                         :outline-style    :solid
-                                         :opacity          (if active? 1 0.5)}
-                            :variant    :text
-                            :on-click   (fn [_e] (state/set-color-accent! color))}
-                           [:strong
-                            {:class (if none? "h-0.5 w-full bg-red-700"
-                                              "w-2 h-2 rounded-full transition ease-in duration-100")
-                             :style {:background-color (if-not none? (str "var(--rx-" (name color) "-07)") "")
-                                     :opacity          (if (or none? active?) 1 0)}}]))
+                        {:html (case color
+                                 :none [:p {:style {:max-width "300px"}}
+                                        "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."]
+                                 :logseq "Logseq classical color"
+                                 (str (name color) " color"))
+                         :delay [1000, 100]}
+                        (shui/button
+                         {:class      "w-5 h-5 px-1 rounded-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"
+                          :auto-focus (and _in-modal? active?)
+                          :style      {:background-color (colors/variable color :09)
+                                       :outline-color    (colors/variable color (if active? :07 :06))
+                                       :outline-width    (if active? "4px" "1px")
+                                       :outline-style    :solid
+                                       :opacity          (if active? 1 0.5)}
+                          :variant    :text
+                          :on-click   (fn [_e] (state/set-color-accent! color))}
+                         [:strong
+                          {:class (if none? "h-0.5 w-full bg-red-700"
+                                      "w-2 h-2 rounded-full transition ease-in duration-100")
+                           :style {:background-color (if-not none? (str "var(--rx-" (name color) "-07)") "")
+                                   :opacity          (if (or none? active?) 1 0)}}]))
                        ])]]
 
     [:<>

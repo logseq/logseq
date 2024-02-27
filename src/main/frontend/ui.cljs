@@ -37,8 +37,8 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.shui.core :as shui]
-            [logseq.shui.ui :as shui-ui]))
+            [logseq.shui.core :as shui-core]
+            [logseq.shui.ui :as shui]))
 
 (declare icon)
 
@@ -196,7 +196,7 @@
                        (string/split #" "))
                    sequence)]
     [:span.keyboard-shortcut
-     (shui/shortcut sequence opts)]))
+     (shui-core/shortcut sequence opts)]))
 
 (rum/defc menu-link
   [{:keys [only-child? no-padding? class shortcut] :as options} child]
@@ -1026,7 +1026,7 @@
              :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
              :on-tweet-load-success #(reset! *loading? false)})]]))
 
-(def icon shui/icon)
+(def icon shui-core/icon)
 
 (rum/defc button-inner
   [text & {:keys [theme background variant href size class intent small? icon icon-props disabled? button-props]
@@ -1051,10 +1051,10 @@
                       :muted   disabled?}
                 button-props)
 
-        icon (when icon (shui-ui/tabler-icon icon icon-props))
+        icon (when icon (shui/tabler-icon icon icon-props))
         children [icon text]]
 
-    (shui-ui/button props children)))
+    (shui/button props children)))
 
 (defn button
   [text & {:keys []

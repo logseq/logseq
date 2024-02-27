@@ -36,6 +36,7 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [logseq.common.config :as common-config]
+            [logseq.shui.ui :as shui]
             [lambdaisland.glogi :as log]
             [logseq.db.frontend.validate :as db-validate]))
 
@@ -242,14 +243,15 @@
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.leading-6.font-medium
         "New graph name:"]]]
-     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
-      {:auto-focus true
+     (shui/input
+      {:class "my-2 mb-4"
+       :auto-focus true
        :default-value graph-input
        :on-change (fn [e]
                     (set-graph-input! (util/evalue e)))
        :on-key-down (fn [e]
                       (when (= "Enter" (util/ekey e))
-                        (on-submit)))}]
+                        (on-submit)))})
 
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
@@ -257,13 +259,14 @@
         "(Optional) Tags to import as tag classes:"]
        [:span.text-xs
         "Tags are case insensitive and separated by commas"]]]
-     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
-      {:default-value tag-classes-input
+     (shui/input
+      {:class "my-2 mb-4"
+       :default-value tag-classes-input
        :on-change (fn [e]
                     (set-tag-classes-input! (util/evalue e)))
        :on-key-down (fn [e]
                       (when (= "Enter" (util/ekey e))
-                        (on-submit)))}]
+                        (on-submit)))})
 
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
@@ -271,17 +274,16 @@
         "(Optional) Properties whose values are imported as tag classes e.g. 'type':"]
        [:span.text-xs
         "Properties are case insensitive and separated by commas"]]]
-     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
-      {:default-value property-classes-input
+     (shui/input
+      {:class "my-2 mb-4"
+       :default-value property-classes-input
        :on-change (fn [e]
                     (set-property-classes-input! (util/evalue e)))
        :on-key-down (fn [e]
                       (when (= "Enter" (util/ekey e))
-                        (on-submit)))}]
+                        (on-submit)))})
 
-     [:div.mt-5.sm:mt-4.flex
-      (ui/button "Submit"
-                 {:on-click on-submit})]]))
+     (shui/button {:on-click on-submit} "Submit")]))
 
 (defn- counts-from-entities
   [entities]
@@ -341,7 +343,7 @@
 (defn- import-file-graph
   [*files {:keys [graph-name tag-classes property-classes]} config-file]
   (state/set-state! :graph/importing :file-graph)
-  (state/set-state! [:graph/importing-state :current-page] (str graph-name " Assets"))
+  (state/set-state! [:graph/importing-state :current-page] "Config files")
   (async/go
     (let [start-time (t/now)
           _ (async/<! (p->c (repo-handler/new-db! graph-name {:file-graph-import? true})))
@@ -381,6 +383,7 @@
                                                        {:<save-file (fn [_ path content]
                                                                       (db-editor-handler/save-file! path content))
                                                         :notify-user show-notification})))
+      (state/set-state! [:graph/importing-state :current-page] "Asset files")
       (async/<! (import-from-asset-files! asset-files))
       (async/<! (p->c (gp-exporter/import-from-doc-files! db-conn doc-files <read-file import-options)))
       (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))

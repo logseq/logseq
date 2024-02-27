@@ -37,7 +37,7 @@
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [logseq.shui.ui :as shui-ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
@@ -532,8 +532,8 @@
                    ;; blocks
                    (if loading?
                      [:div.space-y-2
-                      (shui-ui/skeleton {:class "h-6 w-full"})
-                      (shui-ui/skeleton {:class "h-6 w-full"})]
+                      (shui/skeleton {:class "h-6 w-full"})
+                      (shui/skeleton {:class "h-6 w-full"})]
                      (let [_ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
                            _ (when (and block? (not page))
                                (route-handler/redirect-to-page! @*current-block-page))]

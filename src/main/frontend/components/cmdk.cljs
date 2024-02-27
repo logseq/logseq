@@ -17,8 +17,8 @@
    [frontend.util.page :as page-util]
    [goog.functions :as gfun]
    [goog.object :as gobj]
-   [logseq.shui.core :as shui]
-   [logseq.shui.ui :as shui-ui]
+   [logseq.shui.core :as shui-core]
+   [logseq.shui.ui :as shui]
    [promesa.core :as p]
    [rum.core :as rum]
    [frontend.mixins :as mixins]
@@ -598,15 +598,15 @@
           (if (= show :more)
             [:div.flex.flex-row.gap-1.items-center
              "Show less"
-             (shui/shortcut "mod up" nil)]
+             (shui-core/shortcut "mod up" nil)]
             [:div.flex.flex-row.gap-1.items-center
              "Show more"
-             (shui/shortcut "mod down" nil)])])]
+             (shui-core/shortcut "mod down" nil)])])]
 
       [:div.search-results
        (for [item visible-items
              :let [highlighted? (= item highlighted-item)]]
-         (let [item (shui/list-item (assoc item
+         (let [item (shui-core/list-item (assoc item
                                            :query (when-not (= group :create) @(::input state))
                                            :compact true
                                            :rounded false
@@ -776,10 +776,10 @@
   (rand-nth
    [[:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
      [:div "Type"]
-     (shui/shortcut "/")
+     (shui-core/shortcut "/")
      [:div "to filter search results"]]
     [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
-     (shui/shortcut ["mod" "enter"])
+     (shui-core/shortcut ["mod" "enter"])
      [:div "to open search in the sidebar"]]]))
 
 (rum/defcs tip <
@@ -791,7 +791,7 @@
       filter
       [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
        [:div "Type"]
-       (shui/shortcut "esc" {:tiled false})
+       (shui-core/shortcut "esc" {:tiled false})
        [:div "to clear search filter"]]
 
       :else
@@ -799,24 +799,24 @@
 
 (rum/defc hint-button
   [text shortcut opts]
-  (shui-ui/button
-    (merge {:class "hint-button [&>span:first-child]:hover:opacity-100 opacity-40 hover:opacity-80"
-            :variant :ghost
-            :size  :sm}
-      opts)
-    [[:span.opacity-60 text]
+  (shui/button
+   (merge {:class "hint-button [&>span:first-child]:hover:opacity-100 opacity-40 hover:opacity-80"
+           :variant :ghost
+           :size  :sm}
+          opts)
+   [[:span.opacity-60 text]
      ;; shortcut
-     (when (not-empty shortcut)
-       (for [key shortcut]
-         [:div.ui__button-shortcut-key
-          (case key
-            "cmd" [:div (if goog.userAgent/MAC "⌘" "Ctrl")]
-            "shift" [:div "⇧"]
-            "return" [:div "⏎"]
-            "esc" [:div.tracking-tightest {:style {:transform   "scaleX(0.8) scaleY(1.2) "
-                                                   :font-size   "0.5rem"
-                                                   :font-weight "500"}} "ESC"]
-            (cond-> key (string? key) .toUpperCase))]))]))
+    (when (not-empty shortcut)
+      (for [key shortcut]
+        [:div.ui__button-shortcut-key
+         (case key
+           "cmd" [:div (if goog.userAgent/MAC "⌘" "Ctrl")]
+           "shift" [:div "⇧"]
+           "return" [:div "⏎"]
+           "esc" [:div.tracking-tightest {:style {:transform   "scaleX(0.8) scaleY(1.2) "
+                                                  :font-size   "0.5rem"
+                                                  :font-weight "500"}} "ESC"]
+           (cond-> key (string? key) .toUpperCase))]))]))
 
 (rum/defc hints
   [state]
@@ -863,13 +863,13 @@
   [:div.flex.flex-row.gap-1.items-center
    [:div "Search only:"]
    [:div group-name]
-   (shui-ui/button
-     {:variant  :ghost
-      :size     :icon
-      :class    "p-1 scale-75"
-      :on-click (fn []
-                  (reset! (::filter state) nil))}
-     (shui-ui/tabler-icon "x"))])
+   (shui/button
+    {:variant  :ghost
+     :size     :icon
+     :class    "p-1 scale-75"
+     :on-click (fn []
+                 (reset! (::filter state) nil))}
+    (shui/tabler-icon "x"))])
 
 (rum/defcs cmdk < rum/static
   rum/reactive

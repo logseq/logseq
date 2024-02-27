@@ -14,7 +14,7 @@
             [frontend.ui :as ui]
             [frontend.state :as state]
             [rum.core :as rum]
-            [logseq.shui.ui :as shui-ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [clojure.set :as set]
             [clojure.string :as string]))
@@ -147,13 +147,13 @@
      (for [mode modes]
        (let [mode' (keyword (string/lower-case mode))
              selected? (and (= mode' current-mode) (> (count modes) 1))]
-         (shui-ui/button {:class (when-not selected? "opacity-70")
-                          :variant (if selected? :outline :ghost)
-                          :size :sm
-                          :on-click (fn [e]
-                                      (util/stop-propagation e)
-                                      (reset! *mode mode'))}
-                         mode)))]))
+         (shui/button {:class (when-not selected? "opacity-70")
+                       :variant (if selected? :outline :ghost)
+                       :size :sm
+                       :on-click (fn [e]
+                                   (util/stop-propagation e)
+                                   (reset! *mode mode'))}
+                      mode)))]))
 
 (rum/defcs page-info < rum/reactive
   (rum/local false ::hover?)
@@ -211,7 +211,7 @@
                 (mode-switch types *mode)])]
             (when (or @*hover? (not collapsed?))
               [:div.px-1
-               (shui-ui/button
+               (shui/button
                 {:variant :ghost :size :sm :class "fade-link"}
                 (if collapsed?
                   [:span.text-xs.font-normal "Configure"]
