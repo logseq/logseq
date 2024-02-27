@@ -110,6 +110,18 @@
     "Text"
     ((comp string/capitalize name) property-type)))
 
+(defn- handle-delete-property!
+  [block property & {:keys [class? class-schema?]}]
+  (let [class? (or class? (some-> block :block/type (contains? "class")))]
+    (when (or (not (and class? class-schema?))
+            ;; Only ask for confirmation on class schema properties
+            (js/confirm "Are you sure you want to delete this property?"))
+      (let [repo (state/get-current-repo)
+            f (if (and class? class-schema?)
+                db-property-handler/class-remove-property!
+                property-handler/remove-block-property!)]
+        (f repo (:block/uuid block) (:block/uuid property))))))
+
 (rum/defcs ^:large-vars/cleanup-todo property-config
   "All changes to a property must update the db and the *property-schema. Failure to do
    so can result in data loss"
@@ -314,15 +326,8 @@
            :class "mt-4 hover:text-red-700"
            :on-click (fn [e]
                        (util/stop e)
-                       (when (or (not (and class? class-schema?))
-                               ;; Only ask for confirmation on class schema properties
-                               (js/confirm "Are you sure you want to delete this property?"))
-                         (let [repo (state/get-current-repo)
-                               f (if (and class? class-schema?)
-                                   db-property-handler/class-remove-property!
-                                   property-handler/remove-block-property!)]
-                           (f repo (:block/uuid block) (:block/uuid property))
-                           (when toggle-fn (toggle-fn)))))}
+                       (handle-delete-property! block property {:class? class? :class-schema? class-schema?})
+                       (when toggle-fn (toggle-fn)))}
           "Delete property from this block"))]]))
 
 (defn- get-property-from-db [name]
@@ -503,9 +508,27 @@
   [state block property {:keys [class-schema? block? collapsed? page-cp inline-text]}]
   (let [*hover? (::hover? state)
         repo (state/get-current-repo)
-        icon (pu/get-block-property-value property :icon)]
-    [:div.flex.flex-row.items-center {:on-mouse-over #(reset! *hover? true)
-                                      :on-mouse-leave #(reset! *hover? false)}
+        icon (pu/get-block-property-value property :icon)
+        property-name (:block/original-name property)]
+    [:div.flex.flex-row.items-center
+     {:on-mouse-over   #(reset! *hover? true)
+      :on-mouse-leave  #(reset! *hover? false)
+      :on-context-menu (fn [^js e]
+                         (shui/popup-show! e
+                           [(shui/dropdown-menu-item
+                              {:on-click (fn []
+                                           (when-let [schema (some-> property :block/schema)]
+                                             (components-pu/update-property! property property-name (assoc schema :hide? true))
+                                             (shui/popup-hide!)))}
+                              "Hide property")
+                            (shui/dropdown-menu-item
+                              {:on-click (fn []
+                                           (handle-delete-property! block property {:class-schema? class-schema?})
+                                           (shui/popup-hide!))}
+                              [:span.w-full.text-red-rx-07.hover:text-red-rx-09
+                               "Delete property"])]
+                           {:as-menu?      true
+                            :content-props {:class "w-48"}}))}
      (when block?
        [:a.block-control
         {:on-click (fn [event]
@@ -519,32 +542,32 @@
          (ui/rotating-arrow collapsed?)]])
 
      (ui/dropdown
-      (fn [{:keys [toggle-fn]}]
-        [:button.flex {:on-click toggle-fn}
-         (if icon
-           (icon-component/icon icon)
-           [:span.bullet-container.cursor (when collapsed? {:class "bullet-closed"})
-            [:span.bullet]])])
-      (fn [{:keys [toggle-fn]}]
-        [:div.p-4
-         (icon-component/icon-search
-          {:on-chosen
-           (fn [_e icon]
-             (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-               (when icon
-                 (db-property-handler/update-property! repo
-                                                       (:block/uuid property)
-                                                       {:properties {icon-property-id icon}})
-                 (toggle-fn))))})])
-      {:modal-class (util/hiccup->class
-                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
+       (fn [{:keys [toggle-fn]}]
+         [:button.flex {:on-click toggle-fn}
+          (if icon
+            (icon-component/icon icon)
+            [:span.bullet-container.cursor (when collapsed? {:class "bullet-closed"})
+             [:span.bullet]])])
+       (fn [{:keys [toggle-fn]}]
+         [:div.p-4
+          (icon-component/icon-search
+            {:on-chosen
+             (fn [_e icon]
+               (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
+                 (when icon
+                   (db-property-handler/update-property! repo
+                     (:block/uuid property)
+                     {:properties {icon-property-id icon}})
+                   (toggle-fn))))})])
+       {:modal-class (util/hiccup->class
+                       "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
 
      (if config/publishing?
        [:a.property-k
         {:on-click #(route-handler/redirect-to-page! (:block/name property))}
         [:div {:style {:padding-left 6}} (:block/original-name property)]]
 
-       [:a.property-k
+       [:a.property-k.select-none
         {:title         (str "Configure property: " (:block/original-name property))
          :on-mouse-down (fn [^js e]
                           (when (util/meta-key? e)
