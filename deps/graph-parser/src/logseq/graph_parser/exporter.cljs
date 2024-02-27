@@ -12,6 +12,7 @@
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.common.util.macro :as macro-util]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (defn- get-pid
@@ -517,8 +518,8 @@
 
 (defn import-from-doc-files!
   [conn *doc-files <read-file {:keys [notify-user set-ui-state]
-                                      :or {set-ui-state (constantly nil) notify-user prn}
-                                      :as import-options}]
+                               :or {set-ui-state (constantly nil) notify-user prn}
+                               :as import-options}]
   (set-ui-state [:graph/importing-state :total] (count *doc-files))
   (let [doc-files (mapv #(assoc %1 :idx %2) *doc-files (range 0 (count *doc-files)))]
     (-> (p/loop [_file-map (import-doc-file (get doc-files 0) conn <read-file import-options)
@@ -529,3 +530,39 @@
         (p/catch (fn [e]
                    (notify-user {:msg (str "Import has unexpected error:\n" e)
                                  :level :error}))))))
+
+(defn- default-save-file [conn path content]
+  (ldb/transact! conn [{:file/path path
+                        :file/content content
+                        :file/last-modified-at (js/Date.)}]))
+
+(defn import-logseq-files
+  [repo-or-conn logseq-files <read-file {:keys [<save-file notify-user]
+                                         :or {<save-file default-save-file}}]
+  (let [custom-css (first (filter #(string/ends-with? (:rpath %) "logseq/custom.css") logseq-files))
+        custom-js (first (filter #(string/ends-with? (:rpath %) "logseq/custom.js") logseq-files))]
+    (-> (p/do!
+         (when custom-css
+           (-> (<read-file custom-css)
+               (p/then #(<save-file repo-or-conn "logseq/custom.css" %))))
+         (when custom-js
+           (-> (<read-file custom-js)
+               (p/then #(<save-file repo-or-conn "logseq/custom.js" %)))))
+        (p/catch (fn [error]
+                   (notify-user {:msg (str "Import unexpectedly failed while reading logseq files:\n" error)
+                                 :level :error}))))))
+
+(defn import-config-file!
+  [repo-or-conn config-file <read-file {:keys [<save-file notify-user default-config]
+                                        :or {default-config {}
+                                             <save-file default-save-file}}]
+  (-> (<read-file config-file)
+      (p/then #(p/do!
+                (<save-file repo-or-conn "logseq/config.edn" %)
+                ;; Return original config as import process depends on original config e.g. :hidden
+                (edn/read-string %)))
+      (p/catch (fn [err]
+                 (notify-user {:msg "Import may have mistakes due to an invalid config.edn. Recommend re-importing with a valid config.edn"
+                               :level :error
+                               :ex-data {:error err}})
+                 (edn/read-string default-config)))))

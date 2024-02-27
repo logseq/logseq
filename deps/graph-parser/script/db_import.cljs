@@ -3,11 +3,9 @@
    developing the import feature and for engineers who want to customize
    the import process"
   (:require [clojure.string :as string]
-            [clojure.edn :as edn]
             [datascript.core :as d]
             ["path" :as node-path]
             ["os" :as os]
-            ["fs" :as fs]
             ["fs/promises" :as fsp]
             [nbb.core :as nbb]
             [babashka.cli :as cli]
@@ -28,32 +26,31 @@
 (defn- build-graph-files
   "Given a graph directory, return absolute, allowed file paths and their contents in preparation
    for parsing"
-  [dir* config]
+  [dir*]
   (let [dir (node-path/resolve dir*)]
     (->> (common-graph/get-files dir)
-         (mapv #(hash-map :rpath %))
-         (remove-hidden-files dir config))))
-
-(defn- read-config
-  "Reads repo-specific config from logseq/config.edn"
-  [dir]
-  (let [config-file (str dir "/" common-config/app-name "/config.edn")]
-    (if (fs/existsSync config-file)
-      (-> config-file fs/readFileSync str edn/read-string)
-      {})))
+         (mapv #(hash-map :rpath %)))))
 
 (defn- import-file-graph-to-db [file-graph-dir conn user-options]
-  (let [config (read-config file-graph-dir)
-        import-options (gp-exporter/setup-import-options
-                        @conn
-                        config
-                        user-options
-                        {:notify-user prn})
-        ;; TODO: Remove logseq/ filter when higher-level import fn is available
-        files (remove #(re-find #"logseq/" (:rpath %)) (build-graph-files file-graph-dir config))]
+  (p/let [*files (build-graph-files file-graph-dir)
+          config-file (first (filter #(string/ends-with? (:rpath %) "logseq/config.edn") *files))
+          _ (assert config-file "No 'logseq/config.edn' found for file graph dir")
+          <read-file #(p/let [s (fsp/readFile (:rpath %))] (str s))
+          ;; TODO: Add :default-config option
+          config (gp-exporter/import-config-file! conn config-file <read-file {:notify-user prn})
+          files (remove-hidden-files file-graph-dir config *files)
+          import-options (gp-exporter/setup-import-options
+                          @conn
+                          config
+                          user-options
+                          {:notify-user prn})
+          logseq-file? #(string/includes? (:rpath %) "logseq/")
+          doc-files (remove logseq-file? files)
+          logseq-files (filter logseq-file? files)]
     ;; (prn :files (count files) files)
-    (gp-exporter/import-from-doc-files!
-     conn files #(p/let [s (fsp/readFile (:rpath %))] (str s)) import-options)))
+    (p/do!
+     (gp-exporter/import-logseq-files conn logseq-files <read-file {:notify-user prn})
+     (gp-exporter/import-from-doc-files! conn doc-files <read-file import-options))))
 
 (def spec
   "Options spec"
