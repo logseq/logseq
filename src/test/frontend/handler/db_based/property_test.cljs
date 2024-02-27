@@ -240,7 +240,7 @@
     (let [k "property-1"
           property (db/entity [:block/name k])]
       (testing "Add existing values to closed values"
-        (db-property-handler/add-existing-values-to-closed-values! property [1 2])
+        (db-property-handler/<add-existing-values-to-closed-values! property [1 2])
         (let [values (get-value-ids k)]
           (is (every? uuid? values))
           (is (= #{1 2} (get-closed-values values)))

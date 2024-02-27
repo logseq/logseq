@@ -367,75 +367,83 @@
            :else
            nil))))})
 
-(rum/defc select < rum/reactive
-  [block property
+(rum/defcs select < rum/reactive
+  {:init (fn [state]
+           (let [*values (atom :loading)]
+             (p/let [result (db-async/<get-block-property-values (state/get-current-repo)
+                                                                 (:block/uuid (nth (:rum/args state) 1)))]
+               (reset! *values result))
+             (assoc state ::values *values)))}
+  [state block property
    {:keys [multiple-choices? dropdown?] :as opts}
    {:keys [*show-new-property-config?]}]
-  (let [schema (:block/schema property)
-        property (db/sub-block (:db/id property))
-        type (:type schema)
-        closed-values? (seq (:values schema))
-        items (if closed-values?
-                (keep (fn [id]
-                        (when-let [block (when id (db/entity [:block/uuid id]))]
-                          (let [icon (pu/get-block-property-value block :icon)
-                                value (or (:block/original-name block)
-                                          (get-in block [:block/schema :value]))]
-                            {:label (if icon
-                                      [:div.flex.flex-row.gap-2
-                                       (icon-component/icon icon)
-                                       value]
-                                      value)
-                             :value id}))) (:values schema))
-                (->> (model/get-block-property-values (:block/uuid property))
-                     (mapcat (fn [[_id value]]
-                               (if (coll? value)
-                                 (map (fn [v] {:value v}) value)
-                                 [{:value value}])))
-                     (distinct)))
-        items (->> (if (= :date type)
-                     (map (fn [m] (let [label (:block/original-name (db/entity [:block/uuid (:value m)]))]
-                                    (when label
-                                      (assoc m :label label)))) items)
-                     items)
-                   (remove nil?))
-        add-property-f #(<add-property! block (:block/original-name property) %)
-        on-chosen (fn [chosen]
-                    (p/do!
-                     (add-property-f (if (map? chosen) (:value chosen) chosen))
-                     (when-let [f (:on-chosen opts)] (f))))
-        selected-choices' (get-in block [:block/properties (:block/uuid property)])
-        selected-choices (if (coll? selected-choices') selected-choices' [selected-choices'])]
-    (select-aux block property
-                (cond->
-                 {:multiple-choices? multiple-choices?
-                  :items items
-                  :selected-choices selected-choices
-                  :dropdown? dropdown?
-                  :show-new-when-not-exact-match? (not closed-values?)
-                  :input-default-placeholder "Select"
-                  :extract-chosen-fn :value
-                  :input-opts (fn [_]
-                                {:on-blur (fn []
-                                            (exit-edit-property)
-                                            (when-let [f (:on-chosen opts)] (f)))
-                                 :on-click (fn []
-                                             (when *show-new-property-config?
-                                               (reset! *show-new-property-config? false)))
-                                 :on-key-down
-                                 (fn [e]
-                                   (case (util/ekey e)
-                                     "Escape"
-                                     (do
-                                       (exit-edit-property)
-                                       (when-let [f (:on-chosen opts)] (f)))
-                                     nil))})}
-                  closed-values?
-                  (assoc :extract-fn :label)
-                  multiple-choices?
-                  (assoc :on-apply on-chosen)
-                  (not multiple-choices?)
-                  (assoc :on-chosen on-chosen)))))
+  (let [values (rum/react (::values state))]
+    (when-not (= :loading values)
+      (let [schema (:block/schema property)
+            property (db/sub-block (:db/id property))
+            type (:type schema)
+            closed-values? (seq (:values schema))
+            items (if closed-values?
+                    (keep (fn [id]
+                            (when-let [block (when id (db/entity [:block/uuid id]))]
+                              (let [icon (pu/get-block-property-value block :icon)
+                                    value (or (:block/original-name block)
+                                              (get-in block [:block/schema :value]))]
+                                {:label (if icon
+                                          [:div.flex.flex-row.gap-2
+                                           (icon-component/icon icon)
+                                           value]
+                                          value)
+                                 :value id}))) (:values schema))
+                    (->> values
+                         (mapcat (fn [[_id value]]
+                                   (if (coll? value)
+                                     (map (fn [v] {:value v}) value)
+                                     [{:value value}])))
+                         (distinct)))
+            items (->> (if (= :date type)
+                         (map (fn [m] (let [label (:block/original-name (db/entity [:block/uuid (:value m)]))]
+                                        (when label
+                                          (assoc m :label label)))) items)
+                         items)
+                       (remove nil?))
+            add-property-f #(<add-property! block (:block/original-name property) %)
+            on-chosen (fn [chosen]
+                        (p/do!
+                         (add-property-f (if (map? chosen) (:value chosen) chosen))
+                         (when-let [f (:on-chosen opts)] (f))))
+            selected-choices' (get-in block [:block/properties (:block/uuid property)])
+            selected-choices (if (coll? selected-choices') selected-choices' [selected-choices'])]
+        (select-aux block property
+                    (cond->
+                     {:multiple-choices? multiple-choices?
+                      :items items
+                      :selected-choices selected-choices
+                      :dropdown? dropdown?
+                      :show-new-when-not-exact-match? (not closed-values?)
+                      :input-default-placeholder "Select"
+                      :extract-chosen-fn :value
+                      :input-opts (fn [_]
+                                    {:on-blur (fn []
+                                                (exit-edit-property)
+                                                (when-let [f (:on-chosen opts)] (f)))
+                                     :on-click (fn []
+                                                 (when *show-new-property-config?
+                                                   (reset! *show-new-property-config? false)))
+                                     :on-key-down
+                                     (fn [e]
+                                       (case (util/ekey e)
+                                         "Escape"
+                                         (do
+                                           (exit-edit-property)
+                                           (when-let [f (:on-chosen opts)] (f)))
+                                         nil))})}
+                      closed-values?
+                      (assoc :extract-fn :label)
+                      multiple-choices?
+                      (assoc :on-apply on-chosen)
+                      (not multiple-choices?)
+                      (assoc :on-chosen on-chosen)))))))
 
 (rum/defc property-normal-block-value
   [parent block-cp editor-box]

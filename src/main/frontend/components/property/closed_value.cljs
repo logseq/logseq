@@ -14,9 +14,9 @@
             [frontend.config :as config]
             [frontend.components.property.value :as property-value]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.state :as state]
             [frontend.handler.property.util :as pu]
-            [frontend.db.model :as model]
             [promesa.core :as p]))
 
 (defn- <upsert-closed-value!
@@ -169,9 +169,9 @@
    (ui/button
     "Add choices"
     {:on-click (fn []
-                 (let [closed-values (db-property-handler/add-existing-values-to-closed-values! property values)]
-                   (swap! *property-schema assoc :values closed-values))
-                 (toggle-fn))})])
+                 (p/let [closed-values (db-property-handler/<add-existing-values-to-closed-values! property values)]
+                   (swap! *property-schema assoc :values closed-values)
+                   (toggle-fn)))})])
 
 (rum/defc choices < rum/reactive
   [property *property-name *property-schema opts]
@@ -197,34 +197,36 @@
        (constantly [])
        [:a.fade-link.flex.flex-row.items-center.gap-1.leading-8
         {:on-click
-         #(shui/popup-show! %
-                            (fn [{:keys [id]}]
-                              (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}]
-                                (if (= :page property-type)
-                                  (property-value/select-page property
-                                                              {:multiple-choices? false
-                                                               :dropdown?         false
-                                                               :close-modal?      false
-                                                               :on-chosen         (fn [chosen]
-                                                                                    (p/let [closed-value (<upsert-closed-value! property {:value chosen})]
-                                                                                      (swap! *property-schema update :values (fnil conj []) closed-value)))})
-                                  (let [values (->> (model/get-block-property-values (:block/uuid property))
-                                                    (map second)
-                                                    (remove uuid?)
-                                                    (remove string/blank?)
-                                                    distinct)]
+         (fn [e]
+           (p/let [values (db-async/<get-block-property-values (state/get-current-repo) (:block/uuid property))]
+             (shui/popup-show! e
+                              (fn [{:keys [id]}]
+                                (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}]
+                                  (if (= :page property-type)
+                                    (property-value/select-page property
+                                                                {:multiple-choices? false
+                                                                 :dropdown?         false
+                                                                 :close-modal?      false
+                                                                 :on-chosen         (fn [chosen]
+                                                                                      (p/let [closed-value (<upsert-closed-value! property {:value chosen})]
+                                                                                        (swap! *property-schema update :values (fnil conj []) closed-value)))})
+                                    (let [values (->> values
+                                                      (map second)
+                                                      (remove uuid?)
+                                                      (remove string/blank?)
+                                                      distinct)]
 
-                                    (if (seq values)
-                                      (add-existing-values property *property-schema values opts)
-                                      (item-config
-                                       property
-                                       nil
-                                       (assoc opts :on-save
-                                              (fn [value icon description]
-                                                (p/let [closed-value (<upsert-closed-value! property {:value       value
-                                                                                                      :description description
-                                                                                                      :icon        icon})]
-                                                  (swap! *property-schema update :values (fnil conj []) closed-value))))))))))
-                            {:as-menu? true})}
+                                      (if (seq values)
+                                        (add-existing-values property *property-schema values opts)
+                                        (item-config
+                                         property
+                                         nil
+                                         (assoc opts :on-save
+                                                (fn [value icon description]
+                                                  (p/let [closed-value (<upsert-closed-value! property {:value       value
+                                                                                                        :description description
+                                                                                                        :icon        icon})]
+                                                    (swap! *property-schema update :values (fnil conj []) closed-value))))))))))
+                              {:as-menu? true})))}
         (ui/icon "plus" {:size 16})
         "Add choice"])]))

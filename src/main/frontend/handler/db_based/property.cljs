@@ -18,7 +18,9 @@
             [logseq.common.util.page-ref :as page-ref]
             [datascript.impl.entity :as e]
             [logseq.db.frontend.property :as db-property]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [promesa.core :as p]
+            [frontend.db.async :as db-async]))
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
@@ -265,9 +267,8 @@
                       (db/transact! repo tx-data {:outliner-op :save-block}))))))))))))
 
 (defn- fix-cardinality-many-values!
-  [repo property-uuid]
-  (let [ev (->> (model/get-block-property-values property-uuid)
-                (remove (fn [[_ v]] (coll? v))))
+  [repo property-uuid property-values]
+  (let [ev (remove (fn [[_ v]] (coll? v)) property-values)
         tx-data (map (fn [[e v]]
                        (let [entity (db/entity e)
                              properties (:block/properties entity)]
@@ -277,29 +278,29 @@
       (db/transact! repo tx-data
                     {:outliner-op :save-block}))))
 
-(defn- handle-cardinality-changes [repo property-uuid property property-schema]
+(defn- handle-cardinality-changes [repo property-uuid property property-schema property-values]
   ;; cardinality changed from :many to :one
   (if (and (= :one (:cardinality property-schema))
            (not= :one (:cardinality (:block/schema property))))
-    (when (seq (model/get-block-property-values property-uuid))
+    (when (seq property-values)
       (notification/show! "Can't change a property's multiple values back to single if a property is used anywhere" :error)
       ::skip-transact)
     ;; cardinality changed from :one to :many
     (when (and (= :many (:cardinality property-schema))
                (not= :many (:cardinality (:block/schema property))))
-      (fix-cardinality-many-values! repo property-uuid))))
+      (fix-cardinality-many-values! repo property-uuid property-values))))
 
-(defn update-property!
-  [repo property-uuid {:keys [property-name property-schema
-                              properties]}]
+(defn <update-property!
+  [repo property-uuid {:keys [property-name property-schema properties]}]
   {:pre [(uuid? property-uuid)]}
   (when-let [property (db/entity [:block/uuid property-uuid])]
-    (let [type (get-in property [:block/schema :type])
-          type-changed? (and type (:type property-schema) (not= type (:type property-schema)))]
+    (p/let [type (get-in property [:block/schema :type])
+            type-changed? (and type (:type property-schema) (not= type (:type property-schema)))
+            property-values (db-async/<get-block-property-values repo property-uuid)]
       (when (or (not type-changed?)
                 ;; only change type if property hasn't been used yet
-                (empty? (model/get-block-property-values property-uuid)))
-        (when (not= ::skip-transact (handle-cardinality-changes repo property-uuid property property-schema))
+                (empty? property-values))
+        (when (not= ::skip-transact (handle-cardinality-changes repo property-uuid property property-schema property-values))
           (let [tx-data (cond-> {:block/uuid property-uuid}
                           property-name (merge
                                          {:block/original-name property-name
@@ -732,44 +733,45 @@
             {:block-id block-id
              :tx-data tx-data}))))))
 
-(defn add-existing-values-to-closed-values!
+(defn <add-existing-values-to-closed-values!
   "Adds existing values as closed values and returns their new block uuids"
   [property values]
   (when (seq values)
-    (let [property-id (:block/uuid property)
-          property-schema (:block/schema property)
-          page (get-property-hidden-page property)
-          page-tx (when-not (e/entity? page) page)
-          page-id (:block/uuid page)
-          values' (remove string/blank? values)
-          closed-value-blocks (map (fn [value]
-                                     (db-property-util/build-closed-value-block
-                                      (db/new-block-id)
-                                      value
-                                      [:block/uuid page-id]
-                                      property
-                                      {}))
-                                values')
-          value->block-id (zipmap
-                           (map #(get-in % [:block/schema :value]) closed-value-blocks)
-                           (map :block/uuid closed-value-blocks))
-          new-value-ids (mapv :block/uuid closed-value-blocks)
-          property-tx {:db/id (:db/id property)
-                       :block/schema (assoc property-schema :values new-value-ids)}
-          block-values (->> (model/get-block-property-values (:block/uuid property))
-                            (remove #(uuid? (first %))))
-          tx-data (concat
-                   (when page-tx [page-tx])
-                   closed-value-blocks
-                   [property-tx]
-                   (map (fn [[id value]]
-                          (let [properties (:block/properties (db/entity id))]
-                            (if (string/blank? value) ; remove blank property values
-                              {:db/id id
-                               :block/properties (dissoc properties property-id)}
-                              {:db/id id
-                               :block/properties (assoc properties property-id (get value->block-id value))})))
-                        block-values))]
+    (p/let [property-id (:block/uuid property)
+            property-schema (:block/schema property)
+            page (get-property-hidden-page property)
+            page-tx (when-not (e/entity? page) page)
+            page-id (:block/uuid page)
+            values' (remove string/blank? values)
+            closed-value-blocks (map (fn [value]
+                                       (db-property-util/build-closed-value-block
+                                        (db/new-block-id)
+                                        value
+                                        [:block/uuid page-id]
+                                        property
+                                        {}))
+                                     values')
+            value->block-id (zipmap
+                             (map #(get-in % [:block/schema :value]) closed-value-blocks)
+                             (map :block/uuid closed-value-blocks))
+            new-value-ids (mapv :block/uuid closed-value-blocks)
+            property-tx {:db/id (:db/id property)
+                         :block/schema (assoc property-schema :values new-value-ids)}
+            property-values (db-async/<get-block-property-values (state/get-current-repo) (:block/uuid property))
+            block-values (->> property-values
+                              (remove #(uuid? (first %))))
+            tx-data (concat
+                     (when page-tx [page-tx])
+                     closed-value-blocks
+                     [property-tx]
+                     (map (fn [[id value]]
+                            (let [properties (:block/properties (db/entity id))]
+                              (if (string/blank? value) ; remove blank property values
+                                {:db/id id
+                                 :block/properties (dissoc properties property-id)}
+                                {:db/id id
+                                 :block/properties (assoc properties property-id (get value->block-id value))})))
+                          block-values))]
       (db/transact! (state/get-current-repo) tx-data
                     {:outliner-op :insert-blocks})
       new-value-ids)))
