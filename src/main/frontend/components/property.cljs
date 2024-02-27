@@ -291,11 +291,22 @@
                         ])]
           [:div.grid.grid-cols-4.gap-1.items-center.leading-8
            [:label.col-span-1 "UI position:"]
-           [:div.col-span-3
-            (ui/select choices
-                       (fn [_e v]
-                         (swap! *property-schema assoc :position v)
-                         (save-property-fn)))]]))
+           [:div.col-span-2
+            (shui/select
+              (cond-> {:on-value-change (fn [v]
+                                          (swap! *property-schema assoc :position v)
+                                          (save-property-fn))}
+                (string? position)
+                (assoc :default-value position))
+              (shui/select-trigger
+                {:class "!px-2 !py-0 !h-8"}
+                (shui/select-value
+                  {:placeholder "Select a position mode"})
+                (shui/tabler-icon "selector" {:class "opacity-30"}))
+              (shui/select-content
+                (shui/select-group
+                  (for [{:keys [label value]} choices]
+                    (shui/select-item {:value value} label)))))]]))
 
       (let [hide? (:hide? @*property-schema)]
         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
