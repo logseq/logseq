@@ -508,11 +508,16 @@
 (declare page-reference)
 
 (defn open-page-ref
-  [e config page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?]
+  [e config page-name page-name-in-block contents-page? whiteboard-page?]
   (util/stop e)
   (when (not (util/right-click? e))
-    (p/let [redirect-page-name (or redirect-page-name
-                                   (model/get-redirect-page-name page-name (:block/alias? config)))
+    (p/let [redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
+            redirect-page-name (if (or (= (util/page-name-sanity-lc (str (:id config)))
+                                          (util/page-name-sanity-lc redirect-page-name))
+                                       (= (some-> (state/get-current-page) util/page-name-sanity-lc)
+                                          (some-> redirect-page-name util/page-name-sanity-lc)))
+                                 page-name
+                                 redirect-page-name)
             page (when redirect-page-name
                    (db-async/<pull (state/get-current-repo) [:block/name (util/page-name-sanity-lc redirect-page-name)]))]
       (cond
@@ -549,7 +554,7 @@
    page-name-in-block is the overridable name of the page (legacy)
 
    All page-names are sanitized except page-name-in-block"
-  [state config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?]
+  [state config page-name-in-block page-name page-entity contents-page? children html-export? label whiteboard-page?]
   (let [*hover? (::hover? state)
         *mouse-down? (::mouse-down? state)
         tag? (:tag? config)
@@ -580,10 +585,10 @@
                            (reset! *mouse-down? true))))
       :on-mouse-up (fn [e]
                      (when @*mouse-down?
-                       (open-page-ref e config page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)
+                       (open-page-ref e config page-name page-name-in-block contents-page? whiteboard-page?)
                        (reset! *mouse-down? false)))
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
-                           (open-page-ref e config page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)))}
+                           (open-page-ref e config page-name page-name-in-block contents-page? whiteboard-page?)))}
      (when-not hide-icon?
        (when-let [icon (pu/get-block-property-value page-entity :icon)]
          [:span.mr-1 (icon/icon icon)]))
@@ -700,19 +705,16 @@
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
-  [{:keys [html-export? redirect-page-name label children contents-page? preview? disable-preview?] :as config} page]
+  [{:keys [html-export? label children contents-page? preview? disable-preview?] :as config} page]
   (when-let [page-name-in-block (:block/name page)]
     (let [page-name-in-block (common-util/remove-boundary-slashes page-name-in-block)
           page-name (util/page-name-sanity-lc page-name-in-block)
           page-entity (db/entity [:block/name page-name])
           whiteboard-page? (model/whiteboard-page? page-name)
-          redirect-page-name (and (= :org (state/get-preferred-format))
-                                  (:org-mode/insert-file-link? (state/get-config))
-                                  redirect-page-name)
           inner (page-inner config
                             page-name-in-block
                             page-name
-                            redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?)
+                            page-entity contents-page? children html-export? label whiteboard-page?)
           modal? (:modal/show? @state/state)]
       (if (and (not (util/mobile?))
                (not preview?)
