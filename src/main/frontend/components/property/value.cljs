@@ -97,12 +97,12 @@
                                 (shui/popup-hide! id)
                                 (when-let [toggle (:toggle-fn opts)]
                                   (toggle)))))}))]
-      [:a.flex
+      [:a.w-fit.flex.items-center
        {:tabIndex      "0"
         ;; meta-click or just click in publishing to navigate to date's page
         :on-click      (if config/publishing?
                          #(navigate-to-date-page value)
-                         #(shui/popup-show! % content-fn {:as-menu? true}))
+                         #(shui/popup-show! (.-target %) content-fn {:as-menu? true :content-props {}}))
         :on-mouse-down (fn [e]
                          (.preventDefault e)
                          (when (util/meta-key? e)
@@ -113,7 +113,7 @@
        [:span.inline-flex.items-center
         (when title
           (when-not multiple-values? [:span.mr-1 title]))
-        (when-not title (ui/icon "calendar" {:size 15}))]])))
+        (when-not title (ui/icon "calendar" {:size 16}))]])))
 
 
 (rum/defc property-value-date-picker
@@ -313,7 +313,8 @@
                                                (string/trim new-value)))
 
        (when (= js/document.activeElement (gdom/getElement editor-id))
-         (exit-edit-property false))))))
+         (exit-edit-property false)
+         (shui/popup-hide!))))))
 
 (defn <create-new-block!
   [block property value]

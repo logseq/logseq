@@ -187,12 +187,15 @@
                              (on-chosen e icon-value)
                              (shui/popup-hide! id))})]))]
     ;; trigger
-    [:button.flex
-     {:on-click #(when-not disabled?
-                   (shui/popup-show! % content-fn
-                     {:as-menu? true
-                      :content-props {:class "w-auto"}}))}
-     (if icon-value
-       (icon icon-value)
-       [:div.opacity-50.text-sm
-        "Empty"])]))
+    (shui/button
+      {:variant  :ghost
+       :size     :sm
+       :class    "px-1 leading-none"
+       :on-click #(when-not disabled?
+                    (shui/popup-show! % content-fn
+                      {:as-menu?      true
+                       :content-props {:class "w-auto"}}))}
+      (if icon-value
+        (icon icon-value {:size 18})
+        [:div.opacity-50.text-sm
+         "Empty"]))))

@@ -2,9 +2,7 @@
   "DB-graph only utility fns for properties"
   (:require [frontend.db.utils :as db-utils]
             [frontend.state :as state]
-            [logseq.db.frontend.property :as db-property]
             [logseq.common.util :as common-util]
-            [clojure.set :as set]
             [frontend.db :as db]))
 
 (defn get-property-name
@@ -29,12 +27,6 @@
   [properties]
   (every? (fn [id]
             (:hide? (:block/schema (db/entity [:block/uuid id])))) properties))
-
-(defn has-hidden-properties?
-  "Checks if the given properties has any hidden properties"
-  [properties]
-  (some (fn [id]
-          (:hide? (:block/schema (db/entity [:block/uuid id])))) properties))
 
 (defn readable-properties
   "Given a DB graph's properties, returns a readable properties map with keys as
