@@ -394,17 +394,15 @@
         blocks (if (empty? blocks)
                  [[(state/get-current-repo) "contents" :contents nil]]
                  blocks)
-        sidebar-open? (state/sub :ui/sidebar-open?)
         repo (state/sub :git/current-repo)]
-    (when sidebar-open?
-      [:<>
-       (shui/resizable-handle
-        {:class "resizer-handle"
-         :id "right-sidebar-handle"})
-       (shui/resizable-panel
-        {:id "right-sidebar"
-         :class "cp__right-sidebar h-screen"
-         :order 2
-         :minSize 10 
-         :defaultSize 40}
-        (sidebar-inner repo t blocks))])))
+    [:<>
+     (shui/resizable-handle
+      {:class "resizer-handle"
+       :id "right-sidebar-handle"})
+     (shui/resizable-panel
+      {:id "right-sidebar"
+       :class "cp__right-sidebar h-screen"
+       :order 2
+       :minSize 10
+       :defaultSize 40}
+      (sidebar-inner repo t blocks))]))

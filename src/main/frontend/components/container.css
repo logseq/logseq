@@ -619,7 +619,6 @@
 
 .cp__right-sidebar {
   z-index: var(--ls-z-index-level-1);
-  transition: width 0.3s;
   position: relative;
   user-select: none;
 

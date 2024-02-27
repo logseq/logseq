@@ -942,7 +942,8 @@
         (when window-controls?
           (window-controls/container))
 
-        (right-sidebar/sidebar)
+        (when sidebar-open?
+          (right-sidebar/sidebar))
 
         [:div#app-single-container])
 
