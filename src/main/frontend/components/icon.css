@@ -1,8 +1,22 @@
 .cp__emoji-icon-picker {
-  @apply w-[320px] max-h-[346px] relative;
+  @apply w-[380px] max-h-[396px] relative;
+  @apply pt-14 pb-16;
+
+  > .hd {
+    @apply absolute w-full pt-3 pb-1 px-3 top-0 left-0;
+  }
+
+  > .bd {
+    @apply pb-20 max-h-96 px-2 py-2;
+    @apply overflow-y-scroll;
+  }
+
+  > .ft {
+    @apply absolute w-full py-3 px-3 bg-gray-02 bottom-0 left-0;
+    @apply border-t h-[50px] overflow-hidden;
+  }
 
   .search-result {
-    @apply overflow-y-scroll max-h-80;
   }
 
   .emojis button:hover, .icons button:hover {
@@ -15,22 +29,46 @@
   }
 
   .hover-preview {
-    @apply flex flex-1 flex-row items-center gap-2 shadow-lg;
-    @apply absolute bottom-0 left-0 right-0 bg-gray-01 m-[-16px] p-2;
+    @apply flex flex-1 items-center justify-between leading-none;
 
     > strong {
-      @apply opacity-75 text-lg whitespace-nowrap font-normal
-      overflow-ellipsis overflow-hidden;
+      @apply opacity-60 text-base whitespace-nowrap font-normal
+      overflow-ellipsis overflow-hidden mr-2;
     }
   }
 }
 
+.dropdown-wrapper .cp__emoji-icon-picker {
+  @apply -m-4;
+}
+
+.ui__dropdown-menu-content .cp__emoji-icon-picker {
+  @apply -m-1;
+}
+
 .ls-icon {
-  &-Backlog { @apply text-gray-05; }
-  &-Todo { @apply text-gray-11; }
-  &-InProgress50 { @apply text-yellow-rx-08; }
-  &-InReview { @apply text-blue-rx-09; }
-  &-Done { @apply text-green-rx-08; }
-  &-Cancelled { @apply text-red-rx-08; }
+  &-Backlog {
+    @apply text-gray-05;
+  }
+
+  &-Todo {
+    @apply text-gray-11;
+  }
+
+  &-InProgress50 {
+    @apply text-yellow-rx-08;
+  }
+
+  &-InReview {
+    @apply text-blue-rx-09;
+  }
+
+  &-Done {
+    @apply text-green-rx-08;
+  }
+
+  &-Cancelled {
+    @apply text-red-rx-08;
+  }
 }
 
