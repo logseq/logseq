@@ -2897,6 +2897,9 @@
                     navigated?)
                 (db/entity [:block/uuid navigating-block])
 
+                (:loop-linked? config)
+                block*
+
                 linked-block
                 linked-block
 
@@ -3562,19 +3565,24 @@
   [config item {:keys [top? bottom?]}]
   (let [original-block item
         linked-block (:block/link item)
-        item (or linked-block item)
+        loop-linked? (and linked-block (contains? (:links config) (:db/id linked-block)))
+        config (if linked-block
+                 (-> (assoc config :original-block original-block)
+                     (update :links (fn [ids] (conj (or ids #{}) (:db/id linked-block)))))
+                 config)
+        item (or (if loop-linked? item linked-block) item)
         item (cond-> (dissoc item :block/meta)
                (not (:block-children? config))
                (assoc :block.temp/top? top?
                       :block.temp/bottom? bottom?))
-        config (assoc config :block/uuid (:block/uuid item))
-        config' (if linked-block
-                  (assoc config :original-block original-block)
-                  config)]
-    (rum/with-key (block-container config' item)
-      (str (:block/uuid item)
-           (when linked-block
-             (str "-" (:block/uuid original-block)))))))
+        config' (assoc config :block/uuid (:block/uuid item)
+                       :loop-linked? loop-linked?)]
+    (when-not (and loop-linked? (:block/name linked-block))
+      (rum/with-key (block-container config' item)
+        (str (:block/uuid item)
+             (when linked-block
+               (str "-" (:block/uuid original-block))))))))
+
 
 (defn- block-list
   [config blocks]
