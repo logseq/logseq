@@ -176,7 +176,7 @@
         [:strong (:name @*hover)]])]))
 
 (rum/defc icon-picker
-  [icon-value {:keys [disabled? on-chosen]}]
+  [icon-value {:keys [disabled? on-chosen icon-props]}]
   (let [content-fn
         (if config/publishing?
           (constantly [])
@@ -196,6 +196,6 @@
                       {:as-menu?      true
                        :content-props {:class "w-auto"}}))}
       (if icon-value
-        (icon icon-value {:size 18})
+        (icon icon-value (merge {:size 18} icon-props))
         [:div.opacity-50.text-sm
          "Empty"]))))

@@ -342,7 +342,8 @@
                                   (db-property-handler/update-property!
                                     repo
                                     (:block/uuid page)
-                                    {:properties {icon-property-id icon}})))})
+                                    {:properties {icon-property-id icon}})))
+                   :icon-props {:size 38}})
                 icon)])
            [:h1.page-title.flex-1.cursor-pointer.gap-1
             {:class (when-not whiteboard-page? "title")
@@ -513,11 +514,11 @@
 
                   (cond
                     (and db-based? (not block?))
-                    [:div.pb-4
+                    [:div.pb-2
                      (db-page/page-info page (::hover-title? state))]
 
                     (and (not db-based?) (not block?))
-                    [:div.pb-4])
+                    [:div.pb-2])
 
                   [:div
                    (when (and block? (not sidebar?) (not whiteboard?))
