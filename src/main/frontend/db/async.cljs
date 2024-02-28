@@ -4,7 +4,6 @@
             [frontend.state :as state]
             [frontend.config :as config]
             [clojure.string :as string]
-            [logseq.common.util.page-ref :as page-ref]
             [frontend.util :as util]
             [frontend.db.utils :as db-utils]
             [frontend.db.async.util :as db-async-util]

@@ -1,7 +1,6 @@
 (ns frontend.components.jump
   "Jump to"
-  (:require [frontend.ui :as ui]
-            [frontend.state :as state]
+  (:require [frontend.state :as state]
             [rum.core :as rum]
             [frontend.util :as util]
             [frontend.handler.jump :as jump-handler]))
