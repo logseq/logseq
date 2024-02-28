@@ -2,9 +2,21 @@
   (:require [rum.core :as rum]
             [logseq.shui.ui :as ui]
             [logseq.shui.popup.core :refer [install-popups update-popup! get-popup]]
-            [frontend.components.icon :refer [emojis-cp emojis]]))
+            [frontend.components.icon :refer [emojis-cp emojis icon-search]]))
 
-(rum/defc page []
+
+(rum/defc page
+  []
+  [:div.sm:p-10
+   [:h1.text-3xl.font-bold.border-b.pb-4.mb-8
+    "UI X Emojis & Icons Picker"]
+
+   [:div.border.rounded.bg-gray-01.overflow-hidden
+    {:class "w-fit"}
+    (icon-search)]])
+
+(rum/defc popup-demo
+  []
   [:div.sm:p-10
    [:h1.text-3xl.font-bold.border-b.pb-4 "UI X Popup"]
 

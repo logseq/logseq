@@ -79,10 +79,7 @@
                                 :name name}))}
      (not (nil? hover))
      (assoc :on-mouse-over #(reset! hover emoji)
-            :on-mouse-out #(js/setTimeout
-                             (fn []
-                               (when (and @hover (= id (:id @hover)))
-                                 (reset! hover nil))) 1000)))
+            :on-mouse-out #()))
    [:em-emoji {:id id}]])
 
 (rum/defc emojis-cp < rum/static
@@ -105,7 +102,7 @@
                                    :id icon
                                    :name icon
                                    :icon icon})
-    :on-mouse-out #(reset! hover nil)}
+    :on-mouse-out #()}
    (ui/icon icon {:size 24})])
 
 (rum/defc icons-cp < rum/static
@@ -127,53 +124,62 @@
         result @*result
         emoji-tab? (= @*tab :emoji)
         opts (assoc opts :hover *hover)]
-    [:div.cp__emoji-icon-picker.flex.flex-1.flex-col.gap-2
-     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5
-      {:auto-focus    true
-       :placeholder   "Select icon"
-       :default-value ""
-       :on-change     (debounce
-                       (fn [e]
-                         (reset! *q (util/evalue e))
-                         (if (string/blank? @*q)
-                           (reset! *result {})
-                           (p/let [result (search @*q)]
-                             (reset! *result result))))
-                       200)}]
-     [:div.search-result
-      (if (seq result)
-        [:div.flex.flex-1.flex-col.gap-1
-         (when (seq (:emojis result))
-           (emojis-cp (:emojis result) opts))
-         (when (seq (:icons result))
-           (icons-cp (:icons result) opts))]
-        [:div.flex.flex-1.flex-col.gap-1
-         [:div.flex.flex-1.flex-row.items-center.gap-2
-          (ui/button
+    [:div.cp__emoji-icon-picker
+     ;; header
+     [:div.hd
+      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5
+       {:auto-focus    true
+        :placeholder   "Select icon"
+        :default-value ""
+        :on-change     (debounce
+                         (fn [e]
+                           (reset! *q (util/evalue e))
+                           (if (string/blank? @*q)
+                             (reset! *result {})
+                             (p/let [result (search @*q)]
+                               (reset! *result result))))
+                         200)}]]
+     ;; body
+     [:div.bd
+      {:on-mouse-leave #(reset! *hover nil)}
+      [:div.search-result
+       (if (seq result)
+         [:div.flex.flex-1.flex-col.gap-1
+          (when (seq (:emojis result))
+            (emojis-cp (:emojis result) opts))
+          (when (seq (:icons result))
+            (icons-cp (:icons result) opts))]
+         [:div.flex.flex-1.flex-col.gap-1
+          (if emoji-tab?
+            (emojis-cp emojis opts)
+            (icons-cp (get-tabler-icons) opts))])]]
+
+     ;; footer
+     [:div.ft
+      (if-not @*hover
+        ;; tabs
+        [:div.flex.flex-1.flex-row.items-center.gap-2
+         (ui/button
            "Emojis"
-           {:intent "logseq"
-            :small? true
+           {:intent   "logseq"
+            :small?   true
             :on-click #(reset! *tab :emoji)})
-          (ui/button
+         (ui/button
            "Icons"
-           {:intent "logseq"
-            :small? true
+           {:intent   "logseq"
+            :small?   true
             :on-click #(reset! *tab :icon)})]
-         (if emoji-tab?
-           (emojis-cp emojis opts)
-           (icons-cp (get-tabler-icons) opts))])]
 
-     (when @*hover
-       [:div.hover-preview
-        [:button.transition-opacity
-         {:style {:font-size 32}
-          :key (:id @*hover)
-          :title (:name @*hover)}
-         (if (= :tabler-icon (:type @*hover))
-           (ui/icon (:icon @*hover) {:size 32})
-           (:native (first (:skins @*hover))))]
-
-        [:strong (:name @*hover)]])]))
+        ;; preview
+        [:div.hover-preview
+         [:strong (:name @*hover)]
+         [:button
+          {:style {:font-size 30}
+           :key   (:id @*hover)
+           :title (:name @*hover)}
+          (if (= :tabler-icon (:type @*hover))
+            (ui/icon (:icon @*hover) {:size 32})
+            (:native (first (:skins @*hover))))]])]]))
 
 (rum/defc icon-picker
   [icon-value {:keys [disabled? on-chosen icon-props]}]
@@ -181,11 +187,10 @@
         (if config/publishing?
           (constantly [])
           (fn [{:keys [id]}]
-            [:div.p-2
-             (icon-search
-               {:on-chosen (fn [e icon-value]
-                             (on-chosen e icon-value)
-                             (shui/popup-hide! id))})]))]
+            (icon-search
+              {:on-chosen (fn [e icon-value]
+                            (on-chosen e icon-value)
+                            (shui/popup-hide! id))})))]
     ;; trigger
     (shui/button
       {:variant  :ghost
