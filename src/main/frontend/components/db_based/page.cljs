@@ -38,6 +38,7 @@
                    property?
                    has-tags?)))
       [:div.ls-page-properties
+       {:class (util/classnames [{:no-mode (nil? mode)}])}
        (cond
          (= mode :class)
          (if (and config/publishing? (not configure?))
