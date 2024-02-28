@@ -200,18 +200,20 @@
         (swap! ignored-properties conj {:property prop :value val :schema (get property-changes prop)})
         nil))))
 
-(defn- update-user-property-values [props prop-name->uuid properties-text-values ignored-properties {:keys [property-changes] :as options}]
+(defn- update-user-property-values [props prop-name->uuid properties-text-values
+                                    {:keys [property-schemas ignored-properties]}
+                                    {:keys [property-changes] :as options}]
   (->> props
        (keep (fn [[prop val]]
                (if (get-in property-changes [prop :type])
                  (when-let [val' (handle-changed-property val prop prop-name->uuid properties-text-values ignored-properties options)]
                    [prop val'])
                  [prop
-                  (cond
-                    (set? val)
-                   ;; assume for now a ref's :block/name can always be translated by lc helper
-                    (set (map (comp prop-name->uuid common-util/page-name-sanity-lc) val))
-                    :else
+                  (if (set? val)
+                    (if (= :default (get-in @property-schemas [prop :type]))
+                      (get properties-text-values prop)
+                      ;; assume for now a ref's :block/name can always be translated by lc helper
+                      (set (map (comp prop-name->uuid common-util/page-name-sanity-lc) val)))
                     val)])))
        (into {})))
 
@@ -242,7 +244,7 @@
            db
            (:ignored-properties import-state)
            (select-keys block [:block/name :block/content]))
-          (merge (update-user-property-values user-properties prop-name->uuid properties-text-values (:ignored-properties import-state) options))
+          (merge (update-user-property-values user-properties prop-name->uuid properties-text-values import-state options))
           (update-keys prop-name->uuid)))))
 
 (defn- handle-page-properties

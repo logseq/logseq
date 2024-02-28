@@ -51,7 +51,6 @@
             [frontend.handler.shell :as shell-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.block :as block-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.db-based.property.util :as db-pu]
             [frontend.handler.file-based.property.util :as property-util]
