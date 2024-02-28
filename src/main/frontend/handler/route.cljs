@@ -99,68 +99,76 @@
                  :path-params {:name (str name)}
                  :query-params (merge {:block-id block-id})}))))
 
+(defn- display-page-name
+  "Return the display name of the page"
+  [path-params title-suffix]
+  (let [name (:name path-params)
+        block? (util/uuid-string? name)
+        block (when block? (db/entity [:block/uuid (uuid name)]))
+        page (when-not block? (db/pull [:block/name (util/page-name-sanity-lc name)]))
+        text (cond
+               (and block? block) (let [content (text/remove-level-spaces (:block/content block)
+                                                                          (:block/format block) (config/get-block-pattern (:block/format block)))]
+                                    (if (> (count content) 48)
+                                      (str (subs content 0 48) "...")
+                                      content))
+               block? "Page no longer exists!!"
+               :else (or (util/get-page-original-name page)
+                         "Logseq"))]
+    (str text title-suffix)))
+
 (defn get-title
   [name path-params]
-  (let [current-repo (state/get-current-repo)
-        repo-name (db/get-repo-name current-repo)
-        short-repo-name (if repo-name
-                          (str (db/get-short-repo-name repo-name) " - ")
-                          "")]
-    (str short-repo-name (case name
-       :home
-       "Logseq"
-       :whiteboards
-       (t :whiteboards)
-       :repos
-       "Repos"
-       :repo-add
-       "Add another repo"
-       :graph
-       (t :graph)
-       :all-files
-       (t :all-files)
-       :all-pages
-       (t :all-pages)
-       :all-journals
-       (t :all-journals)
-       :file
-       (str "File " (:path path-params))
-       :new-page
-       "Create a new page"
-       :page
-       (let [name (:name path-params)
-             block? (util/uuid-string? name)]
+  (let [short-repo-name (some-> (state/get-current-repo)
+                                db/get-repo-name
+                                db/get-short-repo-name)
+        title-suffix (if short-repo-name
+                       (str " - " short-repo-name)
+                       "")]
+    (case name
+      :home
+      (or (not-empty short-repo-name) "Logseq")
+      :whiteboards
+      (str (t :whiteboards) title-suffix)
+      :repos
+      "Repos"
+      :repo-add
+      "Add another repo"
+      :graph
+      (str (t :graph) title-suffix)
+      :all-files
+      (str (t :all-files) title-suffix)
+      :all-pages
+      (str (t :all-pages) title-suffix)
+      :all-journals
+      (str (t :all-journals) title-suffix)
+      :file
+      (str "File " (:path path-params) title-suffix)
+      :new-page
+      (str "Create a new page" title-suffix)
+      :page
+      (display-page-name path-params title-suffix)
+      :whiteboard
+      (let [name (:name path-params)
+            block? (util/uuid-string? name)]
+        (str
          (if block?
-           (if-let [block (db/entity [:block/uuid (uuid name)])]
-             (let [content (text/remove-level-spaces (:block/content block)
-                                                     (:block/format block) (config/get-block-pattern (:block/format block)))]
-               (if (> (count content) 48)
-                 (str (subs content 0 48) "...")
-                 content))
-             "Page no longer exists!!")
+           (t :untitled)
            (let [page (db/pull [:block/name (util/page-name-sanity-lc name)])]
              (or (util/get-page-original-name page)
-                 "Logseq"))))
-       :whiteboard
-       (let [name (:name path-params)
-             block? (util/uuid-string? name)]
-         (str
-          (if block?
-            (t :untitled)
-            (let [page (db/pull [:block/name (util/page-name-sanity-lc name)])]
-              (or (util/get-page-original-name page)
-                  "Logseq"))) " - " (t :whiteboard)))
-       :tag
-       (str "#"  (:name path-params))
-       :diff
-       "Git diff"
-       :draw
-       "Draw"
-       :settings
-       "Settings"
-       :import
-       "Import data into Logseq"
-       "Logseq"))))
+                 "Logseq"))) " - " (t :whiteboard)
+         title-suffix))
+      :tag
+      (str "#" (:name path-params) title-suffix)
+      :diff
+      (str "Git diff" title-suffix)
+      :draw
+      (str "Draw" title-suffix)
+      :settings
+      "Settings"
+      :import
+      "Import data into Logseq"
+      "Logseq")))
 
 (defn update-page-title!
   [route]
