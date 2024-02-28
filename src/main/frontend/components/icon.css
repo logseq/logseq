@@ -25,3 +25,12 @@
   }
 }
 
+.ls-icon {
+  &-Backlog { @apply text-gray-05; }
+  &-Todo { @apply text-gray-11; }
+  &-InProgress50 { @apply text-yellow-rx-08; }
+  &-InReview { @apply text-blue-rx-09; }
+  &-Done { @apply text-green-rx-08; }
+  &-Cancelled { @apply text-red-rx-08; }
+}
+
