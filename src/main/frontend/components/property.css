@@ -242,3 +242,7 @@ a.control-link {
         @apply hidden;
     }
 }
+
+.property-k:focus {
+    @apply pr-1;
+}

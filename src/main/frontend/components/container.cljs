@@ -48,6 +48,7 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.components.window-controls :as window-controls]
+            [frontend.components.jump :as jump]
             [medley.core :as medley]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -919,6 +920,8 @@
                         :new-block-mode new-block-mode})
         (when (util/electron?)
           (find-in-page/search))
+
+        (jump/jump)
 
         (main {:route-match         route-match
                :margin-less-pages?  margin-less-pages?

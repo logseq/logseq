@@ -98,7 +98,7 @@
                                 (shui/popup-hide! id)
                                 (when-let [toggle (:toggle-fn opts)]
                                   (toggle)))))}))]
-      [:a.w-fit.flex.items-center
+      [:a.w-fit.flex.items-center.jtrigger
        {:tabIndex      "0"
         ;; meta-click or just click in publishing to navigate to date's page
         :on-click      (if config/publishing?
@@ -587,10 +587,11 @@
       (select-f)
       (ui/dropdown
        (fn [{:keys [toggle-fn]}]
-         [:a.control-link
-          {:on-mouse-down (if config/publishing?
-                            (constantly nil)
-                            toggle-fn)
+         [:a.control-link.jtrigger
+          {:tabIndex 0
+           :on-click (if config/publishing?
+                       (constantly nil)
+                       toggle-fn)
            :class "flex flex-1"}
           (if (and (string/blank? value) (not editing?))
             [:div.opacity-50.pointer.text-sm "Empty"]
@@ -631,6 +632,7 @@
         (let [add-property! (fn []
                               (<add-property! block (:block/original-name property) (boolean (not value))))]
           (ui/checkbox {:tabIndex "0"
+                        :class "jtrigger"
                         :checked value
                         :on-change (fn [_e] (add-property!))
                         :on-key-down (fn [e]
@@ -653,44 +655,46 @@
                                                      multiple-values?
                                                      (assoc :property-value value)))]))]
            (let [class (str (when-not row? "flex flex-1 ")
-                            (when multiple-values? "property-value-content"))]
-             [:div.cursor-text
+                            (when multiple-values? "property-value-content"))
+                 type (or (when (and (= type :default) (uuid? value)) :block)
+                          type
+                          :default)
+                 type (if (= :block type)
+                        (let [v-block (db/entity [:block/uuid value])]
+                          (if (get-in v-block [:block/metadata :created-from-template])
+                            :template
+                            type))
+                        type)
+                 template? (= :template type)]
+             [:div.cursor-text.jtrigger
               {:id (or dom-id (random-uuid))
+               :tabIndex 0
                :class class
                :style {:min-height 24}
                :on-click (fn []
                            (when (and (= type :default) (not (uuid? value)))
                              (set-editing! property editor-id dom-id value {:ref @*ref})))}
-              (let [type (or (when (and (= type :default) (uuid? value)) :block)
-                             type
-                             :default)
-                    type (if (= :block type)
-                           (let [v-block (db/entity [:block/uuid value])]
-                             (if (get-in v-block [:block/metadata :created-from-template])
-                               :template
-                               type))
-                           type)]
-                (if (string/blank? value)
-                  (if (= :template type)
-                    (let [id (first (:classes schema))
-                          template (when id (db/entity [:block/uuid id]))]
-                      (when template
-                        [:a.fade-link.pointer.text-sm
-                         {:on-click (fn [e]
-                                      (util/stop e)
-                                      (<create-new-block-from-template! block property template))}
-                         (str "Use template #" (:block/original-name template))]))
-                    [:div.opacity-50.pointer.text-sm "Empty"])
-                  (case type
-                    :template
-                    (property-template-value {:editor-id editor-id}
-                                             value
-                                             opts)
+              (if (string/blank? value)
+                (if template?
+                  (let [id (first (:classes schema))
+                        template (when id (db/entity [:block/uuid id]))]
+                    (when template
+                      [:a.fade-link.pointer.text-sm.jtrigger
+                       {:on-click (fn [e]
+                                    (util/stop e)
+                                    (<create-new-block-from-template! block property template))}
+                       (str "Use template #" (:block/original-name template))]))
+                  [:div.opacity-50.pointer.text-sm "Empty"])
+                (case type
+                  :template
+                  (property-template-value {:editor-id editor-id}
+                                           value
+                                           opts)
 
-                    :block
-                    (property-block-value value block property block-cp editor-box opts page-cp editor-id)
+                  :block
+                  (property-block-value value block property block-cp editor-box opts page-cp editor-id)
 
-                    (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros))))))]))]))))
+                  (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros)))))]))]))))
 
 (rum/defc multiple-values < rum/reactive
   [block property v {:keys [on-chosen dropdown? editing?]
@@ -722,10 +726,10 @@
     (if (and dropdown? (not editing?))
       (ui/dropdown
        (fn [{:keys [toggle-fn]}]
-         [:a.control-link
-          {:on-mouse-down (if config/publishing?
-                            (constantly nil)
-                            toggle-fn)
+         [:a.control-link.jtrigger
+          {:on-click (if config/publishing?
+                       (constantly nil)
+                       toggle-fn)
            :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2 pr-4"}
           (values-cp toggle-fn)])
        (fn [{:keys [_toggle-fn]}]
