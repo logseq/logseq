@@ -62,7 +62,8 @@
           (db-property-handler/class-add-property! repo (:block/uuid block) property-key)
           (property-handler/set-block-property! repo (:block/uuid block) property-key property-value)))
       (when exit-edit?
-       (exit-edit-property))))))
+        (shui/popup-hide!)
+        (exit-edit-property))))))
 
 (defn- navigate-to-date-page
   [value]
