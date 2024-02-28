@@ -1,5 +1,5 @@
 (ns frontend.worker.rtc.rtc-fns-test
-  (:require [clojure.test :as t :refer [deftest is testing]]
+  (:require [clojure.test :as t :refer [deftest is testing use-fixtures]]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
             [frontend.worker.rtc.core :as rtc-core]
@@ -7,13 +7,15 @@
             [frontend.handler.page :as page-handler]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
-            [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [logseq.common.config :as common-config]
             [frontend.worker.state :as worker-state]
             [frontend.worker.rtc.const :as rtc-const]
             [logseq.db :as ldb]))
 
+
+(use-fixtures :each
+  test-helper/start-and-destroy-db-map-fixture)
 
 (deftest filter-remote-data-by-local-unpushed-ops-test
   (testing "case1"
@@ -71,8 +73,6 @@
 
 
 (deftest gen-remote-ops-test
-  (state/set-current-repo! test-helper/test-db)
-  (test-helper/reset-test-db!)
   (let [conn (conn/get-db test-helper/test-db false)
         [uuid1 uuid2 uuid3 uuid4] (repeatedly random-uuid)
         opts {:persist-op? false
@@ -109,14 +109,10 @@
               uuid3 [:move]
               uuid4 [:move :update]}
              (update-vals r2 keys))))
-    (op-mem-layer/remove-ops-store! test-helper/test-db))
-  (state/set-current-repo! nil)
-  (test-helper/destroy-test-db!))
+    (op-mem-layer/remove-ops-store! test-helper/test-db)))
 
 
 (deftest apply-remote-move-ops-test
-  (state/set-current-repo! test-helper/test-db)
-  (test-helper/reset-test-db!)
   (let [conn (conn/get-db test-helper/test-db false)
         repo test-helper/test-db
         opts {:persist-op? false
@@ -182,15 +178,10 @@
         (let [page-blocks (ldb/get-page-blocks @conn page-name {})]
           (is (= #{uuid1-remote uuid2-remote uuid1-client uuid2-client} (set (map :block/uuid page-blocks))))
           (is (= uuid1-client (:block/uuid (:block/left (d/entity @conn [:block/uuid uuid2-remote])))))
-          (is (= uuid2-remote (:block/uuid (:block/left (d/entity @conn [:block/uuid uuid1-remote]))))))))
-
-    (state/set-current-repo! nil)
-    (test-helper/destroy-test-db!)))
+          (is (= uuid2-remote (:block/uuid (:block/left (d/entity @conn [:block/uuid uuid1-remote]))))))))))
 
 
 (deftest apply-remote-update-ops-test
-  (state/set-current-repo! test-helper/test-db)
-  (test-helper/reset-test-db!)
   (let [conn (conn/get-db test-helper/test-db false)
         repo test-helper/test-db
         opts {:persist-op? false
@@ -276,14 +267,9 @@
         (rtc-core/apply-remote-update-ops repo conn date-formatter update-ops)
         (let [page-blocks (ldb/get-page-blocks @conn page-name {})]
           (is (= #{uuid1-client uuid2-client uuid1-remote} (set (map :block/uuid page-blocks))))
-          (is (= [nil nil] ((juxt :block/link :block/type) (d/entity @conn [:block/uuid uuid1-remote]))))))))
-
-  (state/set-current-repo! nil)
-  (test-helper/destroy-test-db!))
+          (is (= [nil nil] ((juxt :block/link :block/type) (d/entity @conn [:block/uuid uuid1-remote])))))))))
 
 (deftest apply-remote-remove-ops-test
-  (state/set-current-repo! test-helper/test-db)
-  (test-helper/reset-test-db!)
   (let [conn (conn/get-db test-helper/test-db false)
         repo test-helper/test-db
         opts {:persist-op? false
@@ -331,15 +317,10 @@
         (is (rtc-const/data-from-ws-validator data-from-ws))
         (rtc-core/apply-remote-remove-ops repo conn date-formatter remove-ops)
         (let [page-blocks (ldb/get-page-blocks @conn page-name {})]
-          (is (= #{uuid2-client} (set (map :block/uuid page-blocks))))))))
-
-  (state/set-current-repo! nil)
-  (test-helper/destroy-test-db!))
+          (is (= #{uuid2-client} (set (map :block/uuid page-blocks)))))))))
 
 
 (deftest apply-remote-update&remove-page-ops-test
-  (state/set-current-repo! test-helper/test-db)
-  (test-helper/reset-test-db!)
   (let [conn (conn/get-db test-helper/test-db false)
         repo test-helper/test-db
         date-formatter (common-config/get-date-formatter (worker-state/get-config test-helper/test-db))
@@ -382,15 +363,10 @@
                               (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
         (is (rtc-const/data-from-ws-validator data-from-ws))
         (rtc-core/apply-remote-remove-page-ops repo conn remove-page-ops)
-        (is (nil? (d/entity @conn [:block/uuid page1-uuid]))))))
-
-  (state/set-current-repo! nil)
-  (test-helper/destroy-test-db!))
+        (is (nil? (d/entity @conn [:block/uuid page1-uuid])))))))
 
 
 (deftest same-name-two-pages-merge-test
-  (state/set-current-repo! test-helper/test-db)
-  (test-helper/reset-test-db!)
   (let [conn (conn/get-db test-helper/test-db false)
         repo test-helper/test-db
         date-formatter (common-config/get-date-formatter (worker-state/get-config test-helper/test-db))
@@ -439,7 +415,4 @@
       (rtc-core/apply-remote-move-ops repo conn date-formatter move-ops)
       (is (= #{uuid1-client uuid2-client uuid1-remote uuid2-remote}
              (set (map :block/uuid (ldb/get-page-blocks @conn page-name {})))))
-      (is (= page2-uuid (:block/uuid (d/entity @conn [:block/name page-name]))))))
-
-  (state/set-current-repo! nil)
-  (test-helper/destroy-test-db!))
+      (is (= page2-uuid (:block/uuid (d/entity @conn [:block/name page-name])))))))
