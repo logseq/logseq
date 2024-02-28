@@ -14,6 +14,7 @@
             [logseq.common.graph :as common-graph]
             [logseq.common.config :as common-config]
             [logseq.tasks.db-graph.create-graph :as create-graph]
+            [logseq.db.frontend.rules :as rules]
             [promesa.core :as p]))
 
 (defn- remove-hidden-files [dir config files]
@@ -57,14 +58,16 @@
      (gp-exporter/import-logseq-files conn logseq-files <read-file {:notify-user prn})
      (gp-exporter/import-from-doc-files! conn doc-files <read-file import-options))))
 
-(defn- import-files-to-db [file conn user-options]
+(defn- import-files-to-db [file conn {:keys [files] :as user-options}]
   (let [import-options (gp-exporter/setup-import-options
                         @conn
                         {}
-                        user-options
+                        (dissoc user-options :files)
                         {:notify-user prn})
-        files [{:rpath file}]]
-    (gp-exporter/import-from-doc-files! conn files <read-file import-options)))
+        files' (mapv #(hash-map :rpath %)
+                     (into [file]
+                           (map #(node-path/join (or js/process.env.ORIGINAL_PWD ".") %) files))) ]
+    (gp-exporter/import-from-doc-files! conn files' <read-file import-options)))
 
 (def spec
   "Options spec"
@@ -75,6 +78,9 @@
    :tag-classes {:alias :t
                  :coerce []
                  :desc "List of tags to convert to classes"}
+   :files {:alias :f
+           :coerce []
+           :desc "Additional files to import"}
    :property-classes {:alias :p
                       :coerce []
                       :desc "List of properties whose values convert to classes"}})
