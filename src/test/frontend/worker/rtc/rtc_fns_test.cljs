@@ -181,7 +181,7 @@
           (is (= uuid2-remote (:block/uuid (:block/left (d/entity @conn [:block/uuid uuid1-remote]))))))))))
 
 
-(deftest apply-remote-update-ops-test
+(deftest ^:large-vars/cleanup-todo apply-remote-update-ops-test
   (let [conn (conn/get-db test-helper/test-db false)
         repo test-helper/test-db
         opts {:persist-op? false
@@ -192,7 +192,8 @@
         [page-uuid
          uuid1-client uuid2-client
          uuid1-remote
-         uuid1-not-exist] (repeatedly random-uuid)]
+         uuid1-not-exist
+         tag1-uuid] (repeatedly random-uuid)]
     (page-handler/create! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
     (outliner-tx/transact!
      opts
@@ -267,7 +268,27 @@
         (rtc-core/apply-remote-update-ops repo conn date-formatter update-ops)
         (let [page-blocks (ldb/get-page-blocks @conn page-name {})]
           (is (= #{uuid1-client uuid2-client uuid1-remote} (set (map :block/uuid page-blocks))))
-          (is (= [nil nil] ((juxt :block/link :block/type) (d/entity @conn [:block/uuid uuid1-remote])))))))))
+          (is (= [nil nil] ((juxt :block/link :block/type) (d/entity @conn [:block/uuid uuid1-remote])))))))
+    (testing "update-attr :block/tags"
+      (let [data-from-ws {:req-id "req-id"
+                          :t 1 :t-before 0
+                          :affected-blocks
+                          {uuid1-remote {:op :update-attrs
+                                         :self uuid1-remote
+                                         :parents [uuid2-client]
+                                         :left uuid2-client
+                                         :tags [tag1-uuid]}}}
+            update-ops (vals
+                        (:update-ops-map
+                         (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
+        (d/transact! conn [{:block/uuid tag1-uuid
+                            :block/journal? false,
+                            :block/type #{"class"},
+                            :block/name "task",
+                            :block/original-name "Task"}])
+        (is (rtc-const/data-from-ws-validator data-from-ws))
+        (rtc-core/apply-remote-update-ops repo conn date-formatter update-ops)
+        (is (= #{tag1-uuid} (set (map :block/uuid (:block/tags (d/entity @conn [:block/uuid uuid1-remote]))))))))))
 
 (deftest apply-remote-remove-ops-test
   (let [conn (conn/get-db test-helper/test-db false)
