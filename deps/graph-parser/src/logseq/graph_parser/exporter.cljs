@@ -13,6 +13,7 @@
             [logseq.common.util.macro :as macro-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.rules :as rules]
             [promesa.core :as p]))
 
 (defn- get-pid
@@ -185,7 +186,9 @@
 (defn- handle-changed-property
   "Handles converting a property value whose :type has changed. Returns the changed
    value or nil if the property is to be ignored"
-  [val prop prop-name->uuid properties-text-values ignored-properties {:keys [property-changes log-fn]}]
+  [val prop prop-name->uuid properties-text-values
+   {:keys [ignored-properties property-schemas]}
+   {:keys [property-changes log-fn properties-to-change]}]
   (let [type-change (get-in property-changes [prop :type])]
     (cond
       ;; ignore :to as any property value gets stringified
@@ -194,19 +197,33 @@
       (= {:from :page :to :date} type-change)
       ;; treat it the same as a :page
       (set (map (comp prop-name->uuid common-util/page-name-sanity-lc) val))
+      ;; Unlike the other property changes, this one changes all the previous values of a property
+      ;; in order to accomodate the change
+      (= :default (:to type-change))
+      (if (get @properties-to-change prop)
+        ;; Ignore more than one property schema change per file to keep it simple
+        (do
+          (log-fn :prop-to-change-ignored {:property prop :val val :change type-change})
+          (swap! ignored-properties conj {:property prop :value val :schema (get property-changes prop)})
+          nil)
+        (do
+          (swap! properties-to-change assoc prop {:schema {:type :default}})
+          (swap! property-schemas assoc prop {:schema {:type :default}})
+          (get properties-text-values prop)))
       :else
       (do
         (log-fn :prop-change-ignored {:property prop :val val :change type-change})
         (swap! ignored-properties conj {:property prop :value val :schema (get property-changes prop)})
         nil))))
 
-(defn- update-user-property-values [props prop-name->uuid properties-text-values
-                                    {:keys [property-schemas ignored-properties]}
-                                    {:keys [property-changes] :as options}]
+(defn- update-user-property-values
+  [props prop-name->uuid properties-text-values
+   {:keys [property-schemas] :as import-state}
+   {:keys [property-changes] :as options}]
   (->> props
        (keep (fn [[prop val]]
                (if (get-in property-changes [prop :type])
-                 (when-let [val' (handle-changed-property val prop prop-name->uuid properties-text-values ignored-properties options)]
+                 (when-let [val' (handle-changed-property val prop prop-name->uuid properties-text-values import-state options)]
                    [prop val'])
                  [prop
                   (if (set? val)
@@ -236,6 +253,12 @@
                           (fn prop-name->uuid [k]
                             (cached-prop-name->uuid db page-names-to-uuids k)))
         user-properties (apply dissoc props db-property/built-in-properties-keys)]
+    (when (seq user-properties)
+      (swap! (:block-properties-text-values import-state)
+             assoc
+             ;; For pages, valid uuid is in page-names-to-uuids, not in block
+             (if (:block/name block) (get page-names-to-uuids (:block/name block)) (:block/uuid block))
+             properties-text-values))
     ;; TODO: Add import support for :template. Ignore for now as they cause invalid property types
     (if (contains? props :template)
       {}
@@ -275,11 +298,11 @@
                                       (infer-property-schema-and-get-property-change val prop (get (:block/properties-text-values block) prop) refs (:property-schemas import-state) macros)]
                              [prop property-change])))
                    (into {}))
-              _ (when (seq property-changes) (log-fn :PROP-CHANGES property-changes))
+              _ (when (seq property-changes) (log-fn :prop-changes property-changes))
               options' (assoc options :property-changes property-changes)]
           (cond-> (assoc-in block [:block/properties]
                             (update-properties properties' db page-names-to-uuids
-                                               (select-keys block [:block/properties-text-values :block/name :block/content])
+                                               (select-keys block [:block/properties-text-values :block/name :block/content :block/uuid])
                                                options'))
             (seq classes-from-properties)
             ;; Add a map of {:block.temp/new-class TAG} to be processed later
@@ -429,12 +452,44 @@
     {:pages-tx pages-tx
      :page-names-to-uuids page-names-to-uuids}))
 
+(defn- build-properties-to-change-tx
+  [db page-names-to-uuids properties-to-change text-values-by-uuid log-fn]
+  (if (seq properties-to-change)
+    (do
+      (log-fn :props-upstream-to-change properties-to-change)
+      (mapcat
+       (fn [[prop {:keys [schema]}]]
+       ;; property schema change
+         (let [prop-uuid (cached-prop-name->uuid db page-names-to-uuids prop)
+               block-vals-to-update (map first
+                                         (d/q '[:find (pull ?b [:block/uuid :block/properties])
+                                                :in $ ?p %
+                                                :where (or (has-page-property ?b ?p)
+                                                           (has-property ?b ?p))]
+                                              db
+                                              prop
+                                              (rules/extract-rules rules/db-query-dsl-rules)))]
+           (into [{:block/name (name prop) :block/schema schema}]
+               ;; property value changes
+                 (when (= :default (:type schema))
+                   (mapv #(hash-map :block/uuid (:block/uuid %)
+                                    :block/properties
+                                    (merge (:block/properties %)
+                                           {prop-uuid (or (get-in text-values-by-uuid [(:block/uuid %) prop])
+                                                          (throw (ex-info (str "No :block/text-properties-values found when changing property values: " (:block/uuid %))
+                                                                          {:property prop
+                                                                           :block/uuid (:block/uuid %)})))}))
+                         block-vals-to-update)))))
+       properties-to-change))
+    []))
+
 (defn new-import-state
   "New import state that is used in add-file-to-db-graph. State is atom per
    key to make code more readable and encourage local mutations"
   []
   {:ignored-properties (atom [])
-   :property-schemas (atom {})})
+   :property-schemas (atom {})
+   :block-properties-text-values (atom {})})
 
 (defn add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
@@ -471,6 +526,8 @@
         tx-options (merge
                     (dissoc options :extract-options :user-options)
                     {:import-state (or (:import-state options) (new-import-state))
+                     ;; Track per file changes to make to existing properties
+                     :properties-to-change (atom {})
                      :notify-user notify-user
                      :log-fn log-fn
                      :tag-classes (set (map string/lower-case (:tag-classes user-options)))
@@ -491,8 +548,14 @@
         pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
         blocks-tx (->> blocks
                        (remove :block/pre-block?)
-                       (map #(build-block-tx @conn % pre-blocks page-names-to-uuids
-                                             (assoc tx-options :whiteboard? (some? (seq whiteboard-pages))))))
+                       (mapv #(build-block-tx @conn % pre-blocks page-names-to-uuids
+                                              (assoc tx-options :whiteboard? (some? (seq whiteboard-pages))))))
+        properties-to-change-tx (build-properties-to-change-tx
+                                 @conn
+                                 page-names-to-uuids
+                                 @(:properties-to-change tx-options)
+                                 @(get-in tx-options [:import-state :block-properties-text-values])
+                                 log-fn)
         ;; Build indices
         pages-index (map #(select-keys % [:block/name]) pages-tx)
         block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks-tx)
@@ -503,7 +566,7 @@
                             (seq))
         ;; To prevent "unique constraint" on datascript
         block-ids (set/union (set block-ids) (set block-refs-ids))
-        tx (concat whiteboard-pages pages-index pages-tx block-ids blocks-tx)
+        tx (concat whiteboard-pages pages-index pages-tx block-ids blocks-tx properties-to-change-tx)
         tx' (common-util/fast-remove-nils tx)
         result (d/transact! conn tx')]
     result))
