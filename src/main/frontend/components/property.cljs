@@ -594,18 +594,22 @@
                             (route-handler/redirect-to-page! (:block/name property))
                             (.preventDefault e)))
          :on-click      (fn [^js e]
-                          (shui/popup-show! (.-target e)
-                                            (fn [{:keys [id]}]
-                                              [:div.p-2
-                                               [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
-                                               (property-config block property
-                                                                {:inline-text   inline-text
-                                                                 :page-cp       page-cp
-                                                                 :class-schema? class-schema?
-                                                                 :toggle-fn     #(shui/popup-hide! id)})])
-                                            {:content-props {:class "property-configure-popup-content"
-                                                             :align "start"}
-                                             :as-menu?      true}))}
+                          (shui/popup-show!
+                            (.-target e)
+                            (fn [{:keys [id]}]
+                              [:div.p-2
+                               [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
+                               (property-config block property
+                                 {:inline-text inline-text
+                                  :page-cp page-cp
+                                  :class-schema? class-schema?
+                                  :toggle-fn #(shui/popup-hide! id)})])
+                            {:content-props {:class "property-configure-popup-content"
+                                             :collisionPadding {:bottom 10 :top 10}
+                                             :side "bottom"
+                                             :avoidCollisions true
+                                             :align "start"}
+                             :as-menu? true}))}
         [:div {:style {:padding-left 6}} (:block/original-name property)]])]))
 
 (defn- resolve-linked-block-if-exists
