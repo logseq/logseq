@@ -36,9 +36,11 @@
   (state/set-state! :editor/new-property-input-id value))
 
 (defn editing-new-property!
-  []
-  (set-editing-new-property! (state/get-edit-input-id))
-  (state/clear-edit!))
+  ([]
+   (editing-new-property! (state/get-edit-input-id)))
+  ([input-id]
+   (set-editing-new-property! input-id)
+   (state/clear-edit!)))
 
 (defn remove-id-property
   [repo format content]

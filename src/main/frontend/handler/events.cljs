@@ -51,6 +51,7 @@
             [frontend.handler.shell :as shell-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.block :as block-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.db-based.property.util :as db-pu]
             [frontend.handler.file-based.property.util :as property-util]
@@ -932,17 +933,19 @@
 
 (defmethod handle :editor/new-property [[_ property-key]]
   (p/do!
-    (when-let [edit-block (state/get-edit-block)]
-      (when-let [block-id (:block/uuid edit-block)]
-        (let [block (db/entity [:block/uuid block-id])
-              collapsed? (or (get-in @state/state [:ui/collapsed-blocks (state/get-current-repo) block-id])
-                           (:block/collapsed? block))]
-          (when collapsed?
-            (editor-handler/set-blocks-collapsed! [block-id] false)))))
-    (editor-handler/save-current-block!)
-    (when property-key
-      (state/set-state! :editor/new-property-key property-key))
-    (property-handler/editing-new-property!)))
+   (let [edit-block (state/get-edit-block)]
+     (when-let [block-id (or (:block/uuid edit-block)
+                             (first (state/get-selection-block-ids)))]
+       (let [block (db/entity [:block/uuid block-id])
+             collapsed? (or (get-in @state/state [:ui/collapsed-blocks (state/get-current-repo) block-id])
+                            (:block/collapsed? block))]
+         (when collapsed?
+           (editor-handler/set-blocks-collapsed! [block-id] false)))
+       (if edit-block (editor-handler/save-current-block!)
+           (state/clear-selection!))
+     (when property-key
+       (state/set-state! :editor/new-property-key property-key))
+     (property-handler/editing-new-property! (str "edit-block-" block-id))))))
 
 (rum/defc multi-tabs-dialog
   []
