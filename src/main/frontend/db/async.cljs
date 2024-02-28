@@ -95,17 +95,21 @@
       (->> result
            (map (fn [[prop-type v]] [prop-type (if (coll? v) v [v])]))
            (mapcat (fn [[prop-type vals]]
-                     (case prop-type
-                       :default
-                       ;; Remove multi-block properties as there isn't a supported approach to query them yet
-                       (map str (remove uuid? vals))
-                       (:page :date)
-                       (map #(page-ref/->page-ref (:block/original-name (db-utils/entity graph [:block/uuid %])))
-                            vals)
-                       :number
-                       vals
-                       ;; Checkboxes returned as strings as builder doesn't display boolean values correctly
-                       (map str vals))))
+                     (let [result (case prop-type
+                                    :default
+                                    ;; Remove multi-block properties as there isn't a supported approach to query them yet
+                                    (map str (remove uuid? vals))
+                                    (:page :date)
+                                    (map #(:block/original-name (db-utils/entity graph [:block/uuid %]))
+                                         vals)
+                                    :number
+                                    vals
+                                    ;; Checkboxes returned as strings as builder doesn't display boolean values correctly
+                                    (map str vals))]
+                       (map (fn [value]
+                              (if (uuid? value)
+                                (get-in (db-utils/entity graph [:block/uuid value]) [:block/schema :value])
+                                value)) result))))
            ;; Remove blanks as they match on everything
            (remove string/blank?)
            (distinct)
