@@ -150,7 +150,8 @@
     (when (fn? tap-*input-val)
       (tap-*input-val input))
     [:div.cp__select
-     (merge {:class "cp__select-main"} host-opts)
+     (merge {:class "cp__select-main"}
+            host-opts)
 
      (if dropdown?
        (ui/dropdown

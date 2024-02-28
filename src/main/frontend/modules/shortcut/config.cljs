@@ -18,6 +18,7 @@
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.window :as window-handler]
+            [frontend.handler.jump :as jump-handler]
             [frontend.modules.editor.undo-redo :as undo-redo]
             [frontend.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
@@ -507,6 +508,8 @@
    :command/toggle-favorite                 {:binding "mod+shift+f"
                                              :fn      page-handler/toggle-favorite!}
 
+   :editor/jump                             {:binding "j"
+                                             :fn      jump-handler/jump-to}
    :editor/open-file-in-default-app         {:binding  "mod+d mod+a"
                                              :inactive (not (util/electron?))
                                              :file-graph? true
@@ -711,7 +714,8 @@
             :editor/copy
             :editor/copy-text
             :editor/cut
-            :command/toggle-favorite])
+            :command/toggle-favorite
+            :editor/jump])
        (with-meta {:before m/enable-when-not-component-editing!}))
 
      :shortcut.handler/global-prevent-default
