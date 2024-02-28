@@ -853,8 +853,7 @@
       :editor/open-link-in-sidebar
       :editor/move-block-up
       :editor/move-block-down
-      :editor/escape-editing
-      :editor/add-property]
+      :editor/escape-editing]
 
      :shortcut.category/block-command-editing
      [:editor/backspace
