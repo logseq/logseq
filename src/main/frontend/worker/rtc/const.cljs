@@ -72,6 +72,9 @@
      [:map
       [:block-uuid :uuid]]]]])
 
+(def to-ws-ops-validator (m/validator [:sequential to-ws-op-schema]))
+(def to-ws-ops-decoder (m/decoder [:sequential to-ws-op-schema] mt/string-transformer))
+
 (def data-from-ws-schema
   [:map
    [:req-id :string]
