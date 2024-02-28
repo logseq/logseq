@@ -1,5 +1,5 @@
 .property-configure {
-    min-width: 32rem;
+    min-width: 40rem;
 
     .form-input, .form-select {
         line-height: 1rem;
@@ -135,7 +135,8 @@ input.simple-input:focus {
 }
 
 /* TODO:  */
-.page-add-tags, .page-tags, .property-select, .ls-property-add {
+.page-add-tags, .page-tags, .property-select, .ls-property-add,
+.property-configure, .ui__dropdown-menu-content {
     .cp__select-main {
         width: fit-content;
         margin: 0;

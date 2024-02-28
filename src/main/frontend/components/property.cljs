@@ -46,64 +46,64 @@
   [*property-schema schema-classes {:keys [multiple-choices? save-property-fn]
                                     :or {multiple-choices? true}}]
   [:div.flex.flex-1.col-span-3
-   (ui/dropdown
-    (fn [{:keys [toggle-fn]}]
-      [:div.flex.flex-1.cursor-pointer {:on-click toggle-fn}
-       (if (seq schema-classes)
-         [:div.flex.flex-1.flex-row.items-center.flex-wrap.gap-2
-          (for [class schema-classes]
-            (if (= class :logseq.class)
-              [:a.text-sm "#Logseq Class"]
-              (when-let [page (db/entity [:block/uuid class])]
-                (let [page-name (:block/original-name page)]
-                  [:a.text-sm (str "#" page-name)]))))]
-         [:div.opacity-50.pointer.text-sm "Empty"])])
-    (fn [{:keys [toggle-fn]}]
-      (let [classes (model/get-all-classes (state/get-current-repo))
-            options (cond->> (map (fn [[name id]]
-                                    {:label name :value id})
-                                  classes)
-                      (not= :template (:type @*property-schema))
-                      (concat [{:label "Logseq Class" :value :logseq.class}]))
-            opts (cond->
-                  {:items options
-                   :input-default-placeholder (if multiple-choices? "Choose classes" "Choose class")
-                   :dropdown? false
-                   :close-modal? false
-                   :multiple-choices? multiple-choices?
-                   :selected-choices schema-classes
-                   :extract-fn :label
-                   :extract-chosen-fn :value
-                   :show-new-when-not-exact-match? true
-                   :input-opts {:on-blur toggle-fn
-                                :on-key-down
-                                (fn [e]
-                                  (case (util/ekey e)
-                                    "Escape"
-                                    (do
-                                      (util/stop e)
-                                      (toggle-fn))
-                                    nil))}}
-                   multiple-choices?
-                   (assoc :on-apply (fn [choices]
-                                      (p/let [choices' (p/all (map (fn [value]
-                                                                     (p/let [result (<create-class-if-not-exists! value)]
-                                                                       (or result value))) choices))
-                                              _ (swap! *property-schema assoc :classes (set choices'))
-                                              _ (save-property-fn)]
-                                        (toggle-fn))))
+   (let [content-fn
+         (fn [{:keys [id]}]
+           (let [toggle-fn #(shui/popup-hide! id)
+                 classes (model/get-all-classes (state/get-current-repo))
+                 options (cond->> (map (fn [[name id]]
+                                         {:label name :value id})
+                                    classes)
+                           (not= :template (:type @*property-schema))
+                           (concat [{:label "Logseq Class" :value :logseq.class}]))
+                 opts (cond->
+                        {:items options
+                         :input-default-placeholder (if multiple-choices? "Choose classes" "Choose class")
+                         :dropdown? false
+                         :close-modal? false
+                         :multiple-choices? multiple-choices?
+                         :selected-choices schema-classes
+                         :extract-fn :label
+                         :extract-chosen-fn :value
+                         :show-new-when-not-exact-match? true
+                         :input-opts {:on-blur toggle-fn
+                                      :on-key-down
+                                      (fn [e]
+                                        (case (util/ekey e)
+                                          "Escape"
+                                          (do
+                                            (util/stop e)
+                                            (toggle-fn))
+                                          nil))}}
+                        multiple-choices?
+                        (assoc :on-apply (fn [choices]
+                                           (p/let [choices' (p/all (map (fn [value]
+                                                                          (p/let [result (<create-class-if-not-exists! value)]
+                                                                            (or result value))) choices))
+                                                   _ (swap! *property-schema assoc :classes (set choices'))
+                                                   _ (save-property-fn)]
+                                             (toggle-fn))))
 
-                   (not multiple-choices?)
-                   (assoc :on-chosen (fn [value]
-                                       (p/let [result (<create-class-if-not-exists! value)
-                                               value' (or result value)
-                                               _ (swap! *property-schema assoc :classes #{value'})
-                                               _ (save-property-fn)]
-                                         (toggle-fn)))))]
+                        (not multiple-choices?)
+                        (assoc :on-chosen (fn [value]
+                                            (p/let [result (<create-class-if-not-exists! value)
+                                                    value' (or result value)
+                                                    _ (swap! *property-schema assoc :classes #{value'})
+                                                    _ (save-property-fn)]
+                                              (toggle-fn)))))]
 
-        (select/select opts)))
-    {:modal-class (util/hiccup->class
-                   "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})])
+             (select/select opts)))]
+
+    [:div.flex.flex-1.cursor-pointer
+     {:on-click #(shui/popup-show! (.-target %) content-fn {:as-menu? true})}
+     (if (seq schema-classes)
+       [:div.flex.flex-1.flex-row.items-center.flex-wrap.gap-2
+        (for [class schema-classes]
+          (if (= class :logseq.class)
+            [:a.text-sm "#Logseq Class"]
+            (when-let [page (db/entity [:block/uuid class])]
+              (let [page-name (:block/original-name page)]
+                [:a.text-sm (str "#" page-name)]))))]
+       [:div.opacity-50.pointer.text-sm "Empty"])])])
 
 (defn- property-type-label
   [property-type]
