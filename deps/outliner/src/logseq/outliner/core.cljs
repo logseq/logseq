@@ -397,7 +397,10 @@
               (update m :block/tags (fn [tags]
                                       (->>
                                        (concat (map :db/id (:block/tags block-entity))
-                                               (map (fn [t] (or (:db/id t) [:block/uuid (:block/uuid t)])) tags))
+                                               (map (fn [t] (or (:db/id t)
+                                                                (some->> (:block/uuid t)
+                                                                         (partial vector :block/uuid))))
+                                                    tags))
                                        (remove nil?))))
               m)]
 
