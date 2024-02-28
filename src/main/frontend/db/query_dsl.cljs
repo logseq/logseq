@@ -20,7 +20,9 @@
             [logseq.common.util :as common-util]
             [frontend.util.text :as text-util]
             [frontend.util :as util]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.state :as state]
+            [logseq.db.frontend.property :as db-property]))
 
 
 ;; Query fields:
@@ -255,6 +257,13 @@
       (string/trim result)
       result)))
 
+(defn- ->keyword-property
+  [property-name]
+  (let [repo (state/get-current-repo)]
+    (if (config/db-based-graph? repo)
+      (str property-name)
+      (keyword property-name))))
+
 (defn- build-property-two-arg
   [e]
   (let [k (string/replace (name (nth e 1)) "_" "-")
@@ -262,14 +271,23 @@
         v (if-not (nil? v)
             (parse-property-value (str v))
             v)
-        v (if (coll? v) (first v) v)]
-    {:query (list 'property '?b (keyword k) v)
+        v (if (coll? v) (first v) v)
+        property (db-property/get-property (conn/get-db) k)
+        values (get-in property [:block/schema :values])
+        v' (if (seq values)             ; closed values
+             (some #(when-let [closed-value (get-in (db-utils/entity [:block/uuid %]) [:block/schema :value])]
+                      (if (= v closed-value)
+                        %
+                        v))
+                   values)
+             v)]
+    {:query (list 'property '?b (->keyword-property k) v')
      :rules [:property]}))
 
 (defn- build-property-one-arg
   [e]
   (let [k (string/replace (name (nth e 1)) "_" "-")]
-    {:query (list 'has-property '?b (keyword k))
+    {:query (list 'has-property '?b (->keyword-property k))
      :rules [:has-property]}))
 
 (defn- build-property [e]
@@ -307,9 +325,9 @@
     (if (some? v)
       (let [v' (parse-property-value (str v))
             val (if (coll? v') (first v') v')]
-        {:query (list 'page-property '?p (keyword k) val)
+        {:query (list 'page-property '?p (->keyword-property k) val)
          :rules [:page-property]})
-      {:query (list 'has-page-property '?p (keyword k))
+      {:query (list 'has-page-property '?p (->keyword-property k))
        :rules [:has-page-property]})))
 
 (defn- build-page-tags
