@@ -717,12 +717,13 @@
           {:on-mouse-down (if config/publishing?
                             (constantly nil)
                             toggle-fn)
-           :class "flex flex-1 flex-row items-center flex-wrap gap-x-4 gap-y-2 pr-4"}
+           :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2 pr-4"}
           (values-cp toggle-fn)])
        (fn [{:keys [_toggle-fn]}]
          (select-cp))
        {:modal-class (util/hiccup->class
                       "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")
+        :trigger-class "w-full"
         :initial-open? editing?})
       (select-cp))))
 
