@@ -398,8 +398,8 @@
                                       (->>
                                        (concat (map :db/id (:block/tags block-entity))
                                                (map (fn [t] (or (:db/id t)
-                                                                (some->> (:block/uuid t)
-                                                                         (partial vector :block/uuid))))
+                                                                (when-let [id (:block/uuid t)]
+                                                                  [:block/uuid id])))
                                                     tags))
                                        (remove nil?))))
               m)]
