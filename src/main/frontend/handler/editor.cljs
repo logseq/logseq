@@ -2152,9 +2152,9 @@
    (let [repo (state/get-current-repo)
          db? (config/db-based-graph? repo)]
      (when-not db?
-       (let [block (if (integer? db-id)
-                     (db-async/<pull repo db-id)
-                     (db-async/<get-template-by-name (name db-id)))]
+       (p/let [block (if (integer? db-id)
+                       (db-async/<pull repo db-id)
+                       (db-async/<get-template-by-name (name db-id)))]
          (when-let [db-id (:db/id block)]
            (let [journal? (:block/journal? target)
                  target (or target (state/get-edit-block))
@@ -2215,9 +2215,10 @@
 
 (defn template-on-chosen-handler
   [element-id]
-  (fn [[_template db-id] _click?]
-    (insert-template! element-id db-id
-                      {:replace-empty-target? true})))
+  (fn [[_template template-block] _click?]
+    (when-let [db-id (:db/id template-block)]
+      (insert-template! element-id db-id
+                        {:replace-empty-target? true}))))
 
 (defn get-searching-property
   [input]
