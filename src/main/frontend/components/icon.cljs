@@ -75,9 +75,7 @@
      {:tabIndex "0"
       :title name
       :on-click (fn [e]
-                  (on-chosen e {:type :emoji
-                                :id id
-                                :name name}))}
+                  (on-chosen e (assoc emoji :type :emoji)))}
      (not (nil? hover))
      (assoc :on-mouse-over #(reset! hover emoji)
             :on-mouse-out #()))
@@ -116,7 +114,7 @@
   [label items]
   [:div.pane-block
    [:div.hd.px-1.pb-1.leading-none
-    [:strong.text-xs.font-medium.text-gray-07.opacity-70 label]]
+    [:strong.text-xs.font-medium.text-gray-07.dark:opacity-80 label]]
    [:div.its items]])
 
 (defn get-used-items
@@ -126,7 +124,7 @@
 (defn add-used-item!
   [m]
   (let [s (some->> (or (get-used-items) [])
-            (take 16)
+            (take 24)
             (filter #(not= m %))
             (cons m))]
     (storage/set :ui/ls-icons-used s)))
@@ -168,6 +166,7 @@
         *tab (::tab state)
         *hover (::hover state)
         *input-ref (rum/create-ref)
+        *result-ref (rum/create-ref)
         result @*result
         opts (assoc opts :hover *hover)
         on-chosen' (:on-chosen opts)
@@ -179,7 +178,10 @@
                     (reset! *q "")
                     (reset! *result {})
                     (set! (. input -value) "")
-                    (js/setTimeout (fn [] (.focus input)) 64))]
+                    (js/setTimeout
+                      (fn [] (.focus input)
+                        (util/scroll-to (rum/deref *result-ref) 0 false))
+                      64))]
     [:div.cp__emoji-icon-picker
      ;; header
      [:div.hd
@@ -215,7 +217,8 @@
          [:a.x {:on-click reset-q!} (shui/tabler-icon "x" {:size 14})])]]
      ;; body
      [:div.bd
-      {:on-mouse-leave #(reset! *hover nil)}
+      {:ref *result-ref
+       :on-mouse-leave #(reset! *hover nil)}
       [:div.search-result
        (if (seq result)
          [:div.flex.flex-1.flex-col.gap-1
