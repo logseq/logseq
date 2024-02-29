@@ -299,9 +299,14 @@
      ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern command-trigger
                                                           :backward-pos 2}]]]
 
-     ["Code block" [[:editor/input "```\n```\n" {:type            "block"
-                                                 :backward-pos    5
-                                                 :only-breakline? true}]
+     ["Code block" [(case preferred-format
+                      :markdown [:editor/input "```\n```\n" {:type            "block"
+                                                             :backward-pos    5
+                                                             :only-breakline? true}]
+                      :org      [:editor/input "#+BEGIN_SRC \n#+END_SRC\n"
+                                                            {:type            "block"
+                                                             :backward-pos    11
+                                                             :only-breakline? true}])
                     [:editor/select-code-block-mode]] "Insert code block"]]
 
     @*extend-slash-commands
