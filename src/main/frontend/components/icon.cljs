@@ -116,7 +116,7 @@
   [label items]
   [:div.pane-block
    [:div.hd.px-1.pb-1.leading-none
-    [:strong.text-xs.font-medium.text-gray-07 label]]
+    [:strong.text-xs.font-medium.text-gray-07.opacity-70 label]]
    [:div.its items]])
 
 (defn get-used-items
