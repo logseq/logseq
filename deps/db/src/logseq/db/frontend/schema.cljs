@@ -153,11 +153,6 @@
 ;; If only block/content changes
 (def db-version-retract-attributes
   #{:block/refs
-    :block/marker
-    :block/priority
-    :block/scheduled
-    :block/deadline
-    :block/repeated?
     :block/macros
     :block/warning})
 

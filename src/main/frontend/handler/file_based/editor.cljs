@@ -195,7 +195,7 @@
    {:outliner-op :save-block}
    (doseq [block-id block-ids]
      (when-let [block (set-heading-aux! block-id heading)]
-       (outliner-op/save-block! block)))))
+       (outliner-op/save-block! block {:retract-attributes? false})))))
 
 (defn set-blocks-id!
   "Persist block uuid to file if the uuid is valid, and it's not persisted in file.

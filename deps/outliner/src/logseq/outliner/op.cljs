@@ -10,7 +10,7 @@
    [:save-block
     [:catn
      [:op :keyword]
-     [:args [:tuple ::block]]]]
+     [:args [:tuple ::block ::option]]]]
    [:insert-blocks
     [:catn
      [:op :keyword]
