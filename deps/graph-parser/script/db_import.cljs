@@ -37,6 +37,14 @@
   (p/let [s (fsp/readFile (:rpath file))]
     (str s)))
 
+(defn- build-import-options [conn config options]
+  (-> (gp-exporter/setup-import-options
+       @conn
+       {}
+       (select-keys options [:tag-classes :property-classes])
+       {:notify-user prn :macros (:macros config)})
+      (assoc-in [:extract-options :verbose] (:verbose options))))
+
 (defn- import-file-graph-to-db [file-graph-dir conn options]
   (p/let [*files (build-graph-files file-graph-dir)
           config-file (first (filter #(string/ends-with? (:rpath %) "logseq/config.edn") *files))
@@ -44,12 +52,7 @@
           ;; TODO: Add :default-config option
           config (gp-exporter/import-config-file! conn config-file <read-file {:notify-user prn})
           files (remove-hidden-files file-graph-dir config *files)
-          import-options (-> (gp-exporter/setup-import-options
-                            @conn
-                            {}
-                            (select-keys options [:tag-classes :property-classes])
-                            {:notify-user prn})
-                           (assoc-in [:extract-options :verbose] (:verbose options)))
+          import-options (build-import-options conn config options)
           logseq-file? #(string/includes? (:rpath %) "logseq/")
           doc-files (remove logseq-file? files)
           logseq-files (filter logseq-file? files)]
@@ -58,16 +61,17 @@
      (gp-exporter/import-logseq-files conn logseq-files <read-file {:notify-user prn})
      (gp-exporter/import-from-doc-files! conn doc-files <read-file import-options))))
 
+(defn- resolve-path
+  "If relative path, resolve with $ORIGINAL_PWD"
+  [path]
+  (if (node-path/isAbsolute path)
+    path
+    (node-path/join (or js/process.env.ORIGINAL_PWD ".") path)))
+
 (defn- import-files-to-db [file conn {:keys [files] :as options}]
-  (let [import-options (-> (gp-exporter/setup-import-options
-                            @conn
-                            {}
-                            (select-keys options [:tag-classes :property-classes])
-                            {:notify-user prn})
-                           (assoc-in [:extract-options :verbose] (:verbose options)))
+  (let [import-options (build-import-options conn {:macros {}} options)
         files' (mapv #(hash-map :rpath %)
-                     (into [file]
-                           (map #(node-path/join (or js/process.env.ORIGINAL_PWD ".") %) files)))]
+                     (into [file] (map resolve-path files)))]
     (gp-exporter/import-from-doc-files! conn files' <read-file import-options)))
 
 (def spec
@@ -94,11 +98,10 @@
                           (cli/format-opts {:spec spec})))
             (js/process.exit 1))
         [dir db-name] (if (string/includes? db-graph-dir "/")
-                        (let [graph-dir'
-                              (node-path/join (or js/process.env.ORIGINAL_PWD ".") db-graph-dir)]
+                        (let [graph-dir' (resolve-path db-graph-dir)]
                           ((juxt node-path/dirname node-path/basename) graph-dir'))
                         [(node-path/join (os/homedir) "logseq" "graphs") db-graph-dir])
-        file-graph' (node-path/join (or js/process.env.ORIGINAL_PWD ".") file-graph)
+        file-graph' (resolve-path file-graph)
         conn (create-graph/init-conn dir db-name)
         directory? (.isDirectory (fs/statSync file-graph'))]
     (p/do!
