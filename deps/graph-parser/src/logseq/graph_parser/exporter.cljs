@@ -464,35 +464,45 @@
      :page-names-to-uuids page-names-to-uuids}))
 
 (defn- build-upstream-properties-tx
-  "Builds tx for upstream properties that have changed. Upstream properties can be properties that
-   already exist in the DB from another file or from earlier uses of a property in the same file"
-  [db page-names-to-uuids upstream-properties text-values-by-uuid log-fn]
+  "Builds tx for upstream properties that have changed and any instances of its
+  use in db or in given blocks-tx. Upstream properties can be properties that
+  already exist in the DB from another file or from earlier uses of a property
+  in the same file"
+  [db page-names-to-uuids upstream-properties block-properties-text-values blocks-tx log-fn]
   (if (seq upstream-properties)
     (do
       (log-fn :props-upstream-to-change upstream-properties)
       (mapcat
        (fn [[prop {:keys [schema]}]]
          ;; property schema change
-         (let [prop-uuid (cached-prop-name->uuid db page-names-to-uuids prop)
-               block-vals-to-update (map first
-                                         (d/q '[:find (pull ?b [:block/uuid :block/properties])
-                                                :in $ ?p %
-                                                :where (or (has-page-property ?b ?p)
-                                                           (has-property ?b ?p))]
-                                              db
-                                              prop
-                                              (rules/extract-rules rules/db-query-dsl-rules)))]
+         (let [prop-uuid (cached-prop-name->uuid db page-names-to-uuids prop)]
            (into [{:block/name (name prop) :block/schema schema}]
                  ;; property value changes
                  (when (= :default (:type schema))
-                   (mapv #(hash-map :block/uuid (:block/uuid %)
-                                    :block/properties
-                                    (merge (:block/properties %)
-                                           {prop-uuid (or (get-in text-values-by-uuid [(:block/uuid %) prop])
-                                                          (throw (ex-info (str "No :block/text-properties-values found when changing property values: " (:block/uuid %))
-                                                                          {:property prop
-                                                                           :block/uuid (:block/uuid %)})))}))
-                         block-vals-to-update)))))
+                   (let [existing-blocks
+                         (map first
+                              (d/q '[:find (pull ?b [:block/uuid :block/properties])
+                                     :in $ ?p %
+                                     :where (or (has-page-property ?b ?p)
+                                                (has-property ?b ?p))]
+                                   db
+                                   prop
+                                   (rules/extract-rules rules/db-query-dsl-rules)))
+                         ;; blocks in current file
+                         pending-blocks (keep #(when (get-in % [:block/properties prop-uuid])
+                                                 (select-keys % [:block/uuid :block/properties]))
+                                              blocks-tx)]
+                     (mapv (fn [m]
+                             {:block/uuid (:block/uuid m)
+                              :block/properties
+                              (merge (:block/properties m)
+                                     {prop-uuid (or (get-in block-properties-text-values [(:block/uuid m) prop])
+                                                    (throw (ex-info (str "No :block/text-properties-values found when changing property values: " (:block/uuid m))
+                                                                    {:property prop
+                                                                     :block/uuid (:block/uuid m)})))})})
+                           ;; there should always be some blocks to update or else the change wouldn't have
+                           ;; been detected
+                           (concat existing-blocks pending-blocks)))))))
        upstream-properties))
     []))
 
@@ -574,11 +584,12 @@
                        (mapv #(build-block-tx @conn % pre-blocks page-names-to-uuids
                                               (assoc tx-options :whiteboard? (some? (seq whiteboard-pages))))))
         upstream-properties-tx (build-upstream-properties-tx
-                                 @conn
-                                 page-names-to-uuids
-                                 @(:upstream-properties tx-options)
-                                 @(get-in tx-options [:import-state :block-properties-text-values])
-                                 log-fn)
+                                @conn
+                                page-names-to-uuids
+                                @(:upstream-properties tx-options)
+                                @(get-in tx-options [:import-state :block-properties-text-values])
+                                blocks-tx
+                                log-fn)
         ;; Build indices
         pages-index (map #(select-keys % [:block/name]) pages-tx)
         block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks-tx)
@@ -589,6 +600,8 @@
                             (seq))
         ;; To prevent "unique constraint" on datascript
         block-ids (set/union (set block-ids) (set block-refs-ids))
+        ;; Order matters as upstream-properties-tx can override some blocks-tx and indices need
+        ;; to come before their corresponding tx
         tx (concat whiteboard-pages pages-index pages-tx block-ids blocks-tx upstream-properties-tx)
         tx' (common-util/fast-remove-nils tx)
         result (d/transact! conn tx')]
@@ -634,7 +647,10 @@
                                :or {set-ui-state (constantly nil) notify-user prn}
                                :as import-options}]
   (set-ui-state [:graph/importing-state :total] (count *doc-files))
-  (let [doc-files (mapv #(assoc %1 :idx %2) *doc-files (range 0 (count *doc-files)))]
+  (let [doc-files (mapv #(assoc %1 :idx %2)
+                        ;; Sort files to ensure reproducible import behavior
+                        (sort-by :rpath *doc-files)
+                        (range 0 (count *doc-files)))]
     (-> (p/loop [_file-map (import-doc-file (get doc-files 0) conn <read-file import-options)
                  i 0]
           (when-not (>= i (dec (count doc-files)))

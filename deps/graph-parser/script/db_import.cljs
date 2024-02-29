@@ -14,7 +14,6 @@
             [logseq.common.graph :as common-graph]
             [logseq.common.config :as common-config]
             [logseq.tasks.db-graph.create-graph :as create-graph]
-            [logseq.db.frontend.rules :as rules]
             [promesa.core :as p]))
 
 (defn- remove-hidden-files [dir config files]
@@ -38,35 +37,37 @@
   (p/let [s (fsp/readFile (:rpath file))]
     (str s)))
 
-(defn- import-file-graph-to-db [file-graph-dir conn user-options]
+(defn- import-file-graph-to-db [file-graph-dir conn options]
   (p/let [*files (build-graph-files file-graph-dir)
           config-file (first (filter #(string/ends-with? (:rpath %) "logseq/config.edn") *files))
           _ (assert config-file "No 'logseq/config.edn' found for file graph dir")
           ;; TODO: Add :default-config option
           config (gp-exporter/import-config-file! conn config-file <read-file {:notify-user prn})
           files (remove-hidden-files file-graph-dir config *files)
-          import-options (gp-exporter/setup-import-options
-                          @conn
-                          config
-                          user-options
-                          {:notify-user prn})
+          import-options (-> (gp-exporter/setup-import-options
+                            @conn
+                            {}
+                            (select-keys options [:tag-classes :property-classes])
+                            {:notify-user prn})
+                           (assoc-in [:extract-options :verbose] (:verbose options)))
           logseq-file? #(string/includes? (:rpath %) "logseq/")
           doc-files (remove logseq-file? files)
           logseq-files (filter logseq-file? files)]
-    ;; (prn :files (count files) files)
+    (println "Importing" (count files) "files ...")
     (p/do!
      (gp-exporter/import-logseq-files conn logseq-files <read-file {:notify-user prn})
      (gp-exporter/import-from-doc-files! conn doc-files <read-file import-options))))
 
-(defn- import-files-to-db [file conn {:keys [files] :as user-options}]
-  (let [import-options (gp-exporter/setup-import-options
-                        @conn
-                        {}
-                        (dissoc user-options :files)
-                        {:notify-user prn})
+(defn- import-files-to-db [file conn {:keys [files] :as options}]
+  (let [import-options (-> (gp-exporter/setup-import-options
+                            @conn
+                            {}
+                            (select-keys options [:tag-classes :property-classes])
+                            {:notify-user prn})
+                           (assoc-in [:extract-options :verbose] (:verbose options)))
         files' (mapv #(hash-map :rpath %)
                      (into [file]
-                           (map #(node-path/join (or js/process.env.ORIGINAL_PWD ".") %) files))) ]
+                           (map #(node-path/join (or js/process.env.ORIGINAL_PWD ".") %) files)))]
     (gp-exporter/import-from-doc-files! conn files' <read-file import-options)))
 
 (def spec
