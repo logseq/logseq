@@ -131,11 +131,24 @@
       (concat [block]
               (->> (keep :block/link children)
                    (map (fn [l]
-                          (:block
-                           (get-block-and-children db
-                                                   (str (:block/uuid (d/entity db (:db/id l))))
-                                                   false)))))
+                          (d/pull db '[*] (:db/id l)))))
               children))))
+
+(defn get-full-page-and-blocks
+  [db page-name]
+  (let [data (get-block-and-children db (common-util/page-name-sanity-lc page-name) true)
+        result (first (tree-seq map? :children data))]
+    (cons (:block result)
+          (map #(dissoc % :children) (:children result)))))
+
+(defn get-home-page
+  [db files]
+  (let [config (->> (some (fn [m] (when (= (:file/path m) "logseq/config.edn")
+                                    (:file/content m))) files)
+                    (common-util/safe-read-string {}))
+        home-page (get-in config [:default-home :page])]
+    (when home-page
+      (get-full-page-and-blocks db (common-util/page-name-sanity-lc home-page)))))
 
 (defn get-initial-data
   "Returns initial data"
@@ -143,8 +156,9 @@
   (let [favorites (get-favorites db)
         latest-journals (get-latest-journals db 3)
         all-files (get-all-files db)
+        home-page-data (get-home-page db all-files)
         structured-blocks (get-structured-blocks db)]
-    (concat favorites latest-journals all-files structured-blocks)))
+    (concat favorites latest-journals all-files home-page-data structured-blocks)))
 
 (defn restore-initial-data
   "Given initial sqlite data and schema, returns a datascript connection"
