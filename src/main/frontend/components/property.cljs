@@ -534,21 +534,22 @@
      {:on-mouse-over   #(reset! *hover? true)
       :on-mouse-leave  #(reset! *hover? false)
       :on-context-menu (fn [^js e]
+                         (util/stop e)
                          (shui/popup-show! e
-                                           [(shui/dropdown-menu-item
-                                             {:on-click (fn []
-                                                          (when-let [schema (some-> property :block/schema)]
-                                                            (components-pu/update-property! property property-name (assoc schema :hide? true))
-                                                            (shui/popup-hide!)))}
-                                             "Hide property")
-                                            (shui/dropdown-menu-item
-                                             {:on-click (fn []
-                                                          (handle-delete-property! block property {:class-schema? class-schema?})
-                                                          (shui/popup-hide!))}
-                                             [:span.w-full.text-red-rx-07.hover:text-red-rx-09
-                                              "Delete property"])]
-                                           {:as-menu?      true
-                                            :content-props {:class "w-48"}}))}
+                           [(shui/dropdown-menu-item
+                              {:on-click (fn []
+                                           (when-let [schema (some-> property :block/schema)]
+                                             (components-pu/update-property! property property-name (assoc schema :hide? true))
+                                             (shui/popup-hide!)))}
+                              "Hide property")
+                            (shui/dropdown-menu-item
+                              {:on-click (fn []
+                                           (handle-delete-property! block property {:class-schema? class-schema?})
+                                           (shui/popup-hide!))}
+                              [:span.w-full.text-red-rx-07.hover:text-red-rx-09
+                               "Delete property"])]
+                           {:as-menu? true
+                            :content-props {:class "w-48"}}))}
      (when block?
        [:a.block-control
         {:on-click (fn [event]
