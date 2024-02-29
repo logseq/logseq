@@ -35,10 +35,11 @@
   [_old-state state]
   (let [new-block (:block (first (:rum/args state)))
         repo (state/get-current-repo)]
-    (when (not= (string/trim (state/get-edit-content))
-                (string/trim (:block/content new-block)))
-      (util/set-change-value (state/get-input)
-                             (block-handler/sanity-block-content repo (get new-block :block/format :markdown) (:block/content new-block)))))
+    (when (not= (some-> (state/get-edit-content) string/trim)
+                (some-> (:block/content new-block) string/trim))
+      (when-let [input (state/get-input)]
+        (util/set-change-value input
+                               (block-handler/sanity-block-content repo (get new-block :block/format :markdown) (:block/content new-block))))))
   (keyboards-handler/esc-save! state)
   state)
 
