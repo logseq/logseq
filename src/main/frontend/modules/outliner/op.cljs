@@ -16,11 +16,11 @@
     result))
 
 (defn save-block
-  [block]
+  [block opts]
   (when-let [block' (if (de/entity? block)
                       (assoc (.-kv ^js block) :db/id (:db/id block))
                       block)]
-    [:save-block [block']]))
+    [:save-block [block' opts]]))
 
 (defn insert-blocks
   [blocks target-block opts]
@@ -49,8 +49,8 @@
     [:indent-outdent-blocks [ids indent? opts]]))
 
 (defn save-block!
-  [block]
-  (op-transact! #'save-block block))
+  [block & {:as opts}]
+  (op-transact! #'save-block block opts))
 
 (defn insert-blocks!
   [blocks target-block opts]

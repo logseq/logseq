@@ -371,7 +371,8 @@
     (let [parent-id (otree/-get-id this conn)]
       (get-by-parent-&-left @conn parent-id parent-id)))
 
-  (-save [this txs-state conn repo date-formatter]
+  (-save [this txs-state conn repo date-formatter {:keys [retract-attributes?]
+                                                   :or {retract-attributes? true}}]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
     (let [data (:data this)
@@ -414,7 +415,7 @@
 
       (when eid
         ;; Retract attributes to prepare for tx which rewrites block attributes
-        (when (:block/content m)
+        (when (and retract-attributes? (:block/content m))
           (let [retract-attributes (if db-based?
                                      (conj db-schema/db-version-retract-attributes :block/tags)
                                      db-schema/retract-attributes)]
@@ -627,10 +628,10 @@
 
 (defn ^:api save-block
   "Save the `block`."
-  [repo conn date-formatter block']
+  [repo conn date-formatter block' opts]
   {:pre [(map? block')]}
   (let [txs-state (atom [])]
-    (otree/-save (block @conn block') txs-state conn repo date-formatter)
+    (otree/-save (block @conn block') txs-state conn repo date-formatter opts)
     {:tx-data @txs-state}))
 
 (defn- get-right-siblings
@@ -946,7 +947,7 @@
       (when (otree/satisfied-inode? right-node)
         (let [left-node (otree/-get-left node conn)
               new-right-node (otree/-set-left-id right-node (otree/-get-id left-node conn) conn)]
-          (otree/-save new-right-node txs-state conn repo date-formatter)))
+          (otree/-save new-right-node txs-state conn repo date-formatter {})))
       @txs-state)))
 
 (defn- ^:large-vars/cleanup-todo delete-blocks
@@ -1005,7 +1006,7 @@
                                     :right-node (d/entity @conn [:block/uuid (otree/-get-id right-node conn)])}))))
             (when left-node-id
               (let [new-right-node (otree/-set-left-id right-node left-node-id conn)]
-                (otree/-save new-right-node txs-state conn repo date-formatter)))))
+                (otree/-save new-right-node txs-state conn repo date-formatter {})))))
         (doseq [id block-ids]
           (let [node (block @conn (d/entity @conn id))]
             (otree/-del node txs-state true conn)))
@@ -1186,8 +1187,8 @@
     result))
 
 (defn save-block!
-  [repo conn date-formatter block]
-  (op-transact! #'save-block repo conn date-formatter block))
+  [repo conn date-formatter block & {:as opts}]
+  (op-transact! #'save-block repo conn date-formatter block opts))
 
 (defn insert-blocks!
   [repo conn blocks target-block opts]

@@ -55,7 +55,7 @@
                          :block/properties-order property-ks
                          :block/properties-text-values properties-text-values
                          :block/content content}]
-              (outliner-op/save-block! block))))))
+              (outliner-op/save-block! block {:retract-attributes? false}))))))
      (let [block-id (ffirst col)
            block-id (if (string? block-id) (uuid block-id) block-id)
            input-pos (or (state/get-edit-pos) :max)]
