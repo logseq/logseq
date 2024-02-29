@@ -123,13 +123,28 @@
                                      (d/pull db '[*] (:e e))))))]
     (concat special-pages closed-values)))
 
+(defn get-favorites
+  "Favorites page and its blocks"
+  [db]
+  (let [{:keys [block children]} (get-block-and-children db "$$$favorites" true)]
+    (when block
+      (concat [block]
+              (->> (keep :block/link children)
+                   (map (fn [l]
+                          (:block
+                           (get-block-and-children db
+                                                   (str (:block/uuid (d/entity db (:db/id l))))
+                                                   false)))))
+              children))))
+
 (defn get-initial-data
   "Returns initial data"
   [db]
-  (let [latest-journals (get-latest-journals db 3)
+  (let [favorites (get-favorites db)
+        latest-journals (get-latest-journals db 3)
         all-files (get-all-files db)
         structured-blocks (get-structured-blocks db)]
-    (concat latest-journals all-files structured-blocks)))
+    (concat favorites latest-journals all-files structured-blocks)))
 
 (defn restore-initial-data
   "Given initial sqlite data and schema, returns a datascript connection"
