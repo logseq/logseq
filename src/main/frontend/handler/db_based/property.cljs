@@ -266,7 +266,7 @@
                                        [:db/add (:db/id block) :block/tags task-id]))]]
                       (db/transact! repo tx-data {:outliner-op :save-block}))))))))))))
 
-(defn- fix-cardinality-many-values!
+(defn- convert-one-to-many-values!
   [repo property-uuid property-values]
   (let [ev (remove (fn [[_ v]] (coll? v)) property-values)
         tx-data (map (fn [[e v]]
@@ -278,17 +278,30 @@
       (db/transact! repo tx-data
                     {:outliner-op :save-block}))))
 
+(defn- convert-many-to-one-values!
+  [repo property-uuid property-values]
+  (let [tx-data (map (fn [[e v]]
+                       (let [entity (db/entity e)
+                             properties (:block/properties entity)]
+                         {:db/id e
+                          :block/properties (assoc properties property-uuid (first v))}))
+                     property-values)]
+    (db/transact! repo tx-data {:outliner-op :save-block})))
+
 (defn- handle-cardinality-changes [repo property-uuid property property-schema property-values]
   ;; cardinality changed from :many to :one
   (if (and (= :one (:cardinality property-schema))
            (not= :one (:cardinality (:block/schema property))))
     (when (seq property-values)
-      (notification/show! "Can't change a property's multiple values back to single if a property is used anywhere" :error)
-      ::skip-transact)
+      (if (every? (fn [[_ v]] (and (coll? v) (= 1 (count v)))) property-values)
+        (convert-many-to-one-values! repo property-uuid property-values)
+        (do
+          (notification/show! "Can't change a property's multiple values back to single if a property has multiple values anywhere" :error)
+          ::skip-transact)))
     ;; cardinality changed from :one to :many
     (when (and (= :many (:cardinality property-schema))
                (not= :many (:cardinality (:block/schema property))))
-      (fix-cardinality-many-values! repo property-uuid property-values))))
+      (convert-one-to-many-values! repo property-uuid property-values))))
 
 (defn <update-property!
   [repo property-uuid {:keys [property-name property-schema properties]}]
@@ -497,10 +510,10 @@
           (if (uuid? k)
             k
             (let [property-id (db-pu/get-user-property-uuid k)]
-             (when-not property-id
-               (throw (ex-info "Property not exists yet"
-                               {:key k})))
-             property-id)))
+              (when-not property-id
+                (throw (ex-info "Property not exists yet"
+                                {:key k})))
+              property-id)))
         (keys m))
    (vals m)))
 
