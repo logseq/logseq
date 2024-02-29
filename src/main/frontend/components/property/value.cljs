@@ -421,7 +421,7 @@
                       :items items
                       :selected-choices selected-choices
                       :dropdown? dropdown?
-                      :show-new-when-not-exact-match? (not closed-values?)
+                      :show-new-when-not-exact-match? (not (or closed-values? (= :date type)))
                       :input-default-placeholder "Select"
                       :extract-chosen-fn :value
                       :input-opts (fn [_]
