@@ -96,7 +96,7 @@
 (def ignored-built-in-properties
   "Ignore built-in properties that are already imported or not supported in db graphs"
   ;; Already imported via a datascript attribute i.e. have :attribute on property config
-  [:tags :alias
+  [:tags :alias :collapsed
    ;; Not supported as they have been ignored for a long time and cause invalid built-in pages
    :now :later :doing :done :canceled :cancelled :in-progress :todo :wait :waiting])
 
@@ -446,7 +446,9 @@
         pages-tx (keep #(if (existing-page-names (:block/name %))
                           (let [schema (get new-property-schemas (keyword (:block/name %)))
                                 ;; These attributes are not allowed to be transacted because they must not change across files
-                                disallowed-attributes [:block/name :block/uuid :block/format :block/journal? :block/original-name :block/journal-day]
+                                ;; block/uuid was particularly bad as it actually changed the page's identity across files
+                                disallowed-attributes [:block/name :block/uuid :block/format :block/journal? :block/original-name :block/journal-day
+                                                       :block/type :block/created-at :block/updated-at]
                                 allowed-attributes [:block/properties :block/tags :block/alias :block/namespace]
                                 block-changes (select-keys % allowed-attributes)]
                             (when-let [ignored-attrs (not-empty (apply dissoc % (into disallowed-attributes allowed-attributes)))]
