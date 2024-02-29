@@ -6,6 +6,7 @@
             [camel-snake-kebab.core :as csk]
             [clojure.string :as string]
             [frontend.search :as search]
+            [frontend.storage :as storage]
             [rum.core :as rum]
             [frontend.ui :as ui]
             [logseq.shui.ui :as shui]
@@ -53,7 +54,7 @@
       (reset! *tabler-icons result)
       result)))
 
-(def emojis
+(defonce emojis
   (vals (bean/->clj (gobj/get emoji-data "emojis"))))
 
 (defn- search-tabler-icons
@@ -61,9 +62,9 @@
   (search/fuzzy-search (get-tabler-icons) q :limit 100))
 
 (defn- search
-  [q]
-  (p/let [icons (search-tabler-icons q)
-          emojis (search-emojis q)]
+  [q tab]
+  (p/let [icons (when (not= tab :emoji) (search-tabler-icons q))
+          emojis (when (not= tab :icon) (search-emojis q))]
     {:icons icons
      :emojis emojis}))
 
@@ -111,34 +112,107 @@
    (for [icon icons]
      (icon-cp icon opts))])
 
+(rum/defc pane-block
+  [label items]
+  [:div.pane-block
+   [:div.hd.px-1.pb-1.leading-none
+    [:strong.text-xs.font-medium.text-gray-07 label]]
+   [:div.its items]])
+
+(defn get-used-items
+  []
+  (storage/get :ui/ls-icons-used))
+
+(defn add-used-item!
+  [m]
+  (let [s (some->> (or (get-used-items) [])
+            (take 16)
+            (filter #(not= m %))
+            (cons m))]
+    (storage/set :ui/ls-icons-used s)))
+
+(rum/defc all-cp
+  [opts]
+  (let [used-items (get-used-items)
+        emoji-items (take 32 emojis)
+        icon-items (take 48 (get-tabler-icons))
+        item-cp (fn [d]
+                  (if (or (string? d)
+                        (= :tabler-icon (:type d)))
+                    (icon-cp (if (string? d) d (:id d)) opts)
+                    (emoji-cp d opts)))]
+    [:div.all-pane.pb-10
+     (when (count used-items)
+       (pane-block "Frequently used"
+         (->> used-items (map item-cp))))
+     (pane-block (util/format "Emojis (%s)" (count emojis))
+       (->> emoji-items (map item-cp)))
+     (pane-block (util/format "Icons (%s)" (count (get-tabler-icons)))
+       (->> icon-items (map item-cp)))]))
+
+(rum/defc tab-observer
+  [tab {:keys [reset-q!]}]
+  (rum/use-effect!
+    #(reset-q!)
+    [tab])
+  nil)
+
 (rum/defcs icon-search <
   (rum/local "" ::q)
   (rum/local nil ::result)
-  (rum/local :emoji ::tab)
+  (rum/local :all ::tab)
   (rum/local nil ::hover)
   [state opts]
   (let [*q (::q state)
         *result (::result state)
         *tab (::tab state)
         *hover (::hover state)
+        *input-ref (rum/create-ref)
         result @*result
-        emoji-tab? (= @*tab :emoji)
-        opts (assoc opts :hover *hover)]
+        opts (assoc opts :hover *hover)
+        on-chosen' (:on-chosen opts)
+        opts (assoc opts
+               :on-chosen (fn [e m]
+                            (and on-chosen' (on-chosen' e m))
+                            (when (:type m) (add-used-item! m))))
+        reset-q! #(when-let [^js input (rum/deref *input-ref)]
+                    (reset! *q "")
+                    (reset! *result {})
+                    (set! (. input -value) "")
+                    (js/setTimeout (fn [] (.focus input)) 64))]
     [:div.cp__emoji-icon-picker
      ;; header
      [:div.hd
-      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5
-       {:auto-focus    true
-        :placeholder   "Select icon"
-        :default-value ""
-        :on-change     (debounce
-                         (fn [e]
-                           (reset! *q (util/evalue e))
-                           (if (string/blank? @*q)
-                             (reset! *result {})
-                             (p/let [result (search @*q)]
-                               (reset! *result result))))
-                         200)}]]
+      (tab-observer @*tab {:reset-q! reset-q!})
+      [:div.search-input
+       (shui/tabler-icon "search" {:size 16})
+       [:input.form-input
+        {:auto-focus true
+         :ref *input-ref
+         :placeholder (util/format "Search %s items" (string/lower-case (name @*tab)))
+         :default-value ""
+         :on-key-down (fn [^js e]
+                        (case (.-keyCode e)
+                          ;; esc
+                          27 (do (util/stop e)
+                                 (if (string/blank? @*q)
+                                   (some-> (rum/deref *input-ref) (.blur))
+                                   (reset-q!)))
+                          ;; up
+                          38 (do (util/stop e))
+                          ;; down
+                          40 (do (util/stop e))
+                          :dune))
+         :on-change (debounce
+                      (fn [e]
+                        (reset! *q (util/evalue e))
+                        (if (string/blank? @*q)
+                          (reset! *result {})
+                          (p/let [result (search @*q @*tab)]
+                            (reset! *result result))))
+                      200)}]
+       (when-not (string/blank? @*q)
+         [:a.x {:on-click reset-q!} (shui/tabler-icon "x" {:size 14})])]]
      ;; body
      [:div.bd
       {:on-mouse-leave #(reset! *hover nil)}
@@ -150,25 +224,25 @@
           (when (seq (:icons result))
             (icons-cp (:icons result) opts))]
          [:div.flex.flex-1.flex-col.gap-1
-          (if emoji-tab?
-            (emojis-cp emojis opts)
-            (icons-cp (get-tabler-icons) opts))])]]
+          (case @*tab
+            :emoji (emojis-cp emojis opts)
+            :icon (icons-cp (get-tabler-icons) opts)
+            (all-cp opts))])]]
 
      ;; footer
      [:div.ft
       (if-not @*hover
         ;; tabs
         [:div.flex.flex-1.flex-row.items-center.gap-2
-         (ui/button
-           "Emojis"
-           {:intent   "logseq"
-            :small?   true
-            :on-click #(reset! *tab :emoji)})
-         (ui/button
-           "Icons"
-           {:intent   "logseq"
-            :small?   true
-            :on-click #(reset! *tab :icon)})]
+         (let [tabs [[:all "All"] [:emoji "Emojis"] [:icon "Icons"]]]
+           (for [[id label] tabs
+                 :let [active? (= @*tab id)]]
+             (shui/button
+               {:variant :ghost
+                :size :sm
+                :class (util/classnames [{:active active?} "tab-item"])
+                :on-click #(reset! *tab id)}
+               label)))]
 
         ;; preview
         [:div.hover-preview
