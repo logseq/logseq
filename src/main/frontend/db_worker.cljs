@@ -629,6 +629,10 @@
    [_this repo]
    (bean/->js (rtc-core/get-debug-state repo)))
 
+  (keep-alive
+   [_this]
+   "alive")
+
   (dangerousRemoveAllDbs
    [this repo]
    (p/let [dbs (.listDB this)]

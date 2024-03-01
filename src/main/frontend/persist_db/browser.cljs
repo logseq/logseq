@@ -61,8 +61,8 @@
       (notification/show! "Latest change was not saved! Please restart the application." :error))))
 
 (defn- keep-worker-alive!
-  [worker]
-  (js/setInterval #(.postMessage worker "keepAlive") 25))
+  [^Object wrapped-worker]
+  (js/setInterval #(.keep-alive wrapped-worker) (* 25 1000)))
 
 (defn start-db-worker!
   []
@@ -92,7 +92,7 @@
                      (prn :debug "Can't init SQLite wasm")
                      (js/console.error error)
                      (notification/show! "It seems that OPFS is not supported on this browser, please upgrade this browser to the latest version or use another browser." :error))))
-      (keep-worker-alive! worker))))
+      (keep-worker-alive! wrapped-worker))))
 
 (defn <export-db!
   [repo data]
