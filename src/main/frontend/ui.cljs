@@ -1046,6 +1046,11 @@
                 button-props)
 
         icon (when icon (shui-ui/tabler-icon icon icon-props))
+        href? (not (string/blank? href))
+        text (cond
+               href? [:a {:href href :target "_blank"
+                          :style {:color "inherit"}} text]
+               :else text)
         children [icon text]]
 
     (shui-ui/button props children)))
