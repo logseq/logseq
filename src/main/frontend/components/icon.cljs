@@ -162,7 +162,7 @@
   (rum/local nil ::result)
   (rum/local :all ::tab)
   (rum/local nil ::hover)
-  [state opts]
+  [state {:keys [on-chosen] :as opts}]
   (let [*q (::q state)
         *result (::result state)
         *tab (::tab state)
@@ -170,20 +170,18 @@
         *input-ref (rum/create-ref)
         *result-ref (rum/create-ref)
         result @*result
-        opts (assoc opts :hover *hover)
-        on-chosen' (:on-chosen opts)
-        opts (assoc opts
-               :on-chosen (fn [e m]
-                            (and on-chosen' (on-chosen' e m))
-                            (when (:type m) (add-used-item! m))))
+        opts (assoc opts :hover *hover
+                    :on-chosen (fn [e m]
+                                 (and on-chosen (on-chosen e m))
+                                 (when (:type m) (add-used-item! m))))
         reset-q! #(when-let [^js input (rum/deref *input-ref)]
                     (reset! *q "")
                     (reset! *result {})
                     (set! (. input -value) "")
                     (js/setTimeout
-                      (fn [] (.focus input)
-                        (util/scroll-to (rum/deref *result-ref) 0 false))
-                      64))]
+                     (fn [] (.focus input)
+                       (util/scroll-to (rum/deref *result-ref) 0 false))
+                     64))]
     [:div.cp__emoji-icon-picker
      ;; header
      [:div.hd
@@ -200,7 +198,7 @@
                           ;; esc
                           27 (do (util/stop e)
                                  (if (string/blank? @*q)
-                                   (some-> (rum/deref *input-ref) (.blur))
+                                    (some-> (rum/deref *input-ref) (.blur))
                                    (reset-q!)))
                           ;; up
                           38 (do (util/stop e))
