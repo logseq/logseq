@@ -274,7 +274,6 @@
      ["C" (->priority "C")]]
 
     ;; advanced
-
     [["Query" [[:editor/input "{{query }}" {:backward-pos 2}]
                [:editor/exit]] query-doc]
      ["Zotero" (zotero-steps) "Import Zotero journal article"]
@@ -290,15 +289,11 @@
                    (println "draw file created, " path))
                  text)) "Draw a graph with Excalidraw"]
      ["Embed HTML " (->inline "html")]
-
      ["Embed Video URL" [[:editor/input "{{video }}" {:last-pattern command-trigger
                                                       :backward-pos 2}]]]
-
      ["Embed Youtube timestamp" [[:youtube/insert-timestamp]]]
-
      ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern command-trigger
                                                           :backward-pos 2}]]]
-
      ["Code block" [(case (state/get-preferred-format)
                       :markdown [:editor/input "```\n```\n" {:type            "block"
                                                              :backward-pos    5
