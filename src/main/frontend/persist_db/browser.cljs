@@ -60,10 +60,6 @@
                  (pr-str context))
       (notification/show! "Latest change was not saved! Please restart the application." :error))))
 
-(defn- keep-worker-alive!
-  [^Object wrapped-worker]
-  (js/setInterval #(.keep-alive wrapped-worker) (* 25 1000)))
-
 (defn start-db-worker!
   []
   (when-not util/node-test?
@@ -91,8 +87,7 @@
           (p/catch (fn [error]
                      (prn :debug "Can't init SQLite wasm")
                      (js/console.error error)
-                     (notification/show! "It seems that OPFS is not supported on this browser, please upgrade this browser to the latest version or use another browser." :error))))
-      (keep-worker-alive! wrapped-worker))))
+                     (notification/show! "It seems that OPFS is not supported on this browser, please upgrade this browser to the latest version or use another browser." :error)))))))
 
 (defn <export-db!
   [repo data]
