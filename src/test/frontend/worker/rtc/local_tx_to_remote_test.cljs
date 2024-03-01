@@ -32,7 +32,7 @@
                      (let [r (rtc-const/to-ws-ops-decoder
                               (rtc-core/sort-remote-ops
                                (rtc-core/gen-block-uuid->remote-ops repo conn)))]
-                       (is (rtc-const/to-ws-ops-validator r))
+                       (is (rtc-const/to-ws-ops-validator r) r)
                        r))]
     (testing "create a new page"
       (page-handler/create! page1-name {:redirect? false :create-first-block? false :uuid page1-uuid})
