@@ -68,6 +68,13 @@
     {:icons icons
      :emojis emojis}))
 
+(rum/defc pane-block
+  [label items]
+  [:div.pane-block
+   [:div.hd.px-1.pb-1.leading-none
+    [:strong.text-xs.font-medium.text-gray-07.dark:opacity-80 label]]
+   [:div.its items]])
+
 (rum/defc emoji-cp < rum/static
   [{:keys [id name] :as emoji} {:keys [on-chosen hover]}]
   [:button.text-2xl.w-9.h-9.transition-opacity
@@ -83,10 +90,10 @@
 
 (rum/defc emojis-cp < rum/static
   [emojis opts]
-  [:div.emojis.pane-block
-   [:div.its
+  (pane-block
+    (util/format "Emojis (%s)" (count emojis))
     (for [emoji emojis]
-      (rum/with-key (emoji-cp emoji opts) (:id emoji)))]])
+      (rum/with-key (emoji-cp emoji opts) (:id emoji)))))
 
 (rum/defc icon-cp < rum/static
   [icon {:keys [on-chosen hover]}]
@@ -107,17 +114,10 @@
 
 (rum/defc icons-cp < rum/static
   [icons opts]
-  [:div.icons.pane-block
-   [:div.its
+  (pane-block
+    (util/format "Icons (%s)" (count icons))
     (for [icon icons]
-      (icon-cp icon opts))]])
-
-(rum/defc pane-block
-  [label items]
-  [:div.pane-block
-   [:div.hd.px-1.pb-1.leading-none
-    [:strong.text-xs.font-medium.text-gray-07.dark:opacity-80 label]]
-   [:div.its items]])
+      (icon-cp icon opts))))
 
 (defn get-used-items
   []
