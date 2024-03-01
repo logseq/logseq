@@ -39,7 +39,7 @@
 (rum/defcs add-commit-message < rum/reactive
   (rum/local nil ::git-status)
   {:will-mount (fn [state]
-                 (-> (ipc/ipc "gitStatus")
+                 (-> (ipc/ipc "gitStatus" (state/get-current-repo))
                      (p/then (fn [status]
                                (reset! (get state ::git-status) status))))
                  state)

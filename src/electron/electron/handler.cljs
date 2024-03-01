@@ -434,7 +434,6 @@
   (let [old-path (state/get-window-graph-path window)]
     (when (and old-path graph-path (not= old-path graph-path))
       (close-watcher-when-orphaned! window old-path))
-    (swap! state/state assoc :graph/current graph-path)
     (swap! state/state assoc-in [:window/graph window] graph-path)
     nil))
 
@@ -442,14 +441,14 @@
   (when graph-name
     (set-current-graph! window (utils/get-graph-dir graph-name))))
 
-(defmethod handle :runGit [_ [_ args]]
-  (when (seq args)
-    (git/raw! args)))
+(defmethod handle :runGit [_ [_ {:keys [repo command]}]]
+  (when (seq command)
+    (git/raw! (utils/get-graph-dir repo) command)))
 
-(defmethod handle :runGitWithinCurrentGraph [_ [_ args]]
-  (when (seq args)
-    (git/init!)
-    (git/run-git2! (clj->js args))))
+(defmethod handle :runGitWithinCurrentGraph [_ [_ {:keys [repo command]}]]
+  (when (seq command)
+    (git/init! (utils/get-graph-dir repo))
+    (git/run-git2! (utils/get-graph-dir repo) (clj->js command))))
 
 (defmethod handle :runCli [window [_ {:keys [command args returnResult]}]]
   (try
@@ -472,8 +471,8 @@
 (defmethod handle :gitCommitAll [_ [_ message]]
   (git/add-all-and-commit! message))
 
-(defmethod handle :gitStatus [_ [_]]
-  (git/short-status!))
+(defmethod handle :gitStatus [_ [_ repo]]
+  (git/short-status! (utils/get-graph-dir repo)))
 
 (def debounced-configure-auto-commit! (debounce git/configure-auto-commit! 5000))
 (defmethod handle :setGitAutoCommit []
