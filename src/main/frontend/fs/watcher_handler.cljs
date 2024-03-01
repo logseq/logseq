@@ -41,17 +41,21 @@
 
 (defn- handle-add-and-change!
   [repo path content db-content mtime backup?]
-  (p/let [;; save the previous content in a versioned bak file to avoid data overwritten.
-          _ (when backup?
-              (-> (when-let [repo-dir (config/get-local-dir repo)]
-                    (file-handler/backup-file! repo-dir path db-content content))
-                  (p/catch #(js/console.error "❌ Bak Error: " path %))))
+  (let [config (state/get-config repo)
+        path-hidden-patterns (:hidden config)]
+    (when-not (and (seq path-hidden-patterns)
+                   (common-config/hidden? path path-hidden-patterns))
+      (p/let [;; save the previous content in a versioned bak file to avoid data overwritten.
+              _ (when backup?
+                  (-> (when-let [repo-dir (config/get-local-dir repo)]
+                        (file-handler/backup-file! repo-dir path db-content content))
+                      (p/catch #(js/console.error "❌ Bak Error: " path %))))
 
-          _ (file-handler/alter-file repo path content {:re-render-root? true
-                                                        :from-disk? true
-                                                        :fs/event :fs/local-file-change})]
-    (set-missing-block-ids! content)
-    (db/set-file-last-modified-at! repo path mtime)))
+              _ (file-handler/alter-file repo path content {:re-render-root? true
+                                                            :from-disk? true
+                                                            :fs/event :fs/local-file-change})]
+        (set-missing-block-ids! content)
+        (db/set-file-last-modified-at! repo path mtime)))))
 
 (defn handle-changed!
   [type {:keys [dir path content stat global-dir] :as payload}]
