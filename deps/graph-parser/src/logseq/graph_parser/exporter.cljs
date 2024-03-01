@@ -14,6 +14,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.rules :as rules]
+            [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]))
 
 (defn- get-pid
@@ -73,13 +74,26 @@
              (throw (ex-info (str "No uuid found for page " (pr-str (:block/name m)))
                              {:page m})))))
 
+(defn- content-without-tags-ignore-case
+  "Ignore case because tags in content can have any case and still have a valid ref"
+  [content tags]
+  (->
+   (reduce
+    (fn [content tag]
+      (-> content
+          (common-util/replace-ignore-case (str "#" tag) "")
+          (common-util/replace-ignore-case (str "#" page-ref/left-brackets tag page-ref/right-brackets) "")))
+    content
+    tags)
+   (string/trim)))
+
 (defn- update-block-tags
   [block tag-classes page-names-to-uuids]
   (if (seq (:block/tags block))
     (let [original-tags (remove :block.temp/new-class (:block/tags block))]
       (-> block
           (update :block/content
-                  db-content/content-without-tags
+                  content-without-tags-ignore-case
                   (->> original-tags
                        (filter #(tag-classes (:block/name %)))
                        (map :block/original-name)))

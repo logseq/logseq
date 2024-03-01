@@ -98,4 +98,4 @@
                           (:block/uuid tag)
                           page-ref/right-brackets)))
    content
-   tags))
+   (sort-by :block/original-name > tags)))
