@@ -562,8 +562,8 @@
   [_ & {:keys [parent-uuid left-uuid block-uuid *remote-ops *depend-on-block-uuid-set]}]
   (when parent-uuid
     (let [target-uuid (or left-uuid parent-uuid)
-          sibling? (not= left-uuid parent-uuid)]
-      (swap! *remote-ops conj [:move {:block-uuid block-uuid :target-uuid target-uuid :sibling? sibling?}])
+          pos (if (not= left-uuid parent-uuid) :sibling :child)]
+      (swap! *remote-ops conj [:move {:block-uuid block-uuid :target-uuid target-uuid :pos pos}])
       (swap! *depend-on-block-uuid-set conj target-uuid))))
 
 (defmethod local-block-ops->remote-ops-aux :update-op
@@ -592,7 +592,7 @@
                                   (seq add*) (assoc :add add*)
                                   (seq retract) (assoc :retract retract))))
         target-uuid (or left-uuid parent-uuid)
-        sibling? (not= left-uuid parent-uuid)]
+        pos (if (not= left-uuid parent-uuid) :sibling :child)]
     (swap! *remote-ops conj
            [:update
             (cond-> {:block-uuid block-uuid}
@@ -611,7 +611,7 @@
               (and (contains? attr-map :link)
                    (:block/uuid (:block/link block)))
               (assoc :link (:block/uuid (:block/link block)))
-              target-uuid                     (assoc :target-uuid target-uuid :sibling? sibling?))])))
+              target-uuid                     (assoc :target-uuid target-uuid :pos pos))])))
 
 (defmethod local-block-ops->remote-ops-aux :update-page-op
   [_ & {:keys [conn block-uuid *remote-ops]}]

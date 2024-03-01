@@ -21,6 +21,12 @@
   (into #{} (map first) general-attrs-schema-coll))
 
 (def block-type-schema [:enum "property" "class" "whiteboard" "hidden" "closed value"])
+(def block-pos-schema
+  ":sibling:  sibling of target-block(:target-uuid)
+  :child: child of target-block(:target-uuid)
+  :no-order: this block doesn't have :block/left attr"
+  [:enum :sibling :child :no-order])
+
 
 (def to-ws-op-schema
   [:multi {:dispatch first :decode/string #(update % 0 keyword)}
@@ -29,7 +35,7 @@
      [:map
       [:block-uuid :uuid]
       [:target-uuid :uuid]
-      [:sibling? :boolean]]]]
+      [:pos block-pos-schema]]]]
    [:remove
     [:cat :keyword
      [:map
@@ -40,7 +46,7 @@
      [:map
       [:block-uuid :uuid]
       [:target-uuid {:optional true} :uuid]
-      [:sibling? {:optional true} :boolean]
+      [:pos {:optional true} block-pos-schema]
       [:content {:optional true} :string]
       [:updated-at {:optional true} :int]
       [:created-at {:optional true} :int]
