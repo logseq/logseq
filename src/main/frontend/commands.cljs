@@ -299,7 +299,7 @@
      ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern command-trigger
                                                           :backward-pos 2}]]]
 
-     ["Code block" [(case preferred-format
+     ["Code block" [(case (state/get-preferred-format)
                       :markdown [:editor/input "```\n```\n" {:type            "block"
                                                              :backward-pos    5
                                                              :only-breakline? true}]
