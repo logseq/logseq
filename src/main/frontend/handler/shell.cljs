@@ -11,11 +11,13 @@
 
 (defn run-git-command!
   [command]
-  (ipc/ipc :runGit command))
+  (ipc/ipc :runGit {:repo (state/get-current-repo)
+                    :command command}))
 
 (defn run-git-command2!
   [command]
-  (ipc/ipc :runGitWithinCurrentGraph command))
+  (ipc/ipc :runGitWithinCurrentGraph {:repo (state/get-current-repo) 
+                                      :command command}))
 
 (defn run-cli-command!
   [command args]

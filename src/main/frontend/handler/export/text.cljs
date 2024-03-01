@@ -360,6 +360,10 @@
             (when (and origin-ast newline-after-block? (not current-block-is-first-heading-block?))
               [(newline* 2)])
             (mapcatv inline-ast->simple-ast ast-content)
+            (let [last-element (last ast-content)
+                  [last-element-type] last-element]
+              (when (and newline-after-block? (= "Break_Line" last-element-type))
+                (inline-break-line)))
             [(newline* 1)]))
          "Paragraph_line"
          (assert false "Paragraph_line is mldoc internal ast")
