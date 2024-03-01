@@ -176,30 +176,32 @@
                                                      false))]
         (prn ::initial-watcher repo-dir {:deleted (count deleted-files)
                                          :total (count files)})
-        (when (seq deleted-files)
-          (let [delete-tx-data (->> (db/delete-files deleted-files)
-                                    (concat (db/delete-blocks graph deleted-files nil))
-                                    (remove nil?))]
-            (db/transact! graph delete-tx-data {:delete-files? true})))
-        (-> (p/delay 500) ;; workaround for notification ui not showing
-            (p/then #(p/all (map (fn [file-rpath]
-                                   (p/let [stat (fs/stat repo-dir file-rpath)
-                                           content (fs/read-file repo-dir file-rpath)
-                                           type (if (db/file-exists? graph file-rpath)
-                                                  "change"
-                                                  "add")]
-                                     (handle-changed! type
-                                                      {:dir repo-dir
-                                                       :path file-rpath
-                                                       :content content
-                                                       :stat stat})))
-                                 files)))
-            (p/then (fn []
-                      (when notification-uid
-                        (prn ::init-notify)
-                        (notification/clear! notification-uid)
-                        (state/pub-event! [:notification/show {:content (str "The graph " graph " is loaded.")
-                                                               :status :success
-                                                               :clear? true}]))))
-            (p/catch (fn [error]
-                       (js/console.dir error))))))))
+        (p/do!
+         (when (seq deleted-files)
+           (p/all (map (fn [path]
+                         (when-let [page-name (db/get-file-page path)]
+                           (println "Delete page: " page-name ", file path: " path ".")
+                           (page-handler/<delete! page-name #())))
+                       deleted-files)))
+         (-> (p/delay 500) ;; workaround for notification ui not showing
+             (p/then #(p/all (map (fn [file-rpath]
+                                    (p/let [stat (fs/stat repo-dir file-rpath)
+                                            content (fs/read-file repo-dir file-rpath)
+                                            type (if (db/file-exists? graph file-rpath)
+                                                   "change"
+                                                   "add")]
+                                      (handle-changed! type
+                                                       {:dir repo-dir
+                                                        :path file-rpath
+                                                        :content content
+                                                        :stat stat})))
+                                  files)))
+             (p/then (fn []
+                       (when notification-uid
+                         (prn ::init-notify)
+                         (notification/clear! notification-uid)
+                         (state/pub-event! [:notification/show {:content (str "The graph " graph " is loaded.")
+                                                                :status :success
+                                                                :clear? true}]))))
+             (p/catch (fn [error]
+                        (js/console.dir error)))))))))
