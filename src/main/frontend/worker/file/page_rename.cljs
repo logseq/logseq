@@ -94,11 +94,14 @@
 
 (defn- rename-update-block-refs!
   [refs from-id to-id]
-  (->> refs
-       (remove #{{:db/id from-id}})
-       (cons {:db/id to-id})
-       (distinct)
-       (vec)))
+  (if to-id
+    (->> refs
+        (remove #{{:db/id from-id}})
+        (cons {:db/id to-id})
+        (distinct)
+        (vec))
+    ;; New page not exists so that we keep using the old page's block as a ref
+    refs))
 
 (defn replace-page-ref
   "Unsanitized only"
