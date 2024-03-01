@@ -83,9 +83,10 @@
 
 (rum/defc emojis-cp < rum/static
   [emojis opts]
-  [:div.emojis.flex.flex-1.flex-row.gap-1.flex-wrap
-   (for [emoji emojis]
-     (rum/with-key (emoji-cp emoji opts) (:id emoji)))])
+  [:div.emojis.pane-block
+   [:div.its
+    (for [emoji emojis]
+      (rum/with-key (emoji-cp emoji opts) (:id emoji)))]])
 
 (rum/defc icon-cp < rum/static
   [icon {:keys [on-chosen hover]}]
@@ -106,9 +107,10 @@
 
 (rum/defc icons-cp < rum/static
   [icons opts]
-  [:div.icons.flex.flex-1.flex-row.gap-1.flex-wrap
-   (for [icon icons]
-     (icon-cp icon opts))])
+  [:div.icons.pane-block
+   [:div.its
+    (for [icon icons]
+      (icon-cp icon opts))]])
 
 (rum/defc pane-block
   [label items]
