@@ -87,15 +87,17 @@
    (string/trim)))
 
 (defn replace-tags-with-page-refs
-  "Replace tags in content with page-ref ids"
+  "Replace tags in content with page-ref ids. Ignore case because tags in
+  content can have any case and still have a valid ref"
   [content tags]
   (reduce
    (fn [content tag]
-     (string/replace content
-                     (str "#" (:block/original-name tag))
-                     (str page-ref/left-brackets
-                          page-ref-special-chars
-                          (:block/uuid tag)
-                          page-ref/right-brackets)))
+     (common-util/replace-ignore-case
+      content
+      (str "#" (:block/original-name tag))
+      (str page-ref/left-brackets
+           page-ref-special-chars
+           (:block/uuid tag)
+           page-ref/right-brackets)))
    content
    (sort-by :block/original-name > tags)))
