@@ -3,7 +3,7 @@
   (:require [clojure.string :as string]
             [goog.object :as gobj]))
 
-(defn- hidden?
+(defn hidden?
   [path patterns]
   (let [path (if (and (string? path)
                       (= \/ (first path)))
