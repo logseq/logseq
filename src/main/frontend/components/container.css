@@ -197,6 +197,7 @@
       @apply pl-6 pr-4 py-1 flex justify-between items-center select-none sticky top-[-4px];
       @apply cursor-pointer z-[2] active:opacity-80;
 
+      background-color: var(--left-sidebar-bg-color);
 
       .ui__icon {
         @apply flex justify-center;
