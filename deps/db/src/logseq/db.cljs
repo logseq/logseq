@@ -53,23 +53,33 @@
 
 (defonce *request-id (atom 0))
 (defonce requests (async/chan 1000))
-(defonce *request-id->response (atom {}))
+(defonce *unfinished-request-ids (atom #{}))
 
 (defn request-finished?
   "Whether any DB transaction request has been finished"
   []
-  (empty? @*request-id->response))
+  (empty? @*unfinished-request-ids))
 
 (async/go-loop []
   (when-let [{:keys [id request response]} (async/<! requests)]
     (let [result (async/<! (p->c (request)))]
       (p/resolve! response result)
-      (swap! *request-id->response dissoc id))
+      (swap! *unfinished-request-ids disj id))
     (recur)))
 
 (defn get-next-request-id
   []
   (swap! *request-id inc))
+
+(defn add-request!
+  [request-id request-f]
+  (let [resp (p/deferred)
+        new-request {:id request-id
+                     :request request-f
+                     :response resp}]
+    (swap! *unfinished-request-ids conj request-id)
+    (async/go (async/>! requests new-request))
+    resp))
 
 (defn transact!
   "`repo-or-conn`: repo for UI thread and conn for worker/node"
@@ -93,12 +103,7 @@
                         (assoc :request-id request-id))]
          (if sync?
            (f repo-or-conn tx-data tx-meta')
-           (let [resp (p/deferred)
-                 new-request {:id request-id
-                              :request #(f repo-or-conn tx-data tx-meta')
-                              :response resp}]
-             (async/go (async/>! requests new-request))
-             resp)))))))
+           (add-request! request-id #(f repo-or-conn tx-data tx-meta'))))))))
 
 (defn build-default-pages-tx
   []

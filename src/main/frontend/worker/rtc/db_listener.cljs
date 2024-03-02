@@ -207,7 +207,7 @@
   [repo conn]
   (d/listen! conn :sync-db
              (fn [{:keys [tx-meta] :as tx-report}]
-               (let [{:keys [pipeline-replace?]} tx-meta
+               (let [{:keys [pipeline-replace? from-disk?]} tx-meta
                      result (worker-pipeline/invoke-hooks repo conn tx-report (worker-state/get-context))
                      tx-report' (or (:tx-report result) tx-report)]
                  (when-not pipeline-replace?
@@ -220,14 +220,15 @@
                                 (dissoc result :tx-report)))]
                      (worker-util/post-message :sync-db-changes data))
 
-                   (p/do!
-                    (let [{:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice repo tx-report')
-                          ^js wo (worker-state/get-worker-object)]
-                      (when wo
-                        (when (seq blocks-to-remove-set)
-                          (.search-delete-blocks wo repo (bean/->js blocks-to-remove-set)))
-                        (when (seq blocks-to-add)
-                          (.search-upsert-blocks wo repo (bean/->js blocks-to-add)))))))))))
+                   (when-not from-disk?
+                     (p/do!
+                      (let [{:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice repo tx-report')
+                            ^js wo (worker-state/get-worker-object)]
+                        (when wo
+                          (when (seq blocks-to-remove-set)
+                            (.search-delete-blocks wo repo (bean/->js blocks-to-remove-set)))
+                          (when (seq blocks-to-add)
+                            (.search-upsert-blocks wo repo (bean/->js blocks-to-add))))))))))))
 
 (defn listen-to-db-changes!
   [repo conn]

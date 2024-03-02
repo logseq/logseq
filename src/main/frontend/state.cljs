@@ -2376,3 +2376,4 @@ Similar to re-frame subscriptions"
   (update-state! :favorites/updated? inc))
 
 (def get-worker-next-request-id ldb/get-next-request-id)
+(def add-worker-request! ldb/add-request!)

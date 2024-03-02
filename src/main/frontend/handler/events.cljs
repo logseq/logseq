@@ -196,13 +196,13 @@
   (let [^js sqlite @db-browser/*worker]
     (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite (state/get-current-repo)))
             request-finished? (ldb/request-finished?)]
-      (if (or (not request-finished?) (not writes-finished?)) ; TODO: test (:sync-graph/init? @state/state)
+      (if (not writes-finished?) ; TODO: test (:sync-graph/init? @state/state)
         (do
           (log/info :graph/switch (cond->
                                     {:request-finished? request-finished?
                                      :file-writes-finished? writes-finished?}
                                     (false? request-finished?)
-                                    (assoc :unfinished-requests? @ldb/*request-id->response)))
+                                    (assoc :unfinished-requests? @ldb/*unfinished-request-ids)))
           (notification/show!
             "Please wait seconds until all changes are saved for the current graph."
             :warning))

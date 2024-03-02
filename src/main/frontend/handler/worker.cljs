@@ -45,7 +45,8 @@
   (set! (.-onmessage worker)
         (fn [event]
           (let [data (.-data event)]
-            (when-not (= (.-type data) "RAW")
+            (when-not (or (= (.-type data) "RAW")
+                          (= data "keepAlive"))
               ;; Log thrown exceptions from comlink
               ;; https://github.com/GoogleChromeLabs/comlink/blob/dffe9050f63b1b39f30213adeb1dd4b9ed7d2594/src/comlink.ts#L223-L236
               (if (and (= "HANDLER" (.-type data)) (= "throw" (.-name data)))
