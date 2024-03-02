@@ -92,7 +92,7 @@
     (hide! id)))
 
 (rum/defc x-popup
-  [{:keys [id open? content position as-menu? root-props content-props] :as _props}]
+  [{:keys [id open? content position as-menu? auto-side? root-props content-props] :as _props}]
   (rum/use-effect!
     (fn []
       (when (false? open?)
@@ -102,7 +102,16 @@
   (when-let [[x y _ height] position]
     (let [popup-root (if as-menu? dropdown-menu popover)
           popup-trigger (if as-menu? dropdown-menu-trigger popover-trigger)
-          popup-content (if as-menu? dropdown-menu-content popover-content)]
+          popup-content (if as-menu? dropdown-menu-content popover-content)
+          auto-side-fn (fn []
+                         (let [vh js/window.innerHeight
+                               [th bh] [y (- vh (+ y height))]]
+                           (if (> bh 280)
+                             "bottom"
+                             (if (> (- th bh) 100)
+                               "top" "bottom"))))
+          content-props (cond-> content-props
+                          auto-side? (assoc :side (auto-side-fn)))]
       (popup-root
         (merge root-props {:open open?})
         (popup-trigger
