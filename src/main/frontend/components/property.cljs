@@ -608,9 +608,9 @@
                                   :toggle-fn #(shui/popup-hide! id)})])
                             {:content-props {:class "property-configure-popup-content"
                                              :collisionPadding {:bottom 10 :top 10}
-                                             :side "bottom"
                                              :avoidCollisions true
                                              :align "start"}
+                             :auto-side? true
                              :as-menu? true}))}
         [:div {:style {:padding-left 6}} (:block/original-name property)]])]))
 
