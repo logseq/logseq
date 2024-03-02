@@ -37,7 +37,7 @@
   (history/restore-app-state! app-state))
 
 (defn invoke-hooks
-  [{:keys [request-id tx-meta tx-data deleted-block-uuids affected-keys blocks] :as opts}]
+  [{:keys [_request-id tx-meta tx-data deleted-block-uuids affected-keys blocks] :as opts}]
   ;; (prn :debug
   ;;      :request-id request-id
   ;;      :tx-meta tx-meta
@@ -47,12 +47,21 @@
         tx-report {:tx-meta tx-meta
                    :tx-data tx-data}
         conn (db/get-db repo false)]
-    (if initial-pages?
+    (cond
+      initial-pages?
       (do
         (util/profile "transact initial-pages" (d/transact! conn tx-data tx-meta))
         (when end?
           (state/pub-event! [:init/commands])
           (ui-handler/re-render-root!)))
+
+      (or from-disk? new-graph?)
+      (do
+        (d/transact! conn tx-data tx-meta)
+        (react/clear-query-state!)
+        (ui-handler/re-render-root!))
+
+      :else
       (do
         (let [tx-data' (if (= (:outliner-op tx-meta) :insert-blocks)
                          (let [update-blocks-fully-loaded (keep (fn [datom] (when (= :block/uuid (:a datom))
@@ -67,35 +76,31 @@
           (when-not (or undo? redo?)
             (update-current-tx-editor-cursor! tx-report)))
 
-        (let [new-datoms (filter (fn [datom]
-                                   (and
-                                    (= :block/uuid (:a datom))
-                                    (true? (:added datom)))) tx-data)]
-          (when (seq new-datoms)
-            (state/set-state! :editor/new-created-blocks (set (map :v new-datoms)))))
+        (when-not (:graph/importing @state/state)
+          (let [new-datoms (filter (fn [datom]
+                                     (and
+                                      (= :block/uuid (:a datom))
+                                      (true? (:added datom)))) tx-data)]
+            (when (seq new-datoms)
+              (state/set-state! :editor/new-created-blocks (set (map :v new-datoms)))))
 
-        (if (or from-disk? new-graph?)
-          (do
-            (react/clear-query-state!)
-            (ui-handler/re-render-root!))
-          (when-not (:graph/importing @state/state)
-            (react/refresh! repo tx-report affected-keys)
+          (react/refresh! repo tx-report affected-keys)
 
-            (when-let [state (:ui/restore-cursor-state @state/state)]
-              (when (or undo? redo?)
-                (restore-cursor-and-app-state! state undo?)
-                (state/set-state! :ui/restore-cursor-state nil)))
+          (when-let [state (:ui/restore-cursor-state @state/state)]
+            (when (or undo? redo?)
+              (restore-cursor-and-app-state! state undo?)
+              (state/set-state! :ui/restore-cursor-state nil)))
 
-            (state/set-state! :editor/start-pos nil)
+          (state/set-state! :editor/start-pos nil)
 
-            (when (and state/lsp-enabled?
-                       (seq blocks)
-                       (<= (count blocks) 1000))
-              (state/pub-event! [:plugin/hook-db-tx
-                                 {:blocks  blocks
-                                  :deleted-block-uuids deleted-block-uuids
-                                  :tx-data (:tx-data tx-report)
-                                  :tx-meta (:tx-meta tx-report)}]))))))
+          (when (and state/lsp-enabled?
+                     (seq blocks)
+                     (<= (count blocks) 1000))
+            (state/pub-event! [:plugin/hook-db-tx
+                               {:blocks  blocks
+                                :deleted-block-uuids deleted-block-uuids
+                                :tx-data (:tx-data tx-report)
+                                :tx-meta (:tx-meta tx-report)}])))))
 
     (when (= (:outliner-op tx-meta) :delete-page)
       (state/pub-event! [:page/deleted repo (:deleted-page tx-meta) (:file-path tx-meta) tx-meta]))
@@ -108,10 +113,4 @@
                                (= :block/uuid (:a datom))
                                (= (:v datom) deleting-block-id)
                                (true? (:added datom)))) tx-data) ; editing-block was added back (could be undo or from remote sync)
-        (state/set-state! :ui/deleting-block nil)))
-
-    (when request-id
-      (when-let [deferred (ldb/get-deferred-response request-id)]
-        (when (p/promise? deferred)
-          (p/resolve! deferred {:tx-meta tx-meta :tx-data tx-data})))
-      (swap! ldb/*request-id->response dissoc request-id))))
+        (state/set-state! :ui/deleting-block nil)))))
