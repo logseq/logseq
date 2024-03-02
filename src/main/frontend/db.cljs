@@ -66,5 +66,3 @@
    (conn/start! repo option)))
 
 (def new-block-id ldb/new-block-id)
-
-(def request-finished? ldb/request-finished?)

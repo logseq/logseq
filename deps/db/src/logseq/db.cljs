@@ -10,7 +10,9 @@
             [clojure.set :as set]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.entity-plus]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [clojure.core.async :as async]
+            [clojure.core.async.interop :refer [p->c]]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
@@ -50,6 +52,7 @@
   (when f (reset! *transact-fn f)))
 
 (defonce *request-id (atom 0))
+(defonce requests (async/chan 1000))
 (defonce *request-id->response (atom {}))
 
 (defn request-finished?
@@ -57,26 +60,16 @@
   []
   (empty? @*request-id->response))
 
-(defn get-deferred-response
-  [request-id]
-  (:response (get @*request-id->response request-id)))
-
-;; run the next request
-(add-watch *request-id->response :loop-execute-requests
-           (fn [_ _ _ new]
-             (when-let [request-id (some->> (keys new)
-                                            sort
-                                            first)]
-               (when-let [callback (:callback (get new request-id))]
-                 (callback)))))
+(async/go-loop []
+  (when-let [{:keys [id request response]} (async/<! requests)]
+    (let [result (async/<! (p->c (request)))]
+      (p/resolve! response result)
+      (swap! *request-id->response dissoc id))
+    (recur)))
 
 (defn get-next-request-id
   []
   (swap! *request-id inc))
-
-(defn add-request!
-  [request-id data]
-  (swap! *request-id->response assoc request-id (if (map? data) data {:response data})))
 
 (defn transact!
   "`repo-or-conn`: repo for UI thread and conn for worker/node"
@@ -84,13 +77,12 @@
    (transact! repo-or-conn tx-data nil))
   ([repo-or-conn tx-data tx-meta]
    (let [tx-data (->> (common-util/fast-remove-nils tx-data)
-                      (remove empty?))
-         request-finished? (request-finished?)]
+                      (remove empty?))]
      ;; Ensure worker can handle the request sequentially (one by one)
      ;; Because UI assumes that the in-memory db has all the data except the last one transaction
      (when (seq tx-data)
 
-       ;; (prn :debug :transact)
+       ;; (prn :debug :transact :sync? (= d/transact! (or @*transact-fn d/transact!)))
        ;; (cljs.pprint/pprint tx-data)
 
        (let [f (or @*transact-fn d/transact!)
@@ -101,14 +93,11 @@
                         (assoc :request-id request-id))]
          (if sync?
            (f repo-or-conn tx-data tx-meta')
-           (let [resp (p/deferred)]
-             (when request-finished?
-               (f repo-or-conn tx-data tx-meta'))
-             (let [value (if request-finished?
-                           {:response resp}
-                           {:response resp
-                            :callback #(f repo-or-conn tx-data tx-meta')})]
-               (add-request! request-id value))
+           (let [resp (p/deferred)
+                 new-request {:id request-id
+                              :request #(f repo-or-conn tx-data tx-meta')
+                              :response resp}]
+             (async/go (async/>! requests new-request))
              resp)))))))
 
 (defn build-default-pages-tx
