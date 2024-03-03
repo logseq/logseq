@@ -1,5 +1,9 @@
 [
 	{
+		"pkg": "@capacitor/action-sheet",
+		"classpath": "com.capacitorjs.plugins.actionsheet.ActionSheetPlugin"
+	},
+	{
 		"pkg": "@capacitor/app",
 		"classpath": "com.capacitorjs.plugins.app.AppPlugin"
 	},
@@ -40,8 +44,8 @@
 		"classpath": "io.capawesome.capacitorjs.plugins.backgroundtask.BackgroundTaskPlugin"
 	},
 	{
-		"pkg": "@hugotomazi/capacitor-navigation-bar",
-		"classpath": "br.com.tombus.capacitor.plugin.navigationbar.NavigationBarPlugin"
+		"pkg": "@capgo/capacitor-navigation-bar",
+		"classpath": "ee.forgr.capacitor_navigation_bar.NavigationBarPlugin"
 	},
 	{
 		"pkg": "@logseq/capacitor-file-sync",

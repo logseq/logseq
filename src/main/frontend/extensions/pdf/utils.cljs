@@ -4,28 +4,18 @@
             [frontend.util :as util]
             ["/frontend/extensions/pdf/utils" :as js-utils]
             [datascript.core :as d]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.publishing.db :as publish-db]
             [clojure.string :as string]))
 
 (defonce MAX-SCALE 5.0)
 (defonce MIN-SCALE 0.25)
 (defonce DELTA_SCALE 1.05)
 
-(defn clean-asset-path-prefix
-  [path]
-  (when (string? path)
-    (string/replace-first path #"^[.\/\\]*(assets)[\/\\]+" "")))
+(defn hls-file?
+  [filename]
+  (and filename (string? filename) (string/starts-with? filename "hls__")))
 
-(defn get-area-block-asset-url
-  [block page]
-  (when-some [props (and block page (:block/properties block))]
-    (when-some [uuid (:block/uuid block)]
-      (when-some [stamp (:hl-stamp props)]
-        (let [group-key      (string/replace-first (:block/original-name page) #"^hls__" "")
-              hl-page        (:hl-page props)
-              encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" group-key))
-              group-key      (if encoded-chars? (js/encodeURI group-key) group-key)]
-          (str "./" gp-config/local-assets-dir "/" group-key "/" (str hl-page "_" uuid "_" stamp ".png")))))))
+(def get-area-block-asset-url publish-db/get-area-block-asset-url)
 
 (defn get-bounding-rect
   [rects]
@@ -66,7 +56,7 @@
 (defn resolve-hls-layer!
   [^js viewer page]
   (when-let [^js text-layer (.. viewer (getPageView (dec page)) -textLayer)]
-    (let [cnt (.-textLayerDiv text-layer)
+    (let [cnt (.-div text-layer)
           cls "extensions__pdf-hls-layer"
           doc js/document
           layer (.querySelector cnt (str "." cls))]
@@ -155,7 +145,8 @@
         ^js cnt-offset (.getBoundingClientRect page-cnt)]
 
     (when (seq rge-rects)
-      (let [rects (for [rect rge-rects]
+      (let [rects (for [rect rge-rects
+                        :when (and rect (not (zero? (.-width rect))) (not (zero? (.-height rect))))]
                     {:top    (- (+ (.-top rect) (.-scrollTop page-cnt)) (.-top cnt-offset))
                      :left   (- (+ (.-left rect) (.-scrollLeft page-cnt)) (.-left cnt-offset))
                      :width  (.-width rect)
@@ -177,12 +168,13 @@
   [filename]
   (when-not (string/blank? filename)
     (let [local-asset? (re-find #"[0-9]{13}_\d$" filename)
-          hls?         (re-find #"^hls__" filename)
+          hls?         (hls-file? filename)
           len          (count filename)]
       (if (or local-asset? hls?)
         (-> filename
             (subs 0 (if local-asset? (- len 15) len))
             (string/replace #"^hls__" "")
+            (string/replace #"__[-\d]+$" "")
             (string/replace "_" " ")
             (string/trimr))
         filename))))
@@ -191,13 +183,13 @@
 (defn next-page
   []
   (try
-    (js-invoke js/window.lsPdfViewer "nextPage")
+    (js-invoke js/window.lsActivePdfViewer "nextPage")
     (catch :default _e nil)))
 
 (defn prev-page
   []
   (try
-    (js-invoke js/window.lsPdfViewer "previousPage")
+    (js-invoke js/window.lsActivePdfViewer "previousPage")
     (catch :default _e nil)))
 
 (defn open-finder

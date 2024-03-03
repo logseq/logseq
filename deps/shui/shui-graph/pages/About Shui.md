@@ -1,0 +1,22 @@
+- ## What is shui?
+- Shui is the component library for logseq. It has 3 main goals:
+	- 1. Provide an abstraction for specific components, separate from the main codebase
+	  2. Provide a consistent look and feel for the future of logseq
+	  3. Provide ready to use components to plugin authors to allow for a more consistent better user experience of plugin authors and users
+-
+- ## What are the general concepts of shui?
+- Shui has a few core principles:
+	- ### Focus on a native core experience
+		- We want to provide a smooth, consistent, and native feel for all logseq features, first and foremost
+	- ### Specific output, general input
+		- Components should be generally reusable by their props, however should have the user experience themselves
+		- Eventually, getting to a highly composable components is a great goal, but we should start small and focused first
+	- ### UI is a marathon, not a sprint
+		- Components in shui should be versioned, and should expect to evolve over time
+		- We need to go from highly coupled, low reused components to a loosely coupled, highly reusable library. This will take time, and means components have to be adaptable over time
+		- Versioning is at the core of shui
+-
+- ## How to contribute to shui?
+- In the logseq repo, there is a directory at `deps/shui`. Here you can find all of the shui components
+- In the logseq repo, you can find a copy of this graph at `deps/shui/shui-graph`. Here you can find and add all the test cases needed for different `shui` components
+- In the logseq repo, you can find tests under the `e2e-tests/shui`. To keep our infra streamlined, `shui` is bundled with and tested with the current CI for logseq

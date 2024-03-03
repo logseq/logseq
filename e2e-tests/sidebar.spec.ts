@@ -12,19 +12,21 @@ test('favorite item and recent item test', async ({ page }) => {
   const fav_page_name = await createRandomPage(page)
   let favs = await page.$$('.favorite-item a')
   let previous_fav_count = favs.length
-  await page.click('.ui__dropdown-trigger')
+  await page.click('.ui__dropdown-trigger .toolbar-dots-btn')
   await page.locator("text=Add to Favorites").click()
   // click from another page
   const another_page_name = await createRandomPage(page)
   expect(await page.innerText(':nth-match(.favorite-item a, 1)')).toBe(fav_page_name)
+  await page.waitForTimeout(500);
   await page.click(":nth-match(.favorite-item, 1)")
+  await page.waitForTimeout(500);
   expect(await page.innerText('.page-title .title')).toBe(fav_page_name)
 
   expect(await page.innerText(':nth-match(.recent-item a, 1)')).toBe(fav_page_name)
   expect(await page.innerText(':nth-match(.recent-item a, 2)')).toBe(another_page_name)
 
   // remove fav
-  await page.click('.ui__dropdown-trigger')
+  await page.click('.ui__dropdown-trigger .toolbar-dots-btn')
   await page.locator("text=Unfavorite page").click()
   await expect(page.locator('.favorite-item a')).toHaveCount(previous_fav_count)
 
@@ -49,6 +51,7 @@ test('recent is updated #4320', async ({ page }) => {
 
   // then jump back
   await searchAndJumpToPage(page, page1)
+  await page.waitForTimeout(500)
   expect(await firstRecent.textContent()).toContain(page1)
   expect(await secondRecent.textContent()).toContain(page2)
 })

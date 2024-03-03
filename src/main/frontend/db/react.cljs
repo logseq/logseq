@@ -16,7 +16,7 @@
 ;;; keywords specs for reactive query, used by `react/q` calls
 ;; ::block
 ;; pull-block react-query
-(s/def ::block (s/tuple #(= ::block %) uuid?))
+(s/def ::block (s/tuple #(= ::block %) int?))
 ;; ::page-blocks
 ;; get page-blocks react-query
 (s/def ::page-blocks (s/tuple #(= ::page-blocks %) int?))
@@ -51,7 +51,11 @@
 
 (defonce query-state (atom {}))
 
-(def ^:dynamic *query-component*)
+;; Current dynamic component
+(def ^:dynamic *query-component* nil)
+
+;; Which reactive queries are triggered by the current component
+(def ^:dynamic *reactive-queries* nil)
 
 ;; component -> query-key
 (defonce query-components (atom {}))
@@ -81,11 +85,6 @@
     (let [new-result' (f @result-atom)]
       (reset! result-atom new-result'))))
 
-(defn get-query-time
-  [q]
-  (let [k [(state/get-current-repo) :custom q]]
-    (get-in @query-state [k :query-time])))
-
 (defn kv
   [key value]
   {:db/id -1
@@ -111,14 +110,14 @@
 
 (defn add-q!
   [k query time inputs result-atom transform-fn query-fn inputs-fn]
-  (let [time' (int (util/safe-parse-float time))]
+  (let [time' (int (util/safe-parse-float time))] ;; for robustness. `time` should already be float
     (swap! query-state assoc k {:query query
-                               :query-time time'
-                               :inputs inputs
-                               :result result-atom
-                               :transform-fn transform-fn
-                               :query-fn query-fn
-                               :inputs-fn inputs-fn}))
+                                :query-time time'
+                                :inputs inputs
+                                :result result-atom
+                                :transform-fn transform-fn
+                                :query-fn query-fn
+                                :inputs-fn inputs-fn}))
   result-atom)
 
 (defn remove-q!
@@ -149,7 +148,11 @@
 
 (defn get-query-cached-result
   [k]
-  (:result (get @query-state k)))
+  (when-let [result (get @query-state k)]
+    (when (satisfies? IWithMeta @(:result result))
+      (set! (.-state (:result result))
+           (with-meta @(:result result) {:query-time (:query-time result)})))
+    (:result result)))
 
 (defn q
   [repo k {:keys [use-cache? transform-fn query-fn inputs-fn disable-reactive?]
@@ -157,11 +160,14 @@
                 transform-fn identity}} query & inputs]
   {:pre [(s/valid? ::react-query-keys k)]}
   (let [kv? (and (vector? k) (= :kv (first k)))
+        origin-key k
         k (vec (cons repo k))]
     (when-let [db (conn/get-db repo)]
       (let [result-atom (get-query-cached-result k)]
         (when-let [component *query-component*]
           (add-query-component! k component))
+        (when-let [queries *reactive-queries*]
+          (swap! queries conj origin-key))
         (if (and use-cache? result-atom)
           result-atom
           (let [{:keys [result time]} (util/with-time
@@ -174,7 +180,7 @@
                                                 (apply d/q query db inputs))
 
                                               kv?
-                                              (d/entity db (last k))
+                                              (db-utils/entity db (last k))
 
                                               (seq inputs)
                                               (apply d/q query db inputs)
@@ -211,7 +217,7 @@
 
 (defn- get-block-parents
   [db id]
-  (let [get-parent (fn [id] (:db/id (:block/parent (d/entity db id))))]
+  (let [get-parent (fn [id] (:db/id (:block/parent (db-utils/entity db id))))]
     (loop [result [id]
            id id]
       (if-let [parent (get-parent id)]
@@ -257,9 +263,11 @@
                                          (:db/id (:block/page block)))
                                 blocks [[::block (:db/id block)]]
                                 path-refs (:block/path-refs block)
-                                path-refs' (keep (fn [ref]
-                                                   (when-not (= (:db/id ref) page-id)
-                                                     [::refs (:db/id ref)])) path-refs)
+                                path-refs' (->> (keep (fn [ref]
+                                                        (when-not (= (:db/id ref) page-id)
+                                                          [[::refs (:db/id ref)]
+                                                           [::block (:db/id ref)]])) path-refs)
+                                                (apply concat))
                                 page-blocks (when page-id
                                               [[::page-blocks page-id]])]
                             (concat blocks page-blocks path-refs')))
@@ -267,7 +275,8 @@
 
                        (mapcat
                         (fn [ref]
-                          [[::refs ref]])
+                          [[::refs ref]
+                           [::block ref]])
                         refs)
 
                        (when-let [current-page-id (:db/id (get-current-page))]
@@ -291,26 +300,26 @@
   (when (or skip-query-time-check?
             (<= (or query-time 0) 80))
     (let [new-result (->
-                     (cond
-                       query-fn
-                       (let [result (query-fn db tx result)]
-                         (if (coll? result)
-                           (doall result)
-                           result))
+                      (cond
+                        query-fn
+                        (let [result (query-fn db tx result)]
+                          (if (coll? result)
+                            (doall result)
+                            result))
 
-                       inputs-fn
-                       (let [inputs (inputs-fn)]
-                         (apply d/q query db inputs))
+                        inputs-fn
+                        (let [inputs (inputs-fn)]
+                          (apply d/q query db inputs))
 
-                       (keyword? query)
-                       (db-utils/get-key-value graph query)
+                        (keyword? query)
+                        (db-utils/get-key-value graph query)
 
-                       (seq inputs)
-                       (apply d/q query db inputs)
+                        (seq inputs)
+                        (apply d/q query db inputs)
 
-                       :else
-                       (d/q query db))
-                     transform-fn)]
+                        :else
+                        (d/q query db))
+                      transform-fn)]
      (when-not (= new-result result)
        (set-new-result! k new-result tx)))))
 

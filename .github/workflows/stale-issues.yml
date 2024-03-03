@@ -1,0 +1,78 @@
+# This workflow warns and then closes issues that have had no activity for a
+# specified amount of time. You can adjust the behavior by modifying this file.
+# For more information, see:
+#   https://github.com/marketplace/actions/close-stale-issues
+#   https://github.com/actions/stale/blob/master/action.yml
+#   https://github.com/actions/stale
+---
+name: 'Stale Issues Policy'
+on:  # yamllint disable-line rule:truthy
+  schedule:
+    - cron: '0 0 * * *'  # Run at 00:00 UTC every day
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write  # for actions/stale to close stale issues
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - name: '🧹 Mark & close stale issues'
+        id: stale_issues
+        uses: actions/stale@6f05e4244c9a0b2ed3401882b05d701dd0a7289b  # v7
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          days-before-issue-stale: 180
+          days-before-close: 20
+          operations-per-run: 100  # max num of ops per run
+          stale-issue-label: ':status/automatic-stale'
+          close-issue-label: ':status/automatic-closing'
+          # trunk-ignore(yamllint/line-length)
+          exempt-issue-labels: 'hold, WIP, :type/enhancement, can-be-reproduced, priority-A, :type/bug, :type/feature-request'
+          remove-stale-when-updated: true
+          stale-issue-message: |
+            Hi There! 👋
+
+            We haven't seen any activity on this issue in a while :sleeping:, and we just wanted to make sure that it's still relevant. If you're still experiencing this issue, you might find it helpful to update to the latest version of Logseq. The latest version includes bug fixes and new features that may help to resolve this issue, and you can download it from [our website](https://logseq.com). If updating to the latest version doesn't help, please let us know by adding a comment 💬. We're here to help!
+
+            If the issue has been resolved or is no longer relevant, that's great news! 🎉
+            We'll go ahead and close this issue to keep our backlog organized. Please note that this issue will be closed automatically in 20 days if there is no further activity. If you need more time to resolve the issue or provide more information, please just let us know by adding a comment.
+
+
+            Access additional [Logseq](https://logseq.com) 🚀 resources:
+              - **Forum**: https://discuss.logseq.com
+              - **Blog**: https://blog.logseq.com
+              - **Docs**: https://docs.logseq.com
+
+            Thanks for your contributions to Logseq! If you have any other [**issues**](https://github.com/logseq/logseq/issues/new/choose) or [**feature requests**](https://discuss.logseq.com/c/feature-requests/), please don't hesitate to [let us know](https://github.com/logseq/logseq/issues/new/choose). We always welcome pull requests too!
+
+      - name: '🧹 Close stale awaiting response issues'
+        id: awaiting_issues
+        uses: actions/stale@6f05e4244c9a0b2ed3401882b05d701dd0a7289b  # v7
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          days-before-issue-stale: 40
+          days-before-close: 20
+          operations-per-run: 30  # max num of ops per run
+          stale-issue-label: ':status/automatic-stale'
+          close-issue-label: ':status/automatic-closing'
+          only-labels: 'awaiting response'
+          remove-stale-when-updated: true
+          stale-issue-message: |
+            Hi There! 👋
+
+            We haven't seen any activity on this issue in a while :sleeping:, and we just wanted to make sure that it's still relevant. If you're still experiencing this issue, you might find it helpful to update to the latest version of Logseq. The latest version includes bug fixes and new features that may help to resolve this issue, and you can download it from [our website](https://logseq.com). If updating to the latest version doesn't help, please let us know by adding a comment 💬. We're here to help!
+
+            If the issue has been resolved or is no longer relevant, that's great news! 🎉
+            We'll go ahead and close this issue to keep our backlog organized. Please note that this issue will be closed automatically in 20 days if there is no further activity. If you need more time to resolve the issue or provide more information, please just let us know by adding a comment.
+
+
+            Access additional [Logseq](https://logseq.com) 🚀 resources:
+              - **Forum**: https://discuss.logseq.com
+              - **Blog**: https://blog.logseq.com
+              - **Docs**: https://docs.logseq.com
+
+            Thanks for your contributions to Logseq! If you have any other [**issues**](https://github.com/logseq/logseq/issues/new/choose) or [**feature requests**](https://discuss.logseq.com/c/feature-requests/), please don't hesitate to [let us know](https://github.com/logseq/logseq/issues/new/choose). We always welcome pull requests too!
+

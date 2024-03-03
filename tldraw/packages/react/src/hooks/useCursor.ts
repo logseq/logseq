@@ -46,6 +46,6 @@ export function useCursor(ref: React.RefObject<HTMLDivElement>, cursor: TLCursor
   React.useEffect(() => {
     const elm = ref.current
     if (!elm) return
-    elm.style.setProperty('--tl-cursor', CURSORS[cursor](GeomUtils.radiansToDegrees(rotation)))
+    elm.style.cursor = CURSORS[cursor](GeomUtils.radiansToDegrees(rotation))
   }, [cursor, rotation])
 }

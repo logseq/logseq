@@ -35,7 +35,7 @@ export const QuickLinksContainer = observer(function QuickLinksContainer<S exten
   const rounded = bounds.height * zoom < 50 || !app.selectedShapesArray.includes(shape)
 
   return (
-    <Container bounds={bounds} className="tl-quick-links-container">
+    <Container bounds={bounds} className="tl-quick-links-container" data-html2canvas-ignore="true">
       <HTMLContainer>
         <span
           style={{

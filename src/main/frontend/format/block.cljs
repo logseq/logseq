@@ -1,7 +1,6 @@
 (ns frontend.format.block
   "Block code needed by app but not graph-parser"
-  (:require ["@sentry/react" :as Sentry]
-            [cljs-time.format :as tf]
+  (:require [cljs-time.format :as tf]
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -10,7 +9,6 @@
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [lambdaisland.glogi :as log]))
@@ -18,18 +16,19 @@
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
 and handles unexpected failure."
-  [blocks content format {:keys [with-id?]
+  [blocks content format {:keys [with-id? page-name]
                           :or {with-id? true}}]
   (try
     (gp-block/extract-blocks blocks content with-id? format
                              {:user-config (state/get-config)
                               :block-pattern (config/get-block-pattern format)
-                              :supported-formats (gp-config/supported-formats)
                               :db (db/get-db (state/get-current-repo))
-                              :date-formatter (state/get-date-formatter)})
+                              :date-formatter (state/get-date-formatter)
+                              :page-name page-name})
     (catch :default e
       (log/error :exception e)
-      (Sentry/captureException e)
+      (state/pub-event! [:capture-error {:error e
+                                         :payload {:type "Extract-blocks"}}])
       (notification/show! "An unexpected error occurred during block extraction." :error)
       [])))
 
@@ -41,27 +40,31 @@ and handles unexpected failure."
    (gp-block/page-name->map original-page-name with-id? (db/get-db (state/get-current-repo)) with-timestamp? (state/get-date-formatter))))
 
 (defn- normalize-as-percentage
-  ([block]
-   (some->> block
-            str
-            (re-matches #"(-?\d+\.?\d*)%")
-            second
-            (#(/ % 100)))))
+  [block]
+  (some->> block
+           str
+           (re-matches #"(-?\d+\.?\d*)%")
+           second
+           (#(/ % 100))))
 
 (defn- normalize-as-date
-  ([block]
-   (some->> block
-            str
-            date/normalize-date
-            (tf/unparse date/custom-formatter))))
+  [block]
+  (some->> block
+           str
+           date/normalize-date
+           (tf/unparse date/custom-formatter)))
 
 (defn normalize-block
-  "Normalizes supported formats such as dates and percentages."
-  ([block]
-   (->> [normalize-as-percentage normalize-as-date identity]
-        (map #(% (if (set? block) (first block) block)))
-        (remove nil?)
-        (first))))
+  "Normalizes supported formats such as dates and percentages.
+   Be careful, this function may harm query sort performance!
+   - nlp-date? - Enable NLP parsing on date items.
+       Requires heavy computation (see `normalize-as-date` for details)"
+  [block nlp-date?]
+  (->> [normalize-as-percentage (when nlp-date? normalize-as-date) identity]
+       (remove nil?)
+       (map #(% (if (set? block) (first block) block)))
+       (remove nil?)
+       (first)))
 
 (defn parse-block
   ([block]

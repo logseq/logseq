@@ -1,7 +1,10 @@
 (ns electron.file-sync-rsapi
   (:require ["@logseq/rsapi" :as rsapi]
             [electron.window :as window]
+            [electron.logger :as logger]
             [cljs-bean.core :as bean]))
+
+(defn- init-logger [log-fn] (rsapi/initLogger log-fn))
 
 (defn key-gen [] (rsapi/keygen))
 
@@ -23,6 +26,9 @@
 (defn delete-local-files [graph-uuid base-path file-paths]
   (rsapi/deleteLocalFiles graph-uuid base-path (clj->js file-paths)))
 
+(defn fetch-remote-files [graph-uuid base-path file-paths token]
+  (rsapi/fetchRemoteFiles graph-uuid base-path (clj->js file-paths) token))
+
 (defn update-local-files [graph-uuid base-path file-paths token]
   (rsapi/updateLocalFiles graph-uuid base-path (clj->js file-paths) token))
 
@@ -33,7 +39,7 @@
   (rsapi/deleteRemoteFiles graph-uuid base-path (clj->js file-paths) txid token))
 
 (defn update-remote-files [graph-uuid base-path file-paths txid token]
-  (rsapi/updateRemoteFiles graph-uuid base-path (clj->js file-paths) txid token true))
+  (rsapi/updateRemoteFiles graph-uuid base-path (clj->js file-paths) txid token))
 
 (defn encrypt-fnames [graph-uuid fnames]
   (rsapi/encryptFnames graph-uuid (clj->js fnames)))
@@ -57,3 +63,12 @@
                              (when-not (.isDestroyed win)
                                (.. win -webContents
                                    (send progress-notify-chan (bean/->js progress-info))))))))
+
+(init-logger (fn [_error record]
+               (let [[level message] record]
+                 (case level
+                   "ERROR" (logger/error message)
+                   "WARN" (logger/warn message)
+                   "INFO" (logger/info message)
+                   "DEBUG" (logger/debug message)
+                   (logger/debug message)))))

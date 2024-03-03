@@ -5,26 +5,35 @@ import { TextAreaUtils } from './TextAreaUtils'
 
 const stopPropagation = (e: KeyboardEvent | React.SyntheticEvent<any, Event>) => e.stopPropagation()
 
+const placeholder = "Enter text"
 export interface TextLabelProps {
   font: string
   text: string
   color: string
+  fontStyle: string
+  fontSize: number
+  fontWeight: number
   onBlur?: () => void
   onChange: (text: string) => void
   offsetY?: number
   offsetX?: number
   scale?: number
   isEditing?: boolean
+  pointerEvents?: boolean
 }
 
 export const TextLabel = React.memo(function TextLabel({
   font,
   text,
   color,
+  fontStyle,
+  fontSize,
+  fontWeight,
   offsetX = 0,
   offsetY = 0,
   scale = 1,
   isEditing = false,
+  pointerEvents = false,
   onBlur,
   onChange,
 }: TextLabelProps) {
@@ -49,11 +58,7 @@ export const TextLabel = React.memo(function TextLabel({
       if (!(e.key === 'Meta' || e.metaKey)) {
         e.stopPropagation()
       } else if (e.key === 'z' && e.metaKey) {
-        if (e.shiftKey) {
-          document.execCommand('redo', false)
-        } else {
-          document.execCommand('undo', false)
-        }
+        document.execCommand(e.shiftKey ? 'redo' : 'undo', false)
         e.stopPropagation()
         e.preventDefault()
         return
@@ -84,8 +89,7 @@ export const TextLabel = React.memo(function TextLabel({
 
   const handleFocus = React.useCallback(
     (e: React.FocusEvent<HTMLTextAreaElement>) => {
-      if (!isEditing) return
-      if (!rIsMounted.current) return
+      if (!isEditing || !rIsMounted.current) return
 
       if (document.activeElement === e.currentTarget) {
         e.currentTarget.select()
@@ -121,11 +125,15 @@ export const TextLabel = React.memo(function TextLabel({
   React.useLayoutEffect(() => {
     const elm = rInnerWrapper.current
     if (!elm) return
-    const size = getTextLabelSize(text, font, 4)
+    const size = getTextLabelSize(
+      text || placeholder,
+      { fontFamily: 'var(--ls-font-family)', fontSize, lineHeight: 1, fontWeight },
+      4
+    )
     elm.style.transform = `scale(${scale}, ${scale}) translate(${offsetX}px, ${offsetY}px)`
     elm.style.width = size[0] + 1 + 'px'
     elm.style.height = size[1] + 1 + 'px'
-  }, [text, font, offsetY, offsetX, scale])
+  }, [text, fontWeight, fontSize, offsetY, offsetX, scale])
 
   return (
     <div className="tl-text-label-wrapper">
@@ -134,8 +142,11 @@ export const TextLabel = React.memo(function TextLabel({
         ref={rInnerWrapper}
         style={{
           font,
+          fontStyle,
+          fontSize,
+          fontWeight,
           color,
-          pointerEvents: text ? 'all' : 'none',
+          pointerEvents: pointerEvents ? 'all' : 'none',
           userSelect: isEditing ? 'text' : 'none',
         }}
       >
@@ -145,6 +156,9 @@ export const TextLabel = React.memo(function TextLabel({
             style={{
               font,
               color,
+              fontStyle,
+              fontSize,
+              fontWeight,
             }}
             className="tl-text-label-textarea"
             name="text"
@@ -154,7 +168,7 @@ export const TextLabel = React.memo(function TextLabel({
             autoCorrect="false"
             autoSave="false"
             autoFocus
-            placeholder=""
+            placeholder={placeholder}
             spellCheck="true"
             wrap="off"
             dir="auto"

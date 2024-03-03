@@ -1,10 +1,9 @@
 (ns electron.context-menu
-  (:require [clojure.string :as string]
-            [electron.utils :as utils]
-            ["electron" :refer [Menu MenuItem shell] :as electron]
+  (:require [electron.utils :as utils]
+            ["electron" :refer [Menu MenuItem shell nativeImage clipboard] :as electron]
             ["electron-dl" :refer [download]]))
 
-;; context menu is registerd in window/setup-window-listeners!
+;; context menu is registered in window/setup-window-listeners!
 (defn setup-context-menu!
   [^js win]
   (let [web-contents (.-webContents win)
@@ -16,7 +15,7 @@
                 edit-flags (.-editFlags params)
                 editable? (.-isEditable params)
                 selection-text (.-selectionText params)
-                has-text? (not (string/blank? (string/trim selection-text)))
+                has-text? (seq selection-text)
                 link-url (not-empty (.-linkURL params))
                 media-type (.-mediaType params)]
 
@@ -45,7 +44,6 @@
                                            (.. url -searchParams (set "q" selection-text))
                                            (.. shell (openExternal (.toString url))))}))
               (. menu append (MenuItem. #js {:type "separator"})))
-
 
             (when editable?
               (when has-text?
@@ -88,7 +86,8 @@
 
               (. menu append
                  (MenuItem. #js {:label "Copy Image"
-                                 :click #(. web-contents copyImageAt (.-x params) (.-y params))})))
+                                 :click (fn []
+                                          (. clipboard writeImage (. nativeImage createFromPath (subs (.-srcURL params) 7))))})))
 
             (when (not-empty (.-items menu))
               (. menu popup))))]

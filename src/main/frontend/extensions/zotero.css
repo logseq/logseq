@@ -8,17 +8,37 @@
   }
 
   .form-select {
-      @apply py-2;
-      min-width: 20rem;
+    @apply py-2;
+    min-width: 20rem;
   }
 
   .form-input {
-      @apply py-2;
-      min-width: 20rem;
+    @apply py-2;
+    min-width: 20rem;
   }
 
   svg {
     display: inline;
+  }
+}
+
+.zotero-search {
+  @apply w-[80vw] sm:w-[380px] lg:w-[620px];
+
+  > .input-wrap {
+    @apply relative p-2;
+
+    > input {
+      @apply p-1.5 border rounded text-sm;
+
+      color: var(--ls-primary-text-color);
+      border-color: var(--ls-secondary-border-color);
+      background-color: var(--ls-secondary-background-color);
+    }
+
+    .icon-loading {
+      @apply absolute top-4 right-4 opacity-75 scale-[.7];
+    }
   }
 }
 
@@ -35,6 +55,10 @@
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+.zotero-search-item {
+  border-bottom-color: var(--ls-border-color);
 }
 
 .zotero-search-item:hover {

@@ -1,8 +1,6 @@
-;; FIXME
-;; this test is not focusable (unable to feed :node-test as reading feature?)
 (ns frontend.extensions.zotero.extractor-test
   (:require [clojure.edn :as edn]
-            [clojure.test :as test :refer [deftest is testing]]
+            [clojure.test :as test :refer [deftest is testing are]]
             [shadow.resource :as rc]
             [frontend.extensions.zotero.extractor :as extractor]))
 
@@ -43,7 +41,6 @@
         (is (= 8 authors)))
 
       (testing "tags"
-        (prn (-> properties :tags))
         ;; tags split by `,` are counted into different tags
         ;; https://github.com/logseq/logseq/commit/435c2110bcc2d30ed743ba31375450f1a705b00b
         (is (= 20 tags)))))
@@ -68,6 +65,17 @@
 
       (testing "use parsed date when possible"
         (is (= "[[Mar 28th, 2011]]" (-> properties :date))))))
+  
+  (testing "zotero imported file path"
+    (are [item-key filename open] (= (extractor/zotero-imported-file-macro item-key filename) open)
+      "9AUD8MNT" "a.pdf" "{{zotero-imported-file 9AUD8MNT, \"a.pdf\"}}"))
+
+  (testing "zotero linked file path"
+    (are [path open] (= (extractor/zotero-linked-file-macro path) open)
+      ;; TODO provide some real samples on multiple platforms
+      "attachments:abc/def/ghi.pdf" "{{zotero-linked-file \"abc/def/ghi.pdf\"}}"
+      ;; Chinese and blank
+      "attachments:书籍/人民邮电出版社/NSCA-CPT美国国家体能协会私人教练认证指南 第2版.pdf" "{{zotero-linked-file \"书籍/人民邮电出版社/NSCA-CPT美国国家体能协会私人教练认证指南 第2版.pdf\"}}"))
 
 ;; 2022.10.18. Should be deprecated since Hickory is invalid in Node test
 ;; Skip until we find an alternative

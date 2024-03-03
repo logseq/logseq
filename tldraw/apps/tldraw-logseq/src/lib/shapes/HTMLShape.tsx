@@ -136,9 +136,17 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
     const {
       props: {
         size: [w, h],
+        isLocked,
       },
     } = this
-    return <rect width={w} height={h} fill="transparent" />
+    return (
+      <rect
+        width={w}
+        height={h}
+        fill="transparent"
+        strokeDasharray={isLocked ? '8 2' : 'undefined'}
+      />
+    )
   })
 
   validateProps = (props: Partial<HTMLShapeProps>) => {

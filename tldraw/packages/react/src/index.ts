@@ -14,7 +14,7 @@ export function getContextBarTranslation(barSize: number[], offset: TLOffset) {
   let y = 0
   if (offset.top < 116) {
     // Show on bottom
-    y = offset.height / 2 + 72
+    y = offset.height / 2 + 40
     // Too far down, move up
     if (offset.bottom < 140) {
       y += offset.bottom - 140

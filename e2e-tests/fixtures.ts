@@ -9,32 +9,37 @@ let electronApp: ElectronApplication
 let context: BrowserContext
 let page: Page
 
-let repoName = randomString(10)
+// For testing special characters in graph name / path
+let repoName = "@" + randomString(10)
 let testTmpDir = path.resolve(__dirname, '../tmp')
 
 if (fs.existsSync(testTmpDir)) {
   fs.rmSync(testTmpDir, { recursive: true })
 }
 
-export let graphDir = path.resolve(testTmpDir, "e2e-test", repoName)
+export let graphDir = path.resolve(testTmpDir, "#e2e-test", repoName)
 
 // NOTE: This following is a console log watcher for error logs.
 // Save and print all logs when error happens.
-let logs: string
+let logs: string = '';
 const consoleLogWatcher = (msg: ConsoleMessage) => {
-  // console.log(msg.text())
-  const text = msg.text()
-  logs += text + '\n'
-  expect(text, logs).not.toMatch(/^(Failed to|Uncaught)/)
+  const text = msg.text();
 
-  // youtube video
-  // Error with Permissions-Policy header: Origin trial controlled feature not enabled: 'ch-ua-reduced'.
-  if (!text.match(/^Error with Permissions-Policy header:/)) {
-    expect(text, logs).not.toMatch(/^Error/)
+  // List of error messages to ignore
+  const ignoreErrors = [
+    /net/,
+    /^Error with Permissions-Policy header:/
+  ];
+
+  // If the text matches any of the ignoreErrors, return early
+  if (ignoreErrors.some(error => text.match(error))) {
+    console.log(`WARN:: ${text}\n`)
+    return;
   }
 
-  // NOTE: React warnings will be logged as error.
-  // expect(msg.type()).not.toBe('error')
+  logs += text + '\n';
+  expect(text, logs).not.toMatch(/^(Failed to|Uncaught|Assert failed)/);
+  expect(text, logs).not.toMatch(/^Error/);
 }
 
 base.beforeAll(async () => {
@@ -55,6 +60,7 @@ base.beforeAll(async () => {
   })
   context = electronApp.context()
   await context.tracing.start({ screenshots: true, snapshots: true });
+  await context.tracing.startChunk();
 
   // NOTE: The following ensures App first start with the correct path.
   const info = await electronApp.evaluate(async ({ app }) => {
@@ -70,6 +76,16 @@ base.beforeAll(async () => {
   console.log("Test start with:", info)
 
   page = await electronApp.firstWindow()
+
+  // inject testing flags
+  await page.evaluate(
+    () => {
+      Object.assign(window, {
+        __E2E_TESTING__: true,
+      })
+    },
+  )
+
   // Direct Electron console to watcher
   page.on('console', consoleLogWatcher)
   page.on('crash', () => {
@@ -108,17 +124,17 @@ base.beforeEach(async () => {
     await page.keyboard.press('Escape')
     await page.keyboard.press('Escape')
 
+    await expect(page.locator('.notification-close-button')).not.toBeVisible()
+
+    if (await page.locator('.notification-clear button').isVisible()) {
+      await page.locator('.notification-clear button').click()
+    }
+
     const rightSidebar = page.locator('.cp__right-sidebar-inner')
     if (await rightSidebar.isVisible()) {
       await page.click('button.toggle-right-sidebar', {delay: 100})
     }
   }
-})
-
-base.afterAll(async () => {
-  // if (electronApp) {
-  //  await electronApp.close()
-  //}
 })
 
 // hijack electron app into the test context
@@ -185,12 +201,18 @@ export const test = base.extend<LogseqFixtures>({
         await page.waitForSelector(`.ls-block.selected >> nth=${total - 1}`, { timeout: 1000 })
       },
       escapeEditing: async (): Promise<void> => {
-        await page.keyboard.press('Escape')
-        await page.keyboard.press('Escape')
+        const blockEdit = page.locator('.ls-block textarea >> nth=0')
+        while (await blockEdit.isVisible()) {
+          await page.keyboard.press('Escape')
+        }
+        const blockSelect = page.locator('.ls-block.selected')
+        while (await blockSelect.isVisible()) {
+          await page.keyboard.press('Escape')
+        }
       },
       activeEditing: async (nth: number): Promise<void> => {
         await page.waitForSelector(`.ls-block >> nth=${nth}`, { timeout: 1000 })
-        // scroll, for isVisble test
+        // scroll, for isVisible test
         await page.$eval(`.ls-block >> nth=${nth}`, (element) => {
           element.scrollIntoView();
         });
@@ -257,3 +279,27 @@ export const test = base.extend<LogseqFixtures>({
     await use(graphDir);
   },
 });
+
+
+let getTracingFilePath = function(): string {
+  return `e2e-dump/trace-${Date.now()}.zip.dump`
+}
+
+
+test.afterAll(async () => {
+  await context.tracing.stopChunk({ path: getTracingFilePath() });
+})
+
+
+/**
+ * Trace all tests in a file
+ */
+export let traceAll = function(){
+  test.beforeAll(async () => {
+    await context.tracing.startChunk();
+  })
+
+  test.afterAll(async () => {
+    await context.tracing.stopChunk({ path: getTracingFilePath() });
+  })
+}

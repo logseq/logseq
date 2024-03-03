@@ -24,13 +24,16 @@ export class PreviewManager {
   }
 
   load(snapshot: TLDocumentModel) {
-    const page = snapshot.pages[0]
+    const page = snapshot?.pages?.[0]
     this.pageId = page?.id
     this.assets = snapshot.assets
-    this.shapes = page?.shapes.map(s => {
-      const ShapeClass = getShapeClass(s.type)
-      return new ShapeClass(s)
-    })
+    this.shapes = page?.shapes
+      .map(s => {
+        const ShapeClass = getShapeClass(s.type)
+        return new ShapeClass(s)
+      })
+      // do not need to render group shape because it is invisible in preview
+      .filter(s => s.type !== 'group')
   }
 
   generatePreviewJsx(viewport?: TLViewport, ratio?: number) {

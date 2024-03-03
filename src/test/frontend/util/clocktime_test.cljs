@@ -14,4 +14,4 @@
                [0, 17, 45, 53],
                [5, 14, 41, 22],
                [27, 17, 8, 23]]]
-    (map #(is (= (clock/s->dhms-util %1) %2)) inputs want)))
+    (mapv #(is (= (clock/s->dhms-util %1) %2)) inputs want)))

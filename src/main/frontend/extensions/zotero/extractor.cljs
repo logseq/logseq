@@ -147,7 +147,7 @@
   (util/format "{{zotero-imported-file %s, %s}}" item-key (pr-str filename)))
 
 (defn zotero-linked-file-macro [path]
-  (util/format "{{zotero-linked-file %s}}" (pr-str (util/node-path.basename path))))
+  (util/format "{{zotero-linked-file %s}}" (pr-str (string/replace-first path "attachments:" ""))))
 
 (defmethod extract "attachment"
   [item]

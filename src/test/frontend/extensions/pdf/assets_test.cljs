@@ -7,7 +7,8 @@
     (are [x y] (= y (pdf-utils/fix-local-asset-pagename x))
       "2015_Book_Intertwingled_1659920114630_0" "2015 Book Intertwingled"
       "hls__2015_Book_Intertwingled_1659920114630_0" "2015 Book Intertwingled"
-      "hls/2015_Book_Intertwingled_1659920114630_0" "hls/2015 Book Intertwingled"))
+      "hls/2015_Book_Intertwingled_1659920114630_0" "hls/2015 Book Intertwingled"
+      "hls__sicp__-1234567" "sicp"))
   (testing "non matched filenames"
     (are [x y] (= y (pdf-utils/fix-local-asset-pagename x))
       "foo" "foo"

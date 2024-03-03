@@ -7,10 +7,10 @@
    [frontend.handler.editor :as editor-handler]
    [frontend.handler.notification :as notification]
    [frontend.handler.route :as route-handler]
-   [frontend.handler.user :as user-handler]
    [frontend.mobile.intent :as intent]
    [frontend.state :as state]
-   [frontend.util.text :as text-util]))
+   [frontend.util.text :as text-util]
+   [logseq.graph-parser.util :as gp-util]))
 
 (def *link-to-another-graph (atom false))
 
@@ -30,10 +30,6 @@
                    (map :url))
         repo-names (map #(get-graph-name-fn %) repos)]
     (cond
-      (= hostname "auth-callback")
-      (when-let [code (.get search-params "code")]
-        (user-handler/login-callback code))
-
       (= hostname "graph")
       (let [graph-name (some-> pathname
                                (string/replace "/" "")
@@ -75,8 +71,14 @@
       (= hostname "shared")
       (let [result (into {} (map (fn [key]
                                    [(keyword key) (.get search-params key)])
-                                 ["title" "url" "type"]))]
-        (intent/handle-result result))
+                                 ["title" "url" "type" "payload"]))]
+        (if (:payload result)
+          (let [raw (gp-util/safe-decode-uri-component (:payload result))
+                payload (-> raw
+                            js/JSON.parse
+                            (js->clj :keywordize-keys true))]
+            (intent/handle-payload payload))
+          (intent/handle-result result)))
 
       :else
       nil)))

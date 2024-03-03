@@ -59,8 +59,7 @@
         (blocks-cp repo page)
         (ui/lazy-visible
          (fn [] (blocks-cp repo page))
-         {:trigger-once? false
-          :debug-id (str "journal-blocks " page)}))
+         {:debug-id (str "journal-blocks " page)}))
 
       {})
 

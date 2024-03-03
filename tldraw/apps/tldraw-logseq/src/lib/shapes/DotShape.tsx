@@ -43,8 +43,16 @@ export class DotShape extends TLDotShape<DotShapeProps> {
   })
 
   ReactIndicator = observer(() => {
-    const { radius } = this.props
-    return <circle cx={radius} cy={radius} r={radius} pointerEvents="all" />
+    const { radius, isLocked } = this.props
+    return (
+      <circle
+        cx={radius}
+        cy={radius}
+        r={radius}
+        pointerEvents="all"
+        strokeDasharray={isLocked ? '8 2' : 'undefined'}
+      />
+    )
   })
 
   validateProps = (props: Partial<DotShapeProps>) => {

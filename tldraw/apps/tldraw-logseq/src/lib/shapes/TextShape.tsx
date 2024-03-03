@@ -131,7 +131,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
 
     const handleBlur = React.useCallback(
       (e: React.FocusEvent<HTMLTextAreaElement>) => {
-        e.currentTarget.setSelectionRange(0, 0)
+        if (!isEditing) return
         onEditingEnd?.()
       },
       [onEditingEnd]
@@ -165,8 +165,6 @@ export class TextShape extends TLTextShape<TextShapeProps> {
             elm.select()
           }
         })
-      } else {
-        onEditingEnd?.()
       }
     }, [isEditing, onEditingEnd])
 
@@ -237,18 +235,19 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     this.onResetBounds()
   }
 
-  ReactIndicator = observer(() => {
+  ReactIndicator = observer(({ isEditing }: TLComponentProps) => {
     const {
-      props: { borderRadius },
+      props: { borderRadius, isLocked },
       bounds,
     } = this
-    return (
+    return isEditing ? null : (
       <rect
         width={bounds.width}
         height={bounds.height}
         rx={borderRadius}
         ry={borderRadius}
         fill="transparent"
+        strokeDasharray={isLocked ? '8 2' : 'undefined'}
       />
     )
   })

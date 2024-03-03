@@ -1,9 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
-import { HTMLContainer, TLComponentProps } from '@tldraw/react'
+import { HTMLContainer, TLComponentProps, useApp} from '@tldraw/react'
 import { action, computed } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import { withClampedStyles } from './style-props'
+
+export const YOUTUBE_REGEX =
+  /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/
 
 export interface YouTubeShapeProps extends TLBoxShapeProps {
   type: 'youtube'
@@ -32,9 +35,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
 
   @computed get embedId() {
     const url = this.props.url
-    const match = url.match(
-      /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/
-    )
+    const match = url.match(YOUTUBE_REGEX)
     const embedId = match?.[1] ?? url ?? ''
     return embedId
   }
@@ -44,6 +45,8 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
   }
 
   ReactComponent = observer(({ events, isErasing, isEditing, isSelected }: TLComponentProps) => {
+    const app = useApp<Shape>()
+
     return (
       <HTMLContainer
         style={{
@@ -54,10 +57,11 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
         {...events}
       >
         <div
-          className="rounded-lg w-full h-full relative overflow-hidden shadow-xl"
+          className="rounded-lg w-full h-full relative overflow-hidden shadow-xl tl-youtube-container"
           style={{
-            pointerEvents: isEditing ? 'all' : 'none',
+            pointerEvents: isEditing || app.readOnly ? 'all' : 'none',
             userSelect: 'none',
+            background: `url('https://img.youtube.com/vi/${this.embedId}/mqdefault.jpg') no-repeat center/cover`,
           }}
         >
           {this.embedId ? (
@@ -117,9 +121,19 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
     const {
       props: {
         size: [w, h],
+        isLocked,
       },
     } = this
-    return <rect width={w} height={h} fill="transparent" rx={8} ry={8} />
+    return (
+      <rect
+        width={w}
+        height={h}
+        fill="transparent"
+        rx={8}
+        ry={8}
+        strokeDasharray={isLocked ? '8 2' : 'undefined'}
+      />
+    )
   })
 
   validateProps = (props: Partial<YouTubeShapeProps>) => {

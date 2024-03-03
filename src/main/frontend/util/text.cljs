@@ -2,8 +2,10 @@
   "Misc low-level utility text fns that are useful across features or don't have
   a good ns to be in yet"
   (:require [clojure.string :as string]
+            [frontend.config :as config]
+            [frontend.util :as util]
             [goog.string :as gstring]
-            [frontend.util :as util]))
+            [logseq.common.path :as path]))
 
 (defonce between-re #"\(between ([^\)]+)\)")
 
@@ -14,16 +16,17 @@
 
 (defn get-matched-video
   [url]
-  (or (re-find youtube-regex url)
-      (re-find loom-regex url)
-      (re-find vimeo-regex url)
-      (re-find bilibili-regex url)))
+  (when (not-empty url)
+    (or (re-find youtube-regex url)
+        (re-find loom-regex url)
+        (re-find vimeo-regex url)
+        (re-find bilibili-regex url))))
 
 (defn build-data-value
   [col]
   (let [items (map (fn [item] (str "\"" item "\"")) col)]
     (gstring/format "[%s]"
-                 (string/join ", " items))))
+                    (string/join ", " items))))
 
 (defn media-link?
   [media-formats s]
@@ -38,7 +41,7 @@
                           (if (string/starts-with? (string/lower-case line) key)
                             new-line
                             line)))
-                    lines)
+                       lines)
         new-lines (if (not= (map string/trim lines) new-lines)
                     new-lines
                     (cons (first new-lines) ;; title
@@ -93,10 +96,10 @@
   (if (= value "")
     (if before? [0] [(count s)]) ;; Hack: this prevents unnecessary work in wrapped-by?
     (loop [acc []
-          i 0]
-     (if-let [i (string/index-of s value i)]
-       (recur (conj acc i) (+ i (count value)))
-       acc))))
+           i 0]
+      (if-let [i (string/index-of s value i)]
+        (recur (conj acc i) (+ i (count value)))
+        acc))))
 
 (defn wrapped-by?
   "`pos` must be wrapped by `before` and `end` in string `value`, e.g. ((a|b))"
@@ -118,12 +121,38 @@
              []
              ks))))
 
+(defn cut-by
+  "Cut string by specified wrapping symbols, only match the first occurrence.
+     value - string to cut
+     before - cutting symbol (before)
+     end - cutting symbol (end)"
+  [value before end]
+  (let [b-pos (string/index-of value before)
+        b-len (count before)]
+    (if b-pos
+      (let [b-cut (subs value 0 b-pos)
+            m-cut (subs value (+ b-pos b-len))
+            e-len (count end)
+            e-pos (string/index-of m-cut end)]
+        (if e-pos
+          (let [e-cut (subs m-cut (+ e-pos e-len))
+                m-cut (subs m-cut 0 e-pos)]
+            [b-cut m-cut e-cut])
+          [b-cut m-cut nil]))
+      [value nil nil])))
+
 (defn get-graph-name-from-path
-  [path]
-  (when (string? path)
-    (let [parts (->> (string/split path #"/")
+  "Get `Dir/GraphName` style name for from repo-url.
+
+   On iOS, repo-url might be nil"
+  [repo-url]
+  (when (not-empty repo-url)
+    (let [path (config/get-local-dir repo-url)
+          path (if (path/is-file-url? path)
+                 (path/url-to-path path)
+                 path)
+          parts (->> (string/split path #"/")
                      (take-last 2))]
-      (-> (if (not= (first parts) "0")
-            (string/join "/" parts)
-            (last parts))
-          js/decodeURI))))
+      (if (not= (first parts) "0")
+        (util/string-join-path parts)
+        (last parts)))))

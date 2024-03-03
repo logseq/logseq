@@ -30,6 +30,7 @@ export interface TLShapeProps {
   name?: string
   fill?: string
   stroke?: string
+  scaleLevel?: string
   refs?: string[] // block id or page name
   point: number[]
   size?: number[]

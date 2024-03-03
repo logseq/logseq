@@ -121,13 +121,10 @@ export class IdleState<
   }
 
   onDoubleClick: TLEvents<S>['pointer'] = info => {
-    if (info.order) return
+    if (info.order || this.app.selectedShapesArray.length !== 1 || this.app.readOnly) return
 
-    if (this.app.selectedShapesArray.length !== 1) return
     const selectedShape = this.app.selectedShapesArray[0]
-    if (!selectedShape.canEdit) return
-
-    if (!PointUtils.pointInBounds(this.app.inputs.currentPoint, selectedShape.bounds)) return
+    if (!selectedShape.canEdit || selectedShape.props.isLocked) return
 
     switch (info.type) {
       case TLTargetType.Shape: {
@@ -150,7 +147,11 @@ export class IdleState<
     const { selectedShapesArray } = this.app
     switch (e.key) {
       case 'Enter': {
-        if (selectedShapesArray.length === 1 && selectedShapesArray[0].canEdit) {
+        if (
+          selectedShapesArray.length === 1 &&
+          selectedShapesArray[0].canEdit &&
+          !this.app.readOnly
+        ) {
           this.tool.transition('editingShape', {
             type: TLTargetType.Shape,
             shape: selectedShapesArray[0],

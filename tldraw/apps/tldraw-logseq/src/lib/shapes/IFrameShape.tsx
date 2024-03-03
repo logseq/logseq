@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from 'react'
 import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
-import { HTMLContainer, TLComponentProps } from '@tldraw/react'
+import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
 import { action } from 'mobx'
 import { observer } from 'mobx-react-lite'
 
@@ -37,6 +37,7 @@ export class IFrameShape extends TLBoxShape<IFrameShapeProps> {
 
   ReactComponent = observer(({ events, isErasing, isEditing }: TLComponentProps) => {
     const ref = React.useRef<HTMLIFrameElement>(null)
+    const app = useApp<Shape>()
 
     return (
       <HTMLContainer
@@ -50,7 +51,7 @@ export class IFrameShape extends TLBoxShape<IFrameShapeProps> {
         <div
           className="tl-iframe-container"
           style={{
-            pointerEvents: isEditing ? 'all' : 'none',
+            pointerEvents: isEditing || app.readOnly ? 'all' : 'none',
             userSelect: 'none',
           }}
         >
@@ -69,7 +70,7 @@ export class IFrameShape extends TLBoxShape<IFrameShapeProps> {
                 height="100%"
                 src={`${this.props.url}`}
                 frameBorder="0"
-                sandbox="allow-scripts"
+                sandbox="allow-scripts allow-same-origin allow-presentation"
               />
             </div>
           )}
@@ -82,8 +83,18 @@ export class IFrameShape extends TLBoxShape<IFrameShapeProps> {
     const {
       props: {
         size: [w, h],
+        isLocked,
       },
     } = this
-    return <rect width={w} height={h} fill="transparent" rx={8} ry={8} />
+    return (
+      <rect
+        width={w}
+        height={h}
+        fill="transparent"
+        rx={8}
+        ry={8}
+        strokeDasharray={isLocked ? '8 2' : 'undefined'}
+      />
+    )
   })
 }

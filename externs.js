@@ -8,6 +8,8 @@ fs.unlink = function() {};
 fs.readdir = function() {};
 fs.rmdir = function() {};
 fs.rimraf = function() {};
+fs.lstat = function () {};
+
 var dummy = {};
 dummy.populateStat = function() {};
 dummy.populateHash = function() {};
@@ -132,6 +134,25 @@ dummy.contentRect = function() {};
 dummy.height = function() {};
 dummy.createShapes = function() {};
 dummy.updateShapes = function() {};
+// hickory related, ATTRIBUTE will be $ATTRIBUTE$
+dummy.ATTRIBUTE = function() {};
+dummy.COMMENT = function() {};
+dummy.DOCUMENT = function() {};
+dummy.DOCUMENT_TYPE = function() {};
+dummy.ELEMENT = function() {};
+dummy.TEXT = function() {};
+dummy.isAbsolute = function() {};
+
+var utils = {}
+utils.withFileTypes = true;
+utils.accessTime = 0;
+utils.modifiedTime = 0;
+utils.changeTime = 0;
+utils.birthTime = 0;
+utils.atimeMs = 0;
+utils.mtimeMs = 0;
+utils.ctimeMs = 0;
+utils.birthtimeMs = 0;
 
 /**
  * @typedef {{

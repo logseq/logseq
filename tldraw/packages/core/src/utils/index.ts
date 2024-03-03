@@ -1,7 +1,6 @@
 import * as uuid from 'uuid'
 export * from './BoundsUtils'
 export * from './PointUtils'
-export * from './KeyUtils'
 export * from './GeomUtils'
 export * from './PolygonUtils'
 export * from './SvgPathUtils'
@@ -81,9 +80,14 @@ export function isDarwin(): boolean {
   return /Mac|iPod|iPhone|iPad/.test(window.navigator.platform)
 }
 
-/**
- * Migrated from frontend.util/safari?
- */
+export function isDev(): boolean {
+  return (
+    window?.logseq?.api?.get_state_from_store?.('ui/developer-mode?') ||
+    process.env.NODE_ENV === 'development'
+  )
+}
+
+/** Migrated from frontend.util/safari? */
 export function isSafari(): boolean {
   const ua = window.navigator.userAgent.toLowerCase()
   return ua.includes('webkit') && !ua.includes('chrome')
@@ -98,7 +102,7 @@ export function modKey(e: any): boolean {
   return isDarwin() ? e.metaKey : e.ctrlKey
 }
 
-export const MOD_KEY = isDarwin() ? '⌘' : 'Ctrl'
+export const MOD_KEY = isDarwin() ? '⌘' : 'ctrl'
 
 export function isNonNullable<TValue>(value: TValue): value is NonNullable<TValue> {
   return Boolean(value)

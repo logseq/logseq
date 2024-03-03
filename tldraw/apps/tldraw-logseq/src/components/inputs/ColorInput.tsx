@@ -1,8 +1,11 @@
 import type { Side } from '@radix-ui/react-popper'
 import * as Slider from '@radix-ui/react-slider'
-import { Color } from '@tldraw/core'
+import { Color, isBuiltInColor, debounce } from '@tldraw/core'
 import { TablerIcon } from '../icons'
 import { PopoverButton } from '../PopoverButton'
+import { Tooltip } from '../Tooltip'
+import React from 'react'
+import { LogseqContext } from '../../lib/logseq-context'
 
 interface ColorInputProps extends React.HTMLAttributes<HTMLButtonElement> {
   color?: string
@@ -20,6 +23,10 @@ export function ColorInput({
   setOpacity,
   ...rest
 }: ColorInputProps) {
+  const {
+    handlers: { t },
+  } = React.useContext(LogseqContext)
+
   function renderColor(color?: string) {
     return color ? (
       <div className="tl-color-bg" style={{ backgroundColor: color }}>
@@ -32,8 +39,34 @@ export function ColorInput({
     )
   }
 
+  function isHexColor(color: string) {
+    return /^#(?:[0-9a-f]{3}){1,2}$/i.test(color)
+  }
+
+  const handleChangeDebounced = React.useMemo(() => {
+    let latestValue = ''
+
+    const handler: React.ChangeEventHandler<HTMLInputElement> = e => {
+      setColor(latestValue)
+    }
+
+    return debounce(handler, 100, e => {
+      latestValue = e.target.value
+    })
+  }, [])
+
   return (
-    <PopoverButton {...rest} border arrow side={popoverSide} label={renderColor(color)}>
+    <PopoverButton
+      {...rest}
+      border
+      arrow
+      side={popoverSide}
+      label={
+        <Tooltip content={t('whiteboard/color')} side={popoverSide} sideOffset={14}>
+          {renderColor(color)}
+        </Tooltip>
+      }
+    >
       <div className="p-1">
         <div className={'tl-color-palette'}>
           {Object.values(Color).map(value => (
@@ -47,6 +80,25 @@ export function ColorInput({
           ))}
         </div>
 
+        <div className="flex items-center tl-custom-color">
+          <div className={`tl-color-drip m-1 mr-3 ${!isBuiltInColor(color) ? 'active' : ''}`}>
+            <div className="color-input-wrapper tl-color-bg">
+              <input
+                className="color-input cursor-pointer"
+                id="tl-custom-color-input"
+                type="color"
+                value={isHexColor(color) ? color : '#000000'}
+                onChange={handleChangeDebounced}
+                style={{ opacity: isBuiltInColor(color) ? 0 : 1 }}
+                {...rest}
+              />
+            </div>
+          </div>
+          <label htmlFor="tl-custom-color-input" className="cursor-pointer">
+            {t('whiteboard/select-custom-color')}
+          </label>
+        </div>
+
         {setOpacity && (
           <div className="mx-1 my-2">
             <Slider.Root
@@ -54,7 +106,7 @@ export function ColorInput({
               onValueCommit={value => setOpacity(value[0])}
               max={1}
               step={0.1}
-              aria-label="Opacity"
+              aria-label={t('whiteboard/opacity')}
               className="tl-slider-root"
             >
               <Slider.Track className="tl-slider-track">

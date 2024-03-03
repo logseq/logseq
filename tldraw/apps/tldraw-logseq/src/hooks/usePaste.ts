@@ -17,43 +17,47 @@ import {
   HTMLShape,
   IFrameShape,
   ImageShape,
+  PdfShape,
   LogseqPortalShape,
   VideoShape,
   YouTubeShape,
+  YOUTUBE_REGEX,
+  TweetShape,
+  TWITTER_REGEX,
   type Shape,
 } from '../lib'
 import { LogseqContext, LogseqContextValue } from '../lib/logseq-context'
 
 const isValidURL = (url: string) => {
   try {
-    new URL(url)
-    return true
+    const parsedUrl = new URL(url)
+    return parsedUrl.host && ['http:', 'https:'].includes(parsedUrl.protocol)
   } catch {
     return false
   }
 }
 
-interface VideoImageAsset extends TLAsset {
+interface Asset extends TLAsset {
   size?: number[]
 }
 
-const IMAGE_EXTENSIONS = ['.png', '.svg', '.jpg', '.jpeg', '.gif']
-const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.ogg']
+const assetExtensions = {
+  image: ['.png', '.svg', '.jpg', '.jpeg', '.gif'],
+  video: ['.mp4', '.webm', '.ogg'],
+  pdf: ['.pdf'],
+}
 
 function getFileType(filename: string) {
   // Get extension, verify that it's an image
   const extensionMatch = filename.match(/\.[0-9a-z]+$/i)
-  if (!extensionMatch) {
-    return 'unknown'
-  }
+  if (!extensionMatch) return 'unknown'
   const extension = extensionMatch[0].toLowerCase()
-  if (IMAGE_EXTENSIONS.includes(extension)) {
-    return 'image'
-  }
-  if (VIDEO_EXTENSIONS.includes(extension)) {
-    return 'video'
-  }
-  return 'unknown'
+
+  const [type, _extensions] = Object.entries(assetExtensions).find(([_type, extensions]) =>
+    extensions.includes(extension)
+  ) ?? ['unknown', null]
+
+  return type
 }
 
 type MaybeShapes = TLShapeModel[] | null | undefined
@@ -93,25 +97,25 @@ const handleCreatingShapes = async (
   { point, shiftKey, dataTransfer, fromDrop }: TLPasteEventInfo,
   handlers: LogseqContextValue['handlers']
 ) => {
-  let imageAssetsToCreate: VideoImageAsset[] = []
+  let imageAssetsToCreate: Asset[] = []
   let assetsToClone: TLAsset[] = []
   const bindingsToCreate: TLBinding[] = []
 
-  async function createAssetsFromURL(url: string, isVideo: boolean): Promise<VideoImageAsset> {
+  async function createAssetsFromURL(url: string, type: string): Promise<Asset> {
     // Do we already have an asset for this image?
     const existingAsset = Object.values(app.assets).find(asset => asset.src === url)
     if (existingAsset) {
-      return existingAsset as VideoImageAsset
-    } else {
-      // Create a new asset for this image
-      const asset: VideoImageAsset = {
-        id: uniqueId(),
-        type: isVideo ? 'video' : 'image',
-        src: url,
-        size: await getSizeFromSrc(handlers.makeAssetUrl(url), isVideo),
-      }
-      return asset
+      return existingAsset as Asset
     }
+
+    // Create a new asset for this image
+    const asset: Asset = {
+      id: uniqueId(),
+      type: type,
+      src: url,
+      size: await getSizeFromSrc(handlers.makeAssetUrl(url), type),
+    }
+    return asset
   }
 
   async function createAssetsFromFiles(files: File[]) {
@@ -120,7 +124,7 @@ const handleCreatingShapes = async (
       .map(async file => {
         try {
           const dataurl = await handlers.saveAsset(file)
-          return await createAssetsFromURL(dataurl, getFileType(file.name) === 'video')
+          return await createAssetsFromURL(dataurl, getFileType(file.name))
         } catch (err) {
           console.error(err)
         }
@@ -141,24 +145,52 @@ const handleCreatingShapes = async (
 
   async function tryCreateShapesFromDataTransfer(dataTransfer: DataTransfer) {
     return tryCreateShapeHelper(
+      tryCreateShapeFromFilePath,
       tryCreateShapeFromFiles,
-      tryCreateShapeFromTextHTML,
+      tryCreateShapeFromPageName,
+      tryCreateShapeFromBlockUUID,
       tryCreateShapeFromTextPlain,
-      tryCreateShapeFromBlockUUID
+      tryCreateShapeFromTextHTML,
+      tryCreateLogseqPortalShapesFromString
     )(dataTransfer)
   }
 
   async function tryCreateShapesFromClipboard() {
     const items = await navigator.clipboard.read()
     const createShapesFn = tryCreateShapeHelper(
+      tryCreateShapeFromTextPlain,
       tryCreateShapeFromTextHTML,
-      tryCreateShapeFromTextPlain
+      tryCreateLogseqPortalShapesFromString
     )
     const allShapes = (await Promise.all(items.map(item => createShapesFn(item))))
       .flat()
       .filter(isNonNullable)
 
     return allShapes
+  }
+
+  async function tryCreateShapeFromFilePath(item: DataTransfer) {
+    const file = item.getData('file')
+    if (!file) return null
+
+    const asset = await createAssetsFromURL(file, 'pdf')
+    app.addAssets([asset])
+
+    const newShape = {
+      ...PdfShape.defaultProps,
+      id: uniqueId(),
+      assetId: asset.id,
+      url: file,
+      opacity: 1,
+    }
+
+    if (asset.size) {
+      Object.assign(newShape, {
+        point: [point[0] - asset.size[0] / 4 + 16, point[1] - asset.size[1] / 4 + 16],
+        size: Vec.div(asset.size, 2),
+      })
+    }
+    return [newShape]
   }
 
   async function tryCreateShapeFromFiles(item: DataTransfer) {
@@ -169,8 +201,22 @@ const handleCreatingShapes = async (
       imageAssetsToCreate = assets
 
       return assets.map((asset, i) => {
-        const defaultProps =
-          asset.type === 'video' ? VideoShape.defaultProps : ImageShape.defaultProps
+        let defaultProps = null
+
+        switch (asset.type) {
+          case 'video':
+            defaultProps = VideoShape.defaultProps
+            break
+          case 'image':
+            defaultProps = ImageShape.defaultProps
+            break
+          case 'pdf':
+            defaultProps = PdfShape.defaultProps
+            break
+          default:
+            return null
+        }
+
         const newShape = {
           ...defaultProps,
           id: uniqueId(),
@@ -216,7 +262,7 @@ const handleCreatingShapes = async (
           : [text]
       // ensure all uuid in blockUUIDs is persisted
       window.logseq?.api?.set_blocks_id?.(blockUUIDs)
-      const tasks = blockUUIDs.map(uuid => tryCreateLogseqPortalShapesFromString(`((${uuid}))`))
+      const tasks = blockUUIDs.map(uuid => tryCreateLogseqPortalShapesFromUUID(`((${uuid}))`))
       const newShapes = (await Promise.all(tasks)).flat().filter(isNonNullable)
       return newShapes.map((s, idx) => {
         // if there are multiple shapes, shift them to the right
@@ -230,15 +276,22 @@ const handleCreatingShapes = async (
     return null
   }
 
+  async function tryCreateShapeFromPageName(dataTransfer: DataTransfer) {
+    // This is a Logseq custom data type defined in frontend.components.block
+    const rawText = dataTransfer.getData('page-name')
+    if (rawText) {
+      const text = rawText.trim()
+
+      return tryCreateLogseqPortalShapesFromUUID(`[[${text}]]`)
+    }
+    return null
+  }
+
   async function tryCreateShapeFromTextPlain(item: DataTransfer | ClipboardItem) {
     const rawText = await getDataFromType(item, 'text/plain')
     if (rawText) {
       const text = rawText.trim()
-      return tryCreateShapeHelper(
-        tryCreateShapeFromURL,
-        tryCreateShapeFromIframeString,
-        tryCreateLogseqPortalShapesFromString
-      )(text)
+      return tryCreateShapeHelper(tryCreateShapeFromURL, tryCreateShapeFromIframeString)(text)
     }
 
     return null
@@ -256,16 +309,21 @@ const handleCreatingShapes = async (
   }
 
   async function tryCreateShapeFromURL(rawText: string) {
-    if (isValidURL(rawText) && !(shiftKey || fromDrop)) {
-      const isYoutubeUrl = (url: string) => {
-        const youtubeRegex =
-          /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/
-        return youtubeRegex.test(url)
-      }
-      if (isYoutubeUrl(rawText)) {
+    if (isValidURL(rawText) && !shiftKey) {
+      if (YOUTUBE_REGEX.test(rawText)) {
         return [
           {
             ...YouTubeShape.defaultProps,
+            url: rawText,
+            point: [point[0], point[1]],
+          },
+        ]
+      }
+
+      if (TWITTER_REGEX.test(rawText)) {
+        return [
+          {
+            ...TweetShape.defaultProps,
             url: rawText,
             point: [point[0], point[1]],
           },
@@ -297,7 +355,7 @@ const handleCreatingShapes = async (
     return null
   }
 
-  async function tryCreateLogseqPortalShapesFromString(rawText: string) {
+  async function tryCreateLogseqPortalShapesFromUUID(rawText: string) {
     if (/^\(\(.*\)\)$/.test(rawText) && rawText.length === NIL_UUID.length + 4) {
       const blockRef = rawText.slice(2, -2)
       if (validUUID(blockRef)) {
@@ -309,6 +367,7 @@ const handleCreatingShapes = async (
             pageId: blockRef,
             fill: app.settings.color,
             stroke: app.settings.color,
+            scaleLevel: app.settings.scaleLevel,
             blockType: 'B' as 'B',
           },
         ]
@@ -325,27 +384,37 @@ const handleCreatingShapes = async (
           pageId: pageName,
           fill: app.settings.color,
           stroke: app.settings.color,
+          scaleLevel: app.settings.scaleLevel,
           blockType: 'P' as 'P',
         },
       ]
     }
 
-    // Otherwise, creating a new block that belongs to the current whiteboard
-    const uuid = handlers?.addNewBlock(rawText)
-    if (uuid) {
-      // create text shape
-      return [
-        {
-          ...LogseqPortalShape.defaultProps,
-          size: [400, 0], // use 0 here to enable auto-resize
-          point: [point[0], point[1]],
-          pageId: uuid,
-          fill: app.settings.color,
-          stroke: app.settings.color,
-          blockType: 'B' as 'B',
-          compact: true,
-        },
-      ]
+    return null
+  }
+
+  async function tryCreateLogseqPortalShapesFromString(item: DataTransfer | ClipboardItem) {
+    const rawText = await getDataFromType(item, 'text/plain')
+    if (rawText) {
+      const text = rawText.trim()
+      // Create a new block that belongs to the current whiteboard
+      const uuid = handlers?.addNewBlock(text)
+      if (uuid) {
+        // create text shape
+        return [
+          {
+            ...LogseqPortalShape.defaultProps,
+            size: [400, 0], // use 0 here to enable auto-resize
+            point: [point[0], point[1]],
+            pageId: uuid,
+            fill: app.settings.color,
+            stroke: app.settings.color,
+            scaleLevel: app.settings.scaleLevel,
+            blockType: 'B' as 'B',
+            compact: true,
+          },
+        ]
+      }
     }
 
     return null
@@ -370,6 +439,7 @@ const handleCreatingShapes = async (
     return {
       ...shape,
       parentId: app.currentPageId,
+      isLocked: false,
       id: validUUID(shape.id) ? shape.id : uniqueId(),
     }
   })
@@ -386,7 +456,7 @@ const handleCreatingShapes = async (
     }
     app.currentPage.updateBindings(Object.fromEntries(bindingsToCreate.map(b => [b.id, b])))
 
-    if (app.selectedShapesArray.length === 1 && allShapesToAdd.length === 1 && !fromDrop) {
+    if (app.selectedShapesArray.length === 1 && allShapesToAdd.length === 1 && fromDrop) {
       const source = app.selectedShapesArray[0]
       const target = app.getShapeById(allShapesToAdd[0].id!)!
       app.createNewLineBinding(source, target)

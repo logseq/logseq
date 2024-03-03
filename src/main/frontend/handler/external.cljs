@@ -59,10 +59,12 @@
                              (map
                                (fn [title]
                                  (let [day (date/journal-title->int title)
-                                       page-name (util/page-name-sanity-lc (date-time-util/int->journal-title day (state/get-date-formatter)))]
-                                   {:block/name page-name
-                                    :block/journal? true
-                                    :block/journal-day day}))
+                                       journal-title (date-time-util/int->journal-title day (state/get-date-formatter))]
+                                   (when journal-title
+                                     (let [page-name (util/page-name-sanity-lc journal-title)]
+                                       {:block/name page-name
+                                        :block/journal? true
+                                        :block/journal-day day}))))
                                titles))]
       (when (seq journal-pages-tx)
         (db/transact! repo journal-pages-tx)))))
@@ -85,10 +87,10 @@
           [headers parsed-blocks] (mldoc/opml->edn config data)
           ;; add empty pos metadata
           parsed-blocks (map (fn [b] [b {}]) parsed-blocks)
+          page-name (:title headers)
           parsed-blocks (->>
-                         (block/extract-blocks parsed-blocks "" :markdown {})
-                         (mapv editor/wrap-parse-block))
-          page-name (:title headers)]
+                         (block/extract-blocks parsed-blocks "" :markdown {:page-name page-name})
+                         (mapv editor/wrap-parse-block))]
       (when (not (db/page-exists? page-name))
         (page-handler/create! page-name {:redirect? false}))
       (let [page-block (db/entity [:block/name (util/page-name-sanity-lc page-name)])

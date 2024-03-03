@@ -31,8 +31,6 @@ export interface TLReactCallbacks<
 > {
   onMount: TLReactCallback<S, R, 'mount'>
   onPersist: TLReactCallback<S, R, 'persist'>
-  onSave: TLReactCallback<S, R, 'save'>
-  onSaveAs: TLReactCallback<S, R, 'saveAs'>
   onError: TLReactCallback<S, R, 'error'>
   onCreateShapes: TLReactCallback<S, R, 'create-shapes'>
   onCreateAssets: TLReactCallback<S, R, 'create-assets'>
@@ -41,4 +39,5 @@ export interface TLReactCallbacks<
   onDrop: TLReactCallback<S, R, 'drop'>
   onCanvasDBClick: TLReactCallback<S, R, 'canvas-dbclick'>
   onPaste: TLReactCallback<S, R, 'paste'>
+  onCopy: TLReactCallback<S, R, 'copy'>
 }

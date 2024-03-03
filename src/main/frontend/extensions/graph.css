@@ -8,6 +8,11 @@
     z-index: 4;
 }
 
+
 .graph {
+    height: 500px;
+}
+
+#main-content-container .graph {
     height: calc(100vh - 100px) !important;
 }

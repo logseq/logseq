@@ -1,7 +1,14 @@
 (ns frontend.db.model-test
   (:require [cljs.test :refer [use-fixtures deftest is are]]
             [frontend.db.model :as model]
-            [frontend.test.helper :as test-helper :refer [load-test-files]]))
+            [frontend.db :as db]
+            [frontend.db.conn :as conn]
+            [logseq.db.schema :as db-schema]
+            [frontend.test.helper :as test-helper :refer [load-test-files]]
+            [datascript.core :as d]
+            [shadow.resource :as rc]
+            [clojure.set :as set]
+            [clojure.edn :as edn]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
                      :after test-helper/destroy-test-db!})
@@ -121,7 +128,77 @@
          (#'model/get-unnecessary-namespaces-name '("one/two/tree" "one" "one/two" "non nested tag" "non nested link")))
       "Must be  one/two one"))
 
+(deftest entity-query-should-return-nil-if-id-not-exists
+  (is (nil? (db/entity 1000000))))
+
+(deftest entity-query-should-support-both-graph-string-and-db
+  (is (= 1 (:db/id (db/entity test-helper/test-db 1))))
+  (is (= 1 (:db/id (db/entity (conn/get-db test-helper/test-db) 1)))))
+
+(deftest get-block-by-page-name-and-block-route-name
+  (load-test-files [{:file/path "foo.md"
+                     :file/content "foo:: bar
+- b2
+- ### Header 2
+foo:: bar"}])
+  (is (uuid?
+       (:block/uuid
+        (model/get-block-by-page-name-and-block-route-name test-helper/test-db "foo" "header 2")))
+      "Header block's content returns map with :block/uuid")
+
+  (is (nil?
+       (model/get-block-by-page-name-and-block-route-name test-helper/test-db "foo" "b2"))
+      "Non header block's content returns nil"))
 
 
+(def broken-outliner-data-with-cycle (-> (rc/inline "fixtures/broken-outliner-data-with-cycle.edn")
+                                         edn/read-string))
 
-#_(cljs.test/test-ns 'frontend.db.model-test)
+(deftest get-block-children-ids-on-bad-outliner-data
+  (let [db (d/db-with (d/empty-db db-schema/schema)
+                      broken-outliner-data-with-cycle)]
+
+    (is (= "bad outliner data, need to re-index to fix"
+           (try (model/get-block-children-ids-in-db db #uuid"e538d319-48d4-4a6d-ae70-c03bb55b6fe4")
+                (catch :default e
+                  (ex-message e)))))))
+
+(deftest get-block-immediate-children
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "\n
+- parent
+  - child 1
+    - grandchild 1
+  - child 2
+    - grandchild 2
+  - child 3"}])
+  (let [parent (-> (d/q '[:find (pull ?b [*]) :where [?b :block/content "parent"]]
+                        (conn/get-db test-helper/test-db))
+                   ffirst)]
+    (is (= ["child 1" "child 2" "child 3"]
+           (map :block/content
+                (model/get-block-immediate-children test-helper/test-db (:block/uuid parent)))))))
+
+(deftest get-property-values
+  (load-test-files [{:file/path "pages/Feature.md"
+                     :file/content "type:: [[Class]]"}
+                    {:file/path "pages/Class.md"
+                     :file/content "type:: https://schema.org/Class\npublic:: true"}
+                    {:file/path "pages/DatePicker.md"
+                     :file/content "type:: #Feature, #Command"}
+                    {:file/path "pages/Whiteboard___Tool___Eraser.md"
+                     :file/content "type:: [[Tool]], [[Whiteboard/Object]]"}])
+
+  (let [type-values (set (model/get-property-values :type))
+        public-values (set (model/get-property-values :public))]
+
+    (is (contains? type-values "[[Class]]")
+        "Property value from single page-ref is wrapped in square brackets")
+    (is (= #{} (set/difference #{"[[Tool]]" "[[Whiteboard/Object]]"} type-values))
+        "Property values from multiple page-refs are wrapped in square brackets")
+    (is (= #{} (set/difference #{"#Feature" "#Command"} type-values))
+        "Property values from multiple tags have hashtags")
+    (is (contains? type-values "https://schema.org/Class")
+        "Property value text is not modified")
+    (is (contains? public-values "true")
+        "Property value that is not text is not modified")))

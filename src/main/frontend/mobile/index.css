@@ -1,7 +1,7 @@
 .cp__footer {
-  position: absolute;
-  bottom: 0px;
-  left: 0px;
+  position: fixed;
+  bottom: 0;
+  left: 0;
   padding: 10px 20px;
   background-color: var(--ls-primary-background-color);
   z-index: 10;
@@ -28,13 +28,14 @@
 }
 
 .action-bar {
-  position: absolute;
+  position: fixed;
   bottom: 100px;
   height: 70px;
   padding: 6px;
   border-radius: 10px;
   background-color: var(--ls-secondary-background-color);
   overflow-x: overlay;
+  overflow-y: hidden;
   box-shadow: rgba(0, 0, 0, 0.02) 0px 1px 1px 0px, rgba(27, 31, 35, 0.10) 0px 0px 0px 1px;
   z-index: 100;
 
@@ -67,9 +68,6 @@
   position: fixed;
   bottom: 0;
   transition: bottom 260ms;
-  /* transition-timing-function: cubic-bezier(.29, 1.01, 1, -0.68); */
-  /* transition-timing-function: steps(10, jump-end); */
-  /* transition-timing-function: steps(5, end); */
   transition-timing-function: ease-out;
   left: 0;
   width: 100%;
@@ -78,22 +76,19 @@
   justify-content: space-between;
 
   button {
-    padding: 7px 10px;
+    @apply flex items-center py-2 px-2;
+  }
 
-    .submenu {
-      background-color: red;
-      z-index: 100;
-      background-color: var(--ls-secondary-background-color);
-      border-radius: 5px;
-      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02);
-      overflow-x: overlay;
-      overflow-y: hidden;
-      left: 0px;
-      height: 40px;
-    }
+  .submenu {
+    @apply fixed left-0 bottom-0 w-full flex-row justify-evenly items-center z-10 bg-base-2;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02);
+    overflow-x: overlay;
+    overflow-y: hidden;
+    height: 40px;
+    display: none;
 
-    .show-submenu {
-      display: block;
+    &.show-submenu {
+      display: flex;
     }
   }
 
@@ -103,7 +98,12 @@
     align-items: center;
     overflow-x: overlay;
     overflow-y: hidden;
+    overflow-scrolling: touch;
     width: 95%;
+
+    &::-webkit-scrollbar {
+      height: 4px;
+    }
   }
 
   .toolbar-hide-keyboard {

@@ -7,7 +7,8 @@
             [lambdaisland.glogi :as log]
             ["mldoc" :as mldoc :refer [Mldoc]]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [clojure.walk :as walk]))
 
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
 (defonce parseOPML (gobj/get Mldoc "parseOPML"))
@@ -62,10 +63,6 @@
     (->edn content config))
   (toHtml [_this content config references]
     (export "html" content config references))
-  (loaded? [_this]
-    true)
-  (lazyLoad [_this _ok-handler]
-    true)
   (exportMarkdown [_this content config references]
     (parse-export-markdown content config references))
   (exportOPML [_this content config title references]
@@ -83,3 +80,15 @@
   [ast typ]
   (and (contains? #{"Drawer"} (ffirst ast))
        (= typ (second (first ast)))))
+
+(defn extract-first-query-from-ast [ast]
+  (let [*result (atom nil)]
+    (walk/postwalk
+     (fn [f]
+       (if (and (vector? f)
+                (= "Custom" (first f))
+                (= "query" (second f)))
+         (reset! *result (last f))
+         f))
+     ast)
+    @*result))

@@ -1,0 +1,11 @@
+contact_links:
+  - name: Feature request
+    url: https://discuss.logseq.com/new-topic?category=feature-requests
+    about: Suggest an idea for Logseq
+  - name: Questions & Help
+    url: https://discuss.logseq.com/new-topic?category=questions-and-help
+    about: Ask a question about Logseq
+  - name: Feedback
+    url: https://discuss.logseq.com/new-topic?category=feedback
+    about: Discuss where Logseq can be improved
+

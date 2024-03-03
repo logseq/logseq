@@ -17,11 +17,11 @@
                      :after test-helper/destroy-test-db!})
 
 (defn- query-assertions-v067
-  [db files]
+  [db graph-dir files]
   (testing "Query based stats"
     (is (= (->> files
                 ;; logseq files aren't saved under :block/file
-                (remove #(string/includes? % (str "/" gp-config/app-name "/")))
+                (remove #(string/includes? % (str graph-dir "/" gp-config/app-name "/")))
                 set)
            (->> (d/q '[:find (pull ?b [* {:block/file [:file/path]}])
                        :where [?b :block/name] [?b :block/file]]
@@ -63,7 +63,7 @@
 
     (is (= {:title 98
             :alias 6
-            :tags 2 :permalink 2
+            :tags 3 :permalink 2
             :name 1 :type 1 :related 1 :sample 1 :click 1 :id 1 :example 1}
            (docs-graph-helper/get-all-page-properties db))
         "Counts for all page properties")
@@ -93,12 +93,12 @@
   logseq app. It is important to run these in both contexts to ensure that the
   functionality in frontend.handler.repo and logseq.graph-parser remain the
   same"
-  [db files]
+  [db graph-dir files]
   ;; Counts assertions help check for no major regressions. These counts should
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
     (is (= 211 (count files)) "Correct file count")
-    (is (= 42208 (count (d/datoms db :eavt))) "Correct datoms count")
+    (is (= 38704 (count (d/datoms db :eavt))) "Correct datoms count")
 
     (is (= 3600
            (ffirst
@@ -113,7 +113,7 @@
                  db)))
         "Advanced query count"))
 
-  (query-assertions-v067 db files))
+  (query-assertions-v067 db graph-dir files))
 
 (defn- convert-to-triple-lowbar
   [path]
@@ -123,7 +123,7 @@
     (if rename-target
       #_:clj-kondo/ignore
       (do #_(prn "conversion triple-lowbar: " original-body " -> " rename-target)
-        (#'page-handler/compute-new-file-path path rename-target))
+       (#'page-handler/compute-new-file-path path rename-target))
       path)))
 
 (defn- convert-graph-files-path
@@ -134,14 +134,14 @@
 
 ;; Integration test that test parsing a large graph like docs
 ;; Check if file name conversion from old version of docs is working
-(deftest ^:integration convert-v067-filesnames-parse-and-load-files-to-db
+(deftest ^:integration convert-v067-filenames-parse-and-load-files-to-db
   (let [graph-dir "src/test/docs"
         _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.6.7")
-        files (gp-cli/build-graph-files graph-dir)
+        files (#'gp-cli/build-graph-files graph-dir {})
         ;; Converting the v0.6.7 ver docs graph under the old namespace naming rule to the new one (:repo/dir-version 0->3)
         files (convert-graph-files-path files convert-to-triple-lowbar)
         _ (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false :verbose false})
         db (conn/get-db test-helper/test-db)]
 
     ;; Result under new naming rule after conversion should be the same as the old one
-    (docs-graph-assertions-v067 db (map :file/path files))))
+    (docs-graph-assertions-v067 db graph-dir (map :file/path files))))

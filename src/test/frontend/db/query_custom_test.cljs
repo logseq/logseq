@@ -51,6 +51,18 @@
                                            (not [?b :block/marker _])]]]})))
         "advanced query that uses rule from logseq and rule from :inputs")
 
+    (is (= ["LATER b3"]
+           (map :block/content
+                (custom-query {:query '[:find (pull ?b [*])
+                                        :in $ %
+                                        :where
+                                        (starts-with ?b "LA")
+                                        (task ?b #{"LATER"})]
+                               :rules '[[(starts-with ?b ?substr)
+                                         [?b :block/content ?content]
+                                         [(clojure.string/starts-with? ?content ?substr)]]]})))
+        "advanced query that uses :rules and rules from logseq")
+
     (is (= #{"page1"}
            (set
             (map #(get-in % [:block/page :block/name])

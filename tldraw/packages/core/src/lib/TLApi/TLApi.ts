@@ -1,6 +1,7 @@
 import Vec from '@tldraw/vec'
 import type { TLAsset, TLBinding, TLEventMap } from '../../types'
-import { BoundsUtils, uniqueId } from '../../utils'
+import { TLCloneDirection, Geometry } from '../../types'
+import { BoundsUtils, isNonNullable, uniqueId } from '../../utils'
 import type { TLShape, TLShapeModel } from '../shapes'
 import type { TLApp } from '../TLApp'
 
@@ -11,8 +12,10 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     this.app = app
   }
 
-  editShape = (shape: string | S | undefined): this => {
-    this.app.transition('select').selectedTool.transition('editingShape', { shape })
+  editShape = (shape: S | undefined): this => {
+    if (!shape?.props.isLocked)
+      this.app.transition('select').selectedTool.transition('editingShape', { shape })
+
     return this
   }
 
@@ -41,7 +44,9 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
    *
    * @param shapes The serialized shape changes to apply.
    */
-  updateShapes = <T extends S>(...shapes: ({ id: string } & Partial<T['props']>)[]): this => {
+  updateShapes = <T extends S>(
+    ...shapes: ({ id: string; type: string } & Partial<T['props']>)[]
+  ): this => {
     this.app.updateShapes(shapes)
     return this
   }
@@ -92,7 +97,9 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
 
   /** Select all shapes on the current page. */
   selectAll = (): this => {
-    this.app.setSelectedShapes(this.app.currentPage.shapes)
+    this.app.setSelectedShapes(
+      this.app.currentPage.shapes.filter(s => !this.app.shapesInGroups().includes(s))
+    )
     return this
   }
 
@@ -153,7 +160,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
 
   resetZoomToCursor = (): this => {
     const viewport = this.app.viewport
-    viewport.update({
+    viewport.animateCamera({
       zoom: 1,
       point: Vec.sub(this.app.inputs.originScreenPoint, this.app.inputs.originPoint),
     })
@@ -166,26 +173,42 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     return this
   }
 
+  toggleSnapToGrid = (): this => {
+    const { settings } = this.app
+    settings.update({ snapToGrid: !settings.snapToGrid })
+    return this
+  }
+
+
+  togglePenMode = (): this => {
+    const { settings } = this.app
+    settings.update({ penMode: !settings.penMode })
+    return this
+  }
+
   setColor = (color: string): this => {
     const { settings } = this.app
 
     settings.update({ color: color })
 
     this.app.selectedShapesArray.forEach(s => {
-      s.update({ fill: color, stroke: color })
+      if (!s.props.isLocked) s.update({ fill: color, stroke: color })
     })
     this.app.persist()
 
     return this
   }
 
-  save = () => {
-    this.app.save()
-    return this
-  }
+  setScaleLevel = (scaleLevel: string): this => {
+    const { settings } = this.app
 
-  saveAs = () => {
-    this.app.save()
+    settings.update({ scaleLevel })
+
+    this.app.selectedShapes.forEach(shape => {
+      if (!shape.props.isLocked) shape.setScaleLevel(scaleLevel)
+    })
+    this.app.persist()
+
     return this
   }
 
@@ -199,10 +222,65 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     return this
   }
 
+  persist = () => {
+    this.app.persist()
+    return this
+  }
+
   createNewLineBinding = (source: S | string, target: S | string) => {
     return this.app.createNewLineBinding(source, target)
   }
 
+  clone = (direction: TLCloneDirection) => {
+    if (
+      this.app.readOnly ||
+      this.app.selectedShapesArray.length !== 1 ||
+      !Object.values(Geometry).some((geometry: string) => geometry === this.app.selectedShapesArray[0].type)
+    ) return;
+
+    const shape = this.app.allSelectedShapesArray[0]
+    const ShapeClass = this.app.getShapeClass(shape.type)
+
+    const {minX, minY, maxX, maxY, width, height} = shape.bounds
+    const spacing = 100
+    let point = [0, 0]
+
+    switch(direction) {
+      case TLCloneDirection.Down: {
+        point = [minX, maxY + spacing]
+        break
+      }
+      case TLCloneDirection.Up: {
+        point = [minX, minY - spacing  - height]
+        break
+      }
+      case TLCloneDirection.Left: {
+        point = [minX - spacing - width, minY]
+        break
+      }
+      case TLCloneDirection.Right: {
+        point = [maxX + spacing, minY]
+        break
+      }
+    }
+
+    const clone = new ShapeClass({
+      ...shape.serialized,
+      id: uniqueId(),
+      nonce: Date.now(),
+      refs: [],
+      label: '',
+      point: point,
+    })
+
+    this.app.history.pause()
+    this.app.currentPage.addShapes(clone)
+    this.app.createNewLineBinding(shape, clone)
+    this.app.history.resume()
+    this.app.persist();
+    setTimeout(() => this.editShape(clone)) 
+  }
+  
   /** Clone shapes with given context */
   cloneShapes = ({
     shapes,
@@ -217,14 +295,16 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     bindings: Record<string, TLBinding>
   }) => {
     const commonBounds = BoundsUtils.getCommonBounds(
-      shapes.map(shape => ({
-        minX: shape.point?.[0] ?? point[0],
-        minY: shape.point?.[1] ?? point[1],
-        width: shape.size?.[0] ?? 4,
-        height: shape.size?.[1] ?? 4,
-        maxX: (shape.point?.[0] ?? point[0]) + (shape.size?.[0] ?? 4),
-        maxY: (shape.point?.[1] ?? point[1]) + (shape.size?.[1] ?? 4),
-      }))
+      shapes
+        .filter(s => s.type !== 'group')
+        .map(shape => ({
+          minX: shape.point?.[0] ?? point[0],
+          minY: shape.point?.[1] ?? point[1],
+          width: shape.size?.[0] ?? 4,
+          height: shape.size?.[1] ?? 4,
+          maxX: (shape.point?.[0] ?? point[0]) + (shape.size?.[0] ?? 4),
+          maxY: (shape.point?.[1] ?? point[1]) + (shape.size?.[1] ?? 4),
+        }))
     )
 
     const clonedShapes = shapes.map(shape => {
@@ -235,6 +315,14 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
           point[0] + shape.point![0] - commonBounds.minX,
           point[1] + shape.point![1] - commonBounds.minY,
         ],
+      }
+    })
+
+    clonedShapes.forEach(s => {
+      if (s.children && s.children?.length > 0) {
+        s.children = s.children
+          .map(oldId => clonedShapes[shapes.findIndex(s => s.id === oldId)]?.id)
+          .filter(isNonNullable)
       }
     })
 
@@ -347,5 +435,75 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
       this.addClonedShapes(data)
     }
     return this
+  }
+
+  doGroup = (shapes: S[] = this.app.allSelectedShapesArray) => {
+    if (this.app.readOnly) return
+
+    const selectedGroups: S[] = [
+      ...shapes.filter(s => s.type === 'group'),
+      ...shapes.map(s => this.app.getParentGroup(s)),
+    ].filter(isNonNullable)
+    // not using this.app.removeShapes because it also remove shapes in the group
+    this.app.currentPage.removeShapes(...selectedGroups)
+
+    // group all shapes
+    const selectedShapes = shapes.filter(s => s.type !== 'group')
+    if (selectedShapes.length > 1) {
+      const ShapeGroup = this.app.getShapeClass('group')
+      const group = new ShapeGroup({
+        id: uniqueId(),
+        type: ShapeGroup.id,
+        parentId: this.app.currentPage.id,
+        children: selectedShapes.map(s => s.id),
+      })
+      this.app.currentPage.addShapes(group)
+      this.app.setSelectedShapes([group])
+      // the shapes in the group should also be moved to the bottom of the array (to be on top on the canvas)
+      this.app.bringForward(selectedShapes)
+    }
+    this.app.persist()
+  }
+
+  unGroup = (shapes: S[] = this.app.allSelectedShapesArray) => {
+    if (this.app.readOnly) return
+
+    const selectedGroups: S[] = [
+      ...shapes.filter(s => s.type === 'group'),
+      ...shapes.map(s => this.app.getParentGroup(s)),
+    ].filter(isNonNullable)
+
+    const shapesInGroups = this.app.shapesInGroups(selectedGroups)
+
+    if (selectedGroups.length > 0) {
+      // not using this.app.removeShapes because it also remove shapes in the group
+      this.app.currentPage.removeShapes(...selectedGroups)
+      this.app.persist()
+
+      this.app.setSelectedShapes(shapesInGroups)
+    }
+  }
+
+  convertShapes = (type: string, shapes: S[] = this.app.allSelectedShapesArray) => {
+    const ShapeClass = this.app.getShapeClass(type)
+
+    this.app.currentPage.removeShapes(...shapes)
+    const clones = shapes.map(s => {
+      return new ShapeClass({
+        ...s.serialized,
+        type: type,
+        nonce: Date.now(),
+      })
+    })
+    this.app.currentPage.addShapes(...clones)
+    this.app.persist()
+    this.app.setSelectedShapes(clones)
+  }
+
+  setCollapsed = (collapsed: boolean, shapes: S[] = this.app.allSelectedShapesArray) => {
+    shapes.forEach(shape => {
+      if (shape.props.type === 'logseq-portal') shape.setCollapsed(collapsed)
+    })
+    this.app.persist()
   }
 }

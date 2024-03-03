@@ -7,6 +7,10 @@
             [goog.string.format]))
 
 (def colons "Property delimiter for markdown mode" "::")
+(defn colons-org
+  "Property delimiter for org mode"
+  [property]
+  (str ":" property ":"))
 
 (defn ->block-content
   "Creates a block content string from properties map"
@@ -43,13 +47,23 @@
   "Properties used by logseq that user can edit and that can have linkable property values"
   #{:alias :aliases :tags})
 
+(def editable-view-and-table-properties
+  "Properties used by view and table component"
+  #{;; view props
+    :logseq.color
+    ;; table props
+    :logseq.table.version :logseq.table.compact :logseq.table.headers :logseq.table.hover
+    :logseq.table.borders :logseq.table.stripes :logseq.table.max-width})
+
 (defn editable-built-in-properties
   "Properties used by logseq that user can edit"
   []
-  (into #{:title :icon :template :template-including-parent :public :filters :exclude-from-graph-view
+  (set/union #{:title :icon :template :template-including-parent :public :filters :exclude-from-graph-view
+               :logseq.query/nlp-date
           ;; org-mode only
-          :macro :filetags}
-        editable-linkable-built-in-properties))
+               :macro :filetags}
+             editable-linkable-built-in-properties
+             editable-view-and-table-properties))
 
 (defn hidden-built-in-properties
   "Properties used by logseq that user can't edit or see"
@@ -59,7 +73,7 @@
      :created-at :updated-at :last-modified-at :created_at :last_modified_at
      :query-table :query-properties :query-sort-by :query-sort-desc :ls-type
      :hl-type :hl-page :hl-stamp :hl-color :logseq.macro-name :logseq.macro-arguments
-     :logseq.tldraw.page :logseq.tldraw.shape
+     :logseq.order-list-type :logseq.tldraw.page :logseq.tldraw.shape
      ; task markers
      :todo :doing :now :later :done}
    @built-in-extended-properties))
@@ -70,6 +84,7 @@
   {:template-including-parent :boolean
    :public :boolean
    :exclude-from-graph-view :boolean
+   :logseq.query/nlp-date :boolean
    :heading :boolean
    :collapsed :boolean
    :created-at :integer

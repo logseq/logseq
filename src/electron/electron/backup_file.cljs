@@ -1,6 +1,6 @@
 (ns electron.backup-file
   (:require [clojure.string :as string]
-            ["path" :as path]
+            ["path" :as node-path]
             ["fs" :as fs]
             ["fs-extra" :as fs-extra]))
 
@@ -10,11 +10,11 @@
 (defn- get-backup-dir*
   [repo relative-path bak-dir]
   (let [relative-path* (string/replace relative-path repo "")
-        bak-dir (path/join repo bak-dir)
-        path (path/join bak-dir relative-path*)
-        parsed-path (path/parse path)]
-    (path/join (.-dir parsed-path)
-               (.-name parsed-path))))
+        bak-dir (node-path/join repo bak-dir)
+        path (node-path/join bak-dir relative-path*)
+        parsed-path (node-path/parse path)]
+    (node-path/join (.-dir parsed-path)
+                    (.-name parsed-path))))
 
 (defn get-backup-dir
   [repo relative-path]
@@ -31,7 +31,7 @@
         files (mapv #(.-name %) files)
         old-versioned-files (drop 6 (reverse (sort files)))]
     (doseq [file old-versioned-files]
-      (fs-extra/removeSync (path/join dir file)))))
+      (fs-extra/removeSync (node-path/join dir file)))))
 
 (defn backup-file
   "backup CONTENT under DIR :backup-dir or :version-file-dir
@@ -42,9 +42,9 @@
   (let [dir* (case dir
                :backup-dir (get-backup-dir repo relative-path)
                :version-file-dir (get-version-file-dir repo relative-path))
-        new-path (path/join dir*
-                            (str (string/replace (.toISOString (js/Date.)) ":" "_")
-                                 ".Desktop" ext))]
+        new-path (node-path/join dir*
+                                 (str (string/replace (.toISOString (js/Date.)) ":" "_")
+                                      ".Desktop" ext))]
     (fs-extra/ensureDirSync dir*)
     (fs/writeFileSync new-path content)
     (fs/statSync new-path)

@@ -6,12 +6,13 @@
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
             [frontend.db :as db]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [datascript.core :as d]))
 
 (defn updated-page-hook
   [tx-report page]
   (when-not (get-in tx-report [:tx-meta :created-from-journal-template?])
-    (file/sync-to-file page)))
+    (file/sync-to-file page (:outliner-op (:tx-meta tx-report)))))
 
 ;; TODO: it'll be great if we can calculate the :block/path-refs before any
 ;; outliner transaction, this way we can group together the real outliner tx
@@ -24,7 +25,7 @@
 ;; 1. For each changed block, new-refs = its page + :block/refs + parents :block/refs
 ;; 2. Its children' block/path-refs might need to be updated too.
 (defn compute-block-path-refs
-  [{:keys [tx-meta]} blocks]
+  [{:keys [tx-meta db-before]} blocks]
   (let [repo (state/get-current-repo)
         blocks (remove :block/name blocks)]
     (when (:outliner-op tx-meta)
@@ -36,19 +37,42 @@
                       (let [parents (db-model/get-block-parents repo (:block/uuid block))
                             parents-refs (->> (mapcat :block/path-refs parents)
                                               (map :db/id))
-                            old-refs (set (map :db/id (:block/path-refs block)))
+                            old-refs (if db-before
+                                       (set (map :db/id (:block/path-refs (d/entity db-before (:db/id block)))))
+                                       #{})
                             new-refs (set (util/concat-without-nil
                                            [(:db/id (:block/page block))]
                                            (map :db/id (:block/refs block))
                                            parents-refs))
                             refs-changed? (not= old-refs new-refs)
                             children (db-model/get-block-children-ids repo (:block/uuid block))
-                            children-refs (map (fn [id]
-                                                 (let [entity (db/entity [:block/uuid id])]
-                                                   {:db/id (:db/id entity)
-                                                    :block/path-refs (concat
-                                                                      (map :db/id (:block/path-refs entity))
-                                                                      new-refs)})) children)]
+                            ;; Builds map of children ids to their parent id and :block/refs ids
+                            children-maps (into {}
+                                                (map (fn [id]
+                                                       (let [entity (db/entity [:block/uuid id])]
+                                                         [(:db/id entity)
+                                                          {:parent-id (get-in entity [:block/parent :db/id])
+                                                           :block-ref-ids (map :db/id (:block/refs entity))}]))
+                                                     children))
+                            children-refs (map (fn [[id {:keys [block-ref-ids] :as child-map}]]
+                                                 {:db/id id
+                                                  ;; Recalculate :block/path-refs as db contains stale data for this attribute
+                                                  :block/path-refs
+                                                  (set/union
+                                                   ;; Refs from top-level parent
+                                                   new-refs
+                                                   ;; Refs from current block
+                                                   block-ref-ids
+                                                   ;; Refs from parents in between top-level
+                                                   ;; parent and current block
+                                                   (loop [parent-refs #{}
+                                                          parent-id (:parent-id child-map)]
+                                                     (if-let [parent (children-maps parent-id)]
+                                                       (recur (into parent-refs (:block-ref-ids parent))
+                                                              (:parent-id parent))
+                                                       ;; exits when top-level parent is reached
+                                                       parent-refs)))})
+                                               children-maps)]
                         (swap! *computed-ids set/union (set (cons (:block/uuid block) children)))
                         (util/concat-without-nil
                          [(when (and (seq new-refs)
@@ -63,7 +87,7 @@
   (let [tx-meta (:tx-meta tx-report)]
     (when (and (not (:from-disk? tx-meta))
                (not (:new-graph? tx-meta))
-               (not (:compute-new-refs? tx-meta)))
+               (not (:replace? tx-meta)))
       (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
             repo (state/get-current-repo)
             refs-tx (util/profile
@@ -73,7 +97,7 @@
             tx (util/concat-without-nil truncate-refs-tx refs-tx)
             tx-report' (if (seq tx)
                          (let [refs-tx-data' (:tx-data (db/transact! repo tx {:outliner/transact? true
-                                                                              :compute-new-refs? true}))]
+                                                                              :replace? true}))]
                            ;; merge
                            (assoc tx-report :tx-data (concat (:tx-data tx-report) refs-tx-data')))
                          tx-report)
@@ -82,10 +106,14 @@
         (when-not importing?
           (react/refresh! repo tx-report'))
 
-        (doseq [p (seq pages)]
-          (updated-page-hook tx-report p))
+        (when-not (:delete-files? tx-meta)
+          (doseq [p (seq pages)]
+            (updated-page-hook tx-report p)))
 
-        (when (and state/lsp-enabled? (seq blocks) (not importing?))
+        (when (and state/lsp-enabled?
+                   (seq blocks)
+                   (not importing?)
+                   (<= (count blocks) 1000))
           (state/pub-event! [:plugin/hook-db-tx
                              {:blocks  blocks
                               :tx-data (:tx-data tx-report)

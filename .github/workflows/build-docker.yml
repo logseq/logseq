@@ -7,7 +7,7 @@ on:
     types: [released]
 
 env:
-  CLOJURE_VERSION: '1.10.1.727'
+  CLOJURE_VERSION: '1.11.1.1413'
 
 jobs:
 
@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c  # v3.3.0
         with:
           fetch-depth: 1
           submodules: 'true'

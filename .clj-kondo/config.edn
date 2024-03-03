@@ -10,7 +10,13 @@
                          {:exclude [frontend.db.conn frontend.db.react logseq.db.default]}}}}
 
  :linters
- {:aliased-namespace-symbol {:level :warning}
+ {:path-invalid-construct/string-join {:level :info}
+  :regex-checks/double-escaped-regex {:level :warning}
+  :aliased-namespace-symbol {:level :warning}
+  ;; Disable until it doesn't trigger false positives on rum/defcontext
+  :earmuffed-var-not-dynamic {:level :off}
+  ;; Disable until we decide to use conj! as recommended in docs
+  :unused-value {:level :off}
   :unresolved-symbol {:exclude [goog.DEBUG
                                 goog.string.unescapeEntities
                                 ;; TODO:lint: Fix when fixing all type hints
@@ -20,7 +26,9 @@
                              frontend.util/node-path.dirname
                              frontend.util/node-path.join
                              frontend.util/node-path.extname
-                             frontend.util/node-path.name]}
+                             frontend.util/node-path.name
+                             ;; frontend.pubsub/def-mult-or-pub generate vars clj-kondo cannot resolve
+                             frontend.pubsub]}
 
   :consistent-alias
   {:aliases {cljs.reader reader
@@ -33,6 +41,9 @@
              electron.utils utils
              "/electron/utils" js-utils
              frontend.commands commands
+             frontend.components.block.macros block-macros
+             frontend.components.query query
+             frontend.components.query.result query-result
              frontend.config config
              frontend.date date
              frontend.db db
@@ -40,20 +51,23 @@
              frontend.db.query-dsl query-dsl
              frontend.db.react react
              frontend.db.query-react query-react
+             frontend.db.util db-utils
              frontend.diff diff
              frontend.encrypt encrypt
              frontend.extensions.sci sci
              frontend.format.mldoc mldoc
              frontend.format.block block
              frontend.fs fs
-             frontend.fs.bfs bfs
+             frontend.fs.memory-fs memory-fs
              frontend.fs.capacitor-fs capacitor-fs
              frontend.fs.nfs nfs
              frontend.handler.extract extract
              frontend.handler.common common-handler
              frontend.handler.common.file file-common-handler
              frontend.handler.common.plugin plugin-common-handler
+             frontend.handler.common.developer dev-common-handler
              frontend.handler.config config-handler
+             frontend.handler.editor.property editor-property
              frontend.handler.events events
              frontend.handler.global-config global-config-handler
              frontend.handler.ui ui-handler
@@ -61,14 +75,17 @@
              frontend.handler.page page-handler
              frontend.handler.plugin plugin-handler
              frontend.handler.plugin-config plugin-config-handler
+             frontend.handler.query.builder query-builder
              frontend.handler.repo repo-handler
              frontend.handler.repo-config repo-config-handler
+             frontend.handler.route route-handler
              frontend.handler.search search-handler
              frontend.idb idb
              frontend.loader loader
              frontend.mixins mixins
              frontend.mobile.util mobile-util
              frontend.page page
+             frontend.schema.handler.common-config common-config-schema
              frontend.search search
              frontend.state state
              frontend.template template
@@ -76,12 +93,16 @@
              frontend.ui ui
              frontend.util util
              frontend.util.clock clock
+             frontend.util.page page-util
              frontend.util.property property
              frontend.util.persist-var persist-var
              frontend.util.text text-util
              frontend.util.url url-util
              frontend.util.thingatpt thingatpt
              lambdaisland.glogi log
+             logseq.common.path path
+             logseq.common.graph common-graph
+             logseq.common.config common-config
              logseq.graph-parser graph-parser
              logseq.graph-parser.text text
              logseq.graph-parser.block gp-block
@@ -91,15 +112,19 @@
              logseq.graph-parser.config gp-config
              logseq.graph-parser.util.page-ref page-ref
              logseq.graph-parser.util.block-ref block-ref
+             logseq.graph-parser.util.db db-util
              logseq.graph-parser.date-time-util date-time-util
              medley.core medley
+             "path" node-path
              promesa.core p}}
 
   :namespace-name-mismatch {:level :warning}
   :used-underscored-binding {:level :warning}}
 
  :hooks {:analyze-call {rum.core/defc hooks.rum/defc
-                         rum.core/defcs hooks.rum/defcs}}
+                        rum.core/defcs hooks.rum/defcs
+                        clojure.string/join hooks.path-invalid-construct/string-join
+                        clojure.string/replace hooks.regex-checks/double-escaped-regex}}
  :lint-as {promesa.core/let clojure.core/let
            promesa.core/loop clojure.core/loop
            promesa.core/recur clojure.core/recur

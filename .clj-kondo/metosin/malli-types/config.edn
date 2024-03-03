@@ -1,0 +1,23 @@
+{:linters
+ {:unresolved-symbol {:exclude [(malli.core/=>)]},
+  :type-mismatch
+  {:namespaces
+   {frontend.util
+    {safe-re-find {:arities {2 {:args [:any :string], :ret :any}}},
+     check-password-strength
+     {:arities
+      {1
+       {:args [:string],
+        :ret
+        {:op :keys,
+         :req
+         {:contains :sequential,
+          :length :int,
+          :id :int,
+          :value :string},
+         :nilable true}}}},
+     uuid-string? {:arities {1 {:args [:string], :ret :boolean}}},
+     safe-parse-int {:arities {1 {:args [:any], :ret :int}}},
+     safe-sanitize-file-name
+     {:arities {1 {:args [:string], :ret :string}}},
+     safe-parse-float {:arities {1 {:args [:any], :ret :double}}}}}}}}

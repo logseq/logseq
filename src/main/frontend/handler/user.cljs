@@ -9,7 +9,11 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [cljs-http.client :as http]
-            [cljs.core.async :as async :refer [go <!]]))
+            [cljs.core.async :as async :refer [go <!]]
+            [goog.crypt.Sha256]
+            [goog.crypt.Hmac]
+            [goog.crypt :as crypt]
+            [frontend.handler.notification :as notification]))
 
 (defn set-preferred-format!
   [format]
@@ -25,13 +29,21 @@
 
 ;;; userinfo, token, login/logout, ...
 
+(defn- decode-username
+  [username]
+  (let [arr (new js/Uint8Array (count username))]
+    (doseq [i (range (count username))]
+      (aset arr i (.charCodeAt username i)))
+    (.decode (new js/TextDecoder "utf-8") arr)))
+
 (defn- parse-jwt [jwt]
   (some-> jwt
           (string/split ".")
           second
-          js/atob
+          (#(.decodeString ^js crypt/base64 % true))
           js/JSON.parse
-          (js->clj :keywordize-keys true)))
+          (js->clj :keywordize-keys true)
+          (update :cognito:username decode-username)))
 
 (defn- expired? [parsed-jwt]
   (some->
@@ -58,7 +70,7 @@
    parse-jwt
    :email))
 
-(defn- user-uuid []
+(defn user-uuid []
   (some->
    (state/get-auth-id-token)
    parse-jwt
@@ -104,80 +116,127 @@
    (state/set-auth-refresh-token refresh-token)
    (set-token-to-localstorage! id-token access-token refresh-token)))
 
+(defn- <refresh-tokens
+  "return refreshed id-token, access-token"
+  [refresh-token]
+  (http/post (str "https://" config/OAUTH-DOMAIN "/oauth2/token")
+             {:form-params {:grant_type "refresh_token"
+                            :client_id config/COGNITO-CLIENT-ID
+                            :refresh_token refresh-token}}))
 
 (defn <refresh-id-token&access-token
   "Refresh id-token and access-token"
   []
   (go
     (when-let [refresh-token (state/get-auth-refresh-token)]
-      (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_refresh_token?refresh_token=" refresh-token)
-                               {:with-credentials? false}))]
+      (let [resp (<! (<refresh-tokens refresh-token))]
         (cond
           (and (<= 400 (:status resp))
                (> 500 (:status resp)))
           ;; invalid refresh-token
-          (clear-tokens)
+          (let [invalid-grant? (and (= 400 (:status resp))
+                                    (= (:error (:body resp)) "invalid_grant"))]
+            (prn :debug :refresh-token-failed
+                 :status (:status resp))
+            (when invalid-grant?
+              (clear-tokens)))
 
           ;; e.g. api return 500, server internal error
           ;; we shouldn't clear tokens if they aren't expired yet
           ;; the `refresh-tokens-loop` will retry soon
           (and (not (http/unexceptional-status? (:status resp)))
                (not (-> (state/get-auth-id-token) parse-jwt expired?)))
-          nil                           ; do nothing
+          (do
+            (prn :debug :refresh-token-failed
+                 :status (:status resp)
+                 :body (:body resp)
+                 :error-code (:error-code resp)
+                 :error-text (:error-text resp))
+            nil)                           ; do nothing
 
           (not (http/unexceptional-status? (:status resp)))
-          (clear-tokens true)
+          (notification/show! "exceptional status when refresh-token" :warning true)
 
           :else                         ; ok
-        (when (and (:id_token (:body resp)) (:access_token (:body resp)))
-          (set-tokens! (:id_token (:body resp)) (:access_token (:body resp)))))))))
+          (when (and (:id_token (:body resp)) (:access_token (:body resp)))
+            (set-tokens! (:id_token (:body resp)) (:access_token (:body resp)))))))))
 
 (defn restore-tokens-from-localstorage
-  "Restore id-token, access-token, refresh-token from localstorage,
-  and refresh id-token&access-token if necessary.
-  return nil when tokens are not available."
+  "Refresh id-token&access-token, pull latest repos, returns nil when tokens are not available."
   []
   (println "restore-tokens-from-localstorage")
-  (let [id-token (js/localStorage.getItem "id-token")
-        access-token (js/localStorage.getItem "access-token")
-        refresh-token (js/localStorage.getItem "refresh-token")]
+  (let [refresh-token (js/localStorage.getItem "refresh-token")]
     (when refresh-token
-      (set-tokens! id-token access-token refresh-token)
-      (when-not (or (nil? id-token) (nil? access-token)
-                    (-> id-token parse-jwt almost-expired?)
-                    (-> access-token parse-jwt almost-expired?))
-        (go
-          ;; id-token or access-token expired
-          (<! (<refresh-id-token&access-token))
-          ;; refresh remote graph list by pub login event
-          (when (user-uuid) (state/pub-event! [:user/login])))))))
+      (go
+        (<! (<refresh-id-token&access-token))
+        ;; refresh remote graph list by pub login event
+        (when (user-uuid) (state/pub-event! [:user/fetch-info-and-graphs]))))))
 
-(defn login-callback [code]
-  (state/set-state! [:ui/loading? :login] true)
-  (go
-    (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_callback?code=" code)
-                             {:with-credentials? false}))]
-      (if (= 200 (:status resp))
-        (-> resp
-            :body
-            (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $)))
-            (#(state/pub-event! [:user/login])))
-        (debug/pprint "login-callback" resp)))))
+(defn has-refresh-token?
+  "Has refresh-token"
+  []
+  (boolean (js/localStorage.getItem "refresh-token")))
+
+(defn login-callback
+  [session]
+  (set-tokens!
+   (:jwtToken (:idToken session))
+   (:jwtToken (:accessToken session))
+   (:token (:refreshToken session)))
+  (state/pub-event! [:user/fetch-info-and-graphs]))
+
+(defn ^:export login-with-username-password-e2e
+  [username password client-id client-secret]
+  (let [text-encoder (new js/TextEncoder)
+        key          (.encode text-encoder client-secret)
+        hasher       (new crypt/Sha256)
+        hmacer       (new crypt/Hmac hasher key)
+        secret-hash  (.encodeByteArray ^js crypt/base64 (.getHmac hmacer (str username client-id)))
+        payload      {"AuthParameters" {"USERNAME"    username,
+                                        "PASSWORD"    password,
+                                        "SECRET_HASH" secret-hash}
+                      "AuthFlow"       "USER_PASSWORD_AUTH",
+                      "ClientId"       client-id}
+        headers      {"X-Amz-Target" "AWSCognitoIdentityProviderService.InitiateAuth",
+                      "Content-Type" "application/x-amz-json-1.1"}]
+    (go
+      (let [resp (<! (http/post config/COGNITO-IDP {:headers headers
+                                                    :body    (js/JSON.stringify (clj->js payload))}))]
+        (assert (= 200 (:status resp)))
+        (let [body          (js->clj (js/JSON.parse (:body resp)))
+              access-token  (get-in body ["AuthenticationResult" "AccessToken"])
+              id-token      (get-in body ["AuthenticationResult" "IdToken"])
+              refresh-token (get-in body ["AuthenticationResult" "RefreshToken"])]
+          (set-tokens! id-token access-token refresh-token)
+          (state/pub-event! [:user/fetch-info-and-graphs])
+          {:id-token id-token :access-token access-token :refresh-token refresh-token})))))
 
 (defn logout []
   (clear-tokens)
+  (state/clear-user-info!)
   (state/pub-event! [:user/logout]))
+
+(defn upgrade []
+  (let [base-upgrade-url "https://logseqdemo.lemonsqueezy.com/checkout/buy/13e194b5-c927-41a8-af58-ed1a36d6000d"
+        user-uuid (user-uuid)
+        url (cond-> base-upgrade-url
+              user-uuid (str "?checkout[custom][user_uuid]=" (name user-uuid)))]
+    (println " ~~~ LEMON: " url " ~~~ ")
+    (js/window.open url)))
+  ; (js/window.open
+  ;   "https://logseqdemo.lemonsqueezy.com/checkout/buy/13e194b5-c927-41a8-af58-ed1a36d6000d"))
 
 (defn <ensure-id&access-token
   []
-  (go
-    (when (or (nil? (state/get-auth-id-token))
-              (-> (state/get-auth-id-token) parse-jwt almost-expired-or-expired?))
-      (debug/pprint (str "refresh tokens... " (tc/to-string (t/now))))
-      (<! (<refresh-id-token&access-token))
-      (when (or (nil? (state/get-auth-id-token))
-                (-> (state/get-auth-id-token) parse-jwt expired?))
-        (ex-info "empty or expired token and refresh failed" {})))))
+  (let [id-token (state/get-auth-id-token)]
+    (go
+      (when (or (nil? id-token)
+                (-> id-token parse-jwt almost-expired-or-expired?))
+        (debug/pprint (str "refresh tokens... " (tc/to-string (t/now))))
+        (<! (<refresh-id-token&access-token))
+        (when (or (nil? (state/get-auth-id-token))
+                  (-> (state/get-auth-id-token) parse-jwt expired?))
+          (ex-info "empty or expired token and refresh failed" {:anom :expired-token}))))))
 
 (defn <user-uuid
   []
@@ -195,8 +254,22 @@
 
 (defn beta-user?
   []
-  (contains? (state/user-groups) "beta-tester"))
+  (or config/dev?
+      (contains? (state/user-groups) "beta-tester")))
 
 (defn alpha-or-beta-user?
   []
   (or (alpha-user?) (beta-user?)))
+
+(comment
+  ;; We probably need this for some new features later
+  (defonce feature-matrix {:file-sync :beta})
+
+  (defn feature-available?
+    [feature]
+    (or config/dev?
+        (when (logged-in?)
+          (case (feature feature-matrix)
+            :beta (alpha-or-beta-user?)
+            :alpha (alpha-user?)
+            false)))))

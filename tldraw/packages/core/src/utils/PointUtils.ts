@@ -82,7 +82,7 @@ export class PointUtils {
    *
    * @param A The point to check.
    * @param points The points that make up the polyline.
-   * @param distance (optional) The mininum distance that qualifies a hit.
+   * @param distance (optional) The minimum distance that qualifies a hit.
    */
   static pointInPolyline(A: number[], points: number[][], distance = 3): boolean {
     for (let i = 1; i < points.length; i++) {

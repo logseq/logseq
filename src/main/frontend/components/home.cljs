@@ -1,7 +1,7 @@
 (ns frontend.components.home
   (:require [rum.core :as rum]
-            [frontend.components.sidebar :as sidebar]))
+            [frontend.components.container :as container]))
 
 (rum/defc home
   []
-  (sidebar/main-content))
+  (container/main-content))

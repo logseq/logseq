@@ -1,0 +1,14 @@
+;;; datoms
+;;; - 1 <----+
+;;;   - 2    |
+;;;     - 3 -+
+[{:db/id 1
+  :block/uuid #uuid"e538d319-48d4-4a6d-ae70-c03bb55b6fe4"
+  :block/parent 3}
+ {:db/id 2
+  :block/uuid #uuid"c46664c0-ea45-4998-adf0-4c36486bb2e5"
+  :block/parent 1}
+ {:db/id 3
+  :block/uuid #uuid"2b736ac4-fd49-4e04-b00f-48997d2c61a2"
+  :block/parent 2}
+ ]

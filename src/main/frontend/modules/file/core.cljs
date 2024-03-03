@@ -3,13 +3,14 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
+            [frontend.handler.file :as file-handler]
             [frontend.modules.file.uprint :as up]
             [frontend.state :as state]
-            [frontend.util.property :as property]
             [frontend.util.fs :as fs-util]
-            [frontend.handler.file :as file-handler]
-            [frontend.db.model :as model]))
+            [frontend.util.property :as property]
+            [logseq.common.path :as path]))
 
 (defn- indented-block-content
   [content spaces-tabs]
@@ -31,8 +32,10 @@
     content))
 
 (defn transform-content
-  [{:block/keys [collapsed? format pre-block? unordered content left page parent properties]} level {:keys [heading-to-list?]}]
-  (let [heading (:heading properties)
+  [{:block/keys [collapsed? format pre-block? content left page parent properties] :as b} level {:keys [heading-to-list?]}]
+  (let [block-ref-not-saved? (and (seq (:block/_refs (db/entity (:db/id b))))
+                                  (not (string/includes? content (str (:block/uuid b)))))
+        heading (:heading properties)
         markdown? (= :markdown format)
         content (or content "")
         pre-block? (or pre-block?
@@ -45,9 +48,10 @@
                     (str content "\n"))
 
                   :else
-                  (let [markdown-top-heading? (and markdown?
-                                                   (= parent page)
-                                                   (not unordered)
+                  (let [
+                        ;; first block is a heading, Markdown users prefer to remove the `-` before the content
+                        markdown-top-heading? (and markdown?
+                                                   (= parent page left)
                                                    heading)
                         [prefix spaces-tabs]
                         (cond
@@ -79,7 +83,10 @@
                                     (string/blank? new-content))
                               ""
                               " ")]
-                    (str prefix sep new-content)))]
+                    (str prefix sep new-content)))
+        content (if block-ref-not-saved?
+                  (property/insert-property format content :id (str (:block/uuid b)))
+                  content)]
     content))
 
 
@@ -106,37 +113,38 @@
 (def init-level 1)
 
 (defn- transact-file-tx-if-not-exists!
-  [page ok-handler]
-  (when-let [repo (state/get-current-repo)]
-    (when (:block/name page)
-      (let [format (name (get page :block/format
-                              (state/get-preferred-format)))
-            title (string/capitalize (:block/name page))
-            whiteboard-page? (model/whiteboard-page? page)
-            format (if whiteboard-page? "edn" format)
-            journal-page? (date/valid-journal-title? title)
-            journal-title (date/normalize-journal-title title)
-            filename (if (and journal-page? (not (string/blank? journal-title)))
-                       (date/date->file-name journal-title)
-                       (-> (or (:block/original-name page) (:block/name page))
-                           (fs-util/file-name-sanity)))
-            sub-dir (cond
-                      journal-page?    (config/get-journals-directory)
-                      whiteboard-page? (config/get-whiteboards-directory)
-                      :else            (config/get-pages-directory))
-            ext (if (= format "markdown") "md" format)
-            file-path (config/get-page-file-path repo sub-dir filename ext)
-            file {:file/path file-path}
-            tx [{:file/path file-path}
-                {:block/name (:block/name page)
-                 :block/file file}]]
-        (db/transact! tx)
-        (when ok-handler (ok-handler))))))
+  [page-block ok-handler]
+  (when (and (state/get-current-repo)
+             (:block/name page-block))
+    (let [format (name (get page-block :block/format
+                            (state/get-preferred-format)))
+          title (string/capitalize (:block/name page-block))
+          whiteboard-page? (model/whiteboard-page? page-block)
+          format (if whiteboard-page? "edn" format)
+          journal-page? (date/valid-journal-title? title)
+          journal-title (date/normalize-journal-title title)
+          journal-page? (and journal-page? (not (string/blank? journal-title)))
+          filename (if journal-page?
+                     (date/date->file-name journal-title)
+                     (-> (or (:block/original-name page-block) (:block/name page-block))
+                         (fs-util/file-name-sanity)))
+          sub-dir (cond
+                    journal-page?    (config/get-journals-directory)
+                    whiteboard-page? (config/get-whiteboards-directory)
+                    :else            (config/get-pages-directory))
+          ext (if (= format "markdown") "md" format)
+          file-rpath (path/path-join sub-dir (str filename "." ext))
+          file {:file/path file-rpath}
+          tx [{:file/path file-rpath}
+              {:block/name (:block/name page-block)
+               :block/file file}]]
+      (db/transact! tx)
+      (when ok-handler (ok-handler)))))
 
 (defn- remove-transit-ids [block] (dissoc block :db/id :block/file))
 
 (defn save-tree-aux!
-  [page-block tree]
+  [page-block tree blocks-just-deleted?]
   (let [page-block (db/pull (:db/id page-block))
         file-db-id (-> page-block :block/file :db/id)
         file-path (-> (db-utils/entity file-db-id) :file/path)]
@@ -146,17 +154,21 @@
                            (up/ugly-pr-str {:blocks tree
                                             :pages (list (remove-transit-ids page-block))})
                            (string/triml))
-                          (tree->file-content tree {:init-level init-level}))
-            files [[file-path new-content]]
-            repo (state/get-current-repo)]
-        (file-handler/alter-files-handler! repo files {} {}))
+                          (tree->file-content tree {:init-level init-level}))]
+        (if (and (string/blank? new-content)
+                 (not blocks-just-deleted?))
+          (state/pub-event! [:capture-error {:error (js/Error. "Empty content")
+                                             :payload {}}])
+          (let [files [[file-path new-content]]
+                repo (state/get-current-repo)]
+            (file-handler/alter-files-handler! repo files {} {}))))
       ;; In e2e tests, "card" page in db has no :file/path
       (js/console.error "File path from page-block is not valid" page-block tree))))
 
 (defn save-tree!
-  [page-block tree]
+  [page-block tree blocks-just-deleted?]
   {:pre [(map? page-block)]}
-  (let [ok-handler #(save-tree-aux! page-block tree)
+  (let [ok-handler #(save-tree-aux! page-block tree blocks-just-deleted?)
         file (or (:block/file page-block)
                  (when-let [page (:db/id (:block/page page-block))]
                    (:block/file (db-utils/entity page))))]

@@ -3,58 +3,78 @@
   Unlike repo config, this also manages a directory for configuration. This
   component depends on a repo."
   (:require [frontend.fs :as fs]
-            [frontend.handler.common.file :as file-common-handler]
             [frontend.state :as state]
-            [cljs.reader :as reader]
             [promesa.core :as p]
             [shadow.resource :as rc]
+            [clojure.edn :as edn]
             [electron.ipc :as ipc]
-            ["path" :as path]))
+            [borkdude.rewrite-edn :as rewrite]
+            [logseq.common.path :as path]))
 
 ;; Use defonce to avoid broken state on dev reload
 ;; Also known as home directory a.k.a. '~'
 (defonce root-dir
   (atom nil))
 
-(defn global-config-dir-exists?
-  "This is used in contexts where we are unusure whether global-config has been
-  started correctly e.g. an error handler"
-  []
-  (some? @root-dir))
-
 (defn global-config-dir
+  "Fetch config dir in a global config context"
   []
-  (path/join @root-dir "config"))
+  (path/path-join @root-dir "config"))
+
+(defn safe-global-config-dir
+  "Fetch config dir in a general context, not just for global config"
+  []
+  (when @root-dir (global-config-dir)))
 
 (defn global-config-path
+  "Fetch config path in a global config context"
   []
-  (path/join @root-dir "config" "config.edn"))
+  (path/path-join @root-dir "config" "config.edn"))
 
-(defn- set-global-config-state!
+(defn safe-global-config-path
+  "Fetch config path in a general context, not just for global config"
+  []
+  (when @root-dir (global-config-path)))
+
+(defn set-global-config-state!
   [content]
-  (let [config (reader/read-string content)]
-    (state/set-global-config! config)
+  (let [config (edn/read-string content)]
+    (state/set-global-config! config content)
     config))
 
-(def default-content (rc/inline "global-config.edn"))
+(def default-content (rc/inline "templates/global-config.edn"))
 
 (defn- create-global-config-file-if-not-exists
   [repo-url]
   (let [config-dir (global-config-dir)
         config-path (global-config-path)]
     (p/let [_ (fs/mkdir-if-not-exists config-dir)
-            file-exists? (fs/create-if-not-exists repo-url config-dir config-path default-content)]
+            file-exists? (fs/create-if-not-exists repo-url nil config-path default-content)]
            (when-not file-exists?
-             (file-common-handler/reset-file! repo-url config-path default-content)
              (set-global-config-state! default-content)))))
 
 (defn restore-global-config!
   "Sets global config state from config file"
   []
-  (let [config-dir (global-config-dir)
-        config-path (global-config-path)]
-    (p/let [config-content (fs/read-file config-dir config-path)]
+  (let [config-path (global-config-path)]
+    (p/let [config-content (fs/read-file nil config-path)]
            (set-global-config-state! config-content))))
+
+(defn set-global-config-kv!
+  [k v]
+  (let [result (rewrite/parse-string
+                 (or (state/get-global-config-str-content) "{}"))
+        ks (if (sequential? k) k [k])
+        v (cond->> v
+                   (map? v)
+                   (reduce-kv (fn [a k v] (rewrite/assoc a k v)) (rewrite/parse-string "{}")))
+        new-result (if (and (= 1 (count ks))
+                            (nil? v))
+                     (rewrite/dissoc result (first ks))
+                     (rewrite/assoc-in result ks v))
+        new-str-content (str new-result)]
+    (fs/write-file! nil nil (global-config-path) new-str-content {:skip-compare? true})
+    (state/set-global-config! (rewrite/sexpr new-result) new-str-content)))
 
 (defn start
   "This component has four responsibilities on start:
@@ -69,6 +89,7 @@
          (reset! root-dir root-dir'))
        (restore-global-config!)
        (create-global-config-file-if-not-exists repo)
+       ;; FIXME: should use a file watcher instead of dir watcher
        (fs/watch-dir! (global-config-dir) {:global-dir true}))
       (p/timeout 6000)
       (p/catch (fn [e]

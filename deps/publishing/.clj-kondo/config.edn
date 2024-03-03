@@ -1,0 +1,13 @@
+{:linters
+ {:aliased-namespace-symbol {:level :warning}
+  :namespace-name-mismatch {:level :warning}
+  :used-underscored-binding {:level :warning}
+
+  :consistent-alias
+  {:aliases {clojure.string string}}}
+
+ :lint-as
+ {logseq.publishing.test.helper/deftest-async clojure.test/deftest
+  promesa.core/let clojure.core/let}
+ :skip-comments true
+ :output {:progress true}}

@@ -2,9 +2,7 @@
   "Some utils are required by other namespace in frontend.db package."
   (:require [datascript.core :as d]
             [frontend.state :as state]
-            [clojure.string :as string]
             [datascript.transit :as dt]
-            [frontend.date :as date]
             [frontend.db.conn :as conn]
             [frontend.config :as config]
             [logseq.graph-parser.util :as gp-util]))
@@ -43,16 +41,20 @@
   [db]
   (:max-tx db))
 
-(defn date->int
-  [date]
-  (parse-long
-   (string/replace (date/ymd date) "/" "")))
-
 (defn entity
+  "This function will return nil if passed `id-or-lookup-ref` is an integer and
+  the entity doesn't exist in db.
+  `repo-or-db`: a repo string or a db,
+  `id-or-lookup-ref`: same as d/entity."
   ([id-or-lookup-ref]
    (entity (state/get-current-repo) id-or-lookup-ref))
-  ([repo id-or-lookup-ref]
-   (when-let [db (conn/get-db repo)]
+  ([repo-or-db id-or-lookup-ref]
+   (when-let [db (if (string? repo-or-db)
+                   ;; repo
+                   (let [repo (or repo-or-db (state/get-current-repo))]
+                     (conn/get-db repo))
+                   ;; db
+                   repo-or-db)]
      (d/entity db id-or-lookup-ref))))
 
 (defn pull
@@ -88,8 +90,7 @@
    (transact! repo-url tx-data nil))
   ([repo-url tx-data tx-meta]
    (when-not config/publishing?
-     (let [tx-data (->> (gp-util/remove-nils tx-data)
-                        (remove nil?))]
+     (let [tx-data (gp-util/fast-remove-nils tx-data)]
        (when (seq tx-data)
          (when-let [conn (conn/get-db repo-url false)]
            (if tx-meta

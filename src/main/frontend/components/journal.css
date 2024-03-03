@@ -7,7 +7,7 @@
 
   .journal-item {
     border-top: 1px solid;
-    border-top-color: var(--ls-border-color, #738694);
+    border-top-color: var(--lx-gray-07, var(--ls-border-color, var(--rx-gray-06)));
     margin: 24px 0;
     padding: 24px 0;
     min-height: 250px;

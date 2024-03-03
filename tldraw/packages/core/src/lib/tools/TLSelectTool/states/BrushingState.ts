@@ -1,5 +1,5 @@
 import type { TLEventMap, TLEvents } from '../../../../types'
-import { BoundsUtils } from '../../../../utils'
+import { BoundsUtils, dedupe } from '../../../../utils'
 import type { TLShape } from '../../../shapes'
 import type { TLApp } from '../../../TLApp'
 import { TLBush } from '../../../TLBush'
@@ -30,6 +30,7 @@ export class BrushingState<
   onExit = () => {
     this.initialSelectedIds = []
     this.tree.clear()
+    this.app.setBrush(undefined)
   }
 
   onPointerMove: TLEvents<S>['pointer'] = () => {
@@ -41,13 +42,20 @@ export class BrushingState<
 
     this.app.setBrush(brushBounds)
 
-    const hits = this.tree
-      .search(brushBounds)
-      .filter(shape =>
-        ctrlKey
-          ? BoundsUtils.boundsContain(brushBounds, shape.rotatedBounds)
-          : shape.hitTestBounds(brushBounds)
-      )
+    const hits = dedupe(
+      this.tree
+        .search(brushBounds)
+        .filter(shape =>
+          ctrlKey
+            ? BoundsUtils.boundsContain(brushBounds, shape.rotatedBounds)
+            : shape.hitTestBounds(brushBounds)
+        )
+        .filter(shape => shape.type !== 'group')
+        .map(shape => {
+          // for a shape in a group, select the group instead
+          return this.app.getParentGroup(shape) ?? shape
+        })
+    )
 
     if (shiftKey) {
       if (hits.every(hit => this.initialSelectedShapes.includes(hit))) {
@@ -55,14 +63,13 @@ export class BrushingState<
         this.app.setSelectedShapes(this.initialSelectedShapes.filter(hit => !hits.includes(hit)))
       } else {
         // Select hit shapes + initial selected shapes
-        this.app.setSelectedShapes(
-          Array.from(new Set([...this.initialSelectedShapes, ...hits]).values())
-        )
+        this.app.setSelectedShapes(dedupe([...this.initialSelectedShapes, ...hits]))
       }
     } else {
       // Select hit shapes
       this.app.setSelectedShapes(hits)
     }
+    this.app.viewport.panToPointWhenNearBounds(currentPoint)
   }
 
   onPointerUp: TLEvents<S>['pointer'] = () => {

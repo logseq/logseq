@@ -1,7 +1,9 @@
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import { useApp } from '@tldraw/react'
+import { KeyboardShortcut } from '../KeyboardShortcut'
 import { MOD_KEY } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
+import * as React from 'react'
 
 export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
   const app = useApp()
@@ -14,30 +16,28 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
       <DropdownMenuPrimitive.Trigger className="tl-button text-sm px-2 important" id="tl-zoom">
         {(app.viewport.camera.zoom * 100).toFixed(0) + '%'}
       </DropdownMenuPrimitive.Trigger>
-      <DropdownMenuPrimitive.Content className="tl-menu" id="zoomPopup" sideOffset={12}>
+      <DropdownMenuPrimitive.Content
+        onCloseAutoFocus={e => e.preventDefault()}
+        className="tl-menu"
+        id="zoomPopup"
+        sideOffset={12}
+      >
         <DropdownMenuPrimitive.Item
           className="tl-menu-item"
           onSelect={preventEvent}
           onClick={app.api.zoomToFit}
         >
-          Zoom to fit
-          <div className="tl-menu-right-slot">
-            <span className="keyboard-shortcut">
-              <code>⇧</code> <code>1</code>
-            </span>
-          </div>
+          Zoom to drawing
+          <KeyboardShortcut action="whiteboard/zoom-to-fit" />
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
           className="tl-menu-item"
           onSelect={preventEvent}
           onClick={app.api.zoomToSelection}
+          disabled={app.selectedShapesArray.length === 0}
         >
-          Zoom to selection
-          <div className="tl-menu-right-slot">
-            <span className="keyboard-shortcut">
-              <code>{MOD_KEY}</code> <code>⇧</code> <code>1</code>
-            </span>
-          </div>
+          Zoom to fit selection
+          <KeyboardShortcut action="whiteboard/zoom-to-selection" />
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
           className="tl-menu-item"
@@ -45,11 +45,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
           onClick={app.api.zoomIn}
         >
           Zoom in
-          <div className="tl-menu-right-slot">
-            <span className="keyboard-shortcut">
-              <code>{MOD_KEY}</code> <code>+</code>
-            </span>
-          </div>
+          <KeyboardShortcut action="whiteboard/zoom-in" />
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
           className="tl-menu-item"
@@ -57,11 +53,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
           onClick={app.api.zoomOut}
         >
           Zoom out
-          <div className="tl-menu-right-slot">
-            <span className="keyboard-shortcut">
-              <code>{MOD_KEY}</code> <code>-</code>
-            </span>
-          </div>
+          <KeyboardShortcut action="whiteboard/zoom-out" />
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
           className="tl-menu-item"
@@ -69,11 +61,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
           onClick={app.api.resetZoom}
         >
           Reset zoom
-          <div className="tl-menu-right-slot">
-            <span className="keyboard-shortcut">
-              <code>⇧</code> <code>0</code>
-            </span>
-          </div>
+          <KeyboardShortcut action="whiteboard/reset-zoom" />
         </DropdownMenuPrimitive.Item>
       </DropdownMenuPrimitive.Content>
     </DropdownMenuPrimitive.Root>

@@ -11,8 +11,8 @@ on:
         default: "master"
 
 env:
-  CLOJURE_VERSION: '1.10.1.763'
-  NODE_VERSION: '16'
+  CLOJURE_VERSION: '1.11.1.1413'
+  NODE_VERSION: '18'
   JAVA_VERSION: '11'
 
 jobs:
@@ -20,23 +20,23 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Check out Git repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c  # v3.3.0
         with:
           ref: ${{ github.event.inputs.git-ref }}
 
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v3
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Setup Java JDK
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v3
         with:
           distribution: 'zulu'
           java-version: ${{ env.JAVA_VERSION }}
 
       - name: Cache clojure deps
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             ~/.m2/repository
@@ -44,7 +44,7 @@ jobs:
           key: ${{ runner.os }}-clojure-lib-${{ hashFiles('**/deps.edn') }}
 
       - name: Setup clojure
-        uses: DeLaGuardo/setup-clojure@3.5
+        uses: DeLaGuardo/setup-clojure@10.1
         with:
           cli: ${{ env.CLOJURE_VERSION }}
 
@@ -57,6 +57,9 @@ jobs:
 
       - name: Compile CLJS
         run: yarn install && yarn release-app
+        env:
+          LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
+          LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
 
       - name: Sync static build files
         run: rsync -avz --exclude node_modules --exclude '*.js.map' --exclude android ./static/ ./public/static/
@@ -75,3 +78,9 @@ jobs:
           SLACK_URL: ${{ secrets.SLACK_URL }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+
+      - name: Save Static File
+        uses: actions/upload-artifact@v3
+        with:
+          name: static
+          path: static
