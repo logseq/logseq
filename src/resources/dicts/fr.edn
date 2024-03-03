@@ -172,7 +172,23 @@
     :linked-references/filter-excludes "Exclut : "
     :linked-references/filter-heading "Filtrer"
     :linked-references/filter-includes "Inclut : "
-    :linked-references/reference-count (fn [filtered-count total] (str filtered-count (when filtered-count (if (= filtered-count 1) " référence liée" " références liées")) " parmi " total))
+    :linked-references/reference-count (fn [filtered-count total]
+                                           (cond
+                                               (= filtered-count nil)
+                                               (cond
+                                                   (= total 0)
+                                                   "Aucune référence liée"
+                                                   (= total 1)
+                                                   "1 référence liée"
+                                                   :else
+                                                   (str total " références liées")
+                                               )
+                                               (= filtered-count 1)
+                                               (str "1 référence liée / " total)
+                                               :else
+                                               (str filtered-count " références liées / " total)
+                                           )
+                                       )
     :linked-references/filter-search "Rechercher dans les pages liées"
     :linked-references/unexpected-error "Références liées : erreur inattendue. Veuillez d'abord ré-indexer votre graphe."
     :on-boarding/add-graph "Ajouter un graphe"
@@ -314,6 +330,7 @@
     :command.editor/select-block-up         "Sélectionner le bloc au-dessus"
     :command.editor/select-block-down       "Sélectionner le bloc en dessous"
     :command.editor/select-all-blocks       "Sélectionner tous les blocs"
+    :command.editor/toggle-block-children   "Déplier/replier"
     :command.ui/toggle-help                 "Afficher l'aide"
     :command.git/commit                     "Message de validation Git"
     :command.go/search                      "Recherche globale dans le texte"
@@ -408,6 +425,8 @@
     :command.search/re-index  "Reconstruire l'index de recherche"
     :command.sidebar/clear  "Vider intégralement la barre latérale droite"
     :command.sidebar/open-today-page  "Ouvrir la page du jour dans la barre latérale droite"
+    :command.ui/accent-color-reset "Réinitialiser la couleur d'accentuation"
+    :command.ui/accent-colors-picker "Choisir une couleur d'accentuation"
     :command.ui/goto-plugins  "Aller vers le panneau des extensions"
     :command.ui/install-plugins-from-file  "Installer les extensions depuis plugins.edn"
     :command.ui/select-theme-color  "Sélectionner les couleurs disponibles du thème"
@@ -755,6 +774,7 @@
     :settings-page/check-for-updates "Vérifier les mises à jour"
     :settings-page/checking "Vérification en cours…"
     :settings-page/enable-journals "Journaux"
+    :settings-page/git-commit-on-close "Validation Git à la fermeture de la fenêtre"
     :settings-page/git-desc-1 "Pour voir l'historique des modifications d'une page, cliquez les trois…"
     :settings-page/git-desc-2 "Pour les utilisateurs professionnels, Logseq supporte aussi l'utilisation…"
     :settings-page/git-desc-3 "pour le contrôle de versions. Utilisez Git à vos propres risques…"
@@ -802,4 +822,18 @@
     :settings-page/auto-chmod "Automatiquement changer les permissions du fichier"
     :settings-page/auto-chmod-desc "Désactiver pour permettre l'édition par plusieurs utilisateurs avec les permissions données par l'appartenance au groupe."
     :settings-page/tab-keymap "Raccourcis"
-    :unlinked-references/reference-count  (fn [total] (str total (if (= total 1) " référence non liée" " références non liées")))}
+    :unlinked-references/reference-count  (fn [total]
+                                              (cond
+                                                  (= total nil)
+                                                  "Références non liées"
+                                                  (= total "")
+                                                  "Références non liées"
+                                                  (= total 0)
+                                                  "Aucune référence non liée"
+                                                  (= total 1)
+                                                  "1 référence non liée"
+                                                  (> total 1)
+                                                  (str total " références non liées")
+                                              )
+                                          )
+}
