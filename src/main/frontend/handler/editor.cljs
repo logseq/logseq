@@ -2342,12 +2342,12 @@
 
 (defn toggle-list-checkbox
   [{:block/keys [content] :as block} old-item-content new-item-content]
-  (let [replace-first #(string/replace-first content % new-item-content)
-        new-content (replace-first old-item-content)]
+  (let [update-content #(string/replace-first content % new-item-content)
+        new-content (update-content old-item-content)]
     (save-block-if-changed!
       block
       (if (= new-content content)
-        (replace-first (string/replace-first old-item-content "[X]" "[x]"))
+        (update-content (string/replace-first old-item-content "[X]" "[x]"))
         new-content))))
 
 (defn- dwim-in-list
