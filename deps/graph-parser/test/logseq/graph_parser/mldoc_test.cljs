@@ -106,7 +106,6 @@
        second))
 
 (deftest org-properties-test
-  []
   (testing "just title"
     (let [content "#+TITLE:   some title   "
           props (parse-properties content)]
@@ -120,10 +119,28 @@ body"
       (is ["@tag" "tag1" "tag2"] (sort (:filetags props)))
       (is ["@tag" "tag1" "tag2" "tag3"] (sort (:tags props))))))
 
+(deftest remove-indentation-spaces
+  (testing "Remove indentations for every line"
+    (is (=  "block 1.1\n  line 1\n    line 2\nline 3\nline 4"
+            (let [s "block 1.1
+    line 1
+      line 2
+ line 3
+line 4"]
+              (gp-mldoc/remove-indentation-spaces s 2 false)))) 
+    (is (=  "\t- block 1.1\n  line 1\n    line 2\nline 3\nline 4"
+            (let [s "\t- block 1.1
+\t    line 1
+\t      line 2
+\t line 3
+\tline 4"]
+              (gp-mldoc/remove-indentation-spaces s 3 false))))))
+    
+
 (deftest ^:integration test->edn
-  (let [graph-dir "test/docs"
-        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.6.7")
-        files (gp-cli/build-graph-files graph-dir)
+  (let [graph-dir "test/docs-0.9.2"
+        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.9.2")
+        files (#'gp-cli/build-graph-files graph-dir {})
         asts-by-file (->> files
                           (map (fn [{:file/keys [path content]}]
                                  (let [format (if (string/ends-with? path ".org")
@@ -132,21 +149,20 @@ body"
                                     (gp-mldoc/->edn content
                                                     (gp-mldoc/default-config format))])))
                           (into {}))]
-    (is (= {"CommentBlock" 1,
-            "Custom" 41,
+    (is (= {"Custom" 50,
             "Displayed_Math" 1,
             "Drawer" 1,
             "Example" 20,
             "Footnote_Definition" 2,
-            "Heading" 3496,
-            "Hiccup" 15,
-            "List" 37,
-            "Paragraph" 417,
-            "Properties" 91,
-            "Property_Drawer" 201,
-            "Quote" 9,
-            "Raw_Html" 12,
-            "Src" 56,
-            "Table" 4}
+            "Heading" 5648,
+            "Hiccup" 9,
+            "List" 22,
+            "Paragraph" 571,
+            "Properties" 87,
+            "Property_Drawer" 423,
+            "Quote" 24,
+            "Raw_Html" 18,
+            "Src" 79,
+            "Table" 8}
            (->> asts-by-file (mapcat val) (map ffirst) frequencies))
         "AST node type counts")))

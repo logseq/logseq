@@ -1,0 +1,8 @@
+.cp__server-indicator {
+  @apply flex items-center rounded-md;
+
+  .button.icon {
+    width: auto;
+    height: auto;
+  }
+}

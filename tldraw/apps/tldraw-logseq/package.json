@@ -10,19 +10,20 @@
     "dev:vite": "tsup --watch --sourcemap inline"
   },
   "devDependencies": {
-    "@radix-ui/react-context-menu": "^2.0.1",
+    "@radix-ui/react-context-menu": "^2.1.0",
     "@radix-ui/react-dropdown-menu": "^2.0.1",
     "@radix-ui/react-popover": "^1.0.0",
-    "@radix-ui/react-select": "^1.1.2",
+    "@radix-ui/react-select": "^1.2.1",
     "@radix-ui/react-separator": "^1.0.1",
     "@radix-ui/react-slider": "^1.1.0",
     "@radix-ui/react-switch": "^1.0.1",
     "@radix-ui/react-toggle": "^1.0.1",
     "@radix-ui/react-toggle-group": "^1.0.1",
+    "@radix-ui/react-tooltip": "^1.0.2",
     "@tldraw/core": "2.0.0-alpha.1",
     "@tldraw/react": "2.0.0-alpha.1",
     "@tldraw/vec": "2.0.0-alpha.1",
-    "@types/node": "^17.0.42",
+    "@types/node": "^18.13.0",
     "@types/react": "^17.0.0",
     "@types/react-dom": "^17.0.0",
     "autoprefixer": "^10.4.13",
@@ -40,7 +41,7 @@
     "shadow-cljs": "^2.20.11",
     "tsup": "^6.5.0",
     "typescript": "^4.9.3",
-    "zx": "^7.1.1"
+    "zx": "^7.2.2"
   },
   "peerDependencies": {
     "react": "^16.8.0 || ^17.0.0 || ^18.0.0",

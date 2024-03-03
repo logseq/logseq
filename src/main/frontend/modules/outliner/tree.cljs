@@ -68,7 +68,7 @@
                  root-block (assoc root-block :block/children result)]
              [root-block])))))))
 
-(defn- tree [parent->children root]
+(defn- tree [parent->children root default-level]
   (let [root-id (:db/id root)
         nodes (fn nodes [parent-id level]
                 (mapv (fn [b]
@@ -81,19 +81,23 @@
                         (-> (get parent->children parent)
                             (model/try-sort-by-left parent)))))
         children (nodes root-id 1)
-        root' (assoc root :block/level 1)]
+        root' (assoc root :block/level (or default-level 1))]
     (if (seq children)
       (assoc root' :block/children children)
       root')))
 
 (defn block-entity->map
   [e]
-  {:db/id (:db/id e)
-   :block/uuid (:block/uuid e)
-   :block/parent {:db/id (:db/id (:block/parent e))}
-   :block/left {:db/id (:db/id (:block/left e))}
-   :block/page (:block/page e)
-   :block/refs (:block/refs e)})
+  (cond-> {:db/id (:db/id e)
+           :block/uuid (:block/uuid e)
+           :block/parent {:db/id (:db/id (:block/parent e))}
+           :block/page (:block/page e)}
+    (:db/id (:block/left e))
+    (assoc :block/left {:db/id (:db/id (:block/left e))})
+    (:block/refs e)
+    (assoc :block/refs (:block/refs e))
+    (:block/children e)
+    (assoc :block/children (:block/children e))))
 
 (defn filter-top-level-blocks
   [blocks]
@@ -104,12 +108,14 @@
 
 (defn non-consecutive-blocks->vec-tree
   "`blocks` need to be in the same page."
-  [blocks]
-  (let [blocks (map block-entity->map blocks)
-        top-level-blocks (filter-top-level-blocks blocks)
-        top-level-blocks' (model/try-sort-by-left top-level-blocks (:block/parent (first top-level-blocks)))
-        parent->children (group-by :block/parent blocks)]
-    (map #(tree parent->children %) top-level-blocks')))
+  ([blocks]
+   (non-consecutive-blocks->vec-tree blocks 1))
+  ([blocks default-level]
+   (let [blocks (map block-entity->map blocks)
+         top-level-blocks (filter-top-level-blocks blocks)
+         top-level-blocks' (model/try-sort-by-left top-level-blocks (:block/parent (first top-level-blocks)))
+         parent->children (group-by :block/parent blocks)]
+     (map #(tree parent->children % (or default-level 1)) top-level-blocks'))))
 
 (defn- sort-blocks-aux
   [parents parent-groups]
@@ -131,5 +137,7 @@
   [repo db-id]
   (when-let [root-block (db/pull db-id)]
     (let [blocks (db/get-block-and-children repo (:block/uuid root-block))
+          ; the root-block returned by db/pull misses :block/_refs therefore we use the one from db/get-block-and-children
+          root-block (first (filter (fn [b] (= (:db/id b) db-id)) blocks))
           blocks-exclude-root (remove (fn [b] (= (:db/id b) db-id)) blocks)]
       (sort-blocks blocks-exclude-root root-block))))

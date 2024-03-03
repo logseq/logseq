@@ -11,8 +11,8 @@
 
 (defn get-local-repo-identifier
   [repo]
-  (let [repo-path (db-conn/get-repo-name repo)]
-    (db-conn/get-short-repo-name repo-path)))
+  (let [repo-name (db-conn/get-repo-name repo)]
+    (db-conn/get-short-repo-name repo-name)))
 
 (defn get-repo-id-url
   "Get Logseq protocol URL, w/o param (v0.1).

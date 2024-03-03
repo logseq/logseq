@@ -1,0 +1,4 @@
+{:paths ["src"]
+ :api-namespaces [;; for nbb-logseq CLIs
+                  logseq.publishing]
+ :report {:format :ignore}}

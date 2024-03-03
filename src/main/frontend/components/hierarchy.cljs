@@ -18,7 +18,9 @@
     (let [repo (state/get-current-repo)
           aliases (db/get-page-alias-names repo page)
           all-page-names (conj aliases page)]
-      (when-let [page (first (filter text/namespace-page? all-page-names))]
+      (when-let [page (or (first (filter text/namespace-page? all-page-names))
+                          (when (:block/_namespace (db/entity [:block/name (util/page-name-sanity-lc page)]))
+                            page))]
         (let [namespace-pages (db/get-namespace-pages repo page)
               parent-routes (db-model/get-page-namespace-routes repo page)
               pages (->> (concat namespace-pages parent-routes)
@@ -53,7 +55,7 @@
              (for [[idx page] (medley/indexed namespace)]
                (when (and (string? page) page)
                  (let [full-page (->> (take (inc idx) namespace)
-                                      (string/join "/"))]
+                                      util/string-join-path)]
                    (block/page-reference false
                                          full-page
                                          {}

@@ -49,3 +49,34 @@
   [day date-formatter]
   (when day
     (format (tf/parse (tf/formatter "yyyyMMdd") (str day)) date-formatter)))
+
+(defn- get-weekday
+  [date]
+  (.toLocaleString date "en-us" (clj->js {:weekday "long"})))
+
+(defn- get-date
+  ([]
+   (get-date (js/Date.)))
+  ([date]
+   {:year (.getFullYear date)
+    :month (inc (.getMonth date))
+    :day (.getDate date)
+    :weekday (get-weekday date)}))
+
+(defn year-month-day-padded
+  ([]
+   (year-month-day-padded (get-date)))
+  ([date]
+   (let [{:keys [year month day]} date]
+     {:year year
+      :month (gp-util/zero-pad month)
+      :day (gp-util/zero-pad day)})))
+
+(defn ymd
+  ([]
+   (ymd (js/Date.)))
+  ([date]
+   (ymd date "/"))
+  ([date sep]
+   (let [{:keys [year month day]} (year-month-day-padded (get-date date))]
+     (str year sep month sep day))))

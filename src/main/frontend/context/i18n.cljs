@@ -3,12 +3,11 @@
   application. The ns dependencies for this ns must be small since it is used
   throughout the application."
   (:require [frontend.dicts :as dicts]
-            [frontend.modules.shortcut.dicts :as shortcut-dicts]
             [tongue.core :as tongue]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [lambdaisland.glogi :as log]))
 
-(def dicts
-  (merge-with merge dicts/dicts shortcut-dicts/dicts))
+(def dicts (merge dicts/dicts {:tongue/fallback :en}))
 
 (def translate
   (tongue/build-translate dicts))
@@ -16,7 +15,16 @@
 (defn t
   [& args]
   (let [preferred-language (keyword (state/sub :preferred-language))]
-    (apply translate preferred-language args)))
+    (try
+      (apply translate preferred-language args)
+      (catch :default e
+        (log/error :failed-translation {:arguments args
+                                        :lang preferred-language})
+        (state/pub-event! [:capture-error {:error e
+                                           :payload {:type :failed-translation
+                                                     :arguments args
+                                                     :lang preferred-language}}])
+        (apply translate :en args)))))
 
 (defn- fetch-local-language []
   (.. js/window -navigator -language))

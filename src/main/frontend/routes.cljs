@@ -7,11 +7,13 @@
             [frontend.components.page :as page]
             [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
-            [frontend.components.search :as search]
             [frontend.components.settings :as settings]
-            [frontend.components.shortcut :as shortcut]
             [frontend.components.whiteboard :as whiteboard]
-            [frontend.extensions.zotero :as zotero]))
+            [frontend.extensions.zotero :as zotero]
+            [frontend.components.bug-report :as bug-report]
+            [frontend.components.user.login :as login]
+            [logseq.shui.demo :as shui]
+            ))
 
 ;; http://localhost:3000/#?anchor=fn.1
 (def routes
@@ -43,12 +45,12 @@
     {:name :file
      :view file/file}]
 
-   ["/search/:q"
-    {:name :search
-     :view search/more}]
-
    ["/page/:name"
     {:name :page
+     :view page/page}]
+
+   ["/page/:name/block/:block-route-name"
+    {:name :page-block
      :view page/page}]
 
    ["/all-pages"
@@ -63,10 +65,6 @@
     {:name :settings
      :view settings/settings}]
 
-   ["/settings/shortcut"
-    {:name :shortcut-setting
-     :view shortcut/shortcut}]
-
    ["/settings/zotero"
     {:name :zotero-setting
      :view zotero/settings}]
@@ -75,10 +73,27 @@
     {:name :import
      :view setups/importer}]
 
+   ["/bug-report"
+    {:name :bug-report
+     :view bug-report/bug-report}]
+
+    ["/bug-report-tool/:tool"
+     {:name :bug-report-tools
+      :view bug-report/bug-report-tool-route}]
+
    ["/all-journals"
     {:name :all-journals
      :view journal/all-journals}]
 
    ["/plugins"
     {:name :plugins
-     :view plugins/plugins-page}]])
+     :view plugins/plugins-page}]
+
+   ["/login"
+    {:name :user-login
+     :view login/page}]
+
+   ["/ui"
+    {:name :ui
+     :view shui/page}]
+   ])

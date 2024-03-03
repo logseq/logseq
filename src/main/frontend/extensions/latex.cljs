@@ -61,7 +61,7 @@
   [id s block? _display?]
   (let [loading? (rum/react *loading?)]
     (if loading?
-      (ui/loading "Loading")
+      (ui/loading)
       (let [element (if block?
                       :div.latex
                       :span.latex-inline)]

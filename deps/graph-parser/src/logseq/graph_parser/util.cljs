@@ -28,7 +28,8 @@
   (.normalize s "NFC"))
 
 (defn remove-nils
-  "remove pairs of key-value that has nil value from a (possibly nested) map."
+  "remove pairs of key-value that has nil value from a (possibly nested) map or
+  coll of maps."
   [nm]
   (walk/postwalk
    (fn [el]
@@ -36,6 +37,16 @@
        (into {} (remove (comp nil? second)) el)
        el))
    nm))
+
+(defn remove-nils-non-nested
+  "remove pairs of key-value that has nil value from a map (nested not supported)."
+  [nm]
+  (into {} (remove (comp nil? second)) nm))
+
+(defn fast-remove-nils
+  "remove pairs of key-value that has nil value from a coll of maps."
+  [nm]
+  (keep (fn [m] (if (map? m) (remove-nils-non-nested m) m)) nm))
 
 (defn split-first [pattern s]
   (when-let [first-index (string/index-of s pattern)]
@@ -69,11 +80,13 @@
   (and (string? v) (>= (count v) 2) (= "\"" (first v) (last v))))
 
 (defn url?
+  "Test if it is a `protocol://`-style URL.
+
+   NOTE: Can not handle mailto: links, use this with caution."
   [s]
   (and (string? s)
        (try
-         (js/URL. s)
-         true
+         (not (contains? #{nil "null"} (.-origin (js/URL. s))))
          (catch :default _e
            false))))
 
@@ -157,27 +170,30 @@
            (map string/capitalize)
            (string/join " ")))
 
+
 (defn distinct-by
-  "Copy of frontend.util/distinct-by. Too basic to couple to main app"
-  [f col]
-  (reduce
-   (fn [acc x]
-     (if (some #(= (f x) (f %)) acc)
-       acc
-       (vec (conj acc x))))
-   []
-   col))
+  "Copy from medley"
+  [f coll]
+  (let [step (fn step [xs seen]
+               (lazy-seq
+                ((fn [[x :as xs] seen]
+                   (when-let [s (seq xs)]
+                     (let [fx (f x)]
+                       (if (contains? seen fx)
+                         (recur (rest s) seen)
+                         (cons x (step (rest s) (conj seen fx)))))))
+                 xs seen)))]
+    (step (seq coll) #{})))
 
 (defn normalize-format
   [format]
   (case (keyword format)
     :md :markdown
-    :asciidoc :adoc
     ;; default
     (keyword format)))
 
 (defn path->file-name
-  ;; Only for interal paths, as they are converted to POXIS already
+  ;; Only for internal paths, as they are converted to POXIS already
   ;; https://github.com/logseq/logseq/blob/48b8e54e0fdd8fbd2c5d25b7f1912efef8814714/deps/graph-parser/src/logseq/graph_parser/extract.cljc#L32
   ;; Should be converted to POXIS first for external paths
   [path]
@@ -194,12 +210,13 @@
 
 (defn path->file-ext
   [path-or-file-name]
-  (last (split-last "." path-or-file-name)))
+  (second (re-find #"(?:\.)(\w+)[^.]*$" path-or-file-name)))
 
 (defn get-format
+  "File path to format keyword, :org, :markdown, etc."
   [file]
   (when file
-    (normalize-format (keyword (string/lower-case (path->file-ext file))))))
+    (normalize-format (keyword (some-> (path->file-ext file) string/lower-case)))))
 
 (defn get-file-ext
   "Copy of frontend.util/get-file-ext. Too basic to couple to main app"
@@ -241,12 +258,14 @@
     (legacy-title-parsing file-name-body)))
 
 (defn safe-read-string
-  [content]
-  (try
-    (reader/read-string content)
-    (catch :default e
-      (log/error :parse/read-string-failed e)
-      {})))
+  ([content]
+   (safe-read-string {} content))
+  ([opts content]
+   (try
+     (reader/read-string opts content)
+     (catch :default e
+       (log/error :parse/read-string-failed e)
+       {}))))
 
 ;; Copied from Medley
 ;; https://github.com/weavejester/medley/blob/d1e00337cf6c0843fb6547aadf9ad78d981bfae5/src/medley/core.cljc#L22

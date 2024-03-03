@@ -1,13 +1,13 @@
 #audio-record-toolbar {
-    position: fixed;
-    background-color: var(--ls-secondary-background-color);
-    width: 90px;
-    justify-content: left;
-    left: 5px;
-    transition: none;
-    z-index: 9999;
-    padding: 5px 5px 5px 8px;
-    border-radius: 5px;
+  position: fixed;
+  background-color: var(--ls-secondary-background-color);
+  width: 90px;
+  justify-content: left;
+  left: 5px;
+  transition: none;
+  z-index: 9999;
+  padding: 5px 5px 5px 8px;
+  border-radius: 5px;
 }
 
 .editor-wrapper {
@@ -40,6 +40,26 @@
   &.is-overflow-vh-y {
     transform: translateY(calc(-100% - 2rem));
   }
+
+  &[data-modal-name] {
+    @apply bg-popover border overflow-x-hidden overflow-y-auto rounded-lg py-1;
+  }
+
+  &[data-modal-name="commands"],
+  &[data-modal-name="select-code-block-mode"] {
+    @screen sm {
+      width: 380px !important;
+      max-width: 90vw !important;
+    }
+  }
+
+  &[data-modal-name="date-picker"] {
+    @apply py-0;
+
+    .rc-datepicker {
+      @apply my-0;
+    }
+  }
 }
 
 .is-mobile {
@@ -69,11 +89,11 @@ pre {
 }
 
 #time-repeater {
+  min-width: 300px;
+
+  @screen sm {
     width: 135px;
-    
-    @screen sm {
-        min-width: 300px;
-    }
+  }
 }
 
 

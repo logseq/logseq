@@ -14,26 +14,21 @@
             [clojure.string :as string]
             [rum.core :as rum]
             [electron.ipc :as ipc]
-            [promesa.core :as p]))
-
-(defn- get-css-var-value
-  [var-name]
-  (.getPropertyValue (js/getComputedStyle (.-documentElement js/document)) var-name))
+            [promesa.core :as p]
+            [logseq.common.path :as path]))
 
 ;; sidebars
-(defn- get-right-sidebar-width
-  []
-  (or (.. (js/document.getElementById "right-sidebar") -style -width)
-      (get-css-var-value "--right-sidebar-width")))
+(def *right-sidebar-resized-at (atom (js/Date.now)))
 
 (defn persist-right-sidebar-width!
-  []
-  (storage/set "ls-right-sidebar-width" (get-right-sidebar-width)))
+  [width]
+  (state/set-state! :ui/sidebar-width width)
+  (storage/set "ls-right-sidebar-width" width))
 
 (defn restore-right-sidebar-width!
   []
   (when-let [width (storage/get "ls-right-sidebar-width")]
-    (.setProperty (.-style (js/document.getElementById "right-sidebar")) "width" width)))
+    (state/set-state! :ui/sidebar-width width)))
 
 (defn close-left-sidebar!
   []
@@ -73,11 +68,7 @@
 
 (defn toggle-help!
   []
-  (when-let [current-repo (state/get-current-repo)]
-    (let [id "help"]
-      (if (state/sidebar-block-exists? id)
-        (state/sidebar-remove-block! id)
-        (state/sidebar-add-block! current-repo id :help)))))
+  (state/toggle! :ui/help-open?))
 
 (defn toggle-settings-modal!
   []
@@ -92,13 +83,13 @@
    (re-render-root! {}))
   ([{:keys [clear-all-query-state?]
      :or {clear-all-query-state? false}}]
+   {:post [(nil? %)]}
    (when-let [component (state/get-root-component)]
      (if clear-all-query-state?
        (db/clear-query-state!)
        (db/clear-query-state-without-refs-and-embeds!))
-     (rum/request-render component)
-     (doseq [component (state/get-custom-query-components)]
-       (rum/request-render component)))))
+     (rum/request-render component))
+   nil))
 
 (defn highlight-element!
   [fragment]
@@ -121,9 +112,7 @@
   (when-let [style (or
                     (state/get-custom-css-link)
                     (some-> (db-model/get-custom-css)
-                            (config/expand-relative-assets-path))
-                    ;; (state/get-custom-css-link)
-)]
+                            (config/expand-relative-assets-path)))]
     (util/add-style! style)))
 (defn reset-custom-css!
   []
@@ -155,11 +144,12 @@
           (when (or (not should-ask?)
                     (ask-allow))
             (load href #(do (js/console.log "[custom js]" href) (execed))))
-          (let [dir (if (util/electron?) "" (config/get-repo-dir (state/get-current-repo)))]
-            (p/let [exists? (fs/file-exists? dir href)]
+          (let [repo-dir (config/get-repo-dir (state/get-current-repo))
+                rpath (path/relative-path repo-dir href)]
+            (p/let [exists? (fs/file-exists? repo-dir rpath)]
               (when exists?
                 (util/p-handle
-                 (fs/read-file dir href)
+                 (fs/read-file repo-dir rpath)
                  #(when-let [scripts (and % (string/trim %))]
                     (when-not (string/blank? scripts)
                       (when (or (not should-ask?) (ask-allow))
@@ -295,7 +285,7 @@
 
 (defn toggle-cards!
   []
-  (if (:modal/show? @state/state)
+  (if (and (= :srs (:modal/id @state/state)) (:modal/show? @state/state))
     (state/close-modal!)
     (state/pub-event! [:modal/show-cards])))
 

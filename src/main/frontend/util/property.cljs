@@ -10,7 +10,10 @@
             [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.format.mldoc :as mldoc]
             [logseq.graph-parser.text :as text]
-            [frontend.util.cursor :as cursor]))
+            [frontend.db :as db]
+            [frontend.state :as state]
+            [frontend.util.cursor :as cursor]
+            [frontend.util.block-content :as content]))
 
 (defn hidden-properties
   "These are properties hidden from user including built-in ones and ones
@@ -45,13 +48,13 @@
   [line]
   (boolean
    (and (string? line)
-        (re-find (re-pattern (str "^\\s?[^ ]+" gp-property/colons " ")) line))))
+        (re-find (re-pattern (str "^\\s?[^ ]+" gp-property/colons)) line))))
 
 (defn front-matter-property?
   [line]
   (boolean
    (and (string? line)
-        (util/safe-re-find #"^\s*[^ ]+: " line))))
+        (util/safe-re-find #"^\s*[^ ]+:" line))))
 
 (defn get-property-key
   [line format]
@@ -226,8 +229,8 @@
    (insert-property format content key value false))
   ([format content key value front-matter?]
    (when (string? content)
-     (let [ast (mldoc/->edn content (gp-mldoc/default-config format))
-           title? (mldoc/block-with-title? (ffirst (map first ast)))
+     (let [ast (content/get-ast content format)
+           title? (content/has-title? content format)
            has-properties? (or (and title?
                                     (or (mldoc/properties? (second ast))
                                         (mldoc/properties? (second
@@ -237,9 +240,7 @@
                                                              ast)))))
                                (mldoc/properties? (first ast)))
            lines (string/split-lines content)
-           [title body] (if title?
-                          [(first lines) (string/join "\n" (rest lines))]
-                          [nil (string/join "\n" lines)])
+           [title body] (content/get-title&body content format)
            scheduled (filter #(string/starts-with? % "SCHEDULED") lines)
            deadline (filter #(string/starts-with? % "DEADLINE") lines)
            body-without-timestamps (filter
@@ -353,15 +354,27 @@
   [format content]
   (remove-property format "id" content false))
 
-;; FIXME: only remove from the properties area
+;; FIXME: remove only from the properties area, not other blocks such as
+;; code blocks, quotes, etc.
+;; Currently, this function will do nothing if the content is a code block.
+;; The future plan is to separate those properties from the block' content.
 (defn remove-built-in-properties
   [format content]
-  (let [built-in-properties* (built-in-properties)
-        content (reduce (fn [content key]
-                          (remove-property format key content)) content built-in-properties*)]
-    (if (= format :org)
-      (string/replace-first content (re-pattern ":PROPERTIES:\n:END:\n*") "")
-      content)))
+  (let [trim-content (some-> content string/trim)]
+    (if (or
+         (and (= format :markdown)
+              (string/starts-with? trim-content "```")
+              (string/ends-with? trim-content "```"))
+         (and (= format :org)
+              (string/starts-with? trim-content "#+BEGIN_SRC")
+              (string/ends-with? trim-content "#+END_SRC")))
+      content
+      (let [built-in-properties* (built-in-properties)
+            content (reduce (fn [content key]
+                              (remove-property format key content)) content built-in-properties*)]
+        (if (= format :org)
+          (string/replace-first content (re-pattern ":PROPERTIES:\n:END:\n*") "")
+          content)))))
 
 (defn add-page-properties
   [page-format properties-content properties]
@@ -402,3 +415,50 @@
     (util/format
      (config/properties-wrapper-pattern page-format)
      (string/join "\n" lines))))
+
+(def hidden-editable-page-properties
+  "Properties that are hidden in the pre-block (page property)"
+  #{:title :filters :icon})
+
+(assert (set/subset? hidden-editable-page-properties (gp-property/editable-built-in-properties))
+        "Hidden editable page properties must be valid editable properties")
+
+(def hidden-editable-block-properties
+  "Properties that are hidden in a block (block property)"
+  (into #{:logseq.query/nlp-date}
+        gp-property/editable-view-and-table-properties))
+
+(assert (set/subset? hidden-editable-block-properties (gp-property/editable-built-in-properties))
+        "Hidden editable page properties must be valid editable properties")
+
+(defn- add-aliases-to-properties
+  "Adds aliases to a page when a page has aliases and is also an alias of other pages"
+  [properties page-id]
+  (let [repo (state/get-current-repo)
+        aliases (db/get-page-alias-names repo
+                                         (:block/name (db/pull page-id)))]
+    (if (seq aliases)
+      (if (:alias properties)
+        (update properties :alias (fn [c]
+                                    (util/distinct-by string/lower-case (concat c aliases))))
+        (assoc properties :alias aliases))
+      properties)))
+
+(defn get-visible-ordered-properties
+  "Given a block's properties, order of properties and any display context,
+  returns a tuple of property pairs that are visible when not being edited"
+  [properties* properties-order {:keys [pre-block? page-id]}]
+  (let [dissoc-keys (fn [m keys] (apply dissoc m keys))
+        properties (cond-> (update-keys properties* keyword)
+                     true
+                     (dissoc-keys (hidden-properties))
+                     pre-block?
+                     (dissoc-keys hidden-editable-page-properties)
+                     (not pre-block?)
+                     (dissoc-keys hidden-editable-block-properties)
+                     pre-block?
+                     (add-aliases-to-properties page-id))]
+    (if (seq properties-order)
+      (keep (fn [k] (when (contains? properties k) [k (get properties k)]))
+            (distinct properties-order))
+      properties*)))

@@ -89,10 +89,15 @@
       (let [^js cl (.-classList js/document.documentElement)]
         (.add cl "is-zoomed-native-ios")))))
 
-(defn iCloud-container-path?
+(defn in-iCloud-container-path?
   "Check whether `path' is logseq's iCloud container path on iOS"
   [path]
-  (string/includes? path "iCloud~com~logseq~logseq"))
+  (string/includes? path "/iCloud~com~logseq~logseq/"))
+
+(defn is-iCloud-container-path?
+  "Check whether `path' is iCloud container path on iOS"
+  [path]
+  (re-matches #"/iCloud~com~logseq~logseq/Documents/?$" path))
 
 (defn app-active?
   "Whether the app is active. This function returns a promise."

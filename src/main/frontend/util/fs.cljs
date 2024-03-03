@@ -2,7 +2,7 @@
 
 (ns frontend.util.fs
   "Misc util fns built on top of frontend.fs"
-  (:require ["path" :as path]
+  (:require ["path" :as node-path]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [clojure.string :as string]
@@ -24,17 +24,22 @@
                  "logseq/version-files" "logseq/graphs-txid.edn"]]
     (when (string? path)
       (or
-       (some #(string/starts-with? path (str dir "/" %)) ignores)
-       (some #(string/includes? path (str "/" % "/")) ignores)
+       (some #(string/starts-with? path
+                                   (if (= dir "")
+                                     %
+                                     (str dir "/" %))) ignores)
+       (some #(string/includes? path (if (= dir "")
+                                       (str "/" % "/")
+                                       (str % "/"))) ignores)
        (some #(string/ends-with? path %)
-             [".DS_Store" "logseq/graphs-txid.edn" "logseq/broken-config.edn"])
+             [".DS_Store" "logseq/graphs-txid.edn"])
       ;; hidden directory or file
-       (let [relpath (path/relative dir path)]
+       (let [relpath (node-path/relative dir path)]
          (or (re-find #"/\.[^.]+" relpath)
              (re-find #"^\.[^.]+" relpath)))
        (let [path (string/lower-case path)]
          (and
-          (not (string/blank? (path/extname path)))
+          (not (string/blank? (node-path/extname path)))
           (not
            (some #(string/ends-with? path %)
                  [".md" ".markdown" ".org" ".js" ".edn" ".css"]))))))))
@@ -64,9 +69,9 @@
     []))
 
 (defn read-repo-file
-  [repo-url file]
+  [repo-url file-rpath]
   (when-let [repo-dir (config/get-repo-dir repo-url)]
-    (fs/read-file repo-dir file)))
+    (fs/read-file repo-dir file-rpath)))
 
 (def multiplatform-reserved-chars ":\\*\\?\"<>|\\#\\\\")
 
@@ -125,6 +130,7 @@
           gp-util/page-name-sanity ;; we want to preserve the case sensitive nature of most file systems, don't lowercase
           (string/replace gp-util/url-encoded-pattern encode-url-percent) ;; pre-encode % in title on demand
           (string/replace reserved-chars-pattern url-encode-file-name)
+          (string/replace #"^\." "%2E") ;; Force percent encoding to distinguish pages with a title starting with a dot from a hidden file.
           (escape-windows-reserved-filebodies) ;; do this before the lowbar encoding to avoid ambiguity
           (escape-namespace-slashes-and-multilowbars)))
 
@@ -137,6 +143,9 @@
 (defn legacy-dot-file-name-sanity
   [page-name]
   (when (string? page-name)
+    ;; Bug in original code, but doesn't affect the result
+    ;; https://github.com/logseq/logseq/blob/1519e35e0c8308d8db90b2525bfe7a716c4cdf04/src/main/frontend/util.cljc#L892
+    #_{:clj-kondo/ignore [:regex-checks/double-escaped-regex]}
     (let [normalize (fn [s] (.normalize s "NFC"))
           remove-boundary-slashes (fn [s] (when (string? s)
                                             (let [s (if (= \/ (first s))
@@ -159,9 +168,12 @@
 (defn legacy-url-file-name-sanity
   [page-name]
   (let [url-encode #(some-> % str (js/encodeURIComponent) (.replace "+" "%20"))]
+    ;; Bug in original code, but doesn't affect the result
+    ;; https://github.com/logseq/logseq/blob/1519e35e0c8308d8db90b2525bfe7a716c4cdf04/src/main/frontend/util.cljc#L892
+    #_{:clj-kondo/ignore [:regex-checks/double-escaped-regex]}
     (some-> page-name
             gp-util/page-name-sanity
-             ;; for android filesystem compatibility
+            ;; for android filesystem compatibility
             (string/replace #"[\\#|%]+" url-encode)
              ;; Windows reserved path characters
             (string/replace #"[:\\*\\?\"<>|]+" url-encode)

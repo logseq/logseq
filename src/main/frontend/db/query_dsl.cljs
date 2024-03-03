@@ -9,20 +9,24 @@
             [frontend.date :as date]
             [frontend.db.model :as model]
             [frontend.db.query-react :as query-react]
-            [frontend.db.utils :as db-utils]
+            [logseq.graph-parser.util.db :as db-util]
             [logseq.db.rules :as rules]
             [frontend.template :as template]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.util.text :as text-util]
             [frontend.util :as util]))
 
 
 ;; Query fields:
 
+;; Operators:
 ;; and
 ;; or
 ;; not
+
+;; Filters:
 ;; between
 ;;   Example: (between -7d +7d)
 ;;            (between created-at -1d today)
@@ -32,15 +36,16 @@
 ;; task (block)
 ;; priority (block)
 ;; page
+;; sample
+;; full-text-search ""
+
+;; namespace
 ;; page-property (page)
 ;; page-tags (page)
 ;; all-page-tags
-;; project (block, TBD)
 
 ;; Sort by (field, asc/desc):
 ;; (sort-by created-at asc)
-
-;; (between -7d +7d)
 
 ;; Time helpers
 ;; ============
@@ -48,13 +53,13 @@
   (let [input (string/lower-case (name input))]
     (cond
       (= "today" input)
-      (db-utils/date->int (t/today))
+      (db-util/date->int (t/today))
 
       (= "yesterday" input)
-      (db-utils/date->int (t/yesterday))
+      (db-util/date->int (t/yesterday))
 
       (= "tomorrow" input)
-      (db-utils/date->int (t/plus (t/today) (t/days 1)))
+      (db-util/date->int (t/plus (t/today) (t/days 1)))
 
       (page-ref/page-ref? input)
       (let [input (-> (page-ref/get-page-name input)
@@ -71,7 +76,7 @@
                  "m" t/months
                  "w" t/weeks
                  t/days)]
-        (db-utils/date->int (t/plus (t/today) (tf duration)))))))
+        (db-util/date->int (t/plus (t/today) (tf duration)))))))
 
 (defn- ->timestamp [input]
   (let [input (string/lower-case (name input))]
@@ -443,31 +448,39 @@ Some bindings in this fn:
 ;; parse fns
 ;; =========
 
-(defn- pre-transform
+(defonce tag-placeholder "~~~tag-placeholder~~~")
+(defn pre-transform
   [s]
-  (let [quoted-page-ref (str "\"" page-ref/left-brackets "$1" page-ref/right-brackets "\"")]
-    (some-> s
-            (string/replace page-ref/page-ref-re quoted-page-ref)
-            (string/replace text-util/between-re
-                            (fn [[_ x]]
-                              (->> (string/split x #" ")
-                                   (remove string/blank?)
-                                   (map (fn [x]
-                                          (if (or (contains? #{"+" "-"} (first x))
-                                                  (and (util/safe-re-find #"\d" (first x))
-                                                       (some #(string/ends-with? x %) ["y" "m" "d" "h" "min"])))
-                                            (keyword (name x))
-                                            x)))
-                                   (string/join " ")
-                                   (util/format "(between %s)")))))))
+  (if (gp-util/wrapped-by-quotes? s)
+    s
+    (let [quoted-page-ref (fn [matches]
+                            (let [match' (string/replace (second matches) "#" tag-placeholder)]
+                              (str "\"" page-ref/left-brackets match' page-ref/right-brackets "\"")))]
+      (some-> s
+              (string/replace page-ref/page-ref-re quoted-page-ref)
+              (string/replace text-util/between-re
+                              (fn [[_ x]]
+                                (->> (string/split x #" ")
+                                     (remove string/blank?)
+                                     (map (fn [x]
+                                            (if (or (contains? #{"+" "-"} (first x))
+                                                    (and (util/safe-re-find #"\d" (first x))
+                                                         (some #(string/ends-with? x %) ["y" "m" "d" "h" "min"])))
+                                              (keyword (name x))
+                                              x)))
+                                     (string/join " ")
+                                     (util/format "(between %s)"))))
+              (string/replace #"\"[^\"]+\"" (fn [s] (string/replace s "#" tag-placeholder)))
+              (string/replace " #" " #tag ")
+              (string/replace #"^#" "#tag ")
+              (string/replace tag-placeholder "#")))))
 
 (defn- add-bindings!
-  [form q]
+  [q]
   (let [forms (set (flatten q))
         syms ['?b '?p 'not]
         [b? p? not?] (-> (set/intersection (set syms) forms)
-                         (map syms))
-        or? (contains? (set (flatten form)) 'or)]
+                         (map syms))]
     (cond
       not?
       (cond
@@ -483,33 +496,39 @@ Some bindings in this fn:
         :else
         q)
 
-      or?
-      (cond
-        (->> (flatten form)
-             (remove (every-pred string? page-ref/page-ref?))
-             (some string?))            ; block full-text search
-        (concat [['?b :block/content '?content]] [q])
-
-        :else
-        q)
-
       (and b? p?)
       (concat [['?b :block/page '?p]] q)
 
       :else
       q)))
 
+(defn simplify-query
+  [query]
+  (if (string? query)
+    query
+    (walk/postwalk
+     (fn [f]
+       (if (and
+            (coll? f)
+            (contains? #{'and 'or} (first f))
+            (= 2 (count f)))
+         (second f)
+         f))
+     query)))
+
+(def custom-readers {:readers {'tag (fn [x] (page-ref/->page-ref x))}})
 (defn parse
   [s]
   (when (and (string? s)
              (not (string/blank? s)))
     (let [s (if (= \# (first s)) (page-ref/->page-ref (subs s 1)) s)
-          form (some-> s
-                       (pre-transform)
-                       (reader/read-string))
+          form (some->> s
+                        (pre-transform)
+                        (reader/read-string custom-readers))
           sort-by (atom nil)
           blocks? (atom nil)
           sample (atom nil)
+          form (simplify-query form)
           {result :query rules :rules}
           (when form (build-query form {:sort-by sort-by
                                         :blocks? blocks?
@@ -520,8 +539,7 @@ Some bindings in this fn:
                                 ;; [(not (page-ref ?b "page 2"))]
                                 (keyword (ffirst result))
                                 (keyword (first result)))]
-                      (add-bindings! form
-                                     (if (= key :and) (rest result) result))))]
+                      (add-bindings! (if (= key :and) (rest result) result))))]
       {:query result'
        :rules (mapv rules/query-dsl-rules rules)
        :sort-by @sort-by
@@ -545,25 +563,38 @@ Some bindings in this fn:
       (apply conj q where)
       (conj q where))))
 
+(defn parse-query
+  [q]
+  (let [q' (template/resolve-dynamic-template! q)]
+    (parse q')))
+
+(defn pre-transform-query
+  [q]
+  (let [q' (template/resolve-dynamic-template! q)]
+    (pre-transform q')))
+
 (defn query
   "Runs a dsl query with query as a string. Primary use is from '{{query }}'"
-  [repo query-string]
-  (when (and (string? query-string) (not= "\"\"" query-string))
-    (let [query-string' (template/resolve-dynamic-template! query-string)
-          {:keys [query rules sort-by blocks? sample]} (parse query-string')]
-      (when-let [query' (some-> query (query-wrapper {:blocks? blocks?}))]
-        (let [sort-by (or sort-by identity)
-              random-samples (if @sample
-                               (fn [col]
-                                 (take @sample (shuffle col)))
-                               identity)
-              transform-fn (comp sort-by random-samples)]
-          (query-react/react-query repo
-                                   {:query query'
-                                    :query-string query-string
-                                    :rules rules}
-                                   {:use-cache? false
-                                    :transform-fn transform-fn}))))))
+  ([repo query-string]
+   (query repo query-string {}))
+  ([repo query-string query-opts]
+   (when (and (string? query-string) (not= "\"\"" query-string))
+     (let [{:keys [query rules sort-by blocks? sample]} (parse-query query-string)]
+       (when-let [query' (some-> query (query-wrapper {:blocks? blocks?}))]
+         (let [sort-by (or sort-by identity)
+               random-samples (if @sample
+                                (fn [col]
+                                  (take @sample (shuffle col)))
+                                identity)
+               transform-fn (comp sort-by random-samples)]
+           (query-react/react-query repo
+                                    {:query query'
+                                     :query-string query-string
+                                     :rules rules}
+                                    (merge
+                                     {:use-cache? false
+                                      :transform-fn transform-fn}
+                                     query-opts))))))))
 
 (defn custom-query
   "Runs a dsl query with query as a seq. Primary use is from advanced query"

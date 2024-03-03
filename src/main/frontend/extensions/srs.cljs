@@ -1,33 +1,36 @@
 (ns frontend.extensions.srs
-  (:require [frontend.template :as template]
-            [frontend.db.query-dsl :as query-dsl]
-            [frontend.db.query-react :as query-react]
-            [frontend.util :as util]
-            [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.util.page-ref :as page-ref]
-            [frontend.util.property :as property]
-            [frontend.util.drawer :as drawer]
-            [frontend.util.persist-var :as persist-var]
-            [frontend.db :as db]
-            [frontend.db.model :as db-model]
-            [frontend.db-mixins :as db-mixins]
-            [frontend.state :as state]
-            [frontend.handler.editor :as editor-handler]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [cljs-time.local :as tl]
+            [clojure.string :as string]
+            [frontend.commands :as commands]
             [frontend.components.block :as component-block]
+            [frontend.components.editor :as editor]
             [frontend.components.macro :as component-macro]
             [frontend.components.select :as component-select]
             [frontend.components.svg :as svg]
-            [frontend.ui :as ui]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
-            [frontend.commands :as commands]
-            [frontend.components.editor :as editor]
-            [cljs-time.core :as t]
-            [cljs-time.local :as tl]
-            [cljs-time.coerce :as tc]
-            [clojure.string :as string]
-            [rum.core :as rum]
+            [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
+            [frontend.db.model :as db-model]
+            [frontend.db.query-dsl :as query-dsl]
+            [frontend.db.query-react :as query-react]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.property :as editor-property]
             [frontend.modules.shortcut.core :as shortcut]
-            [medley.core :as medley]))
+            [frontend.state :as state]
+            [frontend.template :as template]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [frontend.util.block-content :as content]
+            [frontend.util.drawer :as drawer]
+            [frontend.util.persist-var :as persist-var]
+            [frontend.util.property :as property]
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.util.page-ref :as page-ref]
+            [medley.core :as medley]
+            [rum.core :as rum]))
 
 ;;; ================================================================
 ;;; Commentary
@@ -299,10 +302,10 @@
                                          (nil? next-sched*)
                                          (t/before? next-sched* time))))
                                  blocks),
-        sort-by-next-shedule   (sort-by (fn [b]
-                                (get (get b :block/properties) card-next-schedule-property)) filtered-result)]
+        sort-by-next-schedule   (sort-by (fn [b]
+                                           (get (get b :block/properties) card-next-schedule-property)) filtered-result)]
     {:total (count blocks)
-     :result sort-by-next-shedule}))
+     :result sort-by-next-schedule}))
 
 
 ;;; ================================================================
@@ -315,9 +318,15 @@
          (satisfies? ICard card)]}
   (let [block (.-block card)
         props (get-block-card-properties block)
-        last-interval (or (util/safe-parse-float (get props card-last-interval-property)) 0)
-        repeats (or (util/safe-parse-int (get props card-repeats-property)) 0)
-        last-ef (or (util/safe-parse-float (get props card-last-easiness-factor-property)) 2.5)
+        last-interval (or
+                       (when-let [v (get props card-last-interval-property)]
+                         (util/safe-parse-float v))
+                       0)
+        repeats (or (when-let [v (get props card-repeats-property)]
+                      (util/safe-parse-int v))
+                    0)
+        last-ef (or (when-let [v (get props card-last-easiness-factor-property)]
+                      (util/safe-parse-float v)) 2.5)
         [next-interval next-repeats next-ef of-matrix*]
         (next-interval last-interval repeats last-ef score @of-matrix)
         next-interval* (if (< next-interval 0) 0 next-interval)
@@ -370,7 +379,8 @@
                      (util/format "Remembered:   %d (%d%%)" score-remembered-count (* 100 (/ score-remembered-count review-count)))}
                     {:content
                      (util/format "Forgotten :   %d (%d%%)" score-forgotten-count (* 100 (/ score-forgotten-count review-count)))}]}]
-       (:block/format card-query-block)))))
+       (:block/format card-query-block)
+       false))))
 
 ;;; ================================================================
 ;;; UI
@@ -401,18 +411,18 @@
     (reset! *phase 1)))
 
 (def review-finished
-  [:p.p-2 "Congrats, you've reviewed all the cards for this query, see you next time! 💯"])
+  [:p.p-2 (t :flashcards/modal-finished)])
 
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click class]}]
   (ui/button
-    [:span btn-text (when-not (util/sm-breakpoint?)
-                      [" " (ui/render-keyboard-shortcut shortcut)])]
-    :id id
-    :class (str id " " class)
-    :background background
-    :on-mouse-down (fn [e] (util/stop-propagation e))
-    :on-click (fn [_e]
-                (js/setTimeout #(on-click) 10))))
+   [:span btn-text (when-not (util/sm-breakpoint?)
+                     [" " (ui/render-keyboard-shortcut shortcut {:theme :text})])]
+   :id id
+   :class (str id " " class)
+   :background background
+   :on-mouse-down (fn [e] (util/stop-propagation e))
+   :on-click (fn [_e]
+               (js/setTimeout #(on-click) 10))))
 
 (rum/defcs view < rum/reactive db-mixins/query
   (rum/local 1 ::phase)
@@ -449,9 +459,9 @@
            [:div.flex.my-4.justify-between
             (when-not (and (not preview?) (= next-phase 1))
               (btn-with-shortcut {:btn-text (case next-phase
-                                              1 "Hide answers"
-                                              2 "Show answers"
-                                              3 "Show clozes")
+                                              1 (t :flashcards/modal-btn-hide-answers)
+                                              2 (t :flashcards/modal-btn-show-answers)
+                                              3 (t :flashcards/modal-btn-show-clozes))
                                   :shortcut  "s"
                                   :id "card-answers"
                                   :class "mr-2"
@@ -459,7 +469,7 @@
             (when (and (not= @card-index (count blocks))
                        cards?
                        preview?)
-              (btn-with-shortcut {:btn-text "Next"
+              (btn-with-shortcut {:btn-text (t :flashcards/modal-btn-next-card)
                                   :shortcut "n"
                                   :id       "card-next"
                                   :class    "mr-2"
@@ -469,21 +479,21 @@
 
             (when (and (not preview?) (= 1 next-phase))
               [:<>
-               (btn-with-shortcut {:btn-text   "Forgotten"
+               (btn-with-shortcut {:btn-text   (t :flashcards/modal-btn-forgotten)
                                    :shortcut   "f"
                                    :id         "card-forgotten"
                                    :background "red"
                                    :on-click   (fn []
                                                  (score-and-next-card 1 card card-index finished? phase review-records cb)
                                                  (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
-                                                   (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow)))})
+                                                   (editor-property/set-block-property! root-block-id card-next-schedule-property tomorrow)))})
 
-               (btn-with-shortcut {:btn-text (if (util/mobile?) "Hard" "Took a while to recall")
+               (btn-with-shortcut {:btn-text (if (util/mobile?) "Hard" (t :flashcards/modal-btn-recall))
                                    :shortcut "t"
                                    :id       "card-recall"
                                    :on-click #(score-and-next-card 3 card card-index finished? phase review-records cb)})
 
-               (btn-with-shortcut {:btn-text   "Remembered"
+               (btn-with-shortcut {:btn-text   (t :flashcards/modal-btn-remembered)
                                    :shortcut   "r"
                                    :id         "card-remembered"
                                    :background "green"
@@ -491,19 +501,19 @@
 
             (when preview?
               (ui/tippy {:html [:div.text-sm
-                                "Reset this card so that you can review it immediately."]
+                                (t :flashcards/modal-btn-reset-tip)]
                          :class "tippy-hover"
                          :interactive true}
-                        (ui/button [:span "Reset"]
-                          :id "card-reset"
-                          :class (util/hiccup->class "opacity-60.hover:opacity-100.card-reset")
-                          :on-click (fn [e]
-                                      (util/stop e)
-                                      (operation-reset! card)))))]
+                        (ui/button [:span (t :flashcards/modal-btn-reset)]
+                                   :id "card-reset"
+                                   :class (util/hiccup->class "opacity-60.hover:opacity-100.card-reset")
+                                   :on-click (fn [e]
+                                               (util/stop e)
+                                               (operation-reset! card)))))]
            [:div.my-3 (ui/button "Review cards" :small? true)])]))))
 
 (rum/defc view-modal <
-  (shortcut/mixin :shortcut.handler/cards)
+  (shortcut/mixin :shortcut.handler/cards false)
   [blocks option card-index]
   [:div#cards-modal
    (if (seq blocks)
@@ -527,6 +537,17 @@
 
 ;;; register cloze macro
 
+(def ^:private cloze-cue-separator "\\\\")
+
+(defn- cloze-parse
+  "Parse the cloze content, and return [answer cue]."
+  [content]
+  (let [parts (string/split content cloze-cue-separator -1)]
+    (if (<= (count parts) 1)
+      [content nil]
+      (let [cue (string/trim (last parts))]
+        ;; If there are more than one separator, only the last component is considered the cue.
+        [(string/trimr (string/join cloze-cue-separator (drop-last parts))) cue]))))
 
 (rum/defcs cloze-macro-show < rum/reactive
   {:init (fn [state]
@@ -536,12 +557,15 @@
   [state config options]
   (let [shown?* (:shown? state)
         shown? (rum/react shown?*)
-        toggle! #(swap! shown?* not)]
+        toggle! #(swap! shown?* not)
+        [answer cue] (cloze-parse (string/join ", " (:arguments options)))]
     (if (or shown? (:show-cloze? config))
       [:a.cloze-revealed {:on-click toggle!}
-       (util/format "[%s]" (string/join ", " (:arguments options)))]
+       (util/format "[%s]" answer)]
       [:a.cloze {:on-click toggle!}
-       "[...]"])))
+       (if (string/blank? cue)
+         "[...]"
+         (str "(" cue ")"))])))
 
 (component-macro/register cloze-macro-name cloze-macro-show)
 
@@ -568,11 +592,11 @@
   (let [cards (db-model/get-macro-blocks (state/get-current-repo) "cards")
         items (->> (map (comp :logseq.macro-arguments :block/properties) cards)
                    (map (fn [col] (string/join " " col))))
-        items (concat items ["All"])]
+        items (concat items [(t :flashcards/modal-select-all)])]
     (component-select/select {:items items
                               :on-chosen on-chosen
                               :close-modal? false
-                              :input-default-placeholder "Switch to"
+                              :input-default-placeholder (t :flashcards/modal-select-switch)
                               :extract-fn nil})))
 
 ;;; register cards macro
@@ -605,12 +629,12 @@
                {:on-mouse-down (fn [e]
                                  (util/stop e)
                                  (toggle-fn))}
-               [:span.flex (if (string/blank? query-string) "All" query-string)
+               [:span.flex (if (string/blank? query-string) (t :flashcards/modal-select-all) query-string)
                 [:span {:style {:margin-top 2}}
                  (svg/caret-down)]]])
             (fn [{:keys [toggle-fn]}]
               (cards-select {:on-chosen (fn [query]
-                                          (let [query' (if (= query "All") "" query)]
+                                          (let [query' (if (= query (t :flashcards/modal-select-all)) "" query)]
                                             (reset! query-atom query')
                                             (toggle-fn)))}))
             {:modal-class (util/hiccup->class
@@ -620,49 +644,55 @@
 
            ;; FIXME: CSS issue
            (if @*preview-mode?
-             (ui/tippy {:html [:div.text-sm "current/total"]
+             (ui/tippy {:html [:div.text-sm (t :flashcards/modal-current-total)]
                         :interactive true}
-                       [:div.opacity-60.text-sm.mr-3
+                       [:div.opacity-60.text-sm.mr-2
                         @*card-index
                         [:span "/"]
                         total])
-             (ui/tippy {:html [:div.text-sm "overdue/total"]
+             (ui/tippy {:html [:div.text-sm (t :flashcards/modal-overdue-total)]
                         ;; :class "tippy-hover"
                         :interactive true}
-                       [:div.opacity-60.text-sm.mr-3
+                       [:div.opacity-60.text-sm.mr-2
                         (max 0 (- filtered-total @*card-index))
                         [:span "/"]
                         total]))
 
            (ui/tippy
-            {:html [:div.text-sm "Toggle preview mode"]
+            {:html [:div.text-sm (t :flashcards/modal-toggle-preview-mode)]
              :delay [1000, 100]
              :class "tippy-hover"
              :interactive true
              :disabled false}
-            [:a.opacity-60.hover:opacity-100.svg-small.inline.font-bold
-             {:id "preview-all-cards"
-              :style (when @*preview-mode? {:color "orange"})
-              :on-click (fn [e]
+
+            (ui/button
+             (merge
+              {:icon "letter-a"
+               :intent "link"
+               :on-click (fn [e]
                           (util/stop e)
                           (swap! *preview-mode? not)
-                          (reset! *card-index 0))}
-             "A"])
+                           (reset! *card-index 0))
+               :button-props {:id "preview-all-cards"}
+               :small? true}
+              (when @*preview-mode?
+                {:icon-props {:style {:color "var(--ls-button-background)"}}}))))
 
            (ui/tippy
-            {:html [:div.text-sm "Toggle random mode"]
+            {:html [:div.text-sm (t :flashcards/modal-toggle-random-mode)]
              :delay [1000, 100]
              :class "tippy-hover"
              :interactive true}
-            [:a.mt-1.ml-2.block.opacity-60.hover:opacity-100
-             {:on-mouse-down (fn [e]
-                               (util/stop e)
-                               (swap! *random-mode? not))}
-             (ui/icon "arrows-shuffle" {:style (cond->
-                                                {:font-size 18
-                                                 :font-weight 600}
-                                                 @*random-mode?
-                                                 (assoc :color "orange"))})])]]
+            (ui/button
+             (merge
+              {:icon "arrows-shuffle"
+               :intent "link"
+               :on-click (fn [e]
+                           (util/stop e)
+                           (swap! *random-mode? not))
+               :small? true}
+              (when @*random-mode?
+                {:icon-props {:style {:color "var(--ls-button-background)"}}}))))]]
          [:div.px-1
           (when (and (not modal?) (not @*preview-mode?))
             {:on-click (fn []
@@ -680,15 +710,15 @@
                      *card-index))]])
       (if (:global? config)
         [:div.ls-card.content
-         [:h1.title "Time to create a card!"]
+         [:h1.title (t :flashcards/modal-welcome-title)]
 
          [:div
-          [:p "You can add \"#card\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."]
+          [:p (t :flashcards/modal-welcome-desc-1)]
           [:img.my-4 {:src "https://docs.logseq.com/assets/2021-07-22_22.28.02_1626964258528_0.gif"}]
-          [:p "You can "
-           [:a {:href "https://docs.logseq.com/#/page/cards" :target "_blank"}
-            "click this link"]
-           " to check the documentation."]]]
+          [:p (t :flashcards/modal-welcome-desc-2)
+           [:a {:href "https://docs.logseq.com/#/page/Flashcards" :target "_blank"}
+            (t :flashcards/modal-welcome-desc-3)]
+           (t :flashcards/modal-welcome-desc-4)]]]
         [:div.opacity-60.custom-query-title.ls-card.content
          [:div.w-full.flex-1
           [:code.p-1 (str "Cards: " query-string)]]
@@ -747,16 +777,34 @@
                                   "Create a cloze"])
 
 ;; handlers
+(defn add-card-tag-to-block
+  "given a block struct, adds the #card to title and returns
+   a seq of [original-block new-content-string]"
+  [block]
+    (when-let [content (:block/content block)]
+      (let [format (:block/format block)
+            content (-> (property/remove-built-in-properties format content)
+                        (drawer/remove-logbook))
+            [title body] (content/get-title&body content format)]
+        [block (str title " #" card-hash-tag "\n" body)])))
+
 (defn make-block-a-card!
   [block-id]
   (when-let [block (db/entity [:block/uuid block-id])]
-    (when-let [content (:block/content block)]
-      (let [content (-> (property/remove-built-in-properties (:block/format block) content)
-                        (drawer/remove-logbook))]
-        (editor-handler/save-block!
-         (state/get-current-repo)
-         block-id
-         (str (string/trim content) " #" card-hash-tag))))))
+    (let [block-content (add-card-tag-to-block block)
+          new-content (get block-content 1)]
+      (editor-handler/save-block! (state/get-current-repo) block-id new-content))))
+
+(defn batch-make-cards!
+  ([] (batch-make-cards! (state/get-selection-block-ids)))
+  ([block-ids]
+   (let [valid-blocks (->> block-ids
+                           (map #(db/entity [:block/uuid %]))
+                           (remove card-block?)
+                           (map #(db/pull [:block/uuid (:block/uuid %)])))
+         blocks (map add-card-tag-to-block valid-blocks)]
+     (when-not (empty? blocks)
+       (editor-handler/save-blocks! blocks)))))
 
 (defonce *due-cards-interval (atom nil))
 

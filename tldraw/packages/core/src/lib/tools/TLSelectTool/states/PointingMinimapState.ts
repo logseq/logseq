@@ -66,11 +66,13 @@ export class PointingMinimapState<
   }
 
   onPointerMove: TLEvents<S>['pointer'] = (info, e) => {
-    const newCameraPoint = this.getCameraPoint([e.clientX, e.clientY])
-    if (newCameraPoint) {
-      this.app.viewport.update({
-        point: newCameraPoint,
-      })
+    if ('clientX' in e) {
+      const newCameraPoint = this.getCameraPoint([e.clientX, e.clientY])
+      if (newCameraPoint) {
+        this.app.viewport.update({
+          point: newCameraPoint,
+        })
+      }
     }
   }
 

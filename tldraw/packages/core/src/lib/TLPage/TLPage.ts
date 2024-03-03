@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { deepEqual } from '@tldraw/core'
 import { intersectRayBounds, TLBounds } from '@tldraw/intersect'
 import Vec from '@tldraw/vec'
 import { action, autorun, computed, makeObservable, observable, toJS, transaction } from 'mobx'
@@ -85,11 +86,11 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     }
   }
 
-  @observable nonce = 0
-
-  @action bump = () => {
-    this.nonce++
+  @computed get shapesById() {
+    return Object.fromEntries(this.shapes.map(shape => [shape.id, shape]))
   }
+
+  @observable nonce = 0
 
   @action update(props: Partial<TLPageProps<S>>) {
     Object.assign(this, props)
@@ -98,6 +99,11 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
 
   @action updateBindings(bindings: Record<string, TLBinding>) {
     Object.assign(this.bindings, bindings)
+    return this
+  }
+
+  @action updateShapesIndex(shapesIndex: string[]) {
+    this.shapes.sort((a,b) => shapesIndex.indexOf(a.id) - shapesIndex.indexOf(b.id))
     return this
   }
 
@@ -111,16 +117,14 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
             return new ShapeClass(shape)
           })
     this.shapes.push(...shapeInstances)
-    this.bump()
     return shapeInstances
   }
 
   private parseShapesArg<S>(shapes: S[] | string[]) {
     if (typeof shapes[0] === 'string') {
       return this.shapes.filter(shape => (shapes as string[]).includes(shape.id))
-    } else {
-      return shapes as S[]
     }
+    return shapes as S[]
   }
 
   @action removeShapes(...shapes: S[] | string[]) {
@@ -261,7 +265,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
           ...fromDelta,
         }
         shapeChanged = true
-        this.getShapeById(nextShape.id)?.update(nextShape, false, true)
+        this.getShapeById(nextShape.id)?.update(nextShape, false, deepEqual(fromDelta?.handles, fromShape?.props.handles))
       }
     })
 

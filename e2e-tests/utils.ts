@@ -1,75 +1,16 @@
 import { Page, Locator } from 'playwright'
 import { expect, ConsoleMessage } from '@playwright/test'
-import * as process from 'process'
-import { Block } from './types'
 import * as pathlib from 'path'
+import { modKey } from './util/basic'
+import { Block } from './types'
 
-export const IsMac = process.platform === 'darwin'
-export const IsLinux = process.platform === 'linux'
-export const IsWindows = process.platform === 'win32'
-export const IsCI = process.env.CI === 'true'
-
-export function randomString(length: number) {
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-
-  let result = '';
-  const charactersLength = characters.length;
-  for (let i = 0; i < length; i++) {
-    result += characters.charAt(Math.floor(Math.random() * charactersLength));
-  }
-
-  return result;
-}
-
-export function randomLowerString(length: number) {
-  const characters = 'abcdefghijklmnopqrstuvwxyz0123456789';
-
-  let result = '';
-  const charactersLength = characters.length;
-  for (let i = 0; i < length; i++) {
-    result += characters.charAt(Math.floor(Math.random() * charactersLength));
-  }
-
-  return result;
-}
-
-export async function createRandomPage(page: Page) {
-  const randomTitle = randomString(20)
-
-  // Click #search-button
-  await page.click('#search-button')
-  // Fill [placeholder="Search or create page"]
-  await page.fill('[placeholder="Search or create page"]', randomTitle)
-  // Click text=/.*New page: "new page".*/
-  await page.click('text=/.*New page: ".*/')
-  // Wait for h1 to be from our new page
-  await page.waitForSelector(`h1 >> text="${randomTitle}"`, { state: 'visible' })
-  // wait for textarea of first block
-  await page.waitForSelector('textarea >> nth=0', { state: 'visible' })
-
-  return randomTitle;
-}
-
-export async function createPage(page: Page, page_name: string) {// Click #search-button
-  await page.click('#search-button')
-  // Fill [placeholder="Search or create page"]
-  await page.fill('[placeholder="Search or create page"]', page_name)
-  // Click text=/.*New page: "new page".*/
-  await page.click('text=/.*New page: ".*/')
-  // wait for textarea of first block
-  await page.waitForSelector('textarea >> nth=0', { state: 'visible' })
-
-  return page_name;
-}
-
-
-export async function searchAndJumpToPage(page: Page, pageTitle: string) {
-  await page.click('#search-button')
-  await page.fill('[placeholder="Search or create page"]', pageTitle)
-  await page.waitForSelector(`[data-page-ref="${pageTitle}"]`, { state: 'visible' })
-  await page.click(`[data-page-ref="${pageTitle}"]`)
-  return pageTitle;
-}
+// TODO: The file should be a facade of utils in the /util folder
+// No more additional functions should be added to this file
+// Move the functions to the corresponding files in the /util folder
+// Criteria: If the same selector is shared in multiple functions, they should be in the same file
+export * from './util/basic'
+export * from './util/search-modal'
+export * from './util/page'
 
 /**
 * Locate the last block in the inner editor
@@ -92,10 +33,33 @@ export async function lastBlock(page: Page): Promise<Locator> {
 }
 
 /**
+ * Move the cursor to the beginning of the current editor
+ * @param page The Playwright Page object.
+ */
+export async function moveCursorToBeginning(page: Page): Promise<Locator> {
+  await page.press('textarea >> nth=0', modKey + '+a') // select all
+  await page.press('textarea >> nth=0', 'ArrowLeft')
+  return page.locator('textarea >> nth=0')
+}
+
+/**
+ * Move the cursor to the end of the current editor
+ * @param page The Playwright Page object.
+ */
+export async function moveCursorToEnd(page: Page): Promise<Locator> {
+  await page.press('textarea >> nth=0', modKey + '+a') // select all
+  await page.press('textarea >> nth=0', 'ArrowRight')
+  return page.locator('textarea >> nth=0')
+}
+
+/**
  * Press Enter and create the next block.
  * @param page The Playwright Page object.
  */
 export async function enterNextBlock(page: Page): Promise<Locator> {
+  // Move cursor to the end of the editor
+  await page.press('textarea >> nth=0', modKey + '+a') // select all
+  await page.press('textarea >> nth=0', 'ArrowRight')
   let blockCount = await page.locator('.page-blocks-inner .ls-block').count()
   await page.press('textarea >> nth=0', 'Enter')
   await page.waitForTimeout(10)
@@ -112,14 +76,6 @@ export async function newInnerBlock(page: Page): Promise<Locator> {
   await lastBlock(page)
   await page.press('textarea >> nth=0', 'Enter')
 
-  return page.locator('textarea >> nth=0')
-}
-
-export async function newBlock(page: Page): Promise<Locator> {
-  let blockNumber = await page.locator('.page-blocks-inner .ls-block').count()
-  await lastBlock(page)
-  await page.press('textarea >> nth=0', 'Enter')
-  await page.waitForSelector(`.page-blocks-inner .ls-block >> nth=${blockNumber} >> textarea`, { state: 'visible' })
   return page.locator('textarea >> nth=0')
 }
 
@@ -188,7 +144,6 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
     await page.waitForSelector('#left-sidebar .dropdown-wrapper >> text="Add new graph"',
       { state: 'visible', timeout: 5000 })
     await page.click('text=Add new graph')
-    await page.waitForSelector('strong:has-text("Choose a folder")', { state: 'visible', timeout: 5000 })
 
     expect(page.locator('#repo-name')).toHaveText(pathlib.basename(path))
   }
@@ -210,42 +165,34 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
 
   // If there is an error notification from a previous test graph being deleted,
   // close it first so it doesn't cover up the UI
-  let locator = page.locator('.notification-close-button').first()
-  while (await locator?.isVisible()) {
-    await locator.click()
-    await page.waitForTimeout(250)
-
-    expect(locator.isVisible()).resolves.toBe(false)
+  let n = await page.locator('.notification-close-button').count()
+  if (n > 1) {
+    await page.locator('button >> text="Clear all"').click()
+  } else if (n == 1) {
+    await page.locator('.notification-close-button').click()
   }
+  await expect(page.locator('.notification-close-button').first()).not.toBeVisible({ timeout: 2000 })
 
   console.log('Graph loaded for ' + path)
 }
 
-export async function activateNewPage(page: Page) {
-  await page.click('.ls-block >> nth=0')
-  await page.waitForTimeout(500)
+export async function editNthBlock(page: Page, n) {
+  await page.click(`.ls-block .block-content >> nth=${n}`)
 }
 
 export async function editFirstBlock(page: Page) {
-  await page.click('.ls-block .block-content >> nth=0')
+  await editNthBlock(page, 0)
 }
 
-export function randomInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1) + min)
-}
-
-export function randomBoolean(): boolean {
-  return Math.random() < 0.5;
-}
-
-export function systemModifier(shortcut: string): string {
-  if (IsMac) {
-    return shortcut.replace('Control', 'Meta')
-  } else {
-    return shortcut
-  }
-}
-
+/**
+ * Wait for a console message with a given prefix to appear, and return the full text of the message
+ * Or reject after a timeout
+ *
+ * @param page
+ * @param prefix - the prefix to look for
+ * @param timeout - the timeout in ms
+ * @returns the full text of the console message
+ */
 export async function captureConsoleWithPrefix(page: Page, prefix: string, timeout: number = 3000): Promise<string> {
   return new Promise((resolve, reject) => {
     let console_handler = (msg: ConsoleMessage) => {
@@ -283,4 +230,76 @@ export async function doesClipboardItemExists(page: Page): Promise<boolean> {
 export async function getIsWebAPIClipboardSupported(page: Page): Promise<boolean> {
   // @ts-ignore "clipboard-write" is not included in TS's type definition for permissionName
   return await queryPermission(page, "clipboard-write") && await doesClipboardItemExists(page)
+}
+
+export async function navigateToStartOfBlock(page: Page, block: Block) {
+  const selectionStart = await block.selectionStart()
+  for (let i = 0; i < selectionStart; i++) {
+    await page.keyboard.press('ArrowLeft')
+  }
+}
+
+/**
+ * Repeats a key press a certain number of times.
+ * @param {Page} page - The Page object.
+ * @param {string} key - The key to press.
+ * @param {number} times - The number of times to press the key.
+ * @return {Promise<void>} - Promise which resolves when the key press repetition is done.
+ */
+export async function repeatKeyPress(page: Page, key: string, times: number): Promise<void> {
+  for (let i = 0; i < times; i++) {
+    await page.keyboard.press(key);
+  }
+}
+
+/**
+ * Moves the cursor a certain number of characters to the right (positive value) or left (negative value).
+ * @param {Page} page - The Page object.
+ * @param {number} shift - The number of characters to move the cursor. Positive moves to the right, negative to the left.
+ * @return {Promise<void>} - Promise which resolves when the cursor has moved.
+ */
+export async function moveCursor(page: Page, shift: number): Promise<void> {
+  const direction = shift < 0 ? 'ArrowLeft' : 'ArrowRight';
+  const absShift = Math.abs(shift);
+  await repeatKeyPress(page, direction, absShift);
+}
+
+/**
+ * Selects a certain length of text in a textarea to the right of the cursor.
+ * @param {Page} page - The Page object.
+ * @param {number} length - The number of characters to select.
+ * @return {Promise<void>} - Promise which resolves when the text selection is done.
+ */
+export async function selectCharacters(page: Page, length: number): Promise<void> {
+  await page.keyboard.down('Shift');
+  await repeatKeyPress(page, 'ArrowRight', length);
+  await page.keyboard.up('Shift');
+}
+
+/**
+ * Retrieves the selected text in a textarea.
+ * @param {Page} page - The page object.
+ * @return {Promise<string | null>} - Promise which resolves to the selected text or null.
+ */
+export async function getSelection(page: Page): Promise<string | null> {
+  const selection = await page.evaluate(() => {
+    const textarea = document.querySelector('textarea')
+    return textarea?.value.substring(textarea.selectionStart, textarea.selectionEnd) || null
+  })
+
+  return selection
+}
+
+/**
+ * Retrieves the current cursor position in a textarea.
+ * @param {Page} page - The page object.
+ * @return {Promise<number | null>} - Promise which resolves to the cursor position or null.
+ */
+export async function getCursorPos(page: Page): Promise<number | null> {
+  const cursorPosition = await page.evaluate(() => {
+    const textarea = document.querySelector('textarea');
+    return textarea ? textarea.selectionStart : null;
+  });
+
+  return cursorPosition;
 }

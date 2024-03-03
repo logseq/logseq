@@ -19,7 +19,7 @@
       width: 100%;
       min-height: 100%;
     }
- 
+
       html::-webkit-scrollbar-thumb {
         background-color: rgba(0, 0, 0, 0.1);
       }
@@ -40,7 +40,7 @@
       html::-webkit-scrollbar-corner {
         background: transparent;
       }
-    
+
     body {
       display: flex;
     }
@@ -125,7 +125,7 @@
       }
     })
 
-    content = marked(content).replace('src="./', `src="${fixLink('')}`)
+    content = marked.parse(content).replace('src="./', `src="${fixLink('')}`)
     setContent(content)
   }())
 </script>

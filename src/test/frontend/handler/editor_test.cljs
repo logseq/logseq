@@ -1,8 +1,16 @@
 (ns frontend.handler.editor-test
   (:require [frontend.handler.editor :as editor]
-            [clojure.test :refer [deftest is testing are]]
+            [frontend.db :as db]
+            [clojure.test :refer [deftest is testing are use-fixtures]]
+            [datascript.core :as d]
+            [frontend.test.helper :as test-helper :refer [load-test-files]]
+            [frontend.db.model :as model]
             [frontend.state :as state]
-            [frontend.util.cursor :as cursor]))
+            [frontend.util.cursor :as cursor]
+            [goog.dom :as gdom]
+            [frontend.util :as util]))
+
+(use-fixtures :each test-helper/start-and-destroy-db)
 
 (deftest extract-nearest-link-from-text-test
   (testing "Page, block and tag links"
@@ -66,8 +74,62 @@
     "TODO" "## TODO content" "## DOING content"
     "DONE" "DONE content" "content"))
 
+(defn- keyup-handler
+  "Spied version of editor/keyup-handler"
+  [{:keys [value cursor-pos action commands]
+    ;; Default to some commands matching which matches default behavior for most
+    ;; completion scenarios
+    :or {commands [:fake-command]}}]
+  ;; Reset editor action in order to test result
+  (state/set-editor-action! action)
+  ;; Default cursor pos to end of line
+  (let [pos (or cursor-pos (count value))
+        input #js {:value value}]
+    (with-redefs [editor/get-matched-commands (constantly commands)
+                  ;; Ignore as none of its behaviors are tested
+                  editor/default-case-for-keyup-handler (constantly nil)
+                  cursor/pos (constantly pos)]
+      ((editor/keyup-handler nil input nil)
+       #js {:key (subs value (dec (count value)))}
+       nil))))
+
+(deftest keyup-handler-test
+  (testing "Command autocompletion"
+    (keyup-handler {:value "/b"
+                    :action :commands
+                    :commands [:fake-command]})
+    (is (= :commands (state/get-editor-action))
+        "Completion stays open if there is a matching command")
+
+    (keyup-handler {:value "/zz"
+                    :action :commands
+                    :commands []})
+    (is (= nil (state/get-editor-action))
+        "Completion closed if there no matching commands")
+
+    (keyup-handler {:value "/ " :action :commands})
+    (is (= nil (state/get-editor-action))
+        "Completion closed after a space follows /")
+
+    (keyup-handler {:value "/block " :action :commands})
+    (is (= :commands (state/get-editor-action))
+        "Completion stays open if space is part of the search term for /"))
+
+  (testing "Tag autocompletion"
+    (keyup-handler {:value "foo #b" :action :page-search-hashtag})
+    (is (= :page-search-hashtag (state/get-editor-action))
+        "Completion stays open for one tag")
+
+    (keyup-handler {:value "text # #bar"
+                    :action :page-search-hashtag
+                    :cursor-pos 6})
+    (is (= :page-search-hashtag (state/get-editor-action))
+        "Completion stays open when typing tag before another tag"))
+  ;; Reset state
+  (state/set-editor-action! nil))
+
 (defn- handle-last-input-handler
-  "Spied version of editor/keydown-not-matched-handler"
+  "Spied version of editor/handle-last-input"
   [{:keys [value cursor-pos]}]
   ;; Reset editor action in order to test result
   (state/set-editor-action! nil)
@@ -97,6 +159,27 @@
                                 :cursor-pos (dec (count "first "))})
     (is (= nil (state/get-editor-action))
         "Don't autocomplete properties if typing in a block where properties already exist"))
+
+  (testing "Command autocompletion"
+    (handle-last-input-handler {:value "/"})
+    (is (= :commands (state/get-editor-action))
+        "Command search if only / has been typed")
+
+    (handle-last-input-handler {:value "some words /"})
+    (is (= :commands (state/get-editor-action))
+        "Command search on start of new word")
+
+    (handle-last-input-handler {:value "a line\n/"})
+    (is (= :commands (state/get-editor-action))
+        "Command search on start of a new line")
+
+    (handle-last-input-handler {:value "https://"})
+    (is (= nil (state/get-editor-action))
+        "No command search in middle of a word")
+
+    (handle-last-input-handler {:value "#blah/"})
+    (is (= nil (state/get-editor-action))
+        "No command search after a tag search to allow for namespace completion"))
 
   (testing "Tag autocompletion"
     (handle-last-input-handler {:value "#"
@@ -138,3 +221,105 @@
         "No page search within backticks"))
   ;; Reset state
   (state/set-editor-action! nil))
+
+(deftest save-block-aux!
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "\n
+- b1 #foo"}])
+  (testing "updating block's content changes content and preserves path-refs"
+   (let [conn (db/get-db test-helper/test-db false)
+         block (->> (d/q '[:find (pull ?b [* {:block/path-refs [:block/name]}])
+                           :where [?b :block/content "b1 #foo"]]
+                         @conn)
+                    ffirst)
+         prev-path-refs (set (map :block/name (:block/path-refs block)))
+         _ (assert (= #{"page1" "foo"} prev-path-refs)
+                   "block has expected :block/path-refs")
+         ;; Use same options as edit-box-on-change!
+         _ (editor/save-block-aux! block "b12 #foo" {:skip-properties? true})
+         updated-block (d/pull @conn '[* {:block/path-refs [:block/name]}] [:block/uuid (:block/uuid block)])]
+     (is (= "b12 #foo" (:block/content updated-block)) "Content updated correctly")
+     (is (= prev-path-refs
+            (set (map :block/name (:block/path-refs updated-block))))
+         "Path-refs remain the same"))))
+
+(deftest save-block!
+  (testing "Saving blocks with and without properties"
+    (test-helper/load-test-files [{:file/path "foo.md"
+                                   :file/content "# foo"}])
+    (let [repo test-helper/test-db
+          block-uuid (:block/uuid (model/get-block-by-page-name-and-block-route-name repo "foo" "foo"))]
+      (editor/save-block! repo block-uuid "# bar")
+      (is (= "# bar" (:block/content (model/query-block-by-uuid block-uuid))))
+
+      (editor/save-block! repo block-uuid "# foo" {:properties {:foo "bar"}})
+      (is (= "# foo\nfoo:: bar" (:block/content (model/query-block-by-uuid block-uuid))))
+
+      (editor/save-block! repo block-uuid "# bar")
+      (is (= "# bar" (:block/content (model/query-block-by-uuid block-uuid)))))))
+
+(defn- delete-block
+  [db block {:keys [embed?]}]
+  (let [sibling-block (d/entity db (get-in block [:block/left :db/id]))
+        first-block (d/entity db (get-in sibling-block [:block/left :db/id]))
+        block-dom-id "ls-block-block-to-delete"]
+    (with-redefs [editor/get-state (constantly {:block-id (:block/uuid block)
+                                                :block-parent-id block-dom-id
+                                                :config {:embed? embed?}})
+                ;; stub for delete-block
+                  gdom/getElement (constantly #js {:id block-dom-id})
+                ;; stub since not testing moving
+                  editor/edit-block! (constantly nil)
+                  util/get-blocks-noncollapse (constantly (mapv
+                                                           (fn [m]
+                                                             #js {:id (:id m)
+                                                                  ;; for dom/attr
+                                                                  :getAttribute #({"blockid" (str (:block-uuid m))
+                                                                                   "data-embed" (if embed? "true" "false")} %)})
+                                                           [{:id "ls-block-first-block"
+                                                             :block-uuid (:block/uuid first-block)}
+                                                            {:id "ls-block-sibling-block"
+                                                             :block-uuid (:block/uuid sibling-block)}
+                                                            {:id block-dom-id
+                                                             :block-uuid (:block/uuid block)}]))]
+      (editor/delete-block! test-helper/test-db false))))
+
+(deftest delete-block!
+  (testing "backspace deletes empty block"
+    (load-test-files [{:file/path "pages/page1.md"
+                       :file/content "\n
+- b1
+- b2
+-"}])
+    (let [conn (db/get-db test-helper/test-db false)
+          block (->> (d/q '[:find (pull ?b [*])
+                            :where [?b :block/content ""] [?b :block/page [:block/name "page1"]]]
+                          @conn)
+                     ffirst)
+          _ (delete-block @conn block {})
+          updated-blocks (->> (d/q '[:find (pull ?b [*])
+                                     :where [?b :block/content] [(missing? $ ?b :block/pre-block?)]]
+                                   @conn)
+                              (map (comp :block/content first)))]
+      (is (= ["b1" "b2"] updated-blocks) "Block is deleted"))
+    (test-helper/reset-test-db!))
+
+  (testing "backspace deletes empty block in embedded context"
+    ;; testing embed at this layer doesn't require an embed block since
+    ;; delete-block handles all the embed setup
+    (load-test-files [{:file/path "pages/page1.md"
+                       :file/content "\n
+- b1
+- b2
+-"}])
+    (let [conn (db/get-db test-helper/test-db false)
+          block (->> (d/q '[:find (pull ?b [*])
+                            :where [?b :block/content ""] [?b :block/page [:block/name "page1"]]]
+                          @conn)
+                     ffirst)
+          _ (delete-block @conn block {:embed? true})
+          updated-blocks (->> (d/q '[:find (pull ?b [*])
+                                     :where [?b :block/content] [(missing? $ ?b :block/pre-block?)]]
+                                   @conn)
+                              (map (comp :block/content first)))]
+      (is (= ["b1" "b2"] updated-blocks) "Block is deleted"))))

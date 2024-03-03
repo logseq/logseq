@@ -11,41 +11,53 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.config :as config]
+            [frontend.handler.repo :as repo-handler]))
 
-(def *url (atom nil))
+(def *init-url (atom nil))
 ;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
 ;; The following two variable atoms are used to compare whether
 ;; they are from the same intent share.
 (def *last-shared-url (atom nil))
 (def *last-shared-seconds (atom 0))
 
+(defn mobile-preinit
+  "preinit logic of mobile platforms: setup document folder permission"
+  []
+  (when (mobile-util/native-ios?)
+    ;; Caution: This must be called before any file accessing
+    (capacitor-fs/ios-ensure-documents!)))
+
+
+(defn mobile-postinit
+  "postinit logic of mobile platforms: handle deeplink and intent"
+  []
+  (when (mobile-util/native-ios?)
+    (when @*init-url
+      (deeplink/deeplink @*init-url)
+      (reset! *init-url nil))))
+
 (defn- ios-init
   "Initialize iOS-specified event listeners"
   []
-  (p/let [^js path (capacitor-fs/ios-ensure-documents!)]
-    (when-let [path' (bean/->clj path)]
-      (state/set-state! :mobile/container-urls
-                        (update-vals path' #(cond-> %
-                                              string?
-                                              (js/decodeURIComponent))))
-      (println "iOS container path: " path')))
+  (p/let [^js paths (capacitor-fs/ios-ensure-documents!)]
+    (when paths
+      (let [paths (-> paths
+                      bean/->clj
+                      (update-vals capacitor-fs/ios-force-include-private))]
+        (state/set-state! :mobile/container-urls paths)
+        (println "iOS container path: " paths))))
 
-  (state/pub-event! [:validate-appId])
-
-  (.addEventListener js/window
-                     "load"
-                     (fn [_event]
-                       (when @*url
-                         (js/setTimeout #(deeplink/deeplink @*url)
-                                        1000))))
+  ;; Fix iOS App directory change across installation
+  (when (not (config/demo-graph?))
+    (state/pub-event! [:validate-appId]))
 
   (mobile-util/check-ios-zoomed-display)
 
   ;; keep this the same logic as src/main/electron/listener.cljs
   (.addListener mobile-util/file-sync "debug"
                 (fn [event]
-                  (js/console.log "🔄" event)
                   (let [event (js->clj event :keywordize-keys true)
                         payload (:data event)]
                     (when (or (= (:event event) "download:progress")
@@ -61,17 +73,25 @@
   (.addListener App "backButton"
                 #(let [href js/window.location.href]
                    (when (true? (cond
-                                  (state/get-left-sidebar-open?)
-                                  (state/set-left-sidebar-open! false)
-
                                   (state/settings-open?)
                                   (state/close-settings!)
 
                                   (state/modal-opened?)
                                   (state/close-modal!)
 
-                                  :else true))
+                                  (state/get-left-sidebar-open?)
+                                  (state/set-left-sidebar-open! false)
 
+                                  (state/action-bar-open?)
+                                  (state/set-state! :mobile/show-action-bar? false)
+
+                                  (not-empty (state/get-selection-blocks))
+                                  (editor-handler/clear-selection!)
+
+                                  (state/editing?)
+                                  (editor-handler/escape-editing)
+
+                                  :else true))
                      (if (or (string/ends-with? href "#/")
                              (string/ends-with? href "/")
                              (not (string/includes? href "#/")))
@@ -93,7 +113,8 @@
   (when (state/get-current-repo)
     (let [is-active? (.-isActive state)]
       (when-not is-active?
-        (editor-handler/save-current-block!))
+        (editor-handler/save-current-block!)
+        (repo-handler/persist-db!))
       (state/set-mobile-app-state-change is-active?))))
 
 (defn- general-init
@@ -103,7 +124,7 @@
                 (fn [^js data]
                   (when-let [url (.-url data)]
                     (if-not (= (.-readyState js/document) "complete")
-                      (reset! *url url)
+                      (reset! *init-url url)
                       (when-not (and (= @*last-shared-url url)
                                      (<= (- (.getSeconds (js/Date.)) @*last-shared-seconds) 1))
                         (reset! *last-shared-url url)

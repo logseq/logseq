@@ -1,0 +1,8 @@
+{:aliases
+ {:test {:extra-paths ["test"]
+         :extra-deps  {olical/cljs-test-runner   {:mvn/version "3.8.0"}
+                       org.clojure/clojurescript {:mvn/version "1.11.54"}}
+         :main-opts   ["-m" "cljs-test-runner.main"]}
+  :clj-kondo
+  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2023.05.26"}}
+   :main-opts  ["-m" "clj-kondo.main"]}}}

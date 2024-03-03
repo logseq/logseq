@@ -5,9 +5,12 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.common.path :as path]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
-            [shadow.resource :as rc]))
+            [shadow.resource :as rc]
+            [goog.crypt.Md5]
+            [goog.crypt :as crypt]))
 
 (goog-define DEV-RELEASE false)
 (defonce dev-release? DEV-RELEASE)
@@ -16,24 +19,47 @@
 (goog-define PUBLISHING false)
 (defonce publishing? PUBLISHING)
 
+(goog-define REVISION "unknown")
+(defonce revision REVISION)
+
 (reset! state/publishing? publishing?)
 
-(def test? false)
+(goog-define TEST false)
+(def test? TEST)
 
 (goog-define ENABLE-FILE-SYNC-PRODUCTION false)
+
+;; this is a feature flag to enable the account tab
+;; when it launches (when pro plan launches) it should be removed
+(def ENABLE-SETTINGS-ACCOUNT-TAB false)
 
 (if ENABLE-FILE-SYNC-PRODUCTION
   (do (def FILE-SYNC-PROD? true)
       (def LOGIN-URL
         "https://logseq-prod.auth.us-east-1.amazoncognito.com/login?client_id=3c7np6bjtb4r1k1bi9i049ops5&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
       (def API-DOMAIN "api.logseq.com")
-      (def WS-URL "wss://ws.logseq.com/file-sync?graphuuid=%s"))
+      (def WS-URL "wss://ws.logseq.com/file-sync?graphuuid=%s")
+      (def COGNITO-IDP "https://cognito-idp.us-east-1.amazonaws.com/")
+      (def COGNITO-CLIENT-ID "69cs1lgme7p8kbgld8n5kseii6")
+      (def REGION "us-east-1")
+      (def USER-POOL-ID "us-east-1_dtagLnju8")
+      (def IDENTITY-POOL-ID "us-east-1:d6d3b034-1631-402b-b838-b44513e93ee0")
+      (def OAUTH-DOMAIN "logseq-prod.auth.us-east-1.amazoncognito.com")
+      (def CONNECTIVITY-TESTING-S3-URL "https://logseq-connectivity-testing-prod.s3.us-east-1.amazonaws.com/logseq-connectivity-testing")
+      )
 
   (do (def FILE-SYNC-PROD? false)
       (def LOGIN-URL
         "https://logseq-test2.auth.us-east-2.amazoncognito.com/login?client_id=3ji1a0059hspovjq5fhed3uil8&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
       (def API-DOMAIN "api-dev.logseq.com")
-      (def WS-URL "wss://ws-dev.logseq.com/file-sync?graphuuid=%s")))
+      (def WS-URL "wss://ws-dev.logseq.com/file-sync?graphuuid=%s")
+      (def COGNITO-IDP "https://cognito-idp.us-east-2.amazonaws.com/")
+      (def COGNITO-CLIENT-ID "1qi1uijg8b6ra70nejvbptis0q")
+      (def REGION "us-east-2")
+      (def USER-POOL-ID "us-east-2_kAqZcxIeM")
+      (def IDENTITY-POOL-ID "us-east-2:cc7d2ad3-84d0-4faf-98fe-628f6b52c0a5")
+      (def OAUTH-DOMAIN "logseq-test2.auth.us-east-2.amazoncognito.com")
+      (def CONNECTIVITY-TESTING-S3-URL "https://logseq-connectivity-testing-prod.s3.us-east-1.amazonaws.com/logseq-connectivity-testing")))
 
 ;; Feature flags
 ;; =============
@@ -90,24 +116,21 @@
   #{:doc :docx :xls :xlsx :ppt :pptx :one :pdf :epub})
 
 (def image-formats
-  #{:png :jpg :jpeg :bmp :gif :webp :svg})
+  #{:png :jpg :jpeg :bmp :gif :webp :svg :heic})
 
 (def audio-formats
   #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
 
 (def video-formats
-  #{:mp4 :webm :mov})
+  #{:mp4 :webm :mov :flv :avi :mkv})
 
-(def media-formats (set/union (gp-config/img-formats) audio-formats))
-
-(def html-render-formats
-  #{:adoc :asciidoc})
+(def media-formats (set/union (gp-config/img-formats) audio-formats video-formats))
 
 (defn extname-of-supported?
   ([input] (extname-of-supported?
             input
             [image-formats doc-formats audio-formats
-             video-formats markup-formats html-render-formats
+             video-formats markup-formats
              (gp-config/text-formats)]))
   ([input formats]
    (when-let [input (some->
@@ -117,10 +140,32 @@
                        (string/replace-first "." ""))
                      (util/safe-lower-case)
                      (keyword))]
-     (some
-      (fn [s]
-        (contains? s input))
-      formats))))
+     (boolean
+       (some
+         (fn [s]
+           (contains? s input))
+         formats)))))
+
+(defn ext-of-video?
+  ([s] (ext-of-video? s true))
+  ([s html5?]
+   (when-let [s (and (string? s) (util/get-file-ext s))]
+     (let [video-formats (cond-> video-formats
+                                 html5? (disj :mkv))]
+       (extname-of-supported? s [video-formats])))))
+
+(defn ext-of-audio?
+  ([s] (ext-of-audio? s true))
+  ([s html5?]
+   (when-let [s (and (string? s) (util/get-file-ext s))]
+     (let [audio-formats (cond-> audio-formats
+                                 html5? (disj :wma :ogg))]
+       (extname-of-supported? s [audio-formats])))))
+
+(defn ext-of-image?
+  [s]
+  (when-let [s (and (string? s) (util/get-file-ext s))]
+    (extname-of-supported? s [image-formats])))
 
 (def mobile?
   "Triggering condition: Mobile phones
@@ -216,7 +261,7 @@
 
 (defn link-format
   [format label link]
-  (if label
+  (if (not-empty label)
     (case format
       :org
       (util/format "[[%s][%s]]" link label)
@@ -293,20 +338,29 @@
   "Demo graph or nil graph?"
   ([]
    (demo-graph? (state/get-current-repo)))
-  ([graph]
-   (or (nil? graph) (= graph local-repo))))
+  ([repo-url]
+   (or (nil? repo-url) (= repo-url local-repo))))
 
 (defonce recycle-dir ".recycle")
 (def config-file "config.edn")
 (def custom-css-file "custom.css")
 (def export-css-file "export.css")
 (def custom-js-file "custom.js")
-(def config-default-content (rc/inline "config.edn"))
+(def config-default-content (rc/inline "templates/config.edn"))
+(def config-default-content-md5 (let [md5 (new crypt/Md5)]
+                                  (.update md5 (crypt/stringToUtf8ByteArray config-default-content))
+                                  (crypt/byteArrayToHex (.digest md5))))
+
+;; NOTE: repo-url is the unique identifier of a repo.
+;; - `local` => in-memory demo graph
+;; - `logseq_local_/absolute/path/to/graph` => local graph, native fs backend
+;; - `logseq_local_x:/absolute/path/to/graph` => local graph, native fs backend, on Windows
+;; - `logseq_local_GraphName` => local graph, browser fs backend
+;; - Use `""` while writing global files
 
 (defonce idb-db-prefix "logseq-db/")
 (defonce local-db-prefix "logseq_local_")
 (defonce local-handle "handle")
-(defonce local-handle-prefix (str local-handle "/" local-db-prefix))
 
 (defn local-db?
   [s]
@@ -321,6 +375,7 @@
   [s]
   (string/replace s local-db-prefix ""))
 
+;; FIXME(andelf): this is not the reverse op of get-repo-dir, should be fixed
 (defn get-local-repo
   [dir]
   (str local-db-prefix dir))
@@ -328,24 +383,44 @@
 (defn get-repo-dir
   [repo-url]
   (cond
+    (nil? repo-url)
+    (do
+      (js/console.error "BUG: nil repo")
+      nil)
+
     (and (util/electron?) (local-db? repo-url))
     (get-local-dir repo-url)
 
     (and (mobile-util/native-platform?) (local-db? repo-url))
     (let [dir (get-local-dir repo-url)]
-      (if (string/starts-with? dir "file:")
+      (if (string/starts-with? dir "file://")
         dir
-        (str "file:///" (string/replace dir #"^/+" ""))))
+        (path/path-join "file://" dir)))
+
+    ;; Special handling for demo graph
+    (= repo-url "local")
+    "memory:///local"
+
+    ;; nfs, browser-fs-access
+    ;; Format: logseq_local_{dir-name}
+    (local-db? repo-url)
+    (string/replace-first repo-url local-db-prefix "")
+
+    ;; unit test
+    (= repo-url "test-db")
+    "/test-db"
 
     :else
-    (str "/"
-         (->> (take-last 2 (string/split repo-url #"/"))
-              (string/join "_")))))
+    (do
+      (js/console.error "BUG: This should be unreachable! get-repo-dir" repo-url)
+      (str "/"
+           (->> (take-last 2 (string/split repo-url #"/"))
+                (string/join "_"))))))
 
 (defn get-string-repo-dir
   [repo-dir]
   (if (mobile-util/native-ios?)
-    (str (if (mobile-util/iCloud-container-path? repo-dir)
+    (str (if (mobile-util/in-iCloud-container-path? repo-dir)
            "iCloud"
            (cond (mobile-util/native-iphone?)
                  "On My iPhone"
@@ -359,105 +434,61 @@
               last
               gp-util/safe-decode-uri-component
               (str "/" (string/capitalize app-name) "/")))
-    (get-repo-dir repo-dir)))
+    (get-repo-dir (get-local-repo repo-dir))))
 
-(defn get-repo-path
+(defn get-repo-fpath
   [repo-url path]
-  (if (and (or (util/electron?) (mobile-util/native-platform?))
-           (local-db? repo-url))
-    path
-    (util/node-path.join (get-repo-dir repo-url) path)))
-
-;; FIXME: There is another normalize-file-protocol-path at src/main/frontend/fs/capacitor_fs.cljs
-(defn get-file-path
-  "Normalization happens here"
-  [repo-url relative-path]
-  (when (and repo-url relative-path)
-    (let [path (cond
-                 (demo-graph?)
-                 nil
-
-                 (and (util/electron?) (local-db? repo-url))
-                 (let [dir (get-repo-dir repo-url)]
-                   (if (string/starts-with? relative-path dir)
-                     relative-path
-                     (str dir "/"
-                          (string/replace relative-path #"^/" ""))))
-
-                 (and (mobile-util/native-ios?) (local-db? repo-url))
-                 (let [dir (get-repo-dir repo-url)]
-                   (util/safe-path-join dir relative-path))
-
-                 (and (mobile-util/native-android?) (local-db? repo-url))
-                 (let [dir (get-repo-dir repo-url)
-                       dir (if (or (string/starts-with? dir "file:")
-                                   (string/starts-with? dir "content:"))
-                             dir
-                             (str "file:///" (string/replace dir #"^/+" "")))]
-                   (util/safe-path-join dir relative-path))
-
-                 (= "/" (first relative-path))
-                 (subs relative-path 1)
-
-                 :else
-                 relative-path)]
-      (and (not-empty path) (gp-util/path-normalize path)))))
-
-;; NOTE: js/encodeURIComponent cannot be used here
-(defn get-page-file-path
-  "Get the path to the page file for the given page. This is used when creating new files."
-  [repo-url sub-dir page-name ext]
-  (let [page-basename (if (mobile-util/native-platform?)
-                        (js/encodeURI page-name)
-                        page-name)]
-    (get-file-path repo-url (str sub-dir "/" page-basename "." ext))))
+  (path/path-join (get-repo-dir repo-url) path))
 
 (defn get-repo-config-path
-  ([]
-   (get-repo-config-path (state/get-current-repo)))
-  ([repo]
-   (when repo
-     (get-file-path repo (str app-name "/" config-file)))))
+  []
+  (path/path-join app-name config-file))
 
 (defn get-custom-css-path
   ([]
    (get-custom-css-path (state/get-current-repo)))
   ([repo]
-   (when repo
-     (get-file-path repo
-                    (str app-name "/" custom-css-file)))))
+   (when-let [repo-dir (get-repo-dir repo)]
+     (path/path-join repo-dir app-name custom-css-file))))
 
 (defn get-export-css-path
   ([]
    (get-export-css-path (state/get-current-repo)))
   ([repo]
-   (when repo
-     (get-file-path repo
-                    (str app-name "/" export-css-file)))))
+   (when-let [repo-dir (get-repo-dir repo)]
+     (path/path-join repo-dir app-name  export-css-file))))
 
 (defn expand-relative-assets-path
+  "Resolve all relative links in custom.css to assets:// URL"
   ;; ../assets/xxx -> {assets|file}://{current-graph-root-path}/xxx
   [source]
-  (when-let [protocol (and (string? source)
-                           (not (string/blank? source))
-                           (if (util/electron?) "assets" "file"))]
-
-    (string/replace
-     source "../assets" (util/format "%s://%s/assets" protocol (get-repo-dir (state/get-current-repo))))))
+  (when-not (string/blank? source)
+    (let [protocol (and (string? source)
+                        (not (string/blank? source))
+                        (if (util/electron?) "assets://" "file://"))
+          ;; BUG: use "assets" as fake current directory
+          assets-link-fn (fn [_]
+                           (let [graph-root (get-repo-dir (state/get-current-repo))
+                                 protocol (if (string/starts-with? graph-root "file:") "" protocol)
+                                 full-path (path/path-join protocol graph-root "assets")]
+                             (str (cond-> full-path
+                                          (mobile-util/native-platform?)
+                                          (mobile-util/convert-file-src))
+                                  "/")))]
+      (string/replace source #"\.\./assets/" assets-link-fn))))
 
 (defn get-current-repo-assets-root
   []
-  (when-let [repo-root (and (local-db? (state/get-current-repo))
-                            (get-repo-dir (state/get-current-repo)))]
-    (util/node-path.join repo-root "assets")))
+  (when-let [repo-dir (and (local-db? (state/get-current-repo))
+                           (get-repo-dir (state/get-current-repo)))]
+    (path/path-join repo-dir "assets")))
 
 (defn get-custom-js-path
   ([]
    (get-custom-js-path (state/get-current-repo)))
   ([repo]
-   (when repo
-     (get-file-path repo
-                    (str app-name "/" custom-js-file)))))
+   (when-let [repo-dir (get-repo-dir repo)]
+     (path/path-join repo-dir app-name custom-js-file))))
 
 (defn get-block-hidden-properties
   []

@@ -6,7 +6,7 @@
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
             ["@capacitor/status-bar" :refer [^js StatusBar Style]]
-            ["@hugotomazi/capacitor-navigation-bar" :refer [^js NavigationBar]]
+            ["@capgo/capacitor-navigation-bar" :refer [^js NavigationBar]]
             ["grapheme-splitter" :as GraphemeSplitter]
             ["remove-accents" :as removeAccents]
             ["sanitize-filename" :as sanitizeFilename]
@@ -27,7 +27,10 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [clojure.core.async :as async]
-            [cljs.core.async.impl.channels :refer [ManyToManyChannel]]))
+            [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
+            [medley.core :as medley]
+            [frontend.pubsub :as pubsub]))
+  #?(:cljs (:import [goog.async Debouncer]))
   (:require
    [clojure.pprint]
    [clojure.string :as string]
@@ -54,9 +57,20 @@
               (or
                (gdom/getElementByClass "sidebar-item-list")
                (app-scroll-container-node))))))
+#?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
+#?(:cljs (defonce convert-to-roman utils/convertToRoman))
+#?(:cljs (defonce convert-to-letters utils/convertToLetters))
+#?(:cljs (defonce hsl2hex utils/hsl2hex))
+
+(defn string-join-path
+  "Replace all `strings/join` used to construct paths with this function to reduce lint output.
+  https://github.com/logseq/logseq/pull/8679"
+  [parts]
+  (string/join "/" parts))
 
 #?(:cljs
    (defn safe-re-find
+     {:malli/schema [:=> [:cat :any :string] [:or :nil :string [:vector [:maybe :string]]]]}
      [pattern s]
      (when-not (string? s)
        ;; TODO: sentry
@@ -69,49 +83,73 @@
      (def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
      (defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
      (defn uuid-string?
+       {:malli/schema [:=> [:cat :string] :boolean]}
        [s]
-       (safe-re-find exactly-uuid-pattern s))
-     (defn check-password-strength [input]
+       (boolean (safe-re-find exactly-uuid-pattern s)))
+     (defn check-password-strength
+       {:malli/schema [:=> [:cat :string] [:maybe
+                                           [:map
+                                            [:contains [:sequential :string]]
+                                            [:length :int]
+                                            [:id :int]
+                                            [:value :string]]]]}
+       [input]
        (when-let [^js ret (and (string? input)
                                (not (string/blank? input))
                                (passwordStrength input))]
          (bean/->clj ret)))
-     (defn safe-sanitize-file-name [s]
+     (defn safe-sanitize-file-name
+       {:malli/schema [:=> [:cat :string] :string]}
+       [s]
        (sanitizeFilename (str s)))))
 
-#?(:cljs
-   (defn ios?
-     []
-     (utils/ios)))
 
 #?(:cljs
-   (defn safari?
-     []
-     (let [ua (string/lower-case js/navigator.userAgent)]
-       (and (string/includes? ua "webkit")
-            (not (string/includes? ua "chrome"))))))
+   (do
+     (defn- ios*?
+       []
+       (utils/ios))
+     (def ios? (memoize ios*?))))
 
 #?(:cljs
-   (defn mobile?
-     "Triggering condition: Mobile phones
+   (do
+     (defn- safari*?
+       []
+       (let [ua (string/lower-case js/navigator.userAgent)]
+         (and (string/includes? ua "webkit")
+              (not (string/includes? ua "chrome")))))
+     (def safari? (memoize safari*?))))
+
+#?(:cljs
+   (do
+     (defn- mobile*?
+       "Triggering condition: Mobile phones
         *** Warning!!! ***
         For UX logic only! Don't use for FS logic
         iPad / Android Pad doesn't trigger!"
-     []
-     (when-not node-test?
-       (safe-re-find #"Mobi" js/navigator.userAgent))))
+       []
+       (when-not node-test?
+         (safe-re-find #"Mobi" js/navigator.userAgent)))
+     (def mobile? (memoize mobile*?))))
 
 #?(:cljs
-   (defn electron?
-     []
-     (when (and js/window (gobj/get js/window "navigator"))
-       (gstring/caseInsensitiveContains js/navigator.userAgent " electron"))))
+   (do
+     (defn- electron*?
+       []
+       (when (and js/window (gobj/get js/window "navigator"))
+         (gstring/caseInsensitiveContains js/navigator.userAgent " electron")))
+     (def electron? (memoize electron*?))))
 
 #?(:cljs
    (defn mocked-open-dir-path
      "Mocked open DIR path for by-passing open dir in electron during testing. Nil if not given"
      []
      (when (electron?) (. js/window -__MOCKED_OPEN_DIR_PATH__))))
+
+;; #?(:cljs
+;;    (defn ci?
+;;      []
+;;      (boolean (. js/window -__E2E_TESTING__))))
 
 #?(:cljs
    (do
@@ -167,26 +205,63 @@
 
 ;; Keep the following colors in sync with common.css
 #?(:cljs
+   (defn- get-computed-bg-color
+     []
+     ;; window.getComputedStyle(document.body, null).getPropertyValue('background-color');
+     (let [styles (js/window.getComputedStyle (js/document.querySelector "#app-container"))
+           bg-color (gobj/get styles "background-color")
+           ;; convert rgb(r,g,b) to #rrggbb
+           rgb2hex (fn [rgb]
+                     (->> rgb
+                          (map (comp #(.toString % 16) parse-long string/trim))
+                          (map #(if (< (count %) 2)
+                                  (str "0" %)
+                                  %))
+                          (string/join)
+                          (str "#")))]
+       (when (string/starts-with? bg-color "rgb(")
+         (let [rgb (-> bg-color
+                       (string/replace #"^rgb\(" "")
+                       (string/replace #"\)$" "")
+                       (string/split #","))
+               rgb (take 3 rgb)]
+           (rgb2hex rgb)))))
+)
+
+#?(:cljs
+   (defn set-android-theme
+     []
+     (when (mobile-util/native-android?)
+       (when-let [bg-color (try (get-computed-bg-color)
+                                (catch :default _
+                                  nil))]
+         (.setNavigationBarColor NavigationBar (clj->js {:color bg-color}))
+         (.setBackgroundColor StatusBar (clj->js {:color bg-color}))))))
+
+#?(:cljs
    (defn set-theme-light
      []
      (p/do!
       (.setStyle StatusBar (clj->js {:style (.-Light Style)}))
-      (when (mobile-util/native-android?)
-        (.setColor NavigationBar (clj->js {:color "#ffffff"}))
-        (.setBackgroundColor StatusBar (clj->js {:color "#ffffff"}))))))
+      (set-android-theme))))
 
 #?(:cljs
    (defn set-theme-dark
      []
      (p/do!
       (.setStyle StatusBar (clj->js {:style (.-Dark Style)}))
-      (when (mobile-util/native-android?)
-        (.setColor NavigationBar (clj->js {:color "#002b36"}))
-        (.setBackgroundColor StatusBar (clj->js {:color "#002b36"}))))))
+      (set-android-theme))))
 
 (defn find-first
   [pred coll]
   (first (filter pred coll)))
+
+(defn find-index
+  "Find first index of an element in list"
+  [pred-or-val coll]
+  (let [pred (if (fn? pred-or-val) pred-or-val #(= pred-or-val %))]
+    (reduce-kv #(if (pred %3) (reduced %2) %1) -1
+               (cond-> coll (list? coll) (vec)))))
 
 ;; (defn format
 ;;   [fmt & args]
@@ -195,16 +270,6 @@
 (defn remove-nils-non-nested
   [nm]
   (into {} (remove (comp nil? second)) nm))
-
-(defn ext-of-image? [s]
-  (some #(-> (string/lower-case s)
-             (string/ends-with? %))
-        [".png" ".jpg" ".jpeg" ".bmp" ".gif" ".webp" ".svg"]))
-
-(defn ext-of-video? [s]
-  (some #(-> (string/lower-case s)
-             (string/ends-with? %))
-        [".mp4" ".mkv" ".mov" ".wmv" ".avi" ".webm" ".mpg" ".ts" ".ogg" ".flv"]))
 
 ;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
 (defn hiccup->class
@@ -237,6 +302,7 @@
 #?(:cljs
    (defn safe-parse-int
      "Use if arg could be an int or string. If arg is only a string, use `parse-long`."
+     {:malli/schema [:=> [:cat [:or :int :string]] :int]}
      [x]
      (if (string? x)
        (parse-long x)
@@ -245,10 +311,12 @@
 #?(:cljs
    (defn safe-parse-float
      "Use if arg could be a float or string. If arg is only a string, use `parse-double`"
+     {:malli/schema [:=> [:cat [:or :double :string]] :double]}
      [x]
      (if (string? x)
        (parse-double x)
        x)))
+
 
 #?(:cljs
    (defn debounce
@@ -265,6 +333,19 @@
                                       (reset! t nil)
                                       (apply f args))
                                    threshold)))))))
+#?(:cljs
+   (defn cancelable-debounce
+     "Create a stateful debounce function with specified interval
+
+      Returns [fire-fn, cancel-fn]
+
+      Use `fire-fn` to call the function(debounced)
+
+      Use `cancel-fn` to cancel pending callback if there is"
+     [f interval]
+     (let [debouncer (Debouncer. f interval)]
+       [(fn [& args] (.apply (.-fire debouncer) debouncer (to-array args)))
+        (fn [] (.stop debouncer))])))
 
 (defn nth-safe [c i]
   (if (or (< i 0) (>= i (count c)))
@@ -355,6 +436,23 @@
      (when e (.stopPropagation e))))
 
 #?(:cljs
+   (defn nearest-scrollable-container [^js/HTMLElement element]
+     (some #(when-let [overflow-y (.-overflowY (js/window.getComputedStyle %))]
+              (when (contains? #{"auto" "scroll" "overlay"} overflow-y)
+                %))
+           (take-while (complement nil?) (iterate #(.-parentElement %) element)))))
+
+#?(:cljs
+   (defn element-visible?
+     [element]
+     (when element
+       (when-let [r (.getBoundingClientRect element)]
+         (and (>= (.-top r) 0)
+              (<= (+ (.-bottom r) 64)
+                  (or (.-innerHeight js/window)
+                      (js/document.documentElement.clientHeight))))))))
+
+#?(:cljs
    (defn element-top [elem top]
      (when elem
        (if (.-offsetParent elem)
@@ -403,6 +501,19 @@
       (scroll-to (app-scroll-container-node) 0 false))
      ([animate?]
       (scroll-to (app-scroll-container-node) 0 animate?))))
+
+#?(:cljs
+   (defn scroll-to-block
+     "Scroll into the view to vertically align a non-visible block to the centre
+     of the visible area"
+     ([block]
+      (scroll-to-block block true))
+     ([block animate?]
+      (when block
+        (when-not (element-visible? block)
+          (.scrollIntoView block
+                           #js {:behavior (if animate? "smooth" "auto")
+                                :block    "center"}))))))
 
 #?(:cljs
    (defn link?
@@ -466,30 +577,17 @@
   [s substr]
   (string/starts-with? s substr))
 
-(defn distinct-by
-  [f col]
-  (reduce
-   (fn [acc x]
-     (if (some #(= (f x) (f %)) acc)
-       acc
-       (vec (conj acc x))))
-   []
-   col))
 
-(defn distinct-by-last-wins
-  [f col]
-  (reduce
-   (fn [acc x]
-     (if (some #(= (f x) (f %)) acc)
-       (mapv
-        (fn [v]
-          (if (= (f x) (f v))
-            x
-            v))
-        acc)
-       (vec (conj acc x))))
-   []
-   col))
+#?(:cljs
+   (defn distinct-by
+     [f col]
+     (medley/distinct-by f (seq col))))
+
+#?(:cljs
+   (defn distinct-by-last-wins
+     [f col]
+     {:pre [(sequential? col)]}
+     (reverse (distinct-by f (reverse col)))))
 
 (defn get-git-owner-and-repo
   [repo-url]
@@ -499,13 +597,6 @@
   [s]
   (if (string? s)
     (string/lower-case s) s))
-
-#?(:cljs
-   (defn safe-path-join [prefix & paths]
-     (let [path (apply node-path.join (cons prefix paths))]
-       (if (and (electron?) (gstring/caseInsensitiveStartsWith path "file://"))
-         (gp-util/safe-decode-uri-component (subs path 7))
-         path))))
 
 (defn trim-safe
   [s]
@@ -531,6 +622,10 @@
       (str left
            (when-not not-space? " ")
            (triml-without-newlines right)))))
+
+(defn cjk-string?
+  [s]
+  (re-find #"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]" s))
 
 ;; Add documentation
 (defn replace-first [pattern s new-value]
@@ -720,9 +815,13 @@
             (rec-get-blocks-content-section (gobj/get node "parentNode"))))))
 
 #?(:cljs
-   (defn get-blocks-noncollapse []
-     (->> (d/sel "div:not(.reveal) .ls-block")
-          (filter (fn [b] (some? (gobj/get b "offsetParent")))))))
+   (defn get-blocks-noncollapse
+     ([]
+      (->> (d/sel "div:not(.reveal) .ls-block")
+           (filter (fn [b] (some? (gobj/get b "offsetParent"))))))
+     ([blocks-container]
+      (->> (d/sel blocks-container "div:not(.reveal) .ls-block")
+           (filter (fn [b] (some? (gobj/get b "offsetParent"))))))))
 
 #?(:cljs
    (defn remove-embedded-blocks [blocks]
@@ -738,10 +837,15 @@
 
 #?(:cljs
    (defn copy-to-clipboard!
-     ([s]
-      (utils/writeClipboard (clj->js {:text s})))
-     ([s html]
-      (utils/writeClipboard (clj->js {:text s :html html})))))
+     [text & {:keys [html blocks owner-window]}]
+     (let [data (clj->js
+                 (gp-util/remove-nils-non-nested
+                  {:text text
+                   :html html
+                   :blocks (when (seq blocks) (pr-str blocks))}))]
+       (if owner-window
+         (utils/writeClipboard data owner-window)
+         (utils/writeClipboard data)))))
 
 (defn drop-nth [n coll]
   (keep-indexed #(when (not= %1 n) %2) coll))
@@ -756,13 +860,6 @@
 (defn time-ms
   []
   #?(:cljs (tc/to-long (t/now))))
-
-;; Returns the milliseconds representation of the provided time, in the local timezone.
-;; For example, if you run this function at 10pm EDT in the EDT timezone on May 31st,
-;; it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00.
-#?(:cljs
-   (defn today-at-local-ms [hours mins secs millisecs]
-     (.setHours (js/Date. (.now js/Date)) hours mins secs millisecs)))
 
 (defn d
   [k f]
@@ -792,14 +889,19 @@
 
 #?(:cljs
    (defn get-prev-block-non-collapsed
-     [block]
-     (when-let [blocks (get-blocks-noncollapse)]
-       (let [block-id (.-id block)
-             block-ids (mapv #(.-id %) blocks)]
-         (when-let [index (.indexOf block-ids block-id)]
-           (let [idx (dec index)]
-             (when (>= idx 0)
-               (nth-safe blocks idx))))))))
+     "Gets previous non-collapsed block. If given a container
+      looks up blocks in that container e.g. for embed"
+     ([block] (get-prev-block-non-collapsed block {}))
+     ([block {:keys [container]}]
+      (when-let [blocks (if container
+                          (get-blocks-noncollapse container)
+                          (get-blocks-noncollapse))]
+        (let [block-id (.-id block)
+              block-ids (mapv #(.-id %) blocks)]
+          (when-let [index (.indexOf block-ids block-id)]
+            (let [idx (dec index)]
+              (when (>= idx 0)
+                (nth-safe blocks idx)))))))))
 
 #?(:cljs
    (defn get-prev-block-non-collapsed-non-embed
@@ -891,13 +993,8 @@
 (defonce win32? #?(:cljs goog.userAgent/WINDOWS
                    :clj nil))
 
-#?(:cljs
-   (defn absolute-path?
-     [path]
-     (try
-       (js/window.apis.isAbsolutePath path)
-       (catch :default _
-         (utils/win32 path)))))
+(defonce linux? #?(:cljs goog.userAgent/LINUX
+                   :clj nil))
 
 (defn default-content-with-title
   [text-format]
@@ -924,10 +1021,11 @@
    (defn search-normalize
      "Normalize string for searching (loose)"
      [s remove-accents?]
-     (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
-       (if remove-accents?
-         (removeAccents  normalize-str)
-         normalize-str))))
+     (when s
+       (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
+         (if remove-accents?
+           (removeAccents normalize-str)
+           normalize-str)))))
 
 #?(:cljs
    (def page-name-sanity-lc
@@ -964,18 +1062,8 @@
                      (d/set-attr! :type "text/css")
                      (d/set-attr! :href style)
                      (d/set-attr! :media "all"))]
-           (d/append! parent-node link))))))
-
-(defn ->platform-shortcut
-  [keyboard-shortcut]
-  (let [result (or keyboard-shortcut "")
-        result (string/replace result "left" "←")
-        result (string/replace result "right" "→")]
-    (if mac?
-      (-> result
-          (string/replace "Ctrl" "Cmd")
-          (string/replace "Alt" "Opt"))
-      result)))
+           (d/append! parent-node link))
+         (set-android-theme)))))
 
 (defn remove-common-preceding
   [col1 col2]
@@ -998,7 +1086,7 @@
   (let [parts (string/split path "/")
         basename (last parts)
         dir (->> (butlast parts)
-                 (string/join "/"))]
+                 string-join-path)]
     [dir basename]))
 
 (defn get-relative-path
@@ -1014,7 +1102,7 @@
             ["."])
           parts-2
           [another-file-name])
-         (string/join "/"))))
+         string-join-path)))
 
 ;; Copied from https://github.com/tonsky/datascript-todo
 #?(:clj
@@ -1030,34 +1118,15 @@
 
 #?(:clj
    (defmacro with-time
-     "Evaluates expr and prints the time it took. Returns the value of expr and the spent time."
+     "Evaluates expr and prints the time it took.
+      Returns the value of expr and the spent time of float number in msecs."
      [expr]
      `(let [start# (cljs.core/system-time)
             ret# ~expr]
         {:result ret#
-         :time (.toFixed (- (cljs.core/system-time) start#) 6)})))
+         :time (- (cljs.core/system-time) start#)})))
 
 ;; TODO: profile and profileEnd
-
-;; Copy from hiccup but tweaked for publish usage
-(defn escape-html
-  "Change special characters into HTML character entities."
-  [text]
-  (-> text
-      (string/replace "&"  "logseq____&amp;")
-      (string/replace "<"  "logseq____&lt;")
-      (string/replace ">"  "logseq____&gt;")
-      (string/replace "\"" "logseq____&quot;")
-      (string/replace "'" "logseq____&apos;")))
-
-(defn unescape-html
-  [text]
-  (-> text
-      (string/replace "logseq____&amp;" "&")
-      (string/replace "logseq____&lt;" "<")
-      (string/replace "logseq____&gt;" ">")
-      (string/replace "logseq____&quot;" "\"")
-      (string/replace "logseq____&apos;" "'")))
 
 (comment
   (= (get-relative-path "journals/2020_11_18.org" "pages/grant_ideas.org")
@@ -1070,18 +1139,6 @@
      "../e/f.org"))
 
 (defn keyname [key] (str (namespace key) "/" (name key)))
-
-#?(:cljs
-   (defn select-highlight!
-     [blocks]
-     (doseq [block blocks]
-       (d/add-class! block "selected noselect"))))
-
-#?(:cljs
-   (defn select-unhighlight!
-     [blocks]
-     (doseq [block blocks]
-       (d/remove-class! block "selected" "noselect"))))
 
 #?(:cljs
    (defn drain-chan
@@ -1099,11 +1156,11 @@
                will poll it when its return value is channel,
   - :flush-fn exec flush-fn when time to flush, (flush-fn item-coll)
   - :stop-ch stop go-loop when stop-ch closed
-  - :distinct-coll? distinct coll when put into CH
+  - :distinct-key-fn distinct coll when put into CH
   - :chan-buffer buffer of return CH, default use (async/chan 1000)
   - :flush-now-ch flush the content in the queue immediately
   - :refresh-timeout-ch refresh (timeout max-duration)"
-     [in-ch max-duration & {:keys [filter-fn flush-fn stop-ch distinct-coll? chan-buffer flush-now-ch refresh-timeout-ch]}]
+     [in-ch max-duration & {:keys [filter-fn flush-fn stop-ch distinct-key-fn chan-buffer flush-now-ch refresh-timeout-ch]}]
      (let [ch (if chan-buffer (async/chan chan-buffer) (async/chan 1000))
            stop-ch* (or stop-ch (async/chan))
            flush-now-ch* (or flush-now-ch (async/chan))
@@ -1131,8 +1188,8 @@
                                (async/<! filter-v)
                                filter-v)]
                (if filter-v*
-                 (recur timeout-ch (cond-> (conj coll e)
-                                     distinct-coll? distinct
+                 (recur timeout-ch (cond->> (conj coll e)
+                                     distinct-key-fn (distinct-by distinct-key-fn)
                                      true vec))
                  (recur timeout-ch coll)))
 
@@ -1223,14 +1280,15 @@
 #?(:cljs
    (defn- get-dom-top
      [node]
-     (gobj/get (.getBoundingClientRect node) "top")))
+     (when node
+       (gobj/get (.getBoundingClientRect node) "top"))))
 
 #?(:cljs
    (defn sort-by-height
      [elements]
      (sort (fn [x y]
              (< (get-dom-top x) (get-dom-top y)))
-           elements)))
+           (remove nil? elements))))
 
 #?(:cljs
    (defn calc-delta-rect-offset
@@ -1256,10 +1314,6 @@
   (re-matches (re-pattern (regex-escape "$u^8(d)+w.*[dw]d?")) "$u^8(d)+w.*[dw]d?"))
 
 #?(:cljs
-   (defn meta-key-name []
-     (if mac? "Cmd" "Ctrl")))
-
-#?(:cljs
    (defn meta-key? [e]
      (if mac?
        (gobj/get e "metaKey")
@@ -1277,7 +1331,7 @@
 #?(:cljs
    (defn scroll-editor-cursor
      [^js/HTMLElement el & {:keys [to-vw-one-quarter?]}]
-     (when (and el (or (mobile-util/native-platform?) mobile?))
+     (when (and el (or (mobile-util/native-platform?) (mobile?)))
        (let [box-rect    (.getBoundingClientRect el)
              box-top     (.-top box-rect)
              box-bottom  (.-bottom box-rect)
@@ -1300,7 +1354,7 @@
              vw-height   (or (.-height js/window.visualViewport)
                              (.-clientHeight js/document.documentElement))
              ;; mobile toolbar height: 40px
-             scroll      (- cursor-y (- vw-height (+ @keyboard-height 40)))]
+             scroll      (- cursor-y (- vw-height (+ @keyboard-height (+ 40 4))))]
          (cond
            (and to-vw-one-quarter? (> cursor-y (* vw-height 0.4)))
            (set! (.-scrollTop main-node) (+ scroll-top (- cursor-y (/ vw-height 4))))
@@ -1322,30 +1376,49 @@
            nil)))))
 
 #?(:cljs
-   (defn sm-breakpoint?
-     []
-     (< (.-offsetWidth js/document.documentElement) 640)))
+   (do
+     (defn breakpoint?
+       [size]
+       (< (.-offsetWidth js/document.documentElement) size))
+
+     (defn sm-breakpoint?
+       [] (breakpoint? 640))))
 
 #?(:cljs
-   (defn event-is-composing?
-     "Check if keydown event is a composing (IME) event.
-      Ignore the IME process by default."
-     ([e]
-      (event-is-composing? e false))
-     ([e include-process?]
-      (let [event-composing? (gobj/getValueByKeys e "event_" "isComposing")]
-        (if include-process?
-          (or event-composing?
-              (= (gobj/get e "keyCode") 229)
-              (= (gobj/get e "key") "Process"))
-          event-composing?)))))
+   (do
+     (defn goog-event?
+       [^js e]
+       (and e (fn? (gobj/get e "getBrowserEvent"))))
+
+     (defn goog-event-is-composing?
+       "Check if keydown event is a composing (IME) event.
+        Ignore the IME process by default."
+       ([^js e]
+        (goog-event-is-composing? e false))
+       ([^js e include-process?]
+        (when (goog-event? e)
+          (let [event-composing? (some-> (.getBrowserEvent e) (.-isComposing))]
+            (if include-process?
+              (or event-composing?
+                (= (gobj/get e "keyCode") 229)
+                (= (gobj/get e "key") "Process"))
+              event-composing?)))))))
 
 #?(:cljs
-   (defn onchange-event-is-composing?
+   (defn native-event-is-composing?
      "Check if onchange event of Input is a composing (IME) event.
        Always ignore the IME process."
-     [e]
-     (gobj/getValueByKeys e "nativeEvent" "isComposing"))) ;; No keycode available
+     [^js e]
+     (when-let [^js native-event
+                (and e (cond
+                         (goog-event? e)
+                         (.getBrowserEvent e)
+
+                         (js-in "_reactName" e)
+                         (.-nativeEvent e)
+
+                         :else e))]
+       (.-isComposing native-event))))
 
 #?(:cljs
    (defn open-url
@@ -1402,14 +1475,21 @@
         (load url resolve)))))
 
 #?(:cljs
-   (defn element-visible?
-     [element]
-     (when element
-       (when-let [r (.getBoundingClientRect element)]
-         (and (>= (.-top r) 0)
-              (<= (+ (.-bottom r) 64)
-                  (or (.-innerHeight js/window)
-                      (js/document.documentElement.clientHeight))))))))
+   (defn css-load$
+     ([url] (css-load$ url nil))
+     ([url id]
+      (p/create
+       (fn [resolve reject]
+         (let [id (str "css-load-" (or id url))]
+           (if-not (gdom/getElement id)
+             (let [^js link (js/document.createElement "link")]
+               (set! (.-id link) id)
+               (set! (.-rel link) "stylesheet")
+               (set! (.-href link) url)
+               (set! (.-onload link) resolve)
+               (set! (.-onerror link) reject)
+               (.append (.-head js/document) link))
+             (resolve))))))))
 
 #?(:cljs
    (defn copy-image-to-clipboard
@@ -1420,3 +1500,62 @@
                       (.then (fn [blob]
                                (js/navigator.clipboard.write (clj->js [(js/ClipboardItem. (clj->js {(.-type blob) blob}))]))))
                       (.catch js/console.error)))))))
+
+
+(defn memoize-last
+  "Different from core.memoize, it only cache the last result.
+   Returns a memoized version of a referentially transparent function. The
+  memoized version of the function cache the the last result, and replay when calls
+   with the same arguments, or update cache when with different arguments."
+  [f]
+  (let [last-mem (atom nil)
+        last-args (atom nil)]
+    (fn [& args]
+      (if (or (nil? @last-mem)
+              (not= @last-args args))
+        (let [ret (apply f args)]
+          (reset! last-args args)
+          (reset! last-mem ret)
+          ret)
+        @last-mem))))
+
+#?(:cljs
+   (do
+     (defn <app-wake-up-from-sleep-loop
+       "start a async/go-loop to check the app awake from sleep.
+Use (async/tap `pubsub/app-wake-up-from-sleep-mult`) to receive messages.
+Arg *stop: atom, reset to true to stop the loop"
+       [*stop]
+       (let [*last-activated-at (volatile! (tc/to-epoch (t/now)))]
+         (async/go-loop []
+           (if @*stop
+             (println :<app-wake-up-from-sleep-loop :stop)
+             (let [now-epoch (tc/to-epoch (t/now))]
+               (when (< @*last-activated-at (- now-epoch 10))
+                 (async/>! pubsub/app-wake-up-from-sleep-ch {:last-activated-at @*last-activated-at :now now-epoch}))
+               (vreset! *last-activated-at now-epoch)
+               (async/<! (async/timeout 5000))
+               (recur))))))))
+
+
+(defmacro concatv
+  "Vector version of concat. non-lazy"
+  [& args]
+  `(vec (concat ~@args)))
+
+(defmacro mapcatv
+  "Vector version of mapcat. non-lazy"
+  [f coll & colls]
+  `(vec (mapcat ~f ~coll ~@colls)))
+
+(defmacro removev
+  "Vector version of remove. non-lazy"
+  [pred coll]
+  `(vec (remove ~pred ~coll)))
+
+#?(:cljs
+   (defn safe-with-meta
+     [o meta]
+     (if (satisfies? IMeta o)
+       (with-meta o meta)
+       o)))

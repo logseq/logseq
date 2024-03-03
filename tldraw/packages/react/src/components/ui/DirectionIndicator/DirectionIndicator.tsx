@@ -28,14 +28,13 @@ export const DirectionIndicator = observer(function DirectionIndicator<
       const int = intersectRayLineSegment(center, direction, A, B)
       if (!int.didIntersect) continue
       const point = int.points[0]
-      elm.style.setProperty(
-        'transform',
-        `translate(${point[0] - 6}px,${point[1] - 6}px) rotate(${Vec.toAngle(direction)}rad)`
-      )
+      elm.style.transform = `translate(${point[0] - 6}px,${point[1] - 6}px) rotate(${Vec.toAngle(
+        direction
+      )}rad)`
     }
   }, [direction, bounds])
   return (
-    <div ref={rIndicator} className="tl-direction-indicator">
+    <div ref={rIndicator} className="tl-direction-indicator" data-html2canvas-ignore="true">
       <svg height={12} width={12}>
         <polygon points="0,0 12,6 0,12" />
       </svg>

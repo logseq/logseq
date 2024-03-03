@@ -1,7 +1,6 @@
 (ns logseq.graph-parser.config
   "App config that is shared between graph-parser and rest of app"
-  (:require [clojure.set :as set]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [goog.object :as gobj]))
 
 (def app-name
@@ -32,7 +31,7 @@
   [s]
   (if (local-protocol-asset? s)
     (-> s
-        (string/replace-first asset-protocol "")
+        (string/replace-first asset-protocol "file://")
         (string/replace-first capacitor-protocol-with-prefix "file://")
         (string/replace-first capacitor-x-protocol-with-prefix "file://"))
     s))
@@ -67,11 +66,6 @@
 (defn img-formats
   []
   #{:gif :svg :jpeg :ico :png :jpg :bmp :webp})
-
-(defn supported-formats
-  []
-  (set/union (text-formats)
-             (img-formats)))
 
 (defn get-date-formatter
   [config]

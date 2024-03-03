@@ -12,11 +12,12 @@
    [frontend.mobile.util :as mobile-util]
    [frontend.fs :as fs]
    [frontend.components.svg :as svg]
-   [promesa.core :as p]))
+   [promesa.core :as p]
+   [logseq.common.path :as path]))
 
 (defn validate-graph-dirname
   [root dirname]
-  (util/node-path.join root dirname))
+  (path/path-join root dirname))
 
 (rum/defc toggle-item
   [{:keys [on? title on-toggle]}]
@@ -52,21 +53,27 @@
                                (when-let [root (if icloud-sync-on?
                                                  (state/get-icloud-container-root-url)
                                                  (state/get-local-container-root-url))]
-                                 (-> (let [graph-path (validate-graph-dirname root graph-name)]
-                                       (-> (fs/mkdir-if-not-exists graph-path)
-                                           (p/then
-                                            (fn []
-                                              (web-nfs/ls-dir-files-with-path!
-                                               graph-path (merge
-                                                           {:ok-handler
-                                                            (fn []
-                                                              (when logseq-sync-on?
-                                                                (state/pub-event! [:sync/create-remote-graph (state/get-current-repo)])))}
-                                                           opts))
-                                              (notification/show! (str "Create graph: " graph-name) :success)))
-                                           (p/catch (fn [^js e]
-                                                      (notification/show! (str e) :error)
-                                                      (js/console.error e))))))))))]
+                                 (let [graph-path (validate-graph-dirname root graph-name)]
+                                   (-> (fs/mkdir-if-not-exists graph-path)
+                                       ;; iCloud folder creation is slow, so we need to wait for it
+                                       (p/then (fn []
+                                                 (if icloud-sync-on?
+                                                   (js/Promise. (fn [resolve _reject]
+                                                                  (js/setTimeout (fn [] (resolve)) 1000)))
+                                                   (p/resolved nil))))
+                                       (p/then
+                                        (fn []
+                                          (web-nfs/ls-dir-files-with-path!
+                                           graph-path (merge
+                                                       {:ok-handler
+                                                        (fn []
+                                                          (when logseq-sync-on?
+                                                            (state/pub-event! [:sync/create-remote-graph (state/get-current-repo)])))}
+                                                       opts))
+                                          (notification/show! (str "Create graph: " graph-name) :success)))
+                                       (p/catch (fn [^js e]
+                                                  (notification/show! (str e) :error)
+                                                  (js/console.error e)))))))))]
 
     (rum/use-effect!
      (fn []
@@ -92,29 +99,29 @@
        :init
        [:div.flex.flex-col.w-full.space-y-6
         (ui/button
-          [:span.flex.items-center.justify-between.w-full.py-1
-           [:strong "Create a new graph"]
-           (ui/icon "chevron-right")]
+         [:span.flex.items-center.justify-between.w-full.py-1
+          [:strong "Create a new graph"]
+          (ui/icon "chevron-right")]
 
-          :on-click #(if (and native-ios?
-                              (some (fn [s] (not (string/blank? s)))
-                                    (vals (:mobile/container-urls @state/state))))
-                       (set-step! :new-graph)
-                       (open-picker)))
+         :on-click #(if (and native-ios?
+                             (some (fn [s] (not (string/blank? s)))
+                                   (vals (:mobile/container-urls @state/state))))
+                      (set-step! :new-graph)
+                      (open-picker)))
 
         (ui/button
-          [:span.flex.items-center.justify-between.w-full.py-1
-           [:strong "Select an existing graph"]
-           (ui/icon "folder-plus")]
+         [:span.flex.items-center.justify-between.w-full.py-1
+          [:strong "Select an existing graph"]
+          (ui/icon "folder-plus")]
 
-          :intent "logseq"
-          :on-click (fn []
-                      (state/close-modal!)
-                      (page-handler/ls-dir-files! shortcut/refresh!
-                                                  {:dir (when native-ios?
-                                                          (or
-                                                           (state/get-icloud-container-root-url)
-                                                           (state/get-local-container-root-url)))})))]
+         :intent "logseq"
+         :on-click (fn []
+                     (state/close-modal!)
+                     (page-handler/ls-dir-files! shortcut/refresh!
+                                                 {:dir (when native-ios?
+                                                         (or
+                                                          (state/get-icloud-container-root-url)
+                                                          (state/get-local-container-root-url)))})))]
 
        ;; step 1
        :new-graph
@@ -138,8 +145,8 @@
         [:div.flex.justify-between.items-center.pt-2
          (ui/button [:span.flex.items-center
                      (ui/icon "chevron-left" {:size 18}) "Back"]
-           :intent "logseq"
-           :on-click #(set-step! :init))
+                    :intent "logseq"
+                    :on-click #(set-step! :init))
 
          (ui/button "Create"
                     :on-click

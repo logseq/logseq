@@ -4,11 +4,12 @@ module.exports = {
   packagerConfig: {
     name: 'Logseq',
     icon: './icons/logseq_big_sur.icns',
+    buildVersion: 81,
     protocols: [
       {
-        "protocol":"logseq",
-        "name":"logseq",
-        "schemes":"logseq"
+        "protocol": "logseq",
+        "name": "logseq",
+        "schemes": "logseq"
       }
     ],
     osxSign: {
@@ -46,8 +47,9 @@ module.exports = {
     },
     {
       name: '@electron-forge/maker-zip',
-      platforms: ['darwin', 'linux']
+      platforms: ['darwin', 'linux', 'win32'],
     },
+
     {
       name: 'electron-forge-maker-appimage',
       platforms: ['linux'],

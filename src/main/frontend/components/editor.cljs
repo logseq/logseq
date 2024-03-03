@@ -4,8 +4,8 @@
              :refer [*first-command-group *matched-block-commands *matched-commands]]
             [frontend.components.block :as block]
             [frontend.components.datetime :as datetime-comp]
-            [frontend.components.search :as search]
             [frontend.components.svg :as svg]
+            [frontend.components.search :as search]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
@@ -14,6 +14,8 @@
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.handler.page :as page-handler]
             [frontend.handler.paste :as paste-handler]
+            [frontend.handler.search :as search-handler]
+            [frontend.search :refer [fuzzy-search]]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
@@ -42,23 +44,26 @@
         :item-render
         (fn [item]
           (let [command-name (first item)
-                command-doc (get item 2)
-                doc (when (state/show-command-doc?) command-doc)]
+                command-doc  (get item 2)
+                plugin-id    (get-in item [1 1 1 :pid])
+                doc          (when (state/show-command-doc?) command-doc)]
             (cond
+              (or plugin-id (vector? doc))
+              [:div.has-help
+               command-name
+               (when doc (ui/tippy
+                          {:html            doc
+                           :interactive     true
+                           :fixed-position? true
+                           :position        "right"}
+
+                          [:small (svg/help-circle)]))
+               (when plugin-id
+                 [:small {:title (str plugin-id)} (ui/icon "puzzle")])]
+
               (string? doc)
               [:div {:title doc}
                command-name]
-
-              (vector? doc)
-              [:div.has-help
-               command-name
-               (ui/tippy
-                {:html doc
-                 :interactive true
-                 :fixed-position? true
-                 :position "right"}
-
-                [:small (svg/help-circle)])]
 
               :else
               [:div command-name])))
@@ -67,7 +72,7 @@
         (fn [chosen-item]
           (let [command (first chosen-item)]
             (reset! commands/*current-command command)
-            (let [command-steps (get (into {} matched) command)
+            (let [command-steps  (get (into {} matched) command)
                   restore-slash? (or
                                   (contains? #{"Today" "Yesterday" "Tomorrow" "Current time"} command)
                                   (and
@@ -76,7 +81,8 @@
                                    (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
               (editor-handler/insert-command! id command-steps
                                               format
-                                              {:restore? restore-slash?}))))
+                                              {:restore? restore-slash?
+                                               :command  command}))))
         :class
         "black"}))))
 
@@ -89,14 +95,14 @@
        {:on-chosen (fn [chosen]
                      (editor-handler/insert-command! id (get (into {} matched) chosen)
                                                      format
-                                                     {:last-pattern commands/angle-bracket}))
+                                                     {:last-pattern commands/angle-bracket
+                                                      :command :block-commands}))
         :class     "black"}))))
 
 (defn- in-sidebar? [el]
   (not (.contains (.getElementById js/document "left-container") el)))
 
 (rum/defc page-search < rum/reactive
-  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   "Embedded page searching popup"
   [id format]
   (let [action (state/sub :editor/action)]
@@ -108,7 +114,7 @@
                 edit-content (or (state/sub [:editor/content id]) "")
                 sidebar? (in-sidebar? input)
                 q (or
-                   @editor-handler/*selected-text
+                   (editor-handler/get-selected-text)
                    (when (= action :page-search-hashtag)
                      (gp-util/safe-subs edit-content pos current-pos))
                    (when (> (count edit-content) current-pos)
@@ -127,7 +133,7 @@
                                 nil
 
                                 (empty? matched-pages)
-                                (cons (str (t :new-page) ": " q) matched-pages)
+                                (cons q matched-pages)
 
                                ;; reorder, shortest and starts-with first.
                                 :else
@@ -138,8 +144,8 @@
                                                      matched-pages)]
                                   (if (gstring/caseInsensitiveStartsWith (first matched-pages) q)
                                     (cons (first matched-pages)
-                                          (cons  (str (t :new-page) ": " q) (rest matched-pages)))
-                                    (cons (str (t :new-page) ": " q) matched-pages))))]
+                                          (cons q (rest matched-pages)))
+                                    (cons q matched-pages))))]
             (ui/auto-complete
              matched-pages
              {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
@@ -150,7 +156,9 @@
                                {:children
                                 [:div.flex
                                  (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
-                                 (search/highlight-exact-query page-name q)]
+                                 [:div.flex.space-x-1
+                                  [:div (when-not (db/page-exists? page-name) (t :new-page))]
+                                  (search-handler/highlight-exact-query page-name q)]]
                                 :open?           chosen?
                                 :manual?         true
                                 :fixed-position? true
@@ -160,20 +168,25 @@
               :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
               :class       "black"})))))))
 
+(defn- search-blocks!
+  [state result]
+  (let [[edit-block _ _ q] (:rum/args state)]
+    (p/let [matched-blocks (when-not (string/blank? q)
+                             (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
+      (reset! result matched-blocks))))
+
 (rum/defcs block-search-auto-complete < rum/reactive
   {:init (fn [state]
-           (assoc state ::result (atom nil)))
+           (let [result (atom nil)]
+             (search-blocks! state result)
+             (assoc state ::result result)))
    :did-update (fn [state]
-                 (let [result (::result state)
-                       [edit-block _ _ q] (:rum/args state)]
-                   (p/let [matched-blocks (when-not (string/blank? q)
-                                            (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
-                     (reset! result matched-blocks)))
+                 (search-blocks! state (::result state))
                  state)}
-  [state _edit-block input id q format]
+  [state _edit-block input id q format selected-text]
   (let [result (->> (rum/react (get state ::result))
                     (remove (fn [b] (string/blank? (:block/content (db-model/query-block-by-uuid (:block/uuid b)))))))
-        chosen-handler (editor-handler/block-on-chosen-handler input id q format)
+        chosen-handler (editor-handler/block-on-chosen-handler id q format selected-text)
         non-exist-block-handler (editor-handler/block-non-exist-handler input)]
     (ui/auto-complete
      result
@@ -193,7 +206,6 @@
 
 (rum/defcs block-search < rum/reactive
   {:will-unmount (fn [state]
-                   (reset! editor-handler/*selected-text nil)
                    (state/clear-search-result!)
                    state)}
   [state id _format]
@@ -204,15 +216,15 @@
           current-pos (cursor/pos input)
           edit-content (state/sub [:editor/content id])
           edit-block (state/get-edit-block)
+          selected-text (editor-handler/get-selected-text)
           q (or
-             @editor-handler/*selected-text
+             selected-text
              (when (> (count edit-content) current-pos)
                (subs edit-content pos current-pos)))]
       (when input
-        (block-search-auto-complete edit-block input id q format)))))
+        (block-search-auto-complete edit-block input id q format selected-text)))))
 
 (rum/defc template-search < rum/reactive
-  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id _format]
   (let [pos (state/get-editor-last-pos)
         input (gdom/getElement id)]
@@ -236,7 +248,6 @@
           :class       "black"})))))
 
 (rum/defc property-search < rum/reactive
-  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id]
   (let [input (gdom/getElement id)]
     (when input
@@ -256,7 +267,6 @@
           :class       "black"})))))
 
 (rum/defc property-value-search < rum/reactive
-  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id]
   (let [property (:property (state/get-editor-action-data))
         input (gdom/getElement id)]
@@ -283,12 +293,50 @@
           :item-render (fn [property-value] property-value)
           :class       "black"})))))
 
+(rum/defc code-block-mode-keyup-listener
+  [_q _edit-content last-pos current-pos]
+  (rum/use-effect!
+    (fn []
+      (when (< current-pos last-pos)
+        (state/clear-editor-action!)))
+    [last-pos current-pos])
+  [:<>])
+
+(rum/defc code-block-mode-picker < rum/reactive
+  [id format]
+  (when-let [modes (some->> js/window.CodeMirror (.-modes) (js/Object.keys) (js->clj) (remove #(= "null" %)))]
+    (when-let [input (gdom/getElement id)]
+      (let [pos          (state/get-editor-last-pos)
+            current-pos  (cursor/pos input)
+            edit-content (or (state/sub [:editor/content id]) "")
+            q            (or (editor-handler/get-selected-text)
+                             (gp-util/safe-subs edit-content pos current-pos)
+                             "")
+            matched      (seq (fuzzy-search modes q))
+            matched      (or matched (if (string/blank? q) modes [q]))]
+        [:div
+         (code-block-mode-keyup-listener q edit-content pos current-pos)
+         (ui/auto-complete matched
+                           {:on-chosen   (fn [chosen _click?]
+                                           (state/clear-editor-action!)
+                                           (let [prefix (str "```" chosen)
+                                                 last-pattern (str "```" q)]
+                                             (editor-handler/insert-command! id
+                                               prefix format {:last-pattern last-pattern})
+                                             (commands/handle-step [:codemirror/focus])))
+                            :on-enter    (fn []
+                                           (state/clear-editor-action!)
+                                           (commands/handle-step [:codemirror/focus]))
+                            :item-render (fn [mode _chosen?]
+                                           [:strong mode])
+                            :class       "code-block-mode-picker"})]))))
+
 (rum/defcs input < rum/reactive
-  (rum/local {} ::input-value)
-  (mixins/event-mixin
-   (fn [state]
-     (mixins/on-key-down
-      state
+                   (rum/local {} ::input-value)
+                   (mixins/event-mixin
+                     (fn [state]
+                       (mixins/on-key-down
+                         state
       {;; enter
        13 (fn [state e]
             (let [input-value (get state ::input-value)
@@ -337,59 +385,72 @@
 
 (rum/defc absolute-modal < rum/static
   [cp modal-name set-default-width? {:keys [top left rect]}]
-  (let [vw-width js/window.innerWidth
+  (let [MAX-HEIGHT 700
+        MAX-HEIGHT' 600
+        MAX-WIDTH 600
+        SM-MAX-WIDTH 300
+        Y-BOUNDARY-HEIGHT 150
+        vw-width js/window.innerWidth
         vw-height js/window.innerHeight
         vw-max-width (- vw-width (:left rect))
         vw-max-height (- vw-height (:top rect))
+        vw-max-height' (:top rect)
         sm? (< vw-width 415)
-        max-height (min (- vw-max-height 20) 800)
-        max-width (if sm? 300 (min (max 400 (/ vw-max-width 2)) 600))
+        max-height (min (- vw-max-height 20) MAX-HEIGHT)
+        max-height' (min (- vw-max-height' 70) MAX-HEIGHT')
+        max-width (if sm? SM-MAX-WIDTH (min (max 400 (/ vw-max-width 2)) MAX-WIDTH))
         offset-top 24
-        to-max-height (if (and (seq rect) (> vw-height max-height))
-                        (let [delta-height (- vw-height (+ (:top rect) top offset-top))]
-                          (if (< delta-height max-height)
-                            (- (max (* 2 offset-top) delta-height) 16)
-                            max-height))
-                        max-height)
+        to-max-height (cond-> (if (and (seq rect) (> vw-height max-height))
+                                (let [delta-height (- vw-height (+ (:top rect) top offset-top))]
+                                  (if (< delta-height max-height)
+                                    (- (max (* 2 offset-top) delta-height) 16)
+                                    max-height))
+                                max-height)
+
+                              (= modal-name "commands")
+                              (min 500))
         right-sidebar? (:ui/sidebar-open? @state/state)
         editing-key    (first (keys (:editor/editing? @state/state)))
         *el (rum/use-ref nil)
-        _ (rum/use-effect! (fn []
-                             (when-let [^js/HTMLElement cnt
-                                        (and right-sidebar? editing-key
-                                             (js/document.querySelector "#main-content-container"))]
-                               (when (.contains cnt (js/document.querySelector (str "#" editing-key)))
-                                 (let [el  (rum/deref *el)
-                                       ofx (- (.-scrollWidth cnt) (.-clientWidth cnt))]
-                                   (when (> ofx 0)
-                                     (set! (.-transform (.-style el)) (str "translateX(-" (+ ofx 20) "px)")))))))
-                           [right-sidebar? editing-key])
-        y-overflow-vh? (< to-max-height 130)
-        to-max-height (if y-overflow-vh? max-height to-max-height)
+        y-overflow-vh? (or (< to-max-height Y-BOUNDARY-HEIGHT)
+                           (> (- max-height' to-max-height) Y-BOUNDARY-HEIGHT))
+        to-max-height (if y-overflow-vh? max-height' to-max-height)
         pos-rect (when (and (seq rect) editing-key)
                    (:rect (cursor/get-caret-pos (state/get-input))))
         y-diff (when pos-rect (- (:height pos-rect) (:height rect)))
         style (merge
                {:top        (+ top offset-top (if (int? y-diff) y-diff 0))
                 :max-height to-max-height
-                :max-width 700
+                :max-width  700
                 ;; TODO: auto responsive fixed size
-                :width "fit-content"
+                :width      "fit-content"
                 :z-index    11}
                (when set-default-width?
                  {:width max-width})
-               (let [^js/HTMLElement editor
-                     (js/document.querySelector ".editor-wrapper")]
-                 (if (<= (.-clientWidth editor) (+ left (if set-default-width? max-width 500)))
-                   {:right 0}
-                   {:left (if (or (nil? y-diff) (and y-diff (= y-diff 0))) left 0)})))]
+               (if (<= vw-max-width (+ left (if set-default-width? max-width 500)))
+                 {:right 0}
+                 {:left 0}))]
+
+    (rum/use-effect!
+     (fn []
+       (when-let [^js/HTMLElement cnt
+                  (and right-sidebar? editing-key
+                       (js/document.querySelector "#main-content-container"))]
+         (when (.contains cnt (js/document.querySelector (str "#" editing-key)))
+           (let [el  (rum/deref *el)
+                 ofx (- (.-scrollWidth cnt) (.-clientWidth cnt))]
+             (when (> ofx 0)
+               (set! (.-transform (.-style el))
+                     (util/format "translate(-%spx, %s)" (+ ofx 20) (if y-overflow-vh? "calc(-100% - 2rem)" 0))))))))
+     [right-sidebar? editing-key y-overflow-vh?])
+
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
-     {:ref *el
+     {:ref             *el
       :data-modal-name modal-name
-      :class (if y-overflow-vh? "is-overflow-vh-y" "")
-      :on-mouse-down (fn [e]
-                       (.stopPropagation e))
-      :style style}
+      :class           (if y-overflow-vh? "is-overflow-vh-y" "")
+      :on-mouse-down   (fn [e]
+                         (.stopPropagation e))
+      :style           style}
      cp]))
 
 (rum/defc transition-cp < rum/reactive
@@ -447,8 +508,12 @@
 
 (defn get-editor-style-class
   "Get textarea css class according to it's content"
-  [content format]
-  (let [content (if content (str content) "")]
+  [block content format]
+  (let [content (if content (str content) "")
+        heading (-> block :block/properties :heading)
+        heading (if (true? heading)
+                  (min (inc (:block/level block)) 6)
+                  heading)]
     ;; as the function is binding to the editor content, optimization is welcome
     (str
      (if (or (> (.-length content) 1000)
@@ -459,6 +524,7 @@
      (case format
        :markdown
        (cond
+         heading (str "h" heading)
          (string/starts-with? content "# ") "h1"
          (string/starts-with? content "## ") "h2"
          (string/starts-with? content "### ") "h3"
@@ -469,6 +535,7 @@
          :else "normal-block")
        ;; other formats
        (cond
+         heading (str "h" heading)
          (and (string/starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
          :else "normal-block")))))
 
@@ -552,8 +619,12 @@
       (= :property-value-search action)
       (animated-modal "property-value-search" (property-value-search id) true)
 
+      ;; date-picker in editing-mode
       (= :datepicker action)
       (animated-modal "date-picker" (datetime-comp/date-picker id format nil) false)
+
+      (= :select-code-block-mode action)
+      (animated-modal "select-code-block-mode" (code-block-mode-picker id format) true)
 
       (= :input action)
       (animated-modal "input" (input id
@@ -581,7 +652,7 @@
   lifecycle/lifecycle
   [state {:keys [format block]} id _config]
   (let [content (state/sub-edit-content id)
-        heading-class (get-editor-style-class content format)]
+        heading-class (get-editor-style-class block content format)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
 
      (ui/ls-textarea

@@ -1,7 +1,9 @@
 (ns frontend.db.query-dsl-test
   (:require [cljs.test :refer [are deftest testing use-fixtures is]]
             [clojure.string :as str]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.db :as db]
+            [frontend.util :as util]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.test.helper :as test-helper :include-macros true :refer [load-test-files]]))
 
@@ -44,6 +46,30 @@
 
 ;; Tests
 ;; =====
+
+(deftest pre-transform-test
+  (testing "page references should be quoted and tags should be handled"
+    (are [x y] (= (query-dsl/pre-transform x) y)
+     "#foo"
+     "#tag foo"
+
+     "(and #foo)"
+     "(and #tag foo)"
+
+     "[[test #foo]]"
+     "\"[[test #foo]]\""
+
+     "(and [[test #foo]] (or #foo))"
+     "(and \"[[test #foo]]\" (or #tag foo))"
+
+     "\"for #clojure\""
+     "\"for #clojure\""
+
+     "(and \"for #clojure\")"
+     "(and \"for #clojure\")"
+
+     "(and \"for #clojure\" #foo)"
+     "(and \"for #clojure\" #tag foo)")))
 
 (defn- block-property-queries-test
   []
@@ -118,6 +144,21 @@ prop-d:: nada"}])
     (test-helper/with-config {}
       (block-property-queries-test))))
 
+(deftest block-property-query-performance
+  (let [pages (->> (repeat 10 {:tags ["tag1" "tag2"]})
+                   (map-indexed (fn [idx {:keys [tags]}]
+                                  {:file/path (str "pages/page" idx ".md")
+                                   :file/content (if (seq tags)
+                                                   (str "tags:: " (str/join ", " (map page-ref/->page-ref tags)))
+                                                   "")})))
+        _ (load-test-files pages)
+        {:keys [result time]}
+        (util/with-time (dsl-query "(and (property tags tag1) (property tags tag2))"))]
+    ;; Specific number isn't as important as ensuring query doesn't take orders
+    ;; of magnitude longer
+    (is (> 25.0 time) "multi property query perf is reasonable")
+    (is (= 10 (count result)))))
+
 (defn- page-property-queries-test
   []
   (load-test-files [{:file/path "pages/page1.md"
@@ -157,6 +198,10 @@ prop-d:: nada"}])
           (dsl-query "(or (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))")))
       "Page property queries ORed")
 
+  (is (= ["page1" "page3"]
+         (map :block/name
+              (dsl-query "(and (page-property parent [[child page 1]]) (or (page-property interesting true) (page-property parent [[child page 2]])))"))))
+
   (is (= ["page4"]
          (map
           :block/name
@@ -189,31 +234,36 @@ prop-d:: nada"}])
 - NOW b1
 - TODO b2
 - LATER b3
-- LATER [#A] b4"}])
+- LATER [#A] b4
+- LATER [#B] b5"}])
 
   (testing "Lowercase query"
     (is (= ["NOW b1"]
            (map :block/content (dsl-query "(task now)"))))
 
-    (is (= ["LATER b3" "LATER [#A] b4"]
+    (is (= ["LATER b3" "LATER [#A] b4" "LATER [#B] b5"]
            (map :block/content (dsl-query "(task later)")))))
 
-  (is (= ["LATER b3" "LATER [#A] b4"]
+  (is (= ["LATER b3" "LATER [#A] b4" "LATER [#B] b5"]
          (map :block/content (dsl-query "(task LATER)")))
       "Uppercase query")
 
   (testing "Multiple specified tasks results in ORed results"
-    (is (= ["NOW b1" "LATER b3" "LATER [#A] b4"]
+    (is (= ["NOW b1" "LATER b3" "LATER [#A] b4" "LATER [#B] b5"]
            (map :block/content (dsl-query "(task now later)"))))
 
-    (is (= ["NOW b1" "LATER b3" "LATER [#A] b4"]
+    (is (= ["NOW b1" "LATER b3" "LATER [#A] b4" "LATER [#B] b5"]
            (map :block/content (dsl-query "(task [now later])")))
         "Multiple arguments specified with vector notation"))
 
   (is (= ["NOW b1" "LATER [#A] b4"]
          (map :block/content
               (dsl-query "(or (todo now) (and (todo later) (priority a)))")))
-      "Multiple boolean operators with todo and priority operators"))
+      "Multiple boolean operators with todo and priority operators")
+
+  (is (= ["LATER [#A] b4" "LATER [#B] b5"]
+         (map :block/content
+              (dsl-query "(and (todo later) (or (priority a) (priority b)))")))))
 
 (deftest sample-queries
   (load-test-files [{:file/path "pages/page1.md"
@@ -287,6 +337,12 @@ prop-d:: nada"}])
          (->> (dsl-query "(not (and (todo now later) (or [[page 1]] [[page 2]])))")
               (keep :block/content)
               set)))
+
+  (is (= #{"DONE b2 [[page 1]]" "LATER b4 [[page 2]]"}
+         (->> (dsl-query "(and \"b\" (or \"2\" \"4\"))")
+              (keep :block/content)
+              set))
+      "AND-OR with full text search")
 
   ;; FIXME: not working
   ;; Requires or-join and not-join which aren't supported yet
@@ -528,6 +584,26 @@ created-at:: 1608968448116
     (is (= [10 8]
            (->> (dsl-query "(and (page-property rating) (sort-by rating))")
                 (map #(get-in % [:block/properties :rating])))))))
+
+(deftest simplify-query
+  (are [x y] (= (query-dsl/simplify-query x) y)
+    '(and [[foo]])
+    '[[foo]]
+
+    '(and (and [[foo]]))
+    '[[foo]]
+
+    '(and (or [[foo]]))
+    '[[foo]]
+
+    '(and (not [[foo]]))
+    '(not [[foo]])
+
+    '(and (or (and [[foo]])))
+    '[[foo]]
+
+    '(not (or [[foo]]))
+    '(not [[foo]])))
 
 (comment
  (require '[clojure.pprint :as pprint])

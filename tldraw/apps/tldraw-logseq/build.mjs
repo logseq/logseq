@@ -4,8 +4,14 @@ import 'zx/globals'
 import fs from 'fs'
 import path from 'path'
 
+if (process.platform === 'win32') {
+  defaults.shell = "cmd.exe";
+  defaults.prefix = "";
+}
+
 // Build with [tsup](https://tsup.egoist.sh)
 await $`npx tsup`
+
 
 // Prepare package.json file
 const packageJson = fs.readFileSync('package.json', 'utf8')

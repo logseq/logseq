@@ -1,6 +1,5 @@
 (ns frontend.components.repo
-  (:require [clojure.string :as string]
-            [frontend.components.widgets :as widgets]
+  (:require [frontend.components.widgets :as widgets]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -19,15 +18,6 @@
             [frontend.handler.file-sync :as file-sync]
             [reitit.frontend.easy :as rfe]))
 
-(rum/defc add-repo
-  [args]
-  (if-let [graph-types (get-in args [:query-params :graph-types])]
-    (let [graph-types-s (->> (string/split graph-types #",")
-                             (mapv keyword))]
-      (when (seq graph-types-s)
-        (widgets/add-graph :graph-types graph-types-s)))
-    (widgets/add-graph)))
-
 (rum/defc normalized-graph-label
   [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]
   (when graph
@@ -35,10 +25,10 @@
       [:span.flex.items-center
        (if local?
          (let [local-dir (config/get-local-dir url)
-               graph-name (text-util/get-graph-name-from-path local-dir)]
+               graph-name (text-util/get-graph-name-from-path url)]
            [:a.flex.items-center {:title    local-dir
                                   :on-click #(on-click graph)}
-            [:span graph-name (and GraphName [:strong.px-1 "(" GraphName ")"])]
+            [:span graph-name (when GraphName [:strong.px-1 "(" GraphName ")"])]
             (when remote? [:strong.pr-1.flex.items-center (ui/icon "cloud")])])
 
          [:a.flex.items-center {:title    GraphUUID
@@ -47,6 +37,7 @@
           (when remote? [:strong.pl-1.flex.items-center (ui/icon "cloud")])])])))
 
 (rum/defc repos-inner
+  "Graph list in `All graphs` page"
   [repos]
   (for [{:keys [url remote? GraphUUID GraphName] :as repo} repos
         :let [only-cloud? (and remote? (nil? url))]]
@@ -106,7 +97,7 @@
        [:div.pl-1.content.mt-3
 
         [:div
-         [:h2.text-lg.font-medium.my-4 (str (t :graph/local-graphs) ":")]
+         [:h2.text-lg.font-medium.my-4 (t :graph/local-graphs)]
          (when (seq local-graphs)
            (repos-inner local-graphs))
 
@@ -118,11 +109,11 @@
                (t :open-a-directory)
                :on-click #(state/pub-event! [:graph/setup-a-repo]))])]]
 
-        (when (seq remote-graphs)
+        (when (and (file-sync/enable-sync?) login?)
           [:div
            [:hr]
            [:div.flex.align-items.justify-between
-            [:h2.text-lg.font-medium.my-4 (str (t :graph/remote-graphs) ":")]
+            [:h2.text-lg.font-medium.my-4 (t :graph/remote-graphs)]
             [:div
              (ui/button
               [:span.flex.items-center "Refresh"
@@ -145,14 +136,14 @@
         repo-links (mapv
                     (fn [{:keys [url remote? GraphName GraphUUID] :as graph}]
                       (let [local? (config/local-db? url)
-                            repo-path (if local? (db/get-repo-name url) GraphName )
-                            short-repo-name (if local? (text-util/get-graph-name-from-path repo-path) GraphName)]
+                            repo-url (if local? (db/get-repo-name url) GraphName)
+                            short-repo-name (if local? (text-util/get-graph-name-from-path repo-url) GraphName)]
                         (when short-repo-name
                           {:title        [:span.flex.items-center.whitespace-nowrap short-repo-name
                                           (when remote? [:span.pl-1.flex.items-center
                                                          {:title (str "<" GraphName "> #" GraphUUID)}
                                                          (ui/icon "cloud" {:size 18})])]
-                           :hover-detail repo-path ;; show full path on hover
+                           :hover-detail repo-url ;; show full path on hover
                            :options      {:on-click (fn [e]
                                                       (if (gobj/get e "shiftKey")
                                                         (state/pub-event! [:graph/open-new-window url])
@@ -182,7 +173,9 @@
     (->>
      (concat repo-links
              [(when (seq repo-links) {:hr true})
-              {:title (t :new-graph) :options {:on-click #(state/pub-event! [:graph/setup-a-repo])}}
+              (if (or (nfs-handler/supported?) (mobile-util/native-platform?))
+                {:title (t :new-graph) :options {:on-click #(state/pub-event! [:graph/setup-a-repo])}}
+                {:title (t :new-graph) :options {:href (rfe/href :repos)}}) ;; Brings to the repos page for showing fallback message
               {:title (t :all-graphs) :options {:href (rfe/href :repos)}}
               refresh-link
               reindex-link
@@ -194,7 +187,8 @@
   [state]
   (let [multiple-windows? (::electron-multiple-windows? state)
         current-repo (state/sub :git/current-repo)
-        login? (boolean (state/sub :auth/id-token))]
+        login? (boolean (state/sub :auth/id-token))
+        remotes-loading? (state/sub [:file-sync/remote-graphs :loading])]
     (when (or login? current-repo)
       (let [repos (state/sub [:me :repos])
             remotes (state/sub [:file-sync/remote-graphs :graphs])
@@ -202,34 +196,41 @@
                     (repo-handler/combine-local-&-remote-graphs repos remotes) repos)
             links (repos-dropdown-links repos current-repo multiple-windows?)
             render-content (fn [{:keys [toggle-fn]}]
-                             (let [valid-remotes-but-locals? (and (seq repos) (not (some :url repos)))
-                                   remote? (when-not valid-remotes-but-locals?
-                                             (:remote? (first (filter #(= current-repo (:url %)) repos))))
-                                   repo-path (if-not valid-remotes-but-locals?
-                                               (db/get-repo-name current-repo) "")
-                                   short-repo-name (if-not valid-remotes-but-locals?
-                                                     (db/get-short-repo-name repo-path) "Select a Graph")]
+                             (let [remote? (:remote? (first (filter #(= current-repo (:url %)) repos)))
+                                   repo-name (db/get-repo-name current-repo)
+                                   short-repo-name (if repo-name
+                                                     (db/get-short-repo-name repo-name)
+                                                     "Select a Graph")]
                                [:a.item.group.flex.items-center.p-2.text-sm.font-medium.rounded-md
 
                                 {:on-click (fn []
                                              (check-multiple-windows? state)
                                              (toggle-fn))
-                                 :title    repo-path}       ;; show full path on hover
-                                [:span.flex.relative
-                                 {:style {:top 1}}
-                                 (ui/icon "database" {:size 16 :id "database-icon"})]
-                                [:div.graphs
-                                 [:span#repo-switch.block.pr-2.whitespace-nowrap
-                                  [:span [:span#repo-name.font-medium
-                                          (if (= config/local-repo short-repo-name) "Demo" short-repo-name)
-                                          (when remote? [:span.pl-1 (ui/icon "cloud")])]]
-                                  [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]))
+                                 :title    repo-name}       ;; show full path on hover
+                                [:div.flex.flex-row.items-center
+                                 [:div.flex.relative.graph-icon.rounded
+                                  (let [icon "database"
+                                        opts {:size 14}]
+                                    (ui/icon icon opts))]
+
+                                 [:div.graphs
+                                  [:span#repo-switch.block.pr-2.whitespace-nowrap
+                                   [:span [:span#repo-name.font-medium
+                                           [:span.overflow-hidden.text-ellipsis (if (= config/local-repo short-repo-name) "Demo" short-repo-name)]
+                                           (when remote? [:span.pl-1 (ui/icon "cloud")])]]
+                                   [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]]))
             links-header (cond->
-                           {:z-index 1000
-                            :modal-class (util/hiccup->class
-                                           "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")}
+                          {:z-index 1000
+                           :modal-class (util/hiccup->class
+                                         "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")}
                            (> (count repos) 1)              ; show switch to if there are multiple repos
-                           (assoc :links-header [:div.font-medium.text-sm.opacity-60.px-4.pt-2.pb-1
-                                                 "Switch to:"]))]
+                           (assoc :links-header [:div.font-medium.text-sm.opacity-70.px-4.pt-2.pb-1.flex.flex-row.justify-between.items-center
+                                                 [:div (t :left-side-bar/switch)]
+                                                 (when (and (file-sync/enable-sync?) login?)
+                                                   (if remotes-loading?
+                                                     (ui/loading "")
+                                                     [:a.flex {:title "Refresh remote graphs"
+                                                               :on-click file-sync/load-session-graphs}
+                                                      (ui/icon "refresh")]))]))]
         (when (seq repos)
           (ui/dropdown-with-links render-content links links-header))))))

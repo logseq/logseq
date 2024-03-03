@@ -3,17 +3,18 @@
 From v0.5.6, Logseq is also available as a Docker image of Web App.
 The Docker image is available at [ghcr.io/logseq/logseq-webapp:latest](https://github.com/logseq/logseq/pkgs/container/logseq-webapp).
 
-**NOTE:** Logseq web app uses [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API) to access the file system. You need a [compatible browser](https://caniuse.com/native-filesystem-api).
-Also, an HTTPS connection is required if you are accessing it remotely.
+> **Note**
+> Logseq web app uses [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API) to access the file system. You need a [compatible browser](https://caniuse.com/native-filesystem-api).
+> Also, an HTTPS connection is required if you are accessing it remotely.
 
 ## Simple one-line start(local machine)
 
 ```shell
 docker pull ghcr.io/logseq/logseq-webapp:latest
-docker run -d --rm -p 3001:80 ghcr.io/logseq/logseq-webapp:latest
+docker run -d --rm -p 127.0.0.1:3001:80 ghcr.io/logseq/logseq-webapp:latest
 ```
 
-Open the browser and go to http://localhost:3001.
+Open the browser and go to <http://localhost:3001>.
 
 ## Remote(non-local) access
 
@@ -69,6 +70,10 @@ docker pull ghcr.io/logseq/logseq-webapp:latest
 
 docker run -d --rm -p 8443:443 -v `pwd`:/etc/nginx/certs -v ./ssl.conf:/etc/nginx/conf.d/ssl.conf ghcr.io/logseq/logseq-webapp:latest
 ```
+
+> **Note**
+> The above command will expose the web app to the public network, which is not recommended and may cause security issues.
+> Please make sure the firewall is configured properly.
 
 ### Done!
 

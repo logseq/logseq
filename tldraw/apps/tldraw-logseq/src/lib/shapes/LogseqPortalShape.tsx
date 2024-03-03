@@ -7,6 +7,7 @@ import {
   TLResetBoundsInfo,
   TLResizeInfo,
   validUUID,
+  isBuiltInColor,
 } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
 import Vec from '@tldraw/vec'
@@ -14,7 +15,6 @@ import { action, computed, makeObservable } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import type { Shape, SizeLevel } from '.'
-import { CircleButton } from '../../components/Button'
 import { LogseqQuickSearch } from '../../components/QuickSearch'
 import { useCameraMovingRef } from '../../hooks/useCameraMoving'
 import { LogseqContext } from '../logseq-context'
@@ -61,6 +61,13 @@ const LogseqPortalShapeHeader = observer(
         ? getComputedColor(fill, 'background')
         : 'var(--ls-tertiary-background-color)'
 
+    const fillGradient =
+      fill && fill !== 'var(--ls-secondary-background-color)'
+        ? isBuiltInColor(fill)
+          ? `var(--ls-highlight-color-${fill})`
+          : fill
+        : 'var(--ls-secondary-background-color)'
+
     return (
       <div
         className={`tl-logseq-portal-header tl-logseq-portal-header-${
@@ -71,7 +78,8 @@ const LogseqPortalShapeHeader = observer(
           className="absolute inset-0 tl-logseq-portal-header-bg"
           style={{
             opacity,
-            background: type === 'P' ? bgColor : `linear-gradient(0deg, transparent, ${bgColor}`,
+            background:
+              type === 'P' ? bgColor : `linear-gradient(0deg, ${fillGradient}, ${bgColor})`,
           }}
         ></div>
         <div className="relative">{children}</div>
@@ -145,20 +153,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       this.update({ compact: collapsed })
       this.canResize[1] = !collapsed
       if (!collapsed) {
-        // this will also persist the state, so we can skip persist call
-        await delay()
         this.onResetBounds()
       }
-      this.persist?.()
     } else {
       const originalHeight = this.props.size[1]
       this.canResize[1] = !collapsed
-      console.log(
-        collapsed,
-        collapsed ? this.getHeaderHeight() : this.props.collapsedHeight,
-        this.getHeaderHeight(),
-        this.props.collapsedHeight
-      )
       this.update({
         isAutoResizing: !collapsed,
         collapsed: collapsed,
@@ -166,6 +165,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         collapsedHeight: collapsed ? originalHeight : this.props.collapsedHeight,
       })
     }
+    this.persist?.()
   }
 
   @computed get scaleLevel() {
@@ -190,28 +190,30 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const [size, setSize] = React.useState<[number, number]>([0, 0])
     const app = useApp<Shape>()
     React.useEffect(() => {
-      if (ref?.current) {
-        const el = selector ? ref.current.querySelector<HTMLElement>(selector) : ref.current
-        if (el) {
-          const updateSize = () => {
-            const { width, height } = el.getBoundingClientRect()
-            const bound = Vec.div([width, height], app.viewport.camera.zoom) as [number, number]
-            setSize(bound)
-            return bound
-          }
-          updateSize()
-          // Hacky, I know 🤨
-          this.getInnerHeight = () => updateSize()[1]
-          const resizeObserver = new ResizeObserver(() => {
+      setTimeout(() => {
+        if (ref?.current) {
+          const el = selector ? ref.current.querySelector<HTMLElement>(selector) : ref.current
+          if (el) {
+            const updateSize = () => {
+              const { width, height } = el.getBoundingClientRect()
+              const bound = Vec.div([width, height], app.viewport.camera.zoom) as [number, number]
+              setSize(bound)
+              return bound
+            }
             updateSize()
-          })
-          resizeObserver.observe(el)
-          return () => {
-            resizeObserver.disconnect()
+            // Hacky, I know 🤨
+            this.getInnerHeight = () => updateSize()[1]
+            const resizeObserver = new ResizeObserver(() => {
+              updateSize()
+            })
+            resizeObserver.observe(el)
+            return () => {
+              resizeObserver.disconnect()
+            }
           }
         }
-      }
-      return () => {}
+        return () => {}
+      }, 10);
     }, [ref, selector])
     return size
   }
@@ -283,6 +285,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       return null // not being correctly configured
     }
     const { Page, Block } = renderers
+    const [loaded, setLoaded] = React.useState(false)
 
     React.useEffect(() => {
       if (this.props.isAutoResizing) {
@@ -292,7 +295,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           this.update({
             size: [this.props.size[0], newHeight],
           })
-          app.persist(true)
+
+          if (loaded) app.persist(true)
         }
       }
     }, [innerHeight, this.props.isAutoResizing])
@@ -306,14 +310,23 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       }
     }, [this.initialHeightCalculated])
 
+    React.useEffect(() => {
+      setTimeout(function () {
+        setLoaded(true)
+      })
+    }, [])
+
     return (
       <>
         <div
           className="absolute inset-0 tl-logseq-cp-container-bg"
           style={{
+            textRendering: app.viewport.camera.zoom < 0.5 ? 'optimizeSpeed' : 'auto',
             background:
               fill && fill !== 'var(--ls-secondary-background-color)'
-                ? `var(--ls-highlight-color-${fill})`
+                ? isBuiltInColor(fill)
+                  ? `var(--ls-highlight-color-${fill})`
+                  : fill
                 : 'var(--ls-secondary-background-color)',
             opacity,
           }}
@@ -323,11 +336,12 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           className="relative tl-logseq-cp-container"
           style={{ overflow: this.props.isAutoResizing ? 'visible' : 'auto' }}
         >
-          {this.props.blockType === 'B' && this.props.compact ? (
-            <Block blockId={pageId} />
-          ) : (
-            <Page pageName={pageId} />
-          )}
+          {(loaded || !this.initialHeightCalculated) &&
+            (this.props.blockType === 'B' && this.props.compact ? (
+              <Block blockId={pageId} />
+            ) : (
+              <Page pageName={pageId} />
+            ))}
         </div>
       </>
     )
@@ -336,7 +350,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   ReactComponent = observer((componentProps: TLComponentProps) => {
     const { events, isErasing, isEditing, isBinding } = componentProps
     const {
-      props: { opacity, pageId, fill, scaleLevel, strokeWidth, size },
+      props: { opacity, pageId, fill, scaleLevel, strokeWidth, size, isLocked },
     } = this
 
     const app = useApp<Shape>()
@@ -390,6 +404,22 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       }
     }, [isEditing, this.props.collapsed])
 
+    React.useEffect(() => {
+      if (isCreating) {
+        const screenSize = [app.viewport.bounds.width, app.viewport.bounds.height]
+        const boundScreenCenter = app.viewport.getScreenPoint([this.bounds.minX, this.bounds.minY])
+
+        if (
+          boundScreenCenter[0] > screenSize[0] - 400 ||
+          boundScreenCenter[1] > screenSize[1] - 240 ||
+          app.viewport.camera.zoom > 1.5 ||
+          app.viewport.camera.zoom < 0.5
+        ) {
+          app.viewport.zoomToBounds({ ...this.bounds, minY: this.bounds.maxY + 25 })
+        }
+      }
+    }, [app.viewport.bounds.height.toFixed(2)])
+
     const onPageNameChanged = React.useCallback((id: string) => {
       this.initialHeightCalculated = false
       const blockType = validUUID(id) ? 'B' : 'P'
@@ -420,6 +450,17 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     }
 
     const { Breadcrumb, PageName } = renderers
+
+    const portalStyle: React.CSSProperties = {
+      width: `calc(100% / ${scaleRatio})`,
+      height: `calc(100% / ${scaleRatio})`,
+      opacity: isErasing ? 0.2 : 1,
+    }
+
+    // Reduce the chance of blurry text
+    if (scaleRatio !== 1) {
+      portalStyle.transform = `scale(${scaleRatio})`
+    }
 
     return (
       <HTMLContainer
@@ -453,44 +494,30 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               placeholder="Create or search your graph..."
             />
           ) : (
-            <>
-              <div
-                className="tl-logseq-portal-container"
-                data-collapsed={this.collapsed}
-                data-page-id={pageId}
-                data-portal-selected={portalSelected}
-                data-editing={isEditing}
-                style={{
-                  width: `calc(100% / ${scaleRatio})`,
-                  height: `calc(100% / ${scaleRatio})`,
-                  transform: `scale(${scaleRatio})`,
-                  opacity: isErasing ? 0.2 : 1,
-                }}
-              >
-                {!this.props.compact && !targetNotFound && (
-                  <LogseqPortalShapeHeader
-                    type={this.props.blockType ?? 'P'}
-                    fill={fill}
-                    opacity={opacity}
-                  >
-                    {this.props.blockType === 'P' ? (
-                      <PageName pageName={pageId} />
-                    ) : (
-                      <Breadcrumb blockId={pageId} />
-                    )}
-                  </LogseqPortalShapeHeader>
-                )}
-                {targetNotFound && <div className="tl-target-not-found">Target not found</div>}
-                {showingPortal && <PortalComponent {...componentProps} />}
-              </div>
-              <CircleButton
-                active={!!this.collapsed}
-                style={{ opacity: isSelected ? 1 : 0 }}
-                icon={this.props.blockType === 'B' ? 'block' : 'page'}
-                onClick={() => this.setCollapsed(!this.collapsed)}
-                otherIcon={'whiteboard-element'}
-              />
-            </>
+            <div
+              className="tl-logseq-portal-container"
+              data-collapsed={this.collapsed}
+              data-page-id={pageId}
+              data-portal-selected={portalSelected}
+              data-editing={isEditing}
+              style={portalStyle}
+            >
+              {!this.props.compact && !targetNotFound && (
+                <LogseqPortalShapeHeader
+                  type={this.props.blockType ?? 'P'}
+                  fill={fill}
+                  opacity={opacity}
+                >
+                  {this.props.blockType === 'P' ? (
+                    <PageName pageName={pageId} />
+                  ) : (
+                    <Breadcrumb blockId={pageId} />
+                  )}
+                </LogseqPortalShapeHeader>
+              )}
+              {targetNotFound && <div className="tl-target-not-found">Target not found</div>}
+              {showingPortal && <PortalComponent {...componentProps} />}
+            </div>
           )}
         </div>
       </HTMLContainer>
@@ -499,7 +526,16 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
   ReactIndicator = observer(() => {
     const bounds = this.getBounds()
-    return <rect width={bounds.width} height={bounds.height} fill="transparent" rx={8} ry={8} />
+    return (
+      <rect
+        width={bounds.width}
+        height={bounds.height}
+        fill="transparent"
+        rx={8}
+        ry={8}
+        strokeDasharray={this.props.isLocked ? '8 2' : 'undefined'}
+      />
+    )
   })
 
   validateProps = (props: Partial<LogseqPortalShapeProps>) => {
@@ -519,7 +555,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         <rect
           fill={
             this.props.fill && this.props.fill !== 'var(--ls-secondary-background-color)'
-              ? `var(--ls-highlight-color-${this.props.fill})`
+              ? isBuiltInColor(this.props.fill)
+                ? `var(--ls-highlight-color-${this.props.fill})`
+                : this.props.fill
               : 'var(--ls-secondary-background-color)'
           }
           stroke={getComputedColor(this.props.fill, 'background')}

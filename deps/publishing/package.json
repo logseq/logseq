@@ -1,0 +1,15 @@
+{
+  "name": "@logseq/publishing",
+  "version": "1.0.0",
+  "private": true,
+  "devDependencies": {
+    "@logseq/nbb-logseq": "^1.2.173",
+    "mldoc": "^1.5.1"
+  },
+  "dependencies": {
+    "fs-extra": "9.1.0"
+  },
+  "scripts": {
+    "test": "yarn nbb-logseq -cp test:../graph-parser/src -m nextjournal.test-runner"
+  }
+}

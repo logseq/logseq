@@ -1,6 +1,6 @@
 (ns frontend.handler.file-sync
   "Provides util handler fns for file sync"
-  (:require ["path" :as path]
+  (:require ["path" :as node-path]
             [cljs-time.format :as tf]
             [cljs.core.async :as async :refer [go <!]]
             [cljs.core.async.interop :refer [p->c]]
@@ -12,11 +12,12 @@
             [frontend.state :as state]
             [frontend.handler.user :as user]
             [frontend.fs :as fs]
+            [frontend.pubsub :as pubsub]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [frontend.storage :as storage]
-            [logseq.graph-parser.util :as gp-util]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [logseq.common.path :as path]))
 
 (def *beta-unavailable? (volatile! false))
 
@@ -68,10 +69,10 @@
               nil
 
               (contains? #{400 404} (get-in (ex-data r) [:err :status]))
-              (notification/show! (str "Create graph failed: already existed graph: " name) :warning true nil 4000)
+              (notification/show! (str "Create graph failed: already existed graph: " name) :warning true nil 4000 nil)
 
               :else
-              (notification/show! (str "Create graph failed: " (ex-message r)) :warning true nil 4000))))))))
+              (notification/show! (str "Create graph failed: " (ex-message r)) :warning true nil 4000 nil))))))))
 
 (defn <delete-graph
   [graph-uuid]
@@ -90,14 +91,19 @@
 
 (defn <list-graphs
   []
-  (go (:Graphs (<! (sync/<list-remote-graphs sync/remoteapi)))))
+  (go
+    (let [r (<! (sync/<list-remote-graphs sync/remoteapi))]
+      (if (instance? ExceptionInfo r)
+        r
+        (:Graphs r)))))
 
 (defn load-session-graphs
   []
   (when-not (state/sub [:file-sync/remote-graphs :loading])
     (go (state/set-state! [:file-sync/remote-graphs :loading] true)
-        (let [graphs (<! (<list-graphs))]
-          (state/set-state! :file-sync/remote-graphs {:loading false :graphs graphs})))))
+        (let [graphs-or-exp (<! (<list-graphs))]
+          (when-not (instance? ExceptionInfo graphs-or-exp)
+            (state/set-state! :file-sync/remote-graphs {:loading false :graphs graphs-or-exp}))))))
 
 (defn reset-session-graphs
   []
@@ -120,7 +126,7 @@
    (download-version-file graph-uuid file-uuid version-uuid false))
   ([graph-uuid file-uuid version-uuid silent-download?]
    (go
-     (let [key (path/join file-uuid version-uuid)
+     (let [key (node-path/join file-uuid version-uuid)
            r   (<! (sync/<download-version-files
                     sync/rsapi graph-uuid (config/get-repo-dir (state/get-current-repo)) [key]))]
        (if (instance? ExceptionInfo r)
@@ -130,21 +136,17 @@
                                 [:div "Downloaded version file at: "]
                                 [:div key]] :success false)))
        (when-not (instance? ExceptionInfo r)
-         (path/join "logseq" "version-files" key))))))
+         (path/path-join "logseq" "version-files" key))))))
 
-(defn- list-file-local-versions
+(defn- <list-file-local-versions
   [page]
   (go
     (when-let [path (-> page :block/file :file/path)]
-      (let [base-path           (config/get-repo-dir (state/get-current-repo))
-            rel-path            (string/replace-first path base-path "")
-            version-files-dir   (->> (path/join "logseq/version-files/local" rel-path)
-                                     path/parse
-                                     (#(js->clj % :keywordize-keys true))
-                                     ((juxt :dir :name))
-                                     (apply path/join base-path))
-            version-file-paths (->> (<! (p->c (fs/readdir version-files-dir :path-only? true)))
-                                    (remove #{version-files-dir}))]
+      (let [base-path          (config/get-repo-dir (state/get-current-repo))
+            rel-path           (string/replace-first path base-path "")
+            file-stem          (path/file-stem rel-path)
+            version-files-dir  (path/path-join base-path "logseq/version-files/local" (path/dirname rel-path) file-stem)
+            version-file-paths (<! (p->c (fs/readdir version-files-dir :path-only? true)))]
         (when-not (instance? ExceptionInfo version-file-paths)
           (when (seq version-file-paths)
             (->>
@@ -152,45 +154,42 @@
               (fn [path]
                 (try
                   (let [create-time
-                       (-> (path/parse path)
-                           (js->clj :keywordize-keys true)
-                           :name
-                           (#(tf/parse (tf/formatter "yyyy-MM-dd'T'HH_mm_ss.SSSZZ") %)))]
-                    {:create-time create-time :path path :relative-path (string/replace-first path base-path "")})
+                        (-> (node-path/parse path)
+                            (js->clj :keywordize-keys true)
+                            :name
+                            (#(tf/parse (tf/formatter "yyyy-MM-dd'T'HH_mm_ss.SSSZZ") %)))]
+                    {:create-time   create-time
+                     :path          path
+                     :relative-path (path/relative-path base-path path)})
                   (catch :default e
                     (log/error :page-history/parse-format-error e)
                     nil)))
               version-file-paths)
              (remove nil?))))))))
 
-(defn fetch-page-file-versions [graph-uuid page]
+(defn <fetch-page-file-versions [graph-uuid page]
   []
   (let [file-id (:db/id (:block/file page))]
-    (when-let [path (:file/path (db/entity file-id))]
-      (let [base-path (config/get-repo-dir (state/get-current-repo))
-            base-path (if (string/starts-with? base-path "file://")
-                        (gp-util/safe-decode-uri-component base-path)
-                        base-path)
-            path*     (string/replace-first (string/replace-first path base-path "") #"^/" "")]
-        (go
-          (let [version-list       (:VersionList
-                                    (<! (sync/<get-remote-file-versions sync/remoteapi graph-uuid path*)))
-                local-version-list (<! (list-file-local-versions page))
-                all-version-list   (->> (concat version-list local-version-list)
-                                        (sort-by #(or (:CreateTime %)
-                                                      (:create-time %))
-                                                 >))]
-            all-version-list))))))
+    (go
+      (when-let [path (:file/path (db/entity file-id))]
+        (let [version-list       (:VersionList
+                                  (<! (sync/<get-remote-file-versions sync/remoteapi graph-uuid path)))
+              local-version-list (<! (<list-file-local-versions page))
+              all-version-list   (->> (concat version-list local-version-list)
+                                      (sort-by #(or (:CreateTime %)
+                                                    (:create-time %))
+                                               >))]
+          all-version-list)))))
 
 
 (defn init-remote-graph
-  [local graph]
-  (when (and local graph)
+  [local-graph-dir graph]
+  (when (and local-graph-dir graph)
     (notification/show!
      (str "Start syncing the remote graph "
           (:GraphName graph)
           " to "
-          (config/get-string-repo-dir (config/get-local-dir local)))
+          (config/get-string-repo-dir local-graph-dir))
      :success)
     (init-graph (:GraphUUID graph))
     (state/close-modal!)))
@@ -198,7 +197,7 @@
 (defn setup-file-sync-event-listeners
   []
   (let [c     (async/chan 1)
-        p     sync/sync-events-publication
+        p     pubsub/sync-events-pub
         topics [:finished-local->remote :finished-remote->local :start]]
     (doseq [topic topics]
       (async/sub p topic c))
@@ -260,3 +259,8 @@
   [value]
   (storage/set :logseq-sync-enabled value)
   (state/set-state! :feature/enable-sync? value))
+
+(defn set-sync-diff-merge-enabled!
+  [value]
+  (storage/set :logseq-sync-diff-merge-enabled value)
+  (state/set-state! :feature/enable-sync-diff-merge? value))

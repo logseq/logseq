@@ -1,4 +1,4 @@
-import { TLApp, TLTargetType, TLToolState, uniqueId } from '@tldraw/core'
+import { TLApp, TLTargetType, TLToolState, uniqueId, GRID_SIZE } from '@tldraw/core'
 import type { TLReactEventMap, TLReactEvents } from '@tldraw/react'
 import Vec from '@tldraw/vec'
 import { transaction } from 'mobx'
@@ -20,10 +20,16 @@ export class CreatingState extends TLToolState<
   onEnter = () => {
     this.app.history.pause()
     transaction(() => {
+      let point = Vec.sub(this.app.inputs.originPoint, this.offset)
+
+      if (this.app.settings.snapToGrid) {
+        point = Vec.snap(point, GRID_SIZE)
+      }
+
       const shape = new LogseqPortalShape({
         id: uniqueId(),
         parentId: this.app.currentPage.id,
-        point: Vec.sub(this.app.inputs.originPoint, this.offset),
+        point: point,
         size: LogseqPortalShape.defaultProps.size,
         fill: this.app.settings.color,
         stroke: this.app.settings.color,
@@ -32,9 +38,6 @@ export class CreatingState extends TLToolState<
       this.app.currentPage.addShapes(shape)
       this.app.setEditingShape(shape)
       this.app.setSelectedShapes([shape])
-      if (this.app.viewport.camera.zoom < 0.8 || this.app.viewport.camera.zoom > 1.2) {
-        this.app.api.resetZoomToCursor()
-      }
     })
   }
 

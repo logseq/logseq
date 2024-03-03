@@ -33,7 +33,7 @@ export class TLSelectTool<
 
   static initial = 'idle'
 
-  static shortcut = ['8']
+  static shortcut = 'whiteboard/select'
 
   static states = [
     IdleState,

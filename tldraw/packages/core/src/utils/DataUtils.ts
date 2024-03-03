@@ -76,9 +76,9 @@ export function fileToBase64(file: Blob): Promise<string | ArrayBuffer | null> {
   })
 }
 
-export function getSizeFromSrc(dataURL: string, isVideo: boolean): Promise<number[]> {
+export function getSizeFromSrc(dataURL: string, type: string): Promise<number[]> {
   return new Promise((resolve, reject) => {
-    if (isVideo) {
+    if (type === 'video') {
       const video = document.createElement('video')
 
       // place a listener on it
@@ -96,11 +96,13 @@ export function getSizeFromSrc(dataURL: string, isVideo: boolean): Promise<numbe
       )
       // start download meta-datas
       video.src = dataURL
-    } else {
+    } else if (type === 'image') {
       const img = new Image()
       img.onload = () => resolve([img.width, img.height])
       img.src = dataURL
       img.onerror = err => reject(err)
+    } else if (type === 'pdf') {
+      resolve([595, 842]) // A4 portrait dimensions at 72 ppi
     }
   })
 }
@@ -111,7 +113,7 @@ export function getFirstFromSet<T = unknown>(set: Set<T>): T {
 
 /**
  * Seeded random number generator, using [xorshift](https://en.wikipedia.org/wiki/Xorshift). The
- * result will always be betweeen -1 and 1.
+ * result will always be between -1 and 1.
  *
  * Adapted from [seedrandom](https://github.com/davidbau/seedrandom).
  */

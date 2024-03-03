@@ -10,7 +10,7 @@ export const SelectionBackground = observer(function SelectionBackground<S exten
   const events = useBoundsEvents('background')
 
   return (
-    <SVGContainer {...events}>
+    <SVGContainer data-html2canvas-ignore="true" {...events}>
       <rect
         className="tl-bounds-bg"
         width={Math.max(1, bounds.width)}

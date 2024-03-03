@@ -21,14 +21,14 @@
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.events :as events]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.repo-config :as repo-config-handler]
-            [frontend.handler.global-config :as global-config-handler]
-            [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
@@ -41,20 +41,21 @@
             [frontend.util.persist-var :as persist-var]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.mobile.core :as mobile]))
 
-(defn set-global-error-notification!
+(defn- set-global-error-notification!
   []
   (set! js/window.onerror
         (fn [message, _source, _lineno, _colno, error]
           (when-not (error/ignored? message)
-            (log/error :exception error)
+            (log/error :exception error)))))
             ;; (notification/show!
             ;;  (str "message=" message "\nsource=" source "\nlineno=" lineno "\ncolno=" colno "\nerror=" error)
             ;;  :error
             ;;  ;; Don't auto-hide
             ;;  false)
-            ))))
+            
 
 
 (defn- watch-for-date!
@@ -88,7 +89,8 @@
             (p/do! (repo-config-handler/start {:repo repo})
                    (when (config/global-config-enabled?)
                      (global-config-handler/start {:repo repo}))
-                   (when (config/plugin-config-enabled?) (plugin-config-handler/start)))
+                   (when (config/plugin-config-enabled?)
+                     (plugin-config-handler/start)))
             (p/finally
               (fn []
                 ;; install after config is restored
@@ -187,6 +189,8 @@
   (state/set-component! :block/linked-references reference/block-linked-references)
   (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
   (state/set-component! :block/single-block block/single-block-cp)
+  (state/set-component! :block/container block/block-container)
+  (state/set-component! :block/embed block/block-embed)
   (state/set-component! :editor/box editor/box)
   (command-palette/register-global-shortcut-commands))
 
@@ -195,9 +199,13 @@
 (defn start!
   [render]
   (set-global-error-notification!)
+
+  (set! js/window.onhashchange #(state/hide-custom-context-menu!)) ;; close context menu when page navs
   (register-components-fns!)
   (user-handler/restore-tokens-from-localstorage)
   (state/set-db-restoring! true)
+  (when (util/electron?)
+    (el/listen!))
   (render)
   (i18n/start)
   (instrument/init)
@@ -214,27 +222,28 @@
 
   (events/run!)
 
-  (-> (p/let [repos (get-repos)
-              _ (state/set-repos! repos)
-              _ (restore-and-setup! repos)]
-        (when (mobile-util/native-platform?)
-          (p/do!
-           (mobile-util/hide-splash)
-           (state/restore-mobile-theme!))))
-      (p/catch (fn [e]
-                 (js/console.error "Error while restoring repos: " e)))
-      (p/finally (fn []
-                   (state/set-db-restoring! false))))
+  (p/do!
+   (when (mobile-util/native-platform?)
+     (mobile/mobile-preinit))
+   (-> (p/let [repos (get-repos)
+               _ (state/set-repos! repos)
+               _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
+               _ (restore-and-setup! repos)]
+         (when (mobile-util/native-platform?)
+           (state/restore-mobile-theme!)))
+       (p/catch (fn [e]
+                  (js/console.error "Error while restoring repos: " e)))
+       (p/finally (fn []
+                    (state/set-db-restoring! false))))
 
-  (db/run-batch-txs!)
-  (file/<ratelimit-file-writes!)
+   (db/run-batch-txs!)
+   (file/<ratelimit-file-writes!)
+   (util/<app-wake-up-from-sleep-loop (atom false))
 
-  (when config/dev?
-    (enable-datalog-console))
-  (when (util/electron?)
-    (el/listen!))
-  (persist-var/load-vars)
-  (js/setTimeout instrument! (* 60 1000)))
+   (when config/dev?
+     (enable-datalog-console))
+   (persist-var/load-vars)
+   (js/setTimeout instrument! (* 60 1000))))
 
 (defn stop! []
   (prn "stop!"))

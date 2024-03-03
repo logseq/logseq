@@ -1,0 +1,164 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 0 0% 52.3%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 300 1% 92%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+
+    --radius: 0.5rem;
+  }
+
+  html[data-theme=dark] {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 0 0% 49.4%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+  }
+}
+
+@layer utilities {
+  /* force override primary color for specific component*/
+  .primary {
+    &-green {
+      --primary: var(--rx-green-10-hsl);
+    }
+
+    &-orange {
+      --primary: var(--rx-orange-10-hsl);
+    }
+
+    &-red {
+      --primary: var(--rx-red-10-hsl);
+    }
+
+    &-yellow {
+      --primary: var(--rx-yellow-10-hsl);
+      --primary-foreground: 0 0% 10%;
+    }
+
+    &-purple {
+      --primary: var(--rx-purple-10-hsl);
+    }
+  }
+}
+
+@layer components {
+  /* ui components */
+  .ui__button {
+    &.as-classic {
+      /* depth = 1*/
+      box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
+      inset 0 -1px 0 0 rgba(0, 0, 0, 0.15);
+
+      &:hover {
+        box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
+        inset 0 -2px 0 0 rgba(0, 0, 0, 0.15);
+      }
+    }
+
+    &.as-outline {
+      --accent: var(--rx-gray-02-hsl);
+      --accent-foreground: var(--rx-gray-12-hsl);
+    }
+  }
+
+  .ui__toaster {
+    &-viewport {
+      @apply m-0;
+
+      > li {
+        border-color: hsl(var(--border));
+
+        &.has-variant-icon {
+          @apply relative border pl-12 py-5;
+
+          .variant-icon {
+            @apply absolute left-[14px] top-[19px] flex items-center;
+          }
+
+          &.info .variant-icon {
+            @apply text-blue-rx-09-alpha;
+          }
+
+          &.success .variant-icon {
+            @apply text-green-rx-09-alpha;
+          }
+
+          &.warning .variant-icon {
+            @apply text-yellow-rx-10-alpha;
+          }
+
+          &.error .variant-icon {
+            @apply text-red-rx-10-alpha;
+          }
+        }
+      }
+    }
+  }
+
+  .ui__alert {
+    > .ui__icon {
+      @apply absolute top-4 left-4;
+
+      & ~ * {
+        @apply pl-7;
+      }
+    }
+  }
+
+  .ui__dialog {
+    &-overlay {
+      @apply top-0 left-0 right-0 bottom-0 grid place-items-center overflow-y-auto;
+    }
+  }
+}

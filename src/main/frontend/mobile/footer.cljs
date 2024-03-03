@@ -17,7 +17,7 @@
                      (command-handler))}
    (if (= icon "player-stop")
      svg/circle-stop
-     (ui/icon icon {:size ui/icon-size}))])
+     (ui/icon icon {:size 24}))])
 
 (defn seconds->minutes:seconds
   [seconds]

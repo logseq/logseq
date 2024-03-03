@@ -1,0 +1,26 @@
+{:min-bb-version "1.0.168"
+ :deps
+ {logseq/bb-tasks
+  #_{:local/root "../../../bb-tasks"}
+  {:git/url "https://github.com/logseq/bb-tasks"
+   :git/sha "70d3edeb287f5cec7192e642549a401f7d6d4263"}}
+
+ :pods
+ {clj-kondo/clj-kondo {:version "2023.05.26"}}
+
+ :tasks
+ {test:load-all-namespaces-with-nbb
+  logseq.bb-tasks.nbb.test/load-all-namespaces
+
+  lint:large-vars
+  logseq.bb-tasks.lint.large-vars/-main
+
+  lint:carve
+  logseq.bb-tasks.lint.carve/-main
+
+  lint:ns-docstrings
+  logseq.bb-tasks.lint.ns-docstrings/-main}
+
+ :tasks/config
+ {:large-vars
+  {:max-lines-count 45}}}

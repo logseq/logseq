@@ -3,6 +3,7 @@
             [frontend.components.export :as export]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
+            [frontend.components.server :as server]
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
@@ -18,15 +19,17 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.version :refer [version]]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [clojure.string :as string]))
 
 (rum/defc home-button
   < {:key-fn #(identity "home-button")}
   []
   (ui/with-shortcut :go/home "left"
-    [:button.button.icon.inline
-     {:title "Home"
+    [:button.button.icon.inline.mx-1
+     {:title (t :home)
       :on-click #(do
                    (when (mobile-util/native-iphone?)
                      (state/set-left-sidebar-open! false))
@@ -43,19 +46,38 @@
     (when-not (or config/publishing?
                   logged?
                   (not sync-enabled?))
-      [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
-       [:span (t :login)]
-       (when loading?
-         [:span.ml-2 (ui/loading "")])])))
+      [:span.flex.space-x-2
+       [:a.button.text-sm.font-medium.block.text-gray-11
+        {:on-click #(state/pub-event! [:user/login])}
+        [:span (t :login)]
+        (when loading?
+          [:span.ml-2 (ui/loading "")])]])))
 
 (rum/defc left-menu-button < rum/reactive
   < {:key-fn #(identity "left-menu-toggle-button")}
   [{:keys [on-click]}]
   (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
     [:button.#left-menu.cp__header-left-menu.button.icon
-     {:title "Toggle left menu"
+     {:title (t :header/toggle-left-sidebar)
       :on-click on-click}
      (ui/icon "menu-2" {:size ui/icon-size})]))
+
+(defn bug-report-url []
+  (let [ua (.-userAgent js/navigator)
+        safe-ua (string/replace ua #"[^_/a-zA-Z0-9\.\(\)]+" " ")
+        platform (str "App Version: " version "\n"
+                      "Git Revision: " config/REVISION "\n"
+                      "Platform: " safe-ua "\n"
+                      "Language: " (.-language js/navigator) "\n"
+                      "Plugins: " (string/join ", " (map (fn [[k v]]
+                                                           (str (name k) " (" (:version v) ")"))
+                                                         (:plugin/installed-plugins @state/state))))]
+    (str "https://github.com/logseq/logseq/issues/new?"
+         "title=&"
+         "template=bug_report.yaml&"
+         "labels=from:in-app&"
+         "platform="
+         (js/encodeURIComponent platform))))
 
 (rum/defc dropdown-menu < rum/reactive
   < {:key-fn #(identity "repos-dropdown-menu")}
@@ -67,7 +89,7 @@
      (fn [{:keys [toggle-fn]}]
        [:button.button.icon.toolbar-dots-btn
         {:on-click toggle-fn
-         :title "More"}
+         :title (t :header/more)}
         (ui/icon "dots" {:size ui/icon-size})])
      (->>
       [(when (state/enable-editing?)
@@ -95,15 +117,27 @@
           :options {:href (rfe/href :import)}
           :icon (ui/icon "file-upload")})
 
-       {:title [:div.flex-row.flex.justify-between.items-center
-                [:span (t :join-community)]]
-        :options {:href "https://discuss.logseq.com"
-                  :title (t :discourse-title)
-                  :target "_blank"}
-        :icon (ui/icon "brand-discord")}
+       (when-not config/publishing?
+         {:title [:div.flex-row.flex.justify-between.items-center
+                  [:span (t :join-community)]]
+          :options {:href "https://discuss.logseq.com"
+                    :title (t :discourse-title)
+                    :target "_blank"}
+          :icon (ui/icon "brand-discord")})
+
+       (when-not config/publishing?
+         {:title [:div.flex-row.flex.justify-between.items-center
+                  [:span (t :help/bug)]]
+          :options {:href (rfe/href :bug-report)}
+          :icon (ui/icon "bug")})
+
+       (when config/publishing?
+         {:title (t :toggle-theme)
+          :options {:on-click #(state/toggle-theme!)}
+          :icon (ui/icon "bulb")})
 
        (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
-         {:title (str (t :logout) " (" (user-handler/email) ")")
+         {:title (t :logout-user (user-handler/email))
           :options {:on-click #(user-handler/logout)}
           :icon  (ui/icon "logout")})]
       (concat page-menu-and-hr)
@@ -117,12 +151,12 @@
 
    (ui/with-shortcut :go/backward "bottom"
      [:button.it.navigation.nav-left.button.icon
-      {:title "Go back" :on-click #(js/window.history.back)}
+      {:title (t :header/go-back) :on-click #(js/window.history.back)}
       (ui/icon "arrow-left" {:size ui/icon-size})])
 
    (ui/with-shortcut :go/forward "bottom"
      [:button.it.navigation.nav-right.button.icon
-      {:title "Go forward" :on-click #(js/window.history.forward)}
+      {:title (t :header/go-forward) :on-click #(js/window.history.forward)}
       (ui/icon "arrow-right" {:size ui/icon-size})])])
 
 (rum/defc updater-tips-new-version
@@ -172,29 +206,33 @@
                                           :native-android (mobile-util/native-android?)}])
       :on-double-click (fn [^js e]
                          (when-let [target (.-target e)]
-                           (when (and (util/electron?)
-                                      (.. target -classList (contains "drag-region")))
-                             (js/window.apis.toggleMaxOrMinActiveWindow))))
-      :style           {:fontSize  50}}
+                           (cond
+                             (and (util/electron?)
+                                  (.. target -classList (contains "drag-region")))
+                             (js/window.apis.toggleMaxOrMinActiveWindow)
+
+                             (mobile-util/native-platform?)
+                             (util/scroll-to-top true))))
+      :style           {:fontSize 50}}
      [:div.l.flex.drag-region
-      (when-not (mobile-util/native-platform?)
-        [left-menu
-         (when current-repo ;; this is for the Search button
+      [left-menu
+       (if (mobile-util/native-platform?)
+         ;; back button for mobile
+         (when-not (or (state/home?) custom-home-page? (state/whiteboard-dashboard?))
+           (ui/with-shortcut :go/backward "bottom"
+             [:button.it.navigation.nav-left.button.icon.opacity-70
+              {:title (t :header/go-back) :on-click #(js/window.history.back)}
+              (ui/icon "chevron-left" {:size 26})]))
+         ;; search button for non-mobile
+         (when current-repo
            (ui/with-shortcut :go/search "right"
              [:button.button.icon#search-button
-              {:title "Search"
+              {:title (t :header/search)
                :on-click #(do (when (or (mobile-util/native-android?)
                                         (mobile-util/native-iphone?))
                                 (state/set-left-sidebar-open! false))
                               (state/pub-event! [:go/search]))}
-              (ui/icon "search" {:size ui/icon-size})]))])
-      (when (mobile-util/native-platform?)
-        (if (or (state/home?) custom-home-page?)
-          left-menu
-          (ui/with-shortcut :go/backward "bottom"
-            [:button.it.navigation.nav-left.button.icon.opacity-70
-             {:title "Go back" :on-click #(js/window.history.back)}
-             (ui/icon "chevron-left" {:size 26})])))]
+              (ui/icon "search" {:size ui/icon-size})])))]]
 
      [:div.r.flex.drag-region
       (when (and current-repo
@@ -210,7 +248,12 @@
         (login))
 
       (when config/lsp-enabled?
-        (plugins/hook-ui-items :toolbar))
+        [:<>
+         (plugins/hook-ui-items :toolbar)
+         (plugins/updates-notifications)])
+
+      (when (state/feature-http-server-enabled?)
+        (server/server-indicator (state/sub :electron/server)))
 
       (when (util/electron?)
         (back-and-forward))
@@ -234,7 +277,6 @@
                       :current-repo current-repo
                       :default-home default-home})
 
-      (when (not (state/sub :ui/sidebar-open?))
-        (sidebar/toggle))
+      (sidebar/toggle)
 
       (updater-tips-new-version t)]]))

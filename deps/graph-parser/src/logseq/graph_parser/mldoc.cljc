@@ -13,7 +13,8 @@
             [logseq.graph-parser.utf8 :as utf8]
             [clojure.string :as string]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.config :as gp-config]))
+            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.schema.mldoc :as mldoc-schema]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
@@ -74,13 +75,26 @@
           js/JSON.stringify))))
 
 (defn remove-indentation-spaces
+  "Remove the indentation spaces from the content. Only for markdown.
+   level - ast level + 1 (2 for the first level, 3 for the second level, etc., as the non-first line of multi-line block has 2 more space
+           Ex.
+              - level 1 multiline block first line
+                level 1 multiline block second line
+              \t- level 2 multiline block first line
+              \t  level 2 multiline block second line
+   remove-first-line? - apply the indentation removal to the first line or not"
   [s level remove-first-line?]
   (let [lines (string/split-lines s)
         [f & r] lines
         body (map (fn [line]
+                    ;; Check if the indentation area only contains white spaces
+                    ;; Level = ast level + 1, 1-based indentation level
+                    ;; For markdown in Logseq, the indentation area for the non-first line of multi-line block is (ast level - 1) * "\t" + 2 * "(space)"
                     (if (string/blank? (gp-util/safe-subs line 0 level))
+                      ;; If valid, then remove the indentation area spaces. Keep the rest of the line (might contain leading spaces)
                       (gp-util/safe-subs line level)
-                      line))
+                      ;; Otherwise, trim these invalid spaces
+                      (string/triml line)))
                (if remove-first-line? lines r))
         content (if remove-first-line? body (cons f body))]
     (string/join "\n" content)))
@@ -110,16 +124,14 @@
                                            (map first))
                                       (get grouped-ast false)]
           properties (map (fn [[_directive k v]]
-                            (let [kname (string/lower-case k)
-                                  k (keyword kname)
-                                  mldoc-ast (get-references v config)]
-                              [k v mldoc-ast]))
-                       properties-ast)]
+                            [k v (get-references v config)])
+                          properties-ast)]
       (if (seq properties)
         (cons [["Properties" properties] nil] other-ast)
         original-ast))))
 
 (defn ->edn
+  {:malli/schema [:=> [:cat :string :string] mldoc-schema/block-ast-with-pos-coll-schema]}
   [content config]
   (if (string? content)
     (try
@@ -167,3 +179,13 @@
   (when (string? link)
     (some-> (first (inline->edn link (default-config format)))
             ast-link?)))
+
+(defn mldoc-link?
+  "Check whether s is a link (including page/block refs)."
+  [format s]
+  (let [result (inline->edn s (default-config format))]
+    (and
+     (= 1 (count result))
+     (let [result' (first result)]
+       (or (contains? #{"Nested_link"} (first result'))
+           (contains? #{"Page_ref" "Block_ref" "Complex"} (first (:url (second result')))))))))

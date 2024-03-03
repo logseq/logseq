@@ -9,6 +9,15 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]))
 
+
+(rum/defc native-fs-api-alert
+  []
+  [:p "It seems that your browser doesn't support the "
+   [:a {:href   "https://web.dev/file-system-access/"
+        :target "_blank"}
+    "new native filesystem API"]
+   [:span ", please use any Chromium 86+ based browser like Chrome, Vivaldi, Edge, etc. Notice that the API doesn't support mobile browsers at the moment."]])
+
 (rum/defc add-local-directory
   []
   [:div.flex.flex-col
@@ -38,12 +47,7 @@
            [:li (t :on-boarding/new-graph-desc-4)]
            [:li (t :on-boarding/new-graph-desc-5)]]
           (when-not nfs-supported?
-            (ui/admonition :warning
-                           [:p "It seems that your browser doesn't support the "
-                            [:a {:href   "https://web.dev/file-system-access/"
-                                 :target "_blank"}
-                             "new native filesystem API"]
-                            [:span ", please use any Chromium 86+ based browser like Chrome, Vivaldi, Edge, etc. Notice that the API doesn't support mobile browsers at the moment."]]))]]]))])
+            (ui/admonition :warning (native-fs-api-alert)))]]]))])
 
 (rum/defc android-permission-alert
   []

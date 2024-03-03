@@ -1,0 +1,43 @@
+{
+  "name": "logseq-amplify",
+  "version": "0.0.1",
+  "description": "Amplify components for Logseq",
+  "license": "MIT",
+  "scripts": {
+    "dev:amplify": "parcel watch ./src/amplify.ts --dist-dir ../src/main/frontend/ --no-hmr --no-source-maps",
+    "dev:examples": "parcel serve ./examples/index.html",
+    "build:amplify": "parcel build ./src/amplify.ts --no-source-maps",
+    "postinstall": "yarn build:amplify"
+  },
+  "devDependencies": {
+    "buffer": "^5.5.0",
+    "parcel": "^2.8.3",
+    "punycode": "^1.4.1"
+  },
+  "dependencies": {
+    "@aws-amplify/ui-react": "^4.3.8",
+    "aws-amplify": "^5.0.15",
+    "aws-amplify-react": "^5.1.43",
+    "react": "^17",
+    "react-dom": "^17"
+  },
+  "alias": {
+    "react": {
+      "global": "React"
+    },
+    "react-dom": {
+      "global": "ReactDOM"
+    },
+    "react/jsx-dev-runtime": "./node_modules/react/jsx-dev-runtime.js",
+    "react/jsx-runtime": "./node_modules/react/jsx-runtime.js"
+  },
+  "targets": {
+    "default": {
+      "outputFormat": "global",
+      "includeNodeModules": {
+        "react": false,
+        "react-dom": false
+      }
+    }
+  }
+}

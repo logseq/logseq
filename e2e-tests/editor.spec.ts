@@ -1,10 +1,25 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, enterNextBlock, systemModifier, IsMac } from './utils'
+import {
+  createRandomPage,
+  enterNextBlock,
+  modKey,
+  repeatKeyPress,
+  moveCursor,
+  selectCharacters,
+  getSelection,
+  getCursorPos,
+} from './utils'
 import { dispatch_kb_events } from './util/keyboard-events'
 import * as kb_events from './util/keyboard-events'
 
 test('hashtag and quare brackets in same line #4178', async ({ page }) => {
+  try {
+    await page.waitForSelector('.notification-clear', { timeout: 10 })
+    page.click('.notification-clear')
+  } catch (error) {
+  }
+
   await createRandomPage(page)
 
   await page.type('textarea >> nth=0', '#foo bar')
@@ -48,6 +63,16 @@ test('hashtag search page auto-complete', async ({ page, block }) => {
   await block.mustFill("done")
 })
 
+test('hashtag search #[[ page auto-complete', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  await block.activeEditing(0)
+
+  await page.type('textarea >> nth=0', '#[[', { delay: 100 })
+  await page.waitForSelector('text="Search for a page"', { state: 'visible' })
+  await page.keyboard.press('Escape', { delay: 50 })
+})
+
 test('disappeared children #4814', async ({ page, block }) => {
   await createRandomPage(page)
 
@@ -78,7 +103,7 @@ test('create new page from bracketing text #4971', async ({ page, block }) => {
 
   await block.mustType(`[[${title}]]`)
 
-  await page.keyboard.press(systemModifier('Control+o'))
+  await page.keyboard.press(modKey + '+o')
 
   // Check page title equals to `title`
   await page.waitForTimeout(100)
@@ -91,7 +116,7 @@ test('create new page from bracketing text #4971', async ({ page, block }) => {
 test.skip('backspace and cursor position #4897', async ({ page, block }) => {
   await createRandomPage(page)
 
-  // Delete to previous block, and check cursor postion, with markup
+  // Delete to previous block, and check cursor position, with markup
   await block.mustFill('`012345`')
   await block.enterNext()
   await block.mustType('`abcdef', { toBe: '`abcdef`' }) // "`" auto-completes
@@ -111,7 +136,7 @@ test.skip('backspace and cursor position #4897', async ({ page, block }) => {
 test.skip('next block and cursor position', async ({ page, block }) => {
   await createRandomPage(page)
 
-  // Press Enter and check cursor postion, with markup
+  // Press Enter and check cursor position, with markup
   await block.mustType('abcde`12345', { toBe: 'abcde`12345`' }) // "`" auto-completes
   for (let i = 0; i < 7; i++) {
     await page.keyboard.press('ArrowLeft')
@@ -131,8 +156,9 @@ test(
   // cases should trigger [[]] #3251
   async ({ page, block }) => {
     // This test requires dev mode
-    test.skip(process.env.RELEASE === 'true', 'not avaliable for release version')
+    test.skip(process.env.RELEASE === 'true', 'not available for release version')
 
+    // @ts-ignore
     for (let [idx, events] of [
       kb_events.win10_pinyin_left_full_square_bracket,
       kb_events.macos_pinyin_left_full_square_bracket
@@ -149,7 +175,7 @@ test(
       expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text + '[[]]')
     };
 
-    // dont trigger RIME #3440
+    // @ts-ignore dont trigger RIME #3440
     for (let [idx, events] of [
       kb_events.macos_pinyin_selecting_candidate_double_left_square_bracket,
       kb_events.win10_RIME_selecting_candidate_double_left_square_bracket
@@ -167,71 +193,64 @@ test(
 test('copy & paste block ref and replace its content', async ({ page, block }) => {
   await createRandomPage(page)
 
-  await block.mustFill('Some random text')
-  // FIXME: copy instantly will make content disappear
-  await page.waitForTimeout(1000)
-  if (IsMac) {
-    await page.keyboard.press('Meta+c')
-  } else {
-    await page.keyboard.press('Control+c')
-  }
+  await block.mustType('Some random text')
+
+  await page.keyboard.press(modKey + '+c')
 
   await page.press('textarea >> nth=0', 'Enter')
-  if (IsMac) {
-    await page.keyboard.press('Meta+v')
-  } else {
-    await page.keyboard.press('Control+v')
-  }
+  await block.waitForBlocks(2)
+  await page.waitForTimeout(100)
+  await page.keyboard.press(modKey + '+v')
+  await page.waitForTimeout(100)
   await page.keyboard.press('Enter')
 
-  const blockRef = page.locator('.block-ref >> text="Some random text"');
-
   // Check if the newly created block-ref has the same referenced content
-  await expect(blockRef).toHaveCount(1);
+  await expect(page.locator('.block-ref >> text="Some random text"')).toHaveCount(1);
 
   // Move cursor into the block ref
   for (let i = 0; i < 4; i++) {
     await page.press('textarea >> nth=0', 'ArrowLeft')
   }
 
-  // Trigger replace-block-reference-with-content-at-point
-  if (IsMac) {
-    await page.keyboard.press('Meta+Shift+r')
-  } else {
-    await page.keyboard.press('Control+Shift+v')
+  await expect(page.locator('textarea >> nth=0')).not.toHaveValue('Some random text')
+
+  // FIXME: Sometimes the cursor is in the end of the editor
+  for (let i = 0; i < 4; i++) {
+    await page.press('textarea >> nth=0', 'ArrowLeft')
   }
+
+  // Trigger replace-block-reference-with-content-at-point
+  await page.keyboard.press(modKey + '+Shift+r')
+
+  await expect(page.locator('textarea >> nth=0')).toHaveValue('Some random text')
+
+  await block.escapeEditing()
+
+  await expect(page.locator('.block-ref >> text="Some random text"')).toHaveCount(0);
+  await expect(page.locator('text="Some random text"')).toHaveCount(2);
 })
 
 test('copy and paste block after editing new block #5962', async ({ page, block }) => {
   await createRandomPage(page)
 
   // Create a block and copy it in block-select mode
-  await block.mustFill('Block being copied')
-  await page.waitForTimeout(100)
+  await block.mustType('Block being copied')
   await page.keyboard.press('Escape')
-  await page.waitForTimeout(100)
-  if (IsMac) {
-    await page.keyboard.press('Meta+c')
-  } else {
-    await page.keyboard.press('Control+c')
-  }
-  // await page.waitForTimeout(100)
+  await expect(page.locator('.ls-block.selected')).toHaveCount(1)
+
+  await page.keyboard.press(modKey + '+c', { delay: 10 })
+
   await page.keyboard.press('Enter')
-  await page.waitForTimeout(100)
+  await expect(page.locator('.ls-block.selected')).toHaveCount(0)
+  await expect(page.locator('textarea >> nth=0')).toBeVisible()
   await page.keyboard.press('Enter')
+  await block.waitForBlocks(2)
 
-  await page.waitForTimeout(100)
-  // Create a new block with some text
-  await page.keyboard.insertText("Typed block")
+  await block.mustType('Typed block')
 
-  // Quickly paste the copied block
-  if (IsMac) {
-    await page.keyboard.press('Meta+v')
-  } else {
-    await page.keyboard.press('Control+v')
-  }
-
-  await expect(page.locator('text="Typed block"')).toHaveCount(1);
+  await page.keyboard.press(modKey + '+v')
+  await expect(page.locator('text="Typed block"')).toHaveCount(1)
+  await block.waitForBlocks(3)
 })
 
 test('undo and redo after starting an action should not destroy text #6267', async ({ page, block }) => {
@@ -246,11 +265,7 @@ test('undo and redo after starting an action should not destroy text #6267', asy
   await page.keyboard.type('[[', { delay: 50 })
 
   await expect(page.locator(`[data-modal-name="page-search"]`)).toBeVisible()
-  if (IsMac) {
-    await page.keyboard.press('Meta+z')
-  } else {
-    await page.keyboard.press('Control+z')
-  }
+  await page.keyboard.press(modKey + '+z')
   await page.waitForTimeout(100)
 
   // Should close the action menu when we undo the action prompt
@@ -260,12 +275,8 @@ test('undo and redo after starting an action should not destroy text #6267', asy
   await expect(page.locator('text="text1"')).toHaveCount(1)
 
   // And it should keep what was undone as a redo action
-  if (IsMac) {
-    await page.keyboard.press('Meta+Shift+z')
-  } else {
-    await page.keyboard.press('Control+Shift+z')
-  }
-  await expect(page.locator('text="text2"')).toHaveCount(1)
+  await page.keyboard.press(modKey + '+Shift+z')
+  await expect(page.locator('text="text1 text2 [[]]"')).toHaveCount(1)
 })
 
 test('undo after starting an action should close the action menu #6269', async ({ page, block }) => {
@@ -281,11 +292,7 @@ test('undo after starting an action should close the action menu #6269', async (
     await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
 
     // Undo, removing "/today", and closing the action modal
-    if (IsMac) {
-      await page.keyboard.press('Meta+z')
-    } else {
-      await page.keyboard.press('Control+z')
-    }
+    await page.keyboard.press(modKey + '+z')
     await page.waitForTimeout(100)
     await expect(page.locator('text="/today"')).toHaveCount(0)
     await expect(page.locator(`[data-modal-name="${modalName}"]`)).not.toBeVisible()
@@ -516,7 +523,7 @@ test('press escape when link/image dialog is open, should restore focus to input
 })
 
 test('should show text after soft return when node is collapsed #5074', async ({ page, block }) => {
-  const delay = 100
+  const delay = 300
   await createRandomPage(page)
 
   await page.type('textarea >> nth=0', 'Before soft return', { delay: 10 })
@@ -526,11 +533,10 @@ test('should show text after soft return when node is collapsed #5074', async ({
   await block.enterNext()
   expect(await block.indent()).toBe(true)
   await block.mustType('Child text')
-  await page.waitForTimeout(delay)
 
   // collapse
   await page.click('.block-control >> nth=0')
-  await page.waitForTimeout(delay)
+  await block.waitForBlocks(1)
 
   // select the block that has the soft return
   await page.keyboard.press('ArrowDown')
@@ -538,13 +544,12 @@ test('should show text after soft return when node is collapsed #5074', async ({
   await page.keyboard.press('Enter')
   await page.waitForTimeout(delay)
 
-  expect(await page.inputValue('textarea >> nth=0')).toBe(
-    'Before soft return\nAfter soft return'
-  )
+  await expect(page.locator('textarea >> nth=0')).toHaveText('Before soft return\nAfter soft return')
 
   // zoom into the block
-  await page.click('a.block-control + a')
-  await page.waitForTimeout(delay)
+  page.click('a.block-control + a')
+  await page.waitForNavigation()
+  await page.waitForTimeout(delay * 3)
 
   // select the block that has the soft return
   await page.keyboard.press('ArrowDown')
@@ -552,9 +557,7 @@ test('should show text after soft return when node is collapsed #5074', async ({
   await page.keyboard.press('Enter')
   await page.waitForTimeout(delay)
 
-  expect(await page.inputValue('textarea >> nth=0')).toBe(
-    'Before soft return\nAfter soft return'
-  )
+  await expect(page.locator('textarea >> nth=0')).toHaveText('Before soft return\nAfter soft return')
 })
 
 test('should not erase typed text when expanding block quickly after typing #3891', async ({ page, block }) => {
@@ -564,32 +567,301 @@ test('should not erase typed text when expanding block quickly after typing #389
   await page.waitForTimeout(500)
   await page.type('textarea >> nth=0', ' then expand', { delay: 10 })
   // A quick cmd-down must not destroy the typed text
-  if (IsMac) {
-    await page.keyboard.press('Meta+ArrowDown')
-  } else {
-    await page.keyboard.press('Control+ArrowDown')
-  }
+  await page.keyboard.press(modKey + '+ArrowDown')
   await page.waitForTimeout(500)
   expect(await page.inputValue('textarea >> nth=0')).toBe(
     'initial text, then expand'
   )
 
   // First undo should delete the last typed information, not undo a no-op expand action
-  if (IsMac) {
-    await page.keyboard.press('Meta+z')
-  } else {
-    await page.keyboard.press('Control+z')
-  }
+  await page.keyboard.press(modKey + '+z')
   expect(await page.inputValue('textarea >> nth=0')).toBe(
     'initial text,'
   )
 
-  if (IsMac) {
-    await page.keyboard.press('Meta+z')
-  } else {
-    await page.keyboard.press('Control+z')
-  }
+  await page.keyboard.press(modKey + '+z')
   expect(await page.inputValue('textarea >> nth=0')).toBe(
     ''
   )
+})
+
+test('should keep correct undo and redo seq after indenting or outdenting the block #7615',async({page,block}) => {
+  await createRandomPage(page)
+
+  await block.mustFill("foo")
+
+  await page.keyboard.press("Enter")
+  await expect(page.locator('textarea >> nth=0')).toHaveText("")
+  await block.indent()
+  await block.mustFill("bar")
+  await expect(page.locator('textarea >> nth=0')).toHaveText("bar")
+
+  await page.keyboard.press(modKey + '+z')
+  // should undo "bar" input
+  await expect(page.locator('textarea >> nth=0')).toHaveText("")
+  await page.keyboard.press(modKey + '+Shift+z')
+  // should redo "bar" input
+  await expect(page.locator('textarea >> nth=0')).toHaveText("bar")
+  await page.keyboard.press("Shift+Tab")
+
+  await page.keyboard.press("Enter")
+  await expect(page.locator('textarea >> nth=0')).toHaveText("")
+  // swap input seq
+  await block.mustFill("baz")
+  await block.indent()
+
+  await page.keyboard.press(modKey + '+z')
+  // should undo indention
+  await expect(page.locator('textarea >> nth=0')).toHaveText("baz")
+  await page.keyboard.press("Shift+Tab")
+
+  await page.keyboard.press("Enter")
+  await expect(page.locator('textarea >> nth=0')).toHaveText("")
+  // #7615
+  await page.keyboard.type("aaa")
+  await block.indent()
+  await page.keyboard.type(" bbb")
+  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa bbb")
+  await page.keyboard.press(modKey + '+z')
+  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
+  await page.keyboard.press(modKey + '+z')
+  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
+  await page.keyboard.press(modKey + '+z')
+  await expect(page.locator('textarea >> nth=0')).toHaveText("")
+  await page.keyboard.press(modKey + '+Shift+z')
+  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
+  await page.keyboard.press(modKey + '+Shift+z')
+  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa")
+  await page.keyboard.press(modKey + '+Shift+z')
+  await expect(page.locator('textarea >> nth=0')).toHaveText("aaa bbb")
+})
+
+test.describe('Text Formatting', () => {
+  const formats = [
+    { name: 'bold', prefix: '**', postfix: '**', shortcut: modKey + '+b' },
+    { name: 'italic', prefix: '*', postfix: '*', shortcut: modKey + '+i' },
+    {
+      name: 'strikethrough',
+      prefix: '~~',
+      postfix: '~~',
+      shortcut: modKey + '+Shift+s',
+    },
+    // {
+    //   name: 'underline',
+    //   prefix: '<u>',
+    //   postfix: '</u>',
+    //   shortcut: modKey + '+u',
+    // },
+  ]
+
+  for (const format of formats) {
+    test.describe(`${format.name} formatting`, () => {
+      test('Applying to an empty selection inserts placeholder formatting and places cursor correctly', async ({
+        page,
+        block,
+      }) => {
+        await createRandomPage(page)
+
+        const text = 'Lorem ipsum'
+        await block.mustFill(text)
+
+        // move the cursor to the end of Lorem
+        await repeatKeyPress(page, 'ArrowLeft', text.length - 'ipsum'.length)
+        await page.keyboard.press('Space')
+
+        // Apply formatting
+        await page.keyboard.press(format.shortcut)
+
+        await expect(page.locator('textarea >> nth=0')).toHaveText(
+          `Lorem ${format.prefix}${format.postfix} ipsum`
+        )
+
+        // Verify cursor position
+        const cursorPos = await getCursorPos(page)
+        expect(cursorPos).toBe(' ipsum'.length + format.prefix.length)
+      })
+
+      test('Applying to an entire block encloses the block in formatting and places cursor correctly', async ({
+        page,
+        block,
+      }) => {
+        await createRandomPage(page)
+
+        const text = 'Lorem ipsum-dolor sit.'
+        await block.mustFill(text)
+
+        // Select the entire block
+        await page.keyboard.press(modKey + '+a')
+
+        // Apply formatting
+        await page.keyboard.press(format.shortcut)
+
+        await expect(page.locator('textarea >> nth=0')).toHaveText(
+          `${format.prefix}${text}${format.postfix}`
+        )
+
+        // Verify cursor position
+        const cursorPosition = await getCursorPos(page)
+        expect(cursorPosition).toBe(format.prefix.length + text.length)
+      })
+
+      test('Applying and then removing from a word connected with a special character correctly formats and then reverts', async ({
+        page,
+        block,
+      }) => {
+        await createRandomPage(page)
+
+        await block.mustFill('Lorem ipsum-dolor sit.')
+
+        // Select 'ipsum'
+        // Move the cursor to the desired position
+        await moveCursor(page, -16)
+
+        // Select the desired length of text
+        await selectCharacters(page, 5)
+
+        // Apply formatting
+        await page.keyboard.press(format.shortcut)
+
+        // Verify that 'ipsum' is formatted
+        await expect(page.locator('textarea >> nth=0')).toHaveText(
+          `Lorem ${format.prefix}ipsum${format.postfix}-dolor sit.`
+        )
+
+        // Re-select 'ipsum'
+        // Move the cursor to the desired position
+        await moveCursor(page, -5)
+
+        // Select the desired length of text
+        await selectCharacters(page, 5)
+
+        // Remove formatting
+        await page.keyboard.press(format.shortcut)
+        await expect(page.locator('textarea >> nth=0')).toHaveText(
+          'Lorem ipsum-dolor sit.'
+        )
+
+        // Verify the word 'ipsum' is still selected
+        const selection = await getSelection(page)
+        expect(selection).toBe('ipsum')
+      })
+    })
+  }
+})
+
+test.describe('Always auto-pair symbols', () => {
+  // Define the symbols that should be auto-paired
+  const autoPairSymbols = [
+    { name: 'square brackets', prefix: '[', postfix: ']' },
+    { name: 'curly brackets', prefix: '{', postfix: '}' },
+    { name: 'parentheses', prefix: '(', postfix: ')' },
+    // { name: 'angle brackets', prefix: '<', postfix: '>' },
+    { name: 'backtick', prefix: '`', postfix: '`' },
+    // { name: 'single quote', prefix: "'", postfix: "'" },
+    // { name: 'double quote', prefix: '"', postfix: '"' },
+  ]
+
+  for (const symbol of autoPairSymbols) {
+    test(`${symbol.name} auto-pairing`, async ({ page }) => {
+      await createRandomPage(page)
+
+      // Type prefix and check that the postfix is automatically added
+      page.type('textarea >> nth=0', symbol.prefix, { delay: 100 })
+      await expect(page.locator('textarea >> nth=0')).toHaveText(
+        `${symbol.prefix}${symbol.postfix}`
+      )
+
+      // Check that the cursor is positioned correctly between the prefix and postfix
+      const CursorPos = await getCursorPos(page)
+      expect(CursorPos).toBe(symbol.prefix.length)
+    })
+  }
+})
+
+test.describe('Auto-pair symbols only with text selection', () => {
+  const autoPairSymbols = [
+    // { name: 'tilde', prefix: '~', postfix: '~' },
+    { name: 'asterisk', prefix: '*', postfix: '*' },
+    { name: 'underscore', prefix: '_', postfix: '_' },
+    { name: 'caret', prefix: '^', postfix: '^' },
+    { name: 'equal', prefix: '=', postfix: '=' },
+    { name: 'slash', prefix: '/', postfix: '/' },
+    { name: 'plus', prefix: '+', postfix: '+' },
+  ]
+
+  for (const symbol of autoPairSymbols) {
+    test(`Only auto-pair ${symbol.name} with text selection`, async ({
+      page,
+      block,
+    }) => {
+      await createRandomPage(page)
+
+      // type the symbol
+      page.type('textarea >> nth=0', symbol.prefix, { delay: 100 })
+
+      // Verify that there is no auto-pairing
+      await expect(page.locator('textarea >> nth=0')).toHaveText(symbol.prefix)
+
+      // remove prefix
+      await page.keyboard.press('Backspace')
+
+      // add text
+      await block.mustType('Lorem')
+      // select text
+      await page.keyboard.press(modKey + '+a')
+
+      // Type the prefix
+      await page.type('textarea >> nth=0', symbol.prefix, { delay: 100 })
+
+      // Verify that an additional postfix was automatically added around 'Lorem'
+      await expect(page.locator('textarea >> nth=0')).toHaveText(
+        `${symbol.prefix}Lorem${symbol.postfix}`
+      )
+
+      // Verify 'Lorem' is selected
+      const selection = await getSelection(page)
+      expect(selection).toBe('Lorem')
+    })
+  }
+})
+
+test('copy blocks should remove all ref-related values', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  await block.mustFill('test')
+  await page.keyboard.press(modKey + '+c', { delay: 10 })
+  await block.clickNext()
+  await page.keyboard.press(modKey + '+v')
+  await expect(page.locator('.open-block-ref-link')).toHaveCount(1)
+
+  await page.keyboard.press('ArrowUp', { delay: 10 })
+  await page.waitForTimeout(100)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.ls-block.selected')).toHaveCount(1)
+  await page.keyboard.press(modKey + '+c', { delay: 10 })
+  await block.clickNext()
+  await page.keyboard.press(modKey + '+v', { delay: 10 })
+  await block.clickNext() // let 3rd block leave editing state
+  await expect(page.locator('.open-block-ref-link')).toHaveCount(1)
+})
+
+test('undo cut block should recover refs', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  await block.mustFill('test')
+  await page.keyboard.press(modKey + '+c', { delay: 10 })
+  await block.clickNext()
+  await page.keyboard.press(modKey + '+v')
+  await expect(page.locator('.open-block-ref-link')).toHaveCount(1)
+
+  await page.keyboard.press('ArrowUp', { delay: 10 })
+  await page.waitForTimeout(100)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.ls-block.selected')).toHaveCount(1)
+  await page.keyboard.press(modKey + '+x', { delay: 10 })
+  await expect(page.locator('.ls-block')).toHaveCount(1)
+  await page.keyboard.press(modKey + '+z')
+  await page.waitForTimeout(100)
+  await expect(page.locator('.ls-block')).toHaveCount(2)
+  await expect(page.locator('.open-block-ref-link')).toHaveCount(1)
 })

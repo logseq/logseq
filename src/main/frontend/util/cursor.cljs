@@ -226,7 +226,7 @@
 
 (defn- move-cursor-up-down
   [input direction]
-    (move-cursor-to input (next-cursor-pos-up-down direction (get-caret-pos input))))
+  (move-cursor-to input (next-cursor-pos-up-down direction (get-caret-pos input))))
 
 (defn move-cursor-up [input]
   (move-cursor-up-down input :up))

@@ -6,12 +6,17 @@ import * as React from 'react'
 import type { Shape } from '../../lib'
 import { TablerIcon } from '../icons'
 import { Button } from '../Button'
-import { ToolButton } from '../ToolButton'
+import { ToggleInput } from '../inputs/ToggleInput'
 import { ZoomMenu } from '../ZoomMenu'
 import * as Separator from '@radix-ui/react-separator'
+import { LogseqContext } from '../../lib/logseq-context'
 
 export const ActionBar = observer(function ActionBar(): JSX.Element {
   const app = useApp<Shape>()
+  const {
+    handlers: { t },
+  } = React.useContext(LogseqContext)
+
   const undo = React.useCallback(() => {
     app.api.undo()
   }, [app])
@@ -28,34 +33,79 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
     app.api.zoomOut()
   }, [app])
 
-  return (
-    <div className="tl-action-bar">
-      <div className="tl-toolbar tl-history-bar">
-        <ToolButton title="Select" id="select" icon="select-cursor" />
-        <ToolButton
-          title="Move"
-          id="move"
-          icon={app.isIn('move.panning') ? 'hand-grab' : 'hand-stop'}
-        />
-        <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
-        <Button title="Undo" onClick={undo}>
-          <TablerIcon name="arrow-back-up" />
-        </Button>
-        <Button title="Redo" onClick={redo}>
-          <TablerIcon name="arrow-forward-up" />
-        </Button>
-      </div>
+  const toggleGrid = React.useCallback(() => {
+    app.api.toggleGrid()
+  }, [app])
 
-      <div className="tl-toolbar tl-zoom-bar">
-        <Button title="Zoom in" onClick={zoomIn} id="tl-zoom-in">
+  const toggleSnapToGrid = React.useCallback(() => {
+    app.api.toggleSnapToGrid()
+  }, [app])
+
+  const togglePenMode = React.useCallback(() => {
+    app.api.togglePenMode()
+  }, [app])
+
+  return (
+    <div className="tl-action-bar" data-html2canvas-ignore="true">
+      {!app.readOnly && (
+        <div className="tl-toolbar tl-history-bar mr-2 mb-2">
+          <Button tooltip={t('whiteboard/undo')} onClick={undo}>
+            <TablerIcon name="arrow-back-up" />
+          </Button>
+          <Button tooltip={t('whiteboard/redo')} onClick={redo}>
+            <TablerIcon name="arrow-forward-up" />
+          </Button>
+        </div>
+      )}
+
+      <div className={'tl-toolbar tl-zoom-bar mr-2 mb-2'}>
+        <Button tooltip={t('whiteboard/zoom-in')} onClick={zoomIn} id="tl-zoom-in">
           <TablerIcon name="plus" />
         </Button>
-        <Button title="Zoom out" onClick={zoomOut} id="tl-zoom-out">
+        <Button tooltip={t('whiteboard/zoom-out')} onClick={zoomOut} id="tl-zoom-out">
           <TablerIcon name="minus" />
         </Button>
         <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
         <ZoomMenu />
       </div>
+
+      <div className={'tl-toolbar tl-grid-bar mr-2 mb-2'}>
+        <ToggleInput
+            tooltip={t('whiteboard/toggle-grid')}
+            className="tl-button"
+            pressed={app.settings.showGrid}
+            id="tl-show-grid"
+            onPressedChange={toggleGrid}
+          >
+          <TablerIcon name="grid-dots" />
+        </ToggleInput>
+
+        {!app.readOnly && (
+          <ToggleInput
+              tooltip={t('whiteboard/snap-to-grid')}
+              className="tl-button"
+              pressed={app.settings.snapToGrid}
+              id="tl-snap-to-grid"
+              onPressedChange={toggleSnapToGrid}
+            >
+            <TablerIcon name={app.settings.snapToGrid ? "magnet" : "magnet-off"} />
+          </ToggleInput>
+        )}
+      </div>
+
+      {!app.readOnly && (
+        <div className="tl-toolbar tl-pen-mode-bar mb-2">
+          <ToggleInput
+            tooltip={t('whiteboard/toggle-pen-mode')}
+            className="tl-button"
+            pressed={app.settings.penMode}
+            id="tl-toggle-pen-mode"
+            onPressedChange={togglePenMode}
+          >
+          <TablerIcon name={app.settings.penMode ? "pencil" : "pencil-off"} />
+        </ToggleInput>
+        </div>
+      )}
     </div>
   )
 })

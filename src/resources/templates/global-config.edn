@@ -1,0 +1,12 @@
+;; This global config file applies a configuration to all graphs. Any config
+;; keys from a graph's logseq/config.edn can used here. A graph's
+;; logseq/config.edn overrides config keys in this file except for maps which
+;; are merged. As an example of merging, the following global and local configs:
+;;   {:shortcuts {:ui/toggle-theme "t z"}}
+;;   {:shortcuts {:ui/toggle-brackets "t b"}}
+;;
+;;  would result in the final config:
+;;   {:shortcuts {:ui/toggle-theme "t z"
+;;                :ui/toggle-brackets "t b"}}
+
+{}

@@ -11,7 +11,7 @@
     (mixins/hide-when-esc-or-outside
      state
      :on-hide
-     (fn [_state _e event]
+     (fn [_state e event]
        (cond
          (contains?
           #{:commands :block-commands
@@ -23,6 +23,10 @@
 
          ;; editor/input component handles Escape directly, so just prevent handling it here
          (= :input (state/get-editor-action))
+         nil
+
+         (some-> (.-target e)
+                 (.closest ".ls-keep-editing-when-outside-click"))
          nil
 
          :else
