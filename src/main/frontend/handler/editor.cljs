@@ -2347,7 +2347,7 @@
     (save-block-if-changed!
       block
       (if (= new-content content)
-        (replace-first (string/replace old-item-content "[X]" "[x]"))
+        (replace-first (string/replace-first old-item-content "[X]" "[x]"))
         new-content))))
 
 (defn- dwim-in-list
