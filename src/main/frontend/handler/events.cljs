@@ -30,6 +30,7 @@
             [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
             [frontend.db.persist :as db-persist]
+            [frontend.db.transact :as db-transact]
             [frontend.extensions.srs :as srs]
             [frontend.fs :as fs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
@@ -80,8 +81,7 @@
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [frontend.modules.outliner.pipeline :as pipeline]
             [electron.ipc :as ipc]
-            [frontend.date :as date]
-            [logseq.db :as ldb]))
+            [frontend.date :as date]))
 
 ;; TODO: should we move all events here?
 
@@ -195,14 +195,14 @@
 
   (let [^js sqlite @db-browser/*worker]
     (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite (state/get-current-repo)))
-            request-finished? (ldb/request-finished?)]
+            request-finished? (db-transact/request-finished?)]
       (if (not writes-finished?) ; TODO: test (:sync-graph/init? @state/state)
         (do
           (log/info :graph/switch (cond->
                                     {:request-finished? request-finished?
                                      :file-writes-finished? writes-finished?}
                                     (false? request-finished?)
-                                    (assoc :unfinished-requests? @ldb/*unfinished-request-ids)))
+                                    (assoc :unfinished-requests? @db-transact/*unfinished-request-ids)))
           (notification/show!
             "Please wait seconds until all changes are saved for the current graph."
             :warning))
@@ -386,7 +386,7 @@
   (when-let [repo (state/get-current-repo)]
     (let [^js sqlite @db-browser/*worker]
       (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite (state/get-current-repo)))
-              request-finished? (ldb/request-finished?)]
+              request-finished? (db-transact/request-finished?)]
         (prn :debug :writes-finished? writes-finished?
           :request-finished? request-finished?)
         (when (and request-finished? writes-finished? disk-content db-content

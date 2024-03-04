@@ -9,10 +9,7 @@
             [logseq.db.frontend.content :as db-content]
             [clojure.set :as set]
             [logseq.db.frontend.rules :as rules]
-            [logseq.db.frontend.entity-plus]
-            [promesa.core :as p]
-            [clojure.core.async :as async]
-            [clojure.core.async.interop :refer [p->c]]))
+            [logseq.db.frontend.entity-plus]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
@@ -51,36 +48,6 @@
   [f]
   (when f (reset! *transact-fn f)))
 
-(defonce *request-id (atom 0))
-(defonce requests (async/chan 1000))
-(defonce *unfinished-request-ids (atom #{}))
-
-(defn request-finished?
-  "Whether any DB transaction request has been finished"
-  []
-  (empty? @*unfinished-request-ids))
-
-(async/go-loop []
-  (when-let [{:keys [id request response]} (async/<! requests)]
-    (let [result (async/<! (p->c (request)))]
-      (p/resolve! response result)
-      (swap! *unfinished-request-ids disj id))
-    (recur)))
-
-(defn get-next-request-id
-  []
-  (swap! *request-id inc))
-
-(defn add-request!
-  [request-id request-f]
-  (let [resp (p/deferred)
-        new-request {:id request-id
-                     :request request-f
-                     :response resp}]
-    (swap! *unfinished-request-ids conj request-id)
-    (async/go (async/>! requests new-request))
-    resp))
-
 (defn transact!
   "`repo-or-conn`: repo for UI thread and conn for worker/node"
   ([repo-or-conn tx-data]
@@ -95,15 +62,8 @@
        ;; (prn :debug :transact :sync? (= d/transact! (or @*transact-fn d/transact!)))
        ;; (cljs.pprint/pprint tx-data)
 
-       (let [f (or @*transact-fn d/transact!)
-             sync? (= f d/transact!)
-             request-id (when-not sync? (get-next-request-id))
-             tx-meta' (cond-> tx-meta
-                        (not sync?)
-                        (assoc :request-id request-id))]
-         (if sync?
-           (f repo-or-conn tx-data tx-meta')
-           (add-request! request-id #(f repo-or-conn tx-data tx-meta'))))))))
+       (let [f (or @*transact-fn d/transact!)]
+         (f repo-or-conn tx-data tx-meta))))))
 
 (defn build-default-pages-tx
   []
