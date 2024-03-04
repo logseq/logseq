@@ -478,16 +478,7 @@
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (let [ops (edn/read-string ops-str)
            opts (edn/read-string opts-str)
-           start-tx (:max-tx @conn)
-           result (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts)
-           end-tx (:max-tx @conn)]
-       (when (= start-tx end-tx)        ; nothing changes
-         ;; remove task from ldb/*request-id->response
-         (worker-util/post-message :sync-db-changes (pr-str
-                                                     {:request-id (:request-id opts)
-                                                      :repo repo
-                                                      :tx-data []
-                                                      :tx-meta nil})))
+           result (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts)]
        (pr-str result))))
 
   (file-writes-finished?
