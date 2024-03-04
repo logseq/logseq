@@ -742,7 +742,6 @@
                 (state/set-editor-args! (:rum/args state))
                 state)}
   (mixins/event-mixin setup-key-listener!)
-  (shortcut/mixin :shortcut.handler/block-editing-only)
   lifecycle/lifecycle
   [state {:keys [format block parent-block on-hide]} id config]
   (let [content (state/sub-edit-content (:block/uuid block))
