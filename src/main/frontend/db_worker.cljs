@@ -99,7 +99,13 @@
                                           :bind #js [addr]
                                           :rowMode "array"})
                            ffirst)]
-      (edn/read-string content))))
+      (try
+        (let [data (sqlite-util/transit-read content)]
+         (if-let [addresses (:addresses data)]
+           (assoc data :addresses (bean/->js addresses))
+           data))
+        (catch :default _e              ; TODO: remove this once db goes to test
+          (edn/read-string content))))))
 
 (defn new-sqlite-storage
   [repo _opts]
@@ -108,7 +114,7 @@
       (let [data (map
                   (fn [[addr data]]
                     #js {:$addr addr
-                         :$content (pr-str data)})
+                         :$content (sqlite-util/transit-write data)})
                   addr+data-seq)]
         (if (worker-state/rtc-downloading-graph?)
           (upsert-addr-content! repo data delete-addrs) ; sync writes when downloading whole graph

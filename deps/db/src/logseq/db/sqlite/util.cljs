@@ -2,10 +2,22 @@
   "Utils fns for backend sqlite db"
   (:require [clojure.string :as string]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [cognitect.transit :as transit]))
 
 (defonce db-version-prefix "logseq_db_")
 (defonce file-version-prefix "logseq_local_")
+
+(def transit-w (transit/writer :json))
+(def transit-r (transit/reader :json))
+(defn transit-write
+  [data]
+  (transit/write transit-w data))
+
+(defn transit-read
+  [str]
+  (transit/read transit-r str))
+
 
 (defn db-based-graph?
   [graph-name]
