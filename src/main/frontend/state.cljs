@@ -156,7 +156,7 @@
 
       :db/properties-changed-pages           {}
       :editor/cursor-range                   (atom nil)
-      :editor/new-created-blocks             (atom #{})
+      :editor/new-created-block-id           (atom nil)
 
       :selection/mode                        (atom false)
       ;; Warning: blocks order is determined when setting this attribute
