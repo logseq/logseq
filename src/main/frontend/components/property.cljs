@@ -171,6 +171,7 @@
           [:label.col-span-1 "Name:"]
           (shui/input
            {:class         "col-span-2 !px-2 !py-0 !h-8"
+            :auto-focus    true
             :on-change     #(reset! *property-name (util/evalue %))
             :on-blur       save-property-fn
             :on-key-press  (fn [e]
