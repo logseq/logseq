@@ -77,12 +77,13 @@
             (update-current-tx-editor-cursor! tx-report)))
 
         (when-not (:graph/importing @state/state)
-          (let [new-datoms (filter (fn [datom]
-                                     (and
-                                      (= :block/uuid (:a datom))
-                                      (true? (:added datom)))) tx-data)]
-            (when (seq new-datoms)
-              (state/set-state! :editor/new-created-blocks (set (map :v new-datoms)))))
+          (when (and (= (:outliner-op tx-meta) :insert-blocks) (:local-tx? tx-meta))
+            (let [new-datoms (filter (fn [datom]
+                                       (and
+                                        (= :block/uuid (:a datom))
+                                        (true? (:added datom)))) tx-data)]
+              (when (seq new-datoms)
+                (state/set-state! :editor/new-created-block-id (last (map :v new-datoms))))))
 
           (react/refresh! repo tx-report affected-keys)
 
@@ -113,4 +114,6 @@
                                (= :block/uuid (:a datom))
                                (= (:v datom) deleting-block-id)
                                (true? (:added datom)))) tx-data) ; editing-block was added back (could be undo or from remote sync)
-        (state/set-state! :ui/deleting-block nil)))))
+        (state/set-state! :ui/deleting-block nil)))
+
+    (state/set-state! :editor/new-created-block-id nil)))

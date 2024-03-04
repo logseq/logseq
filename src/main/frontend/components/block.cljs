@@ -1832,7 +1832,7 @@
                                  (when order-list? " as-order-list typed-list"))}
 
                     [:span.bullet (cond->
-                                    {:blockid (str uuid)}
+                                   {:blockid (str uuid)}
                                     selected?
                                     (assoc :class "selected"))
                      (when order-list?
@@ -1840,6 +1840,7 @@
        (cond
          (and (or (mobile-util/native-platform?)
                   (:ui/show-empty-bullets? (state/get-config))
+                  (= @(:editor/new-created-block-id @state/state) uuid)
                   collapsed?
                   collapsable?)
               (not doc-mode?))
@@ -3102,8 +3103,7 @@
                            (block-mouse-leave e *control-show? block-id doc-mode?))}
         (when (and (not slide?) (not in-whiteboard?) (not hidden?))
           (let [edit? (or edit?
-                          (= uuid (:block/uuid (state/get-edit-block)))
-                          (contains? @(:editor/new-created-blocks @state/state) uuid))]
+                          (= uuid (:block/uuid (state/get-edit-block))))]
             (block-control config block uuid block-id collapsed? *control-show? edit? selected?)))
 
         (when (and @*show-left-menu? (not in-whiteboard?) (not hidden?))
