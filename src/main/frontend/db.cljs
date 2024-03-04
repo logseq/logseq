@@ -5,6 +5,7 @@
             [frontend.db.query-custom]
             [frontend.db.query-react]
             [frontend.db.react :as react]
+            [frontend.db.transact :as db-transact]
             [frontend.db.utils]
             [frontend.namespaces :refer [import-vars]]
             [logseq.db.frontend.default :as default-db]
@@ -66,4 +67,4 @@
    (conn/start! repo option)))
 
 (def new-block-id ldb/new-block-id)
-(def request-finished? ldb/request-finished?)
+(def request-finished? db-transact/request-finished?)

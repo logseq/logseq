@@ -7,7 +7,7 @@
             [frontend.handler.route :as route-handler]
             [goog.dom :as gdom]
             [promesa.core :as p]
-            [logseq.db :as ldb]))
+            [frontend.db.transact :as db-transact]))
 
 (defn restore-cursor!
   [{:keys [last-edit-block container pos end-pos]} undo?]
@@ -41,7 +41,7 @@
 
 (defn undo!
   [e]
-  (when (ldb/request-finished?)
+  (when (db-transact/request-finished?)
     (util/stop e)
     (p/do!
      (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)] nil)
@@ -53,7 +53,7 @@
 
 (defn redo!
   [e]
-  (when (ldb/request-finished?)
+  (when (db-transact/request-finished?)
     (util/stop e)
     (state/clear-editor-action!)
     (let [cursor-state (undo-redo/redo)]

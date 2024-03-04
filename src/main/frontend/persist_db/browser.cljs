@@ -13,6 +13,7 @@
             [electron.ipc :as ipc]
             [frontend.handler.worker :as worker-handler]
             [logseq.db :as ldb]
+            [frontend.db.transact :as db-transact]
             [frontend.date :as date]))
 
 (defonce *worker state/*db-worker)
@@ -80,10 +81,11 @@
             (ldb/register-transact-fn!
              (fn worker-transact!
                [repo tx-data tx-meta]
-               (let [repo' (if (string? repo) repo (state/get-current-repo))]
-                 (transact! wrapped-worker repo' tx-data
-                 ;; not from remote(rtc)
-                            (assoc tx-meta :local-tx? true))))))
+               (db-transact/transact (partial transact! wrapped-worker)
+                                     (if (string? repo) repo (state/get-current-repo))
+                                     tx-data
+                                     tx-meta)))
+            (db-transact/listen-for-requests))
           (p/catch (fn [error]
                      (prn :debug "Can't init SQLite wasm")
                      (js/console.error error)
