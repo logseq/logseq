@@ -591,7 +591,7 @@
                            (open-page-ref e config page-name page-name-in-block contents-page? whiteboard-page?)))}
      (when-not hide-icon?
        (when-let [icon (pu/get-block-property-value page-entity :icon)]
-         [:span.mr-1 (icon/icon icon)]))
+         [:span.mr-1.flex.items-center (icon/icon icon)]))
      (if (and (coll? children) (seq children))
        (for [child children]
          (if (= (first child) "Label")
