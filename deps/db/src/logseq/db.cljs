@@ -135,20 +135,19 @@
     db-conn))
 
 (defn sort-by-left
-  ([blocks parent]
-   (sort-by-left blocks parent {:check? true}))
-  ([blocks parent {:keys [_check?]}]
-   (let [blocks (common-util/distinct-by :db/id blocks)
-         left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
-     (loop [block parent
-            result []]
-       (if-let [next (get left->blocks (:db/id block))]
-         (recur next (conj result next))
-         (vec result))))))
+  [blocks parent]
+  (let [left->blocks (->> (reduce (fn [acc b] (assoc! acc (:db/id (:block/left b)) b))
+                                  (transient {}) blocks)
+                          (persistent!))]
+    (loop [block parent
+           result (transient [])]
+      (if-let [next (get left->blocks (:db/id block))]
+        (recur next (conj! result next))
+        (vec (persistent! result))))))
 
 (defn try-sort-by-left
   [blocks parent]
-  (let [result' (sort-by-left blocks parent {:check? false})]
+  (let [result' (sort-by-left blocks parent)]
     (if (= (count result') (count blocks))
       result'
       blocks)))
