@@ -829,6 +829,7 @@
       :editor/expand-block-children
       :editor/toggle-block-children
       :editor/toggle-open-blocks
+      :editor/jump
       :go/backward
       :go/forward
       :go/home
