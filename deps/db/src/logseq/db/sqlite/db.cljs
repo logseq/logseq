@@ -55,9 +55,16 @@
 
 (defn restore-data-from-addr
   [db addr]
-  (-> (query db (str "select content from kvs where addr = " addr))
-      first
-      (gobj/get "content")))
+  (when-let [content (-> (query db (str "select content from kvs where addr = " addr))
+                         first
+                         (gobj/get "content"))]
+    (try
+        (let [data (sqlite-util/transit-read content)]
+         (if-let [addresses (:addresses data)]
+           (assoc data :addresses (clj->js addresses))
+           data))
+        (catch :default _e              ; TODO: remove this once db goes to test
+          (edn/read-string content)))))
 
 (defn new-sqlite-storage
   "Creates a datascript storage for sqlite. Should be functionally equivalent to db-worker/new-sqlite-storage"
@@ -68,13 +75,12 @@
                   (map
                    (fn [[addr data]]
                      #js {:addr addr
-                          :content (pr-str data)})
+                          :content (sqlite-util/transit-write data)})
                    addr+data-seq)
                   (to-array))]
         (upsert-addr-content! db data delete-addrs)))
     (-restore [_ addr]
-      (let [content (restore-data-from-addr db addr)]
-        (edn/read-string content)))))
+      (restore-data-from-addr db addr))))
 
 (defn open-db!
   "For a given database name, opens a sqlite db connection for it, creates
