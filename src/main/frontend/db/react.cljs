@@ -191,14 +191,11 @@
      (doseq [k all-keys]
        (when-let [cache (get state k)]
          (let [{:keys [query query-fn]} cache
-               custom? (= :custom (first k))
-               {:keys [custom-query?]} (state/edit-in-query-or-refs-component)]
+               custom? (= :custom (first k))]
            (when (or query query-fn)
              (try
                (let [f #(execute-query! repo-url db (vec (cons repo-url k)) cache)]
-                       ;; Detects whether user is editing in a custom query, if so, execute the query immediately
-                 (if (and custom? (not custom-query?))
-                   (async/put! (state/get-reactive-custom-queries-chan) [f query])
+                 (when-not custom?
                    (f)))
                (catch :default e
                  (js/console.error e)

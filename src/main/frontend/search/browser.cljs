@@ -31,14 +31,14 @@
               file-based? (config/local-file-based-graph? repo)
               _ (protocol/truncate-blocks! this)
               result (.search-build-blocks-indice sqlite repo)
-              blocks (cond->> (bean/->clj result)
-                       file-based?
-                       ;; remove built-in properties from content
-                       (map #(update % :content
-                                     (fn [content]
-                                       (property-util/remove-built-in-properties (get % :format :markdown) content))))
-                       true
-                       bean/->js)
+              blocks (if file-based?
+                       (->> (bean/->clj result)
+                            ;; remove built-in properties from content
+                            (map #(update % :content
+                                          (fn [content]
+                                            (property-util/remove-built-in-properties (get % :format :markdown) content))))
+                            bean/->js)
+                       result)
               _ (when (seq blocks)
                   (.search-upsert-blocks sqlite repo blocks))])
       (p/resolved nil)))
