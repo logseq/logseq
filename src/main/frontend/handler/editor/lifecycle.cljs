@@ -1,6 +1,5 @@
 (ns ^:no-doc frontend.handler.editor.lifecycle
   (:require [frontend.handler.editor :as editor-handler]
-            [frontend.handler.editor.keyboards :as keyboards-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
@@ -24,10 +23,8 @@
       (when content
         (editor-handler/restore-cursor-pos! id content)))
 
-    (keyboards-handler/esc-save! state)
-
     (when-let [element (gdom/getElement id)]
-      (.focus element)
+      ;; TODO: check whether editor is visible, do less work
       (js/setTimeout #(util/scroll-editor-cursor element) 50)))
   state)
 
@@ -40,7 +37,6 @@
       (when-let [input (state/get-input)]
         (util/set-change-value input
                                (block-handler/sanity-block-content repo (get new-block :block/format :markdown) (:block/content new-block))))))
-  (keyboards-handler/esc-save! state)
   state)
 
 (defn will-unmount

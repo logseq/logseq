@@ -715,6 +715,26 @@
       :else
       nil)))
 
+(defn- editor-on-blur
+  [_e]
+  (cond
+    (contains?
+     #{:commands :block-commands
+       :page-search :page-search-hashtag :block-search :template-search
+       :property-search :property-value-search
+       :datepicker}
+     (state/get-editor-action))
+    (state/clear-editor-action!) ;; FIXME: This should probably be handled as a keydown handler in editor, but this handler intercepts Esc first
+
+         ;; editor/input component handles Escape directly, so just prevent handling it here
+    (= :input (state/get-editor-action))
+    nil
+
+    :else
+    (let [{:keys [on-hide value]} (editor-handler/get-state)]
+      (when on-hide
+        (on-hide value nil)))))
+
 (rum/defcs box < rum/reactive
   {:init (fn [state]
            (assoc state ::id (str (random-uuid))))
@@ -724,19 +744,28 @@
   (mixins/event-mixin setup-key-listener!)
   (shortcut/mixin :shortcut.handler/block-editing-only)
   lifecycle/lifecycle
-  [state {:keys [format block parent-block]} id config]
+  [state {:keys [format block parent-block on-hide]} id config]
   (let [content (state/sub-edit-content (:block/uuid block))
         heading-class (get-editor-style-class block content format)
         opts (cond->
-                 {:id                id
-                  :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)
-                  :default-value     (or content "")
-                  :minRows           (if (state/enable-grammarly?) 2 1)
-                  :on-click          (editor-handler/editor-on-click! id)
-                  :on-change         (editor-handler/editor-on-change! block id search-timeout)
-                  :on-paste          (paste-handler/editor-on-paste! id)
-                  :auto-focus        false
-                  :class             heading-class}
+              {:id                id
+               :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)
+               :default-value     (or content "")
+               :minRows           (if (state/enable-grammarly?) 2 1)
+               :on-click          (editor-handler/editor-on-click! id)
+               :on-change         (editor-handler/editor-on-change! block id search-timeout)
+               :on-paste          (paste-handler/editor-on-paste! id)
+               :on-blur           (fn [e]
+                                    (if-let [on-blur (:on-blur config)]
+                                      (on-blur e)
+                                      (editor-on-blur e)))
+               :on-key-down       (fn [e]
+                                    (if-let [on-key-down (:on-key-down config)]
+                                      (on-key-down e)
+                                      (when (and (= (util/ekey e) "Escape") on-hide)
+                                        (on-hide content :esc))))
+               :auto-focus        true
+               :class             heading-class}
                (some? parent-block)
                (assoc :parentblockid (str (:block/uuid parent-block)))
 
