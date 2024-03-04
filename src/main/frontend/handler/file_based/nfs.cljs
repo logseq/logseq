@@ -156,6 +156,7 @@
                                                                              {:new-graph?   true
                                                                               :empty-graph? (nil? (seq markup-files))
                                                                               :file-objs    files})
+                                     (state/set-parsing-state! {:graph-loading? false})
                                      (state/add-repo! {:url repo :nfs? true})
                                      (persist-db/<export-db repo {})
                                      (state/set-loading-files! repo false)

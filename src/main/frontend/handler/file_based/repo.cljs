@@ -21,7 +21,8 @@
             [logseq.common.config :as common-config]
             [clojure.core.async :as async]
             [medley.core :as medley]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [clojure.core.async.interop :refer [p->c]]))
 
 (defn- create-contents-file
   [repo-url]
@@ -238,14 +239,15 @@
                   _ (when (and page-name (not page-exists?))
                       (swap! *page-names conj page-name)
                       (swap! *page-name->path assoc page-name (:file/path file)))
-                  tx' (if (or whiteboard? (zero? (rem (inc idx) 100)))
-                        (do (db/transact! repo-url tx' {:from-disk? true})
-                            [])
+                  tx' (if (zero? (rem (inc idx) 100))
+                        (do
+                          (async/<! (p->c (db/transact! repo-url tx' {:from-disk? true})))
+                          [])
                         tx')]
               (recur tx')))
-          (do
-            (when (seq tx) (db/transact! repo-url tx {:from-disk? true}))
-            (after-parse repo-url re-render? re-render-opts opts graph-added-chan)))))
+          (p/do!
+           (when (seq tx) (db/transact! repo-url tx {:from-disk? true}))
+           (after-parse repo-url re-render? re-render-opts opts graph-added-chan)))))
     graph-added-chan))
 
 (defn- parse-files-and-create-default-files!
@@ -276,8 +278,7 @@
 
     ;; Load to db even it's empty, (will create default files)
     (parse-files-and-load-to-db! repo-url file-objs {:new-graph? new-graph?
-                                                     :empty-graph? empty-graph?})
-    (state/set-parsing-state! {:graph-loading? false})))
+                                                     :empty-graph? empty-graph?})))
 
 (defn load-repo-to-db!
   [repo-url {:keys [diffs file-objs refresh? new-graph? empty-graph?]}]
