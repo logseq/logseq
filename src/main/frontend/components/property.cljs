@@ -563,26 +563,23 @@
                          "control-hide")}
          (ui/rotating-arrow collapsed?)]])
 
-     (ui/dropdown
-      (fn [{:keys [toggle-fn]}]
-        [:button.flex {:on-click toggle-fn}
-         (if icon
-           (icon-component/icon icon)
-           [:span.bullet-container.cursor (when collapsed? {:class "bullet-closed"})
-            [:span.bullet]])])
-      (fn [{:keys [toggle-fn]}]
-        [:div.p-4
-         (icon-component/icon-search
-          {:on-chosen
-           (fn [_e icon]
-             (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-               (when icon
-                 (p/let [_ (db-property-handler/<update-property! repo
-                                                                  (:block/uuid property)
-                                                                  {:properties {icon-property-id icon}})]
-                   (toggle-fn)))))})])
-      {:modal-class (util/hiccup->class
-                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")})
+     ;; icon picker
+     (let [content-fn (fn [{:keys [id]}]
+                        (icon-component/icon-search
+                          {:on-chosen
+                           (fn [_e icon]
+                             (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
+                               (when icon
+                                 (p/let [_ (db-property-handler/<update-property! repo
+                                             (:block/uuid property)
+                                             {:properties {icon-property-id icon}})]
+                                   (shui/popup-hide! id)))))}))]
+       [:button.flex
+        {:on-click #(shui/popup-show! (.-target %) content-fn {:as-menu? true})}
+        (if icon
+          (icon-component/icon icon)
+          [:span.bullet-container.cursor (when collapsed? {:class "bullet-closed"})
+           [:span.bullet]])])
 
      (if config/publishing?
        [:a.property-k
