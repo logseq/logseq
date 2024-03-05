@@ -59,7 +59,8 @@
     (println "Importing" (count files) "files ...")
     (p/do!
      (gp-exporter/import-logseq-files conn logseq-files <read-file {:notify-user prn})
-     (gp-exporter/import-from-doc-files! conn doc-files <read-file import-options))))
+     (gp-exporter/import-from-doc-files! conn doc-files <read-file import-options)
+     (gp-exporter/import-class-properties conn conn))))
 
 (defn- resolve-path
   "If relative path, resolve with $ORIGINAL_PWD"

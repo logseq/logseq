@@ -14,6 +14,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.rules :as rules]
+            [logseq.db.frontend.class :as db-class]
             [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]))
 
@@ -723,3 +724,32 @@
                                :level :error
                                :ex-data {:error err}})
                  (edn/read-string default-config)))))
+
+(defn import-class-properties
+  [conn repo-or-conn]
+  (let [user-classes (->> (d/q '[:find (pull ?b [:db/id :block/name])
+                                 :where [?b :block/type "class"]] @conn)
+                          (map first)
+                          (remove #(db-class/built-in-classes (keyword (:block/name %)))))
+        class-to-prop-uuids
+        (->> (d/q '[:find ?t ?prop-name ?prop-uuid #_?class
+                    :in $ ?user-classes
+                    :where
+                    [?b :block/tags ?t]
+                    [?t :block/name ?class]
+                    [(contains? ?user-classes ?class)]
+                    [?b :block/properties ?bp]
+                    [?prop-b :block/name ?prop-name]
+                    [?prop-b :block/uuid ?prop-uuid]
+                    [(get ?bp ?prop-uuid) ?_v]]
+                  @conn
+                  (set (map :block/name user-classes)))
+             (remove #(db-property/built-in-properties-keys-str (second %)))
+             (reduce (fn [acc [class-id _prop-name prop-uuid]]
+                       (update acc class-id (fnil conj #{}) prop-uuid))
+                     {}))
+        tx (mapv (fn [[class-id prop-ids]]
+                   {:db/id class-id
+                    :block/schema {:properties (vec prop-ids)}})
+                 class-to-prop-uuids)]
+    (ldb/transact! repo-or-conn tx)))
