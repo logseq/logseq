@@ -269,15 +269,15 @@
                             (on-chosen e icon-value)
                             (shui/popup-hide! id))})))]
     ;; trigger
-    (shui/button
-      {:variant  :ghost
-       :size     :sm
-       :class    "px-1 leading-none"
-       :on-click #(when-not disabled?
-                    (shui/popup-show! % content-fn
-                      {:as-menu?      true
-                       :content-props {:class "w-auto"}}))}
-      (if icon-value
-        (icon icon-value (merge {:size 18} icon-props))
-        [:div.opacity-50.text-sm
-         "Empty"]))))
+    (let [has-icon? (not (nil? icon-value))]
+      (shui/button
+        {:variant (if has-icon? :ghost :text)
+         :size :sm
+         :class (if has-icon? "px-1 leading-none" "font-normal text-sm px-[0.5px] opacity-50")
+         :on-click #(when-not disabled?
+                      (shui/popup-show! % content-fn
+                        {:as-menu? true
+                         :content-props {:class "w-auto"}}))}
+        (if has-icon?
+          (icon icon-value (merge {:size 18} icon-props))
+          "Empty")))))
