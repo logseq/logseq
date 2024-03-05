@@ -164,10 +164,17 @@
         *current-ref (rum/use-ref [-1])
         set-current! (fn [idx node] (set! (. *current-ref -current) [idx node]))
         get-cnt #(some-> (rum/deref *el-ref) (.closest ".cp__emoji-icon-picker"))
-        focus! (fn [idx]
-                 (let [items (rum/deref *items-ref)]
+        focus! (fn [idx dir]
+                 (let [items (rum/deref *items-ref)
+                       ^js popup (some-> (get-cnt) (.closest ".ui__dropdown-menu-content"))
+                       idx (loop [n idx]
+                             (if (false? (nth items n nil))
+                               (recur (+ n (if (= dir :prev) -1 1))) n))]
                    (if-let [node (nth items idx nil)]
-                     (do (.focus node) (set-current! idx node))
+                     (do (.focus node #js {:preventScroll true :focusVisible true})
+                         (.scrollIntoView node #js {:block "center"})
+                         (set! (. popup -scrollTop) 0)
+                         (set-current! idx node))
                      (do (.focus (rum/deref *input-ref)) (set-current! -1 nil)))))
         down-handler!
         (rum/use-callback
@@ -179,22 +186,26 @@
                 (let [[idx _node] (rum/deref *current-ref)]
                   (case (.-keyCode e)
                     ;;left
-                    37 (focus! (dec idx))
-                    ;; right
-                    39 (focus! (inc idx))
+                    37 (focus! (dec idx) :prev)
+                    ;; tab & right
+                    (9 39) (focus! (inc idx) :next)
                     ;; up
-                    38 (do (focus! (- idx 9)) (util/stop e))
+                    38 (do (focus! (- idx 9) :prev) (util/stop e))
                     ;; down
-                    40 (do (focus! (+ idx 9)) (util/stop e))
+                    40 (do (focus! (+ idx 9) :next) (util/stop e))
                     :dune))))) [])]
 
     (rum/use-effect!
       (fn []
         ;; calculate items
         (let [^js blocks (.querySelectorAll (get-cnt) ".pane-block")
-              items (map #(some-> (.querySelectorAll % ".its > button") (js/Array.from) (js->clj)) blocks)]
+              items (map #(some-> (.querySelectorAll % ".its > button") (js/Array.from) (js->clj)) blocks)
+              step 9
+              items (map #(let [count (count %)
+                                m (mod count step)]
+                            (if (> m 0) (concat % (repeat (- step m) false)) %)) items)]
           (set! (. *items-ref -current) (flatten items))
-          (focus! 0))
+          (focus! 0 :next))
 
         ;; handlers
         (let [^js cnt (get-cnt)]
@@ -250,12 +261,12 @@
                           ;; esc
                           27 (do (util/stop e)
                                  (if (string/blank? @*q)
-                                    (some-> (rum/deref *input-ref) (.blur))
+                                   (some-> (rum/deref *input-ref) (.blur))
                                    (reset-q!)))
                           38 (do (util/stop e))
-                          40 (do
-                               (reset! *select-mode? true)
-                               (util/stop e))
+                          (9 40) (do
+                                   (reset! *select-mode? true)
+                                   (util/stop e))
                           :dune))
          :on-change (debounce
                       (fn [e]
@@ -328,7 +339,7 @@
          :size :sm
          :class (if has-icon? "px-1 leading-none" "font-normal text-sm px-[0.5px] opacity-50")
          :on-click #(when-not disabled?
-                      (shui/popup-show! % content-fn
+                      (shui/popup-show! (.-target %) content-fn
                         {:as-menu? true
                          :content-props {:class "w-auto"}}))}
         (if has-icon?
