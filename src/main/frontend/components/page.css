@@ -238,10 +238,6 @@
     margin-bottom: 12px;
   }
 
-  h1.page-title {
-    margin-bottom: 0;
-  }
-
   .edit-input {
     @apply w-full border-0 p-0 pr-1 bg-transparent outline-0;
 
@@ -257,7 +253,11 @@
   }
 
   .page-icon {
-      font-size: 48px;
+    @apply font-[48px] leading-none;
+
+    .ui__button {
+      @apply !h-auto mb-[-3px];
+    }
   }
 }
 
