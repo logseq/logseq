@@ -380,10 +380,11 @@
   (let [src (::src state)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         href (config/get-local-asset-absolute-path href)]
-    (when (or granted?
-              (util/electron?)
-              (mobile-util/native-platform?)
-              (config/db-based-graph? (state/get-current-repo)))
+    (when (and (or granted?
+                   (util/electron?)
+                   (mobile-util/native-platform?)
+                   (config/db-based-graph? (state/get-current-repo)))
+               (nil? @src))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
