@@ -71,6 +71,7 @@
           contents? (= page-name "contents")
           properties (:block/properties page)
           public? (true? (pu/lookup properties :public))
+          _favorites-updated? (state/sub :favorites/updated?)
           favorited? (page-handler/favorited? page-name)
           developer-mode? (state/sub [:ui/developer-mode?])
           file-rpath (when (util/electron?) (page-util/get-page-file-rpath page-name))
