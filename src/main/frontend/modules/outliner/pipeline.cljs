@@ -7,8 +7,6 @@
             [datascript.core :as d]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.history :as history]
-            [logseq.db :as ldb]
-            [promesa.core :as p]
             [frontend.util :as util]))
 
 (defn store-undo-data!

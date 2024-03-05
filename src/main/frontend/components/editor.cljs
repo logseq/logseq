@@ -17,7 +17,6 @@
             [frontend.handler.search :as search-handler]
             [frontend.search :refer [fuzzy-search]]
             [frontend.mixins :as mixins]
-            [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]

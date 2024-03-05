@@ -214,7 +214,7 @@
       [])
     [:span.absolute.hidden {:ref *el-ref}]))
 
-(rum/defcs icon-search <
+(rum/defcs ^:large-vars/cleanup-todo icon-search <
   (rum/local "" ::q)
   (rum/local nil ::result)
   (rum/local false ::select-mode?)

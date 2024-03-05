@@ -2152,12 +2152,6 @@ Similar to re-frame subscriptions"
   []
   (:modal/id @state))
 
-(defn edit-in-query-or-refs-component
-  []
-  (let [config (last (get-editor-args))]
-    {:custom-query? (:custom-query? config)
-     :ref? (:ref? config)}))
-
 (defn set-auth-id-token
   [id-token]
   (set-state! :auth/id-token id-token))
