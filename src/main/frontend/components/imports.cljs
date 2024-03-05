@@ -387,6 +387,7 @@
       (async/<! (import-from-asset-files! asset-files))
       (async/<! (p->c (gp-exporter/import-from-doc-files! db-conn doc-files <read-file import-options)))
       (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))
+      (async/<! (p->c (gp-exporter/import-class-properties db-conn repo)))
       (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
       (state/set-state! :graph/importing nil)
       (state/set-state! :graph/importing-state nil)
