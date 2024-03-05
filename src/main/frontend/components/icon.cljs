@@ -157,9 +157,61 @@
     [tab])
   nil)
 
+(rum/defc select-observer
+  [*result *select-mode?]
+  (let [*el-ref (rum/use-ref nil)
+        *items-ref (rum/use-ref [])
+        *current-ref (rum/use-ref [-1])
+        set-current! (fn [idx node] (set! (. *current-ref -current) [idx node]))
+        get-cnt #(some-> (rum/deref *el-ref) (.closest ".cp__emoji-icon-picker"))
+        focus! (fn [idx]
+                 (let [items (rum/deref *items-ref)
+                       total (count items)]
+                   (let [idx (if (< idx -1) 0 (if (> idx total) (dec total) idx))]
+                     (if-let [node (nth items idx)]
+                       (do (.focus node) (set-current! idx node))
+                       (set-current! -1 nil)))))
+        down-handler!
+        (rum/use-callback
+          (fn [^js e]
+            (let []
+              (if (= 13 (.-keyCode e))
+                ;; enter
+                (some-> (second (rum/deref *current-ref)) (.click))
+                (let [[idx _node] (rum/deref *current-ref)]
+                  (case (.-keyCode e)
+                    ;;left
+                    37 (focus! (dec idx))
+                    ;; right
+                    39 (focus! (inc idx))
+                    ;; up
+                    38 (do (focus! (- idx 9)) (util/stop e))
+                    ;; down
+                    40 (do (focus! (+ idx 9)) (util/stop e))
+                    :dune))))) [])]
+
+    (rum/use-effect!
+      (fn []
+        ;; calculate items
+        (let [^js blocks (.querySelectorAll (get-cnt) ".pane-block")
+              items (map #(some-> (.querySelectorAll % ".its > button") (js/Array.from) (js->clj)) blocks)]
+          (set! (. *items-ref -current) (flatten items))
+          (focus! 0))
+
+        ;; handlers
+        (let [^js cnt (get-cnt)]
+          (prn "==>>> init select 0b")
+          (.addEventListener cnt "keydown" down-handler! false)
+          (fn []
+            (prn "==>> bye: 0b")
+            (.removeEventListener cnt "keydown" down-handler!))))
+      [])
+    [:span.absolute.hidden {:ref *el-ref}]))
+
 (rum/defcs icon-search <
   (rum/local "" ::q)
   (rum/local nil ::result)
+  (rum/local false ::select-mode?)
   (rum/local :all ::tab)
   (rum/local nil ::hover)
   [state {:keys [on-chosen] :as opts}]
@@ -174,9 +226,11 @@
                     :on-chosen (fn [e m]
                                  (and on-chosen (on-chosen e m))
                                  (when (:type m) (add-used-item! m))))
+        *select-mode? (::select-mode? state)
         reset-q! #(when-let [^js input (rum/deref *input-ref)]
                     (reset! *q "")
                     (reset! *result {})
+                    (reset! *select-mode? false)
                     (set! (. input -value) "")
                     (js/setTimeout
                      (fn [] (.focus input)
@@ -186,6 +240,8 @@
      ;; header
      [:div.hd
       (tab-observer @*tab {:reset-q! reset-q!})
+      (when @*select-mode?
+        (select-observer *result *select-mode?))
       [:div.search-input
        (shui/tabler-icon "search" {:size 16})
        [:input.form-input
@@ -193,6 +249,7 @@
          :ref *input-ref
          :placeholder (util/format "Search %s items" (string/lower-case (name @*tab)))
          :default-value ""
+         :on-focus #(reset! *select-mode? false)
          :on-key-down (fn [^js e]
                         (case (.-keyCode e)
                           ;; esc
@@ -200,14 +257,15 @@
                                  (if (string/blank? @*q)
                                     (some-> (rum/deref *input-ref) (.blur))
                                    (reset-q!)))
-                          ;; up
                           38 (do (util/stop e))
-                          ;; down
-                          40 (do (util/stop e))
+                          40 (do
+                               (reset! *select-mode? true)
+                               (util/stop e))
                           :dune))
          :on-change (debounce
                       (fn [e]
                         (reset! *q (util/evalue e))
+                        (reset! *select-mode? false)
                         (if (string/blank? @*q)
                           (reset! *result {})
                           (p/let [result (search @*q @*tab)]

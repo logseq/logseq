@@ -54,6 +54,8 @@
 
       > button {
         @apply flex items-center justify-center rounded-full hover:bg-gray-03 active:opacity-70;
+
+        @apply focus:outline-accent-09;
       }
     }
   }
