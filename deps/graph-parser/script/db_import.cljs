@@ -45,7 +45,13 @@
        {:notify-user prn :macros (:macros config)})
       (assoc-in [:extract-options :verbose] (:verbose options))))
 
-(defn- import-file-graph-to-db [file-graph-dir conn options]
+(defn- <copy-asset-file [file db-graph-dir file-graph-dir]
+  (p/let [parent-dir (node-path/dirname
+                      (node-path/join db-graph-dir (node-path/relative file-graph-dir (:rpath file))))
+          _ (fsp/mkdir parent-dir #js {:recursive true})]
+    (fsp/copyFile (:rpath file) (node-path/join parent-dir (node-path/basename (:rpath file))))))
+
+(defn- import-file-graph-to-db [file-graph-dir db-graph-dir conn options]
   (p/let [*files (build-graph-files file-graph-dir)
           config-file (first (filter #(string/ends-with? (:rpath %) "logseq/config.edn") *files))
           _ (assert config-file "No 'logseq/config.edn' found for file graph dir")
@@ -54,11 +60,14 @@
           files (remove-hidden-files file-graph-dir config *files)
           import-options (build-import-options conn config options)
           logseq-file? #(string/includes? (:rpath %) "logseq/")
+          asset-files (when (fs/existsSync (node-path/join file-graph-dir "assets"))
+                        (map #(hash-map :rpath %) (common-graph/readdir (node-path/join file-graph-dir "assets"))))
           doc-files (remove logseq-file? files)
           logseq-files (filter logseq-file? files)]
     (println "Importing" (count files) "files ...")
     (p/do!
      (gp-exporter/import-logseq-files conn logseq-files <read-file {:notify-user prn})
+     (gp-exporter/import-from-asset-files! asset-files #(<copy-asset-file % db-graph-dir file-graph-dir) {:notify-user prn})
      (gp-exporter/import-from-doc-files! conn doc-files <read-file import-options)
      (gp-exporter/import-class-properties conn conn))))
 
@@ -107,7 +116,7 @@
         directory? (.isDirectory (fs/statSync file-graph'))]
     (p/do!
      (if directory?
-       (import-file-graph-to-db file-graph' conn (merge options {:graph-name db-name}))
+       (import-file-graph-to-db file-graph' (node-path/join dir db-name) conn (merge options {:graph-name db-name}))
        (import-files-to-db file-graph' conn (merge options {:graph-name db-name})))
      (when (:verbose options) (println "Transacted" (count (d/datoms @conn :eavt)) "datoms"))
      (println "Created graph" (str db-name "!")))))
