@@ -579,25 +579,18 @@
                       (select block property select-opts' opts)
 
                       :page
-                      (property-value-select-page block property select-opts' opts))])
-        dropdown-opts {:modal-class (util/hiccup->class
-                                     "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")
-                       :initial-open? editing?}]
+                      (property-value-select-page block property select-opts' opts))])]
     (if editing?
       (select-f)
-      (ui/dropdown
-       (fn [{:keys [toggle-fn]}]
-         [:a.control-link.jtrigger
-          {:tabIndex 0
-           :on-click (if config/publishing?
-                       (constantly nil)
-                       toggle-fn)
-           :class "flex flex-1"}
-          (if (and (string/blank? value) (not editing?))
-            [:div.opacity-50.pointer.text-sm "Empty"]
-            (value-f))])
-       select-f
-       dropdown-opts))))
+      [:a.control-link.jtrigger
+       {:tabIndex 0
+        :on-click (if config/publishing?
+                    (constantly nil)
+                    #(shui/popup-show! (.-target %) select-f {:as-menu? true}))
+        :class "flex flex-1"}
+       (if (and (string/blank? value) (not editing?))
+         [:div.opacity-50.pointer.text-sm "Empty"]
+         (value-f))])))
 
 (rum/defcs property-scalar-value < rum/reactive db-mixins/query
   (rum/local nil ::ref)
