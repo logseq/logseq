@@ -1064,7 +1064,8 @@
 (rum/defc audio-link
   [config url href _label metadata full_text]
   (if (and (common-config/local-asset? href)
-           (config/local-file-based-graph? (state/get-current-repo)))
+           (or (config/local-file-based-graph? (state/get-current-repo))
+               (config/db-based-graph? (state/get-current-repo))))
     (asset-link config nil href metadata full_text)
     (let [href (cond
                  (util/starts-with? href "http")
