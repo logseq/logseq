@@ -160,16 +160,6 @@
 
 (declare move-blocks)
 
-(defn- remove-macros-when-save
-  [db txs-state block-entity]
-  (swap! txs-state (fn [txs]
-                     (vec (concat txs
-                                  ;; Only delete if last reference
-                                  (keep #(when (<= (count (:block/_macros (d/entity db (:db/id %))))
-                                                   1)
-                                           (when (:db/id %) (vector :db.fn/retractEntity (:db/id %))))
-                                        (:block/macros block-entity)))))))
-
 (comment
   (defn- create-linked-page-when-save
    [repo conn db date-formatter txs-state block-entity m tags-has-class?]
@@ -208,6 +198,26 @@
                                       merge-tx))))))
      (reset! (:editor/create-page? @state/state) false))))
 
+(defn- ref->eid
+  "ref: entity, map, int, eid"
+  [ref]
+  (cond
+    (:db/id ref)
+    (:db/id ref)
+
+    (:block/uuid ref)
+    [:block/uuid (:block/uuid ref)]
+
+    (and (vector? ref)
+         (= (count ref) 2)
+         (= :block/uuid (first ref)))
+    [:block/uuid (second ref)]
+
+    (int? ref)
+    ref
+
+    :else (throw (js/Error. (str "invalid ref " ref)))))
+
 (defn ^:api rebuild-block-refs
   [repo conn date-formatter block new-properties]
   (let [db @conn
@@ -241,15 +251,7 @@
                        (gp-block/extract-refs-from-text repo db content date-formatter))]
     (concat property-refs content-refs
             (when (sqlite-util/db-based-graph? repo)
-              (map (fn [t]
-                     (cond
-                       (de/entity? t)
-                       (:db/id t)
-                       (and (vector? t) (= (count t) 2) (= :block/uuid (first t)))
-                       [:block/uuid (second t)]
-                       (map? t)
-                       [:block/uuid (:block/uuid t)]))
-                (:block/tags block))))))
+              (map ref->eid (:block/tags block))))))
 
 (defn- rebuild-refs
   [repo conn date-formatter txs-state block m]
@@ -260,18 +262,8 @@
                     (remove nil?))
           add-tag-type (map
                         (fn [t]
-                          (cond
-                            (integer? t)
-                            {:db/id t
-                             :block/type "class"}
-                            (and (vector? t) (= (count t) 2) (= :block/uuid (first t)))
-                            {:block/uuid (second t)
-                             :block/type "class"}
-                            (map? t)
-                            {:block/uuid (:block/uuid t)
-                             :block/type "class"}
-                            :else
-                            (throw (js/Error. (str "Wrong tag: " t)))))
+                          {:db/id (ref->eid t)
+                           :block/type "class"})
                         (:block/tags m))]
       (swap! txs-state (fn [txs] (concat txs [{:db/id (:db/id block)
                                                :block/refs refs}]
@@ -396,13 +388,8 @@
               (db-marker-handle conn))
           m (if db-based?
               (update m :block/tags (fn [tags]
-                                      (->>
-                                       (concat (map :db/id (:block/tags block-entity))
-                                               (map (fn [t] (or (:db/id t)
-                                                                (when-let [id (:block/uuid t)]
-                                                                  [:block/uuid id])))
-                                                    tags))
-                                       (remove nil?))))
+                                      (concat (keep :db/id (:block/tags block-entity))
+                                              (keep ref->eid tags))))
               m)]
 
       ;; Ensure block UUID never changes
@@ -428,8 +415,6 @@
 
         ;; Update block's page attributes
         (update-page-when-save-block txs-state block-entity m)
-        ;; Remove macros as they are replaced by new ones
-        (remove-macros-when-save db txs-state block-entity)
         ;; Remove orphaned refs from block
         (when (and (:block/content m) (not= (:block/content m) (:block/content block-entity)))
           (remove-orphaned-refs-when-save @conn txs-state block-entity m {:db-graph? db-based?})))
