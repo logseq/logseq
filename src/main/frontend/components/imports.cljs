@@ -196,7 +196,7 @@
       :block/format :markdown})
    page-block-uuid-coll))
 
-(def hidden-favorites-page-name "$$$favorites")
+(def hidden-favorites-page-name common-config/favorites-page-name)
 (def hidden-favorites-page-tx
   {:block/uuid (d/squuid)
    :block/name hidden-favorites-page-name

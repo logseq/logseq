@@ -5,7 +5,8 @@
             [clojure.string :as string]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [logseq.common.config :as common-config]))
 
 (comment
   (defn- get-built-in-files
@@ -126,7 +127,7 @@
 (defn get-favorites
   "Favorites page and its blocks"
   [db]
-  (let [{:keys [block children]} (get-block-and-children db "$$$favorites" true)]
+  (let [{:keys [block children]} (get-block-and-children db common-config/favorites-page-name true)]
     (when block
       (concat [block]
               (->> (keep :block/link children)

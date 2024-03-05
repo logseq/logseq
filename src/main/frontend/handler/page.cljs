@@ -87,8 +87,8 @@
     (let [repo (state/get-current-repo)]
       (if (config/db-based-graph? repo)
         (let [blocks (ldb/sort-by-left
-                      (ldb/get-page-blocks db page-common-handler/favorites-page-name {})
-                      (d/entity db [:block/name page-common-handler/favorites-page-name]))]
+                      (ldb/get-page-blocks db common-config/favorites-page-name {})
+                      (d/entity db [:block/name common-config/favorites-page-name]))]
           (keep (fn [block]
                   (when-let [block-db-id (:db/id (:block/link block))]
                     (d/entity db block-db-id))) blocks))
@@ -140,13 +140,13 @@
 (defn <reorder-favorites!
   [favorites]
   (let [conn (conn/get-db false)]
-    (when-let [favorites-page-entity (d/entity @conn [:block/name page-common-handler/favorites-page-name])]
+    (when-let [favorites-page-entity (d/entity @conn [:block/name common-config/favorites-page-name])]
       (let [favorite-page-block-db-id-coll
             (keep (fn [page-name]
                     (some-> (d/entity @conn [:block/name (common-util/page-name-sanity-lc page-name)])
                             :db/id))
                   favorites)
-            current-blocks (ldb/sort-by-left (ldb/get-page-blocks @conn page-common-handler/favorites-page-name {})
+            current-blocks (ldb/sort-by-left (ldb/get-page-blocks @conn common-config/favorites-page-name {})
                                              favorites-page-entity)]
         (p/do!
          (ui-outliner-tx/transact!
