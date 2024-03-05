@@ -158,19 +158,17 @@
   nil)
 
 (rum/defc select-observer
-  [*result *select-mode?]
+  [*input-ref]
   (let [*el-ref (rum/use-ref nil)
         *items-ref (rum/use-ref [])
         *current-ref (rum/use-ref [-1])
         set-current! (fn [idx node] (set! (. *current-ref -current) [idx node]))
         get-cnt #(some-> (rum/deref *el-ref) (.closest ".cp__emoji-icon-picker"))
         focus! (fn [idx]
-                 (let [items (rum/deref *items-ref)
-                       total (count items)]
-                   (let [idx (if (< idx -1) 0 (if (> idx total) (dec total) idx))]
-                     (if-let [node (nth items idx)]
-                       (do (.focus node) (set-current! idx node))
-                       (set-current! -1 nil)))))
+                 (let [items (rum/deref *items-ref)]
+                   (if-let [node (nth items idx nil)]
+                     (do (.focus node) (set-current! idx node))
+                     (do (.focus (rum/deref *input-ref)) (set-current! -1 nil)))))
         down-handler!
         (rum/use-callback
           (fn [^js e]
@@ -200,11 +198,8 @@
 
         ;; handlers
         (let [^js cnt (get-cnt)]
-          (prn "==>>> init select 0b")
           (.addEventListener cnt "keydown" down-handler! false)
-          (fn []
-            (prn "==>> bye: 0b")
-            (.removeEventListener cnt "keydown" down-handler!))))
+          #(.removeEventListener cnt "keydown" down-handler!)))
       [])
     [:span.absolute.hidden {:ref *el-ref}]))
 
@@ -241,7 +236,7 @@
      [:div.hd
       (tab-observer @*tab {:reset-q! reset-q!})
       (when @*select-mode?
-        (select-observer *result *select-mode?))
+        (select-observer *input-ref))
       [:div.search-input
        (shui/tabler-icon "search" {:size 16})
        [:input.form-input
