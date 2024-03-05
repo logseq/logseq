@@ -10,6 +10,7 @@
             [frontend.state :as state]
             [frontend.worker.handler.page :as worker-page]
             [logseq.common.util :as common-util]
+            [logseq.common.config :as common-config]
             [frontend.handler.ui :as ui-handler]
             [frontend.config :as config]
             [frontend.fs :as fs]
@@ -106,12 +107,10 @@
       (when-not (= old-favorites new-favorites)
         (config-handler/set-config! :favorites new-favorites)))))
 
-(def favorites-page-name "$$$favorites")
-
 (defn- find-block-in-favorites-page
   [page-block-uuid]
   (let [db (conn/get-db)
-        blocks (ldb/get-page-blocks db favorites-page-name {})]
+        blocks (ldb/get-page-blocks db common-config/favorites-page-name {})]
     (when-let [page-block-entity (d/entity db [:block/uuid page-block-uuid])]
       (some (fn [block]
               (when (= (:db/id (:block/link block)) (:db/id page-block-entity))
@@ -126,7 +125,7 @@
 (defn <favorite-page!-v2
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
-  (let [favorites-page (d/entity (conn/get-db) [:block/name favorites-page-name])
+  (let [favorites-page (d/entity (conn/get-db) [:block/name common-config/favorites-page-name])
         favorites-page-tx-data (build-hidden-page-tx-data "favorites")]
     (when (d/entity (conn/get-db) [:block/uuid page-block-uuid])
       (p/do!
@@ -136,7 +135,7 @@
         (outliner-op/insert-blocks! [{:block/link [:block/uuid page-block-uuid]
                                       :block/content ""
                                       :block/format :markdown}]
-                                    (d/entity (conn/get-db) [:block/name favorites-page-name])
+                                    (d/entity (conn/get-db) [:block/name common-config/favorites-page-name])
                                     {}))))))
 
 (defn <unfavorite-page!-v2

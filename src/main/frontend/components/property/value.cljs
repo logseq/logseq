@@ -23,7 +23,8 @@
             [frontend.handler.property.util :as pu]
             [promesa.core :as p]
             [frontend.db.async :as db-async]
-            [logseq.common.util.macro :as macro-util]))
+            [logseq.common.util.macro :as macro-util]
+            [logseq.db :as ldb]))
 
 (defn- select-type?
   [property type]
@@ -215,7 +216,7 @@
                  :else
                  (model/get-all-page-original-names repo))
                distinct
-               (remove (fn [p] (util/uuid-string? (str p)))))
+               (remove (fn [p] (or (ldb/hidden-page? p) (util/uuid-string? (str p))))))
         options (map (fn [p] {:value p}) pages)
         string-classes (remove #(= :logseq.class %) classes)
         opts' (cond->

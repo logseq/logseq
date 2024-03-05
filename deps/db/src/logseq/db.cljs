@@ -197,8 +197,9 @@
   [page]
   (when page
     (if (string? page)
-      (and (string/starts-with? page "$$$")
-           (common-util/uuid-string? (common-util/safe-subs page 3)))
+      (or (and (string/starts-with? page "$$$")
+               (common-util/uuid-string? (common-util/safe-subs page 3)))
+          (= common-config/favorites-page-name page))
       (contains? (set (:block/type page)) "hidden"))))
 
 (defn get-pages
