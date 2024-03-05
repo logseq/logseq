@@ -168,25 +168,6 @@
       (ui/button "Submit"
                  {:on-click on-submit})]]))
 
-(defn- import-from-asset-files!
-  [asset-files]
-  (let [ch (async/to-chan! asset-files)
-        repo (state/get-current-repo)
-        repo-dir (config/get-repo-dir repo)]
-    (prn :in-files asset-files)
-    (async/go-loop []
-      (if-let [file (async/<! ch)]
-        (do
-          (async/<! (p->c (-> (.arrayBuffer (:file-object file))
-                              (p/then (fn [buffer]
-                                        (let [content (js/Uint8Array. buffer)
-                                              parent-dir (path/path-join repo-dir (path/dirname (:rpath file)))]
-                                          (p/do!
-                                           (fs/mkdir-if-not-exists parent-dir)
-                                           (fs/write-file! repo repo-dir (:rpath file) content {:skip-transact? true}))))))))
-          (recur))
-        true))))
-
 (defn- build-hidden-favorites-page-blocks
   [page-block-uuid-coll]
   (map
@@ -376,7 +357,16 @@
                            :import-file (fn import-file [conn m opts]
                                           (let [tx-report
                                                 (gp-exporter/add-file-to-db-graph conn (:file/path m) (:file/content m) opts)]
-                                            (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report))))})]
+                                            (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report))))})
+          repo-dir (config/get-repo-dir repo)
+          <copy-asset (fn copy-asset [file]
+                        (-> (.arrayBuffer (:file-object file))
+                            (p/then (fn [buffer]
+                                      (let [content (js/Uint8Array. buffer)
+                                            parent-dir (path/path-join repo-dir (path/dirname (:rpath file)))]
+                                        (p/do!
+                                         (fs/mkdir-if-not-exists parent-dir)
+                                         (fs/write-file! repo repo-dir (:rpath file) content {:skip-transact? true})))))))]
       (async/<! (p->c (gp-exporter/import-logseq-files (state/get-current-repo)
                                                        (filter logseq-file? files)
                                                        <read-file
@@ -384,7 +374,7 @@
                                                                       (db-editor-handler/save-file! path content))
                                                         :notify-user show-notification})))
       (state/set-state! [:graph/importing-state :current-page] "Asset files")
-      (async/<! (import-from-asset-files! asset-files))
+      (async/<! (p->c (gp-exporter/import-from-asset-files! asset-files <copy-asset {:notify-user show-notification})))
       (async/<! (p->c (gp-exporter/import-from-doc-files! db-conn doc-files <read-file import-options)))
       (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))
       (async/<! (p->c (gp-exporter/import-class-properties db-conn repo)))

@@ -753,3 +753,26 @@
                     :block/schema {:properties (vec prop-ids)}})
                  class-to-prop-uuids)]
     (ldb/transact! repo-or-conn tx)))
+
+(defn import-from-asset-files!
+  [*asset-files <copy-asset-file {:keys [notify-user]}]
+  (let [asset-files (mapv #(assoc %1 :idx %2)
+                          ;; Sort files to ensure reproducible import behavior
+                          (sort-by :rpath *asset-files)
+                          (range 0 (count *asset-files)))
+        copy-asset (fn copy-asset [{:keys [rpath] :as file}]
+                     (p/catch
+                      (<copy-asset-file file)
+                      (fn [error]
+                        (notify-user {:msg (str "Import failed on " (pr-str rpath) " with error:\n" error)
+                                      :level :error
+                                      :ex-data {:path rpath :error error}}))))]
+    (when (seq asset-files)
+      (-> (p/loop [_ (copy-asset (get asset-files 0))
+                   i 0]
+            (when-not (>= i (dec (count asset-files)))
+              (p/recur (copy-asset (get asset-files (inc i)))
+                       (inc i))))
+          (p/catch (fn [e]
+                     (notify-user {:msg (str "Import has an unexpected error:\n" e)
+                                   :level :error})))))))
