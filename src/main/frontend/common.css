@@ -336,7 +336,7 @@ i.ti {
 
 /* region FIXME: override elements (?) */
 h1.title, h1.title input {
-  @apply mb-4 font-medium;
+  @apply font-medium;
 
   color: var(--lx-gray-12, var(--ls-title-text-color, hsl(var(--foreground))));
   font-size: var(--ls-page-title-size, 32px);

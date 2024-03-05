@@ -334,7 +334,8 @@
            {:on-mouse-over #(reset! *hover? true)
             :on-mouse-out #(reset! *hover? false)}
            (when icon
-             [:div.page-icon {:on-mouse-down util/stop-propagation}
+             [:div.page-icon
+              {:on-mouse-down util/stop-propagation}
               (if (and (map? icon) db-based?)
                 (icon-component/icon-picker icon
                   {:on-chosen (fn [_e icon]
