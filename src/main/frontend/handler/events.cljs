@@ -192,6 +192,7 @@
 
 (defmethod handle :graph/switch [[_ graph opts]]
   (state/set-state! :db/async-queries #{})
+  (st/refresh!)
   (reset! r/*key->atom {})
 
   (let [^js sqlite @db-browser/*worker]
@@ -200,13 +201,13 @@
       (if (not writes-finished?) ; TODO: test (:sync-graph/init? @state/state)
         (do
           (log/info :graph/switch (cond->
-                                    {:request-finished? request-finished?
-                                     :file-writes-finished? writes-finished?}
+                                   {:request-finished? request-finished?
+                                    :file-writes-finished? writes-finished?}
                                     (false? request-finished?)
                                     (assoc :unfinished-requests? @db-transact/*unfinished-request-ids)))
           (notification/show!
-            "Please wait seconds until all changes are saved for the current graph."
-            :warning))
+           "Please wait seconds until all changes are saved for the current graph."
+           :warning))
         (graph-switch-on-persisted graph opts)))))
 
 (defmethod handle :graph/pull-down-remote-graph [[_ graph dir-name]]
