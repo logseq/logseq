@@ -169,9 +169,7 @@
           whiteboard-page-block? (whiteboard-page-block? local-parent)
           ;; when insert blocks in whiteboard, local-left is ignored
           local-left (when-not whiteboard-page-block? (d/entity @conn [:block/uuid remote-left-uuid]))
-          b {:block/uuid block-uuid}
-          ;; b-ent (d/entity @conn [:block/uuid (uuid block-uuid-str)])
-          ]
+          b (d/entity @conn [:block/uuid block-uuid])]
       (case [whiteboard-page-block? (some? local-parent) (some? local-left)]
         [false false true]
         (if move?
