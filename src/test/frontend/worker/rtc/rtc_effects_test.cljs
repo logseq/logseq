@@ -7,17 +7,18 @@
             [clojure.test :as t :refer [deftest is use-fixtures]]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
+            [frontend.handler.page :as page-handler]
+            [frontend.state :as state]
+            [frontend.test.helper :as test-helper :include-macros true]
             [frontend.worker.rtc.fixture :as rtc-fixture]
             [frontend.worker.rtc.idb-keyval-mock :as idb-keyval-mock :include-macros true]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
-            [frontend.handler.page :as page-handler]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
-            [frontend.test.helper :as test-helper :include-macros true]
             [spy.core :as spy]))
 
 (use-fixtures :each
-  test-helper/start-and-destroy-db-map-fixture
+  test-helper/db-based-start-and-destroy-db-map-fixture
   rtc-fixture/listen-test-db-fixture
   rtc-fixture/start-and-stop-rtc-loop-fixture
   rtc-fixture/clear-op-mem-stores-fixture)
@@ -38,22 +39,23 @@
 (deftest gen-local-ops-test--create-page
   (idb-keyval-mock/with-reset-idb-keyval-mock reset
     (page-handler/create! "gen-local-ops-test-1" {:redirect? false :create-first-block? false})
-    (is (= 1 (op-mem-layer/get-unpushed-block-update-count test-helper/test-db)))
+    (is (= 1 (op-mem-layer/get-unpushed-block-update-count (state/get-current-repo))))
     (reset)))
 
 
 (deftest gen-local-ops-test-2--create-page&insert-blocks
   (idb-keyval-mock/with-reset-idb-keyval-mock reset
-    (let [conn (conn/get-db test-helper/test-db false)]
+    (let [repo (state/get-current-repo)
+          conn (conn/get-db repo false)]
       (page-handler/create! "gen-local-ops-test-2--create-page&insert-blocks"
                             {:redirect? false :create-first-block? false})
       (let [page-block (d/pull @conn '[*] [:block/name "gen-local-ops-test-2--create-page&insert-blocks"])
             [block-uuid1 block-uuid2] (repeatedly random-uuid)]
         (outliner-tx/transact!
-         {:transact-opts {:repo test-helper/test-db
+         {:transact-opts {:repo repo
                           :conn conn}}
          (outliner-core/insert-blocks!
-          test-helper/test-db
+          repo
           conn
           [{:block/uuid block-uuid1 :block/content "block1"}
            {:block/uuid block-uuid2 :block/content "block2"
@@ -61,7 +63,7 @@
             :block/parent [:block/uuid (:block/uuid page-block)]}]
           page-block
           {:sibling? true :keep-uuid? true}))
-        (let [ops (op-mem-layer/get-all-ops test-helper/test-db)
+        (let [ops (op-mem-layer/get-all-ops repo)
               ops* (sort-by (comp :epoch second) < ops)
               [update-page-op move-op-1 update-op-1 move-op-2 update-op-2]
               (map (fn [op] [(first op) (dissoc (second op) :epoch)]) ops*)]
@@ -78,12 +80,13 @@
    done
    (idb-keyval-mock/with-reset-idb-keyval-mock reset
      (go
-       (let [conn (conn/get-db test-helper/test-db false)
+       (let [repo (state/get-current-repo)
+             conn (conn/get-db repo false)
              ws @(:*ws @rtc-fixture/*test-rtc-state)
              push-data-to-client-chan (:push-data-to-client-chan ws)]
          ;; set local-t & graph-uuid in mock-indexeddb-store
-         (op-mem-layer/update-local-tx! test-helper/test-db rtc-fixture/test-graph-init-local-t)
-         (op-mem-layer/update-graph-uuid! test-helper/test-db rtc-fixture/test-graph-uuid)
+         (op-mem-layer/update-local-tx! repo rtc-fixture/test-graph-init-local-t)
+         (op-mem-layer/update-graph-uuid! repo rtc-fixture/test-graph-uuid)
          (>! push-data-to-client-chan {:req-id "push-updates"
                                        :t 2 :t-before 1
                                        :affected-blocks

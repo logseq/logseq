@@ -1,32 +1,33 @@
 (ns frontend.worker.rtc.local-tx-to-remote-test
   (:require [clojure.test :as t :refer [deftest is testing use-fixtures]]
-            [frontend.test.helper :as test-helper]
-            [frontend.worker.rtc.fixture :as rtc-fixture]
+            [datascript.core :as d]
             [frontend.db.conn :as conn]
             [frontend.handler.page :as page-handler]
-            [frontend.worker.rtc.core :as rtc-core]
+            [frontend.state :as state]
+            [frontend.test.helper :as test-helper]
             [frontend.worker.rtc.const :as rtc-const]
-            [logseq.outliner.transaction :as outliner-tx]
-            [logseq.outliner.core :as outliner-core]
-            [datascript.core :as d]
+            [frontend.worker.rtc.core :as rtc-core]
+            [frontend.worker.rtc.fixture :as rtc-fixture]
             [frontend.worker.state :as worker-state]
-            [logseq.common.config :as common-config]))
+            [logseq.common.config :as common-config]
+            [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.transaction :as outliner-tx]))
 
 
 (use-fixtures :each
-  test-helper/start-and-destroy-db-map-fixture
+  test-helper/db-based-start-and-destroy-db-map-fixture
   rtc-fixture/listen-test-db-fixture
   rtc-fixture/clear-op-mem-stores-fixture)
 
 (deftest local-db-tx->remote-ops-test
-  (let [conn (conn/get-db test-helper/test-db false)
-        repo test-helper/test-db
+  (let [repo (state/get-current-repo)
+        conn (conn/get-db repo false)
         [page1-uuid
          uuid1 uuid2] (repeatedly random-uuid)
         page1-name (str page1-uuid)
-        date-formatter (common-config/get-date-formatter (worker-state/get-config test-helper/test-db))
+        date-formatter (common-config/get-date-formatter (worker-state/get-config repo))
         opts {:persist-op? true
-              :transact-opts {:repo test-helper/test-db
+              :transact-opts {:repo repo
                               :conn conn}}
         gen-ops-fn (fn []
                      (let [r (rtc-const/to-ws-ops-decoder
@@ -45,7 +46,7 @@
       (outliner-tx/transact!
        opts
        (outliner-core/insert-blocks!
-        test-helper/test-db
+        repo
         conn
         [{:block/uuid uuid1 :block/content "uuid1-client"
           :block/left [:block/uuid page1-uuid]
@@ -66,7 +67,7 @@
       (outliner-tx/transact!
        opts
        (outliner-core/delete-blocks!
-        test-helper/test-db
+        repo
         conn
         date-formatter
         [(d/entity @conn [:block/uuid uuid1])]

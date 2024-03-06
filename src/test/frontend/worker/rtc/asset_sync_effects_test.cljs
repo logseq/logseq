@@ -9,7 +9,7 @@
             [spy.core :as spy]))
 
 (use-fixtures :each
-  test-helper/start-and-destroy-db-map-fixture
+  test-helper/db-based-start-and-destroy-db-map-fixture
   rtc-fixture/listen-test-db-fixture
   rtc-fixture/start-and-stop-asset-sync-loop-fixture
   rtc-fixture/clear-op-mem-stores-fixture)
