@@ -102,7 +102,9 @@
      [:block/collapsed? {:optional true} :boolean]
      ;; journal-day is only set for journal pages
      [:block/journal-day {:optional true} :int]
-     [:block/namespace {:optional true} :int]]
+     [:block/namespace {:optional true} :int]
+     [:block/metadata {:optional true}
+      [:map [:built-in? {:optional true} :boolean]]]]
     page-attrs
     page-or-block-attrs)))
 
@@ -117,7 +119,8 @@
        [:properties {:optional true} [:vector :uuid]]]]
      [:block/metadata {:optional true}
       [:map
-       [:hide-properties? {:optional true} :boolean]]]]
+       [:hide-properties? {:optional true} :boolean]
+       [:built-in? {:optional true} :boolean]]]]
     page-attrs
     page-or-block-attrs)))
 
@@ -141,6 +144,7 @@
   (vec
    (concat
     [:map
+     [:db/ident :keyword]
      [:block/schema
       (vec
        (concat
@@ -148,7 +152,9 @@
          [:type (apply vector :enum (into db-property-type/internal-built-in-property-types
                                           db-property-type/user-built-in-property-types))]]
         property-common-schema-attrs
-        property-type-schema-attrs))]]
+        property-type-schema-attrs))]
+     [:block/metadata
+     [:map [:built-in? :boolean]]]]
     page-attrs
     page-or-block-attrs)))
 
@@ -243,6 +249,8 @@
    (concat
     [:map]
     [[:block/type [:= #{"closed value"}]]
+     ;; for built-in properties
+     [:db/ident {:optional true} :keyword]
      [:block/schema {:optional true}
       [:map
        [:value [:or :string :double]]

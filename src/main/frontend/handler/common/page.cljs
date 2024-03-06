@@ -152,7 +152,7 @@
 
 
 (defn <delete!
-  "Deletes a page. If delete is succcessful calls ok-handler. Otherwise calls error-handler
+  "Deletes a page. If delete is successful calls ok-handler. Otherwise calls error-handler
    if given. Note that error-handler is being called in addition to error messages that worker
    already provides"
   [page-name ok-handler & {:keys [error-handler]}]
