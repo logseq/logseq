@@ -222,21 +222,33 @@
                           :disabled    false}
                          (svg/help-circle))]
               [:div.flex.items-center.col-span-2
-               (ui/select schema-types
-                          (fn [_e v]
-                            (let [type (keyword (string/lower-case v))
-                                  update-schema-fn (apply comp
-                                                          #(assoc % :type type)
-                                                       ;; always delete previous closed values as they
-                                                       ;; are not valid for the new type
-                                                          #(dissoc % :values)
-                                                          (keep
-                                                           (fn [attr]
-                                                             (when-not (db-property-type/property-type-allows-schema-attribute? type attr)
-                                                               #(dissoc % attr)))
-                                                           [:cardinality :classes :position]))]
-                              (swap! *property-schema update-schema-fn)
-                              (components-pu/update-property! property @*property-name @*property-schema))))
+               (shui/select
+                 {:on-value-change
+                  (fn [v]
+                    (let [type (keyword (string/lower-case v))
+                          update-schema-fn (apply comp
+                                             #(assoc % :type type)
+                                             ;; always delete previous closed values as they
+                                             ;; are not valid for the new type
+                                             #(dissoc % :values)
+                                             (keep
+                                               (fn [attr]
+                                                 (when-not (db-property-type/property-type-allows-schema-attribute? type attr)
+                                                   #(dissoc % attr)))
+                                               [:cardinality :classes :position]))]
+                      (swap! *property-schema update-schema-fn)
+                      (components-pu/update-property! property @*property-name @*property-schema)))
+                  :default-value :default}
+                 (shui/select-trigger
+                   {:class "!px-2 !py-0 !h-8"}
+                   (shui/select-value
+                     {:placeholder "Select a schema type"})
+                   (shui/tabler-icon "selector" {:class "opacity-30"}))
+                 (shui/select-content
+                   (shui/select-group
+                     (for [{:keys [label value disabled]} schema-types]
+                       (shui/select-item {:value value :disabled disabled} label)))))
+
                (ui/tippy {:html        "Changing the property type clears some property configurations."
                           :class       "tippy-hover ml-2"
                           :interactive true
