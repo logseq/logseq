@@ -21,14 +21,14 @@
   []
   (let [data-from-ws-chan (chan (async/sliding-buffer 100))
         ws (rtc-mock/mock-websocket data-from-ws-chan)]
-    (assoc (rtc-core/init-state ws data-from-ws-chan test-helper/test-db "")
+    (assoc (rtc-core/init-state ws data-from-ws-chan test-helper/test-db-name-db-version "")
            :*auto-push-client-ops? (atom false))))
 
 (defn- init-state-helper-for-asset-sync-loop
   []
   (let [data-from-ws-chan (chan (async/sliding-buffer 100))
         ws (rtc-mock/mock-websocket data-from-ws-chan)
-        rtc-state (rtc-core/init-state ws data-from-ws-chan test-helper/test-db "")]
+        rtc-state (rtc-core/init-state ws data-from-ws-chan test-helper/test-db-name-db-version "")]
     (assoc (asset-sync/init-state-from-rtc-state rtc-state)
            :*auto-push-assets-update-ops? (atom false))))
 
@@ -36,7 +36,7 @@
   []
   (go
     (let [graph-uuid test-graph-uuid
-          repo test-helper/test-db
+          repo test-helper/test-db-name-db-version
           state (init-state-helper)
           loop-started-ch (chan)]
       (reset! *test-rtc-state state)
@@ -47,7 +47,7 @@
   []
   (go
     (let [graph-uuid test-graph-uuid
-          repo test-helper/test-db
+          repo test-helper/test-db-name-db-version
           state (init-state-helper-for-asset-sync-loop)
           loop-started-ch (chan)]
       (reset! *test-asset-sync-state state)
@@ -89,19 +89,19 @@
 
 (def listen-test-db-fixture
   {:before
-   #(let [test-db-conn (conn/get-db test-helper/test-db false)]
+   #(let [test-db-conn (conn/get-db test-helper/test-db-name-db-version false)]
       (assert (some? test-db-conn))
       (d/listen! test-db-conn
                  ::gen-ops
                  (fn [{:keys [tx-data tx-meta db-before db-after]}]
                    (when (:persist-op? tx-meta true)
-                     (db-listener/generate-rtc-ops test-helper/test-db db-before db-after tx-data)))))
+                     (db-listener/generate-rtc-ops test-helper/test-db-name-db-version db-before db-after tx-data)))))
    :after
-   #(when-let [test-db-conn (conn/get-db test-helper/test-db false)]
+   #(when-let [test-db-conn (conn/get-db test-helper/test-db-name-db-version false)]
       (d/unlisten! test-db-conn ::gen-ops))})
 
 
 (def clear-op-mem-stores-fixture
-  {:before #(do (op-mem-layer/remove-ops-store! test-helper/test-db)
-                (op-mem-layer/init-empty-ops-store! test-helper/test-db))
-   :after #(op-mem-layer/remove-ops-store! test-helper/test-db)})
+  {:before #(do (op-mem-layer/remove-ops-store! test-helper/test-db-name-db-version)
+                (op-mem-layer/init-empty-ops-store! test-helper/test-db-name-db-version))
+   :after #(op-mem-layer/remove-ops-store! test-helper/test-db-name-db-version)})

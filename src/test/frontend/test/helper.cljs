@@ -252,13 +252,17 @@ This can be called in synchronous contexts as no async fns should be invoked"
   [f & {:as start-opts}]
   (start-and-destroy-db f (assoc start-opts :db-graph? true)))
 
+(def db-based-start-and-destroy-db-map-fixture
+  "To avoid 'Fixtures may not be of mixed types' error
+  when use together with other map-type fixtures"
+  {:before #(start-test-db! {:db-graph? true})
+   :after #(destroy-test-db!)})
+
 (def start-and-destroy-db-map-fixture
   "To avoid 'Fixtures may not be of mixed types' error
   when use together with other map-type fixtures"
-  {:before #(do (state/set-current-repo! test-db)
-                (start-test-db!))
-   :after #(do (state/set-current-repo! nil)
-               (destroy-test-db!))})
+  {:before #(start-test-db!)
+   :after #(destroy-test-db!)})
 
 (defn save-block!
   "Wrapper around editor-handler/save-block! that also adds tags"
