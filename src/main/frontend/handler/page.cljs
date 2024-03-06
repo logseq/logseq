@@ -131,6 +131,8 @@
             result (.page-rename worker repo old-name new-name)
             result' (:result (bean/->clj result))]
       (case result'
+        :built-in-page
+        (notification/show! "Built-in page's name cann't be modified" :error)
         :invalid-empty-name
         (notification/show! "Please use a valid name, empty name is not allowed!" :error)
         :merge-whiteboard-pages

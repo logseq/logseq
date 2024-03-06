@@ -20,7 +20,8 @@
             [logseq.db.frontend.property :as db-property]
             [frontend.handler.property.util :as pu]
             [promesa.core :as p]
-            [frontend.db.async :as db-async]))
+            [frontend.db.async :as db-async]
+            [logseq.db :as ldb]))
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
@@ -228,7 +229,7 @@
                 (if-let [msg (validate-property-value schema v*)]
                   (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                     (notification/show! msg' :warning))
-                  (do
+                  (p/do!
                     (upsert-property! repo k-name (assoc property-schema :type property-type)
                                       {:property-uuid property-uuid})
                     (let [status? (= "status" (string/lower-case k-name))
@@ -312,7 +313,7 @@
             property-values (db-async/<get-block-property-values repo property-uuid)]
       (when (or (not type-changed?)
                 ;; only change type if property hasn't been used yet
-                (empty? property-values))
+                (and (not (ldb/built-in? property)) (empty? property-values)))
         (when (not= ::skip-transact (handle-cardinality-changes repo property-uuid property property-schema property-values))
           (let [tx-data (cond-> {:block/uuid property-uuid}
                           property-name (merge

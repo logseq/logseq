@@ -184,8 +184,8 @@
   [property
    {:keys [block classes multiple-choices? dropdown? input-opts on-chosen] :as opts}]
   (let [repo (state/get-current-repo)
-        tags? (= "tags" (:block/name property))
-        alias? (= "alias" (:block/name property))
+        tags? (= :tags (:db/ident property))
+        alias? (= :alias (:db/ident property))
         tags-or-alias? (or tags? alias?)
         selected-choices (when block
                            (->>

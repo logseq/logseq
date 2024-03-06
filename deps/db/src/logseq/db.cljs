@@ -65,8 +65,8 @@
        (let [f (or @*transact-fn d/transact!)]
          (f repo-or-conn tx-data tx-meta))))))
 
-(defn build-default-pages-tx
-  []
+(defn build-pages-tx
+  [pages]
   (let [time (common-util/time-ms)]
     (map
      (fn [m]
@@ -74,7 +74,11 @@
            (assoc :block/created-at time)
            (assoc :block/updated-at time)
            (assoc :block/format :markdown)))
-     default-db/built-in-pages)))
+      pages)))
+
+(defn build-default-pages-tx
+  []
+  (build-pages-tx default-db/built-in-pages))
 
 (defn create-default-pages!
   "Creates default pages if one of the default pages does not exist. This
@@ -543,6 +547,11 @@
               search-result-eids)]
     (when (seq eids)
       (d/pull-many db '[*] eids))))
+
+(defn built-in?
+  "Built-in page or block"
+  [entity]
+  (:built-in? (:block/metadata entity)))
 
 (comment
   (defn db-based-graph?

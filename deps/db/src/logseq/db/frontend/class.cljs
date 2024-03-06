@@ -5,5 +5,8 @@
 (def ^:large-vars/data-var built-in-classes
   {:task {:original-name "Task"
           :schema {:properties ["status" "priority"]}}
+   :card {:original-name "card"
+          ;; :schema {:property []}
+          }
    ;; TODO: Add more classes such as :book, :paper, :movie, :music, :project
    })

@@ -254,6 +254,9 @@
         new-page-e (d/entity db [:block/name new-page-name])
         name-changed? (not= old-name new-name)]
     (cond
+      (ldb/built-in? page-e)
+      :built-in-page
+
       (string/blank? new-name)
       :invalid-empty-name
 
