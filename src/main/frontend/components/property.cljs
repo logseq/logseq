@@ -187,15 +187,14 @@
            (let [icon-value (pu/get-block-property-value property :icon)]
              [:div.col-span-3.flex.flex-row.items-center.gap-2
               (icon-component/icon-picker icon-value
-                                          {:disabled? disabled?
-                                           :on-chosen (fn [_e icon]
+                                          {:on-chosen (fn [_e icon]
                                                         (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
                                                           (db-property-handler/<update-property!
                                                            (state/get-current-repo)
                                                            (:block/uuid property)
                                                            {:properties {icon-property-id icon}})))})
 
-              (when (and icon-value (not disabled?))
+              (when icon-value
                 [:a.fade-link.flex {:on-click (fn [_e]
                                                 (db-property-handler/remove-block-property!
                                                  (state/get-current-repo)
@@ -337,7 +336,6 @@
              [:label "Hide by default:"]
              (shui/checkbox
               {:checked           hide?
-               :disabled          disabled?
                :on-checked-change (fn []
                                     (swap! *property-schema assoc :hide? (not hide?))
                                     (save-property-fn))})])
