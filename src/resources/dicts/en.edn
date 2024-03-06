@@ -771,6 +771,7 @@
   :editor/delete-selection        "Delete selected blocks"
   :editor/expand-block-children   "Expand"
   :editor/collapse-block-children "Collapse"
+  :editor/toggle-block-children   "Toggle expand/collapse"
   :editor/indent                  "Indent block"
   :editor/outdent                 "Outdent block"
   :editor/copy                    "Copy (copies either selection, or block reference)"

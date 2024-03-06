@@ -3,77 +3,42 @@
     ["remove-accents" :as remove-accents]
     [rum.core :as rum]
     [clojure.string :as string]
+    [goog.string :as gstring]
     [logseq.shui.icon.v2 :as icon]
     [logseq.shui.shortcut.v1 :as shortcut]))
 
 (def to-string shortcut/to-string)
 
-(defn normalize-text [app-config text]
+(defn- normalize-text [app-config text]
   (cond-> (to-string text)
-    :lower-case (string/lower-case)
+    ;; :lower-case (string/lower-case)
     :normalize (.normalize "NFKC")
     (:feature/enable-search-remove-accents? app-config) (remove-accents)))
 
-(defn split-text-on-highlight [text query normal-text normal-query]
-  (let [start-index (string/index-of normal-text normal-query)
-        end-index (+ start-index (count query))
-        text-string (to-string text)]
-    (if start-index
-      [(to-string (subs text-string 0 start-index))
-       (to-string (subs text-string start-index end-index))
-       (to-string (subs text-string end-index))]
-      [text-string "" ""])))
-
-
-(defn span-with-single-highlight-token [text query normal-text normal-query]
-  (let [[before-text highlighted-text after-text] (split-text-on-highlight text query normal-text normal-query)]
-    [:span
-     (when-not (string/blank? before-text) [:span before-text])
-     (when-not (string/blank? highlighted-text) [:span {:class "ui__list-item-highlighted-span bg-accent-06 dark:bg-accent-08-alpha"} highlighted-text])
-     (when-not (string/blank? after-text) [:span after-text])]))
-
-(defn span-with-multiple-highlight-tokens [app-config text normal-query]
-  (let [normalized-text (normalize-text app-config text)]
-    (loop [[query-token & more] (string/split normal-query #" ")
-           result [[:text (to-string text)]]]
-      (if-not query-token
-        (->> result
-             (map (fn [[type value]]
-                    (if (= type :text)
-                      [:span value]
-                      [:span {:class "ui__list-item-highlighted-span"} value])))
-             (into [:span]))
-        (->> result
-             (mapcat (fn [[type value]]
-                       (let [include-token? (and (= type :text) (string? value)
-                                                 (string/includes? normalized-text query-token))]
-                         (if include-token?
-                           (let [normal-value (normalize-text app-config value)
-                                 normal-query-token (normalize-text app-config query-token)
-                                 [before-text highlighted-text after-text] (split-text-on-highlight value query-token normal-value normal-query-token)]
-                             [[:text before-text]
-                              [:match highlighted-text]
-                              [:text after-text]])
-                           [[type value]]))))
-             (recur more))))))
-
 (defn highlight-query* [app-config query text]
-  (if (vector? text)                    ; hiccup
+  (cond
+    (vector? text)                    ; hiccup
     text
-    (let [text-string (to-string text)]
-      (if-not (seq text-string)
-        [:span text-string]
-        (let [normal-text (normalize-text app-config text-string)
-              normal-query (normalize-text app-config query)]
-          (cond
-            (and (string? query) (re-find #" " query))
-            (span-with-multiple-highlight-tokens app-config text-string normal-query)
-          ;; When the match is present and only a single token, highlight that token
-            (string/includes? normal-text normal-query)
-            (span-with-single-highlight-token text-string query normal-text normal-query)
-          ;; Otherwise, just return the text
-            :else
-            [:span text-string]))))))
+
+    (string/blank? query)
+    [:span (to-string text)]
+
+    :else
+    (when-let [text-string (not-empty (to-string text))]
+      (let [normal-text (normalize-text app-config text-string)
+            normal-query (normalize-text app-config query)
+            query-terms (string/replace (gstring/regExpEscape normal-query) #"\s+" "|")
+            query-re (js/RegExp. (str "(" query-terms ")") "i")
+            highlighted-text (string/replace normal-text query-re "<:hlmarker>$1<:hlmarker>")
+            segs (string/split highlighted-text #"<:hlmarker>")]
+        (if (seq segs)
+          (into [:span]
+                (map-indexed (fn [i seg]
+                               (if (even? i)
+                                 [:span seg]
+                                 [:span {:class "ui__list-item-highlighted-span"} seg]))
+                             segs))
+          [:span normal-text])))))
 
 (rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value
                         title highlighted on-highlight on-highlight-dep header on-click

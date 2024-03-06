@@ -17,6 +17,22 @@
 
 (defonce *once-theme-loaded? (volatile! false))
 
+(rum/defc scrollbar-measure
+  []
+  (let [*el (rum/use-ref nil)]
+    (rum/use-effect!
+      (fn []
+        (when-let [el (rum/deref *el)]
+          (let [w (- (.-offsetWidth el) (.-clientWidth el))
+                c "custom-scrollbar"
+                l (.-classList js/document.documentElement)]
+            (if (or (not util/mac?) (> w 2))
+              (.add l c) (.remove l c)))))
+      [])
+    [:div.fixed.w-16.h-16.overflow-scroll.opacity-0
+     {:ref   *el
+      :class "top-1/2 -left-1/2 z-[-999]"}]))
+
 (rum/defc ^:large-vars/cleanup-todo container
   [{:keys [route theme accent-color on-click current-repo nfs-granted? db-restoring?
            settings-open? sidebar-open? system-theme? sidebar-blocks-len onboarding-state preferred-language]} child]
@@ -122,4 +138,5 @@
      {:on-click on-click}
      child
 
-     (pdf/default-embed-playground)]))
+     (pdf/default-embed-playground)
+     (scrollbar-measure)]))

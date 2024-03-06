@@ -1046,6 +1046,11 @@
                 button-props)
 
         icon (when icon (shui-ui/tabler-icon icon icon-props))
+        href? (not (string/blank? href))
+        text (cond
+               href? [:a {:href href :target "_blank"
+                          :style {:color "inherit"}} text]
+               :else text)
         children [icon text]]
 
     (shui-ui/button props children)))
@@ -1134,7 +1139,7 @@
   ([content-fn]
    (lazy-visible content-fn nil))
   ([content-fn {:keys [trigger-once? _debug-id]
-                :or {trigger-once? false}}]
+                :or {trigger-once? true}}]
    (let [[visible? set-visible!] (rum/use-state false)
          root-margin 100
          inViewState (useInView #js {:rootMargin (str root-margin "px")
