@@ -100,7 +100,7 @@
     z-index: 1;
 
     .dark & {
-        background-color: var(--lx-gray-02, var(--ls-primary-background-color, var(--rx-gray-02)));
+      background-color: var(--lx-gray-02, var(--ls-primary-background-color, var(--rx-gray-02)));
     }
 
     @screen md {
@@ -388,12 +388,23 @@ html.is-native-ios {
 }
 
 .page-info {
-    min-height: 46px;
-    margin-left: -15px;
+  @apply min-h-[46px] ml-[-15px] mt-[-6px];
 
-    .info-title {
-        min-height: 28px;
+  &.is-collapsed {
+    .ls-new-property {
+      @apply hidden;
     }
+
+    .ls-page-properties {
+      &.no-properties {
+        @apply hidden;
+      }
+    }
+  }
+
+  .info-title {
+    @apply relative min-h-[28px] flex items-center pl-1;
+  }
 }
 
 .sidebar-item .page-info {
@@ -401,5 +412,5 @@ html.is-native-ios {
 }
 
 .page-info-title-placeholder {
-    min-height: 28px;
+  min-height: 28px;
 }
