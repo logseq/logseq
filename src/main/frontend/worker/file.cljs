@@ -100,11 +100,10 @@
         (try (do-write-file! repo conn page-id outliner-op context request-id)
              (catch :default e
                (worker-util/post-message :notification
-                                         (pr-str
-                                          [[:div
-                                            [:p "Write file failed, please copy the changes to other editors in case of losing data."]
-                                            "Error: " (str (gobj/get e "stack"))]
-                                           :error]))
+                                         [[:div
+                                           [:p "Write file failed, please copy the changes to other editors in case of losing data."]
+                                           "Error: " (str (gobj/get e "stack"))]
+                                          :error])
                (log/error :file/write-file-error {:error e})
                (dissoc-request! request-id)))))))
 

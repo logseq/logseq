@@ -97,9 +97,11 @@
       ;; (cljs.pprint/pprint txs)
 
       (try
-        (.time js/console "DB transact")
+        (when-not (exists? js/process)  ; UI thread
+          (.time js/console "DB transact"))
         (let [result (ldb/transact! conn txs (assoc tx-meta :outliner/transact? true))]
-          (p/then result (fn [] (.timeEnd js/console "DB transact")))
+          (when-not (exists? js/process)
+            (p/then result (fn [] (.timeEnd js/console "DB transact"))))
           result)
         (catch :default e
           (js/console.error e)

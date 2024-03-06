@@ -7,7 +7,19 @@
             [logseq.common.util :as common-util]
             [clojure.core.async :as async]
             [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
-            [cljs-bean.core :as bean])))
+            [datascript.transit :as dt])))
+
+;; Copied from https://github.com/tonsky/datascript-todo
+#?(:clj
+   (defmacro profile
+     [k & body]
+     `(if goog.DEBUG
+        (let [k# ~k]
+          (.time js/console k#)
+          (let [res# (do ~@body)]
+            (.timeEnd js/console k#)
+            res#))
+        (do ~@body))))
 
 #?(:cljs
    (do
@@ -81,16 +93,4 @@
      (defn post-message
        [type data]
        (when (exists? js/self)
-         (.postMessage js/self (bean/->js [type data]))))))
-
-;; Copied from https://github.com/tonsky/datascript-todo
-#?(:clj
-   (defmacro profile
-     [k & body]
-     `(if goog.DEBUG
-        (let [k# ~k]
-          (.time js/console k#)
-          (let [res# (do ~@body)]
-            (.timeEnd js/console k#)
-            res#))
-        (do ~@body))))
+         (.postMessage js/self (frontend.worker.util/profile "Worker write transit: " (dt/write-transit-str [type data])))))))

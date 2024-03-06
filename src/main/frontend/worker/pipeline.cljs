@@ -66,7 +66,7 @@
     (let [valid? (db-validate/validate-tx-report! tx-report (:validate-db-options context))]
       (when (and (get-in context [:validate-db-options :fail-invalid?]) (not valid?))
         (worker-util/post-message :notification
-                                  (pr-str [["Invalid DB!"] :error])))))
+                                  [["Invalid DB!"] :error]))))
   (when (and (:dev? context)
              (not (:node-test? context)))
     (fix-db! conn tx-report)))

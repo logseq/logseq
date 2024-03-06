@@ -211,13 +211,12 @@
                      result (worker-pipeline/invoke-hooks repo conn tx-report (worker-state/get-context))
                      tx-report' (or (:tx-report result) tx-report)]
                  (when-not pipeline-replace?
-                   (let [data (pr-str
-                               (merge
-                                {:request-id (:request-id tx-meta)
-                                 :repo repo
-                                 :tx-data (:tx-data tx-report')
-                                 :tx-meta tx-meta}
-                                (dissoc result :tx-report)))]
+                   (let [data (merge
+                               {:request-id (:request-id tx-meta)
+                                :repo repo
+                                :tx-data (:tx-data tx-report')
+                                :tx-meta tx-meta}
+                               (dissoc result :tx-report))]
                      (worker-util/post-message :sync-db-changes data))
 
                    (when-not from-disk?

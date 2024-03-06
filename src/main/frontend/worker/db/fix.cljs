@@ -28,9 +28,9 @@
             (prn :debug "Broken chain:")
             (pprint/pprint error-data)
             (worker-util/post-message :notification
-                                      (pr-str [[:div
-                                                (str "Broken chain detected:\n" error-data)]
-                                               :error])))
+                                      [[:div
+                                        (str "Broken chain detected:\n" error-data)]
+                                       :error]))
           (let [first-child-id (:db/id (ldb/get-by-parent-&-left db parent-id parent-id))
                 *ids (atom children-ids)
                 sections (loop [sections []]
@@ -111,12 +111,12 @@
   [db conflicts page-id]
   (when (seq conflicts)
     (prn :debug "Parent left id conflicts:")
-    (worker-util/post-message :notification (pr-str [[:div
-                                               (str "Parent-left conflicts detected on page "
-                                                    (pr-str (:block/original-name (d/entity db page-id)))
-                                                    ":\n"
-                                                    conflicts)]
-                                              :error])))
+    (worker-util/post-message :notification [[:div
+                                              (str "Parent-left conflicts detected on page "
+                                                   (:block/original-name (d/entity db page-id))
+                                                   ":\n"
+                                                   conflicts)]
+                                             :error]))
   (mapcat
    (fn [[_parent-left blocks]]
      (let [items (sort-by :block/created-at blocks)

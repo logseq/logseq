@@ -997,10 +997,9 @@
               c2 (asset-sync/<loop-for-assets-sync state-for-asset-sync graph-uuid repo conn)]
           (<! c1)
           (<! c2))
-        (worker-util/post-message :notification (pr-str
-                                                 [[:div
-                                                   [:p "RTC is not supported for this graph"]]
-                                                  :error]))))))
+        (worker-util/post-message :notification [[:div
+                                                  [:p "RTC is not supported for this graph"]]
+                                                 :error])))))
 
 (defn <stop-rtc
   []
@@ -1037,4 +1036,4 @@
                      old-state (get-debug-state @*repo old)]
                  (when (or (not= new-state old-state)
                            (= :open (:rtc-state new-state)))
-                   (worker-util/post-message :rtc-sync-state (pr-str new-state)))))))
+                   (worker-util/post-message :rtc-sync-state new-state))))))

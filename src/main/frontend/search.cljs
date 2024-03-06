@@ -18,7 +18,7 @@
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
-            [clojure.edn :as edn]))
+            [datascript.transit :as dt]))
 
 (def fuzzy-search fuzzy/fuzzy-search)
 
@@ -145,8 +145,8 @@
             result (block-search repo q {:limit 100})
             eids (map (fn [b] [:block/uuid (:block/uuid b)]) result)
             result (when (seq eids)
-                     (.get-page-unlinked-refs ^Object @state/*db-worker repo (:db/id page) (pr-str eids)))
-            result' (when result (edn/read-string result))]
+                     (.get-page-unlinked-refs ^Object @state/*db-worker repo (:db/id page) (dt/write-transit-str eids)))
+            result' (when result (dt/read-transit-str result))]
       (when result' (db/transact! repo result'))
       (some->> result'
                db-model/sort-by-left-recursive

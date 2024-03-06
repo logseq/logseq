@@ -68,7 +68,7 @@
             [rum.core :as rum]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.fs.capacitor-fs :as capacitor-fs]
-            [clojure.edn :as edn]))
+            [datascript.transit :as dt]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -2098,7 +2098,7 @@
                                                                            :replace-empty-target? replace-empty-target?
                                                                            :keep-uuid? keep-uuid?}))))]
       (state/set-block-op-type! nil)
-      (when result (edit-last-block-after-inserted! (edn/read-string result))))))
+      (when result (edit-last-block-after-inserted! (dt/read-transit-str result))))))
 
 (defn- block-tree->blocks
   "keep-uuid? - maintain the existing :uuid in tree vec"
@@ -2205,7 +2205,7 @@
                                    (save-current-block!))
                                  (outliner-op/insert-blocks! blocks' target
                                                              (assoc opts :sibling? sibling?')))]
-                   (when result (edit-last-block-after-inserted! (edn/read-string result))))
+                   (when result (edit-last-block-after-inserted! (dt/read-transit-str result))))
 
                  (catch :default ^js/Error e
                    (notification/show!
