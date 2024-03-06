@@ -57,12 +57,13 @@
                 (<! (op-mem-layer/<sync-to-idb-layer! repo))
                 r)))))))
 
-(def block-type-ident->str
-  {:block-type/property   "property"
-   :block-type/class      "class"
-   :block-type/whiteboard "whiteboard"
-   :block-type/macros     "macros"
-   :block-type/hidden     "hidden"})
+(def block-type-kw->str
+  {:block-type/property     "property"
+   :block-type/class        "class"
+   :block-type/whiteboard   "whiteboard"
+   :block-type/macros       "macros"
+   :block-type/hidden       "hidden"
+   :block-type/closed-value "closed value"})
 
 
 (defn- replace-db-id-with-temp-id
@@ -74,7 +75,7 @@
            block-left       (:db/id (:block/left block))
            block-alias      (map :db/id (:block/alias block))
            block-tags       (map :db/id (:block/tags block))
-           block-type       (keep (comp block-type-ident->str :db/ident) (:block/type block))
+           block-type       (keep block-type-kw->str (:block/type block))
            block-schema     (some->> (:block/schema block)
                                      (transit/read transit-r))
            block-properties (some->> (:block/properties block)
