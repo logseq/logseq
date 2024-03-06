@@ -14,6 +14,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.config :as config]
             [frontend.fs :as fs]
+            [goog.object :as gobj]
             [promesa.core :as p]
             [frontend.handler.block :as block-handler]
             [frontend.handler.file-based.recent :as file-recent-handler]
@@ -151,15 +152,20 @@
 
 
 (defn <delete!
-  "Deletes a page and then either calls the ok-handler or the error-handler if unable to delete"
+  "Deletes a page. If delete is succcessful calls ok-handler. Otherwise calls error-handler
+   if given. Note that error-handler is being called in addition to error messages that worker
+   already provides"
   [page-name ok-handler & {:keys [error-handler]}]
   (when page-name
     (when-let [^Object worker @state/*db-worker]
       (-> (p/let [repo (state/get-current-repo)
-                  _ (.page-delete worker repo page-name)]
-            (when ok-handler (ok-handler)))
+                  res (.page-delete worker repo page-name)
+                  res' (gobj/get res "result")]
+            (if res'
+              (when ok-handler (ok-handler))
+              (when error-handler (error-handler))))
           (p/catch (fn [error]
-                     (when error-handler (error-handler error))))))))
+                     (js/console.error error)))))))
 
 ;; other fns
 ;; =========

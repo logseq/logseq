@@ -1051,8 +1051,7 @@
                      (p/let [_ (p/all (map (fn [page-name]
                                              (page-handler/<delete! page-name nil
                                                                     {:error-handler
-                                                                     (fn [msg]
-                                                                       (js/console.error msg)
+                                                                     (fn []
                                                                        (swap! failed-pages conj page-name))})) (map :block/name pages)))]
                        (if (seq @failed-pages)
                          (notification/show! (t :all-pages/failed-to-delete-pages (string/join ", " (map pr-str @failed-pages)))
