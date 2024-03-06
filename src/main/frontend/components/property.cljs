@@ -316,7 +316,8 @@
                [:label.col-span-1 "UI position:"]
                [:div.col-span-2
                 (shui/select
-                 (cond-> {:on-value-change (fn [v]
+                 (cond-> {:disabled config/publishing?
+                          :on-value-change (fn [v]
                                              (swap! *property-schema assoc :position v)
                                              (save-property-fn))}
                    (string? position)
@@ -336,6 +337,7 @@
              [:label "Hide by default:"]
              (shui/checkbox
               {:checked           hide?
+               :disabled          config/publishing?
                :on-checked-change (fn []
                                     (swap! *property-schema assoc :hide? (not hide?))
                                     (save-property-fn))})])
