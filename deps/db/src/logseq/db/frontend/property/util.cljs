@@ -18,9 +18,12 @@
 
 (defn build-closed-value-block
   "Builds a closed value block to be transacted"
-  [block-uuid block-value page-id property {:keys [icon-id icon description]}]
+  [block-uuid block-value page-id property {:keys [db-ident icon-id icon description]}]
   (cond->
-    (closed-value-new-block page-id (or block-uuid (d/squuid)) block-value property)
+   (closed-value-new-block page-id (or block-uuid (d/squuid)) block-value property)
+    (and db-ident (keyword? db-ident))
+    (assoc :db/ident db-ident)
+
     icon
     (assoc :block/properties {icon-id icon})
 
@@ -58,9 +61,10 @@
         closed-value-blocks-tx
         (if closed-value-page-uuids?
           (map translate-closed-page-value-fn (:closed-values property))
-          (map (fn [{:keys [value icon description uuid]}]
+          (map (fn [{:keys [db-ident value icon description uuid]}]
                  (build-closed-value-block
-                  uuid value page-id property {:icon-id icon-id
+                  uuid value page-id property {:db-ident db-ident
+                                               :icon-id icon-id
                                                :icon icon
                                                :description description}))
                (:closed-values property)))

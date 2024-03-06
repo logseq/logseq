@@ -56,20 +56,31 @@
             :schema
             {:type :default}
             :closed-values
-            (mapv (fn [[status icon]]
-                    {:value status
+            (mapv (fn [[db-ident value icon]]
+                    {:db-ident db-ident
+                     :value value
                      :uuid (random-uuid)
                      :icon {:type :tabler-icon :id icon :name icon}})
-                  [["Backlog" "Backlog"] ["Todo" "Todo"] ["Doing" "InProgress50"]
-                   ["In Review" "InReview"] ["Done" "Done"] ["Canceled" "Cancelled"]])
+                  [[:task/status.backlog "Backlog" "Backlog"]
+                   [:task/status.todo "Todo" "Todo"]
+                   [:task/status.doing "Doing" "InProgress50"]
+                   [:task/status.in-review "In Review" "InReview"]
+                   [:task/status.done "Done" "Done"]
+                   [:task/status.canceled "Canceled" "Cancelled"]])
             :visible true}
    :priority {:db-ident :task/priority
               :original-name "Priority"
               :schema
               {:type :default}
               :closed-values
-              (mapv #(hash-map :value % :uuid (random-uuid))
-                    ["Urgent" "High" "Medium" "Low"])
+              (mapv (fn [[db-ident value]]
+                      {:db-ident db-ident
+                       :value value
+                       :uuid (random-uuid)})
+                    [[:task/priority.urgent "Urgent"]
+                     [:task/priority.high "High"]
+                     [:task/priority.medium "Medium"]
+                     [:task/priority.low "Low"]])
               :visible true}
    :scheduled {:db-ident :task/scheduled
                :original-name "Scheduled"
