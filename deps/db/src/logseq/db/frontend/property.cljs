@@ -18,13 +18,13 @@
            :visible true
            :schema {:type :page
                     :cardinality :many}}
-   :tags {:original-name "Tags"
+   :tags {:db-ident :tags
+          :original-name "Tags"
           :attribute :block/tags
           :visible true
           :schema {:type :page
                    :cardinality :many
                    :classes #{:logseq.class}}}
-   ;; TODO: why need :pagetags?
    :pagetags {:original-name "pageTags"
               :visible true
               :schema {:type :page
@@ -51,7 +51,8 @@
    :logseq.tldraw.shape {:schema {:type :map}}
 
    ;; Task props
-   :status {:original-name "Status"
+   :status {:db-ident :task/status
+            :original-name "Status"
             :schema
             {:type :default}
             :closed-values
@@ -62,17 +63,20 @@
                   [["Backlog" "Backlog"] ["Todo" "Todo"] ["Doing" "InProgress50"]
                    ["In Review" "InReview"] ["Done" "Done"] ["Canceled" "Cancelled"]])
             :visible true}
-   :priority {:original-name "Priority"
+   :priority {:db-ident :task/priority
+              :original-name "Priority"
               :schema
               {:type :default}
               :closed-values
               (mapv #(hash-map :value % :uuid (random-uuid))
                     ["Urgent" "High" "Medium" "Low"])
               :visible true}
-   :scheduled {:original-name "Scheduled"
+   :scheduled {:db-ident :task/scheduled
+               :original-name "Scheduled"
                :schema {:type :date}
                :visible true}
-   :deadline {:original-name "Deadline"
+   :deadline {:db-ident :task/deadline
+              :original-name "Deadline"
               :schema {:type :date}
               :visible true}
 

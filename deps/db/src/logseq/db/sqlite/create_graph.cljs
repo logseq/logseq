@@ -12,20 +12,28 @@
 (defn- build-initial-properties
   []
   (let [;; Some uuids need to be pre-defined since they are referenced by other properties
-        default-property-uuids {:icon (d/squuid)}]
+        default-property-uuids {:icon (d/squuid)}
+        built-in-properties (->>
+                             (map (fn [[k v]]
+                                    (assert (keyword? k))
+                                    [k (assoc v :db-ident (get v :db-ident k))])
+                                  db-property/built-in-properties)
+                             (into {}))]
     (mapcat
-     (fn [[k-keyword {:keys [schema original-name closed-values]}]]
+     (fn [[k-keyword {:keys [schema original-name closed-values db-ident]}]]
        (let [k-name (name k-keyword)]
          (if closed-values
            (db-property-util/build-closed-values
             (or original-name k-name)
             {:block/schema schema :block/uuid (d/squuid) :closed-values closed-values}
-            {:icon-id (get default-property-uuids :icon)})
+            {:icon-id (get default-property-uuids :icon)
+             :db-ident db-ident})
            [(sqlite-util/build-new-property
              (or original-name k-name)
              schema
-             (get default-property-uuids k-keyword (d/squuid)))])))
-     db-property/built-in-properties)))
+             (get default-property-uuids k-keyword (d/squuid))
+             {:db-ident db-ident})])))
+     built-in-properties)))
 
 (defn build-db-initial-data
   [config-content]

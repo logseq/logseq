@@ -47,15 +47,18 @@
 
 (defn build-new-property
   "Build a standard new property so that it is is consistent across contexts"
-  [prop-name prop-schema prop-uuid]
+  [prop-name prop-schema prop-uuid & {:keys [db-ident]}]
   (block-with-timestamps
-   {:block/type "property"
-    :block/journal? false
-    :block/format :markdown
-    :block/uuid prop-uuid
-    :block/schema (merge {:type :default} prop-schema)
-    :block/original-name (name prop-name)
-    :block/name (common-util/page-name-sanity-lc (name prop-name))}))
+   (cond->
+    {:block/type "property"
+     :block/journal? false
+     :block/format :markdown
+     :block/uuid prop-uuid
+     :block/schema (merge {:type :default} prop-schema)
+     :block/original-name (name prop-name)
+     :block/name (common-util/page-name-sanity-lc (name prop-name))}
+     (and db-ident (keyword? db-ident))
+     (assoc :db/ident db-ident))))
 
 
 (defn build-new-class
