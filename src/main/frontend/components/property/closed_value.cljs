@@ -23,8 +23,10 @@
   "Create new closed value and returns its block UUID."
   [property item]
   (let [{:keys [block-id tx-data]} (db-property-handler/upsert-closed-value property item)]
-    (when (seq tx-data) (db/transact! tx-data))
-    block-id))
+    (p/do!
+     (when (seq tx-data) (db/transact! tx-data))
+     (when (seq tx-data) (db-property-handler/re-init-commands! property))
+     block-id)))
 
 (rum/defc item-value
   [type *value]
@@ -136,27 +138,28 @@
             (fn [{:keys [id]}]
               (let [opts {:toggle-fn #(shui/popup-hide! id)}]
                 (item-config
-                  property
-                  block
-                  (assoc opts :on-save
-                              (fn [value icon description]
-                                (<upsert-closed-value! property {:id          uuid
-                                                                 :value       value
-                                                                 :description description
-                                                                 :icon        icon})))))))
+                 property
+                 block
+                 (assoc opts :on-save
+                        (fn [value icon description]
+                          (<upsert-closed-value! property {:id          uuid
+                                                           :value       value
+                                                           :description description
+                                                           :icon        icon})))))))
           opts {:toggle-fn #(shui/popup-show! % content-fn {:as-menu? true})}]
 
       (choice-with-close
-        block
-        (assoc opts
-          :delete-choice
-          (fn []
-            (db-property-handler/delete-closed-value! property block)
-            (swap! *property-schema update :values (fn [vs] (vec (remove #(= uuid %) vs)))))
-          :update-icon
-          (fn [icon]
-            (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :icon icon)))
-        parent-opts))))
+       block
+       (assoc opts
+              :delete-choice
+              (fn []
+                (p/do!
+                  (db-property-handler/delete-closed-value! property block)
+                  (swap! *property-schema update :values (fn [vs] (vec (remove #(= uuid %) vs))))))
+              :update-icon
+              (fn [icon]
+                (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :icon icon)))
+       parent-opts))))
 
 (rum/defc add-existing-values
   [property *property-schema values {:keys [toggle-fn]}]

@@ -670,6 +670,12 @@
     (or (db/entity [:block/name page-name])
         (db-property-util/build-property-hidden-page property))))
 
+(defn re-init-commands!
+  "Update commands after task status and priority's closed values has been changed"
+  [property]
+  (when (contains? #{:task/status :task/priority} (:db/ident property))
+    (state/pub-event! [:init/commands])))
+
 (defn upsert-closed-value
   "id should be a block UUID or nil"
   [property {:keys [id value icon description]
@@ -802,7 +808,9 @@
                     :block/schema (update schema :values
                                           (fn [values]
                                             (vec (remove #{(:block/uuid value-block)} values))))}]]
-      (db/transact! tx-data))))
+      (p/do!
+       (db/transact! tx-data)
+       (re-init-commands! property)))))
 
 (defn get-property-block-created-block
   "Get the root block and property that created this property block."
