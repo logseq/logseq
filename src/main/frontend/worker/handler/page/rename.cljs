@@ -131,7 +131,7 @@
                        :merge? true
                        :other-tx tx-data))
 
-    (worker-page/delete! repo conn from-page-name (fn [_]) {:rename? true})))
+    (worker-page/delete! repo conn from-page-name {:rename? true})))
 
 (defn- compute-new-file-path
   "Construct the full path given old full path and the file sanitized body.

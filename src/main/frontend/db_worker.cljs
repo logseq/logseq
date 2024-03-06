@@ -476,7 +476,10 @@
   (page-delete
    [this repo page-name]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [result (worker-page/delete! repo conn page-name nil {})]
+     (let [error-handler (fn [{:keys [msg]}]
+                           (worker-util/post-message :notification
+                                                     [[:div [:p msg]] :error]))
+           result (worker-page/delete! repo conn page-name {:error-handler error-handler})]
        (bean/->js {:result result}))))
 
   (apply-outliner-ops

@@ -197,10 +197,11 @@
       {:msg (str "An unexpected failure while deleting: " e)})))
 
 (defn delete!
-  "Deletes a page and then either calls the ok-handler or the error-handler if unable to delete"
-  [repo conn page-name ok-handler & {:keys [persist-op? rename? error-handler]
-                                     :or {persist-op? true
-                                          error-handler (fn [{:keys [msg]}] (js/console.error msg))}}]
+  "Deletes a page. Returns true if able to delete page. If unable to delete,
+  calls error-handler fn and returns false"
+  [repo conn page-name & {:keys [persist-op? rename? error-handler]
+                          :or {persist-op? true
+                               error-handler (fn [{:keys [msg]}] (js/console.error msg))}}]
   (when (and repo page-name)
     (let [page-name (common-util/page-name-sanity-lc page-name)
           page (d/entity @conn [:block/name page-name])
@@ -210,12 +211,16 @@
                                      [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
                                    blocks)
           db-based? (sqlite-util/db-based-graph? repo)]
-      (when-not (ldb/built-in? page)
+      (if (ldb/built-in? page)
+        (do
+          (error-handler {:msg "Built-in page cannot be deleted"})
+          false)
         (if-let [msg (and db-based? (page-unable-to-delete conn page))]
           (do
             (ldb/transact! conn truncate-blocks-tx-data
                            {:outliner-op :truncate-page-blocks :persist-op? persist-op?})
-            (error-handler msg))
+            (error-handler msg)
+            false)
           (let [file (ldb/get-page-file @conn page-name)
                 file-path (:file/path file)
                 delete-file-tx (when file
@@ -245,7 +250,4 @@
                              (assoc :real-outliner-op :rename-page)
                              file-path
                              (assoc :file-path file-path)))
-
-            (when (fn? ok-handler) (ok-handler))
-
             true))))))
