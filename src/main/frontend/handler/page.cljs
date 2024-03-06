@@ -130,9 +130,9 @@
     (p/let [repo (state/get-current-repo)
             result (.page-rename worker repo old-name new-name)
             result' (:result (bean/->clj result))]
-      (case result'
+      (case (if (string? result') (keyword result') result')
         :built-in-page
-        (notification/show! "Built-in page's name cann't be modified" :error)
+        (notification/show! "Built-in page's name cannot be modified" :error)
         :invalid-empty-name
         (notification/show! "Please use a valid name, empty name is not allowed!" :error)
         :merge-whiteboard-pages

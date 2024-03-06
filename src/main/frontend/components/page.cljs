@@ -44,7 +44,6 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
-            [logseq.db.frontend.property :as db-property]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
