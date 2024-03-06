@@ -9,7 +9,8 @@
             [logseq.db.frontend.content :as db-content]
             [clojure.set :as set]
             [logseq.db.frontend.rules :as rules]
-            [logseq.db.frontend.entity-plus]))
+            [logseq.db.frontend.entity-plus]
+            [logseq.db.frontend.class :as db-class]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
@@ -552,6 +553,17 @@
   "Built-in page or block"
   [entity]
   (:built-in? (:block/metadata entity)))
+
+(defn built-in-class-property?
+  "Whether property a built-in property for the specific class"
+  [class-entity property-entity]
+  (let [class-properties (some (fn [[_k v]]
+                                 (when (= (:original-name v) (:block/original-name class-entity))
+                                   (set (get-in v [:schema :properties]))))
+                               db-class/built-in-classes)]
+    (and (built-in? class-entity)
+         (built-in? property-entity)
+         (contains? class-properties (:block/name property-entity)))))
 
 (comment
   (defn db-based-graph?

@@ -158,7 +158,7 @@
             built-in-property? (contains? db-property/built-in-properties-keys-str (:block/original-name property))
             property (db/sub-block (:db/id property))
             built-in? (ldb/built-in? property)
-            disabled? (or built-in-property? config/publishing?)
+            disabled? (or built-in? config/publishing?)
             hide-delete? (or (= (:db/id block) (:db/id property)) ; property page
                              add-new-property?)
             class? (contains? (:block/type block) "class")
@@ -171,18 +171,16 @@
          [:div.grid.gap-2.p-1
           [:div.grid.grid-cols-4.gap-1.items-center.leading-8
            [:label.col-span-1 "Name:"]
-           (if built-in?
-             [:div.col-span-2 (:block/original-name property)]
-             (shui/input
-              {:class         "col-span-2 !px-2 !py-0 !h-8"
-               :auto-focus    (not add-new-property?)
-               :on-change     #(reset! *property-name (util/evalue %))
-               :on-blur       save-property-fn
-               :on-key-press  (fn [e]
-                                (when (= "Enter" (util/ekey e))
-                                  (save-property-fn)))
-               :disabled      disabled?
-               :default-value @*property-name}))]
+           (shui/input
+            {:class         "col-span-2 !px-2 !py-0 !h-8"
+             :auto-focus    (not add-new-property?)
+             :on-change     #(reset! *property-name (util/evalue %))
+             :on-blur       save-property-fn
+             :on-key-press  (fn [e]
+                              (when (= "Enter" (util/ekey e))
+                                (save-property-fn)))
+             :disabled      disabled?
+             :default-value @*property-name})]
 
           [:div.grid.grid-cols-4.gap-1.items-center.leading-8
            [:label.col-span-1 "Icon:"]
@@ -357,7 +355,7 @@
                  :disabled      disabled?
                  :default-value (:description @*property-schema)})])]]
 
-          (when-not hide-delete?
+          (when-not (or hide-delete? (ldb/built-in-class-property? block property))
             (shui/button
              {:variant :secondary
               :class "mt-4 hover:text-red-700"
@@ -553,20 +551,21 @@
       :on-context-menu (fn [^js e]
                          (util/stop e)
                          (shui/popup-show! e
-                           [(shui/dropdown-menu-item
-                              {:on-click (fn []
-                                           (when-let [schema (some-> property :block/schema)]
-                                             (components-pu/update-property! property property-name (assoc schema :hide? true))
-                                             (shui/popup-hide!)))}
-                              "Hide property")
-                            (shui/dropdown-menu-item
-                              {:on-click (fn []
-                                           (handle-delete-property! block property {:class-schema? class-schema?})
-                                           (shui/popup-hide!))}
-                              [:span.w-full.text-red-rx-07.hover:text-red-rx-09
-                               "Delete property"])]
-                           {:as-menu? true
-                            :content-props {:class "w-48"}}))}
+                                           [(shui/dropdown-menu-item
+                                             {:on-click (fn []
+                                                          (when-let [schema (some-> property :block/schema)]
+                                                            (components-pu/update-property! property property-name (assoc schema :hide? true))
+                                                            (shui/popup-hide!)))}
+                                             "Hide property")
+                                            (when-not (ldb/built-in-class-property? block property)
+                                              (shui/dropdown-menu-item
+                                               {:on-click (fn []
+                                                            (handle-delete-property! block property {:class-schema? class-schema?})
+                                                            (shui/popup-hide!))}
+                                               [:span.w-full.text-red-rx-07.hover:text-red-rx-09
+                                                "Delete property"]))]
+                                           {:as-menu? true
+                                            :content-props {:class "w-48"}}))}
      (when block?
        [:a.block-control
         {:on-click (fn [event]
@@ -582,14 +581,14 @@
      ;; icon picker
      (let [content-fn (fn [{:keys [id]}]
                         (icon-component/icon-search
-                          {:on-chosen
-                           (fn [_e icon]
-                             (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-                               (when icon
-                                 (p/let [_ (db-property-handler/<update-property! repo
-                                             (:block/uuid property)
-                                             {:properties {icon-property-id icon}})]
-                                   (shui/popup-hide! id)))))}))]
+                         {:on-chosen
+                          (fn [_e icon]
+                            (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
+                              (when icon
+                                (p/let [_ (db-property-handler/<update-property! repo
+                                                                                 (:block/uuid property)
+                                                                                 {:properties {icon-property-id icon}})]
+                                  (shui/popup-hide! id)))))}))]
        [:button.flex
         {:on-click #(shui/popup-show! (.-target %) content-fn {:as-menu? true})}
         (if icon
@@ -611,21 +610,21 @@
                             (.preventDefault e)))
          :on-click      (fn [^js e]
                           (shui/popup-show!
-                            (.-target e)
-                            (fn [{:keys [id]}]
-                              [:div.p-2
-                               [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
-                               (property-config block property
-                                 {:inline-text inline-text
-                                  :page-cp page-cp
-                                  :class-schema? class-schema?
-                                  :toggle-fn #(shui/popup-hide! id)})])
-                            {:content-props {:class "property-configure-popup-content"
-                                             :collisionPadding {:bottom 10 :top 10}
-                                             :avoidCollisions true
-                                             :align "start"}
-                             :auto-side? true
-                             :as-menu? true}))}
+                           (.-target e)
+                           (fn [{:keys [id]}]
+                             [:div.p-2
+                              [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
+                              (property-config block property
+                                               {:inline-text inline-text
+                                                :page-cp page-cp
+                                                :class-schema? class-schema?
+                                                :toggle-fn #(shui/popup-hide! id)})])
+                           {:content-props {:class "property-configure-popup-content"
+                                            :collisionPadding {:bottom 10 :top 10}
+                                            :avoidCollisions true
+                                            :align "start"}
+                            :auto-side? true
+                            :as-menu? true}))}
         [:div {:style {:padding-left 6}} (:block/original-name property)]])]))
 
 (defn- resolve-linked-block-if-exists

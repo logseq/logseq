@@ -355,14 +355,15 @@
   [repo class-uuid k-uuid]
   (when-let [class (db/entity repo [:block/uuid class-uuid])]
     (when (contains? (:block/type class) "class")
-      (when-let [property (db/pull repo '[*] [:block/uuid k-uuid])]
-        (let [property-uuid (:block/uuid property)
-              {:keys [properties] :as class-schema} (:block/schema class)
-              new-properties (vec (distinct (remove #{property-uuid} properties)))
-              class-new-schema (assoc class-schema :properties new-properties)]
-          (db/transact! repo [{:db/id (:db/id class)
-                               :block/schema class-new-schema}]
-                        {:outliner-op :save-block}))))))
+      (when-let [property (db/entity repo [:block/uuid k-uuid])]
+        (when-not (ldb/built-in-class-property? class property)
+          (let [property-uuid (:block/uuid property)
+                {:keys [properties] :as class-schema} (:block/schema class)
+                new-properties (vec (distinct (remove #{property-uuid} properties)))
+                class-new-schema (assoc class-schema :properties new-properties)]
+            (db/transact! repo [{:db/id (:db/id class)
+                                 :block/schema class-new-schema}]
+                          {:outliner-op :save-block})))))))
 
 (defn class-set-schema!
   [repo class-uuid schema]
