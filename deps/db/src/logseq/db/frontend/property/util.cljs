@@ -50,7 +50,7 @@
 (defn build-closed-values
   "Builds all the tx needed for property with closed values including
    the hidden page and closed value blocks as needed"
-  [prop-name property {:keys [icon-id translate-closed-page-value-fn property-attributes]
+  [prop-name property {:keys [icon-id db-ident translate-closed-page-value-fn property-attributes]
                        :or {translate-closed-page-value-fn identity}}]
   (let [page-tx (build-property-hidden-page property)
         page-id [:block/uuid (:block/uuid page-tx)]
@@ -66,7 +66,8 @@
                (:closed-values property)))
         property-schema (assoc (:block/schema property)
                                :values (mapv :block/uuid closed-value-blocks-tx))
-        property-tx (merge (sqlite-util/build-new-property prop-name property-schema (:block/uuid property))
+        property-tx (merge (sqlite-util/build-new-property prop-name property-schema (:block/uuid property)
+                                                           {:db-ident db-ident})
                            property-attributes)]
     (into [property-tx page-tx]
           (when-not closed-value-page-uuids? closed-value-blocks-tx))))
