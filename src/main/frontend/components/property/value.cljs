@@ -86,25 +86,29 @@
 
     (let [content-fn
           (fn [{:keys [id]}]
-            (ui/datepicker value'
-              {:on-change (fn [_e date]
-                            (let [journal (date/js-date->journal-title date)]
-                              (p/do!
-                                (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
-                                  (page-handler/<create! journal {:redirect?           false
-                                                                  :create-first-block? false}))
-                                (when (fn? on-change)
-                                  (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
-                                (exit-edit-property)
-                                (shui/popup-hide! id)
-                                (when-let [toggle (:toggle-fn opts)]
-                                  (toggle)))))}))]
+            (shui/calendar
+              {:mode "single"
+               :selected (some-> value' (.getTime) (js/Date.))
+               :on-select (fn [^js d]
+                            ;; force local to UTC
+                            (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
+                              (let [journal (date/js-date->journal-title gd)]
+                                (p/do!
+                                  (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
+                                    (page-handler/<create! journal {:redirect? false
+                                                                    :create-first-block? false}))
+                                  (when (fn? on-change)
+                                    (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
+                                  (exit-edit-property)
+                                  (shui/popup-hide! id)
+                                  (when-let [toggle (:toggle-fn opts)]
+                                    (toggle))))))}))]
       [:a.w-fit.flex.items-center.jtrigger
-       {:tabIndex      "0"
+       {:tabIndex "0"
         ;; meta-click or just click in publishing to navigate to date's page
-        :on-click      (if config/publishing?
-                         #(navigate-to-date-page value)
-                         #(shui/popup-show! (.-target %) content-fn {:as-menu? true :content-props {}}))
+        :on-click (if config/publishing?
+                    #(navigate-to-date-page value)
+                    #(shui/popup-show! (.-target %) content-fn {:as-menu? true :content-props {}}))
         :on-mouse-down (fn [e]
                          (.preventDefault e)
                          (when (util/meta-key? e)
