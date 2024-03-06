@@ -50,7 +50,8 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.extensions.graph.pixi :as pixi]
-            [frontend.db.async :as db-async]))
+            [frontend.db.async :as db-async]
+            [logseq.db :as ldb]))
 
 (defn- get-page-name
   [state]
@@ -302,13 +303,13 @@
                   (when untitled? (reset! *title-value "")))}]))
 
 (rum/defcs ^:large-vars/cleanup-todo page-title < rum/reactive
-                                                  (rum/local false ::edit?)
-                                                  (rum/local "" ::input-value)
-                                                  {:init (fn [state]
-                                                           (let [page-name (first (:rum/args state))
-                                                                 original-name (:block/original-name (db/entity [:block/name (util/page-name-sanity-lc page-name)]))
-                                                                 *title-value (atom original-name)]
-                                                             (assoc state ::title-value *title-value)))}
+  (rum/local false ::edit?)
+  (rum/local "" ::input-value)
+  {:init (fn [state]
+           (let [page-name (first (:rum/args state))
+                 original-name (:block/original-name (db/entity [:block/name (util/page-name-sanity-lc page-name)]))
+                 *title-value (atom original-name)]
+             (assoc state ::title-value *title-value)))}
   [state page-name {:keys [fmt-journal? preview? *hover?]}]
   (when page-name
     (let [page (when page-name (db/entity [:block/name page-name]))
@@ -338,13 +339,13 @@
               {:on-mouse-down util/stop-propagation}
               (if (and (map? icon) db-based?)
                 (icon-component/icon-picker icon
-                  {:on-chosen (fn [_e icon]
-                                (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-                                  (db-property-handler/<update-property!
-                                    repo
-                                    (:block/uuid page)
-                                    {:properties {icon-property-id icon}})))
-                   :icon-props {:size 38}})
+                                            {:on-chosen (fn [_e icon]
+                                                          (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
+                                                            (db-property-handler/<update-property!
+                                                             repo
+                                                             (:block/uuid page)
+                                                             {:properties {icon-property-id icon}})))
+                                             :icon-props {:size 38}})
                 icon)])
            [:h1.page-title.flex-1.cursor-pointer.gap-1
             {:class (when-not whiteboard-page? "title")
@@ -357,16 +358,16 @@
                            (if (gobj/get e "shiftKey")
                              (when-let [page (db/pull repo '[*] [:block/name page-name])]
                                (state/sidebar-add-block!
-                                 repo
-                                 (:db/id page)
-                                 :page))
-                             (when (and (not hls-page?)
-                                     (not fmt-journal?)
-                                     (not config/publishing?)
-                                     (not (and (contains? (:block/type page) "property")
-                                            (contains? db-property/built-in-properties-keys-str page-name))))
-                               (reset! *input-value (if untitled? "" old-name))
-                               (reset! *edit? true)))))}
+                                repo
+                                (:db/id page)
+                                :page))
+                             (do
+                               (when (and (not hls-page?)
+                                          (not fmt-journal?)
+                                          (not config/publishing?)
+                                          (not (ldb/built-in? page)))
+                                 (reset! *input-value (if untitled? "" old-name))
+                                 (reset! *edit? true))))))}
 
             (if @*edit?
               (page-title-editor page {:*title-value *title-value
@@ -385,10 +386,10 @@
                 :data-ref   page-name
                 :style      {:opacity (when @*edit? 0)}}
                (let [nested? (and (string/includes? title page-ref/left-brackets)
-                               (string/includes? title page-ref/right-brackets))]
+                                  (string/includes? title page-ref/right-brackets))]
                  (cond untitled? [:span.opacity-50 (t :untitled)]
                        nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (mldoc/get-default-config
-                                                                                            (:block/format page))))
+                                                                                           (:block/format page))))
                        :else title))])]])))))
 
 (defn- page-mouse-over

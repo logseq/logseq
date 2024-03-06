@@ -210,41 +210,42 @@
                                      [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
                                    blocks)
           db-based? (sqlite-util/db-based-graph? repo)]
-      (if-let [msg (and db-based? (page-unable-to-delete conn page))]
-        (do
-          (ldb/transact! conn truncate-blocks-tx-data
-                         {:outliner-op :truncate-page-blocks :persist-op? persist-op?})
-          (error-handler msg))
-        (let [file (ldb/get-page-file @conn page-name)
-              file-path (:file/path file)
-              delete-file-tx (when file
-                               [[:db.fn/retractEntity [:file/path file-path]]])
+      (when-not (ldb/built-in? page)
+        (if-let [msg (and db-based? (page-unable-to-delete conn page))]
+          (do
+            (ldb/transact! conn truncate-blocks-tx-data
+                           {:outliner-op :truncate-page-blocks :persist-op? persist-op?})
+            (error-handler msg))
+          (let [file (ldb/get-page-file @conn page-name)
+                file-path (:file/path file)
+                delete-file-tx (when file
+                                 [[:db.fn/retractEntity [:file/path file-path]]])
               ;; if other page alias this pagename,
               ;; then just remove some attrs of this entity instead of retractEntity
-              delete-page-tx (cond
-                               (or (and db-based? (not (:block/_namespace page)))
-                                   (not db-based?))
-                               (if (and db-based? (ldb/get-alias-source-page @conn page-name))
-                                 (when-let [id (:db/id (d/entity @conn [:block/name page-name]))]
-                                   (mapv (fn [attribute]
-                                           [:db/retract id attribute])
-                                         db-schema/retract-page-attributes))
-                                 (concat (db-refs->page repo page)
-                                         [[:db.fn/retractEntity [:block/name page-name]]]))
+                delete-page-tx (cond
+                                 (or (and db-based? (not (:block/_namespace page)))
+                                     (not db-based?))
+                                 (if (and db-based? (ldb/get-alias-source-page @conn page-name))
+                                   (when-let [id (:db/id (d/entity @conn [:block/name page-name]))]
+                                     (mapv (fn [attribute]
+                                             [:db/retract id attribute])
+                                           db-schema/retract-page-attributes))
+                                   (concat (db-refs->page repo page)
+                                           [[:db.fn/retractEntity [:block/name page-name]]]))
 
-                               :else
-                               nil)
-              tx-data (concat truncate-blocks-tx-data delete-page-tx delete-file-tx)]
+                                 :else
+                                 nil)
+                tx-data (concat truncate-blocks-tx-data delete-page-tx delete-file-tx)]
 
-          (ldb/transact! conn tx-data
-                         (cond-> {:outliner-op :delete-page
-                                  :deleted-page page-name
-                                  :persist-op? persist-op?}
-                           rename?
-                           (assoc :real-outliner-op :rename-page)
-                           file-path
-                           (assoc :file-path file-path)))
+            (ldb/transact! conn tx-data
+                           (cond-> {:outliner-op :delete-page
+                                    :deleted-page page-name
+                                    :persist-op? persist-op?}
+                             rename?
+                             (assoc :real-outliner-op :rename-page)
+                             file-path
+                             (assoc :file-path file-path)))
 
-          (when (fn? ok-handler) (ok-handler))
+            (when (fn? ok-handler) (ok-handler))
 
-          true)))))
+            true))))))

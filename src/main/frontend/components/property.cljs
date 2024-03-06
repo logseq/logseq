@@ -30,7 +30,8 @@
             [frontend.components.dnd :as dnd]
             [frontend.components.property.closed-value :as closed-value]
             [frontend.components.property.util :as components-pu]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db :as ldb]))
 
 (defn- <create-class-if-not-exists!
   [value]
@@ -153,215 +154,218 @@
   (let [values (rum/react (::values state))]
     (when-not (= :loading values)
       (let [*property-name (::property-name state)
-           *property-schema (::property-schema state)
-           built-in-property? (contains? db-property/built-in-properties-keys-str (:block/original-name property))
-           property (db/sub-block (:db/id property))
-           disabled? (or built-in-property? config/publishing?)
-           hide-delete? (or (= (:db/id block) (:db/id property)) ; property page
-                            add-new-property?)
-           class? (contains? (:block/type block) "class")
-           property-type (get-in property [:block/schema :type])
-           save-property-fn (fn [] (components-pu/update-property! property @*property-name @*property-schema))
-           enable-closed-values? (contains? db-property-type/closed-value-property-types (or property-type :default))]
-       [:div.property-configure.flex.flex-1.flex-col
-        {:on-mouse-down #(state/set-state! :editor/mouse-down-from-property-configure? true)
-         :on-mouse-up #(state/set-state! :editor/mouse-down-from-property-configure? nil)}
-        [:div.grid.gap-2.p-1
-         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-          [:label.col-span-1 "Name:"]
-          (shui/input
-           {:class         "col-span-2 !px-2 !py-0 !h-8"
-            :auto-focus    (not add-new-property?)
-            :on-change     #(reset! *property-name (util/evalue %))
-            :on-blur       save-property-fn
-            :on-key-press  (fn [e]
-                             (when (= "Enter" (util/ekey e))
-                               (save-property-fn)))
-            :disabled      disabled?
-            :default-value @*property-name})]
+            *property-schema (::property-schema state)
+            built-in-property? (contains? db-property/built-in-properties-keys-str (:block/original-name property))
+            property (db/sub-block (:db/id property))
+            built-in? (ldb/built-in? property)
+            disabled? (or built-in-property? config/publishing?)
+            hide-delete? (or (= (:db/id block) (:db/id property)) ; property page
+                             add-new-property?)
+            class? (contains? (:block/type block) "class")
+            property-type (get-in property [:block/schema :type])
+            save-property-fn (fn [] (components-pu/update-property! property @*property-name @*property-schema))
+            enable-closed-values? (contains? db-property-type/closed-value-property-types (or property-type :default))]
+        [:div.property-configure.flex.flex-1.flex-col
+         {:on-mouse-down #(state/set-state! :editor/mouse-down-from-property-configure? true)
+          :on-mouse-up #(state/set-state! :editor/mouse-down-from-property-configure? nil)}
+         [:div.grid.gap-2.p-1
+          [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+           [:label.col-span-1 "Name:"]
+           (if built-in?
+             [:div.col-span-2 (:block/original-name property)]
+             (shui/input
+              {:class         "col-span-2 !px-2 !py-0 !h-8"
+               :auto-focus    (not add-new-property?)
+               :on-change     #(reset! *property-name (util/evalue %))
+               :on-blur       save-property-fn
+               :on-key-press  (fn [e]
+                                (when (= "Enter" (util/ekey e))
+                                  (save-property-fn)))
+               :disabled      disabled?
+               :default-value @*property-name}))]
 
-         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-          [:label.col-span-1 "Icon:"]
-          (let [icon-value (pu/get-block-property-value property :icon)]
-            [:div.col-span-3.flex.flex-row.items-center.gap-2
-             (icon-component/icon-picker icon-value
-                                         {:disabled? disabled?
-                                          :on-chosen (fn [_e icon]
-                                                       (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-                                                         (db-property-handler/<update-property!
-                                                          (state/get-current-repo)
-                                                          (:block/uuid property)
-                                                          {:properties {icon-property-id icon}})))})
+          [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+           [:label.col-span-1 "Icon:"]
+           (let [icon-value (pu/get-block-property-value property :icon)]
+             [:div.col-span-3.flex.flex-row.items-center.gap-2
+              (icon-component/icon-picker icon-value
+                                          {:disabled? disabled?
+                                           :on-chosen (fn [_e icon]
+                                                        (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
+                                                          (db-property-handler/<update-property!
+                                                           (state/get-current-repo)
+                                                           (:block/uuid property)
+                                                           {:properties {icon-property-id icon}})))})
 
-             (when (and icon-value (not disabled?))
-               [:a.fade-link.flex {:on-click (fn [_e]
-                                               (db-property-handler/remove-block-property!
-                                                (state/get-current-repo)
-                                                (:block/uuid property)
-                                                (db-pu/get-built-in-property-uuid :icon)))
-                                   :title "Delete this icon"}
-                (ui/icon "X")])])]
+              (when (and icon-value (not disabled?))
+                [:a.fade-link.flex {:on-click (fn [_e]
+                                                (db-property-handler/remove-block-property!
+                                                 (state/get-current-repo)
+                                                 (:block/uuid property)
+                                                 (db-pu/get-built-in-property-uuid :icon)))
+                                    :title "Delete this icon"}
+                 (ui/icon "X")])])]
 
-         [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-          [:label.col-span-1 "Schema type:"]
-          (let [schema-types (->> (concat db-property-type/user-built-in-property-types
-                                          (when built-in-property?
-                                            db-property-type/internal-built-in-property-types))
-                                  (map (fn [type]
-                                         {:label (property-type-label type)
-                                          :disabled disabled?
-                                          :value type
-                                          :selected (= type (:type @*property-schema))})))]
-            (if (and property-type
-                     (seq values))
-              [:div.flex.items-center.col-span-2
-               (property-type-label property-type)
-               (ui/tippy {:html        "The type of this property is locked once you start using it. This is to make sure all your existing information stays correct if the property type is changed later. To unlock, all uses of a property must be deleted."
-                          :class       "tippy-hover ml-2"
-                          :interactive true
-                          :disabled    false}
-                         (svg/help-circle))]
-              [:div.flex.items-center.col-span-2
-               (shui/select
+          [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+           [:label.col-span-1 "Schema type:"]
+           (let [schema-types (->> (concat db-property-type/user-built-in-property-types
+                                           (when built-in-property?
+                                             db-property-type/internal-built-in-property-types))
+                                   (map (fn [type]
+                                          {:label (property-type-label type)
+                                           :disabled disabled?
+                                           :value type
+                                           :selected (= type (:type @*property-schema))})))]
+             (if (or (ldb/built-in? property)
+                     (and property-type (seq values)))
+               [:div.flex.items-center.col-span-2
+                (property-type-label property-type)
+                (ui/tippy {:html        "The type of this property is locked once you start using it. This is to make sure all your existing information stays correct if the property type is changed later. To unlock, all uses of a property must be deleted."
+                           :class       "tippy-hover ml-2"
+                           :interactive true
+                           :disabled    false}
+                          (svg/help-circle))]
+               [:div.flex.items-center.col-span-2
+                (shui/select
                  {:on-value-change
                   (fn [v]
                     (let [type (keyword (string/lower-case v))
                           update-schema-fn (apply comp
-                                             #(assoc % :type type)
+                                                  #(assoc % :type type)
                                              ;; always delete previous closed values as they
                                              ;; are not valid for the new type
-                                             #(dissoc % :values)
-                                             (keep
-                                               (fn [attr]
-                                                 (when-not (db-property-type/property-type-allows-schema-attribute? type attr)
-                                                   #(dissoc % attr)))
-                                               [:cardinality :classes :position]))]
+                                                  #(dissoc % :values)
+                                                  (keep
+                                                   (fn [attr]
+                                                     (when-not (db-property-type/property-type-allows-schema-attribute? type attr)
+                                                       #(dissoc % attr)))
+                                                   [:cardinality :classes :position]))]
                       (swap! *property-schema update-schema-fn)
                       (components-pu/update-property! property @*property-name @*property-schema)))
                   :default-value :default}
                  (shui/select-trigger
-                   {:class "!px-2 !py-0 !h-8"}
-                   (shui/select-value
-                     {:placeholder "Select a schema type"})
-                   (shui/tabler-icon "selector" {:class "opacity-30"}))
+                  {:class "!px-2 !py-0 !h-8"}
+                  (shui/select-value
+                   {:placeholder "Select a schema type"})
+                  (shui/tabler-icon "selector" {:class "opacity-30"}))
                  (shui/select-content
-                   (shui/select-group
-                     (for [{:keys [label value disabled]} schema-types]
-                       (shui/select-item {:value value :disabled disabled} label)))))
+                  (shui/select-group
+                   (for [{:keys [label value disabled]} schema-types]
+                     (shui/select-item {:value value :disabled disabled} label)))))
 
-               (ui/tippy {:html        "Changing the property type clears some property configurations."
-                          :class       "tippy-hover ml-2"
-                          :interactive true
-                          :disabled    false}
-                         (svg/info))]))]
+                (ui/tippy {:html        "Changing the property type clears some property configurations."
+                           :class       "tippy-hover ml-2"
+                           :interactive true
+                           :disabled    false}
+                          (svg/info))]))]
 
-         (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :cardinality)
-           [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-            [:label "Multiple values:"]
-            (let [many? (boolean (= :many (:cardinality @*property-schema)))]
-              (shui/checkbox
-               {:checked           many?
-                :disabled          disabled?
-                :on-checked-change (fn []
-                                     (swap! *property-schema assoc :cardinality (if many? :one :many))
-                                     (save-property-fn))}))])
+          (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :cardinality)
+            [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+             [:label "Multiple values:"]
+             (let [many? (boolean (= :many (:cardinality @*property-schema)))]
+               (shui/checkbox
+                {:checked           many?
+                 :disabled          disabled?
+                 :on-checked-change (fn []
+                                      (swap! *property-schema assoc :cardinality (if many? :one :many))
+                                      (save-property-fn))}))])
 
-         (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :classes)
-           (case (:type @*property-schema)
-             :page
-             (when (empty? (:values @*property-schema))
-               [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-                [:label "Specify classes:"]
-                (class-select *property-schema
-                              (:classes @*property-schema)
-                              (assoc opts
-                                     :disabled? disabled?
-                                     :save-property-fn save-property-fn))])
+          (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :classes)
+            (case (:type @*property-schema)
+              :page
+              (when (empty? (:values @*property-schema))
+                [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+                 [:label "Specify classes:"]
+                 (class-select *property-schema
+                               (:classes @*property-schema)
+                               (assoc opts
+                                      :disabled? disabled?
+                                      :save-property-fn save-property-fn))])
 
-             :template
-             [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-              [:label "Specify template:"]
-              (class-select *property-schema (:classes @*property-schema)
-                            (assoc opts
-                                   :multiple-choices? false
-                                   :disabled? disabled?
-                                   :save-property-fn save-property-fn))]
+              :template
+              [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+               [:label "Specify template:"]
+               (class-select *property-schema (:classes @*property-schema)
+                             (assoc opts
+                                    :multiple-choices? false
+                                    :disabled? disabled?
+                                    :save-property-fn save-property-fn))]
 
-             nil))
+              nil))
 
-         (when (and enable-closed-values? (empty? (:classes @*property-schema)))
-           [:div.grid.grid-cols-4.gap-1.items-start.leading-8
-            [:label.col-span-1 "Available choices:"]
-            [:div.col-span-3
-             (closed-value/choices property *property-name *property-schema opts)]])
+          (when (and enable-closed-values? (empty? (:classes @*property-schema)))
+            [:div.grid.grid-cols-4.gap-1.items-start.leading-8
+             [:label.col-span-1 "Available choices:"]
+             [:div.col-span-3
+              (closed-value/choices property *property-name *property-schema opts)]])
 
-         (when (and enable-closed-values?
-                    (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :position)
-                    (seq (:values @*property-schema)))
-           (let [position (:position @*property-schema)
-                 choices (map
-                          (fn [item]
-                            (assoc item :selected
-                                   (or (and position (= (:value item) position))
-                                       (and (nil? position) (= (:value item) "properties")))))
-                          [{:label "Block properties"
-                            :value "properties"}
-                           {:label "Beginning of the block"
-                            :value "block-beginning"}
+          (when (and enable-closed-values?
+                     (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :position)
+                     (seq (:values @*property-schema)))
+            (let [position (:position @*property-schema)
+                  choices (map
+                           (fn [item]
+                             (assoc item :selected
+                                    (or (and position (= (:value item) position))
+                                        (and (nil? position) (= (:value item) "properties")))))
+                           [{:label "Block properties"
+                             :value "properties"}
+                            {:label "Beginning of the block"
+                             :value "block-beginning"}
                         ;; {:label "Ending of the block"
                         ;;  :value "block-ending"}
-                           ])]
-             [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-              [:label.col-span-1 "UI position:"]
-              [:div.col-span-2
-               (shui/select
-                (cond-> {:on-value-change (fn [v]
-                                            (swap! *property-schema assoc :position v)
-                                            (save-property-fn))}
-                  (string? position)
-                  (assoc :default-value position))
-                (shui/select-trigger
-                 {:class "!px-2 !py-0 !h-8"}
-                 (shui/select-value
-                  {:placeholder "Select a position mode"})
-                 (shui/tabler-icon "selector" {:class "opacity-30"}))
-                (shui/select-content
-                 (shui/select-group
-                  (for [{:keys [label value]} choices]
-                    (shui/select-item {:value value} label)))))]]))
+                            ])]
+              [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+               [:label.col-span-1 "UI position:"]
+               [:div.col-span-2
+                (shui/select
+                 (cond-> {:on-value-change (fn [v]
+                                             (swap! *property-schema assoc :position v)
+                                             (save-property-fn))}
+                   (string? position)
+                   (assoc :default-value position))
+                 (shui/select-trigger
+                  {:class "!px-2 !py-0 !h-8"}
+                  (shui/select-value
+                   {:placeholder "Select a position mode"})
+                  (shui/tabler-icon "selector" {:class "opacity-30"}))
+                 (shui/select-content
+                  (shui/select-group
+                   (for [{:keys [label value]} choices]
+                     (shui/select-item {:value value} label)))))]]))
 
-         (let [hide? (:hide? @*property-schema)]
-           [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-            [:label "Hide by default:"]
-            (shui/checkbox
-             {:checked           hide?
-              :disabled          disabled?
-              :on-checked-change (fn []
-                                   (swap! *property-schema assoc :hide? (not hide?))
-                                   (save-property-fn))})])
+          (let [hide? (:hide? @*property-schema)]
+            [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+             [:label "Hide by default:"]
+             (shui/checkbox
+              {:checked           hide?
+               :disabled          disabled?
+               :on-checked-change (fn []
+                                    (swap! *property-schema assoc :hide? (not hide?))
+                                    (save-property-fn))})])
 
-         [:div.grid.grid-cols-4.gap-1.items-start.leading-8
-          [:label "Description:"]
-          [:div.col-span-3
-           (if (and disabled? inline-text)
-             (inline-text {} :markdown (:description @*property-schema))
-             [:div.mt-1
-              (shui/textarea
-               {:on-change     (fn [e]
-                                 (swap! *property-schema assoc :description (util/evalue e)))
-                :on-blur       save-property-fn
-                :disabled      disabled?
-                :default-value (:description @*property-schema)})])]]
+          [:div.grid.grid-cols-4.gap-1.items-start.leading-8
+           [:label "Description:"]
+           [:div.col-span-3
+            (if (and disabled? inline-text)
+              (inline-text {} :markdown (:description @*property-schema))
+              [:div.mt-1
+               (shui/textarea
+                {:on-change     (fn [e]
+                                  (swap! *property-schema assoc :description (util/evalue e)))
+                 :on-blur       save-property-fn
+                 :disabled      disabled?
+                 :default-value (:description @*property-schema)})])]]
 
-         (when-not hide-delete?
-           (shui/button
-            {:variant :secondary
-             :class "mt-4 hover:text-red-700"
-             :on-click (fn [e]
-                         (util/stop e)
-                         (handle-delete-property! block property {:class? class? :class-schema? class-schema?})
-                         (when toggle-fn (toggle-fn)))}
-            "Delete property from this block"))]]))))
+          (when-not hide-delete?
+            (shui/button
+             {:variant :secondary
+              :class "mt-4 hover:text-red-700"
+              :on-click (fn [e]
+                          (util/stop e)
+                          (handle-delete-property! block property {:class? class? :class-schema? class-schema?})
+                          (when toggle-fn (toggle-fn)))}
+             "Delete property from this block"))]]))))
 
 (defn- get-property-from-db [name]
   (when-not (string/blank? name)

@@ -15,10 +15,12 @@
    (set built-in-priorities)
    #{"Favorites" "Contents" "card"}))
 
+(defn page-title->block
+  [title]
+  {:block/name (string/lower-case title)
+   :block/original-name title
+   :block/journal? false
+   :block/uuid (random-uuid)})
+
 (def built-in-pages
-  (mapv (fn [p]
-          {:block/name (string/lower-case p)
-           :block/original-name p
-           :block/journal? false
-           :block/uuid (random-uuid)})
-        built-in-pages-names))
+  (mapv page-title->block built-in-pages-names))

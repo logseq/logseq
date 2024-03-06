@@ -294,7 +294,7 @@
   [conn m]
   (or
    (let [marker (:block/marker m)
-         property (db-property/get-property @conn "status")
+         property (d/entity @conn :task/status)
          matched-status-id (when marker
                              (->> (get-in property [:block/schema :values])
                                  (some (fn [id]

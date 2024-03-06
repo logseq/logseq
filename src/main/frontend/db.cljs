@@ -58,7 +58,7 @@
  [frontend.db.query-react
   react-query custom-query-result-transform]
 
- [logseq.db.frontend.default built-in-pages-names built-in-pages])
+ [logseq.db.frontend.default built-in-pages-names built-in-pages page-title->block])
 
 (defn start-db-conn!
   ([repo]
