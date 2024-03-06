@@ -635,40 +635,75 @@
    (let [[new-content _] (status/cycle-marker content marker new-marker format (state/get-preferred-workflow))]
      (save-block-if-changed! block new-content))))
 
+(defn file-based-cycle-todo!
+  [block]
+  (when (not-empty (:block/content block))
+    (set-marker block)))
+
+(defn db-based-cycle-todo!
+  [block]
+  (let [task (db/entity [:block/name "task"])
+        status-id (:block/uuid (db/entity :task/status))
+        status-value-id (get-in block [:block/properties status-id])
+        status-value (when status-value-id (db/entity [:block/uuid status-value-id]))
+        next-status (case (:db/ident status-value)
+                      :task/status.todo
+                      :task/status.doing
+                      :task/status.doing
+                      :task/status.done
+                      :task/status.done
+                      nil
+                      :task/status.todo)
+        next-status-id (when next-status (:block/uuid (db/entity next-status)))
+        properties (if next-status-id
+                     (assoc (:block/properties block) status-id next-status-id)
+                     (or (dissoc (:block/properties block) status-id) {}))]
+    (outliner-op/save-block! {:db/id (:db/id block)
+                              :block/properties properties
+                              :block/tags #{{:db/id (:db/id task)}}})))
+
 (defn cycle-todos!
   []
-  ;; TODO: closed values needs to be enriched to know which state to be the next one
-  (when-not (config/db-based-graph? (state/get-current-repo))
-    (when-let [blocks (seq (get-selected-blocks))]
-      (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
-                                       (uuid id)) blocks))
-                     (remove nil?))]
-        (ui-outliner-tx/transact!
-         {:outliner-op :cycle-todos}
-         (doseq [id ids]
-           (let [block (db/pull [:block/uuid id])]
-             (when (not-empty (:block/content block))
-               (set-marker block)))))))))
+  (when-let [blocks (seq (get-selected-blocks))]
+    (let [db-based? (config/db-based-graph? (state/get-current-repo))
+          ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
+                                     (uuid id)) blocks))
+                   (remove nil?))]
+      (ui-outliner-tx/transact!
+       {:outliner-op :cycle-todos}
+       (doseq [id ids]
+         (when-let [block (db/entity [:block/uuid id])]
+           (if db-based?
+             (db-based-cycle-todo! block)
+             (file-based-cycle-todo! block))))))))
 
 (defn cycle-todo!
   []
   #_:clj-kondo/ignore
-  (when (and (not (state/get-editor-action))
-             ;; TODO: closed values needs to be enriched to know which state to be the next one
-             (not (config/db-based-graph? (state/get-current-repo))))
+  (when-not (state/get-editor-action)
     (if-let [blocks (seq (get-selected-blocks))]
       (cycle-todos!)
-      (when (state/get-edit-block)
+      (when-let [edit-block (state/get-edit-block)]
         (let [edit-input-id (state/get-edit-input-id)
-              current-input (gdom/getElement edit-input-id)
-              content (state/get-edit-content)
-              format (or (db/get-page-format (state/get-current-page))
-                         (state/get-preferred-format))
-              [new-content marker] (status/cycle-marker content nil nil format (state/get-preferred-workflow))
-              new-pos (commands/compute-pos-delta-when-change-marker
-                       content marker (cursor/pos current-input))]
-          (state/set-edit-content! edit-input-id new-content)
-          (cursor/move-cursor-to current-input new-pos))))))
+              current-input (gdom/getElement edit-input-id)]
+          (if (config/db-based-graph? (state/get-current-repo))
+            (when-let [block (db/entity (:db/id edit-block))]
+              (let [pos (state/get-edit-pos)]
+                (p/do!
+                 (ui-outliner-tx/transact!
+                  {:outliner-op :cycle-todos}
+                  (db-based-cycle-todo! block))
+
+                 ;; FIXME: don't change current editor's position
+                 )))
+            (let [content (state/get-edit-content)
+                  format (or (db/get-page-format (state/get-current-page))
+                             (state/get-preferred-format))
+                  [new-content marker] (status/cycle-marker content nil nil format (state/get-preferred-workflow))
+                  new-pos (commands/compute-pos-delta-when-change-marker
+                           content marker (cursor/pos current-input))]
+              (state/set-edit-content! edit-input-id new-content)
+              (cursor/move-cursor-to current-input new-pos))))))))
 
 (defn set-priority
   [{:block/keys [priority content] :as block} new-priority]
