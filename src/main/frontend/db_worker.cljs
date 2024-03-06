@@ -482,8 +482,8 @@
   (apply-outliner-ops
    [this repo ops-str opts-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [ops (dt/read-transit-str ops-str)
-           opts (dt/read-transit-str opts-str)
+     (let [ops (edn/read-string ops-str)
+           opts (edn/read-string opts-str)
            result (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts)]
        (dt/write-transit-str result))))
 

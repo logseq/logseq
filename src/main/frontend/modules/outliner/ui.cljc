@@ -26,8 +26,8 @@
                  (when (and worker# (seq r#))
                    (let [request-id# (state/get-worker-next-request-id)
                          request# #(.apply-outliner-ops ^Object worker# (state/get-current-repo)
-                                                        (datascript.transit/write-transit-str r#)
-                                                        (datascript.transit/write-transit-str (assoc ~opts :request-id request-id#)))
+                                                        (pr-str r#)
+                                                        (pr-str (assoc ~opts :request-id request-id#)))
                          response# (state/add-worker-request! request-id# request#)]
 
                      response#))))))))))
