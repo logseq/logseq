@@ -3,14 +3,15 @@
   (:require [cljs-bean.core :as bean]
             [frontend.handler.file :as file-handler]
             [frontend.handler.notification :as notification]
-            [clojure.edn :as edn]
             [frontend.state :as state]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [datascript.transit :as dt]
+            [frontend.util :as util]))
 
 (defmulti handle identity)
 
 (defmethod handle :write-files [_ ^js worker data]
-  (let [{:keys [request-id page-id repo files]} (edn/read-string data)]
+  (let [{:keys [request-id page-id repo files]} data]
     (->
      (p/let [_ (file-handler/alter-files repo files {})]
        (.page-file-saved worker request-id page-id))
@@ -23,18 +24,17 @@
                 (.page-file-saved worker request-id page-id))))))
 
 (defmethod handle :notification [_ _worker data]
-  (apply notification/show! (edn/read-string data)))
+  (apply notification/show! data))
 
 (defmethod handle :add-repo [_ _worker data]
-  (state/add-repo! {:url (:repo (edn/read-string data))}))
+  (state/add-repo! {:url (:repo data)}))
 
 (defmethod handle :rtc-sync-state [_ _worker data]
-  (let [state (edn/read-string data)]
+  (let [state data]
     (state/pub-event! [:rtc/sync-state state])))
 
 (defmethod handle :sync-db-changes [_ _worker data]
-  (let [data (edn/read-string data)]
-    (state/pub-event! [:db/sync-changes data])))
+  (state/pub-event! [:db/sync-changes data]))
 
 (defmethod handle :default [_ _worker data]
   (prn :debug "Worker data not handled: " data))
@@ -53,5 +53,7 @@
                 (if (.-isError (.-value data))
                   (js/console.error "Unexpected webworker error:" (-> data bean/->clj (get-in [:value :value])))
                   (js/console.error "Unexpected webworker error:" data))
-                (let [[e payload] (bean/->clj data)]
-                  (handle (keyword e) wrapped-worker payload))))))))
+                (if (string? data)
+                  (let [[e payload] (util/profile "UI read transit: " (dt/read-transit-str data))]
+                    (handle (keyword e) wrapped-worker payload))
+                  (js/console.error "Worker received invalid data from worker: " data))))))))

@@ -4,6 +4,7 @@
             [datascript.storage :refer [IStorage]]
             [clojure.edn :as edn]
             [datascript.core :as d]
+            [datascript.transit :as dt]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [shadow.cljs.modern :refer [defclass]]
             ["@logseq/sqlite-wasm" :default sqlite3InitModule]
@@ -281,43 +282,43 @@
   (q [_this repo inputs-str]
      "Datascript q"
      (when-let [conn (worker-state/get-datascript-conn repo)]
-       (let [inputs (edn/read-string inputs-str)
+       (let [inputs (dt/read-transit-str inputs-str)
              result (apply d/q (first inputs) @conn (rest inputs))]
-         (pr-str result))))
+         (dt/write-transit-str result))))
 
   (pull
    [_this repo selector-str id-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [selector (edn/read-string selector-str)
-           id (edn/read-string id-str)
+     (let [selector (dt/read-transit-str selector-str)
+           id (dt/read-transit-str id-str)
            result (->> (d/pull @conn selector id)
                        (sqlite-common-db/with-parent-and-left @conn))]
-       (pr-str result))))
+       (dt/write-transit-str result))))
 
   (pull-many
    [_this repo selector-str ids-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [selector (edn/read-string selector-str)
-           ids (edn/read-string ids-str)
+     (let [selector (dt/read-transit-str selector-str)
+           ids (dt/read-transit-str ids-str)
            result (d/pull-many @conn selector ids)]
-       (pr-str result))))
+       (dt/write-transit-str result))))
 
   (get-right-sibling
    [_this repo db-id]
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (let [result (ldb/get-right-sibling @conn db-id)]
-       (pr-str result))))
+       (dt/write-transit-str result))))
 
   (get-block-and-children
    [_this repo name children?]
    (assert (string? name))
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (pr-str (sqlite-common-db/get-block-and-children @conn name children?))))
+     (dt/write-transit-str (sqlite-common-db/get-block-and-children @conn name children?))))
 
   (get-block-refs
    [_this repo id]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (pr-str (ldb/get-block-refs @conn id))))
+     (dt/write-transit-str (ldb/get-block-refs @conn id))))
 
   (get-block-refs-count
    [_this repo id]
@@ -330,13 +331,13 @@
      (let [block-id (:block/uuid (d/entity @conn id))
            parents (->> (ldb/get-block-parents @conn block-id {:depth (or depth 3)})
                         (map (fn [b] (d/pull @conn '[*] (:db/id b)))))]
-       (pr-str parents))))
+       (dt/write-transit-str parents))))
 
   (get-page-unlinked-refs
    [_this repo page-id search-result-eids-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [search-result-eids (edn/read-string search-result-eids-str)]
-       (pr-str (ldb/get-page-unlinked-refs @conn page-id search-result-eids)))))
+     (let [search-result-eids (dt/read-transit-str search-result-eids-str)]
+       (dt/write-transit-str (ldb/get-page-unlinked-refs @conn page-id search-result-eids)))))
 
   (transact
    [_this repo tx-data tx-meta context]
@@ -344,13 +345,13 @@
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (try
        (let [tx-data (if (string? tx-data)
-                       (edn/read-string tx-data)
+                       (dt/read-transit-str tx-data)
                        tx-data)
              tx-meta (if (string? tx-meta)
-                       (edn/read-string tx-meta)
+                       (dt/read-transit-str tx-meta)
                        tx-meta)
              context (if (string? context)
-                       (edn/read-string context)
+                       (dt/read-transit-str context)
                        context)
              _ (when context (worker-state/set-context! context))
              tx-meta' (if (:new-graph? tx-meta)
@@ -378,7 +379,7 @@
   (getInitialData
    [_this repo]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (pr-str (sqlite-common-db/get-initial-data @conn))))
+     (dt/write-transit-str (sqlite-common-db/get-initial-data @conn))))
 
   (fetch-all-pages
    [_this repo]
@@ -387,11 +388,10 @@
        (let [all-pages (sqlite-common-db/get-all-pages @conn)
              partitioned-data (map-indexed (fn [idx p] [idx p]) (partition-all 2000 all-pages))]
          (doseq [[idx tx-data] partitioned-data]
-           (worker-util/post-message :sync-db-changes (pr-str
-                                                       {:repo repo
-                                                        :tx-data tx-data
-                                                        :tx-meta {:initial-pages? true
-                                                                  :end? (= idx (dec (count partitioned-data)))}}))
+           (worker-util/post-message :sync-db-changes {:repo repo
+                                                       :tx-data tx-data
+                                                       :tx-meta {:initial-pages? true
+                                                                 :end? (= idx (dec (count partitioned-data)))}})
            (async/<! (async/timeout 100)))))
      nil))
 
@@ -482,10 +482,10 @@
   (apply-outliner-ops
    [this repo ops-str opts-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [ops (edn/read-string ops-str)
-           opts (edn/read-string opts-str)
+     (let [ops (dt/read-transit-str ops-str)
+           opts (dt/read-transit-str opts-str)
            result (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts)]
-       (pr-str result))))
+       (dt/write-transit-str result))))
 
   (file-writes-finished?
    [this repo]
@@ -511,7 +511,7 @@
 
   (sync-app-state
    [this new-state-str]
-   (let [new-state (edn/read-string new-state-str)]
+   (let [new-state (dt/read-transit-str new-state-str)]
      (worker-state/set-new-state! new-state)
      nil))
 
@@ -520,18 +520,18 @@
    [this repo block-uuid-or-page-name tree->file-opts context]
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (worker-export/block->content repo @conn block-uuid-or-page-name
-                                   (edn/read-string tree->file-opts)
-                                   (edn/read-string context))))
+                                   (dt/read-transit-str tree->file-opts)
+                                   (dt/read-transit-str context))))
 
   (get-all-pages
    [this repo]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (pr-str (worker-export/get-all-pages repo @conn))))
+     (dt/write-transit-str (worker-export/get-all-pages repo @conn))))
 
   (get-all-page->content
    [this repo]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (pr-str (worker-export/get-all-page->content repo @conn))))
+     (dt/write-transit-str (worker-export/get-all-page->content repo @conn))))
 
   ;; RTC
   (rtc-start
@@ -571,15 +571,13 @@
            (<! (rtc-updown/<upload-graph state repo conn))
            (rtc-db-listener/listen-db-to-generate-ops repo conn))
          (worker-util/post-message :notification
-                                   (pr-str
-                                    [[:div
-                                      [:p "Upload graph successfully"]]]))
+                                   [[:div
+                                     [:p "Upload graph successfully"]]])
          (catch :default e
            (worker-util/post-message :notification
-                                     (pr-str
-                                      [[:div
-                                        [:p "upload graph failed"]]
-                                       :error]))
+                                     [[:div
+                                       [:p "upload graph failed"]]
+                                      :error])
            (prn ::download-graph-failed e))))
      nil))
 
@@ -590,15 +588,13 @@
        (try
          (<? (rtc-updown/<download-graph state repo graph-uuid))
          (worker-util/post-message :notification
-                                   (pr-str
-                                    [[:div
-                                      [:p "download graph successfully"]]]))
+                                   [[:div
+                                     [:p "download graph successfully"]]])
          (catch :default e
            (worker-util/post-message :notification
-                                     (pr-str
-                                      [[:div
-                                        [:p "download graph failed"]]
-                                       :error]))
+                                     [[:div
+                                       [:p "download graph failed"]]
+                                      :error])
            (prn ::download-graph-failed e)))))
    nil)
 

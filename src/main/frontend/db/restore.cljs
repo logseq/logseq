@@ -7,7 +7,7 @@
             [promesa.core :as p]
             [cljs-time.core :as t]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [clojure.edn :as edn]
+            [datascript.transit :as dt]
             [frontend.db.async :as db-async]
             [clojure.core.async :as async]))
 
@@ -18,7 +18,7 @@
   (p/let [start-time (t/now)
           data (persist-db/<fetch-init-data repo)
           _ (assert (some? data) "No data found when reloading db")
-          data' (edn/read-string data)
+          data' (dt/read-transit-str data)
           db-schema (db-conn/get-schema repo)
           conn (sqlite-common-db/restore-initial-data data' db-schema)
           db-name (db-conn/datascript-db repo)

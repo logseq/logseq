@@ -81,7 +81,8 @@
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [frontend.modules.outliner.pipeline :as pipeline]
             [electron.ipc :as ipc]
-            [frontend.date :as date]))
+            [frontend.date :as date]
+            [datascript.transit :as dt]))
 
 ;; TODO: should we move all events here?
 
@@ -973,7 +974,9 @@
     (pipeline/invoke-hooks data)
 
     (when (util/electron?)
-      (ipc/ipc :db-transact repo (pr-str (:tx-data data)) (pr-str (:tx-meta data))))
+      (ipc/ipc :db-transact repo
+               (dt/write-transit-str (:tx-data data))
+               (dt/write-transit-str (:tx-meta data))))
 
     nil))
 

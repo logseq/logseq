@@ -14,7 +14,8 @@
             [frontend.handler.worker :as worker-handler]
             [logseq.db :as ldb]
             [frontend.db.transact :as db-transact]
-            [frontend.date :as date]))
+            [frontend.date :as date]
+            [datascript.transit :as dt]))
 
 (defonce *worker state/*db-worker)
 
@@ -37,12 +38,12 @@
                                  (not= (:config prev) (:config current))
                                  (assoc :config (:config current)))]
                  (when (seq new-state)
-                   (.sync-app-state worker (pr-str new-state)))))))
+                   (.sync-app-state worker (dt/write-transit-str new-state)))))))
 
 (defn transact!
   [^js worker repo tx-data tx-meta]
-  (let [tx-meta' (pr-str tx-meta)
-        tx-data' (pr-str tx-data)
+  (let [tx-meta' (dt/write-transit-str tx-meta)
+        tx-data' (dt/write-transit-str tx-data)
         ;; TODO: a better way to share those information with worker, maybe using the state watcher to notify the worker?
         context {:dev? config/dev?
                  :node-test? util/node-test?
@@ -58,7 +59,7 @@
                  :pages-directory (config/get-pages-directory)}]
     (if worker
       (.transact worker repo tx-data' tx-meta'
-                 (pr-str context))
+                 (dt/write-transit-str context))
       (notification/show! "Latest change was not saved! Please restart the application." :error))))
 
 (defn start-db-worker!
@@ -73,7 +74,7 @@
       (reset! *worker wrapped-worker)
       (-> (p/let [_ (.init wrapped-worker config/RTC-WS-URL)
                   _ (.sync-app-state wrapped-worker
-                                     (pr-str
+                                     (dt/write-transit-str
                                       {:git/current-repo (state/get-current-repo)
                                        :config (:config @state/state)}))
                   _ (sync-app-state! wrapped-worker)

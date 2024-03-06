@@ -34,7 +34,7 @@
             [goog.functions :refer [debounce]]
             [logseq.common.graph :as common-graph]
             [promesa.core :as p]
-            [clojure.edn :as edn]))
+            [datascript.transit :as dt]))
 
 (defmethod handle :mkdir [_window [_ dir]]
   (fs/mkdirSync dir))
@@ -315,8 +315,8 @@
 
 (defmethod handle :db-transact [_window [_ repo tx-data-str tx-meta-str]]
   (when-let [conn (sqlite-db/get-conn repo)]
-    (let [tx-data (edn/read-string tx-data-str)
-          tx-meta (edn/read-string tx-meta-str)]
+    (let [tx-data (dt/read-transit-str tx-data-str)
+          tx-meta (dt/read-transit-str tx-meta-str)]
       (sqlite-db/transact! repo tx-data tx-meta)
       (:max-tx @conn))))
 

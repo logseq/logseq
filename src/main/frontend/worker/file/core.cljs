@@ -172,10 +172,10 @@
                      (let [files [[file-path new-content]]]
                        (when (seq files)
                          (let [page-id (:db/id page-block)]
-                           (worker-util/post-message :write-files (pr-str {:request-id request-id
-                                                                           :page-id page-id
-                                                                           :repo repo
-                                                                           :files files}))
+                           (worker-util/post-message :write-files {:request-id request-id
+                                                                   :page-id page-id
+                                                                   :repo repo
+                                                                   :files files})
                            :sent)))))
                  ;; In e2e tests, "card" page in db has no :file/path
                  (js/console.error "File path from page-block is not valid" page-block tree))]

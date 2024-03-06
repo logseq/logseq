@@ -135,7 +135,7 @@
                (.closeDB worker-obj repo))]
      (<? (p->c work))
 
-     (worker-util/post-message :add-repo (pr-str {:repo repo}))
+     (worker-util/post-message :add-repo {:repo repo})
      (op-mem-layer/update-local-tx! repo t))))
 
 (defn <download-graph
