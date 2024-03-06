@@ -22,6 +22,7 @@
 (rum/defc page-properties < rum/reactive
   [page {:keys [mode configure?]}]
   (let [types (:block/type page)
+        class? (= mode :class)
         property? (contains? types "property")
         edit-input-id-prefix (str "edit-block-" (:block/uuid page))
         configure-opts {:selected? false
@@ -38,7 +39,10 @@
                    property?
                    has-tags?)))
       [:div.ls-page-properties
-       {:class (util/classnames [{:no-mode (nil? mode)}])}
+       {:class (util/classnames [{:no-mode (nil? mode)
+                                  :no-properties (if class?
+                                                   (not has-class-properties?)
+                                                   (not has-viewable-properties?))}])}
        (cond
          (= mode :class)
          (if (and config/publishing? (not configure?))
@@ -180,11 +184,12 @@
             (or has-tags? (some? types))
             true)
       [:div.page-info
+       {:class (util/classnames [{:is-collapsed collapsed?}])}
        [:div.py-2 {:class (if (or @*hover? (not collapsed?))
                             "border rounded"
                             "border rounded border-transparent")}
         [:div.info-title.cursor
-         {:on-mouse-over  #(reset! *hover? true)
+         {:on-mouse-over #(reset! *hover? true)
           :on-mouse-leave #(when-not (state/dropdown-opened?)
                              (reset! *hover? false))
           :on-click (if config/publishing?
@@ -193,7 +198,7 @@
                           (swap! *collapsed? not)))
                       #(swap! *collapsed? not))}
          (when show-info?
-           [:div.flex.flex-row.items-center.gap-2.justify-between.pl-1
+           [:<>
             [:div.flex.flex-row.items-center.gap-2
              (if collapsed?
                (if (or has-tags? @*hover? config/publishing?)
@@ -211,17 +216,18 @@
                 [:a.flex.fade-link.ml-3 (ui/icon "info-circle")]
                 (mode-switch types *mode)])]
             (when (or @*hover? (not collapsed?))
-              [:div.px-1
+              [:div.px-1.absolute.right-0.top-0
                (shui/button
-                {:variant :ghost :size :sm :class "fade-link"}
-                (if collapsed?
-                  [:span.text-xs.font-normal "Configure"]
-                  (ui/icon "x")))])])]
+                 {:variant :ghost :size :sm}
+                 (if collapsed?
+                   [:span.opacity-80.flex.items-center
+                    (ui/icon "adjustments-horizontal" {:size 16})]
+                   (ui/icon "x")))])])]
         (when show-info?
           (if collapsed?
             (when (or (seq (:block/properties page))
                       (and class? (seq (:properties (:block/schema page)))))
               [:div.px-4
                (page-properties page {:mode (if class? :class :page)})])
-            [:div.py-2.px-4
+            [:div.pt-2.px-4
              (page-configure page *mode)]))]])))
