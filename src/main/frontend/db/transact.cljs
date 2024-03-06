@@ -2,7 +2,8 @@
   "Provides async transact for use with ldb/transact!"
   (:require [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.worker.async-util :include-macros true :refer [<?]]))
 
 (defonce *request-id (atom 0))
 (defonce requests (async/chan 1000))
@@ -30,9 +31,19 @@
 (defn listen-for-requests []
   (async/go-loop []
     (when-let [{:keys [id request response]} (async/<! requests)]
-      (let [result (async/<! (p->c (request)))]
-        (p/resolve! response result)
-        (swap! *unfinished-request-ids disj id))
+      (try
+        (let [result (<? (p->c (request)))]
+          (if (:ex-data result)
+            (do
+              (js/console.error (:ex-message result) (:ex-data result))
+              (p/reject! response result)
+              (swap! *unfinished-request-ids disj id))
+            (do
+              (p/resolve! response result)
+              (swap! *unfinished-request-ids disj id))))
+        (catch :default e
+          (p/reject! response e)
+          (swap! *unfinished-request-ids disj id)))
       (recur))))
 
 (defn transact [worker-transact repo tx-data tx-meta]
