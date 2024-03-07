@@ -82,7 +82,7 @@
             [frontend.modules.outliner.pipeline :as pipeline]
             [electron.ipc :as ipc]
             [frontend.date :as date]
-            [datascript.transit :as dt]))
+            [logseq.db :as ldb]))
 
 ;; TODO: should we move all events here?
 
@@ -976,8 +976,8 @@
 
     (when (util/electron?)
       (ipc/ipc :db-transact repo
-               (dt/write-transit-str (:tx-data data))
-               (dt/write-transit-str (:tx-meta data))))
+               (ldb/write-transit-str (:tx-data data))
+               (ldb/write-transit-str (:tx-meta data))))
 
     nil))
 
