@@ -10,11 +10,6 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.default :as default-db]))
 
-(defn- mark-block-as-built-in
-  [db block]
-  (let [built-in-property-id (:block/uuid (d/entity db :built-in?))]
-    (update block :block/properties assoc built-in-property-id true)))
-
 (defn- build-initial-properties
   [db]
   (let [;; Some uuids need to be pre-defined since they are referenced by other properties
@@ -45,7 +40,7 @@
                         schema
                         (get default-property-uuids k-keyword id)
                         {:db-ident db-ident})])]
-         (update blocks 0 #(mark-block-as-built-in db %))))
+         (update blocks 0 #(default-db/mark-block-as-built-in db %))))
      built-in-properties)))
 
 (defn build-db-initial-data
@@ -70,7 +65,7 @@
                         :file/content ""
                         :file/last-modified-at (js/Date.)}]
         default-pages (->> (ldb/build-pages-tx (map default-db/page-title->block ["Contents"]))
-                           (map #(mark-block-as-built-in db %)))
+                           (map #(default-db/mark-block-as-built-in db %)))
         default-properties (build-initial-properties db)
         name->properties (zipmap
                           (map :block/name default-properties)
@@ -78,7 +73,7 @@
         default-classes (map
                          (fn [[k-keyword {:keys [schema original-name]}]]
                            (let [k-name (name k-keyword)]
-                             (mark-block-as-built-in
+                             (default-db/mark-block-as-built-in
                               db
                               (sqlite-util/build-new-class
                                (let [properties (mapv

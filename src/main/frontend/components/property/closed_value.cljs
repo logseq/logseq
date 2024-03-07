@@ -153,9 +153,9 @@
        (assoc opts
               :delete-choice
               (fn []
-                (p/do!
-                  (db-property-handler/delete-closed-value! property block)
-                  (swap! *property-schema update :values (fn [vs] (vec (remove #(= uuid %) vs))))))
+                (p/let [success? (db-property-handler/delete-closed-value! (db/get-db) property block)]
+                  (when success?
+                    (swap! *property-schema update :values (fn [vs] (vec (remove #(= uuid %) vs)))))))
               :update-icon
               (fn [icon]
                 (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :icon icon)))
