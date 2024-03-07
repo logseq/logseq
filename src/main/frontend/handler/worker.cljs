@@ -5,8 +5,8 @@
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [promesa.core :as p]
-            [datascript.transit :as dt]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [logseq.db :as ldb]))
 
 (defmulti handle identity)
 
@@ -54,6 +54,6 @@
                   (js/console.error "Unexpected webworker error:" (-> data bean/->clj (get-in [:value :value])))
                   (js/console.error "Unexpected webworker error:" data))
                 (if (string? data)
-                  (let [[e payload] (util/profile "UI read transit: " (dt/read-transit-str data))]
+                  (let [[e payload] (util/profile "UI read transit: " (ldb/read-transit-str data))]
                     (handle (keyword e) wrapped-worker payload))
                   (js/console.error "Worker received invalid data from worker: " data))))))))

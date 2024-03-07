@@ -282,43 +282,43 @@
   (q [_this repo inputs-str]
      "Datascript q"
      (when-let [conn (worker-state/get-datascript-conn repo)]
-       (let [inputs (dt/read-transit-str inputs-str)
+       (let [inputs (ldb/read-transit-str inputs-str)
              result (apply d/q (first inputs) @conn (rest inputs))]
-         (dt/write-transit-str result))))
+         (ldb/write-transit-str result))))
 
   (pull
    [_this repo selector-str id-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [selector (dt/read-transit-str selector-str)
-           id (dt/read-transit-str id-str)
+     (let [selector (ldb/read-transit-str selector-str)
+           id (ldb/read-transit-str id-str)
            result (->> (d/pull @conn selector id)
                        (sqlite-common-db/with-parent-and-left @conn))]
-       (dt/write-transit-str result))))
+       (ldb/write-transit-str result))))
 
   (pull-many
    [_this repo selector-str ids-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [selector (dt/read-transit-str selector-str)
-           ids (dt/read-transit-str ids-str)
+     (let [selector (ldb/read-transit-str selector-str)
+           ids (ldb/read-transit-str ids-str)
            result (d/pull-many @conn selector ids)]
-       (dt/write-transit-str result))))
+       (ldb/write-transit-str result))))
 
   (get-right-sibling
    [_this repo db-id]
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (let [result (ldb/get-right-sibling @conn db-id)]
-       (dt/write-transit-str result))))
+       (ldb/write-transit-str result))))
 
   (get-block-and-children
    [_this repo name children?]
    (assert (string? name))
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (dt/write-transit-str (sqlite-common-db/get-block-and-children @conn name children?))))
+     (ldb/write-transit-str (sqlite-common-db/get-block-and-children @conn name children?))))
 
   (get-block-refs
    [_this repo id]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (dt/write-transit-str (ldb/get-block-refs @conn id))))
+     (ldb/write-transit-str (ldb/get-block-refs @conn id))))
 
   (get-block-refs-count
    [_this repo id]
@@ -331,13 +331,13 @@
      (let [block-id (:block/uuid (d/entity @conn id))
            parents (->> (ldb/get-block-parents @conn block-id {:depth (or depth 3)})
                         (map (fn [b] (d/pull @conn '[*] (:db/id b)))))]
-       (dt/write-transit-str parents))))
+       (ldb/write-transit-str parents))))
 
   (get-page-unlinked-refs
    [_this repo page-id search-result-eids-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [search-result-eids (dt/read-transit-str search-result-eids-str)]
-       (dt/write-transit-str (ldb/get-page-unlinked-refs @conn page-id search-result-eids)))))
+     (let [search-result-eids (ldb/read-transit-str search-result-eids-str)]
+       (ldb/write-transit-str (ldb/get-page-unlinked-refs @conn page-id search-result-eids)))))
 
   (transact
    [_this repo tx-data tx-meta context]
@@ -345,13 +345,13 @@
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (try
        (let [tx-data (if (string? tx-data)
-                       (dt/read-transit-str tx-data)
+                       (ldb/read-transit-str tx-data)
                        tx-data)
              tx-meta (if (string? tx-meta)
-                       (dt/read-transit-str tx-meta)
+                       (ldb/read-transit-str tx-meta)
                        tx-meta)
              context (if (string? context)
-                       (dt/read-transit-str context)
+                       (ldb/read-transit-str context)
                        context)
              _ (when context (worker-state/set-context! context))
              tx-meta' (if (:new-graph? tx-meta)
@@ -379,7 +379,7 @@
   (getInitialData
    [_this repo]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (dt/write-transit-str (sqlite-common-db/get-initial-data @conn))))
+     (ldb/write-transit-str (sqlite-common-db/get-initial-data @conn))))
 
   (fetch-all-pages
    [_this repo]
@@ -488,7 +488,7 @@
      (let [ops (edn/read-string ops-str)
            opts (edn/read-string opts-str)
            result (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts)]
-       (dt/write-transit-str result))))
+       (ldb/write-transit-str result))))
 
   (file-writes-finished?
    [this repo]
@@ -514,7 +514,7 @@
 
   (sync-app-state
    [this new-state-str]
-   (let [new-state (dt/read-transit-str new-state-str)]
+   (let [new-state (ldb/read-transit-str new-state-str)]
      (worker-state/set-new-state! new-state)
      nil))
 
@@ -523,18 +523,18 @@
    [this repo block-uuid-or-page-name tree->file-opts context]
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (worker-export/block->content repo @conn block-uuid-or-page-name
-                                   (dt/read-transit-str tree->file-opts)
-                                   (dt/read-transit-str context))))
+                                   (ldb/read-transit-str tree->file-opts)
+                                   (ldb/read-transit-str context))))
 
   (get-all-pages
    [this repo]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (dt/write-transit-str (worker-export/get-all-pages repo @conn))))
+     (ldb/write-transit-str (worker-export/get-all-pages repo @conn))))
 
   (get-all-page->content
    [this repo]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (dt/write-transit-str (worker-export/get-all-page->content repo @conn))))
+     (ldb/write-transit-str (worker-export/get-all-page->content repo @conn))))
 
   ;; RTC
   (rtc-start

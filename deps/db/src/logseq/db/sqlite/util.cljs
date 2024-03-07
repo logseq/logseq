@@ -3,7 +3,9 @@
   (:require [clojure.string :as string]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.common.util :as common-util]
-            [cognitect.transit :as transit]))
+            [cognitect.transit :as transit]
+            [datascript.transit :as dt]
+            [datascript.impl.entity :as de]))
 
 (defonce db-version-prefix "logseq_db_")
 (defonce file-version-prefix "logseq_local_")
@@ -18,6 +20,18 @@
   [str]
   (transit/read transit-r str))
 
+(defn write-transit-str [o]
+  (let [write-handlers (assoc dt/write-handlers
+                              de/Entity (transit/write-handler (constantly "datascript/Entity")
+                                                         (fn [entity]
+                                                           (assert (some? (:db/id entity)))
+                                                           {:db/id (:db/id entity)})))]
+    (transit/write (transit/writer :json {:handlers write-handlers}) o)))
+
+(defn read-transit-str [s]
+  (let [read-handlers (assoc dt/read-handlers
+                             "datascript/Entity" identity)]
+    (transit/read (transit/reader :json {:handlers read-handlers}) s)))
 
 (defn db-based-graph?
   [graph-name]

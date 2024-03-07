@@ -7,7 +7,7 @@
             [logseq.common.util :as common-util]
             [clojure.core.async :as async]
             [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
-            [datascript.transit :as dt])))
+            [logseq.db :as ldb])))
 
 ;; Copied from https://github.com/tonsky/datascript-todo
 #?(:clj
@@ -93,4 +93,4 @@
      (defn post-message
        [type data]
        (when (exists? js/self)
-         (.postMessage js/self (frontend.worker.util/profile "Worker write transit: " (dt/write-transit-str [type data])))))))
+         (.postMessage js/self (frontend.worker.util/profile "Worker write transit: " (ldb/write-transit-str [type data])))))))

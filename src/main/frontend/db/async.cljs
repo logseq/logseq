@@ -16,7 +16,7 @@
             [frontend.date :as date]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
-            [datascript.transit :as dt]))
+            [logseq.db :as ldb]))
 
 (def <q db-async-util/<q)
 (def <pull db-async-util/<pull)
@@ -148,7 +148,7 @@
       (when-let [^Object sqlite @db-browser/*worker]
         (state/update-state! :db/async-queries (fn [s] (conj s name')))
         (p/let [result (.get-block-and-children sqlite graph name' children?)
-                {:keys [block children] :as result'} (dt/read-transit-str result)
+                {:keys [block children] :as result'} (ldb/read-transit-str result)
                 conn (db/get-db graph false)
                 block-and-children (cons block children)
                 _ (d/transact! conn block-and-children)]
@@ -165,7 +165,7 @@
   (assert (integer? db-id))
   (when-let [^Object worker @db-browser/*worker]
     (p/let [result-str (.get-right-sibling worker graph db-id)
-            result (dt/read-transit-str result-str)
+            result (ldb/read-transit-str result-str)
             conn (db/get-db graph false)
             _ (when result (d/transact! conn [result]))]
       result)))
@@ -177,7 +177,7 @@
     (when-let [block-id (:block/uuid (db/entity graph id))]
       (state/update-state! :db/async-queries (fn [s] (conj s (str block-id "-parents"))))
       (p/let [result-str (.get-block-parents worker graph id depth)
-              result (dt/read-transit-str result-str)
+              result (ldb/read-transit-str result-str)
               conn (db/get-db graph false)
               _ (d/transact! conn result)]
         (state/update-state! :db/async-queries (fn [s] (disj s (str block-id "-parents"))))
@@ -189,7 +189,7 @@
   (when-let [^Object worker @db-browser/*worker]
     (state/update-state! :db/async-queries (fn [s] (conj s (str eid "-refs"))))
     (p/let [result-str (.get-block-refs worker graph eid)
-            result (dt/read-transit-str result-str)
+            result (ldb/read-transit-str result-str)
             conn (db/get-db graph false)
             _ (d/transact! conn result)]
       (state/update-state! :db/async-queries (fn [s] (disj s (str eid "-refs"))))

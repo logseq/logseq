@@ -10,7 +10,8 @@
             [clojure.set :as set]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.entity-plus]
-            [logseq.db.frontend.class :as db-class]))
+            [logseq.db.frontend.class :as db-class]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
@@ -564,6 +565,9 @@
     (and (built-in? class-entity)
          (built-in? property-entity)
          (contains? class-properties (:block/name property-entity)))))
+
+(def write-transit-str sqlite-util/write-transit-str)
+(def read-transit-str sqlite-util/read-transit-str)
 
 (comment
   (defn db-based-graph?
