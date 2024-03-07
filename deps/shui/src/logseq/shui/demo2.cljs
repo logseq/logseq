@@ -1,5 +1,6 @@
 (ns logseq.shui.demo2
-  (:require [rum.core :as rum]
+  (:require [clojure.string :as string]
+            [rum.core :as rum]
             [logseq.shui.ui :as ui]
             [logseq.shui.popup.core :refer [install-popups update-popup! get-popup]]
             [logseq.shui.select.multi :refer [x-select]]
@@ -45,7 +46,8 @@
               (ui/button {:variant :link :size :sm} "+")])
            ;; content
            (x-select items selected-items
-             {:on-chosen on-chosen
+             {:close! #(set-open! false)
+              :on-chosen on-chosen
               :value-render (fn [v {:keys [selected?]}]
                               (if selected?
                                 [:b.text-red-800 v]
@@ -91,6 +93,8 @@
            ;; content
            (x-select items selected-items
              {;; test item render
+              :open? open?
+              :close! #(set-open! false)
               :search-enabled? true
               :item-render (fn [item {:keys [selected?]}]
                              (if item
@@ -106,7 +110,9 @@
               ;:head-render (fn [] [:b "header"])
               ;:foot-render (fn [] [:b "footer"])
               :content-props
-              {:onInteractOutside #(set-open! false)
+              {:align "start"
+               :onInteractOutside #(set-open! false)
+               :onEscapeKeyDown #(set-open! false)
                :class "w-48"}})
            ))))
 
