@@ -801,9 +801,18 @@
       new-value-ids)))
 
 (defn delete-closed-value!
-  [property value-block]
-  (if (seq (:block/_refs value-block))
-    (notification/show! "The choice can't be deleted because it's still used." :warning)
+  "Returns true when deleted or if not deleted displays warning and returns false"
+  [db property value-block]
+  (cond
+    (ldb/built-in? db value-block)
+    (do (notification/show! "The choice can't be deleted because it's built-in." :warning)
+        false)
+
+    (seq (:block/_refs value-block))
+    (do (notification/show! "The choice can't be deleted because it's still used." :warning)
+        false)
+
+    :else
     (let [property (db/entity (:db/id property))
           schema (:block/schema property)
           tx-data [[:db/retractEntity (:db/id value-block)]
@@ -813,7 +822,8 @@
                                             (vec (remove #{(:block/uuid value-block)} values))))}]]
       (p/do!
        (db/transact! tx-data)
-       (re-init-commands! property)))))
+       (re-init-commands! property)
+       true))))
 
 (defn get-property-block-created-block
   "Get the root block and property that created this property block."

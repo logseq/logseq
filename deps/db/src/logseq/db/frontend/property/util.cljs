@@ -2,6 +2,7 @@
   "Util fns for building core property concepts"
   (:require [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.util :as common-util]
+            [logseq.db.frontend.default :as default-db]
             [datascript.core :as d]))
 
 (defonce hidden-page-name-prefix "$$$")
@@ -26,6 +27,10 @@
 
     icon
     (assoc :block/properties {icon-id icon})
+
+    ;; For now, only closed values with :db/ident are built-in?
+    (and db-ident (keyword? db-ident))
+    ((fn [b] (default-db/mark-block-as-built-in db b)))
 
     description
     (update :block/schema assoc :description description)
