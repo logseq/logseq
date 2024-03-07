@@ -28,13 +28,14 @@
           (item-render item {:x-item x-item :selected selected?})
           (let [{:keys [title value]} item
                 k (get-k item)
-                v (or title value)
-                on-click' (:on-click item-props)
-                on-click (fn [e]
-                           ;; TODO: return value
-                           (when (fn? on-click') (on-click' e))
-                           (when (fn? on-chosen)
-                             (on-chosen item {:selected selected?})))]
-            (x-item (merge {:data-k k :on-click on-click} item-props)
-              [:a.flex.items-center.gap-2.w-full
-               (form/checkbox {:checked selected?}) v])))))))
+                v (or title value)]
+            (when k
+              (let [on-click' (:on-click item-props)
+                    on-click (fn [e]
+                               ;; TODO: return value
+                               (when (fn? on-click') (on-click' e))
+                               (when (fn? on-chosen)
+                                 (on-chosen item {:selected selected?})))]
+                (x-item (merge {:data-k k :on-click on-click} item-props)
+                  [:a.flex.items-center.gap-2.w-full
+                   (form/checkbox {:checked selected?}) v])))))))))
