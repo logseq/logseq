@@ -5,7 +5,6 @@
             [logseq.shui.select.multi :refer [x-select]]
             [frontend.components.icon :refer [emojis-cp emojis icon-search]]))
 
-
 (rum/defc page
   []
 
@@ -16,15 +15,15 @@
    (let [items [{:key 1 :value "Apple" :class "bg-gray-800 text-gray-50"}
                 {:key 2 :value "Orange" :class "bg-orange-700 text-gray-50"}
                 nil
-                {:key 3 :value  "Pear"}]
+                {:key 3 :value "Pear"}]
 
          [selected-items set-selected-items!]
          (rum/use-state [(last items)])
 
          rm-item! (fn [item] (set-selected-items! (remove #(= item %) selected-items)))
          add-item! (fn [item] (set-selected-items! (conj selected-items item)))
-         on-chosen (fn [item {:keys [selected]}]
-                     (if (true? selected)
+         on-chosen (fn [item {:keys [selected?]}]
+                     (if (true? selected?)
                        (rm-item! item) (add-item! item)))
          [open? set-open!] (rum/use-state false)]
 
@@ -33,6 +32,8 @@
          (ui/card-title "Basic")
          (ui/card-description "x multiselect for shui"))
        (ui/card-content
+
+         ;; Basic
          (ui/dropdown-menu
            {:open open?}
            ;; trigger
@@ -45,25 +46,71 @@
            ;; content
            (x-select items selected-items
              {:on-chosen on-chosen
-              :value-render (fn [v {:keys [selected]}]
-                              (if selected
+              :value-render (fn [v {:keys [selected?]}]
+                              (if selected?
                                 [:b.text-red-800 v]
                                 [:b.text-green-800 v]))
+              :content-props
+              {:onInteractOutside #(set-open! false)
+               :class "w-48"}})
+           ))))
 
-              ;; test item render
-              ;:item-render (fn [item {:keys [selected]}]
-              ;                (if item
-              ;                  (ui/dropdown-menu-checkbox-item
-              ;                    {:checked selected
-              ;                     :on-click (fn []
-              ;                                 (if selected
-              ;                                   (rm-item! item)
-              ;                                   (add-item! item)))}
-              ;                    (:value item))
-              ;                  (ui/dropdown-menu-separator)))
+   [:hr]
 
-              :content-props {:onInteractOutside #(set-open! false)}})
-           ))))])
+   (let [items [{:key 1 :value "Apple" :class "bg-gray-800 text-gray-50"}
+                {:key 2 :value "Orange" :class "bg-orange-700 text-gray-50"}
+                nil
+                {:key 3 :value "Pear"}]
+
+         [selected-items set-selected-items!]
+         (rum/use-state [(last items)])
+
+         rm-item! (fn [item] (set-selected-items! (remove #(= item %) selected-items)))
+         add-item! (fn [item] (set-selected-items! (conj selected-items item)))
+         on-chosen (fn [item {:keys [selected?]}]
+                     (if (true? selected?)
+                       (rm-item! item) (add-item! item)))
+         [open? set-open!] (rum/use-state false)]
+
+     (ui/card
+       (ui/card-header
+         (ui/card-title "Search")
+         (ui/card-description "x multiselect for shui"))
+       (ui/card-content
+
+         ;; Basic
+         (ui/dropdown-menu
+           {:open open?}
+           ;; trigger
+           (ui/dropdown-menu-trigger
+             [:p.border.p-2.rounded.w-full.cursor-pointer
+              {:on-click #(set-open! true)}
+              (for [{:keys [key value class]} selected-items]
+                (ui/badge {:variant :secondary :class class} (str "#" key " " value)))
+              (ui/button {:variant :link :size :sm} "+")])
+           ;; content
+           (x-select items selected-items
+             {;; test item render
+              :search-enabled? true
+              :item-render (fn [item {:keys [selected?]}]
+                             (if item
+                               (ui/dropdown-menu-checkbox-item
+                                 {:checked selected?
+                                  :on-click (fn []
+                                              (if selected?
+                                                (rm-item! item)
+                                                (add-item! item)))}
+                                 (:value item))
+                               (ui/dropdown-menu-separator)))
+
+              ;:head-render (fn [] [:b "header"])
+              ;:foot-render (fn [] [:b "footer"])
+              :content-props
+              {:onInteractOutside #(set-open! false)
+               :class "w-48"}})
+           ))))
+
+   ])
 
 (rum/defc icon-picker-demo
   []
