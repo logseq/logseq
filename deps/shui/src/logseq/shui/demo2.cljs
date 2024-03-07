@@ -2,10 +2,47 @@
   (:require [rum.core :as rum]
             [logseq.shui.ui :as ui]
             [logseq.shui.popup.core :refer [install-popups update-popup! get-popup]]
+            [logseq.shui.select.multi :refer [x-select]]
             [frontend.components.icon :refer [emojis-cp emojis icon-search]]))
 
 
 (rum/defc page
+  []
+
+  [:div.sm:p-10
+   [:h1.text-3xl.font-bold.border-b.pb-4.mb-8
+    "Multi X Select"]
+
+   (let [items [{:key 1 :value "Apple"}
+                {:key 2 :value "Orange"}
+                {:key 3 :value "Pear"}]
+
+         [selected-items set-selected-items!]
+         (rum/use-state [(last items)])
+
+         on-chosen (fn [item {:keys [selected]}]
+                     (if (true? selected)
+                       (set-selected-items! (remove #(= item %) selected-items))
+                       (set-selected-items! (conj selected-items item))))]
+
+     (ui/card
+       (ui/card-header
+         (ui/card-title "Basic")
+         (ui/card-description "x multiselect for shui"))
+       (ui/card-content
+         (ui/dropdown-menu
+           {:open true}
+           ;; trigger
+           (ui/dropdown-menu-trigger
+             [:p.border.p-2.rounded
+              (for [{:keys [key value]} selected-items]
+                (ui/badge {:variant :outline} (str "#" key " " value)))
+              (ui/button {:variant :link :size :sm} "+")])
+           ;; content
+           (x-select items selected-items
+             {:on-chosen on-chosen})))))])
+
+(rum/defc icon-picker-demo
   []
   [:div.sm:p-10
    [:h1.text-3xl.font-bold.border-b.pb-4.mb-8
@@ -43,14 +80,14 @@
                          (set-emoji! t)
                          (ui/popup-hide-all!))})])
                  {:content-props {:class "w-72 p-0"}
-                  :as-menu?      true})}
+                  :as-menu? true})}
              (if emoji [:strong.px-1.text-6xl [:em-emoji emoji]] "emoji :O")] "."])]
      [:<>
       (emoji-picker nil)
 
       [:p.py-4
        (ui/button
-         {:variant  :secondary
+         {:variant :secondary
           :on-click #(ui/popup-show! %
                        (fn []
                          [:p.p-4
@@ -66,38 +103,38 @@
                 [:strong.px-1.text-6xl q]])]
          (ui/input
            {:placeholder "Select a fruit."
-            :ref         *q-ref
-            :value       q
-            :on-change   (fn [^js e]
-                           (let [val (.-value (.-target e))]
-                             (set-q! val)
-                             (update-popup! :select-a-fruit-input [:content] (gen-content val))))
-            :class       "w-1/5"
-            :on-focus    (fn [^js e]
-                           (let [id :select-a-fruit-input
-                                 [_ popup] (get-popup id)]
-                             (if (not popup)
-                               (ui/popup-show! (.-target e)
-                                 (gen-content q)
-                                 {:id id
-                                  :content-props
-                                  {:class           "x-input-popup-content"
-                                   :onPointerDownOutside
-                                   (fn [^js e]
-                                     (js/console.log "===>> onPointerDownOutside:" e (rum/deref *q-ref))
-                                     (when-let [q-ref (rum/deref *q-ref)]
-                                       (let [^js target (or (.-relatedTarget e)
-                                                          (.-target e))]
-                                         (js/console.log "t:" target)
-                                         (when (and
-                                                 (not (.contains q-ref target))
-                                                 (not (.closest target ".x-input-popup-content")))
-                                           (ui/popup-hide! id)))))
-                                   :onOpenAutoFocus #(.preventDefault %)}})
+            :ref *q-ref
+            :value q
+            :on-change (fn [^js e]
+                         (let [val (.-value (.-target e))]
+                           (set-q! val)
+                           (update-popup! :select-a-fruit-input [:content] (gen-content val))))
+            :class "w-1/5"
+            :on-focus (fn [^js e]
+                        (let [id :select-a-fruit-input
+                              [_ popup] (get-popup id)]
+                          (if (not popup)
+                            (ui/popup-show! (.-target e)
+                              (gen-content q)
+                              {:id id
+                               :content-props
+                               {:class "x-input-popup-content"
+                                :onPointerDownOutside
+                                (fn [^js e]
+                                  (js/console.log "===>> onPointerDownOutside:" e (rum/deref *q-ref))
+                                  (when-let [q-ref (rum/deref *q-ref)]
+                                    (let [^js target (or (.-relatedTarget e)
+                                                       (.-target e))]
+                                      (js/console.log "t:" target)
+                                      (when (and
+                                              (not (.contains q-ref target))
+                                              (not (.closest target ".x-input-popup-content")))
+                                        (ui/popup-hide! id)))))
+                                :onOpenAutoFocus #(.preventDefault %)}})
 
-                               ;; update content
-                               (update-popup! id [:content]
-                                 (gen-content q)))))
+                            ;; update content
+                            (update-popup! id [:content]
+                              (gen-content q)))))
             ;:on-blur     (fn [^js e]
             ;               (let [^js target (.-relatedTarget e)]
             ;                 (js/console.log "==>>>" target)
@@ -106,15 +143,15 @@
             }))]
 
       [:div.w-full.p-4.border.rounded.dotted.h-48.mt-8.bg-gray-02
-       {:on-click        #(ui/popup-show! %
-                            (->> (range 8)
-                              (map (fn [it]
-                                     (ui/dropdown-menu-item
-                                       {:on-select (fn []
-                                                     (ui/toast! it)
-                                                     (ui/popup-hide-all!))}
-                                       [:strong it]))))
-                            {:as-menu?      true
-                             :content-props {:class "w-48"}})
+       {:on-click #(ui/popup-show! %
+                     (->> (range 8)
+                       (map (fn [it]
+                              (ui/dropdown-menu-item
+                                {:on-select (fn []
+                                              (ui/toast! it)
+                                              (ui/popup-hide-all!))}
+                                [:strong it]))))
+                     {:as-menu? true
+                      :content-props {:class "w-48"}})
         :on-context-menu #(ui/popup-show! %
                             [:h1.text-3xl.font-bold "hi x popup for custom context menu!"])}]])])
