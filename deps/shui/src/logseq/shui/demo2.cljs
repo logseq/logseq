@@ -13,17 +13,20 @@
    [:h1.text-3xl.font-bold.border-b.pb-4.mb-8
     "Multi X Select"]
 
-   (let [items [{:key 1 :value "Apple"}
-                {:key 2 :value "Orange"}
+   (let [items [{:key 1 :value "Apple" :class "bg-gray-800 text-gray-50"}
+                {:key 2 :value "Orange" :class "bg-orange-700 text-gray-50"}
+                nil
                 {:key 3 :value "Pear"}]
 
          [selected-items set-selected-items!]
          (rum/use-state [(last items)])
 
+         rm-item! (fn [item] (set-selected-items! (remove #(= item %) selected-items)))
+         add-item! (fn [item] (set-selected-items! (conj selected-items item)))
          on-chosen (fn [item {:keys [selected]}]
                      (if (true? selected)
-                       (set-selected-items! (remove #(= item %) selected-items))
-                       (set-selected-items! (conj selected-items item))))]
+                       (rm-item! item) (add-item! item)))
+         [open? set-open!] (rum/use-state false)]
 
      (ui/card
        (ui/card-header
@@ -31,16 +34,29 @@
          (ui/card-description "x multiselect for shui"))
        (ui/card-content
          (ui/dropdown-menu
-           {:open true}
+           {:open open?}
            ;; trigger
            (ui/dropdown-menu-trigger
-             [:p.border.p-2.rounded
-              (for [{:keys [key value]} selected-items]
-                (ui/badge {:variant :outline} (str "#" key " " value)))
+             [:p.border.p-2.rounded.w-full.cursor-pointer
+              {:on-click #(set-open! true)}
+              (for [{:keys [key value class]} selected-items]
+                (ui/badge {:variant :secondary :class class} (str "#" key " " value)))
               (ui/button {:variant :link :size :sm} "+")])
            ;; content
            (x-select items selected-items
-             {:on-chosen on-chosen})))))])
+             {:on-chosen on-chosen
+              :item-render (fn [item {:keys [selected]}]
+                             (if item
+                               (ui/dropdown-menu-checkbox-item
+                                 {:checked selected
+                                  :on-click (fn []
+                                              (if selected
+                                                (rm-item! item)
+                                                (add-item! item)))}
+                                 (:value item))
+                               (ui/dropdown-menu-separator)))
+              :content-props {:onInteractOutside #(set-open! false)}})
+           ))))])
 
 (rum/defc icon-picker-demo
   []
