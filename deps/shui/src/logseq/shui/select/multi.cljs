@@ -10,8 +10,8 @@
       (first))))
 
 (rum/defc x-select
-  [items selected-items & {:keys [on-chosen item-render item-props
-                                  content-props]}]
+  [items selected-items & {:keys [on-chosen item-render value-render
+                                  item-props content-props]}]
   (let [x-content popup/dropdown-menu-content
         x-item popup/dropdown-menu-item]
     (x-content
@@ -30,12 +30,16 @@
                 k (get-k item)
                 v (or title value)]
             (when k
-              (let [on-click' (:on-click item-props)
+              (let [opts {:selected selected?}
+                    on-click' (:on-click item-props)
                     on-click (fn [e]
                                ;; TODO: return value
                                (when (fn? on-click') (on-click' e))
                                (when (fn? on-chosen)
-                                 (on-chosen item {:selected selected?})))]
+                                 (on-chosen item opts)))]
                 (x-item (merge {:data-k k :on-click on-click} item-props)
-                  [:a.flex.items-center.gap-2.w-full
-                   (form/checkbox {:checked selected?}) v])))))))))
+                  [:span.flex.items-center.gap-2.w-full
+                   (form/checkbox {:checked selected?})
+                   (let [v' (if (fn? v) (v item opts) v)]
+                     (if (fn? value-render)
+                       (value-render v' (assoc opts :item item)) v'))])))))))))

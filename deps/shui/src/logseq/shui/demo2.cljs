@@ -16,7 +16,7 @@
    (let [items [{:key 1 :value "Apple" :class "bg-gray-800 text-gray-50"}
                 {:key 2 :value "Orange" :class "bg-orange-700 text-gray-50"}
                 nil
-                {:key 3 :value "Pear"}]
+                {:key 3 :value  "Pear"}]
 
          [selected-items set-selected-items!]
          (rum/use-state [(last items)])
@@ -45,16 +45,23 @@
            ;; content
            (x-select items selected-items
              {:on-chosen on-chosen
-              :item-render (fn [item {:keys [selected]}]
-                             (if item
-                               (ui/dropdown-menu-checkbox-item
-                                 {:checked selected
-                                  :on-click (fn []
-                                              (if selected
-                                                (rm-item! item)
-                                                (add-item! item)))}
-                                 (:value item))
-                               (ui/dropdown-menu-separator)))
+              :value-render (fn [v {:keys [selected]}]
+                              (if selected
+                                [:b.text-red-800 v]
+                                [:b.text-green-800 v]))
+
+              ;; test item render
+              ;:item-render (fn [item {:keys [selected]}]
+              ;                (if item
+              ;                  (ui/dropdown-menu-checkbox-item
+              ;                    {:checked selected
+              ;                     :on-click (fn []
+              ;                                 (if selected
+              ;                                   (rm-item! item)
+              ;                                   (add-item! item)))}
+              ;                    (:value item))
+              ;                  (ui/dropdown-menu-separator)))
+
               :content-props {:onInteractOutside #(set-open! false)}})
            ))))])
 
