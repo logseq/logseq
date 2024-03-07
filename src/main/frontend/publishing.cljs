@@ -3,6 +3,7 @@
   application"
   (:require [frontend.state :as state]
             [datascript.core :as d]
+            [datascript.transit :as dt]
             [frontend.db :as db]
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
@@ -58,7 +59,7 @@
       (state/set-current-repo! repo)
       (p/let [_ (repo-handler/restore-and-setup-repo! repo)
               _ (let [data (unescape-html data)
-                      db (db/string->db data)
+                      db (dt/read-transit-str data)
                       datoms (d/datoms db :eavt)]
                   (db/transact! repo datoms {:init-db? true
                                              :new-graph? true}))]

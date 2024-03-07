@@ -2,21 +2,11 @@
   "Some utils are required by other namespace in frontend.db package."
   (:require [datascript.core :as d]
             [frontend.state :as state]
-            [datascript.transit :as dt]
             [frontend.db.conn :as conn]
             [frontend.config :as config]
             [logseq.db.frontend.content :as db-content]))
 
 ;; transit serialization
-
-(defn db->string [db]
-  (dt/write-transit-str db))
-
-(defn db->edn-str [db]
-  (pr-str db))
-
-(defn string->db [s]
-  (dt/read-transit-str s))
 
 (defn seq-flatten [col]
   (flatten (seq col)))
@@ -27,13 +17,6 @@
     (some->> blocks
              (group-by :block/page))
     blocks))
-
-(defn get-tx-id [tx-report]
-  (get-in tx-report [:tempids :db/current-tx]))
-
-(defn get-max-tx-id
-  [db]
-  (:max-tx db))
 
 (defn entity
   "This function will return nil if passed `id-or-lookup-ref` is an integer and
