@@ -364,7 +364,7 @@
                                (when (and (not hls-page?)
                                           (not fmt-journal?)
                                           (not config/publishing?)
-                                          (not (ldb/built-in? page)))
+                                          (not (ldb/built-in? (db/get-db) page)))
                                  (reset! *input-value (if untitled? "" old-name))
                                  (reset! *edit? true))))))}
 

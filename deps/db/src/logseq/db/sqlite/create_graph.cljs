@@ -11,11 +11,12 @@
             [logseq.db.frontend.default :as default-db]))
 
 (defn- mark-block-as-built-in
-  [block]
-  (update block :block/metadata assoc :built-in? true))
+  [db block]
+  (let [built-in-property-id (:block/uuid (d/entity db :built-in?))]
+    (update block :block/properties assoc built-in-property-id true)))
 
 (defn- build-initial-properties
-  []
+  [db]
   (let [;; Some uuids need to be pre-defined since they are referenced by other properties
         default-property-uuids {:icon (d/squuid)}
         built-in-properties (->>
@@ -27,23 +28,34 @@
     (mapcat
      (fn [[k-keyword {:keys [schema original-name closed-values db-ident]}]]
        (let [k-name (name k-keyword)
+             id (if (contains? db-property/first-stage-properties k-keyword)
+                  (let [id (:block/uuid (d/entity db k-keyword))]
+                    (assert (uuid? id) "First stage properties are not created yet")
+                    id)
+                  (d/squuid))
              blocks (if closed-values
                       (db-property-util/build-closed-values
+                       db
                        (or original-name k-name)
-                       {:block/schema schema :block/uuid (d/squuid) :closed-values closed-values}
+                       {:block/schema schema :block/uuid id :closed-values closed-values}
                        {:icon-id (get default-property-uuids :icon)
                         :db-ident db-ident})
                       [(sqlite-util/build-new-property
                         (or original-name k-name)
                         schema
-                        (get default-property-uuids k-keyword (d/squuid))
+                        (get default-property-uuids k-keyword id)
                         {:db-ident db-ident})])]
-         (update blocks 0 mark-block-as-built-in)))
+         (update blocks 0 #(mark-block-as-built-in db %))))
      built-in-properties)))
 
 (defn build-db-initial-data
-  [config-content]
-  (let [initial-data [{:db/ident :db/type :db/type "db"}
+  [db* config-content]
+  (let [db (d/db-with db*
+                      (map (fn [p]
+                             {:db/ident p
+                              :block/name (name p)
+                              :block/uuid (random-uuid)}) db-property/first-stage-properties))
+        initial-data [{:db/ident :db/type :db/type "db"}
                       {:db/ident :schema/version :schema/version db-schema/version}]
         initial-files [{:block/uuid (d/squuid)
                         :file/path (str "logseq/" "config.edn")
@@ -58,8 +70,8 @@
                         :file/content ""
                         :file/last-modified-at (js/Date.)}]
         default-pages (->> (ldb/build-pages-tx (map default-db/page-title->block ["Contents"]))
-                           (map mark-block-as-built-in))
-        default-properties (build-initial-properties)
+                           (map #(mark-block-as-built-in db %)))
+        default-properties (build-initial-properties db)
         name->properties (zipmap
                           (map :block/name default-properties)
                           default-properties)
@@ -67,6 +79,7 @@
                          (fn [[k-keyword {:keys [schema original-name]}]]
                            (let [k-name (name k-keyword)]
                              (mark-block-as-built-in
+                              db
                               (sqlite-util/build-new-class
                                (let [properties (mapv
                                                  (fn [property-name]

@@ -28,7 +28,7 @@
   (let [after-db (:db-after tx-report)
         empty-property-parents (->> (keep (fn [child-id]
                                             (let [e (d/entity (:db-before tx-report) [:block/uuid child-id])]
-                                              (when (:created-from-property (:block/metadata (:block/parent e)))
+                                              (when (get-in (:block/parent e) [:block/properties (:block/uuid (d/entity after-db :created-from-property))])
                                                 (let [parent-now (d/entity after-db (:db/id (:block/parent e)))]
                                                   (when (empty? (:block/_parent parent-now))
                                                     parent-now))))) deleted-block-uuids)
@@ -36,7 +36,9 @@
     (when (seq empty-property-parents)
       (->>
        (mapcat (fn [b]
-                 (let [{:keys [created-from-block created-from-property]} (:block/metadata b)
+                 (let [properties (:block/properties b)
+                       created-from-block (get properties (:block/uuid (d/entity after-db :created-from-block)))
+                       created-from-property (get properties (:block/uuid (d/entity after-db :created-from-property)))
                        created-block (d/entity after-db [:block/uuid created-from-block])
                        properties (assoc (:block/properties created-block) created-from-property "")]
                    (when (and created-block created-from-property)

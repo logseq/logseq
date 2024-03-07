@@ -230,7 +230,7 @@
 
                                              (uuid? v)
                                              (when-let [entity (d/entity db [:block/uuid v])]
-                                               (let [from-property? (get-in entity [:block/metadata :created-from-property])]
+                                               (let [from-property? (get-in entity [:block/properties (:block/uuid (d/entity db :created-from-property))])]
                                                  (if (and from-property? (not (contains? (:block/type entity) "closed value")))
                                                    ;; don't reference hidden block property values except closed values
                                                    []

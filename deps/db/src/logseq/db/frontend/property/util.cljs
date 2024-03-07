@@ -7,20 +7,20 @@
 (defonce hidden-page-name-prefix "$$$")
 
 (defn- closed-value-new-block
-  [page-id block-id value property]
+  [db page-id block-id value property]
   {:block/type #{"closed value"}
    :block/format :markdown
    :block/uuid block-id
    :block/page page-id
-   :block/metadata {:created-from-property (:block/uuid property)}
+   :block/properties {(:block/uuid (d/entity db :created-from-property)) (:block/uuid property)}
    :block/schema {:value value}
    :block/parent page-id})
 
 (defn build-closed-value-block
   "Builds a closed value block to be transacted"
-  [block-uuid block-value page-id property {:keys [db-ident icon-id icon description]}]
+  [db block-uuid block-value page-id property {:keys [db-ident icon-id icon description]}]
   (cond->
-   (closed-value-new-block page-id (or block-uuid (d/squuid)) block-value property)
+   (closed-value-new-block db page-id (or block-uuid (d/squuid)) block-value property)
     (and db-ident (keyword? db-ident))
     (assoc :db/ident db-ident)
 
@@ -53,8 +53,8 @@
 (defn build-closed-values
   "Builds all the tx needed for property with closed values including
    the hidden page and closed value blocks as needed"
-  [prop-name property {:keys [icon-id db-ident translate-closed-page-value-fn property-attributes]
-                       :or {translate-closed-page-value-fn identity}}]
+  [db prop-name property {:keys [icon-id db-ident translate-closed-page-value-fn property-attributes]
+                          :or {translate-closed-page-value-fn identity}}]
   (let [page-tx (build-property-hidden-page property)
         page-id [:block/uuid (:block/uuid page-tx)]
         closed-value-page-uuids? (contains? #{:page :date} (get-in property [:block/schema :type]))
@@ -62,7 +62,7 @@
         (if closed-value-page-uuids?
           (map translate-closed-page-value-fn (:closed-values property))
           (map (fn [{:keys [db-ident value icon description uuid]}]
-                 (build-closed-value-block
+                 (build-closed-value-block db
                   uuid value page-id property {:db-ident db-ident
                                                :icon-id icon-id
                                                :icon icon

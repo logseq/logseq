@@ -117,6 +117,7 @@
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
         conn (create-graph/init-conn dir db-name)
         blocks-tx (create-graph/create-blocks-tx
+                   @conn
                    (create-init-data)
                    {:property-uuids {:icon (:block/uuid (d/entity @conn [:block/name "icon"]))}})]
     (println "Generating" (count (filter :block/name blocks-tx)) "pages and"

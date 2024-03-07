@@ -157,7 +157,7 @@
             *property-schema (::property-schema state)
             built-in-property? (contains? db-property/built-in-properties-keys-str (:block/original-name property))
             property (db/sub-block (:db/id property))
-            built-in? (ldb/built-in? property)
+            built-in? (ldb/built-in? (db/get-db) property)
             disabled? (or built-in? config/publishing?)
             hide-delete? (or (= (:db/id block) (:db/id property)) ; property page
                              add-new-property?)
@@ -213,7 +213,7 @@
                                            :disabled disabled?
                                            :value type
                                            :selected (= type (:type @*property-schema))})))]
-             (if (or (ldb/built-in? property)
+             (if (or (ldb/built-in? (db/get-db) property)
                      (and property-type (seq values)))
                [:div.flex.items-center.col-span-2
                 (property-type-label property-type)
@@ -355,7 +355,7 @@
                  :disabled      disabled?
                  :default-value (:description @*property-schema)})])]]
 
-          (when-not (or hide-delete? (ldb/built-in-class-property? block property))
+          (when-not (or hide-delete? (ldb/built-in-class-property? (db/get-db) block property))
             (shui/button
              {:variant :secondary
               :class "mt-4 hover:text-red-700"
@@ -557,7 +557,7 @@
                                                             (components-pu/update-property! property property-name (assoc schema :hide? true))
                                                             (shui/popup-hide!)))}
                                              "Hide property")
-                                            (when-not (ldb/built-in-class-property? block property)
+                                            (when-not (ldb/built-in-class-property? (db/get-db) block property)
                                               (shui/dropdown-menu-item
                                                {:on-click (fn []
                                                             (handle-delete-property! block property {:class-schema? class-schema?})

@@ -430,7 +430,7 @@
 
 (defn toggle-properties!
   [page-entity]
-  (let [current-value (get-in page-entity [:block/metadata :hide-properties?])]
+  (let [properties (:block/properties page-entity)
+        pid (:block/uuid (db/entity :hide-properties?))]
     (db/transact! [{:db/id (:db/id page-entity)
-                    :block/metadata (assoc (:block/metadata page-entity)
-                                           :hide-properties? (not current-value))}])))
+                    :block/properties (update properties pid not)}])))

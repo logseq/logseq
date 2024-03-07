@@ -5,6 +5,9 @@
             [datascript.core :as d]
             [logseq.common.util :as common-util]))
 
+(def first-stage-properties
+  #{:built-in? :created-from-property})
+
 ;; FIXME: no support for built-in-extended-properties
 (def ^:large-vars/data-var built-in-properties
   "Map of built in properties for db graphs. Each property has a config map with
@@ -33,6 +36,12 @@
    :background-image {:schema {:type :default :hide? true}
                       :visible true}
    :heading {:schema {:type :any :hide? true}}      ; number (1-6) or boolean for auto heading
+   :created-from-block    {:schema {:type :uuid}}
+   :created-from-property {:schema {:type :uuid}}
+   :created-from-template {:schema {:type :uuid}}
+   :source-page-id        {:schema {:type :uuid}}
+   :built-in?             {:schema {:type :checkbox}}
+   :hide-properties?      {:schema {:type :checkbox}}
    :query-table {:schema {:type :checkbox}}
    ;; query-properties is a coll of property uuids and keywords where keywords are special frontend keywords
    :query-properties {:schema {:type :coll}}
