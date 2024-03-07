@@ -26,7 +26,7 @@
     (assoc :db/ident db-ident)
 
     icon
-    (assoc :block/properties {icon-id icon})
+    (update :block/properties assoc icon-id icon)
 
     ;; For now, only closed values with :db/ident are built-in?
     (and db-ident (keyword? db-ident))
