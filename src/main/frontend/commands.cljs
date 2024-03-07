@@ -141,11 +141,16 @@
 
 (defn get-statuses
   []
-  (let [result (->>
-                (if (config/db-based-graph? (state/get-current-repo))
+  (let [db-based? (config/db-based-graph? (state/get-current-repo))
+        result (->>
+                (if db-based?
                   (db-based-statuses)
                   (file-based-statuses))
-                (mapv (fn [m] [m (->marker m) (str "Set status to " m)])))]
+                (mapv (fn [m]
+                        (let [command (if db-based?
+                                        [:div.flex.flex-row.items-center.gap-2 m [:div.text-xs.opacity-50 "Status"]]
+                                        m)]
+                          [command (->marker m) (str "Set status to " m)]))))]
     (when (seq result)
       (update result 0 (fn [v] (conj v "TASK"))))))
 
@@ -160,11 +165,16 @@
 
 (defn get-priorities
   []
-  (let [result (->>
-                (if (config/db-based-graph? (state/get-current-repo))
+  (let [db-based? (config/db-based-graph? (state/get-current-repo))
+        result (->>
+                (if db-based?
                   (db-based-priorities)
                   (file-based-priorities))
-                (mapv (fn [item] [item (->priority item) (str "Set priority to " item)])))]
+                (mapv (fn [item]
+                        (let [command (if db-based?
+                                        [:div.flex.flex-row.items-center.gap-2 item [:div.text-xs.opacity-50 "Priority"]]
+                                        item)]
+                          [command (->priority item) (str "Set priority to " item)]))))]
     (when (seq result)
       (update result 0 (fn [v] (conj v "PRIORITY"))))))
 
