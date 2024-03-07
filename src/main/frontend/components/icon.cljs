@@ -166,14 +166,14 @@
         get-cnt #(some-> (rum/deref *el-ref) (.closest ".cp__emoji-icon-picker"))
         focus! (fn [idx dir]
                  (let [items (rum/deref *items-ref)
-                       ^js popup (some-> (get-cnt) (.closest ".ui__dropdown-menu-content"))
+                       ^js popup (some-> (get-cnt) (.-parentNode))
                        idx (loop [n idx]
                              (if (false? (nth items n nil))
                                (recur (+ n (if (= dir :prev) -1 1))) n))]
                    (if-let [node (nth items idx nil)]
                      (do (.focus node #js {:preventScroll true :focusVisible true})
                          (.scrollIntoView node #js {:block "center"})
-                         (set! (. popup -scrollTop) 0)
+                         (when popup (set! (. popup -scrollTop) 0))
                          (set-current! idx node))
                      (do (.focus (rum/deref *input-ref)) (set-current! -1 nil)))))
         down-handler!
