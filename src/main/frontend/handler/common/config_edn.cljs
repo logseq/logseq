@@ -90,6 +90,8 @@ nested keys or positional errors e.g. tuples"
   "File only config that is deprecated in DB graphs"
   {:preferred-format
    "is not used in DB graphs as there is only markdown mode."
+   :preferred-workflow
+   "is not used in DB graphs"
    :property/separated-by-commas
    "is not used in DB graphs"
    :property-pages/enabled?

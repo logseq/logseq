@@ -8,6 +8,7 @@
  ;; :preferred-format "Markdown"
 
  ;; Set the preferred workflow style.
+ ;; This is _only_ for file graphs.
  ;; Available options:
  ;; - :now for NOW/LATER style (default)
  ;; - :todo for TODO/DOING style
