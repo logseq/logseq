@@ -718,13 +718,15 @@
         enable-tooltip? (state/enable-tooltip?)
         enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
         show-brackets? (state/show-brackets?)
-        enable-git-auto-push? (state/enable-git-auto-push? current-repo)]
+        enable-git-auto-push? (state/enable-git-auto-push? current-repo)
+        db-graph? (config/db-based-graph? (state/get-current-repo))]
 
     [:div.panel-wrap.is-editor
-     (when-not (config/db-based-graph? (state/get-current-repo))
+     (when-not db-graph?
        (file-format-row t preferred-format))
      (date-format-row t preferred-date-format)
-     (workflow-row t preferred-workflow)
+     (when-not db-graph?
+       (workflow-row t preferred-workflow))
      (show-brackets-row t show-brackets?)
 
      (when (util/electron?) (switch-spell-check-row t))
