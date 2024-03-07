@@ -23,10 +23,7 @@
   remove-conn!]
 
  [frontend.db.utils
-  db->edn-str db->string get-max-tx-id get-tx-id
   group-by-page seq-flatten
-  string->db
-
   entity pull pull-many transact! get-key-value]
 
  [frontend.db.model

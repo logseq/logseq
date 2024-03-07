@@ -14,8 +14,7 @@
             [frontend.handler.worker :as worker-handler]
             [logseq.db :as ldb]
             [frontend.db.transact :as db-transact]
-            [frontend.date :as date]
-            [datascript.transit :as dt]))
+            [frontend.date :as date]))
 
 (defonce *worker state/*db-worker)
 

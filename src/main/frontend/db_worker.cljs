@@ -4,7 +4,6 @@
             [datascript.storage :refer [IStorage]]
             [clojure.edn :as edn]
             [datascript.core :as d]
-            [datascript.transit :as dt]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [shadow.cljs.modern :refer [defclass]]
             ["@logseq/sqlite-wasm" :default sqlite3InitModule]
