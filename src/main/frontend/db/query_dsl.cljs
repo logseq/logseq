@@ -261,7 +261,7 @@
   [property-name]
   (let [repo (state/get-current-repo)]
     (if (config/db-based-graph? repo)
-      (str property-name)
+      (string/lower-case (str property-name))
       (keyword property-name))))
 
 (defn- build-property-two-arg
@@ -276,9 +276,8 @@
         values (get-in property [:block/schema :values])
         v' (if (seq values)             ; closed values
              (some #(when-let [closed-value (get-in (db-utils/entity [:block/uuid %]) [:block/schema :value])]
-                      (if (= v closed-value)
-                        %
-                        v))
+                      (when (= v closed-value)
+                        %))
                    values)
              v)]
     {:query (list 'property '?b (->keyword-property k) v')

@@ -16,7 +16,8 @@
             [frontend.date :as date]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [frontend.handler.property.util :as pu]))
 
 (def <q db-async-util/<q)
 (def <pull db-async-util/<pull)
@@ -77,9 +78,10 @@
 
 (defn <get-db-based-property-values
   [graph property]
-  (let [property-name (if (keyword? property)
-                        (name property)
-                        (util/page-name-sanity-lc property))]
+  (let [property-name (-> (if (keyword? property) (name property) property)
+                          util/page-name-sanity-lc)
+        property (pu/get-property property-name)
+        closed-values? (seq (get-in property [:block/schema :values]))]
     (p/let [result (<q graph
                        '[:find ?prop-type ?v
                          :in $ ?prop-name
@@ -94,17 +96,19 @@
       (->> result
            (map (fn [[prop-type v]] [prop-type (if (coll? v) v [v])]))
            (mapcat (fn [[prop-type vals]]
-                     (let [result (case prop-type
-                                    :default
-                                    ;; Remove multi-block properties as there isn't a supported approach to query them yet
-                                    (map str (remove uuid? vals))
-                                    (:page :date)
-                                    (map #(:block/original-name (db-utils/entity graph [:block/uuid %]))
-                                         vals)
-                                    :number
+                     (let [result (if closed-values?
                                     vals
-                                    ;; Checkboxes returned as strings as builder doesn't display boolean values correctly
-                                    (map str vals))]
+                                    (case prop-type
+                                      :default
+                                      ;; Remove multi-block properties as there isn't a supported approach to query them yet
+                                      (map str (remove uuid? vals))
+                                      (:page :date)
+                                      (map #(:block/original-name (db-utils/entity graph [:block/uuid %]))
+                                           vals)
+                                      :number
+                                      vals
+                                      ;; Checkboxes returned as strings as builder doesn't display boolean values correctly
+                                      (map str vals)))]
                        (map (fn [value]
                               (if (uuid? value)
                                 (get-in (db-utils/entity graph [:block/uuid value]) [:block/schema :value])
