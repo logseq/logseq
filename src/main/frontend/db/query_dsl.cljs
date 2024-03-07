@@ -275,10 +275,13 @@
         property (db-property/get-property (conn/get-db) k)
         values (get-in property [:block/schema :values])
         v' (if (seq values)             ; closed values
-             (some #(when-let [closed-value (get-in (db-utils/entity [:block/uuid %]) [:block/schema :value])]
-                      (when (= v closed-value)
-                        %))
-                   values)
+             (or
+              (some #(when-let [closed-value (get-in (db-utils/entity [:block/uuid %]) [:block/schema :value])]
+                       (when (= v closed-value)
+                         %))
+                    values)
+              ;; rule needs a non nil value to not error
+              "_stub_value_so_that_query_doesnt_error_")
              v)]
     {:query (list 'property '?b (->keyword-property k) v')
      :rules [:property]}))
