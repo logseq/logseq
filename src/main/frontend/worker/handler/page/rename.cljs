@@ -254,7 +254,7 @@
         new-page-e (d/entity db [:block/name new-page-name])
         name-changed? (not= old-name new-name)]
     (cond
-      (ldb/built-in? page-e)
+      (ldb/built-in? @conn page-e)
       :built-in-page
 
       (string/blank? new-name)

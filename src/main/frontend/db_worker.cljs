@@ -373,7 +373,11 @@
          nil)
        (catch :default e
          (prn :debug :error)
-         (js/console.error e tx-data)))))
+         (let [tx-data (if (string? tx-data)
+                         (ldb/read-transit-str tx-data)
+                         tx-data)]
+           (js/console.error e)
+           (prn :debug :tx-data tx-data))))))
 
   (getInitialData
    [_this repo]

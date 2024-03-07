@@ -313,7 +313,7 @@
             property-values (db-async/<get-block-property-values repo property-uuid)]
       (when (or (not type-changed?)
                 ;; only change type if property hasn't been used yet
-                (and (not (ldb/built-in? property)) (empty? property-values)))
+                (and (not (ldb/built-in? (db/get-db) property)) (empty? property-values)))
         (when (not= ::skip-transact (handle-cardinality-changes repo property-uuid property property-schema property-values))
           (let [tx-data (cond-> {:block/uuid property-uuid}
                           property-name (merge
@@ -356,7 +356,7 @@
   (when-let [class (db/entity repo [:block/uuid class-uuid])]
     (when (contains? (:block/type class) "class")
       (when-let [property (db/entity repo [:block/uuid k-uuid])]
-        (when-not (ldb/built-in-class-property? class property)
+        (when-not (ldb/built-in-class-property? (db/get-db) class property)
           (let [property-uuid (:block/uuid property)
                 {:keys [properties] :as class-schema} (:block/schema class)
                 new-properties (vec (distinct (remove #{property-uuid} properties)))
@@ -427,9 +427,11 @@
                              block-value? (and (= :default (get-in property [:block/schema :type] :default))
                                                (uuid? value))
                              property-block (when block-value? (db/entity [:block/uuid value]))
+                             created-from-block-uuid (:block/uuid (db/entity :created-from-block))
+                             created-from-property-uuid (:block/uuid (db/entity :created-from-property))
                              retract-blocks-tx (when (and property-block
-                                                          (some? (get-in property-block [:block/metadata :created-from-block]))
-                                                          (some? (get-in property-block [:block/metadata :created-from-property])))
+                                                          (some? (get-in property-block [:block/properties created-from-block-uuid]))
+                                                          (some? (get-in property-block [:block/properties created-from-property-uuid])))
                                                  (let [txs-state (atom [])]
                                                    (outliner-core/delete-block repo
                                                                                (db/get-db false)
@@ -592,12 +594,12 @@
                  (-> (block/page-name->map page-name true)
                      (assoc :block/type #{"hidden"}
                             :block/format :markdown
-                            :block/metadata {:source-page-id current-page-id})))
+                            :block/properties {(:block/uuid (db/entity :source-page-id)) current-page-id})))
         page-tx (when-not page-entity page)
         page-id [:block/uuid (:block/uuid page)]
         parent-id (db/new-block-id)
-        metadata {:created-from-block (:block/uuid block)
-                  :created-from-property (:block/uuid property)}
+        properties {(:block/uuid (db/entity :created-from-block)) (:block/uuid block)
+                    (:block/uuid (db/entity :created-from-property)) (:block/uuid property)}
         parent (-> {:block/uuid parent-id
                     :block/format :markdown
                     :block/content ""
@@ -605,7 +607,7 @@
                     :block/parent page-id
                     :block/left (or (when page-entity (model/get-block-last-direct-child-id (db/get-db) (:db/id page-entity)))
                                     page-id)
-                    :block/metadata metadata}
+                    :block/properties properties}
                    sqlite-util/block-with-timestamps)
         child-1-id (db/new-block-id)
         child-1 (-> {:block/uuid child-1-id
@@ -644,19 +646,19 @@
                  (-> (block/page-name->map page-name true)
                      (assoc :block/type #{"hidden"}
                             :block/format :markdown
-                            :block/metadata {:source-page-id current-page-id})))
+                            :block/properties {(:block/uuid (db/entity :source-page-id)) current-page-id})))
         page-tx (when-not page-entity page)
         page-id [:block/uuid (:block/uuid page)]
         block-id (db/new-block-id)
-        metadata {:created-from-block (:block/uuid block)
-                  :created-from-property (:block/uuid property)
-                  :created-from-template (:block/uuid template)}
+        properties {(:block/uuid (db/entity :created-from-block)) (:block/uuid block)
+                    (:block/uuid (db/entity :created-from-property)) (:block/uuid property)
+                    (:block/uuid (db/entity :created-from-template)) (:block/uuid template)}
         new-block (-> {:block/uuid block-id
                        :block/format :markdown
                        :block/content ""
                        :block/tags #{(:db/id template)}
                        :block/page page-id
-                       :block/metadata metadata
+                       :block/properties properties
                        :block/parent page-id
                        :block/left (or (when page-entity (model/get-block-last-direct-child-id (db/get-db) (:db/id page-entity)))
                                        page-id)}
@@ -741,7 +743,7 @@
                           (let [page (get-property-hidden-page property)
                                 page-tx (when-not (e/entity? page) page)
                                 page-id [:block/uuid (:block/uuid page)]
-                                new-block (db-property-util/build-closed-value-block
+                                new-block (db-property-util/build-closed-value-block (db/get-db)
                                            block-id resolved-value page-id property {:icon-id icon-id
                                                                                      :icon icon
                                                                                      :description description})
@@ -766,6 +768,7 @@
             values' (remove string/blank? values)
             closed-value-blocks (map (fn [value]
                                        (db-property-util/build-closed-value-block
+                                        (db/get-db)
                                         (db/new-block-id)
                                         value
                                         [:block/uuid page-id]
@@ -817,12 +820,13 @@
   [eid]
   (let [b (db/entity eid)
         parents (model/get-block-parents (state/get-current-repo) (:block/uuid b) {})
-        {:keys [created-from-block created-from-property]}
+        [created-from-block created-from-property]
         (some (fn [block]
-                (let [metadata (:block/metadata block)
-                      result (select-keys metadata [:created-from-block :created-from-property])]
-                  (when (seq result)
-                    result))) (reverse parents))
+                (let [properties (:block/properties block)
+                      from-block (get properties (:block/uuid (db/entity :created-from-block)))
+                      from-property (get properties (:block/uuid (db/entity :created-from-property)))]
+                  (when (and from-block from-property)
+                    [from-block from-property]))) (reverse parents))
         from-block (when created-from-block (db/entity [:block/uuid created-from-block]))
         from-property (when created-from-property (db/entity [:block/uuid created-from-property]))]
     {:from-block-id (or (:db/id from-block) (:db/id b))

@@ -65,7 +65,7 @@
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
         conn (create-graph/init-conn dir db-name)
         _ (println "Building tx ...")
-        blocks-tx (create-graph/create-blocks-tx (create-init-data options))]
+        blocks-tx (create-graph/create-blocks-tx @conn (create-init-data options))]
     (println "Built" (count blocks-tx) "tx," (count (filter :block/name blocks-tx)) "pages and"
              (count (filter :block/content blocks-tx)) "blocks ...")
     ;; Vary the chunking with page size up to a max to avoid OOM

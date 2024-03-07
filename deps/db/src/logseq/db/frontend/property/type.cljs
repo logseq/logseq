@@ -12,7 +12,7 @@
 
 (def internal-built-in-property-types
   "Valid property types only for use by internal built-in-properties"
-  #{:keyword :map :coll :any})
+  #{:keyword :map :coll :any :uuid})
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
@@ -122,6 +122,7 @@
               logseq-template?]
    ;; internal usage
    :keyword  keyword?
+   :uuid     uuid?
    :map      map?
    ;; coll elements are ordered as it's saved as a vec
    :coll     coll?

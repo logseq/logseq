@@ -28,7 +28,7 @@
   (let [config-content (or (some-> (find-on-classpath "templates/config.edn") fs/readFileSync str)
                            (do (println "Setting graph's config to empty since no templates/config.edn was found.")
                                "{}"))]
-    (d/transact! conn (sqlite-create-graph/build-db-initial-data config-content))))
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data @conn config-content))))
 
 (defn init-conn
   "Create sqlite DB, initialize datascript connection and sync listener and then
@@ -148,10 +148,10 @@
    :checkbox, :number, :page and :date. :checkbox and :number values are written
    as booleans and integers. :page and :block are references that are written as
    vectors e.g. `[:page \"PAGE NAME\"]` and `[:block \"block content\"]`
-   
+
    This fn also takes an optional map arg which supports these keys:
    * :property-uuids - A map of property keyword names to uuids to provide ids for built-in properties"
-  [{:keys [pages-and-blocks properties]} & {:as options}]
+  [db {:keys [pages-and-blocks properties]} & {:as options}]
   (let [;; add uuids before tx for refs in :properties
         pages-and-blocks' (mapv (fn [{:keys [page blocks]}]
                                   (cond-> {:page (merge {:block/uuid (random-uuid)} page)}
@@ -167,6 +167,7 @@
                             (fn [[prop-name uuid]]
                               (if (get-in properties [prop-name :closed-values])
                                 (db-property-util/build-closed-values
+                                 db
                                  prop-name
                                  (assoc (get properties prop-name) :block/uuid uuid)
                                  {:icon-id

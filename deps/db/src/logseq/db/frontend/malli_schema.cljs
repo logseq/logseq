@@ -102,9 +102,7 @@
      [:block/collapsed? {:optional true} :boolean]
      ;; journal-day is only set for journal pages
      [:block/journal-day {:optional true} :int]
-     [:block/namespace {:optional true} :int]
-     [:block/metadata {:optional true}
-      [:map [:built-in? {:optional true} :boolean]]]]
+     [:block/namespace {:optional true} :int]]
     page-attrs
     page-or-block-attrs)))
 
@@ -116,11 +114,7 @@
      [:block/schema
       {:optional true}
       [:map
-       [:properties {:optional true} [:vector :uuid]]]]
-     [:block/metadata {:optional true}
-      [:map
-       [:hide-properties? {:optional true} :boolean]
-       [:built-in? {:optional true} :boolean]]]]
+       [:properties {:optional true} [:vector :uuid]]]]]
     page-attrs
     page-or-block-attrs)))
 
@@ -152,9 +146,7 @@
          [:type (apply vector :enum (into db-property-type/internal-built-in-property-types
                                           db-property-type/user-built-in-property-types))]]
         property-common-schema-attrs
-        property-type-schema-attrs))]
-     [:block/metadata
-     [:map [:built-in? :boolean]]]]
+        property-type-schema-attrs))]]
     page-attrs
     page-or-block-attrs)))
 
@@ -191,11 +183,7 @@
 (def hidden-page
   (vec
    (concat
-    [:map
-     ;; hidden pages for enum values don't have this
-     [:block/metadata {:optional true}
-      [:map
-       [:source-page-id :uuid]]]]
+    [:map]
     page-attrs
     page-or-block-attrs)))
 
@@ -211,13 +199,7 @@
   [[:block/content :string]
    [:block/left :int]
    [:block/parent :int]
-   ;; Created when blocks are used for property values
-   [:block/metadata {:optional true}
-    [:map
-     [:created-from-block :uuid]
-     [:created-from-property :uuid]
-     [:created-from-template {:optional true} :uuid]]]
-    ;; refs
+   ;; refs
    [:block/page :int]
    [:block/path-refs {:optional true} [:set :int]]
    [:block/macros {:optional true} [:set :int]]
@@ -254,11 +236,8 @@
      [:block/schema {:optional true}
       [:map
        [:value [:or :string :double]]
-       [:description {:optional true} :string]]]
-     [:block/metadata
-      [:map
-       [:created-from-property :uuid]]]]
-    (remove #(#{:block/metadata :block/content :block/left} (first %)) block-attrs)
+       [:description {:optional true} :string]]]]
+    (remove #(#{:block/content :block/left} (first %)) block-attrs)
     page-or-block-attrs)))
 
 (def normal-block

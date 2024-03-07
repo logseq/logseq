@@ -552,18 +552,18 @@
 
 (defn built-in?
   "Built-in page or block"
-  [entity]
-  (:built-in? (:block/metadata entity)))
+  [db entity]
+  (get (:block/properties entity) (:block/uuid (d/entity db :built-in?))))
 
 (defn built-in-class-property?
   "Whether property a built-in property for the specific class"
-  [class-entity property-entity]
+  [db class-entity property-entity]
   (let [class-properties (some (fn [[_k v]]
                                  (when (= (:original-name v) (:block/original-name class-entity))
                                    (set (get-in v [:schema :properties]))))
                                db-class/built-in-classes)]
-    (and (built-in? class-entity)
-         (built-in? property-entity)
+    (and (built-in? db class-entity)
+         (built-in? db property-entity)
          (contains? class-properties (:block/name property-entity)))))
 
 (def write-transit-str sqlite-util/write-transit-str)

@@ -30,7 +30,7 @@
         has-viewable-properties? (db-property-handler/block-has-viewable-properties? page)
         has-class-properties? (seq (:properties (:block/schema page)))
         has-tags? (seq (:block/tags page))
-        hide-properties? (get-in page [:block/metadata :hide-properties?])]
+        hide-properties? (get-in page [:block/properties (:block/uuid (db/entity :hide-properties?))])]
     (when (or configure?
               (and
                (not hide-properties?)

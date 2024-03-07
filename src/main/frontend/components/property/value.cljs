@@ -659,7 +659,7 @@
                           :default)
                  type (if (= :block type)
                         (let [v-block (db/entity [:block/uuid value])]
-                          (if (get-in v-block [:block/metadata :created-from-template])
+                          (if (get-in v-block [:block/properties (:block/uuid (db/entity :created-from-template))])
                             :template
                             type))
                         type)
