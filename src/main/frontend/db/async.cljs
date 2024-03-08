@@ -29,11 +29,10 @@
   [graph]
   (p/let [result (<q
                   graph
-                  '[:find ?path ?modified-at
+                  '[:find [(pull ?file [:file/path :file/last-modified-at]) ...]
                     :where
-                    [?file :file/path ?path]
-                    [(get-else $ ?file :file/last-modified-at 0) ?modified-at]])]
-    (->> result seq reverse)))
+                    [?file :file/path ?path]])]
+    (->> result seq reverse (map #(vector (:file/path %) (or (:file/last-modified-at %) 0))))))
 
 (defn <get-all-templates
   [graph]
@@ -50,14 +49,15 @@
     (p/let [templates (<get-all-templates repo)]
       (get templates name))))
 
-(defn <db-based-get-all-properties
-  ":block/type could be one of [property, class]."
+(defn- <db-based-get-all-properties
+  "Return seq of property names. :block/type could be one of [property, class]."
   [graph]
-  (<q graph
-      '[:find [?n ...]
-        :where
-        [?e :block/type "property"]
-        [?e :block/original-name ?n]]))
+  (p/let [result (<q graph
+                     '[:find [(pull ?e [:block/original-name]) ...]
+                       :where
+                       [?e :block/type "property"]
+                       [?e :block/original-name]])]
+    (map :block/original-name result)))
 
 (defn <get-all-properties
   "Returns a seq of property name strings"
