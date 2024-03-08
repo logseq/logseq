@@ -1,15 +1,16 @@
 (ns frontend.db.rtc.debug-ui
   "Debug UI for rtc module"
-  (:require [fipp.edn :as fipp]
+  (:require [cljs-bean.core :as bean]
+            [fipp.edn :as fipp]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.user :as user]
+            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]
-            [frontend.persist-db.browser :as db-browser]
             [promesa.core :as p]
-            [cljs-bean.core :as bean]))
+            [rum.core :as rum]))
 
 (defonce debug-state (atom nil))
 
@@ -70,7 +71,9 @@
                            :on-click (fn []
                                        (let [token (state/get-auth-id-token)
                                              ^object worker @db-browser/*worker]
-                                         (.rtc-start worker (state/get-current-repo) token)))})
+                                         (.rtc-start worker (state/get-current-repo) token
+                                                     (and config/dev?
+                                                          (state/sub [:ui/developer-mode?])))))})
 
        [:div.my-2.flex
         [:div.mr-2 (ui/button (str "send pending ops")
