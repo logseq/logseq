@@ -276,7 +276,7 @@
         values (get-in property [:block/schema :values])
         v' (if (seq values)             ; closed values
              (or
-              (some #(when-let [closed-value (get-in (db-utils/entity [:block/uuid %]) [:block/schema :value])]
+              (some #(when-let [closed-value (db-property/closed-value-name (db-utils/entity [:block/uuid %]))]
                        (when (= v closed-value)
                          %))
                     values)

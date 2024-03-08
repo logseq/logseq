@@ -24,7 +24,8 @@
             [promesa.core :as p]
             [frontend.db.async :as db-async]
             [logseq.common.util.macro :as macro-util]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn- select-type?
   [property type]
@@ -393,8 +394,7 @@
                     (keep (fn [id]
                             (when-let [block (when id (db/entity [:block/uuid id]))]
                               (let [icon (pu/get-block-property-value block :icon)
-                                    value (or (:block/original-name block)
-                                              (get-in block [:block/schema :value]))]
+                                    value (db-property/closed-value-name block)]
                                 {:label (if icon
                                           [:div.flex.flex-row.gap-2
                                            (icon-component/icon icon)
