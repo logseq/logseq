@@ -17,7 +17,8 @@
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
             [logseq.db :as ldb]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [logseq.db.frontend.property :as db-property]))
 
 (def <q db-async-util/<q)
 (def <pull db-async-util/<pull)
@@ -97,7 +98,8 @@
            (map (fn [[prop-type v]] [prop-type (if (coll? v) v [v])]))
            (mapcat (fn [[prop-type vals]]
                      (let [result (if closed-values?
-                                    vals
+                                    (map #(db-property/closed-value-name (db-utils/entity graph [:block/uuid %]))
+                                         vals)
                                     (case prop-type
                                       :default
                                       ;; Remove multi-block properties as there isn't a supported approach to query them yet
@@ -109,10 +111,7 @@
                                       vals
                                       ;; Checkboxes returned as strings as builder doesn't display boolean values correctly
                                       (map str vals)))]
-                       (map (fn [value]
-                              (if (uuid? value)
-                                (get-in (db-utils/entity graph [:block/uuid value]) [:block/schema :value])
-                                value)) result))))
+                       result)))
            ;; Remove blanks as they match on everything
            (remove string/blank?)
            (distinct)

@@ -21,7 +21,6 @@
             [frontend.util.text :as text-util]
             [frontend.util :as util]
             [frontend.config :as config]
-            [frontend.state :as state]
             [logseq.db.frontend.property :as db-property]))
 
 
@@ -258,30 +257,21 @@
       result)))
 
 (defn- ->keyword-property
+  "Case-insensitive property names for users that manually type queries to enter them as they appear"
   [property-name]
-  (let [repo (state/get-current-repo)]
-    (if (config/db-based-graph? repo)
-      (string/lower-case (str property-name))
-      (keyword property-name))))
+  (keyword (string/lower-case (str property-name))))
 
 (defn- build-property-two-arg
-  [e]
+  [e {:keys [db-graph?]}]
   (let [k (string/replace (name (nth e 1)) "_" "-")
         v (nth e 2)
         v (if-not (nil? v)
             (parse-property-value (str v))
             v)
         v (if (coll? v) (first v) v)
-        property (db-property/get-property (conn/get-db) k)
-        values (get-in property [:block/schema :values])
-        v' (if (seq values)             ; closed values
-             (or
-              (some #(when-let [closed-value (db-property/closed-value-name (db-utils/entity [:block/uuid %]))]
-                       (when (= v closed-value)
-                         %))
-                    values)
-              ;; rule needs a non nil value to not error
-              "_stub_value_so_that_query_doesnt_error_")
+        v' (if-let [closed-value (and db-graph?
+                                      (db-property/get-closed-value-entity-by-name (conn/get-db) k v))]
+             (:block/uuid closed-value)
              v)]
     {:query (list 'property '?b (->keyword-property k) v')
      :rules [:property]}))
@@ -292,10 +282,10 @@
     {:query (list 'has-property '?b (->keyword-property k))
      :rules [:has-property]}))
 
-(defn- build-property [e]
+(defn- build-property [e env]
   (cond
     (= 3 (count e))
-    (build-property-two-arg e)
+    (build-property-two-arg e env)
 
     (= 2 (count e))
     (build-property-one-arg e)))
@@ -436,7 +426,7 @@ Some bindings in this fn:
        (build-between e)
 
        (= 'property fe)
-       (build-property e)
+       (build-property e env)
 
        ;; task is the new name and todo is the old one
        (or (= 'todo fe) (= 'task fe))
@@ -556,6 +546,7 @@ Some bindings in this fn:
           {result :query rules :rules}
           (when form (build-query form {:sort-by sort-by
                                         :blocks? blocks?
+                                        :db-graph? db-graph?
                                         :sample sample}))
           result' (when (seq result)
                     (let [key (if (coll? (first result))
