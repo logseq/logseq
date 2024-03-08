@@ -243,8 +243,7 @@
                  (shui/select-trigger
                   {:class "!px-2 !py-0 !h-8"}
                   (shui/select-value
-                   {:placeholder "Select a schema type"})
-                  (shui/tabler-icon "selector" {:class "opacity-30"}))
+                   {:placeholder "Select a schema type"}))
                  (shui/select-content
                   (shui/select-group
                    (for [{:keys [label value disabled]} schema-types]
@@ -325,8 +324,7 @@
                  (shui/select-trigger
                   {:class "!px-2 !py-0 !h-8"}
                   (shui/select-value
-                   {:placeholder "Select a position mode"})
-                  (shui/tabler-icon "selector" {:class "opacity-30"}))
+                   {:placeholder "Select a position mode"}))
                  (shui/select-content
                   (shui/select-group
                    (for [{:keys [label value]} choices]
