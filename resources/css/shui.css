@@ -43,8 +43,14 @@ html {
 
   &:not([data-color=logseq]) {
     .ui__dropdown-menu-item,
-    div[data-radix-popper-content-wrapper] div[role=menuitem] {
-      &:focus, &:hover {
+    div[data-radix-popper-content-wrapper] div[data-radix-collection-item] {
+      &:focus, &:hover, &.is-active {
+        background-color: var(--lx-gray-04, hsl(var(--accent)));
+      }
+    }
+
+    .ui__dropdown-menu-content.has-search-key {
+      > .head:focus-within + div[data-radix-collection-item] {
         background-color: var(--lx-gray-04, hsl(var(--accent)));
       }
     }
