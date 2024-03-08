@@ -588,7 +588,8 @@
                                                                                  {:properties {icon-property-id icon}})]
                                   (shui/popup-hide! id)))))}))]
        [:button.flex
-        {:on-click #(shui/popup-show! (.-target %) content-fn {:as-menu? true})}
+        (when-not config/publishing?
+          {:on-click #(shui/popup-show! (.-target %) content-fn {:as-menu? true})})
         (if icon
           (icon-component/icon icon)
           [:span.bullet-container.cursor (when collapsed? {:class "bullet-closed"})
