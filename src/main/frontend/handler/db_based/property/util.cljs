@@ -3,7 +3,8 @@
   (:require [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [logseq.common.util :as common-util]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn get-property-name
   "Get a property's name given its uuid"
@@ -39,8 +40,7 @@
                     readable-property-val
                     #(if (seq (get-in prop-ent [:block/schema :values])) ; closed values
                        (when-let [block (db-utils/entity [:block/uuid %])]
-                         (or (:block/original-name block)
-                             (get-in block [:block/schema :value])))
+                         (db-property/closed-value-name block))
                        %)]
                 [(-> prop-ent :block/name keyword)
                 (if (set? v)

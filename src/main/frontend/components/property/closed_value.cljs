@@ -17,7 +17,8 @@
             [frontend.db.async :as db-async]
             [frontend.state :as state]
             [frontend.handler.property.util :as pu]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn- <upsert-closed-value!
   "Create new closed value and returns its block UUID."
@@ -110,8 +111,7 @@
   (rum/local false ::hover?)
   [state item {:keys [toggle-fn delete-choice update-icon]} parent-opts]
   (let [*hover? (::hover? state)
-        value (or (:block/original-name item)
-                  (get-in item [:block/schema :value]))
+        value (db-property/closed-value-name item)
         page? (:block/original-name item)]
     [:div.flex.flex-1.flex-row.items-center.gap-2.justify-between
      {:on-mouse-over #(reset! *hover? true)

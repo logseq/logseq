@@ -4,6 +4,7 @@
    NOTE: This script is also used in CI to confirm graph creation works"
   (:require [logseq.tasks.db-graph.create-graph :as create-graph]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db.frontend.property.type :as db-property-type]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -48,8 +49,15 @@
         yesterday (subtract-days today 1)
         two-days-ago (subtract-days today 2)
         closed-values-config (build-closed-values-config {:dates [today yesterday two-days-ago]})
-        random-closed-value #(-> closed-values-config % rand-nth :uuid)
-        random-page-closed-value #(-> closed-values-config % rand-nth :value)]
+        ;; Stores random closed values for use with queries
+        closed-values (atom {})
+        random-closed-value #(let [val (-> closed-values-config % rand-nth)]
+                               (swap! closed-values assoc % (:value val))
+                               (:uuid val))
+        random-page-closed-value #(let [val (-> closed-values-config % rand-nth :value)]
+                                    (swap! closed-values assoc % (second val))
+                                    val)
+        get-closed-value #(get @closed-values %)]
     {:pages-and-blocks
      [{:page
        {:block/name (date-journal-title today) :block/journal? true :block/journal-day (date-journal-day today)}
@@ -83,13 +91,17 @@
        [{:block/content "{{query (property :default \"haha\")}}"}
         {:block/content "{{query (property :url \"https://logseq.com\")}}"}
         {:block/content "{{query (property :url-many \"https://logseq.com\")}}"}
+        {:block/content (str "{{query (property :url-closed " (pr-str (get-closed-value :url-closed)) ")}}")}
         {:block/content "{{query (property :checkbox true)}}"}
         {:block/content "{{query (property :number 5)}}"}
         {:block/content "{{query (property :number-many 10)}}"}
+        {:block/content (str "{{query (property :number-closed " (pr-str (get-closed-value :number-closed)) ")}}")}
         {:block/content "{{query (property :page [[Page 1]])}}"}
         {:block/content "{{query (property :page-many [[Page 2]])}}"}
-        {:block/content (str "{{query (property :date [[" (string/capitalize (date-journal-title today)) "]])}}")}
-        {:block/content (str "{{query (property :date-many [[" (string/capitalize (date-journal-title yesterday)) "]])}}")}]}
+        {:block/content (str "{{query (property :page-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :page-closed))) ")}}")}
+        {:block/content (str "{{query (property :date " (page-ref/->page-ref (string/capitalize (date-journal-title today))) ")}}")}
+        {:block/content (str "{{query (property :date-many " (page-ref/->page-ref (string/capitalize (date-journal-title yesterday))) ")}}")}
+        {:block/content (str "{{query (property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}
       {:page {:block/name "page 1"}
        :blocks
        [{:block/content "yee"}

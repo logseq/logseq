@@ -209,3 +209,8 @@
             (let [e (d/entity db [:block/uuid id])]
               (when (= (get-in e [:block/schema :value]) value-name)
                 e))) values)))
+
+(defn closed-value-name
+  "Gets name of closed value given closed value ent/map. Works for all closed value types including pages"
+  [ent]
+  (or (:block/original-name ent) (get-in ent [:block/schema :value])))
