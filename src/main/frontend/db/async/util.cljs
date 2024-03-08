@@ -21,12 +21,13 @@
                                (apply concat result')
                                result')
                              (remove nil?))]
-                (when (every? map? tx-data)
+                (if (every? map? tx-data)
                   (try
                     (d/transact! conn tx-data)
                     (catch :default e
                       (js/console.error "<q failed with:" e)
-                      nil))))))
+                      nil))
+                  (js/console.log "<q skipped tx for inputs:" inputs)))))
           result')))))
 
 (defn <pull
