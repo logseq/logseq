@@ -254,7 +254,7 @@
                    (subs v 1)
                    (or (page-ref/get-page-name v) v)))]
     (if (string? result)
-      (string/trim result)
+      (or (parse-double result) (string/trim result))
       result)))
 
 (defn- ->keyword-property
