@@ -1904,10 +1904,8 @@
     :on-change (fn [event]
                  (let [target (.-target event)
                        block (:block config)
-                       item-content (.. target -nextSibling -data)
-                       item-full-content (str (if checked? "[X]" "[ ]") " " item-content)
-                       new-item-full-content (str (if checked? "[ ]" "[X]") " " item-content)]
-                   (editor-handler/toggle-list-checkbox block item-full-content new-item-full-content)))}))
+                       item-content (.. target -nextSibling -data)]
+                   (editor-handler/toggle-list-checkbox block item-content)))}))
 
 (defn marker-switch
   [{:block/keys [marker] :as block}]

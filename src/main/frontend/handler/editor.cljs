@@ -54,6 +54,7 @@
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
             [goog.crypt.base64 :as base64]
+            [goog.string :as gstring]
             [lambdaisland.glogi :as log]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.graph-parser.block :as gp-block]
@@ -2399,8 +2400,14 @@
             (insert "\n")))))))
 
 (defn toggle-list-checkbox
-  [{:block/keys [content] :as block} old-item-content new-item-content]
-  (let [new-content (string/replace-first content old-item-content new-item-content)]
+  [{:block/keys [content] :as block} item-content]
+  (let [toggle-fn (fn [m x-mark]
+                    (case (string/lower-case x-mark)
+                      "[ ]" (str "[x] " item-content)
+                      "[x]" (str "[ ] " item-content)
+                      m))
+        pattern (re-pattern (str "(\\[[xX ]\\])\\s+?" (gstring/regExpEscape item-content)))
+        new-content (string/replace-first content pattern toggle-fn)]
     (save-block-if-changed! block new-content)))
 
 (defn- dwim-in-list
