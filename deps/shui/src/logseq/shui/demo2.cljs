@@ -15,11 +15,13 @@
 
    (let [items [{:key 1 :value "Apple" :class "bg-gray-800 text-gray-50"}
                 {:key 2 :value "Orange" :class "bg-orange-700 text-gray-50"}
-                nil
-                {:key 3 :value "Pear"}]
+                {:key 3 :value "Pear"}
+                {:key 4 :value "Banana" :class "bg-yellow-700 text-gray-700"}]
 
          [selected-items set-selected-items!]
-         (rum/use-state [(last items)])
+         (rum/use-state [(second items)])
+
+         [search? set-search?] (rum/use-state false)
 
          rm-item! (fn [item] (set-selected-items! (remove #(= item %) selected-items)))
          add-item! (fn [item] (set-selected-items! (conj selected-items item)))
@@ -33,7 +35,10 @@
          (ui/card-title "Basic")
          (ui/card-description "x multiselect for shui"))
        (ui/card-content
-
+         [:label.block.flex.items-center.pb-3.cursor-pointer
+          (ui/checkbox {:checked search?
+                        :on-click #(set-search? (not search?))})
+          [:small.pl-2 "Enable basic search input"]]
          ;; Basic
          (ui/dropdown-menu
            {:open open?}
@@ -47,6 +52,12 @@
            ;; content
            (x-select items selected-items
              {:close! #(set-open! false)
+              :search-enabled? search?
+              :search-key-render (fn [q {:keys [items]}]
+                                   (when (and (not (string/blank? q))
+                                           (not (seq items)))
+                                     [:b.flex.items-center.justify-center.py-4.gap-2.font-normal.opacity-80
+                                      (ui/tabler-icon "lemon") [:small "No fruits!"]]))
               :on-chosen on-chosen
               :value-render (fn [v {:keys [selected?]}]
                               (if selected?
@@ -59,13 +70,16 @@
 
    [:hr]
 
-   (let [items [{:key 1 :value "Apple" :class "bg-gray-800 text-gray-50"}
-                {:key 2 :value "Orange" :class "bg-orange-700 text-gray-50"}
-                nil
-                {:key 3 :value "Pear"}]
+   (let [[items set-items!]
+         (rum/use-state
+           [{:key 1 :value "Apple" :class "bg-gray-800 text-gray-50"}
+            {:key 2 :value "Orange" :class "bg-orange-700 text-gray-50"}
+            nil
+            {:key 3 :value "Pear"}
+            {:key 4 :value "Banana" :class "bg-yellow-700 text-gray-700"}])
 
          [selected-items set-selected-items!]
-         (rum/use-state [(last items)])
+         (rum/use-state [(last items) (first items)])
 
          rm-item! (fn [item] (set-selected-items! (remove #(= item %) selected-items)))
          add-item! (fn [item] (set-selected-items! (conj selected-items item)))
@@ -76,7 +90,7 @@
 
      (ui/card
        (ui/card-header
-         (ui/card-title "Search")
+         (ui/card-title "Search & Custom")
          (ui/card-description "x multiselect for shui"))
        (ui/card-content
 
@@ -106,6 +120,17 @@
                                                 (add-item! item)))}
                                  (:value item))
                                (ui/dropdown-menu-separator)))
+
+              :search-key-render
+              (fn [k {:keys [items x-item exist-fn]}]
+                (when (and
+                        (not (string/blank? k))
+                        (not (exist-fn)))
+                  (x-item
+                    {:on-click (fn []
+                                 (ui/toast! (str "Create: " k) :warning)
+                                 (set-open! false))}
+                    (str "+ create: " k))))
 
               ;:head-render (fn [] [:b "header"])
               ;:foot-render (fn [] [:b "footer"])
