@@ -541,9 +541,9 @@
 
   ;; RTC
   (rtc-start
-   [this repo token]
+   [this repo token dev-mode?]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (rtc-core/<start-rtc repo conn token)
+     (rtc-core/<start-rtc repo conn token dev-mode?)
      nil))
 
   (rtc-stop

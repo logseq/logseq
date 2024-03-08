@@ -79,7 +79,8 @@
    [:toggle-auto-push-client-ops-chan :any]
    [:*auto-push-client-ops? :any]
    [:force-push-client-ops-chan :any]
-   [:counter :any]])
+   [:counter :any]
+   [:dev-mode? :boolean]])
 
 (def state-validator
   (let [validator (m/validator state-schema)]
@@ -932,7 +933,7 @@
 ;;                                    :block-uuids [page-block-uuid]})))))
 
 (defn init-state
-  [ws data-from-ws-chan repo token]
+  [ws data-from-ws-chan repo token dev-mode?]
   ;; {:post [(m/validate state-schema %)]}
   {:*rtc-state (atom :closed :validator rtc-state-validator)
    :*graph-uuid (atom nil)
@@ -947,7 +948,7 @@
    :*stop-rtc-loop-chan (atom nil)
    :force-push-client-ops-chan (chan (async/sliding-buffer 1))
    :*ws (atom ws)
-
+   :dev-mode? dev-mode?
    ;; used to trigger state watch
    :counter 0})
 
@@ -971,22 +972,23 @@
 
 ;; FIXME: token might be expired
 (defn <init-state
-  [repo token reset-*state?]
+  [repo token reset-*state? & {:keys [dev-mode?]
+                               :or {dev-mode? false}}]
   (go
     (let [data-from-ws-chan (chan (async/sliding-buffer 100))
           ws-opened-ch (chan)
           ws (ws/ws-listen token data-from-ws-chan ws-opened-ch)]
       (<! ws-opened-ch)
-      (let [state (init-state ws data-from-ws-chan repo token)]
+      (let [state (init-state ws data-from-ws-chan repo token dev-mode?)]
         (when reset-*state?
           (reset! *state state)
           (swap! *state update :counter inc))
         state))))
 
 (defn <start-rtc
-  [repo conn token]
+  [repo conn token dev-mode?]
   (go
-    (let [state (<! (<init-state repo token true))
+    (let [state (<! (<init-state repo token true {:dev-mode? dev-mode?}))
           state-for-asset-sync (asset-sync/init-state-from-rtc-state state)
           _ (reset! asset-sync/*asset-sync-state state-for-asset-sync)
           config (worker-state/get-config repo)]
