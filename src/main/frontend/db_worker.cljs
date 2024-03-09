@@ -1,37 +1,40 @@
 (ns frontend.db-worker
   "Worker used for browser DB implementation"
-  (:require [promesa.core :as p]
-            [datascript.storage :refer [IStorage]]
-            [clojure.edn :as edn]
-            [datascript.core :as d]
-            [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [shadow.cljs.modern :refer [defclass]]
-            ["@logseq/sqlite-wasm" :default sqlite3InitModule]
+  (:require ["@logseq/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
-            [clojure.string :as string]
             [cljs-bean.core :as bean]
-            [frontend.worker.search :as search]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [frontend.worker.state :as worker-state]
-            [frontend.worker.file :as file]
+            [clojure.core.async :as async]
+            [clojure.edn :as edn]
+            [clojure.string :as string]
+            [cognitect.transit :as transit]
+            [datascript.core :as d]
+            [datascript.storage :refer [IStorage]]
+            [frontend.worker.async-util :include-macros true :refer [<?]]
             [frontend.worker.export :as worker-export]
-            [logseq.db :as ldb]
-            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.worker.file :as file]
+            [frontend.worker.handler.page :as worker-page]
+            [frontend.worker.handler.page.rename :as worker-page-rename]
+            [frontend.worker.rtc.core :as rtc-core]
             [frontend.worker.rtc.db-listener :as rtc-db-listener]
             [frontend.worker.rtc.full-upload-download-graph :as rtc-updown]
-            [frontend.worker.rtc.core :as rtc-core]
-            [clojure.core.async :as async]
-            [frontend.worker.async-util :include-macros true :refer [<?]]
+            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.worker.search :as search]
+            [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
-            [frontend.worker.handler.page.rename :as worker-page-rename]
-            [frontend.worker.handler.page :as worker-page]
-            [logseq.outliner.op :as outliner-op]))
+            [logseq.db :as ldb]
+            [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.outliner.op :as outliner-op]
+            [promesa.core :as p]
+            [shadow.cljs.modern :refer [defclass]]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
 (defonce *datascript-conns worker-state/*datascript-conns)
 (defonce *opfs-pools worker-state/*opfs-pools)
 (defonce *publishing? (atom false))
+
+(defonce transit-w (transit/writer :json))
 
 (defn- get-pool-name
   [graph-name]
@@ -620,6 +623,10 @@
   (rtc-get-debug-state
    [_this repo]
    (bean/->js (rtc-core/get-debug-state repo)))
+
+  (rtc-get-block-update-log
+   [_this block-uuid]
+   (transit/write transit-w (rtc-core/get-block-update-log (uuid block-uuid))))
 
   (keep-alive
    [_this]

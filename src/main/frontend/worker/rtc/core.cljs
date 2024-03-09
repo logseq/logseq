@@ -54,16 +54,18 @@
 
 (def state-schema
   "
-  | :*graph-uuid                      | atom of graph-uuid syncing now                     |
-  | :*repo                            | atom of repo name syncing now                      |
-  | :data-from-ws-chan                | channel for receive messages from server websocket |
-  | :data-from-ws-pub                 | pub of :data-from-ws-chan, dispatch by :req-id     |
-  | :*stop-rtc-loop-chan              | atom of chan to stop <loop-for-rtc                 |
-  | :*ws                              | atom of websocket                                  |
-  | :*rtc-state                       | atom of state of current rtc progress              |
-  | :toggle-auto-push-client-ops-chan | channel to toggle pushing client ops automatically |
-  | :*auto-push-client-ops?           | atom to show if it's push client-ops automatically |
-  | :force-push-client-ops-chan       | chan used to force push client-ops                 |
+  | :*graph-uuid                      | atom of graph-uuid syncing now                           |
+  | :*repo                            | atom of repo name syncing now                            |
+  | :data-from-ws-chan                | channel for receive messages from server websocket       |
+  | :data-from-ws-pub                 | pub of :data-from-ws-chan, dispatch by :req-id           |
+  | :*stop-rtc-loop-chan              | atom of chan to stop <loop-for-rtc                       |
+  | :*ws                              | atom of websocket                                        |
+  | :*rtc-state                       | atom of state of current rtc progress                    |
+  | :toggle-auto-push-client-ops-chan | channel to toggle pushing client ops automatically       |
+  | :*auto-push-client-ops?           | atom to show if it's push client-ops automatically       |
+  | :force-push-client-ops-chan       | chan used to force push client-ops                       |
+  | :dev-mode?                        | when not nil, will update :block-update-log              |
+  | :block-update-log                 | map of block-uuid-> coll of local-op and remote-updates  |
 "
   [:map {:closed true}
    [:*graph-uuid :any]
@@ -80,7 +82,8 @@
    [:*auto-push-client-ops? :any]
    [:force-push-client-ops-chan :any]
    [:counter :any]
-   [:dev-mode? :boolean]])
+   [:dev-mode? :boolean]
+   [:*block-update-log :any]])
 
 (def state-validator
   (let [validator (m/validator state-schema)]
@@ -92,6 +95,18 @@
 (def rtc-state-schema
   [:enum :open :closed])
 (def rtc-state-validator (m/validator rtc-state-schema))
+
+(defn- update-log
+  [state {:keys [local-ops remote-update-map]}]
+  (when (:dev-mode? state)
+    (let [*block-update-log (:*block-update-log state)]
+      (doseq [op local-ops]
+        (when-let [block-uuid (:block-uuid (second op))]
+          (swap! *block-update-log update block-uuid (fnil conj []) op)))
+      (doseq [[block-uuid value] remote-update-map]
+        (swap! *block-update-log update block-uuid (fnil conj []) value)))))
+
+
 
 (def transit-w (transit/writer :json))
 (def transit-r (transit/reader :json))
@@ -778,7 +793,8 @@
           date-formatter @(:*date-formatter state)]
       (op-mem-layer/new-branch! repo)
       (try
-        (let [ops-for-remote (sort-remote-ops (gen-block-uuid->remote-ops repo conn))
+        (let [ops-for-remote (rtc-const/to-ws-ops-decoder
+                              (sort-remote-ops (gen-block-uuid->remote-ops repo conn)))
               local-tx (op-mem-layer/get-local-tx repo)
               r (<? (ws/<send&receive state {:action "apply-ops" :graph-uuid @(:*graph-uuid state)
                                              :ops ops-for-remote :t-before (or local-tx 1)}))]
@@ -806,6 +822,7 @@
                   (throw (ex-info "Unavailable" {:remote-ex remote-ex}))))
             (do (assert (pos? (:t r)) r)
                 (op-mem-layer/commit! repo)
+                (update-log state {:local-ops ops-for-remote})
                 (<! (<apply-remote-data repo conn date-formatter r))
                 (prn :<client-op-update-handler :t (:t r)))))
         (catch :default e
@@ -948,9 +965,10 @@
    :*stop-rtc-loop-chan (atom nil)
    :force-push-client-ops-chan (chan (async/sliding-buffer 1))
    :*ws (atom ws)
-   :dev-mode? dev-mode?
    ;; used to trigger state watch
-   :counter 0})
+   :counter 0
+   :dev-mode? dev-mode?
+   :*block-update-log (atom {})})
 
 (defn get-debug-state
   ([repo]
@@ -960,15 +978,23 @@
          local-tx (op-mem-layer/get-local-tx repo)
          unpushed-block-update-count (op-mem-layer/get-unpushed-block-update-count repo)]
      (cond->
-      {:graph-uuid graph-uuid
-       :local-tx local-tx
-       :unpushed-block-update-count unpushed-block-update-count}
-       state
-       (merge
-        {:rtc-state @(:*rtc-state state)
-         :ws-state (some-> @(:*ws state) ws/get-state)
-         :auto-push-updates? (when-let [a (:*auto-push-client-ops? state)]
-                               @a)})))))
+         {:graph-uuid graph-uuid
+          :local-tx local-tx
+          :unpushed-block-update-count unpushed-block-update-count}
+         state
+         (merge
+          {:rtc-state @(:*rtc-state state)
+           :ws-state (some-> @(:*ws state) ws/get-state)
+           :auto-push-updates? (when-let [a (:*auto-push-client-ops? state)]
+                                 @a)})))))
+
+(defn get-block-update-log
+  ([block-uuid]
+   (get-block-update-log @*state block-uuid))
+  ([state block-uuid]
+   (when-let [*block-update-log (:*block-update-log state)]
+     (@*block-update-log block-uuid))))
+
 
 ;; FIXME: token might be expired
 (defn <init-state
