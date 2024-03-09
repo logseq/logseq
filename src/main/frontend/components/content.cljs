@@ -1,37 +1,40 @@
 (ns frontend.components.content
-  (:require [clojure.string :as string]
+  (:require [cljs-bean.core :as bean]
+            [cljs-time.coerce :as tc]
+            [cljs.pprint :as pp]
+            [clojure.string :as string]
+            [cognitect.transit :as transit]
             [dommy.core :as d]
             [frontend.commands :as commands]
             [frontend.components.editor :as editor]
-            [frontend.components.page-menu :as page-menu]
             [frontend.components.export :as export]
+            [frontend.components.page-menu :as page-menu]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.srs :as srs]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.mixins :as mixins]
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.modules.shortcut.core :as shortcut]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.block-ref :as block-ref]
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [rum.core :as rum]
-            [frontend.config :as config]
-            [cljs.pprint :as pp]
-            [cljs-time.coerce :as tc]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.block-ref :as block-ref]
             [promesa.core :as p]
-            [cljs-bean.core :as bean]
-            [frontend.persist-db.browser :as db-browser]))
+            [rum.core :as rum]))
+
+(defonce transit-r (transit/reader :json))
 
 ;; TODO i18n support
 
@@ -325,7 +328,18 @@
                                              :content (:value version)})
                                           versions))))))}
 
-            "(Dev) Show block content history"))]))))
+            "(Dev) Show block content history"))
+         (when (state/sub [:ui/developer-mode?])
+           (ui/menu-link
+            {:key "(Dev) Show block RTC log"
+             :on-click
+             (fn []
+               (let [^object worker @db-browser/*worker]
+                 (p/let [result (.rtc-get-block-update-log worker (str block-id))
+                         log (transit/read transit-r result)]
+                   (prn :Dev-show-block-RTC-log block-id)
+                   (pp/pprint log))))}
+            "(Dev) Show block RTC log"))]))))
 
 (rum/defc block-ref-custom-context-menu-content
   [block block-ref-id]
