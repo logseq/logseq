@@ -858,7 +858,7 @@
                  (common-util/remove-nils-non-nested
                   {:text text
                    :html html
-                   :blocks (when (seq blocks) (pr-str blocks))}))]
+                   :blocks (when (seq blocks) (pr-str (mapv #(dissoc % :block.temp/fully-loaded? %) blocks)))}))]
        (if owner-window
          (utils/writeClipboard data owner-window)
          (utils/writeClipboard data)))))
