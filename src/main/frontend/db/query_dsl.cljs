@@ -311,13 +311,17 @@
          :rules [:priority]}))))
 
 (defn- build-page-property
-  [e]
+  [e {:keys [db-graph?]}]
   (let [[k v] (rest e)
         k (string/replace (name k) "_" "-")]
     (if (some? v)
       (let [v' (parse-property-value (str v))
-            val (if (coll? v') (first v') v')]
-        {:query (list 'page-property '?p (->keyword-property k) val)
+            v'' (if (coll? v') (first v') v')
+            v''' (if-let [closed-value (and db-graph?
+                                            (db-property/get-closed-value-entity-by-name (conn/get-db) k v''))]
+                   (:block/uuid closed-value)
+                   v'')]
+        {:query (list 'page-property '?p (->keyword-property k) v''')
          :rules [:page-property]})
       {:query (list 'has-page-property '?p (->keyword-property k))
        :rules [:has-page-property]})))
@@ -445,7 +449,7 @@ Some bindings in this fn:
        (build-namespace e)
 
        (= 'page-property fe)
-       (build-page-property e)
+       (build-page-property e env)
 
        (= 'page-tags fe)
        (build-page-tags e)
