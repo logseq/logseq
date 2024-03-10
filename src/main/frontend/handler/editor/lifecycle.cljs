@@ -31,9 +31,13 @@
 (defn will-remount!
   [_old-state state]
   (let [new-block (:block (first (:rum/args state)))
+        edit-block (state/get-edit-content)
         repo (state/get-current-repo)]
-    (when (not= (some-> (state/get-edit-content) string/trim)
-                (some-> (:block/content new-block) string/trim))
+    (when (and edit-block
+           (= (:block/uuid new-block)
+              (:block/uuid edit-block))
+           (not= (some-> edit-block string/trim)
+                 (some-> (:block/content new-block) string/trim)))
       (when-let [input (state/get-input)]
         (util/set-change-value input
                                (block-handler/sanity-block-content repo (get new-block :block/format :markdown) (:block/content new-block))))))
