@@ -229,7 +229,7 @@
                 (if-let [msg (validate-property-value schema v*)]
                   (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                     (notification/show! msg' :warning))
-                  (p/do!
+                  (do
                     (upsert-property! repo k-name (assoc property-schema :type property-type)
                                       {:property-uuid property-uuid})
                     (let [status? (= "status" (string/lower-case k-name))

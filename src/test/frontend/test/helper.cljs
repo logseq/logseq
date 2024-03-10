@@ -11,7 +11,9 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [datascript.core :as d]
-            [logseq.graph-parser.text :as text]))
+            [logseq.graph-parser.text :as text]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [frontend.config :as config]))
 
 (def node? (exists? js/process))
 
@@ -236,17 +238,21 @@ This can be called in synchronous contexts as no async fns should be invoked"
   connection when done with it."
   [f & {:as start-opts}]
   ;; Set current-repo explicitly since it's not the default
-  (state/set-current-repo!
-   (if (or (:db-graph? start-opts) (some? js/process.env.DB_GRAPH))
-     test-db-name-db-version
-     test-db-name))
-  (start-test-db! start-opts)
-  (when-let [init-f (:init-data start-opts)]
-    (assert (fn? f) "init-data should be a fn")
-    (init-f (db/get-db test-db-name-db-version false)))
-  (f)
-  (state/set-current-repo! nil)
-  (destroy-test-db!))
+  (let [db-graph? (or (:db-graph? start-opts) (some? js/process.env.DB_GRAPH))
+        repo (if db-graph? test-db-name-db-version test-db-name)]
+    (state/set-current-repo! repo)
+    (start-test-db! start-opts)
+    (when db-graph?
+      (let [built-in-data (sqlite-create-graph/build-db-initial-data
+                           (db/get-db repo)
+                           config/config-default-content)]
+        (db/transact! repo built-in-data)))
+    (when-let [init-f (:init-data start-opts)]
+      (assert (fn? f) "init-data should be a fn")
+      (init-f (db/get-db repo false)))
+    (f)
+    (state/set-current-repo! nil)
+    (destroy-test-db!)))
 
 (defn db-based-start-and-destroy-db
   [f & {:as start-opts}]
