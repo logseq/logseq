@@ -824,9 +824,7 @@
                       {:on-click #(handle-action action (assoc state :opts opts) %)
                        :muted    true}))]
     (when action
-      [:div {:class "flex w-full px-3 py-2 gap-2 justify-between"
-             :style {:background "var(--lx-gray-03)"
-                     :border-top "1px solid var(--lx-gray-07)"}}
+      [:div.hints
        [:div.text-sm.leading-6
         [:div.flex.flex-row.gap-1.items-center
          [:div.font-medium.text-gray-12 "Tip:"]

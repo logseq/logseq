@@ -12,13 +12,8 @@
 }
 
 #custom-context-menu {
-  @apply transition ease-out duration-100 transform
-  opacity-100 scale-100 absolute;
+  @apply absolute animate-in zoom-in-95;
 
   z-index: calc(var(--ls-z-index-level-1) + 1);
   width: 270px;
-
-  a:hover {
-    color: var(--ls-primary-text-color);
-  }
 }

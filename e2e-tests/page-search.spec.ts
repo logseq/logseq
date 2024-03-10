@@ -151,7 +151,7 @@ async function alias_test(block: Block, page: Page, page_name: string, search_kw
     const results = await searchPage(page, kw_name)
 
     // test search results
-    expect(await results[0].innerText()).toContain(alias_name)
+    expect(await results[0].innerText()).toContain(alias_name.normalize('NFKC'))
 
     // test search entering (page)
     page.keyboard.press("Enter")

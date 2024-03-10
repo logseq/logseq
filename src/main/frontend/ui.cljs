@@ -177,14 +177,14 @@
                        (string/split #" "))
                    sequence)]
     [:span.keyboard-shortcut
-     (shui/shortcut-v1 sequence opts)]))
+     (shui/shortcut sequence opts)]))
 
 (rum/defc menu-link
   [{:keys [only-child? no-padding? class shortcut] :as options} child]
   (if only-child?
     [:div.menu-link
      (dissoc options :only-child?) child]
-    [:a.flex.justify-between.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
+    [:a.flex.justify-between.menu-link
      (cond-> options
              (true? no-padding?)
              (assoc :class (str class " no-padding"))
@@ -194,7 +194,7 @@
 
      [:span.flex-1 child]
      (when shortcut
-       [:span.ml-1 (render-keyboard-shortcut shortcut)])]))
+       [:span.ml-1 (render-keyboard-shortcut shortcut {:interactive? false})])]))
 
 (rum/defc dropdown-with-links
   [content-fn links
@@ -647,13 +647,16 @@
         close-backdrop? (state/sub :modal/close-backdrop?)
         show? (state/sub :modal/show?)
         label (state/sub :modal/label)
+        class (state/sub :modal/class)
         close-fn (fn []
                    (state/close-modal!)
                    (state/close-settings!))
         modal-panel-content (or modal-panel-content (fn [_close] [:div]))]
     [:div.ui__modal
-     {:style {:z-index (if show? 999 -1)}
-      :label label}
+     {:style {:z-index (if show? 999 -1)
+              :display (if show? "flex" "none")}
+      :label label
+      :class class}
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
@@ -718,12 +721,14 @@
             close-backdrop? (:modal/close-backdrop? modal)
             show? (:modal/show? modal)
             label (:modal/label modal)
+            class (:modal/class modal)
             close-fn (fn []
                        (state/close-sub-modal! id))
             modal-panel-content (or modal-panel-content (fn [_close] [:div]))]
         [:div.ui__modal.is-sub-modal
          {:style {:z-index (if show? (+ 999 idx) -1)}
-          :label label}
+          :label label
+          :class class}
          (css-transition
           {:in show? :timeout 0}
           (fn [state]
@@ -986,16 +991,24 @@
                           [:div {:key "tippy"} ""])))
            (rum/fragment {:key "tippy-children"} child))))
 
-(rum/defc slider
-  [default-value {:keys [min max on-change]}]
-  [:input.cursor-pointer
-   {:type      "range"
-    :value     (int default-value)
-    :min       min
-    :max       max
-    :style     {:width "100%"}
-    :on-change #(let [value (util/evalue %)]
-                  (on-change value))}])
+(rum/defcs slider < rum/reactive
+  {:init (fn [state]
+           (assoc state ::value (atom (first (:rum/args state)))))}
+  [state _default-value {:keys [min max on-change]}]
+  (let [*value (::value state)
+        value (rum/react *value)
+        value' (int value)]
+    (assert (int? value'))
+    [:input.cursor-pointer
+     {:type      "range"
+      :value     value'
+      :min       min
+      :max       max
+      :style     {:width "100%"}
+      :on-change #(let [value (util/evalue %)]
+                    (reset! *value value))
+      :on-mouse-up #(let [value (util/evalue %)]
+                      (on-change value))}]))
 
 (rum/defcs tweet-embed < (rum/local true :loading?)
   [state id]
@@ -1033,6 +1046,11 @@
                 button-props)
 
         icon (when icon (shui-ui/tabler-icon icon icon-props))
+        href? (not (string/blank? href))
+        text (cond
+               href? [:a {:href href :target "_blank"
+                          :style {:color "inherit"}} text]
+               :else text)
         children [icon text]]
 
     (shui-ui/button props children)))
@@ -1121,7 +1139,7 @@
   ([content-fn]
    (lazy-visible content-fn nil))
   ([content-fn {:keys [trigger-once? _debug-id]
-                :or {trigger-once? false}}]
+                :or {trigger-once? true}}]
    (let [[visible? set-visible!] (rum/use-state false)
          root-margin 100
          inViewState (useInView #js {:rootMargin (str root-margin "px")

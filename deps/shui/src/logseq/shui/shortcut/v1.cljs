@@ -62,31 +62,36 @@
                            %)))))))
 
 (rum/defc part
-  [ks size]
-  (let [tiles (map print-shortcut-key ks)]
-    (ui/button {:variant     :default
-                :class       "bg-gray-03 text-gray-12 px-1.5 py-0 leading-4 h-5 hover:bg-gray-04 active:bg-gray-03 hover:text-gray-11"
-                :interactive false
-                :size        size}
+  [ks size {:keys [interactive?]}]
+  (let [tiles (map print-shortcut-key ks)
+        interactive? (true? interactive?)]
+    (ui/button {:variant (if interactive? :default :text)
+                :class   (str "bg-gray-03 text-gray-10 px-1.5 py-0 leading-4 h-5 rounded font-normal "
+                           (if interactive?
+                             "hover:bg-gray-04 active:bg-gray-03 hover:text-gray-12"
+                             "bg-transparent cursor-default active:bg-gray-03 hover:text-gray-11 opacity-80"))
+                :size    size}
       (for [[index tile] (map-indexed vector tiles)]
         [:<>
          (when (< 0 index)
-           [:div.ui__button__tile-separator])
-         [:div.ui__button__tile tile]]))))
+           [:span.ui__button__tile-separator])
+         [:span.ui__button__tile tile]]))))
 
 (rum/defc root
-  [shortcut & {:keys [size theme]
-                       :or   {size  :xs
-                              theme :gray}}]
+  [shortcut & {:keys [size theme interactive?]
+               :or   {size  :xs
+                      interactive? true
+                      theme :gray}}]
   (when (seq shortcut)
     (let [shortcuts (if (coll? shortcut)
                       [shortcut]
-                      (parse-shortcuts shortcut))]
+                      (parse-shortcuts shortcut))
+          opts {:interactive? interactive?}]
       (for [[index binding] (map-indexed vector shortcuts)]
         [:<>
          (when (< 0 index)
            [:div.text-gray-11.text-sm "|"])
          (if (coll? (first binding))   ; + included
            (for [ks binding]
-             (part ks size))
-           (part binding size))]))))
+             (part ks size opts))
+           (part binding size opts))]))))

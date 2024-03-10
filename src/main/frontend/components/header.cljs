@@ -28,7 +28,7 @@
   < {:key-fn #(identity "home-button")}
   []
   (ui/with-shortcut :go/home "left"
-    [:button.button.icon.inline
+    [:button.button.icon.inline.mx-1
      {:title (t :home)
       :on-click #(do
                    (when (mobile-util/native-iphone?)
@@ -47,7 +47,7 @@
                   logged?
                   (not sync-enabled?))
       [:span.flex.space-x-2
-       [:a.button.text-sm.font-medium.block
+       [:a.button.text-sm.font-medium.block.text-gray-11
         {:on-click #(state/pub-event! [:user/login])}
         [:span (t :login)]
         (when loading?

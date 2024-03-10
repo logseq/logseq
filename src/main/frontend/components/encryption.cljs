@@ -101,11 +101,11 @@
        [:h1#modal-headline.text-2xl.font-bold.text-center
         (if init-graph-keys
           (if remote-pw?
-            "Secure this remote graph!"
-            "Encrypt this graph")
+            "Secure graph!"
+            "Encrypt graph")
           (if remote-pw?
-            "Unlock this remote graph!"
-            "Decrypt this graph"))]]
+            "Unlock graph!"
+            "Decrypt graph"))]]
 
       ;; decrypt remote graph with one password
       (when (and remote-pw? (not init-graph-keys))

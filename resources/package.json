@@ -1,7 +1,7 @@
 {
   "name": "Logseq",
   "productName": "Logseq",
-  "version": "0.10.5",
+  "version": "0.10.7",
   "main": "electron.js",
   "author": "Logseq",
   "license": "AGPL-3.0",
@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@fastify/cors": "8.2.0",
-    "@logseq/rsapi": "0.0.81",
+    "@logseq/rsapi": "0.0.84",
     "@sentry/electron": "2.5.1",
     "abort-controller": "3.0.0",
     "better-sqlite3": "9.3.0",
