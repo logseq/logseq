@@ -719,6 +719,7 @@
                             page-entity contents-page? children html-export? label whiteboard-page?)
           modal? (:modal/show? @state/state)]
       (if (and (not (util/mobile?))
+               (not= (util/page-name-sanity-lc page-name-in-block) (:id config))
                (not preview?)
                (not disable-preview?)
                (not modal?))
