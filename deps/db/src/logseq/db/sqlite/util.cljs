@@ -23,9 +23,10 @@
 (defn write-transit-str [o]
   (let [write-handlers (assoc dt/write-handlers
                               de/Entity (transit/write-handler (constantly "datascript/Entity")
-                                                         (fn [entity]
+                                                               (fn [^de/entity entity]
                                                            (assert (some? (:db/id entity)))
-                                                           {:db/id (:db/id entity)})))]
+                                                           (assoc (.-kv entity)
+                                                                  :db/id (:db/id entity)))))]
     (transit/write (transit/writer :json {:handlers write-handlers}) o)))
 
 (defn read-transit-str [s]
