@@ -99,12 +99,13 @@
 (defn- update-log
   [state {:keys [local-ops remote-update-map]}]
   (when (:dev-mode? state)
-    (let [*block-update-log (:*block-update-log state)]
+    (let [now (tc/to-string (t/now))
+          *block-update-log (:*block-update-log state)]
       (doseq [op local-ops]
         (when-let [block-uuid (:block-uuid (second op))]
-          (swap! *block-update-log update block-uuid (fnil conj []) op)))
+          (swap! *block-update-log update block-uuid (fnil conj []) [:local->remote now op])))
       (doseq [[block-uuid value] remote-update-map]
-        (swap! *block-update-log update block-uuid (fnil conj []) value)))))
+        (swap! *block-update-log update block-uuid (fnil conj []) [:remote->local now value])))))
 
 
 
