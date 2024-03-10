@@ -506,7 +506,7 @@
      :remove-page-ops-map remove-page-ops-map}))
 
 (defn <apply-remote-data
-  [repo conn date-formatter data-from-ws]
+  [state repo conn date-formatter data-from-ws]
   (assert (rtc-const/data-from-ws-validator data-from-ws) data-from-ws)
   (go
     (let [remote-t (:t data-from-ws)
@@ -546,16 +546,17 @@
           ;;       affected-keys (worker-react/get-affected-queries-keys {:tx-data txs :db-after @conn})]
           ;;   (worker-state/exit-batch-tx-mode!))
 
-          (op-mem-layer/update-local-tx! repo remote-t))
+          (op-mem-layer/update-local-tx! repo remote-t)
+          (update-log state {:remote-update-map affected-blocks-map}))
         :else (throw (ex-info "unreachable" {:remote-t remote-t
                                              :remote-t-before remote-t-before
                                              :local-t local-tx}))))))
 
 (defn- <push-data-from-ws-handler
-  [repo conn date-formatter push-data-from-ws]
+  [state repo conn date-formatter push-data-from-ws]
   (prn :push-data-from-ws push-data-from-ws)
   (go
-    (let [r (<! (<apply-remote-data repo conn date-formatter push-data-from-ws))]
+    (let [r (<! (<apply-remote-data state repo conn date-formatter push-data-from-ws))]
       (when (= r ::need-pull-remote-data)
         r))))
 
@@ -823,7 +824,7 @@
             (do (assert (pos? (:t r)) r)
                 (op-mem-layer/commit! repo)
                 (update-log state {:local-ops ops-for-remote})
-                (<! (<apply-remote-data repo conn date-formatter r))
+                (<! (<apply-remote-data state repo conn date-formatter r))
                 (prn :<client-op-update-handler :t (:t r)))))
         (catch :default e
           (prn ::unknown-ex e)
@@ -884,7 +885,7 @@
                 (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?)))
 
                 push-data-from-ws
-                (let [r (<! (<push-data-from-ws-handler repo conn date-formatter push-data-from-ws))]
+                (let [r (<! (<push-data-from-ws-handler state repo conn date-formatter push-data-from-ws))]
                   (when (= r ::need-pull-remote-data)
                     ;; trigger a force push, which can pull remote-diff-data from local-t to remote-t
                     (async/put! force-push-client-ops-ch true))
