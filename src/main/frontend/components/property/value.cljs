@@ -34,13 +34,10 @@
       (seq (get-in property [:block/schema :values]))))
 
 (defn exit-edit-property
-  ([]
-   (exit-edit-property true))
-  ([property-configure-check?]
-   (when (or (and property-configure-check? (not (:editor/property-configure? @state/state)))
-             (not property-configure-check?))
-     (state/set-state! :editor/new-property-input-id nil)
-     (state/clear-edit!))))
+  []
+  (state/set-state! :editor/new-property-input-id nil)
+  (state/set-state! :editor/properties nil)
+  (state/clear-edit!))
 
 (defn set-editing!
   [property editor-id dom-id v opts]
@@ -309,19 +306,16 @@
 ;;       (.focus editor))))
 
 (defn- save-text!
-  [repo block property value editor-id e]
+  [repo block property value _editor-id e]
   (let [new-value (util/evalue e)]
     (when (not (state/get-editor-action))
       (util/stop e)
       (p/do!
+       (exit-edit-property)
        (when (not= new-value value)
          (property-handler/set-block-property! repo (:block/uuid block)
                                                (:block/original-name property)
-                                               (string/trim new-value)))
-
-       (when (= js/document.activeElement (gdom/getElement editor-id))
-         (exit-edit-property false)
-         (shui/popup-hide!))))))
+                                               (string/trim new-value)))))))
 
 (defn <create-new-block!
   [block property value]
