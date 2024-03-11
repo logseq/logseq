@@ -346,20 +346,22 @@
   (let [ent (d/entity @conn [:block/uuid block-uuid])]
     (worker-util/profile
      ::need-update-block?
-     (some (fn [[k v]]
-             (case k
-               :content     (not= v (:block/raw-content ent))
-               :updated-at  (not= v (:block/updated-at ent))
-               :created-at  (not= v (:block/created-at ent))
-               :alias       (not= (set v) (set (map :block/uuid (:block/alias ent))))
-               :type        (not= (set v) (set (:block/type ent)))
-               :schema      (not= (transit/read transit-r v) (:block/schema ent))
-               :tags        (not= (set v) (set (map :block/uuid (:block/tags ent))))
-               :properties  (not= (transit/read transit-r v) (:block/properties ent))
-               :link        (not= v (:block/uuid (:block/link ent)))
-               :journal-day (not= v (:block/journal-day ent))
-               false))
-           op-value))))
+     (let [r (some (fn [[k v]]
+                     (case k
+                       :content     (not= v (:block/raw-content ent))
+                       :updated-at  (not= v (:block/updated-at ent))
+                       :created-at  (not= v (:block/created-at ent))
+                       :alias       (not= (set v) (set (map :block/uuid (:block/alias ent))))
+                       :type        (not= (set v) (set (:block/type ent)))
+                       :schema      (not= (transit/read transit-r v) (:block/schema ent))
+                       :tags        (not= (set v) (set (map :block/uuid (:block/tags ent))))
+                       :properties  (not= (transit/read transit-r v) (:block/properties ent))
+                       :link        (not= v (:block/uuid (:block/link ent)))
+                       :journal-day (not= v (:block/journal-day ent))
+                       false))
+                   op-value)]
+       (prn :need-update-block? r)
+       r))))
 
 (defn- update-block-attrs
   [repo conn date-formatter block-uuid {:keys [parents properties _content] :as op-value}]
