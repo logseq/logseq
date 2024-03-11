@@ -5,6 +5,7 @@
             [cljs-bean.core :as bean]
             [cljs.core.match :refer [match]]
             [cljs.reader :as reader]
+            [cljs-time.format :as tf]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
@@ -79,7 +80,9 @@
             [shadow.loader :as loader]
             [datascript.impl.entity :as e]
             [logseq.common.path :as path]
-            [electron.ipc :as ipc]))
+            [electron.ipc :as ipc])
+    (:import [goog.date DateTime])
+    )
 
 
 
@@ -2409,6 +2412,30 @@
     (when-not edit?
       [:div.more (ui/icon "dots-circle-horizontal" {:size 18})])]])
 
+;;; Block timestamps
+
+;;; TODO should be customizable
+;;; TODO omit day on journal pages (optionally)
+;;; TODO option to also shore created-at time
+(def ts-formatter (tf/formatter "M-d-YY H:mm"))
+
+;;; Similar to cljs-time.coerce/from-long but respects local timezone
+(defn time-from-long
+  [t]
+  (some-> t DateTime.fromTimestamp))
+
+(rum/defc block-timestamp < rum/static
+  [block]
+  (when-let [timestamp (get block :block/updated-at)]
+    [:div
+     [:a.text-sm.ml-2.fade-link
+      {:title "Toggle timestamps"
+       :on-click (fn [e]
+                   (prn :toggle-timestamps) ;TODO!
+                   )}
+      (tf/unparse ts-formatter (time-from-long timestamp))
+      ]]))
+
 (rum/defcs block-content-or-editor < rum/reactive
   {:init (fn [state]
            (let [block (second (:rum/args state))
@@ -2476,7 +2503,11 @@
                                   (editor-handler/edit-block! block :max (:block/uuid block)))}
                 svg/edit])
 
-             (block-refs-count block *hide-block-refs?)])]
+             (block-refs-count block *hide-block-refs?)])
+
+          (when true                    ; TODO 
+            (block-timestamp block))
+          ]
 
          (when (and (not hide-block-refs?) (> refs-count 0))
            (let [refs-cp (state/get-component :block/linked-references)]
