@@ -10,6 +10,7 @@
             [frontend.db :as db]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.history :as history]
@@ -117,7 +118,7 @@
    :isWhiteboardPage model/whiteboard-page?
    :isMobile util/mobile?
    :saveAsset save-asset-handler
-   :makeAssetUrl editor-handler/make-asset-url
+   :makeAssetUrl assets-handler/make-asset-url
    :inflateAsset (fn [src] (clj->js (pdf-assets/inflate-asset src)))
    :setCurrentPdf (fn [src] (state/set-current-pdf! (if src (pdf-assets/inflate-asset src) nil)))
    :copyToClipboard (fn [text, html] (util/copy-to-clipboard! text :html html))

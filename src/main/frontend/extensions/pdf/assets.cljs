@@ -288,7 +288,7 @@
   [block]
   (when-let [asset-path' (and block (pdf-utils/get-area-block-asset-url
                                      block (db-utils/pull (:db/id (:block/page block)))))]
-    (let [asset-path (editor-handler/make-asset-url asset-path')]
+    (let [asset-path (assets-handler/make-asset-url asset-path')]
       [:span.hl-area
        [:span.actions
         (when-not config/publishing?

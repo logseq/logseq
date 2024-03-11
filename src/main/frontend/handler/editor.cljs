@@ -15,7 +15,6 @@
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.fs :as fs]
-            [frontend.fs.nfs :as nfs]
             [logseq.common.path :as path]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.assets :as assets-handler]
@@ -1481,53 +1480,6 @@
                    :else                ; nfs
                    (fs/write-file! repo dir file-rpath (.stream file) nil))
                  [file-rpath file (path/path-join dir file-rpath) matched-alias])))))))
-
-(defonce *assets-url-cache (atom {}))
-
-(defn make-asset-url
-  "Make asset URL for UI element, to fill img.src"
-  [path] ;; path start with "/assets"(editor) or compatible for "../assets"(whiteboards)
-  (if config/publishing?
-    ;; Relative path needed since assets are not under '/' if published graph is not under '/'
-    (string/replace-first path #"^/" "")
-    (let [repo      (state/get-current-repo)
-          repo-dir  (config/get-repo-dir repo)
-          ;; Hack for path calculation
-          path      (string/replace path #"^(\.\.)?/" "./")
-          full-path (path/path-join repo-dir path)
-          data-url? (string/starts-with? path "data:")]
-      (cond
-        data-url?
-        path ;; just return the original
-
-        (and (assets-handler/alias-enabled?)
-             (assets-handler/check-alias-path? path))
-        (assets-handler/resolve-asset-real-path-url (state/get-current-repo) path)
-
-        (util/electron?)
-        (path/prepend-protocol "assets:" full-path)
-
-        (mobile-util/native-platform?)
-        (mobile-util/convert-file-src full-path)
-
-        (config/db-based-graph? (state/get-current-repo)) ; memory fs
-        (p/let [binary (fs/read-file repo-dir path {})
-                blob (js/Blob. (array binary) (clj->js {:type "image"}))]
-          (when blob (js/URL.createObjectURL blob)))
-
-        :else ;; nfs
-        (let [handle-path (str "handle/" full-path)
-              cached-url  (get @*assets-url-cache (keyword handle-path))]
-          (if cached-url
-            (p/resolved cached-url)
-            ;; Loading File from handle cache
-            ;; Use await file handle, to ensure all handles are loaded.
-            (p/let [handle (nfs/await-get-nfs-file-handle repo handle-path)
-                    file   (and handle (.getFile handle))]
-              (when file
-                (p/let [url (js/URL.createObjectURL file)]
-                  (swap! *assets-url-cache assoc (keyword handle-path) url)
-                  url)))))))))
 
 (defn delete-asset-of-block!
   [{:keys [repo href full-text block-id local? delete-local?] :as _opts}]

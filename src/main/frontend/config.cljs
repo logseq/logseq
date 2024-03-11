@@ -500,11 +500,12 @@
           ;; BUG: use "assets" as fake current directory
           assets-link-fn (fn [_]
                            (let [graph-root (get-repo-dir (state/get-current-repo))
-                                 protocol (if (string/starts-with? graph-root "file:") "" protocol)
-                                 full-path (path/path-join protocol graph-root "assets")]
+                                 full-path (if (util/safe-re-find #"^(file|assets):" graph-root)
+                                             (path/path-join graph-root "assets")
+                                             (path/path-join protocol graph-root "assets"))]
                              (str (cond-> full-path
-                                          (mobile-util/native-platform?)
-                                          (mobile-util/convert-file-src))
+                                    (mobile-util/native-platform?)
+                                    (mobile-util/convert-file-src))
                                   "/")))]
       (string/replace source #"\.\./assets/" assets-link-fn))))
 
