@@ -60,7 +60,7 @@
     (swap! *popups #(->> % (medley/remove-nth index) (vec)))))
 
 (defn show!
-  [^js event content & {:keys [id as-menu? root-props content-props] :as opts}]
+  [^js event content & {:keys [id as-menu? align root-props content-props] :as opts}]
   (let [position (cond
                    (vector? event) event
 
@@ -73,13 +73,21 @@
                          width (.-width rect)
                          height (.-height rect)
                          bottom (.-bottom rect)]
-                     [(+ left (/ width 2)) (- bottom height) width height])
+                     [(+ left (case (keyword align)
+                                :start 0
+                                :end width
+                                (/ width 2)))
+                      (- bottom height) width height])
                    :else [0 0])]
     (upsert-popup!
       (merge opts
         {:id       (or id (gen-id))
          :open?    true :content content :position position
-         :as-menu? as-menu? :root-props root-props :content-props content-props}))))
+         :as-menu? as-menu?
+         :root-props root-props
+         :content-props (cond-> content-props
+                          (not (nil? align))
+                          (assoc :align (name align)))}))))
 
 (defn hide!
   ([] (when-let [id (some-> (get-popups) (last) :id)] (hide! id)))
