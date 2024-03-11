@@ -23,11 +23,9 @@
                                     (:value result)) result)
         selected-choices (rum/react *selected-choices)]
     [:div.flex.flex-row.justify-between.w-full {:class (when chosen? "chosen")}
-     [:span
+     [:div.flex.flex-row.items-center.gap-1
       (when multiple-choices?
         (ui/checkbox {:checked (boolean (selected-choices (:value result)))
-                      :style {:margin-right 4}
-                      :readOnly true
                       :on-click (fn [e]
                                   (.preventDefault e))}))
       value]

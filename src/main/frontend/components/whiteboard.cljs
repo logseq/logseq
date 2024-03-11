@@ -172,7 +172,7 @@
       {:tab-index -1
        :style {:visibility (when show-checked? "visible")}
        :on-click util/stop-propagation}
-      (ui/checkbox {:checked checked
+      (ui/checkbox {:value checked
                     :on-change (fn [] (on-checked-change (not checked)))})]]
     [:div.flex.w-full.opacity-50
      [:div (get-page-human-update-time page-name)]
