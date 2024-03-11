@@ -83,8 +83,10 @@
                  (try
                    (tc/to-local-date value)
                    (catch :default e
-                     (js/console.error e))))]
-
+                     (js/console.error e))))
+        initial-day (some-> value' (.getTime) (js/Date.))
+        initial-month (when value'
+                        (js/Date. (.getYear value') (.getMonth value')))]
     (shui/dropdown-menu
      {:open open?}
      (shui/dropdown-menu-trigger
@@ -108,19 +110,22 @@
        :onEscapeKeyDown #(set-open! false)}
       (shui/calendar
        {:mode "single"
-        :selected (some-> value' (.getTime) (js/Date.))
+        :initial-focus true
+        :selected initial-day
+        :default-month initial-month
         :on-select (fn [^js d]
-                            ;; force local to UTC
-                     (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
-                       (let [journal (date/js-date->journal-title gd)]
-                         (p/do!
-                          (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
-                            (page-handler/<create! journal {:redirect? false
-                                                            :create-first-block? false}))
-                          (when (fn? on-change)
-                            (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
-                          (set-open! false)
-                          (exit-edit-property)))))})))))
+                     ;; force local to UTC
+                     (when d
+                       (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
+                         (let [journal (date/js-date->journal-title gd)]
+                           (p/do!
+                            (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
+                              (page-handler/<create! journal {:redirect? false
+                                                              :create-first-block? false}))
+                            (when (fn? on-change)
+                              (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
+                            (set-open! false)
+                            (exit-edit-property))))))})))))
 
 
 (rum/defc property-value-date-picker
