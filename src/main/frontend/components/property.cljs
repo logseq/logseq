@@ -140,7 +140,7 @@
                                   :selected (= type (:type property-schema))})))]
     [:div {:class (if in-block-container? "flex flex-1" "flex items-center col-span-2")}
      (shui/select
-      {:default-open in-block-container?
+      {:default-open true
        :on-value-change
        (fn [v]
          (let [type (keyword (string/lower-case v))
@@ -161,8 +161,7 @@
                              (update-schema-fn property-schema))]
               (components-pu/update-property! property property-name schema))
 
-            (when (and in-block-container? *show-new-property-config?)
-              (reset! *show-new-property-config? false)))))}
+            (reset! *show-new-property-config? false))))}
       (shui/select-trigger
        {:class "!px-2 !py-0 !h-8"}
        (shui/select-value
@@ -410,28 +409,6 @@
             true))
         (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
             (pv/exit-edit-property))))))
-
-(rum/defc property-value-new
-  [entity property property-value opts]
-
-  (let [*el-ref (rum/use-ref nil)]
-    (rum/use-effect!
-     (fn []
-       (let [content-fn
-             (fn [{:keys [id]}]
-               (property-config entity property
-                                (merge opts {:toggle-fn         #(shui/popup-hide! id)
-                                             :block             entity
-                                             :add-new-property? true})))]
-         (when-let [^js target (rum/deref *el-ref)]
-           (shui/popup-show! target content-fn
-                             {:content-props {:onOpenAutoFocus #(.preventDefault %) :class "w-auto"}}))))
-     [])
-
-    [:div.is-new-editing-property-input
-     {:ref *el-ref}
-     (pv/property-value entity property property-value
-                        (assoc opts :editing? true))]))
 
 (rum/defc property-select
   [exclude-properties on-chosen input-opts]
