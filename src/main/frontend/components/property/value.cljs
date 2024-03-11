@@ -35,6 +35,7 @@
 
 (defn exit-edit-property
   []
+  (state/set-state! :editor/new-property-key nil)
   (state/set-state! :editor/new-property-input-id nil)
   (state/set-state! :editor/properties nil)
   (state/clear-edit!))
@@ -311,11 +312,11 @@
     (when (not (state/get-editor-action))
       (util/stop e)
       (p/do!
-       (exit-edit-property)
        (when (not= new-value value)
          (property-handler/set-block-property! repo (:block/uuid block)
                                                (:block/original-name property)
-                                               (string/trim new-value)))))))
+                                               (string/trim new-value)))
+       (exit-edit-property)))))
 
 (defn <create-new-block!
   [block property value]
