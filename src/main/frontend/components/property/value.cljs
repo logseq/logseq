@@ -104,7 +104,8 @@
         (ui/icon "calendar" {:size 16})))
      (shui/dropdown-menu-content
       {:align "start"
-       :on-interact-outside #(set-open! false)}
+       :on-interact-outside #(set-open! false)
+       :onEscapeKeyDown #(set-open! false)}
       (shui/calendar
        {:mode "single"
         :selected (some-> value' (.getTime) (js/Date.))
@@ -592,7 +593,8 @@
         (value-f)))
      (shui/dropdown-menu-content
       {:align "start"
-       :on-interact-outside #(set-open! false)}
+       :on-interact-outside #(set-open! false)
+       :onEscapeKeyDown #(set-open! false)}
       [:div.property-select
        (case type
          (:number :url :date :default)
