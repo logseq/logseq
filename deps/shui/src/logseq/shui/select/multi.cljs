@@ -65,10 +65,12 @@
         [search-key1 set-search-key!] (rum/use-state search-key)
         search-key1' (some-> search-key1 (string/trim) (string/lower-case))
         valid-search-key? (and search-enabled? (not (string/blank? search-key1')))
+        get-content-el #(some-> % (.closest "[data-radix-menu-content]"))
+        get-item-nodes #(some-> % (get-content-el) (.querySelectorAll "[data-radix-collection-item]") (js->clj))
         focus-search-input! (fn [^js target]
                               (when (and search-enabled? (not= "INPUT" (.-nodeName target)))
                                 ;; focus search input
-                                (some-> (.closest target "[data-radix-menu-content]")
+                                (some-> (get-content-el target)
                                   (.querySelector "input")
                                   (.focus))))
         items (if search-enabled?
@@ -89,11 +91,16 @@
         {:onCloseAutoFocus false
          :onInteractOutside close1!
          :onEscapeKeyDown close1!
-         :on-key-up (fn [^js e]
-                      (let [^js target (.-target e)]
-                        (when (and (or (.-metaKey e) (.-ctrlKey e))
-                                (= "l" (.-key e)))
-                          (focus-search-input! target))))
+         :on-key-down (fn [^js e]
+                        (when-let [^js target (.-target e)]
+                          (case (.-key e)
+                            "ArrowUp"
+                            (when (= (some-> (get-item-nodes target) (first))
+                                    js/document.activeElement)
+                              (focus-search-input! target))
+                            "l" (when (or (.-metaKey e) (.-ctrlKey e))
+                                  (focus-search-input! target))
+                            :dune)))
          :class (str (:class content-props)
                   (when valid-search-key? " has-search-key"))}
         (dissoc content-props :class))
