@@ -324,9 +324,10 @@
                           :affected-blocks
                           {uuid1-client {:op :remove
                                          :block-uuid uuid1-not-exist}}}
-            remove-ops (vals
-                        (:remove-ops-map
-                         (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
+            remove-ops
+            (vals
+             (:remove-ops-map
+              (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
         (is (rtc-const/data-from-ws-validator data-from-ws))
         (rtc-core/apply-remote-remove-ops repo conn date-formatter remove-ops)
         (let [page-blocks (ldb/get-page-blocks @conn page-name {})]
@@ -343,6 +344,61 @@
         (rtc-core/apply-remote-remove-ops repo conn date-formatter remove-ops)
         (let [page-blocks (ldb/get-page-blocks @conn page-name {})]
           (is (= #{uuid2-client} (set (map :block/uuid page-blocks)))))))))
+
+(deftest apply-remote-remove-ops-test2
+  (testing "
+origin:
+- 1
+- 2
+- 3
+client: ;; move 3 as child of 2
+- 1
+- 2
+  - 3
+server: ;; remove 2
+- 1
+- 3"
+    (let [repo (state/get-current-repo)
+          conn (conn/get-db repo false)
+          date-formatter (common-config/get-date-formatter (worker-state/get-config repo))
+          opts {:persist-op? false
+                :transact-opts {:repo repo
+                                :conn conn}}
+          page-name "apply-remote-remove-ops-test2"
+          [page-uuid
+           uuid1 uuid2 uuid3] (repeatedly random-uuid)]
+      (page-handler/create! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
+      (outliner-tx/transact!
+       opts
+       (outliner-core/insert-blocks!
+        ;; - 1
+        ;; - 2
+        ;;   - 3
+        repo conn
+        [{:block/uuid uuid1 :block/content "1"
+          :block/left [:block/uuid page-uuid]
+          :block/parent [:block/uuid page-uuid]}
+         {:block/uuid uuid2 :block/content "2"
+          :block/left [:block/uuid uuid1]
+          :block/parent [:block/uuid page-uuid]}
+         {:block/uuid uuid3 :block/content "3"
+          :block/left [:block/uuid uuid2]
+          :block/parent [:block/uuid uuid2]}]
+        (d/pull @conn '[*] [:block/name page-name])
+        {:sibling? false :keep-uuid? true}))
+      (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
+                          :affected-blocks
+                          {uuid2 {:op :remove
+                                  :block-uuid uuid2}}}
+            remove-ops
+            (vals
+             (:remove-ops-map
+              (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
+        (is (rtc-const/data-from-ws-validator data-from-ws))
+        (rtc-core/apply-remote-remove-ops repo conn date-formatter remove-ops)
+        (let [page-blocks (ldb/get-page-blocks @conn page-name {})]
+          (is (= #{uuid1 uuid3} (set (map :block/uuid page-blocks))))
+          (is (= page-uuid (:block/uuid (:block/left (d/entity @conn [:block/uuid uuid3]))))))))))
 
 
 (deftest apply-remote-update&remove-page-ops-test
