@@ -1,22 +1,23 @@
 (ns ^:no-doc frontend.handler.ui
-  (:require [cljs-time.core :refer [plus days weeks]]
+  (:require [cljs-time.core :refer [days plus weeks]]
+            [clojure.string :as string]
             [dommy.core :as dom]
-            [frontend.util :as util]
+            [electron.ipc :as ipc]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
-            [frontend.config :as config]
+            [frontend.db.react :as react]
+            [frontend.fs :as fs]
+            [frontend.handler.assets :as assets-handler]
+            [frontend.loader :refer [load]]
             [frontend.state :as state]
             [frontend.storage :as storage]
-            [frontend.fs :as fs]
-            [frontend.loader :refer [load]]
+            [frontend.util :as util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [clojure.string :as string]
-            [rum.core :as rum]
-            [electron.ipc :as ipc]
-            [promesa.core :as p]
             [logseq.common.path :as path]
-            [frontend.db.react :as react]))
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 ;; sidebars
 (def *right-sidebar-resized-at (atom (js/Date.now)))
@@ -105,11 +106,14 @@
 
 (defn add-style-if-exists!
   []
-  (when-let [style (or
-                    (state/get-custom-css-link)
-                    (some-> (db-model/get-custom-css)
-                            (config/expand-relative-assets-path)))]
-    (util/add-style! style)))
+  (when-let [style (or (state/get-custom-css-link)
+                       (db-model/get-custom-css))]
+    (if (config/db-based-graph? (state/get-current-repo))
+      (p/let [style (assets-handler/<expand-assets-links-for-db-graph style)]
+        (util/add-style! style))
+      (some-> (config/expand-relative-assets-path style)
+              (util/add-style!)))))
+
 (defn reset-custom-css!
   []
   (when-let [el-style (gdom/getElement "logseq-custom-theme-id")]

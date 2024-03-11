@@ -385,7 +385,7 @@
                    (mobile-util/native-platform?)
                    (config/db-based-graph? (state/get-current-repo)))
                (nil? @src))
-      (p/then (editor-handler/make-asset-url href) #(reset! src %)))
+      (p/then (assets-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
       ;; NOTE(andelf): Under nfs context, src might be a bare blob:http://..../uuid URI without ext info
