@@ -124,6 +124,61 @@
                 property-handler/remove-block-property!)]
         (f repo (:block/uuid block) (:block/uuid property))))))
 
+(rum/defc schema-type <
+  shortcut/disable-all-shortcuts
+  [property {:keys [*property-name *property-schema built-in-property? disabled?
+                    show-type-change-hints? in-block-container? *show-new-property-config?]}]
+  (let [property-name (or (and *property-name @*property-name) (:block/original-name property))
+        property-schema (or (and *property-schema @*property-schema) (:block/schema property))
+        schema-types (->> (concat db-property-type/user-built-in-property-types
+                                  (when built-in-property?
+                                    db-property-type/internal-built-in-property-types))
+                          (map (fn [type]
+                                 {:label (property-type-label type)
+                                  :disabled disabled?
+                                  :value type
+                                  :selected (= type (:type property-schema))})))]
+    [:div {:class (if in-block-container? "flex flex-1" "flex items-center col-span-2")}
+     (shui/select
+      {:default-open in-block-container?
+       :on-value-change
+       (fn [v]
+         (let [type (keyword (string/lower-case v))
+               update-schema-fn (apply comp
+                                       #(assoc % :type type)
+                                             ;; always delete previous closed values as they
+                                             ;; are not valid for the new type
+                                       #(dissoc % :values)
+                                       (keep
+                                        (fn [attr]
+                                          (when-not (db-property-type/property-type-allows-schema-attribute? type attr)
+                                            #(dissoc % attr)))
+                                        [:cardinality :classes :position]))]
+           (when *property-schema
+             (swap! *property-schema update-schema-fn))
+           (p/do!
+            (let [schema (or (and *property-schema @*property-schema)
+                             (update-schema-fn property-schema))]
+              (components-pu/update-property! property property-name schema))
+
+            (when (and in-block-container? *show-new-property-config?)
+              (reset! *show-new-property-config? false)))))}
+      (shui/select-trigger
+       {:class "!px-2 !py-0 !h-8"}
+       (shui/select-value
+        {:placeholder "Select a schema type"}))
+      (shui/select-content
+       (shui/select-group
+        (for [{:keys [label value disabled]} schema-types]
+          (shui/select-item {:value value :disabled disabled} label)))))
+
+     (when show-type-change-hints?
+       (ui/tippy {:html        "Changing the property type clears some property configurations."
+                  :class       "tippy-hover ml-2"
+                  :interactive true
+                  :disabled    false}
+                 (svg/info)))]))
+
 (rum/defcs ^:large-vars/cleanup-todo property-config
   "All changes to a property must update the db and the *property-schema. Failure to do
    so can result in data loss"
@@ -166,8 +221,6 @@
             save-property-fn (fn [] (components-pu/update-property! property @*property-name @*property-schema))
             enable-closed-values? (contains? db-property-type/closed-value-property-types (or property-type :default))]
         [:div.property-configure.flex.flex-1.flex-col
-         {:on-mouse-down #(state/set-state! :editor/mouse-down-from-property-configure? true)
-          :on-mouse-up #(state/set-state! :editor/mouse-down-from-property-configure? nil)}
          [:div.grid.gap-2.p-1
           [:div.grid.grid-cols-4.gap-1.items-center.leading-8
            [:label.col-span-1 "Name:"]
@@ -205,55 +258,20 @@
 
           [:div.grid.grid-cols-4.gap-1.items-center.leading-8
            [:label.col-span-1 "Schema type:"]
-           (let [schema-types (->> (concat db-property-type/user-built-in-property-types
-                                           (when built-in-property?
-                                             db-property-type/internal-built-in-property-types))
-                                   (map (fn [type]
-                                          {:label (property-type-label type)
-                                           :disabled disabled?
-                                           :value type
-                                           :selected (= type (:type @*property-schema))})))]
-             (if (or (ldb/built-in? (db/get-db) property)
-                     (and property-type (seq values)))
-               [:div.flex.items-center.col-span-2
-                (property-type-label property-type)
-                (ui/tippy {:html        "The type of this property is locked once you start using it. This is to make sure all your existing information stays correct if the property type is changed later. To unlock, all uses of a property must be deleted."
-                           :class       "tippy-hover ml-2"
-                           :interactive true
-                           :disabled    false}
-                          (svg/help-circle))]
-               [:div.flex.items-center.col-span-2
-                (shui/select
-                 {:on-value-change
-                  (fn [v]
-                    (let [type (keyword (string/lower-case v))
-                          update-schema-fn (apply comp
-                                                  #(assoc % :type type)
-                                             ;; always delete previous closed values as they
-                                             ;; are not valid for the new type
-                                                  #(dissoc % :values)
-                                                  (keep
-                                                   (fn [attr]
-                                                     (when-not (db-property-type/property-type-allows-schema-attribute? type attr)
-                                                       #(dissoc % attr)))
-                                                   [:cardinality :classes :position]))]
-                      (swap! *property-schema update-schema-fn)
-                      (components-pu/update-property! property @*property-name @*property-schema)))
-                  :default-value :default}
-                 (shui/select-trigger
-                  {:class "!px-2 !py-0 !h-8"}
-                  (shui/select-value
-                   {:placeholder "Select a schema type"}))
-                 (shui/select-content
-                  (shui/select-group
-                   (for [{:keys [label value disabled]} schema-types]
-                     (shui/select-item {:value value :disabled disabled} label)))))
-
-                (ui/tippy {:html        "Changing the property type clears some property configurations."
-                           :class       "tippy-hover ml-2"
-                           :interactive true
-                           :disabled    false}
-                          (svg/info))]))]
+           (if (or (ldb/built-in? (db/get-db) property)
+                   (and property-type (seq values)))
+             [:div.flex.items-center.col-span-2
+              (property-type-label property-type)
+              (ui/tippy {:html        "The type of this property is locked once you start using it. This is to make sure all your existing information stays correct if the property type is changed later. To unlock, all uses of a property must be deleted."
+                         :class       "tippy-hover ml-2"
+                         :interactive true
+                         :disabled    false}
+                        (svg/help-circle))]
+             (schema-type property {:*property-name *property-name
+                                    :*property-schema *property-schema
+                                    :built-in-property? built-in-property?
+                                    :disabled? disabled?
+                                    :show-type-change-hints? true}))]
 
           (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :cardinality)
             [:div.grid.grid-cols-4.gap-1.items-center.leading-8
@@ -472,8 +490,8 @@
             [:div.col-span-3.flex.flex-row {:on-mouse-down (fn [e] (util/stop-propagation e))}
              (when-not class-schema?
                (if @*show-new-property-config?
-                 (property-value-new entity property @*property-value
-                   (assoc opts :*show-new-property-config? *show-new-property-config?))
+                 (schema-type property {:in-block-container? in-block-container?
+                                        :*show-new-property-config? *show-new-property-config?})
                  (pv/property-value entity property @*property-value (assoc opts :editing? true))))])])
 
        (let [on-chosen (fn [{:keys [value]}]

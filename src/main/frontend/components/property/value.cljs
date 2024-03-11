@@ -349,8 +349,7 @@
            :background "none"}
    :on-blur
    (fn [e]
-     (when-not (:editor/mouse-down-from-property-configure? @state/state)
-       (save-text! repo block property value editor-id e)))
+     (save-text! repo block property value editor-id e))
    :on-key-down
    (fn [e]
      (let [enter? (= (util/ekey e) "Enter")
