@@ -4,7 +4,19 @@
             [logseq.shui.ui :as ui]
             [logseq.shui.popup.core :refer [install-popups update-popup! get-popup]]
             [logseq.shui.select.multi :refer [x-select]]
-            [frontend.components.icon :refer [emojis-cp emojis icon-search]]))
+            [frontend.components.icon :refer [emojis-cp emojis icon-search]]
+            [cljs-bean.core :as bean]
+            [promesa.core :as p]))
+
+(defn do-fetch!
+  ([action] (do-fetch! action nil))
+  ([action query-str]
+   (-> (js/window.fetch
+         (str "https://movies-api14.p.rapidapi.com/" (name action) (when query-str (str "?" query-str)))
+         #js {:method "GET"
+              :headers #js {:X-RapidAPI-Key "808ffd08c0mshc67d496f6024b46p164350jsn7b35179966c9",
+                            :X-RapidAPI-Host "movies-api14.p.rapidapi.com"}})
+     (p/then #(.json %)))))
 
 (rum/defc page
   []
@@ -12,6 +24,92 @@
   [:div.sm:p-10
    [:h1.text-3xl.font-bold.border-b.pb-4.mb-8
     "Multi X Select"]
+
+   (let [[items set-items!] (rum/use-state [])
+         [q set-q!] (rum/use-state "")
+         [fetching? set-fetching?] (rum/use-state nil)
+
+         [selected-items set-selected-items!]
+         (rum/use-state [])
+
+         rm-item! (fn [item] (set-selected-items! (remove #(= item %) selected-items)))
+         add-item! (fn [item] (set-selected-items! (conj selected-items item)))
+         on-chosen (fn [item {:keys [selected?]}]
+                     (if (true? selected?)
+                       (rm-item! item) (add-item! item)))
+         [open? set-open!] (rum/use-state false)]
+
+     (ui/card
+       (ui/card-header
+         (ui/card-title "Search Movies")
+         (ui/card-description "x multiselect for the remote items"))
+       (ui/card-content
+
+         ;; Basic
+         (ui/dropdown-menu
+           {:open open?}
+           ;; trigger
+           (ui/dropdown-menu-trigger
+             [:p.border.p-2.rounded.w-full.cursor-pointer
+              {:on-click #(set-open! true)}
+              (for [{:keys [id original_title class poster_path]} selected-items]
+                (ui/badge {:variant :secondary :class class}
+                  [:span.flex.items-center.gap-1
+                   [:img {:src poster_path :class "w-[16px] scale-75"}]
+                   [:b original_title]]))
+              (ui/button {:variant :link :size :sm} "+")])
+           ;; content
+           (x-select items selected-items
+             {;; test item render
+              :open? open?
+              :close! #(set-open! false)
+              :search-enabled? true
+              :search-key q
+              :search-fn (fn [items]
+                           (when (not fetching?) items))
+              :on-search-key-change (fn [v]
+                                      (set-q! v)
+                                      (if (string/blank? v)
+                                        (set-items! [])
+                                        (when (not fetching?)
+                                          (set-fetching? true)
+                                          (-> (do-fetch! :search (str "query=" v))
+                                            (p/then #(when-let [ret (bean/->clj %)]
+                                                       (when-let [items (:contents ret)]
+                                                         (set-items! (map (fn [item] (assoc item :id (:_id item))) (take 8 items))))))
+                                            (p/finally #(set-fetching? false))))))
+
+              :item-render (fn [item {:keys [selected?]}]
+                             (if item
+                               (ui/dropdown-menu-item
+                                 {:checked selected?
+                                  :on-click (fn []
+                                              (if selected?
+                                                (rm-item! item)
+                                                (add-item! item)))}
+                                 [:div.flex.items-center.gap-2
+                                  [:span [:img {:src (:poster_path item)
+                                                :class "w-[20px]"}]]
+                                  [:span.flex.flex-col
+                                   [:b (:original_title item)]
+                                   [:small.opacity-50
+                                    {:class "text-[10px]"}
+                                    (:release_date item)]]])
+                               (ui/dropdown-menu-separator)))
+
+              :head-render (fn [] (when (and fetching? (not (string/blank? q)))
+                                    [:b.flex.items-center.justify-center.py-4
+                                     (ui/tabler-icon "loader" {:class "animate-spin"})]))
+              ;:foot-render (fn [] [:b "footer"])
+
+              :content-props
+              {:align "start"
+               :onInteractOutside #(set-open! false)
+               :onEscapeKeyDown #(set-open! false)
+               :class "w-64"}})
+           ))))
+
+   [:hr]
 
    (let [items [{:key 1 :value "Apple" :class "bg-gray-800 text-gray-50"}
                 {:key 2 :value "Orange" :class "bg-orange-700 text-gray-50"}
@@ -140,7 +238,6 @@
                :onEscapeKeyDown #(set-open! false)
                :class "w-48"}})
            ))))
-
    ])
 
 (rum/defc icon-picker-demo

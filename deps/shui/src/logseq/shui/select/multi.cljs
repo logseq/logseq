@@ -56,7 +56,7 @@
 (rum/defc x-select
   [items selected-items & {:keys [on-chosen item-render value-render
                                   head-render foot-render open? close!
-                                  search-enabled? search-key
+                                  search-enabled? search-key on-search-key-change
                                   search-fn search-key-render
                                   item-props content-props]}]
   (let [x-content popup/dropdown-menu-content
@@ -79,6 +79,12 @@
                   (simple-search-fn items search-key1))
                 items)
         close1! #(when (fn? close!) (close!))]
+
+    (rum/use-effect!
+      (fn []
+        (when (fn? on-search-key-change)
+          (on-search-key-change search-key1')))
+      [search-key1'])
 
     (rum/use-effect!
       (fn []
