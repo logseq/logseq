@@ -118,11 +118,11 @@
 (defn get-structured-blocks
   [db]
   (let [special-pages (map #(d/pull db '[*] [:block/name %]) #{"tags"})
-        closed-values (->> (d/datoms db :avet :block/type)
-                           (keep (fn [e]
-                                   (when (contains? #{"closed value"} (:v e))
-                                     (d/pull db '[*] (:e e))))))]
-    (concat special-pages closed-values)))
+        structured-blocks (->> (d/datoms db :avet :block/type)
+                               (keep (fn [e]
+                                       (when (contains? #{"closed value" "property" "class"} (:v e))
+                                         (d/pull db '[*] (:e e))))))]
+    (concat special-pages structured-blocks)))
 
 (defn get-favorites
   "Favorites page and its blocks"
