@@ -51,7 +51,7 @@
       items
       (filter #(some-> (get-v %)
                  (string/lower-case)
-                 (string/starts-with? q)) items))))
+                 (string/includes? q)) items))))
 
 (rum/defc x-select
   [items selected-items & {:keys [on-chosen item-render value-render
@@ -65,6 +65,12 @@
         [search-key1 set-search-key!] (rum/use-state search-key)
         search-key1' (some-> search-key1 (string/trim) (string/lower-case))
         valid-search-key? (and search-enabled? (not (string/blank? search-key1')))
+        focus-search-input! (fn [^js target]
+                              (when (and search-enabled? (not= "INPUT" (.-nodeName target)))
+                                ;; focus search input
+                                (some-> (.closest target "[data-radix-menu-content]")
+                                  (.querySelector "input")
+                                  (.focus))))
         items (if search-enabled?
                 (if (fn? search-fn)
                   (search-fn items search-key1)
@@ -83,6 +89,11 @@
         {:onCloseAutoFocus false
          :onInteractOutside close1!
          :onEscapeKeyDown close1!
+         :on-key-up (fn [^js e]
+                      (let [^js target (.-target e)]
+                        (when (and (or (.-metaKey e) (.-ctrlKey e))
+                                (= "l" (.-key e)))
+                          (focus-search-input! target))))
          :class (str (:class content-props)
                   (when valid-search-key? " has-search-key"))}
         (dissoc content-props :class))
@@ -97,7 +108,7 @@
                              (.stopPropagation e)
                              (case (.-key e)
                                "Escape" (if (string/blank? search-key1)
-                                          (some-> (.-target e) (.blur))
+                                          (some-> (.-target e) (.closest "[data-radix-menu-content]") (.focus))
                                           (set-search-key! ""))
                                :dune))
               :on-change #(set-search-key! (.-value (.-target %)))}
