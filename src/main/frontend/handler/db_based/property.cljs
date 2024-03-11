@@ -208,12 +208,14 @@
                 schema (get (built-in-validation-schemas property) property-type)
                 properties (:block/properties block)
                 value (get properties property-uuid)
-                v* (try
-                     (convert-property-input-string property-type v)
-                     (catch :default e
-                       (js/console.error e)
-                       (notification/show! (str e) :error false)
-                       nil))
+                v* (if (= v :property/empty-placeholder)
+                     v
+                     (try
+                       (convert-property-input-string property-type v)
+                       (catch :default e
+                         (js/console.error e)
+                         (notification/show! (str e) :error false)
+                         nil)))
                 tags-or-alias? (and (contains? #{"tags" "alias"} (string/lower-case k-name)) (uuid? v*))]
             (if tags-or-alias?
               (let [property-value-id (:db/id (db/entity [:block/uuid v*]))
@@ -226,7 +228,7 @@
                               [[:db/add (:db/id block) attribute property-value-id]]
                               {:outliner-op :save-block}))
               (when-not (contains? (if (set? value) value #{value}) v*)
-                (if-let [msg (validate-property-value schema v*)]
+                (if-let [msg (when-not (= v* :property/empty-placeholder) (validate-property-value schema v*))]
                   (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                     (notification/show! msg' :warning))
                   (do

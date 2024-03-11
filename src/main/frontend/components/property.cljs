@@ -31,7 +31,8 @@
             [frontend.components.property.closed-value :as closed-value]
             [frontend.components.property.util :as components-pu]
             [promesa.core :as p]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [goog.dom :as gdom]))
 
 (defn- <create-class-if-not-exists!
   [value]
@@ -127,7 +128,7 @@
 (rum/defc schema-type <
   shortcut/disable-all-shortcuts
   [property {:keys [*property-name *property-schema built-in-property? disabled?
-                    show-type-change-hints? in-block-container? *show-new-property-config?]}]
+                    show-type-change-hints? in-block-container? block *show-new-property-config?]}]
   (let [property-name (or (and *property-name @*property-name) (:block/original-name property))
         property-schema (or (and *property-schema @*property-schema) (:block/schema property))
         schema-types (->> (concat db-property-type/user-built-in-property-types
@@ -156,12 +157,19 @@
                                         [:cardinality :classes :position]))]
            (when *property-schema
              (swap! *property-schema update-schema-fn))
-           (p/do!
-            (let [schema (or (and *property-schema @*property-schema)
-                             (update-schema-fn property-schema))]
-              (components-pu/update-property! property property-name schema))
-
-            (reset! *show-new-property-config? false))))}
+           (let [schema (or (and *property-schema @*property-schema)
+                            (update-schema-fn property-schema))
+                 repo (state/get-current-repo)]
+             (p/do!
+              (when block
+                (pv/exit-edit-property))
+              (reset! *show-new-property-config? false)
+              (components-pu/update-property! property property-name schema)
+              (when block
+                (let [id (str "ls-property-" (:db/id block) "-" (:db/id property) "-editor")]
+                  (state/set-state! :editor/editing-property-value-id
+                                    {id true}))
+                (property-handler/set-block-property! repo (:block/uuid block) property-name (if (= type :default) "" :property/empty-placeholder)))))))}
       (shui/select-trigger
        {:class "!px-2 !py-0 !h-8"}
        (shui/select-value
@@ -468,6 +476,7 @@
              (when-not class-schema?
                (if @*show-new-property-config?
                  (schema-type property {:in-block-container? in-block-container?
+                                        :block entity
                                         :*show-new-property-config? *show-new-property-config?})
                  (pv/property-value entity property @*property-value (assoc opts :editing? true))))])])
 
