@@ -5,7 +5,8 @@
             [logseq.common.util :as common-util]
             [cognitect.transit :as transit]
             [datascript.transit :as dt]
-            [datascript.impl.entity :as de]))
+            [datascript.impl.entity :as de]
+            [cljs-bean.transit]))
 
 (defonce db-version-prefix "logseq_db_")
 (defonce file-version-prefix "logseq_local_")
@@ -21,12 +22,13 @@
   (transit/read transit-r str))
 
 (defn write-transit-str [o]
-  (let [write-handlers (assoc dt/write-handlers
-                              de/Entity (transit/write-handler (constantly "datascript/Entity")
-                                                               (fn [^de/entity entity]
-                                                           (assert (some? (:db/id entity)))
-                                                           (assoc (.-kv entity)
-                                                                  :db/id (:db/id entity)))))]
+  (let [write-handlers (->> (assoc dt/write-handlers
+                                   de/Entity (transit/write-handler (constantly "datascript/Entity")
+                                                                    (fn [^de/entity entity]
+                                                                      (assert (some? (:db/id entity)))
+                                                                      (assoc (.-kv entity)
+                                                                             :db/id (:db/id entity)))))
+                            (merge (cljs-bean.transit/writer-handlers)))]
     (transit/write (transit/writer :json {:handlers write-handlers}) o)))
 
 (defn read-transit-str [s]

@@ -4,6 +4,7 @@
                          :sha     "21fc7880c7042fb1d9086135d162ea7a91681f89"}
   datascript-transit/datascript-transit {:mvn/version "0.3.0"
                                          :exclusions [datascript/datascript]}
+  cljs-bean/cljs-bean         {:mvn/version "1.5.0"}
   com.cognitect/transit-cljs   {:mvn/version "0.8.280"}
   logseq/common                {:local/root "../common"}
   funcool/promesa              {:mvn/version "4.0.2"}}
