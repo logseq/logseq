@@ -21,7 +21,7 @@
   [str]
   (transit/read transit-r str))
 
-(defn write-transit-str [o]
+(def write-transit-str
   (let [write-handlers (->> (assoc dt/write-handlers
                                    de/Entity (transit/write-handler (constantly "datascript/Entity")
                                                                     (fn [^de/entity entity]
@@ -29,12 +29,13 @@
                                                                       (assoc (.-kv entity)
                                                                              :db/id (:db/id entity)))))
                             (merge (cljs-bean.transit/writer-handlers)))]
-    (transit/write (transit/writer :json {:handlers write-handlers}) o)))
+    (fn write-transit-str* [o]
+      (transit/write (transit/writer :json {:handlers write-handlers}) o))))
 
-(defn read-transit-str [s]
+(def read-transit-str
   (let [read-handlers (assoc dt/read-handlers
                              "datascript/Entity" identity)]
-    (transit/read (transit/reader :json {:handlers read-handlers}) s)))
+    (fn read-transit-str* [s] (transit/read (transit/reader :json {:handlers read-handlers}) s))))
 
 (defn db-based-graph?
   [graph-name]
