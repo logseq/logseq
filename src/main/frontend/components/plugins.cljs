@@ -903,7 +903,7 @@
            [:label.flex-1
             {:for k}
             (ui/checkbox {:id        k
-                          :checked   c?
+                          :value     c?
                           :on-change (fn [^js e]
                                        (when-not downloading?
                                          (state/set-unchecked-update (:id it) (not (util/echecked? e)))))})

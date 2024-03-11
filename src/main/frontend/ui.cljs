@@ -365,8 +365,13 @@
 
 (defn checkbox
   [option]
-  [:input.form-checkbox.h-4.w-4.transition.duration-150.ease-in-out
-   (merge {:type "checkbox" :disabled config/publishing?} option)])
+  (let [on-change (:on-change option)
+        option (cond-> (dissoc option :on-change)
+                 on-change
+                 (assoc :on-checked-change on-change))]
+    (shui/checkbox
+     (merge option
+            {:disabled (or (:disabled option) config/publishing?)}))))
 
 (defn main-node
   []
@@ -712,7 +717,7 @@
          [:label.sublabel
           (when sub-checkbox?
             (checkbox
-             {:default-value false
+             {:checked false
               :on-change     (fn [e]
                                (let [checked (.. e -target -checked)]
                                  (reset! *sub-checkbox-selected [checked])))}))

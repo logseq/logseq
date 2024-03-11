@@ -981,15 +981,16 @@
         indeterminate? (boolean (:indeterminate opts))]
 
     (rum/use-effect!
-      #(set! (.-indeterminate (rum/deref *input)) indeterminate?)
-      [indeterminate?])
+     #(set! (.-indeterminate (rum/deref *input)) indeterminate?)
+     [indeterminate?])
 
     [:label {:for key}
-     [:input.form-checkbox
-      (merge {:type    "checkbox"
-              :checked (boolean checked)
-              :ref     *input
-              :id      key} opts)]]))
+     (ui/checkbox
+      (merge
+       {:checked (boolean checked)
+        :ref     *input
+        :id      key}
+       opts))]))
 
 (rum/defc sortable-title
   [title key by-item desc?]

@@ -1889,7 +1889,7 @@
     (when class
       (ui/checkbox {:class class
                     :style {:margin-right 5}
-                    :checked checked?
+                    :value checked?
                     :on-mouse-down (fn [e]
                                      (util/stop-propagation e))
                     :on-change (fn [_e]
@@ -1901,7 +1901,7 @@
   [config checked?]
   (ui/checkbox
    {:style {:margin-right 6}
-    :checked checked?
+    :value checked?
     :on-change (fn [event]
                  (let [target (.-target event)
                        block (:block config)

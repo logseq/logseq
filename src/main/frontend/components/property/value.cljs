@@ -635,13 +635,12 @@
         :checkbox
         (let [add-property! (fn []
                               (<add-property! block (:block/original-name property) (boolean (not value))))]
-          (ui/checkbox {:tabIndex "0"
-                        :class "jtrigger"
-                        :checked value
-                        :on-change (fn [_e] (add-property!))
-                        :on-key-down (fn [e]
-                                       (when (= (util/ekey e) "Enter")
-                                         (add-property!)))}))
+          (shui/checkbox {:class "jtrigger"
+                          :checked value
+                          :on-checked-change add-property!
+                          :on-key-down (fn [e]
+                                         (when (= (util/ekey e) "Enter")
+                                           (add-property!)))}))
         ;; :others
         [:div.flex.flex-1 {:ref #(when-not @*ref (reset! *ref %))}
          (if editing?

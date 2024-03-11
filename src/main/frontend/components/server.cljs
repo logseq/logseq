@@ -99,11 +99,10 @@
 
      [:p.py-3.px-1
       [:label.flex.space-x-2.items-center
-       [:input.form-checkbox
-        {:type      "checkbox"
-         :on-change #(let [checked (.-checked (.-target %))]
+       (ui/checkbox
+        {:on-change #(let [checked (.-checked (.-target %))]
                        (swap! *configs assoc :autostart checked))
-         :checked   (not (false? autostart))}]
+         :value     (not (false? autostart))})
 
        [:strong.select-none "Auto start server with the app launched"]]]
 

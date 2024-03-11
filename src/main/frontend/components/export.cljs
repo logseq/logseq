@@ -212,7 +212,7 @@
           [:div.flex.items-center
            (ui/checkbox {:class "mr-2"
                          :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-                         :checked (contains? @*text-remove-options :page-ref)
+                         :value (contains? @*text-remove-options :page-ref)
                          :on-change (fn [e]
                                       (state/update-export-block-text-remove-options! e :page-ref)
                                       (reset! *text-remove-options (state/get-export-block-text-remove-options))
@@ -222,7 +222,7 @@
 
            (ui/checkbox {:class "mr-2 ml-4"
                          :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-                         :checked (contains? @*text-remove-options :emphasis)
+                         :value (contains? @*text-remove-options :emphasis)
                          :on-change (fn [e]
                                       (state/update-export-block-text-remove-options! e :emphasis)
                                       (reset! *text-remove-options (state/get-export-block-text-remove-options))
@@ -233,7 +233,7 @@
 
            (ui/checkbox {:class "mr-2 ml-4"
                          :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-                         :checked (contains? @*text-remove-options :tag)
+                         :value (contains? @*text-remove-options :tag)
                          :on-change (fn [e]
                                       (state/update-export-block-text-remove-options! e :tag)
                                       (reset! *text-remove-options (state/get-export-block-text-remove-options))
@@ -245,7 +245,7 @@
           [:div.flex.items-center
            (ui/checkbox {:class "mr-2"
                          :style {:visibility (if (#{:text} tp) "visible" "hidden")}
-                         :checked (boolean (:newline-after-block @*text-other-options))
+                         :value (boolean (:newline-after-block @*text-other-options))
                          :on-change (fn [e]
                                       (state/update-export-block-text-other-options!
                                        :newline-after-block (boolean (util/echecked? e)))
@@ -256,7 +256,7 @@
 
            (ui/checkbox {:class "mr-2 ml-4"
                          :style {:visibility (if (#{:text} tp) "visible" "hidden")}
-                         :checked (contains? @*text-remove-options :property)
+                         :value (contains? @*text-remove-options :property)
                          :on-change (fn [e]
                                       (state/update-export-block-text-remove-options! e :property)
                                       (reset! *text-remove-options (state/get-export-block-text-remove-options))
