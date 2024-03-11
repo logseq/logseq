@@ -38,6 +38,7 @@
   (state/set-state! :editor/new-property-key nil)
   (state/set-state! :editor/new-property-input-id nil)
   (state/set-state! :editor/properties nil)
+  (state/set-state! :editor/editing-property-value-id {})
   (state/clear-edit!))
 
 (defn set-editing!
@@ -160,13 +161,17 @@
 
 (defn- select-aux
   [block property {:keys [items selected-choices multiple-choices?] :as opts}]
-  (let [selected-choices (remove nil? selected-choices)
+  (let [selected-choices (->> selected-choices
+                              (remove nil?)
+                              (remove #(= :property/empty-placeholder %)))
         clear-value (str "No " (:block/original-name property))
-        items' (if (and (seq selected-choices) (not multiple-choices?))
-                 (cons {:value clear-value
-                        :label clear-value}
-                       items)
-                 items)
+        items' (->>
+                (if (and (seq selected-choices) (not multiple-choices?))
+                  (cons {:value clear-value
+                         :label clear-value}
+                        items)
+                  items)
+                (remove #(= :property/empty-placeholder (:value %))))
         k (if multiple-choices? :on-apply :on-chosen)
         f (get opts k)
         f' (fn [chosen]
@@ -176,6 +181,7 @@
                                                         (:block/original-name property))
                (f chosen)))]
     (select/select (assoc opts
+                          :selected-choices selected-choices
                           :items items'
                           k f'))))
 
@@ -359,7 +365,8 @@
          (cond
            (or esc?
                (and enter? (util/tag? new-value))
-               (and enter? new-property?))
+               (and enter? new-property?)
+               (string/blank? value))
            (save-text! repo block property value editor-id e)
 
            enter?
@@ -564,32 +571,35 @@
 
 (rum/defc single-value-select
   [block property value value-f select-opts {:keys [editing?] :as opts}]
-  (let [schema (:block/schema property)
+  (let [[open? set-open!] (rum/use-state editing?)
+        schema (:block/schema property)
         type (get schema :type :default)
         select-opts' (cond-> (assoc select-opts
                                     :multiple-choices? false
-                                    :dropdown? (if editing? true false))
+                                    :on-chosen #(set-open! false))
                        (= type :page)
-                       (assoc :classes (:classes schema)))
-        select-f (fn []
-                   [:div.property-select (cond-> {} editing? (assoc :class "h-6"))
-                    (case type
-                      (:number :url :date :default)
-                      (select block property select-opts' opts)
+                       (assoc :classes (:classes schema)))]
+    (shui/dropdown-menu
+     {:open open?}
+     (shui/dropdown-menu-trigger
+      {:class "jtrigger flex flex-1"
+       :on-click #(set-open! (not open?))
+       :on-key-down (fn [e]
+                      (when (= " " (util/ekey e))
+                        (set-open! true)))}
+      (if (string/blank? value)
+        [:div.opacity-50.pointer.text-sm "Empty"]
+        (value-f)))
+     (shui/dropdown-menu-content
+      {:align "start"
+       :on-interact-outside #(set-open! false)}
+      [:div.property-select
+       (case type
+         (:number :url :date :default)
+         (select block property select-opts' opts)
 
-                      :page
-                      (property-value-select-page block property select-opts' opts))])]
-    (if editing?
-      (select-f)
-      [:a.control-link.jtrigger
-       {:tabIndex 0
-        :on-click (if config/publishing?
-                    (constantly nil)
-                    #(shui/popup-show! (.-target %) select-f {:as-menu? true}))
-        :class "flex flex-1"}
-       (if (and (string/blank? value) (not editing?))
-         [:div.opacity-50.pointer.text-sm "Empty"]
-         (value-f))])))
+         :page
+         (property-value-select-page block property select-opts' opts))]))))
 
 (rum/defcs property-scalar-value < rum/reactive db-mixins/query
   (rum/local nil ::ref)
@@ -604,18 +614,20 @@
         schema (:block/schema property)
         type (get schema :type :default)
         multiple-values? (= :many (:cardinality schema))
-        editor-id (or editor-id (str "ls-property-" (:db/id block) "-" (:db/id property)))
-        editing? (or editing? (and @*ref (state/sub-editing? @*ref)))
+        editing? (or editing?
+                     (state/sub-property-value-editing? editor-id)
+                     (and @*ref (state/sub-editing? @*ref)))
         select-type? (select-type? property type)
         closed-values? (seq (:values schema))
-        select-opts {:on-chosen on-chosen}]
+        select-opts {:on-chosen on-chosen}
+        value (if (= value :property/empty-placeholder) nil value)]
     (if (and select-type?
              (not (and (not closed-values?) (= type :date))))
       (single-value-select block property value
                            (fn []
                              (select-item property type value opts))
                            select-opts
-                           opts)
+                           (assoc opts :editing? editing?))
       (case type
         :date
         (property-value-date-picker block property value nil)

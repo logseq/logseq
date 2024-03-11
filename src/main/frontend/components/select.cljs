@@ -60,7 +60,7 @@
                  prompt-key input-default-placeholder close-modal?
                  extract-fn extract-chosen-fn host-opts on-input input-opts
                  item-cp transform-fn tap-*input-val
-                 multiple-choices? on-apply _selected-choices
+                 multiple-choices? on-apply selected-choices
                  dropdown? show-new-when-not-exact-match? exact-match-exclude-items
                  input-container initial-open?]
           :or {limit 100

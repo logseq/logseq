@@ -136,6 +136,8 @@
       :editor/block                          (atom nil)
       :editor/new-property-input-id          (atom nil)
       :editor/new-property-key               (atom nil)
+      ;; id -> bool
+      :editor/editing-property-value-id      (atom {})
       :editor/properties-container           (atom nil)
       :editor/block-dom-id                   (atom nil)
       :editor/set-timestamp-block            (atom nil) ;; click rendered block timestamp-cp to set timestamp
@@ -607,6 +609,16 @@ Similar to re-frame subscriptions"
       (swap! (:editor/ref->editing? @state) assoc block-ref (atom false)))
     (rum/react
      (get @(:editor/ref->editing? @state) block-ref))))
+
+(defn sub-property-value-editing?
+  [property-value-id]
+  (when property-value-id
+    (rum/react
+     (r/cached-derived-atom
+      (:editor/editing-property-value-id @state)
+      [(get-current-repo) ::editing-property-value property-value-id]
+      (fn [s]
+        (get s property-value-id))))))
 
 (defn sub-config
   "Sub equivalent to get-config which should handle all sub user-config access"

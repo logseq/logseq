@@ -92,7 +92,8 @@
                          [?prop-b :block/uuid ?prop-uuid]
                          [?prop-b :block/schema ?prop-schema]
                          [(get ?prop-schema :type) ?prop-type]
-                         [(get ?bp ?prop-uuid) ?v]]
+                         [(get ?bp ?prop-uuid) ?v]
+                         [(not= ?v :property/empty-placeholder)]]
                        property-name)]
       (->> result
            (map (fn [[prop-type v]] [prop-type (if (coll? v) v [v])]))
@@ -131,7 +132,8 @@
         :where
         [?b :block/properties ?p]
         [(get ?p ?property-uuid) ?v]
-        [(some? ?v)]]
+        [(some? ?v)]
+        [(not= ?v :property/empty-placeholder)]]
       property-uuid))
 
 ;; TODO: batch queries for better performance and UX
