@@ -1768,6 +1768,13 @@
   (or @*asset-uploading?
       (state/get-editor-action)))
 
+(defn in-shui-popup?
+  []
+  (some-> js/document.activeElement
+    (.closest "[data-radix-menu-content]")
+    (nil?)
+    (not)))
+
 (defn get-current-input-char
   [input]
   (when-let [pos (cursor/pos input)]
@@ -3333,6 +3340,7 @@
 (defn shortcut-up-down [direction]
   (fn [e]
     (when (and (not (auto-complete?))
+               (not (in-shui-popup?))
                (not (slide-focused?))
                (not (state/get-timestamp-block)))
       (util/stop e)
