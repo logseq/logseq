@@ -345,7 +345,7 @@
   [conn block-uuid op-value]
   (let [ent (d/entity @conn [:block/uuid block-uuid])]
     (worker-util/profile
-     ::need-update-block?
+     :need-update-block?
      (let [r (some (fn [[k v]]
                      (case k
                        :content     (not= v (:block/raw-content ent))
@@ -590,7 +590,7 @@
               remove-page-ops (vals remove-page-ops-map)]
 
           ;; (worker-state/start-batch-tx-mode!)
-          (js/console.groupCollapsed :apply-remote-ops-log)
+          (js/console.groupCollapsed ::apply-remote-ops-log)
           (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn date-formatter update-page-ops))
           (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
           (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn date-formatter sorted-move-ops))
