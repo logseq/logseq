@@ -5,6 +5,7 @@
             [logseq.shui.popup.core :refer [install-popups update-popup! get-popup]]
             [logseq.shui.select.multi :refer [x-select]]
             [frontend.components.icon :refer [emojis-cp emojis icon-search]]
+            [frontend.storage :as storage]
             [cljs-bean.core :as bean]
             [promesa.core :as p]))
 
@@ -30,14 +31,17 @@
          [fetching? set-fetching?] (rum/use-state nil)
 
          [selected-items set-selected-items!]
-         (rum/use-state [])
+         (rum/use-state (storage/get :ls-demo-multi-selected-items))
 
          rm-item! (fn [item] (set-selected-items! (remove #(= item %) selected-items)))
          add-item! (fn [item] (set-selected-items! (conj selected-items item)))
-         on-chosen (fn [item {:keys [selected?]}]
-                     (if (true? selected?)
-                       (rm-item! item) (add-item! item)))
+
          [open? set-open!] (rum/use-state false)]
+
+     (rum/use-effect!
+       (fn []
+         (storage/set :ls-demo-multi-selected-items selected-items))
+       [selected-items])
 
      (ui/card
        (ui/card-header
@@ -50,11 +54,11 @@
            {:open open?}
            ;; trigger
            (ui/dropdown-menu-trigger
-             [:p.border.p-2.rounded.w-full.cursor-pointer
+             [:div.border.p-2.rounded.w-full.cursor-pointer.flex.items-center.gap-1.flex-wrap
               {:on-click #(set-open! true)}
               (for [{:keys [id original_title class poster_path]} selected-items]
                 (ui/badge {:variant :secondary :class class}
-                  [:span.flex.items-center.gap-1
+                  [:span.flex.items-center.gap-1.flex-nowrap
                    [:img {:src poster_path :class "w-[16px] scale-75"}]
                    [:b original_title]]))
               (ui/button {:variant :link :size :sm} "+")])
@@ -86,7 +90,9 @@
                                   :on-click (fn []
                                               (if selected?
                                                 (rm-item! item)
-                                                (add-item! item)))}
+                                                (add-item! item))
+                                              ;(set-open! false)
+                                              )}
                                  [:div.flex.items-center.gap-2
                                   [:span [:img {:src (:poster_path item)
                                                 :class "w-[20px]"}]]
@@ -106,8 +112,7 @@
               {:align "start"
                :onInteractOutside #(set-open! false)
                :onEscapeKeyDown #(set-open! false)
-               :class "w-64"}})
-           ))))
+               :class "w-80"}})))))
 
    [:hr]
 
