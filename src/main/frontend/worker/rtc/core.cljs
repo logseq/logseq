@@ -590,13 +590,13 @@
               remove-page-ops (vals remove-page-ops-map)]
 
           ;; (worker-state/start-batch-tx-mode!)
-
+          (js/console.groupCollapsed :apply-remote-ops-log)
           (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn date-formatter update-page-ops))
           (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
           (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn date-formatter sorted-move-ops))
           (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo conn date-formatter update-ops))
           (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo conn remove-page-ops))
-
+          (js/console.groupEnd)
           ;; (let [txs (worker-state/get-batch-txs)
           ;;       affected-keys (worker-react/get-affected-queries-keys {:tx-data txs :db-after @conn})]
           ;;   (worker-state/exit-batch-tx-mode!))
