@@ -517,7 +517,7 @@
  :loading-files "Memuat berkas"
  :login "Masuk"
  :logout "Keluar"
- :logout-user "Keluar ({1})"
+ :logout-user "Keluar ({1}) ({2})"
  :download "Unduh"
  :language "Bahasa"
  :remove-background "Hapus latar belakang"

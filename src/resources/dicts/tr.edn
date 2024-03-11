@@ -550,7 +550,7 @@
  :loading-files "Dosyalar yükleniyor"
  :login "Oturum aç"
  :logout "Oturumu kapat"
- :logout-user "Oturumu kapat ({1})"
+ :logout-user "Oturumu kapat ({1}) ({2})"
  :download "İndir"
  :language "Dil"
  :remove-background "Arka planı kaldır"

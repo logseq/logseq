@@ -382,7 +382,7 @@
  :loading-files                                        "Загрузка файлов"
  :login                                                "Вход"
  :logout                                               "Выйти"
- :logout-user                                          "Выйти ({1})"
+ :logout-user                                          "Выйти ({1}) ({2})"
  :download                                             "Скачать"
  :language                                             "Язык"
  :remove-background                                    "Удалить фон"

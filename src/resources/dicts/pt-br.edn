@@ -519,7 +519,7 @@
  :loading-files "Carregando arquivos"
  :login "Entrar"
  :logout "Sair"
- :logout-user "Sair ({1})"
+ :logout-user "Sair ({1}) ({2})"
  :download "Baixar"
  :language "Idioma"
  :remove-background "Remover fundo"

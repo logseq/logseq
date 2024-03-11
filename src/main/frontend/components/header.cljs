@@ -137,7 +137,7 @@
           :icon (ui/icon "bulb")})
 
        (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
-         {:title (t :logout-user (user-handler/email))
+         {:title (t :logout-user (user-handler/email) (user-handler/username))
           :options {:on-click #(user-handler/logout)}
           :icon  (ui/icon "logout")})]
       (concat page-menu-and-hr)

@@ -330,7 +330,7 @@
  :host "Host"
  :importing "Importando"
  :loading "Caricamento..."
- :logout-user "Disconnettiti ({1})"
+ :logout-user "Disconnettiti ({1}) ({2})"
  :new-page "Nuova pagina:"
  :remove-heading "Rimuovi titolo"
  :remove-orphaned-pages "Rimuovere le pagine orfane?"

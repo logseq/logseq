@@ -437,7 +437,7 @@
     :export-save-to-file "Enregistrer le fichier"
     :export-transparent-background "Arrière-plan transparent"
     :home "Accueil"
-    :logout-user "Déconnecter {1}"
+    :logout-user "Déconnecter {1} {2}"
     :new-page "Nouvelle page :"
     :remove-orphaned-pages "Supprimer les pages orphelines ?"
     :toggle-theme "Changer le thème"

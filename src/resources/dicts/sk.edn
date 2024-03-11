@@ -521,7 +521,7 @@
  :loading-files                                    "Načítavajú sa súbory"
  :login                                            "Prihlásiť sa"
  :logout                                           "Odhlásiť sa"
- :logout-user                                      "Odhlásiť ({1})"
+ :logout-user                                      "Odhlásiť ({1}) ({2})"
  :download                                         "Stiahnuť"
  :language                                         "Jazyk"
  :remove-background                                "Odstrániť pozadie"

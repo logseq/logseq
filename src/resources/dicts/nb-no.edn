@@ -615,7 +615,7 @@
  :window/restore "Gjenopprett"
 
  :loading "Laster..."
- :logout-user "Logg av ({1})"
+ :logout-user "Logg av ({1}) ({2})"
  :new-page "Ny side:"
  :remove-orphaned-pages "Fjern foreldreløse sider?"
  :bug-report/inspector-page-btn-back "Gå tilbake"

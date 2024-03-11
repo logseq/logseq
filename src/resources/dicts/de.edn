@@ -38,7 +38,7 @@
  :loading-files "Dateien laden"
  :login "Einloggen"
  :logout "Ausloggen"
- :logout-user "Ausloggen ({1})"
+ :logout-user "Ausloggen ({1}) ({2})"
  :new-graph "Neuen Graphen hinzufügen"
  :new-page "Neue Seite:"
  :open-a-directory "Öffne ein lokales Verzeichnis"

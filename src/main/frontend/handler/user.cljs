@@ -70,6 +70,12 @@
    parse-jwt
    :email))
 
+(defn username []
+  (some->
+   (state/get-auth-id-token)
+   parse-jwt
+   :cognito:username))
+
 (defn user-uuid []
   (some->
    (state/get-auth-id-token)
