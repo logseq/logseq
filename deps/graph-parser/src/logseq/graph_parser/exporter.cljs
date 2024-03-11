@@ -564,7 +564,7 @@
 
 (defn add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
-  
+
 * :extract-options - Options map to pass to extract/extract
 * :user-options - User provided options maps that alter how a file is converted to db graph. Current options
    are :tag-classes (set) and :property-classes (set).
