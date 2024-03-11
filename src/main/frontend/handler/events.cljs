@@ -934,6 +934,7 @@
 
 (defmethod handle :editor/new-property [[_ property-key]]
   (p/do!
+   (editor-handler/save-current-block!)
    (let [edit-block (state/get-edit-block)]
      (when-let [block-id (or (:block/uuid edit-block)
                              (first (state/get-selection-block-ids)))]
@@ -944,9 +945,9 @@
            (editor-handler/set-blocks-collapsed! [block-id] false)))
        (if edit-block (editor-handler/save-current-block!)
            (state/clear-selection!))
-     (when property-key
-       (state/set-state! :editor/new-property-key property-key))
-     (property-handler/editing-new-property! (str "edit-block-" block-id))))))
+       (when property-key
+         (state/set-state! :editor/new-property-key property-key))
+       (property-handler/editing-new-property! (str "edit-block-" block-id))))))
 
 (rum/defc multi-tabs-dialog
   []
