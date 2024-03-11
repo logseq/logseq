@@ -7,9 +7,11 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.frontend.property.type :as db-property-type]
             [clojure.string :as string]
+            [clojure.edn :as edn]
             [datascript.core :as d]
             ["path" :as node-path]
             ["os" :as os]
+            [babashka.cli :as cli]
             [nbb.core :as nbb]))
 
 (defn- date-journal-title [date]
@@ -163,15 +165,25 @@
                       [:default :url :number :page :date]))
           (into {}))}))
 
+(def spec
+  "Options spec"
+  {:help {:alias :h
+          :desc "Print help"}
+   :config {:alias :c
+            :coerce edn/read-string
+            :desc "EDN map to add to config.edn"}})
+
 (defn -main [args]
-  (when (not= 1 (count args))
-    (println "Usage: $0 GRAPH-DIR")
-    (js/process.exit 1))
   (let [graph-dir (first args)
+        options (cli/parse-opts args {:spec spec})
+        _ (when (or (nil? graph-dir) (:help options))
+            (println (str "Usage: $0 GRAPH-NAME [OPTIONS]\nOptions:\n"
+                          (cli/format-opts {:spec spec})))
+            (js/process.exit 1))
         [dir db-name] (if (string/includes? graph-dir "/")
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
-        conn (create-graph/init-conn dir db-name)
+        conn (create-graph/init-conn dir db-name {:additional-config (:config options)})
         blocks-tx (create-graph/create-blocks-tx
                    @conn
                    (create-init-data)
