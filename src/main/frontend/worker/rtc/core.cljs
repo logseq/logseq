@@ -196,7 +196,6 @@
 
 (defn apply-remote-remove-ops
   [repo conn date-formatter remove-ops]
-  (prn :remove-ops remove-ops)
   (let [{whiteboard-block-ops true other-ops false} (group-remote-remove-ops-by-whiteboard-block @conn remove-ops)]
     (transact-db! :delete-whiteboard-blocks conn (map :block-uuid whiteboard-block-ops))
 
@@ -213,8 +212,7 @@
         (transact-db! :delete-blocks
                       repo conn date-formatter
                       [(d/entity @conn [:block/uuid block-uuid])]
-                      {:children? true}))
-      (prn :apply-remote-remove-ops r))))
+                      {:children? true})))))
 
 (defn- insert-or-move-block
   [repo conn block-uuid remote-parents remote-left-uuid move? op-value]
@@ -343,6 +341,26 @@
                   content)) content matches)
       content)))
 
+(defn- need-update-block?
+  [conn block-uuid op-value]
+  (let [ent (d/entity @conn [:block/uuid block-uuid])]
+    (worker-util/profile
+     ::need-update-block?
+     (some (fn [[k v]]
+             (case k
+               :content     (not= v (:block/raw-content ent))
+               :updated-at  (not= v (:block/updated-at ent))
+               :created-at  (not= v (:block/created-at ent))
+               :alias       (not= (set v) (set (map :block/uuid (:block/alias ent))))
+               :type        (not= (set v) (set (:block/type ent)))
+               :schema      (not= (transit/read transit-r v) (:block/schema ent))
+               :tags        (not= (set v) (set (map :block/uuid (:block/tags ent))))
+               :properties  (not= (transit/read transit-r v) (:block/properties ent))
+               :link        (not= v (:block/uuid (:block/link ent)))
+               :journal-day (not= v (:block/journal-day ent))
+               false))
+           op-value))))
+
 (defn- update-block-attrs
   [repo conn date-formatter block-uuid {:keys [parents properties _content] :as op-value}]
   (let [key-set (set/intersection
@@ -356,7 +374,7 @@
           (and whiteboard-page-block? properties)
           (upsert-whiteboard-block repo conn op-value)
 
-          :else
+          (need-update-block? conn block-uuid op-value)
           (let [b-ent (d/entity @conn [:block/uuid block-uuid])
                 db-id (:db/id b-ent)
                 new-block
@@ -419,7 +437,6 @@
 
 (defn apply-remote-move-ops
   [repo conn date-formatter sorted-move-ops]
-  (prn :repo repo :sorted-move-ops sorted-move-ops)
   (doseq [{:keys [parents left self] :as op-value} sorted-move-ops]
     (let [r (check-block-pos @conn self parents left)]
       (case r
@@ -429,12 +446,10 @@
         (insert-or-move-block repo conn self parents left true op-value)
         nil                             ; do nothing
         nil)
-      (update-block-attrs repo conn date-formatter self op-value)
-      (prn :apply-remote-move-ops self r parents left))))
+      (update-block-attrs repo conn date-formatter self op-value))))
 
 (defn apply-remote-update-ops
   [repo conn date-formatter update-ops]
-  (prn :update-ops update-ops)
   (doseq [{:keys [parents left self] :as op-value} update-ops]
     (when (and parents left)
       (let [r (check-block-pos @conn self parents left)]
@@ -444,8 +459,7 @@
           :wrong-pos
           (insert-or-move-block repo conn self parents left true op-value)
           nil)))
-    (update-block-attrs repo conn date-formatter self op-value)
-    (prn :apply-remote-update-ops self)))
+    (update-block-attrs repo conn date-formatter self op-value)))
 
 (defn- move-all-blocks-to-another-page
   [repo conn from-page-name to-page-name]
@@ -593,7 +607,6 @@
 
 (defn- <push-data-from-ws-handler
   [state repo conn date-formatter push-data-from-ws]
-  (prn :push-data-from-ws push-data-from-ws)
   (go
     (let [r (<! (<apply-remote-data state repo conn date-formatter push-data-from-ws))]
       (when (= r ::need-pull-remote-data)
