@@ -128,7 +128,8 @@
 (rum/defc schema-type <
   shortcut/disable-all-shortcuts
   [property {:keys [*property-name *property-schema built-in-property? disabled?
-                    show-type-change-hints? in-block-container? block *show-new-property-config?]}]
+                    show-type-change-hints? in-block-container? block *show-new-property-config?
+                    default-open?]}]
   (let [property-name (or (and *property-name @*property-name) (:block/original-name property))
         property-schema (or (and *property-schema @*property-schema) (:block/schema property))
         schema-types (->> (concat db-property-type/user-built-in-property-types
@@ -141,7 +142,7 @@
                                   :selected (= type (:type property-schema))})))]
     [:div {:class (if in-block-container? "flex flex-1" "flex items-center col-span-2")}
      (shui/select
-      {:default-open true
+      {:default-open (boolean default-open?)
        :on-value-change
        (fn [v]
          (let [type (keyword (string/lower-case v))
@@ -475,7 +476,8 @@
             [:div.col-span-3.flex.flex-row {:on-mouse-down (fn [e] (util/stop-propagation e))}
              (when-not class-schema?
                (if @*show-new-property-config?
-                 (schema-type property {:in-block-container? in-block-container?
+                 (schema-type property {:default-open? true
+                                        :in-block-container? in-block-container?
                                         :block entity
                                         :*show-new-property-config? *show-new-property-config?})
                  (pv/property-value entity property @*property-value (assoc opts :editing? true))))])])
