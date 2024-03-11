@@ -232,3 +232,8 @@ html[data-theme=dark] {
 .dark .ui__list-item-highlighted-span {
   background-color: or(--lx-accent-08-alpha, --color-level-4);
 }
+
+.ui__dropdown-menu-content {
+  max-height: var(--radix-dropdown-menu-content-available-height);
+  overflow-y: auto;
+}
