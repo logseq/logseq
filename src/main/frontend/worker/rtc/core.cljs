@@ -130,13 +130,21 @@
                     :conn (second args)}}
    (apply outliner-core/move-blocks! args)))
 
-(defmethod transact-db! :insert-blocks [_ & args]
+(defmethod transact-db! :move-blocks&persist-op [_ & args]
   (outliner-tx/transact!
-   {:persist-op? false
-    :outliner-op :insert-blocks
+   {:persist-op? true
+    :outliner-op :move-blocks
     :transact-opts {:repo (first args)
                     :conn (second args)}}
-   (apply outliner-core/insert-blocks! args)))
+   (apply outliner-core/move-blocks! args)))
+
+(defmethod transact-db! :insert-blocks [_ & args]
+  (outliner-tx/transact!
+      {:persist-op? false
+       :outliner-op :insert-blocks
+       :transact-opts {:repo (first args)
+                       :conn (second args)}}
+      (apply outliner-core/insert-blocks! args)))
 
 (defmethod transact-db! :save-block [_ & args]
   (outliner-tx/transact!
@@ -167,16 +175,46 @@
                  (whiteboard-page-block? (:block/parent block)))))
             remote-remove-ops))
 
+(defn- apply-remote-remove-ops-helper
+  [conn remove-ops]
+  (let [block-uuid->entity (into {}
+                                 (keep
+                                  (fn [op]
+                                    (when-let [block-uuid (:block-uuid op)]
+                                      (when-let [ent (d/entity @conn [:block/uuid block-uuid])]
+                                        [block-uuid ent])))
+                                  remove-ops))
+        block-uuid-set (set (keys block-uuid->entity))
+        block-uuids-need-move
+        (set
+         (mapcat
+          (fn [[_block-uuid ent]]
+            (set/difference (set (map :block/uuid (:block/_parent ent))) block-uuid-set))
+          block-uuid->entity))]
+    {:block-uuids-need-move block-uuids-need-move
+     :block-uuids-to-remove block-uuid-set}))
+
 (defn apply-remote-remove-ops
   [repo conn date-formatter remove-ops]
   (prn :remove-ops remove-ops)
   (let [{whiteboard-block-ops true other-ops false} (group-remote-remove-ops-by-whiteboard-block @conn remove-ops)]
     (transact-db! :delete-whiteboard-blocks conn (map :block-uuid whiteboard-block-ops))
 
-    (doseq [op other-ops]
-      (when-let [block (d/entity @conn [:block/uuid (:block-uuid op)])]
-        (transact-db! :delete-blocks repo conn date-formatter [block] {:children? false})
-        (prn :apply-remote-remove-ops (:block-uuid op))))))
+    (let [{:keys [block-uuids-need-move block-uuids-to-remove] :as r}
+          (apply-remote-remove-ops-helper conn other-ops)]
+      ;; move to page-block's first child
+      (doseq [block-uuid block-uuids-need-move]
+        (transact-db! :move-blocks&persist-op
+                      repo conn
+                      [(d/entity @conn [:block/uuid block-uuid])]
+                      (d/entity @conn (:db/id (:block/page (d/entity @conn [:block/uuid block-uuid]))))
+                      false))
+      (doseq [block-uuid block-uuids-to-remove]
+        (transact-db! :delete-blocks
+                      repo conn date-formatter
+                      [(d/entity @conn [:block/uuid block-uuid])]
+                      {:children? true}))
+      (prn :apply-remote-remove-ops r))))
 
 (defn- insert-or-move-block
   [repo conn block-uuid remote-parents remote-left-uuid move? op-value]
