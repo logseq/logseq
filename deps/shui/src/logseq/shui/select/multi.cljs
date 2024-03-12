@@ -87,14 +87,14 @@
 
     (rum/use-effect!
       (fn []
-        (when (and search-enabled? (false? open?))
-          (js/setTimeout #(set-search-key! "") 500)))
+        (when-let [t (when (and search-enabled? (false? open?))
+                       (js/setTimeout #(set-search-key! "") 500))]
+          #(js/clearTimeout t)))
       [open?])
 
     (x-content
       (merge
-        {:onCloseAutoFocus false
-         :onInteractOutside close1!
+        {:onInteractOutside close1!
          :onEscapeKeyDown close1!
          :on-key-down (fn [^js e]
                         (when-let [^js target (.-target e)]

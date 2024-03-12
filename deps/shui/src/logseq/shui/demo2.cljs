@@ -124,8 +124,6 @@
 
               :content-props
               {:align "start"
-               :onInteractOutside #(set-open! false)
-               :onEscapeKeyDown #(set-open! false)
                :class "w-80"}})))))
 
    [:hr]
@@ -181,9 +179,7 @@
                                 [:b.text-red-800 v]
                                 [:b.text-green-800 v]))
               :content-props
-              {:onInteractOutside #(set-open! false)
-               :class "w-48"}})
-           ))))
+              {:class "w-48"}})))))
 
    [:hr]
 
@@ -253,10 +249,7 @@
               ;:foot-render (fn [] [:b "footer"])
               :content-props
               {:align "start"
-               :onInteractOutside #(set-open! false)
-               :onEscapeKeyDown #(set-open! false)
-               :class "w-48"}})
-           ))))
+               :class "w-48"}})))))
    ])
 
 (rum/defc icon-picker-demo
