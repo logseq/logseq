@@ -4,7 +4,6 @@
      :default (:require [clojure.spec.alpha :as s])))
 
 (s/def ::ls-right-sidebar-state map?)
-(s/def ::ls-right-sidebar-width string?)
 (s/def ::ls-left-sidebar-open? boolean?)
 (s/def :ui/theme string?)
 (s/def :ui/system-theme? boolean?)
@@ -43,7 +42,6 @@
   ;; TODO: Actually use namespaced keys in storage
   (s/keys
    :opt-un [::ls-right-sidebar-state
-            ::ls-right-sidebar-width
             ::ls-left-sidebar-open?
             :ui/theme
             :ui/system-theme?

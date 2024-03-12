@@ -39,6 +39,7 @@
     "react-day-picker": "^8.9.1",
     "react-dom": "^18",
     "react-hook-form": "^7.48.2",
+    "react-resizable-panels": "^2.0.11",
     "tailwind-merge": "^2.0.0",
     "tailwindcss-animate": "^1.0.7",
     "yup": "^1.3.2",
