@@ -22,7 +22,7 @@
 
 (rum/defc page-block-selector
   [*find]
-  [:div.filter-item {:on-mouse-down (fn [e] (util/stop-propagation e))}
+  [:div.filter-item {:on-pointer-down (fn [e] (util/stop-propagation e))}
    (ui/select [{:label "Blocks"
                 :value "block"
                 :selected (not= @*find :page)}
@@ -106,7 +106,7 @@
   (rum/local nil ::start)
   (rum/local nil ::end)
   [state {:keys [tree loc] :as opts}]
-  [:div.between-date {:on-mouse-down (fn [e] (util/stop-propagation e))}
+  [:div.between-date {:on-pointer-down (fn [e] (util/stop-propagation e))}
    [:div.flex.flex-row
     [:div.font-medium.mt-2 "Between: "]
     (datepicker :start "Start date" (merge opts {:auto-focus true}))

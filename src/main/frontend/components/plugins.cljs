@@ -997,7 +997,7 @@
      [:div.lsp-hook-ui-slot
       (merge opts {:id            id
                    :ref           *el-ref
-                   :on-mouse-down (fn [e] (util/stop-propagation e))})])))
+                   :on-pointer-down (fn [e] (util/stop-propagation e))})])))
 
 (rum/defc hook-block-slot < rum/static
   [type block]
@@ -1185,12 +1185,12 @@
       [])
 
     [:div.ui-fenced-code-result
-     {:on-mouse-down (fn [e] (when (false? edit) (util/stop e)))
+     {:on-pointer-down (fn [e] (when (false? edit) (util/stop e)))
       :class         (util/classnames [{:not-edit (false? edit)}])
       :ref           *el}
      [:<>
       [:span.actions
-       {:on-mouse-down #(util/stop %)}
+       {:on-pointer-down #(util/stop %)}
        (ui/button (ui/icon "square-toggle-horizontal" {:size 14})
                   :on-click #(set-editor-active! (not editor-active?)))
        (ui/button (ui/icon "source-code" {:size 14})

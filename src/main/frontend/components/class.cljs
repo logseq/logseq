@@ -33,7 +33,7 @@
     (ui/select options
                (fn [_e value]
                  (on-select value))
-               {:on-mouse-down
+               {:on-pointer-down
                 (fn [e]
                   (when (util/meta-key? e)
                     (if-let [page-name (:block/name (db/entity [:block/uuid (some-> (util/evalue e) uuid)]))]

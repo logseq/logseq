@@ -149,7 +149,7 @@
                          (when @*collapsed? ; collapsed
                            ;; expand
                            (reset! @*collapsed? false)))
-        :on-mouse-down (fn [e]
+        :on-pointer-down (fn [e]
                          (util/stop-propagation e))
         :on-click (fn []
                     (state/set-modal! (filter-dialog filters-atom *ref-pages page-name)

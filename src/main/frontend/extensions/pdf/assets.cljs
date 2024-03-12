@@ -295,7 +295,7 @@
           [:button.asset-action-btn.px-1
            {:title         (t :asset/copy)
             :tabIndex      "-1"
-            :on-mouse-down util/stop
+            :on-pointer-down util/stop
             :on-click      (fn [e]
                              (util/stop e)
                              (-> (util/copy-image-to-clipboard (common-config/remove-asset-protocol asset-path))
@@ -305,7 +305,7 @@
         [:button.asset-action-btn.px-1
          {:title         (t :asset/maximize)
           :tabIndex      "-1"
-          :on-mouse-down util/stop
+          :on-pointer-down util/stop
           :on-click      open-lightbox}
 
          (ui/icon "maximize")]]

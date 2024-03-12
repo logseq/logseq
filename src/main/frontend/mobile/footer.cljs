@@ -12,7 +12,7 @@
 
 (rum/defc mobile-bar-command [command-handler icon]
   [:button.bottom-action
-   {:on-mouse-down (fn [e]
+   {:on-pointer-down (fn [e]
                      (util/stop e)
                      (command-handler))}
    (if (= icon "player-stop")

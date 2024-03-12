@@ -151,7 +151,7 @@
                                               (string/lower-case current-command)))
         date (state/sub :date-picker/date)]
     [:div#date-time-picker.flex.flex-col.sm:flex-row {:on-click (fn [e] (util/stop e))
-                                                      :on-mouse-down (fn [e] (.stopPropagation e))}
+                                                      :on-pointer-down (fn [e] (.stopPropagation e))}
      (ui/datepicker
       date
       {:deadline-or-schedule? deadline-or-schedule?

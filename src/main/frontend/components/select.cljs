@@ -139,7 +139,7 @@
                            (when multiple-choices?
                              [:div.p-4 (ui/button "Apply"
                                                   {:small? true
-                                                   :on-mouse-down (fn [e]
+                                                   :on-pointer-down (fn [e]
                                                                     (util/stop e)
                                                                     (when @*toggle (@*toggle))
                                                                     (when (fn? on-apply)

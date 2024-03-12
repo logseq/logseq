@@ -473,7 +473,7 @@
            [:span.bullet-container.cursor [:span.bullet]]
            [:div {:style {:padding-left 6}} @*property-key]]
           (when property
-            [:div.col-span-3.flex.flex-row {:on-mouse-down (fn [e] (util/stop-propagation e))}
+            [:div.col-span-3.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
              (when-not class-schema?
                (if @*show-new-property-config?
                  (schema-type property {:default-open? true
@@ -609,7 +609,7 @@
        [:a.property-k.flex.select-none.jtrigger
         {:tabIndex      0
          :title         (str "Configure property: " (:block/original-name property))
-         :on-mouse-down (fn [^js e]
+         :on-pointer-down (fn [^js e]
                           (when (util/meta-key? e)
                             (route-handler/redirect-to-page! (:block/name property))
                             (.preventDefault e)))

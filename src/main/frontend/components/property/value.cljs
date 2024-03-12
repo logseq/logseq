@@ -593,7 +593,7 @@
      {:open open?}
      (shui/dropdown-menu-trigger
       {:class "jtrigger flex flex-1"
-       :on-click #(set-open! (not open?))
+       :on-pointer-down #(set-open! (not open?))
        :on-key-down (fn [e]
                       (when (= " " (util/ekey e))
                         (set-open! true)))}

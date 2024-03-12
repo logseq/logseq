@@ -285,14 +285,14 @@
                                       (not= value @size))
                              (reset! *resizing-image? true))
                            (reset! size value))
-          :onMouseUp (fn []
-                       (when (and @size @*resizing-image?)
-                         (when-let [block-id (:block/uuid config)]
-                           (let [size (bean/->clj @size)]
-                             (editor-handler/resize-image! block-id metadata full-text size))))
-                       (when @*resizing-image?
+          :onPointerUp (fn []
+                         (when (and @size @*resizing-image?)
+                           (when-let [block-id (:block/uuid config)]
+                             (let [size (bean/->clj @size)]
+                               (editor-handler/resize-image! block-id metadata full-text size))))
+                         (when @*resizing-image?
                             ;; TODO: need a better way to prevent the clicking to edit current block
-                         (js/setTimeout #(reset! *resizing-image? false) 200)))
+                           (js/setTimeout #(reset! *resizing-image? false) 200)))
           :onClick (fn [e]
                      (when @*resizing-image? (util/stop e)))}
           (and (:width metadata) (not (util/mobile?)))
@@ -316,7 +316,7 @@
                [:button.asset-action-btn.text-left
                 {:title         (t (if local? :asset/show-in-folder :asset/open-in-browser))
                  :tabIndex      "-1"
-                 :on-mouse-down util/stop
+                 :on-pointer-down util/stop
                  :on-click      (fn [e]
                                   (util/stop e)
                                   (if local?
@@ -328,7 +328,7 @@
                 [:button.asset-action-btn
                  {:title         (t :asset/delete)
                   :tabIndex      "-1"
-                  :on-mouse-down util/stop
+                  :on-pointer-down util/stop
                   :on-click
                   (fn [e]
                     (when-let [block-id (:block/uuid config)]
@@ -353,7 +353,7 @@
               [:button.asset-action-btn
                {:title         (t :asset/copy)
                 :tabIndex      "-1"
-                :on-mouse-down util/stop
+                :on-pointer-down util/stop
                 :on-click      (fn [e]
                                  (util/stop e)
                                  (-> (util/copy-image-to-clipboard image-src)
@@ -363,7 +363,7 @@
               [:button.asset-action-btn
                {:title         (t :asset/maximize)
                 :tabIndex      "-1"
-                :on-mouse-down util/stop
+                :on-pointer-down util/stop
                 :on-click      open-lightbox}
 
                (ui/icon "maximize")]]])])]))))
@@ -578,13 +578,13 @@
       :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name-in-block e))
       :on-mouse-over #(reset! *hover? true)
       :on-mouse-leave #(reset! *hover? false)
-      :on-mouse-down (fn [e]
+      :on-pointer-down (fn [e]
                        (if breadcrumb?
                          (.preventDefault e)
                          (do
                            (util/stop e)
                            (reset! *mouse-down? true))))
-      :on-mouse-up (fn [e]
+      :on-pointer-up (fn [e]
                      (when @*mouse-down?
                        (open-page-ref e config page-name page-name-in-block contents-page? whiteboard-page?)
                        (reset! *mouse-down? false)))
@@ -640,7 +640,7 @@
           {:class "absolute left-0"
            :style {:top "0.15rem"}
            :title "Remove this tag"
-           :on-mouse-down
+           :on-pointer-down
            (fn [e]
              (util/stop e)
              (db-property-handler/delete-property-value! repo
@@ -829,7 +829,7 @@
       [:div.color-level.embed-block.bg-base-2
        {:style {:z-index 2}
         :on-double-click #(edit-parent-block % config)
-        :on-mouse-down (fn [e] (.stopPropagation e))}
+        :on-pointer-down (fn [e] (.stopPropagation e))}
        [:div.px-3.pt-1.pb-2
         (let [config' (assoc config
                              :db/id (:db/id block)
@@ -853,7 +853,7 @@
     [:div.color-level.embed.embed-page.bg-base-2
      {:class (when (:sidebar? config) "in-sidebar")
       :on-double-click #(edit-parent-block % config)
-      :on-mouse-down #(.stopPropagation %)}
+      :on-pointer-down #(.stopPropagation %)}
      [:section.flex.items-center.p-1.embed-header
       [:div.mr-3 svg/page]
       (page-cp config {:block/name page-name})]
@@ -930,7 +930,7 @@
             [:div.block-ref-wrap.inline
              {:data-type    (name (or block-type :default))
               :data-hl-type hl-type
-              :on-mouse-down
+              :on-pointer-down
               (fn [^js/MouseEvent e]
                 (if (util/right-click? e)
                   (state/set-state! :block-ref/context {:block (:block config)
@@ -1890,7 +1890,7 @@
       (ui/checkbox {:class class
                     :style {:margin-right 5}
                     :value checked?
-                    :on-mouse-down (fn [e]
+                    :on-pointer-down (fn [e]
                                      (util/stop-propagation e))
                     :on-change (fn [_e]
                                  (if checked?
@@ -1923,7 +1923,7 @@
       [:a
        {:class (str "marker-switch block-marker " marker)
         :title (util/format "Change from %s to %s" marker next-marker)
-        :on-mouse-down (set-marker-fn next-marker)}
+        :on-pointer-down (set-marker-fn next-marker)}
        marker])))
 
 (defn marker-cp
@@ -2014,7 +2014,7 @@
            hl-ref #(when (and (or config/publishing? (util/electron?))
                               (not (#{:default :whiteboard-shape} block-type)))
                      [:div.prefix-link
-                      {:on-mouse-down
+                      {:on-pointer-down
                        (fn [^js e]
                          (let [^js target (.-target e)]
                            (case block-type
@@ -2161,7 +2161,7 @@
       [:div.opacity-50.font-medium.timestamp-label
        (str typ ": ")]
       [:a.opacity-80.hover:opacity-100
-       {:on-mouse-down (fn [e]
+       {:on-pointer-down (fn [e]
                          (util/stop e)
                          (state/clear-editor-action!)
                          (editor-handler/escape-editing false)
@@ -2199,7 +2199,7 @@
    (dom/closest target "a")
    (dom/closest target ".query-table")))
 
-(defn- block-content-on-mouse-down
+(defn- block-content-on-pointer-down
   [e block block-id content edit-input-id ref]
   (when-not (> (count content) (state/block-content-max-length (state/get-current-repo)))
     (let [target (gobj/get e "target")
@@ -2379,7 +2379,7 @@
         content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)
                          :on-click
-                         :on-mouse-down) ; TODO: it seems that Safari doesn't work well with on-mouse-down
+                         :on-pointer-down) ; TODO: it seems that Safari doesn't work well with on-pointer-down
 
         attrs (cond->
                {:blockid       (str uuid)
@@ -2393,11 +2393,11 @@
 
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
-                                        (block-content-on-mouse-down e block block-id content edit-input-id @*ref))))]
+                                        (block-content-on-pointer-down e block block-id content edit-input-id @*ref))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :class (when selected? "select-none")
-              :on-mouse-up (fn [e]
+              :on-pointer-up (fn [e]
                              (when (and
                                     (state/in-selection-mode?)
                                     (not (string/includes? content "```"))
@@ -2574,7 +2574,7 @@
               (when (and (:embed? config)
                          (:embed-parent config))
                 [:a.opacity-70.hover:opacity-100.svg-small.inline
-                 {:on-mouse-down (fn [e]
+                 {:on-pointer-down (fn [e]
                                    (util/stop e)
                                    (when-let [block (:embed-parent config)]
                                      (editor-handler/edit-block! block :max (:block/uuid block))))}
@@ -2582,7 +2582,7 @@
 
               (when block-reference-only?
                 [:a.opacity-70.hover:opacity-100.svg-small.inline
-                 {:on-mouse-down (fn [e]
+                 {:on-pointer-down (fn [e]
                                    (util/stop e)
                                    (editor-handler/edit-block! block :max (:block/uuid block)))}
                  svg/edit])
@@ -2616,7 +2616,7 @@
 
 (rum/defc breadcrumb-fragment
   [config block label opts]
-  [:a {:on-mouse-up
+  [:a {:on-pointer-up
        (fn [e]
          (cond
            (gobj/get e "shiftKey")
