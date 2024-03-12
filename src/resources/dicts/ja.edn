@@ -529,7 +529,7 @@
  :loading-files "ファイルロード中"
  :login "ログイン"
  :logout "ログアウト"
- :logout-user "ログアウト ({1}) ({2})"
+ :logout-user "ログアウト ({1})"
  :download "ダウンロード"
  :language "言語"
  :remove-background "背景を消去"
