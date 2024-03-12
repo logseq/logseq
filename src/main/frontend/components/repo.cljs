@@ -318,8 +318,8 @@
                        (invalid-graph-name-warning)
                        (p/let [repo (repo-handler/new-db! @*graph-name)]
                          (when @*cloud?
-                           (p/let [create-result (rtc-create-graph! repo)
-                                   start-result (rtc-start! repo)]
+                           (p/let [_create-result (rtc-create-graph! repo)
+                                   _start-result (rtc-start! repo)]
                              ;; TODO: can't pr-str result
                              (state/close-modal!)))))))]
     [:div.new-graph.flex.flex-col.p-4.gap-4

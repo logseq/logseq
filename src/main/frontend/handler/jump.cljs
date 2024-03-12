@@ -68,15 +68,15 @@
 
 (defn- trigger!
   [key e]
-  (let [{:keys [triggers _mode]} @*jump-data]
-    (let [trigger (get-trigger triggers (string/trim key))]
-      (when (or trigger (>= (count (string/trim key)) 2))
-        (util/stop e)
-        (state/clear-selection!)
-        (exit!)
-        (if trigger
-          (.click trigger)
-          (notification/show! "Invalid jump" :error true))))))
+  (let [{:keys [triggers _mode]} @*jump-data
+        trigger (get-trigger triggers (string/trim key))]
+    (when (or trigger (>= (count (string/trim key)) 2))
+      (util/stop e)
+      (state/clear-selection!)
+      (exit!)
+      (if trigger
+        (.click trigger)
+        (notification/show! "Invalid jump" :error true)))))
 
 (defn jump-to
   []
