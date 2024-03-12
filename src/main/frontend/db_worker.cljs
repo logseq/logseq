@@ -9,7 +9,7 @@
             [cognitect.transit :as transit]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
-            [frontend.worker.async-util :include-macros true :refer [<?]]
+            [frontend.worker.async-util :include-macros true :refer [<?] :as async-util]
             [frontend.worker.export :as worker-export]
             [frontend.worker.file :as file]
             [frontend.worker.handler.page :as worker-page]
@@ -545,72 +545,74 @@
   ;; RTC
   (rtc-start
    [this repo token dev-mode?]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (rtc-core/<start-rtc repo conn token dev-mode?)
-     nil))
+   (async-util/c->p
+    (when-let [conn (worker-state/get-datascript-conn repo)]
+      (rtc-core/<start-rtc repo conn token dev-mode?))))
 
   (rtc-stop
    [this]
-   (rtc-core/<stop-rtc)
-   nil)
+   (async-util/c->p (rtc-core/<stop-rtc)))
 
   (rtc-toggle-sync
    [this repo]
-   (let [d (p/deferred)]
-     (async/go
-       (let [result (<! (rtc-core/<toggle-sync))]
-         (p/resolve! d result)))
-     d))
+   (async-util/c->p (rtc-core/<toggle-sync)))
 
   (rtc-grant-graph-access
-   [this graph-uuid target-user-uuids target-user-emails]
-   (when-let [state @rtc-core/*state]
-     (rtc-core/<grant-graph-access-to-others
-      state graph-uuid
-      :target-user-uuids target-user-uuids
-      :target-user-emails target-user-emails))
-   nil)
+   [this graph-uuid target-user-uuids-str target-user-emails-str]
+   (async-util/c->p
+    (when-let [state @rtc-core/*state]
+      (let [target-user-uuids (ldb/read-transit-str target-user-uuids-str)
+            target-user-emails (ldb/read-transit-str target-user-emails-str)]
+
+        (rtc-core/<grant-graph-access-to-others
+         state graph-uuid
+         :target-user-uuids target-user-uuids
+         :target-user-emails target-user-emails)
+        nil))))
 
   (rtc-upload-graph
    [this repo token]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (async/go
-       (try
-         (let [state (<! (rtc-core/<init-state repo token false))]
-           (<! (rtc-updown/<upload-graph state repo conn))
-           (rtc-db-listener/listen-db-to-generate-ops repo conn))
-         (worker-util/post-message :notification
-                                   [[:div
-                                     [:p "Upload graph successfully"]]])
-         (catch :default e
+   (let [d (p/deferred)]
+     (when-let [conn (worker-state/get-datascript-conn repo)]
+       (async/go
+         (try
+           (let [state (<? (rtc-core/<init-state repo token false))]
+             (<? (rtc-updown/<upload-graph state repo conn))
+             (rtc-db-listener/listen-db-to-generate-ops repo conn)
+             (p/resolve! d :success))
            (worker-util/post-message :notification
                                      [[:div
-                                       [:p "upload graph failed"]]
-                                      :error])
-           (prn ::download-graph-failed e))))
-     nil))
+                                       [:p "Upload graph successfully"]]])
+           (catch :default e
+             (worker-util/post-message :notification
+                                       [[:div
+                                         [:p "upload graph failed"]]
+                                        :error])
+             (prn ::download-graph-failed e)
+             (p/reject! d e)))))
+     d))
 
   (rtc-download-graph
    [this repo token graph-uuid]
-   (async/go
-     (let [state (<! (rtc-core/<init-state repo token false))]
-       (try
-         (<? (rtc-updown/<download-graph state repo graph-uuid))
-         (worker-util/post-message :notification
-                                   [[:div
-                                     [:p "download graph successfully"]]])
-         (catch :default e
-           (worker-util/post-message :notification
-                                     [[:div
-                                       [:p "download graph failed"]]
-                                      :error])
-           (prn ::download-graph-failed e)))))
-   nil)
+   (async-util/c->p
+    (async/go
+      (let [state (<! (rtc-core/<init-state repo token false))]
+        (try
+          (<? (rtc-updown/<download-graph state repo graph-uuid))
+          (worker-util/post-message :notification
+                                    [[:div
+                                      [:p "download graph successfully"]]])
+          (catch :default e
+            (worker-util/post-message :notification
+                                      [[:div
+                                        [:p "download graph failed"]]
+                                       :error])
+            (prn ::download-graph-failed e)))))))
 
   (rtc-push-pending-ops
    [_this]
-   (async/put! (:force-push-client-ops-chan @rtc-core/*state) true)
-   nil)
+   (async-util/c->p
+    (async/put! (:force-push-client-ops-chan @rtc-core/*state) true)))
 
   (rtc-get-graphs
    [_this repo token]

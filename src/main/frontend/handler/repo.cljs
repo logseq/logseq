@@ -195,7 +195,8 @@
            _ (state/pub-event! [:init/commands])
            _ (when-not file-graph-import? (state/pub-event! [:page/create (date/today) {:redirect? false}]))]
      (js/setTimeout ui-handler/re-render-root! 100)
-     (prn "New db created: " full-graph-name))
+     (prn "New db created: " full-graph-name)
+     full-graph-name)
    (p/catch (fn [error]
               (notification/show! "Create graph failed." :error)
               (js/console.error error)))))
