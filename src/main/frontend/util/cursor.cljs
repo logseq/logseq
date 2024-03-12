@@ -71,7 +71,7 @@
   ([input n]
    (when input
      (let [{:keys [pos]} (get-caret-pos input)
-           pos (if (and (= n 1) (not (zero? pos)))
+           pos (if (= n 1)
                  (or (util/safe-inc-current-pos-from-start (.-value input) pos)
                      (inc pos))
                  (+ pos n))]
