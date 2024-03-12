@@ -199,7 +199,7 @@
   (let [{whiteboard-block-ops true other-ops false} (group-remote-remove-ops-by-whiteboard-block @conn remove-ops)]
     (transact-db! :delete-whiteboard-blocks conn (map :block-uuid whiteboard-block-ops))
 
-    (let [{:keys [block-uuids-need-move block-uuids-to-remove] :as r}
+    (let [{:keys [block-uuids-need-move block-uuids-to-remove]}
           (apply-remote-remove-ops-helper conn other-ops)]
       ;; move to page-block's first child
       (doseq [block-uuid block-uuids-need-move]

@@ -31,8 +31,7 @@
             [frontend.components.property.closed-value :as closed-value]
             [frontend.components.property.util :as components-pu]
             [promesa.core :as p]
-            [logseq.db :as ldb]
-            [goog.dom :as gdom]))
+            [logseq.db :as ldb]))
 
 (defn- <create-class-if-not-exists!
   [value]
