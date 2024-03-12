@@ -72,10 +72,11 @@
     (route-handler/redirect-to-page! (date/js-date->journal-title value))))
 
 (rum/defc date-picker
-  [value {:keys [multiple-values? on-change editing?]}]
+  [value {:keys [on-change editing?]}]
   (let [[open? set-open!] (rum/use-state editing?)
-        title (when (uuid? value)
-                (:block/original-name (db/entity [:block/uuid value])))
+        page (when (uuid? value)
+               (db/entity [:block/uuid value]))
+        title (when page (:block/original-name page))
         value (if title
                 (js/Date. (date/journal-title->long title))
                 value)
@@ -87,45 +88,48 @@
         initial-day (some-> value' (.getTime) (js/Date.))
         initial-month (when value'
                         (js/Date. (.getYear value') (.getMonth value')))]
-    (shui/dropdown-menu
-     {:open open?}
-     (shui/dropdown-menu-trigger
-      {:class "jtrigger flex flex-1 items-center gap-1"
-       :on-click (if config/publishing?
-                   #(navigate-to-date-page value)
-                   #(set-open! (not open?)))
-       :on-mouse-down (fn [e]
-                        (.preventDefault e)
-                        (when (util/meta-key? e)
-                          (navigate-to-date-page value)))
-       :on-key-down (fn [e]
-                      (when (contains? #{" " "Enter"} (util/ekey e))
-                        (set-open! true)))}
-      (if title
-        (when-not multiple-values? title)
-        (ui/icon "calendar" {:size 16})))
-     (shui/dropdown-menu-content
-      {:align "start"
-       :on-interact-outside #(set-open! false)
-       :onEscapeKeyDown #(set-open! false)}
-      (shui/calendar
-       {:mode "single"
-        :initial-focus true
-        :selected initial-day
-        :default-month initial-month
-        :on-select (fn [^js d]
+    [:div.flex.flex-row.gap-1.items-center
+     (shui/dropdown-menu
+      {:open open?}
+      (shui/dropdown-menu-trigger
+       {:class "jtrigger flex"
+        :on-click (fn [e]
+                    (if config/publishing?
+                      (navigate-to-date-page value)
+                      (do
+                        (util/stop e)
+                        (set-open! (not open?)))))
+        :on-key-down (fn [e]
+                       (when (contains? #{" " "Enter"} (util/ekey e))
+                         (set-open! true)))}
+       (ui/icon "calendar" {:size 16}))
+      (shui/dropdown-menu-content
+       {:align "start"
+        :on-interact-outside #(set-open! false)
+        :onEscapeKeyDown #(set-open! false)}
+       (shui/calendar
+        {:mode "single"
+         :initial-focus true
+         :selected initial-day
+         :default-month initial-month
+         :on-select (fn [^js d]
                      ;; force local to UTC
-                     (when d
-                       (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
-                         (let [journal (date/js-date->journal-title gd)]
-                           (p/do!
-                            (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
-                              (page-handler/<create! journal {:redirect? false
-                                                              :create-first-block? false}))
-                            (when (fn? on-change)
-                              (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
-                            (set-open! false)
-                            (exit-edit-property))))))})))))
+                      (when d
+                        (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
+                          (let [journal (date/js-date->journal-title gd)]
+                            (p/do!
+                             (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
+                               (page-handler/<create! journal {:redirect? false
+                                                               :create-first-block? false}))
+                             (when (fn? on-change)
+                               (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
+                             (set-open! false)
+                             (exit-edit-property))))))})))
+
+     (when page
+       (when-let [page-cp (state/get-component :block/page-cp)]
+         (page-cp {:disable-preview? true
+                  :hide-close-button? true} page)))]))
 
 
 (rum/defc property-value-date-picker
@@ -738,9 +742,10 @@
       (ui/dropdown
        (fn [{:keys [toggle-fn]}]
          [:a.control-link.jtrigger
-          {:on-click (if config/publishing?
-                       (constantly nil)
-                       toggle-fn)
+          {:on-click (fn [_e]
+                       (if config/publishing?
+                         nil
+                         (toggle-fn)))
            :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2 pr-4"}
           (values-cp toggle-fn)])
        (fn [{:keys [_toggle-fn]}]

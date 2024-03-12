@@ -147,6 +147,7 @@
   (state/set-component! :block/single-block block/single-block-cp)
   (state/set-component! :block/container block/block-container)
   (state/set-component! :block/embed block/block-embed)
+  (state/set-component! :block/page-cp block/page-cp)
   (state/set-component! :editor/box editor/box)
   (command-palette/register-global-shortcut-commands))
 
