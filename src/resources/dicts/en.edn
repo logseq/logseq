@@ -550,7 +550,6 @@
  :loading-files "Loading files"
  :login "Login"
  :logout "Logout"
- :logout-user "Logout ({1})"
  :download "Download"
  :language "Language"
  :remove-background "Remove background"
