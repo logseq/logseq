@@ -11,7 +11,8 @@
             [frontend.util :as util]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.shui.ui :as shui]))
+            [logseq.shui.ui :as shui]
+            [logseq.db :as ldb]))
 
 (defonce debug-state (atom nil))
 
@@ -104,8 +105,8 @@
                                   (when-let [graph-uuid (:graph-uuid state)]
                                     (let [^object worker @db-browser/*worker]
                                       (.rtc-grant-graph-access worker graph-uuid
-                                                               (some-> user-uuid vector)
-                                                               (some-> user-email vector))))))})
+                                                               (some-> user-uuid vector ldb/write-transit-str)
+                                                               (some-> user-email vector ldb/write-transit-str))))))})
 
         [:input.form-input.my-2
          {:on-change (fn [e] (swap! debug-state assoc :grant-access-to-user (util/evalue e)))

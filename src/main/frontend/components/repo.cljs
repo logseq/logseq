@@ -19,7 +19,10 @@
             [frontend.handler.file-sync :as file-sync]
             [reitit.frontend.easy :as rfe]
             [frontend.handler.notification :as notification]
-            [frontend.util.fs :as fs-util]))
+            [frontend.util.fs :as fs-util]
+            [frontend.handler.user :as user-handler]
+            [logseq.shui.ui :as shui]
+            [frontend.persist-db.browser :as db-browser]))
 
 (rum/defc normalized-graph-label
   [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]
@@ -289,25 +292,51 @@
   (or (fs-util/include-reserved-chars? graph-name)
       (string/includes? graph-name "+")))
 
+(defn- rtc-create-graph!
+  [repo]
+  (let [token (state/get-auth-id-token)
+        ^js worker @db-browser/*worker]
+    (.rtc-upload-graph worker repo token)))
+
+(defn- rtc-start!
+  [repo]
+  (let [token (state/get-auth-id-token)
+        ^object worker @db-browser/*worker]
+    (.rtc-start worker repo token
+                (and config/dev?
+                     (state/sub [:ui/developer-mode?])))))
+
 (rum/defcs new-db-graph <
   (rum/local "" ::graph-name)
+  (rum/local false ::cloud?)
   [state]
   (let [*graph-name (::graph-name state)
+        *cloud? (::cloud? state)
         new-db-f (fn []
                    (when-not (string/blank? @*graph-name)
                      (if (invalid-graph-name? @*graph-name)
                        (invalid-graph-name-warning)
-                       (do
-                         (repo-handler/new-db! @*graph-name)
-                         (state/close-modal!)))))]
-    [:div.new-graph.p-4
-     [:h1.title "Create new graph: "]
-     [:input.form-input.mb-4 {:value @*graph-name
-                              :auto-focus true
-                              :on-change #(reset! *graph-name (util/evalue %))
-                              :on-key-down (fn [^js e]
-                                             (when (= (gobj/get e "key") "Enter")
-                                               (new-db-f)))}]
+                       (p/let [repo (repo-handler/new-db! @*graph-name)]
+                         (when @*cloud?
+                           (p/let [create-result (rtc-create-graph! repo)
+                                   start-result (rtc-start! repo)]
+                             ;; TODO: can't pr-str result
+                             (state/close-modal!)))))))]
+    [:div.new-graph.flex.flex-col.p-4.gap-4
+     [:h1.title.mb-4 "Create new graph: "]
+     [:input.form-input {:value @*graph-name
+                         :auto-focus true
+                         :on-change #(reset! *graph-name (util/evalue %))
+                         :on-key-down (fn [^js e]
+                                        (when (= (gobj/get e "key") "Enter")
+                                          (new-db-f)))}]
+     [:div.flex.flex-row.items-center.gap-1
+      (when (user-handler/logged-in?)
+        (shui/checkbox
+         {:value @*cloud?
+          :on-checked-change #(swap! *cloud? not)}))
+      [:div.opacity-70.text-sm "Use Logseq Sync?"]]
+
      (ui/button "Submit"
                 :on-click new-db-f
                 :on-key-down   (fn [^js e]
