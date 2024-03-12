@@ -33,7 +33,11 @@
          [selected-items set-selected-items!]
          (rum/use-state (storage/get :ls-demo-multi-selected-items))
 
-         rm-item! (fn [item] (set-selected-items! (remove #(= item %) selected-items)))
+         rm-item! (fn [item-or-id]
+                    (set-selected-items!
+                      (remove #(or (= item-or-id %)
+                                 (= item-or-id (str (:id %))))
+                        selected-items)))
          add-item! (fn [item] (set-selected-items! (conj selected-items item)))
 
          [open? set-open!] (rum/use-state false)]
@@ -55,12 +59,22 @@
            ;; trigger
            (ui/dropdown-menu-trigger
              [:div.border.p-2.rounded.w-full.cursor-pointer.flex.items-center.gap-1.flex-wrap
-              {:on-click #(set-open! true)}
+              {:on-click (fn [^js e]
+                           (let [^js target (.-target e)]
+                             (if-let [^js c (some-> target (.closest ".close"))]
+                               (some-> (.-dataset c) (.-k) (rm-item!))
+                               (set-open! true))))}
               (for [{:keys [id original_title class poster_path]} selected-items]
-                (ui/badge {:variant :secondary :class class}
+                (ui/badge {:variant :secondary :class (str class " group relative")}
                   [:span.flex.items-center.gap-1.flex-nowrap
                    [:img {:src poster_path :class "w-[16px] scale-75"}]
-                   [:b original_title]]))
+                   [:b original_title]]
+                  (ui/button
+                    {:variant :destructive
+                     :size :icon
+                     :data-k id
+                     :class "!rounded-full !h-4 !w-4 absolute top-[-7px] right-[-3px] group-hover:visible invisible close"}
+                    (ui/tabler-icon "x" {:size 12}))))
               (ui/button {:variant :link :size :sm} "+")])
            ;; content
            (x-select items selected-items
@@ -85,7 +99,7 @@
 
               :item-render (fn [item {:keys [selected?]}]
                              (if item
-                               (ui/dropdown-menu-item
+                               (ui/dropdown-menu-checkbox-item
                                  {:checked selected?
                                   :on-click (fn []
                                               (if selected?
