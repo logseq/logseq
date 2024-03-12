@@ -92,7 +92,7 @@
      (shui/dropdown-menu
       {:open open?}
       (shui/dropdown-menu-trigger
-       {:class "jtrigger flex"
+       {:class "jtrigger flex flex-row items-center"
         :on-click (fn [e]
                     (if config/publishing?
                       (navigate-to-date-page value)
@@ -593,7 +593,7 @@
      {:open open?}
      (shui/dropdown-menu-trigger
       {:class "jtrigger flex flex-1"
-       :on-pointer-down #(set-open! (not open?))
+       :on-click #(set-open! (not open?))
        :on-key-down (fn [e]
                       (when (= " " (util/ekey e))
                         (set-open! true)))}
@@ -646,7 +646,7 @@
         :checkbox
         (let [add-property! (fn []
                               (<add-property! block (:block/original-name property) (boolean (not value))))]
-          (shui/checkbox {:class "jtrigger"
+          (shui/checkbox {:class "jtrigger flex flex-row items-center"
                           :checked value
                           :auto-focus editing?
                           :on-checked-change add-property!

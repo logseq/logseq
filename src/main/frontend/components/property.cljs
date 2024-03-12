@@ -660,11 +660,12 @@
                         (:block/page v-block)
                         (contains? #{:default :template} type))
             collapsed? (when block? (property-collapsed? block property))
-            date? (= type :date)]
+            date? (= type :date)
+            checkbox? (= type :checkbox)]
         [:div {:class (cond
                         (and block? (not closed-values?))
                         "flex flex-1 flex-col gap-1 property-block"
-                        date?
+                        (or date? checkbox?)
                         "property-pair items-center"
                         :else
                         "property-pair items-start")}
