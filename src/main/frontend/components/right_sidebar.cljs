@@ -270,7 +270,7 @@
                                 (when drag-to (state/sidebar-move-block! idx drag-to))
                                 (reset! *drag-to nil)
                                 (reset! *drag-from nil))
-               :on-mouse-up   (fn [event]
+               :on-pointer-up   (fn [event]
                                 (when (= (.-which (.-nativeEvent event)) 2)
                                   (state/sidebar-remove-block! idx)))}
 

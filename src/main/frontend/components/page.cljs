@@ -335,7 +335,7 @@
             :on-mouse-out #(reset! *hover? false)}
            (when icon
              [:div.page-icon
-              {:on-mouse-down util/stop-propagation}
+              {:on-pointer-down util/stop-propagation}
               (if (and (map? icon) db-based?)
                 (icon-component/icon-picker icon
                                             {:on-chosen (fn [_e icon]
@@ -348,7 +348,7 @@
                 icon)])
            [:h1.page-title.flex-1.cursor-pointer.gap-1
             {:class (when-not whiteboard-page? "title")
-             :on-mouse-down (fn [e]
+             :on-pointer-down (fn [e]
                               (when (util/right-click? e)
                                 (state/set-state! :page-title/context {:page page-name})))
              :on-click (fn [e]

@@ -422,7 +422,7 @@
    :id id
    :class (str id " " class)
    :background background
-   :on-mouse-down (fn [e] (util/stop-propagation e))
+   :on-pointer-down (fn [e] (util/stop-propagation e))
    :on-click (fn [_e]
                (js/setTimeout #(on-click) 10))))
 
@@ -627,7 +627,7 @@
            (ui/dropdown
             (fn [{:keys [toggle-fn]}]
               [:div.ml-1.text-sm.font-medium.cursor
-               {:on-mouse-down (fn [e]
+               {:on-pointer-down (fn [e]
                                  (util/stop e)
                                  (toggle-fn))}
                [:span.flex (if (string/blank? query-string) (t :flashcards/modal-select-all) query-string)

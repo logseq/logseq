@@ -521,7 +521,7 @@
      {:ref             *el
       :data-modal-name modal-name
       :class           (if y-overflow-vh? "is-overflow-vh-y" "")
-      :on-mouse-down   (fn [e]
+      :on-pointer-down   (fn [e]
                          (.stopPropagation e))
       :style           style}
      cp]))

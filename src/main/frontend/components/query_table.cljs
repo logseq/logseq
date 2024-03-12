@@ -239,7 +239,7 @@
                      (db-utils/pull-many '[:block/uuid :block/original-name])
                      (map (juxt :block/uuid :block/original-name))
                      (into {}))))]
-    [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
+    [:div.overflow-x-auto {:on-pointer-down (fn [e] (.stopPropagation e))
                            :style {:width "100%"}
                            :class (when-not page? "query-table")}
      [:table.table-auto
@@ -264,11 +264,11 @@
                                                              :map-inline map-inline
                                                              :config config
                                                              :comma-separated-property? (property-separated-by-commas? column)})]
-                [:td.whitespace-nowrap {:on-mouse-down (fn []
+                [:td.whitespace-nowrap {:on-pointer-down (fn []
                                                          (reset! *mouse-down? true)
                                                          (reset! select? false))
                                         :on-mouse-move (fn [] (reset! select? true))
-                                        :on-mouse-up (fn []
+                                        :on-pointer-up (fn []
                                                        (when (and @*mouse-down? (not @select?))
                                                          (state/sidebar-add-block!
                                                           (state/get-current-repo)

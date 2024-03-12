@@ -559,7 +559,7 @@
                      {:id            (str "ac-" idx)
                       :tab-index     "0"
                       :class         (when chosen? "chosen")
-                      :on-mouse-down (fn [e]
+                      :on-pointer-down (fn [e]
                                        (util/stop e)
                                        (if (and (gobj/get e "shiftKey") on-shift-chosen)
                                          (on-shift-chosen item)
@@ -784,14 +784,14 @@
 
 (rum/defcs foldable-title <
   (rum/local false ::control?)
-  [state {:keys [on-mouse-down header title-trigger? collapsed?]}]
+  [state {:keys [on-pointer-down header title-trigger? collapsed?]}]
   (let [control? (get state ::control?)]
     [:div.content
      [:div.flex-1.flex-row.foldable-title (cond->
                                             {:on-mouse-over #(reset! control? true)
                                              :on-mouse-out  #(reset! control? false)}
                                             title-trigger?
-                                            (assoc :on-mouse-down on-mouse-down
+                                            (assoc :on-pointer-down on-pointer-down
                                                    :class "cursor"))
       [:div.flex.flex-row.items-center
        (when-not (mobile-util/native-platform?)
@@ -801,7 +801,7 @@
                         :height      16
                         :margin-left -30}}
             (not title-trigger?)
-            (assoc :on-mouse-down on-mouse-down))
+            (assoc :on-pointer-down on-pointer-down))
           [:span {:class (if (or @control? @collapsed?) "control-show cursor-pointer" "control-hide")}
            (rotating-arrow @collapsed?)]])
        (if (fn? header)
@@ -819,22 +819,22 @@
                 (when-let [f (:init-collapsed (last (:rum/args state)))]
                   (f (::collapsed? state)))
                 state)}
-  [state header content {:keys [title-trigger? on-mouse-down class
+  [state header content {:keys [title-trigger? on-pointer-down class
                                 _default-collapsed? _init-collapsed]}]
   (let [collapsed? (get state ::collapsed?)
-        on-mouse-down (fn [e]
+        on-pointer-down (fn [e]
                         (util/stop e)
                         (swap! collapsed? not)
-                        (when on-mouse-down
-                          (on-mouse-down @collapsed?)))]
+                        (when on-pointer-down
+                          (on-pointer-down @collapsed?)))]
     [:div.flex.flex-col
      {:class class}
-     (foldable-title {:on-mouse-down on-mouse-down
+     (foldable-title {:on-pointer-down on-pointer-down
                       :header header
                       :title-trigger? title-trigger?
                       :collapsed? collapsed?})
      [:div {:class (if @collapsed? "hidden" "initial")
-            :on-mouse-down (fn [e] (.stopPropagation e))}
+            :on-pointer-down (fn [e] (.stopPropagation e))}
       (if (fn? content)
         (if (not @collapsed?) (content) nil)
         content)]]))
@@ -1018,7 +1018,7 @@
       :style     {:width "100%"}
       :on-change #(let [value (util/evalue %)]
                     (reset! *value value))
-      :on-mouse-up #(let [value (util/evalue %)]
+      :on-pointer-up #(let [value (util/evalue %)]
                       (on-change value))}]))
 
 (rum/defcs tweet-embed < (rum/local true :loading?)

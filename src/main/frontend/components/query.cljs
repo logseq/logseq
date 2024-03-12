@@ -23,7 +23,7 @@
       (boolean (some #(= % title) (map :title queries))))))
 
 (rum/defc query-refresh-button
-  [query-time {:keys [on-mouse-down full-text-search?]}]
+  [query-time {:keys [on-pointer-down full-text-search?]}]
   (ui/tippy
    {:html  [:div
             [:p
@@ -38,7 +38,7 @@
                                    :boundariesElement "viewport"}}}
     :arrow true}
    [:a.fade-link.flex
-    {:on-mouse-down on-mouse-down}
+    {:on-pointer-down on-pointer-down}
     (ui/icon "refresh" {:style {:font-size 20}})]))
 
 (rum/defcs custom-query-inner < rum/reactive
@@ -231,7 +231,7 @@
                 (when (or full-text-search?
                           (and query-time (> query-time 50)))
                   (query-refresh-button query-time {:full-text-search? full-text-search?
-                                                    :on-mouse-down (fn [e]
+                                                    :on-pointer-down (fn [e]
                                                                      (util/stop e)
                                                                      (query-result/trigger-custom-query! config q *query-error))}))]])])
 

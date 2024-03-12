@@ -83,7 +83,7 @@
         *elements (get state ::elements)
         {:keys [file block-uuid]} option]
     (when data
-      [:div.overflow-hidden {:on-mouse-down (fn [e] (util/stop e))}
+      [:div.overflow-hidden {:on-pointer-down (fn [e] (util/stop e))}
        [:div.my-1 {:style {:font-size 10}}
         [:a.mr-2 {:on-click ui-handler/toggle-wide-mode!}
          (util/format "Wide Mode (%s)" (if wide-mode? "ON" "OFF"))]
@@ -98,7 +98,7 @@
          "Edit Block"]]
        [:div.draw-wrap
         {:ref ref
-         :on-mouse-down (fn [e]
+         :on-pointer-down (fn [e]
                           (util/stop e)
                           (state/set-block-component-editing-mode! true))
          :on-blur #(state/set-block-component-editing-mode! false)

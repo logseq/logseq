@@ -37,7 +37,7 @@
 (defonce *current-command (atom nil))
 
 (def query-doc
-  [:div {:on-mouse-down (fn [e] (.stopPropagation e))}
+  [:div {:on-pointer-down (fn [e] (.stopPropagation e))}
    [:div.font-medium.text-lg.mb-2 "Query examples:"]
    [:ul.mb-1
     [:li.mb-1 [:code "{{query #tag}}"]]

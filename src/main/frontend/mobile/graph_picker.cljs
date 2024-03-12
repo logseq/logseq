@@ -27,7 +27,7 @@
      (ui/toggle on? (fn []) true)]
     :class (str "toggle-item " (when on? "is-on"))
     :intent "logseq"
-    :on-mouse-down #(util/stop %)
+    :on-pointer-down #(util/stop %)
     :on-click #(when (fn? on-toggle)
                  (on-toggle (not on?)))))
 
