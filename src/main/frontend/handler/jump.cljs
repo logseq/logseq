@@ -9,7 +9,7 @@
 (defonce *jump-data (atom {}))
 
 (def prefix-keys ["j" "k" "l"])
-(def keys
+(def other-keys
   ["a"
    "s"
    "d"
@@ -34,17 +34,17 @@
    "n"
    "m"])
 
-(defonce full-start-keys (set (concat prefix-keys keys)))
+(defonce full-start-keys (set (concat prefix-keys other-keys)))
 
 (defn generate-keys
   "Notice: at most 92 keys for now"
   [n]
   (vec
    (take n
-         (concat keys
+         (concat other-keys
                  (mapcat
                   (fn [k]
-                    (map #(str k %) keys))
+                    (map #(str k %) other-keys))
                   prefix-keys)))))
 
 (defn clear-jump-hints!
@@ -76,14 +76,19 @@
 
 (defn jump-to
   []
-  (let [selected-block (first (state/get-selection-blocks))]
+  (let [selected-block-or-page (or (first (state/get-selection-blocks))
+                           ;; current edited block
+                           (some-> (:block-parent-id (first (state/get-editor-args)))
+                                   js/document.getElementById)
+                           ;; current page
+                           (d/sel1 js/document "#main-content-container .ls-page-properties"))]
     (cond
-      selected-block
+      selected-block-or-page
       (when (empty? (d/sel js/document ".jtrigger-id"))
-        (let [triggers (d/sel selected-block ".jtrigger")]
+        (let [triggers (d/sel selected-block-or-page ".jtrigger")]
           (when (seq triggers)
             (reset! *jump-data {:mode :property
-                                :triggers (d/sel selected-block ".jtrigger")})
+                                :triggers (d/sel selected-block-or-page ".jtrigger")})
             (let [keys (generate-keys (count triggers))
                   key-down-handler (fn [e]
                                      (let [k (util/ekey e)]
