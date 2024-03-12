@@ -358,7 +358,6 @@
  :loading-files "بار کردن پرونده‌ها"
  :login "ورود"
  :logout "خروج"
- :logout-user "خروج ({1})"
  :download "بارگیری"
  :language "زبان"
  :remove-background "حذف پس‌زمینه"

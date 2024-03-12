@@ -73,7 +73,8 @@
    (when input
      (let [{:keys [pos]} (get-caret-pos input)
            pos (if (= n 1)
-                 (util/safe-inc-current-pos-from-start (.-value input) pos)
+                 (or (util/safe-inc-current-pos-from-start (.-value input) pos)
+                     (inc pos))
                  (+ pos n))]
        (move-cursor-to input pos)))))
 
