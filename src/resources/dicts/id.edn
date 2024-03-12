@@ -483,7 +483,6 @@
  :loading-files "Memuat berkas"
  :login "Masuk"
  :logout "Keluar"
- :logout-user "Keluar ({1})"
  :download "Unduh"
  :language "Bahasa"
  :remove-background "Hapus latar belakang"

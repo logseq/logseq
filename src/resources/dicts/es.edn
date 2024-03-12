@@ -41,7 +41,6 @@
  :loading-files                                     "Cargando archivos"
  :login                                             "Iniciar sesión"
  :logout                                            "Cerrar sesión"
- :logout-user                                       "Cerrar sesión ({1})"
  :new-graph                                         "Añadir nuevo grafo"
  :new-page                                          "Nueva página:"
  :open-a-directory                                  "Abrir un directorio local"

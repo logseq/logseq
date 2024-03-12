@@ -70,6 +70,12 @@
    parse-jwt
    :email))
 
+(defn username []
+  (some->
+   (state/get-auth-id-token)
+   parse-jwt
+   :cognito:username))
+
 (defn user-uuid []
   (some->
    (state/get-auth-id-token)
@@ -90,12 +96,21 @@
    (js/localStorage.setItem "access-token" access-token)
    (js/localStorage.setItem "refresh-token" refresh-token)))
 
+(defn- clear-cognito-tokens!
+  "Clear tokens for cognito's localstorage, prefix is 'CognitoIdentityServiceProvider'"
+  []
+  (let [prefix "CognitoIdentityServiceProvider."]
+    (doseq [key (js/Object.keys js/localStorage)]
+      (when (string/starts-with? key prefix)
+        (js/localStorage.removeItem key)))))
+
 (defn- clear-tokens
   ([]
    (state/set-auth-id-token nil)
    (state/set-auth-access-token nil)
    (state/set-auth-refresh-token nil)
-   (set-token-to-localstorage! "" "" ""))
+   (set-token-to-localstorage! "" "" "")
+   (clear-cognito-tokens!))
   ([except-refresh-token?]
    (state/set-auth-id-token nil)
    (state/set-auth-access-token nil)
