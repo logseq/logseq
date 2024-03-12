@@ -142,8 +142,8 @@
          {:item [:span.flex.flex-col.relative.group.pt-1
                  [:b.leading-none (user-handler/username)]
                  [:small.opacity-70 (user-handler/email)]
-                 [:a.absolute.opacity-0.group-hover:opacity-100.text-red-rx-09
-                  {:class "right-1 top-3"}
+                 [:i.absolute.opacity-0.group-hover:opacity-100.text-red-rx-09
+                  {:class "right-1 top-3" :title (t :logout)}
                   (ui/icon "logout")]]
           :options {:on-click #(user-handler/logout)}})]
        (concat page-menu-and-hr)
