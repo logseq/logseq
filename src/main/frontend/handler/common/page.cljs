@@ -18,19 +18,11 @@
             [promesa.core :as p]
             [frontend.handler.block :as block-handler]
             [frontend.handler.file-based.recent :as file-recent-handler]
-            [frontend.format.block :as block]
             [logseq.db :as ldb]
             [frontend.db.conn :as conn]
             [datascript.core :as d]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]))
-
-(defn build-hidden-page-tx-data
-  [page-name]
-  (let [page-name* (str "$$$" page-name)]
-    (assoc (block/page-name->map page-name* true true)
-           :block/type #{"hidden"}
-           :block/format :markdown)))
 
 ;; TODO: return page entity instead
 (defn create!
@@ -126,16 +118,13 @@
 (defn <favorite-page!-v2
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
-  (let [favorites-page (d/entity (conn/get-db) [:block/name common-config/favorites-page-name])
-        favorites-page-tx-data (build-hidden-page-tx-data "favorites")]
+  (let [favorites-page (d/entity (conn/get-db) [:block/name common-config/favorites-page-name])]
     (when (d/entity (conn/get-db) [:block/uuid page-block-uuid])
       (p/do!
-       (when-not favorites-page (ldb/transact! nil [favorites-page-tx-data]))
+       (when-not favorites-page (ldb/create-favorites-page (state/get-current-repo)))
        (ui-outliner-tx/transact!
         {:outliner-op :insert-blocks}
-        (outliner-op/insert-blocks! [{:block/link [:block/uuid page-block-uuid]
-                                      :block/content ""
-                                      :block/format :markdown}]
+        (outliner-op/insert-blocks! [(ldb/build-favorite-tx page-block-uuid)]
                                     (d/entity (conn/get-db) [:block/name common-config/favorites-page-name])
                                     {}))))))
 
