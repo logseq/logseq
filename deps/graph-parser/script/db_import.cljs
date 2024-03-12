@@ -69,6 +69,7 @@
      (gp-exporter/import-logseq-files conn logseq-files <read-file {:notify-user prn})
      (gp-exporter/import-from-asset-files! asset-files #(<copy-asset-file % db-graph-dir file-graph-dir) {:notify-user prn})
      (gp-exporter/import-from-doc-files! conn doc-files <read-file import-options)
+     (gp-exporter/import-favorites-from-config-edn! conn conn config {})
      (gp-exporter/import-class-properties conn conn))))
 
 (defn- resolve-path

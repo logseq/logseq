@@ -776,3 +776,33 @@
           (p/catch (fn [e]
                      (notify-user {:msg (str "Import has an unexpected error:\n" e)
                                    :level :error})))))))
+
+(defn- insert-favorites
+  "Inserts favorited pages as uuids into a new favorite page"
+  [repo-or-conn favorited-ids page-id]
+  (let [tx (reduce (fn [acc favorite-id]
+                     (conj acc
+                           (sqlite-util/block-with-timestamps
+                            (merge (ldb/build-favorite-tx favorite-id)
+                                   {:block/uuid (d/squuid)
+                                    :db/id (or (some-> (:db/id (last acc)) dec) -1)
+                                    :block/left {:db/id (or (:db/id (last acc)) page-id)}
+                                    :block/parent page-id
+                                    :block/page page-id}))))
+                   []
+                   favorited-ids)]
+    (ldb/transact! repo-or-conn tx)))
+
+(defn import-favorites-from-config-edn!
+  [conn repo config {:keys [log-fn] :or {log-fn prn}}]
+  (when-let [favorites (seq (:favorites config))]
+    (p/do!
+     (ldb/create-favorites-page repo)
+     (if-let [favorited-ids
+              (keep (fn [page-name]
+                      (some-> (d/entity @conn [:block/name (common-util/page-name-sanity-lc page-name)])
+                              :block/uuid))
+                    favorites)]
+       (let [page-entity (d/entity @conn [:block/name common-config/favorites-page-name])]
+         (insert-favorites repo favorited-ids (:db/id page-entity)))
+       (log-fn :no-favorites-found {:favorites favorites})))))

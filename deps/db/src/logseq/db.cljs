@@ -569,6 +569,26 @@
 (def write-transit-str sqlite-util/write-transit-str)
 (def read-transit-str sqlite-util/read-transit-str)
 
+(defn create-favorites-page
+  "Creates hidden favorites page for storing favorites"
+  [repo]
+  (transact!
+   repo
+   [(sqlite-util/block-with-timestamps
+     {:block/uuid (d/squuid)
+      :block/name common-config/favorites-page-name
+      :block/original-name common-config/favorites-page-name
+      :block/journal? false
+      :block/type #{"hidden"}
+      :block/format :markdown})]))
+
+(defn build-favorite-tx
+  "Builds tx for a favorite block in favorite page"
+  [favorite-uuid]
+  {:block/link [:block/uuid favorite-uuid]
+   :block/content ""
+   :block/format :markdown})
+
 (comment
   (defn db-based-graph?
     "Whether the current graph is db-only"

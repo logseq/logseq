@@ -2,11 +2,9 @@
   "Import data into Logseq."
   (:require [cljs.core.async.interop :refer [p->c]]
             [clojure.core.async :as async]
-            [clojure.edn :as edn]
             [clojure.string :as string]
             [cljs-time.core :as t]
             [cljs.pprint :as pprint]
-            [datascript.core :as d]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
@@ -20,7 +18,6 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -29,10 +26,7 @@
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [logseq.common.path :as path]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
             [logseq.graph-parser.exporter :as gp-exporter]
-            [logseq.outliner.core :as outliner-core]
             [promesa.core :as p]
             [rum.core :as rum]
             [logseq.common.config :as common-config]
@@ -167,47 +161,6 @@
      [:div.mt-5.sm:mt-4.flex
       (ui/button "Submit"
                  {:on-click on-submit})]]))
-
-(defn- build-hidden-favorites-page-blocks
-  [page-block-uuid-coll]
-  (map
-   (fn [uuid]
-     {:block/link [:block/uuid uuid]
-      :block/content ""
-      :block/format :markdown})
-   page-block-uuid-coll))
-
-(def hidden-favorites-page-name common-config/favorites-page-name)
-(def hidden-favorites-page-tx
-  {:block/uuid (d/squuid)
-   :block/name hidden-favorites-page-name
-   :block/original-name hidden-favorites-page-name
-   :block/journal? false
-   :block/type #{"hidden"}
-   :block/format :markdown})
-
-(defn- import-favorites-from-config-edn!
-  [db-conn repo config-file]
-  (let [now (inst-ms (js/Date.))]
-    (p/do!
-     (ldb/transact! repo [(assoc hidden-favorites-page-tx
-                                 :block/created-at now
-                                 :block/updated-at now)])
-     (p/let [content (when config-file (.text (:file-object config-file)))]
-       (when-let [content-edn (try (edn/read-string content)
-                                   (catch :default _ nil))]
-         (when-let [favorites (seq (:favorites content-edn))]
-           (when-let [page-block-uuid-coll
-                      (seq
-                       (keep (fn [page-name]
-                               (some-> (d/entity @db-conn [:block/name (common-util/page-name-sanity-lc page-name)])
-                                       :block/uuid))
-                             favorites))]
-             (let [page-entity (d/entity @db-conn [:block/name hidden-favorites-page-name])]
-               (ui-outliner-tx/transact!
-                {:outliner-op :insert-blocks}
-                (outliner-core/insert-blocks! repo db-conn (build-hidden-favorites-page-blocks page-block-uuid-coll)
-                                              page-entity {}))))))))))
 
 (rum/defc import-file-graph-dialog
   [initial-name on-graph-name-confirmed]
@@ -376,7 +329,7 @@
       (state/set-state! [:graph/importing-state :current-page] "Asset files")
       (async/<! (p->c (gp-exporter/import-from-asset-files! asset-files <copy-asset {:notify-user show-notification})))
       (async/<! (p->c (gp-exporter/import-from-doc-files! db-conn doc-files <read-file import-options)))
-      (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))
+      (async/<! (p->c (gp-exporter/import-favorites-from-config-edn! db-conn repo config {})))
       (async/<! (p->c (gp-exporter/import-class-properties db-conn repo)))
       (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
       (state/set-state! :graph/importing nil)
