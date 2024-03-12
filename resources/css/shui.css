@@ -237,3 +237,23 @@ html[data-theme=dark] {
   max-height: var(--radix-dropdown-menu-content-available-height);
   overflow-y: auto;
 }
+
+.ui__multi-select-content {
+  @apply relative;
+
+  > .head {
+    @apply sticky top-0 z-10;
+  }
+
+  .search-input {
+    > .ui__input {
+      @apply rounded-[1px] h-8;
+    }
+  }
+
+  &:has([data-radix-collection-item]) {
+    > .head {
+      @apply mb-1.5;
+    }
+  }
+}

@@ -31,11 +31,10 @@
             (.focus))))
       [down])
 
-    [:div.search-input.p-2
+    [:div.search-input
      {:ref *el}
      (form/input
        (merge {:placeholder "search"
-               :class "!h-8"
                :on-key-up #(case (.-key %)
                              "ArrowDown" (set-down! (inc down))
                              "ArrowUp" nil
@@ -108,6 +107,7 @@
                                   (focus-search-input! target))
                             :dune)))
          :class (str (:class content-props)
+                  " ui__multi-select-content"
                   (when valid-search-key? " has-search-key"))}
         (dissoc content-props :class))
       ;; header
