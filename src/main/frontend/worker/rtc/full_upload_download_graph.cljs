@@ -10,10 +10,10 @@
             [frontend.worker.async-util :include-macros true :refer [<? go-try]]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.ws :refer [<send!]]
-            [logseq.db.frontend.schema :as db-schema]
             [frontend.worker.state :as worker-state]
-            [promesa.core :as p]
-            [frontend.worker.util :as worker-util]))
+            [frontend.worker.util :as worker-util]
+            [logseq.db.frontend.schema :as db-schema]
+            [promesa.core :as p]))
 
 (def transit-r (transit/reader :json))
 
@@ -41,13 +41,13 @@
   (go
     (let [{:keys [url key all-blocks-str]}
           (with-sub-data-from-ws state
-            (<! (<send! state {:req-id (get-req-id) :action "presign-put-temp-s3-obj"}))
+            (<? (<send! state {:req-id (get-req-id) :action "presign-put-temp-s3-obj"}))
             (let [all-blocks (export-as-blocks @conn)
                   all-blocks-str (transit/write (transit/writer :json) all-blocks)]
               (merge (<! (get-result-ch)) {:all-blocks-str all-blocks-str})))]
       (<! (http/put url {:body all-blocks-str}))
       (with-sub-data-from-ws state
-        (<! (<send! state {:req-id (get-req-id) :action "full-upload-graph" :s3-key key}))
+        (<? (<send! state {:req-id (get-req-id) :action "full-upload-graph" :s3-key key}))
         (let [r (<! (get-result-ch))]
           (if-not (:graph-uuid r)
             (ex-info "upload graph failed" r)
@@ -64,7 +64,6 @@
    :block-type/macros       "macros"
    :block-type/hidden       "hidden"
    :block-type/closed-value "closed value"})
-
 
 (defn- replace-db-id-with-temp-id
   [blocks]
@@ -121,7 +120,6 @@
                 b)))
           blocks)))
 
-
 (defn- <transact-remote-all-blocks-to-sqlite
   [all-blocks repo]
   (go-try
@@ -144,7 +142,9 @@
   (go-try
    (let [{:keys [url]}
          (with-sub-data-from-ws state
-           (<send! state {:req-id (get-req-id) :action "full-download-graph" :graph-uuid graph-uuid})
+           (<? (<send! state {:req-id (get-req-id)
+                              :action "full-download-graph"
+                              :graph-uuid graph-uuid}))
            (<! (get-result-ch)))
          {:keys [status body] :as r} (<! (http/get url))
          repo (str "logseq_db_rtc-" repo)]

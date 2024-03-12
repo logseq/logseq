@@ -917,7 +917,7 @@
       (<! (ws/<ensure-ws-open! state))
       (reset! (:*graph-uuid state) graph-uuid)
       (with-sub-data-from-ws state
-        (<! (ws/<send! state {:action "register-graph-updates" :req-id (get-req-id) :graph-uuid graph-uuid}))
+        (<? (ws/<send! state {:action "register-graph-updates" :req-id (get-req-id) :graph-uuid graph-uuid}))
         (<! (get-result-ch)))
 
       (async/sub data-from-ws-pub "push-updates" push-data-from-ws-ch)
@@ -962,7 +962,7 @@
   [state graph-uuid & {:keys [target-user-uuids target-user-emails]}]
   (go
     (let [r (with-sub-data-from-ws state
-              (<! (ws/<send! state (cond-> {:req-id (get-req-id)
+              (<? (ws/<send! state (cond-> {:req-id (get-req-id)
                                             :action "grant-access"
                                             :graph-uuid graph-uuid}
                                      target-user-uuids (assoc :target-user-uuids target-user-uuids)
@@ -985,7 +985,7 @@
     (go
       (when (some-> state :*graph-uuid deref)
         (with-sub-data-from-ws state
-          (<! (ws/<send! state {:req-id (get-req-id)
+          (<? (ws/<send! state {:req-id (get-req-id)
                                 :action "query-block-content-versions"
                                 :block-uuids [block-uuid]
                                 :graph-uuid @(:*graph-uuid state)}))
@@ -1104,17 +1104,35 @@
     (go
       (let [state (or @*state (<! (<init-state repo token true)))
             graph-list (with-sub-data-from-ws state
-                         (<! (ws/<send! state {:req-id (get-req-id)
+                         (<? (ws/<send! state {:req-id (get-req-id)
                                                :action "list-graphs"}))
                          (:graphs (<! (get-result-ch))))]
         (p/resolve! d (bean/->js graph-list))))
     d))
 
+
+(defn <delete-graph
+  [token graph-uuid]
+  (let [d (p/deferred)]
+    (go
+      (let [state (or @*state (<! (<init-state nil token true)))
+            r (with-sub-data-from-ws state
+                (<? (ws/<send! state {:req-id (get-req-id)
+                                      :action "delete-graph"
+                                      :graph-uuid graph-uuid}))
+                (<! (get-result-ch)))
+            {:keys [ex-message]} r]
+        (if ex-message
+          (do (prn ::delete-graph-failed graph-uuid)
+              (p/resolve! d false))
+          (p/resolve! d true))))
+    d))
+
 (add-watch *state :notify-main-thread
            (fn [_ _ old new]
-             (when-let [*repo (:*repo new)]
-               (let [new-state (get-debug-state @*repo new)
-                     old-state (get-debug-state @*repo old)]
+             (when-let [repo @(:*repo new)]
+               (let [new-state (get-debug-state repo new)
+                     old-state (get-debug-state repo old)]
                  (when (or (not= new-state old-state)
                            (= :open (:rtc-state new-state)))
                    (worker-util/post-message :rtc-sync-state new-state))))))
