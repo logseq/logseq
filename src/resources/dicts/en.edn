@@ -729,7 +729,7 @@
   :editor/toggle-undo-redo-mode   "Toggle undo redo mode (global or page only)"
   :editor/toggle-number-list      "Toggle number list"
   :editor/add-property            "Add property"
-  :editor/jump                    "Jump to a property key or value (selection mode)"
+  :editor/jump                    "Jump to a property key or value"
   :whiteboard/select              "Select tool"
   :whiteboard/pan                 "Pan tool"
   :whiteboard/portal              "Portal tool"
