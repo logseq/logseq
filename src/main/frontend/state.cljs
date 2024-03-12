@@ -121,7 +121,6 @@
       :block/component-editing-mode?         false
       :editor/start-pos                      (atom nil)
       :editor/op                             (atom nil)
-      :editor/jump-data                      (atom nil)
       :editor/hidden-editors                 #{} ;; page names
       :editor/draw-mode?                     false
       :editor/action                         (atom nil)

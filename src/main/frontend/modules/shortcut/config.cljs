@@ -508,7 +508,7 @@
    :command/toggle-favorite                 {:binding "mod+shift+f"
                                              :fn      page-handler/toggle-favorite!}
 
-   :editor/jump                             {:binding "j"
+   :editor/jump                             {:binding "mod+j"
                                              :fn      jump-handler/jump-to}
    :editor/open-file-in-default-app         {:binding  "mod+d mod+a"
                                              :inactive (not (util/electron?))
