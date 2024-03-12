@@ -10,7 +10,8 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.shui.ui :as shui]))
 
 (defonce debug-state (atom nil))
 
@@ -49,7 +50,11 @@
                                    ^object worker @db-browser/*worker]
                                (p/let [result (.rtc-get-graphs worker repo token)
                                        graph-list (bean/->clj result)]
-                                 (swap! debug-state assoc :remote-graphs (map :graph-uuid graph-list))))))]
+                                 (swap! debug-state assoc
+                                        :remote-graphs
+                                        (map
+                                         #(select-keys % [:graph-uuid :graph-status])
+                                         graph-list))))))]
 
      [:pre.select-text
       (-> {:user-uuid (user/user-uuid)
@@ -120,15 +125,19 @@
                                         ^object worker @db-browser/*worker]
                                     (.rtc-download-graph worker repo token graph-uuid)))))})
       [:div.flex.flex-col
-       [:select
-        {:on-change (fn [e]
-                      (let [value (util/evalue e)]
-                        (swap! debug-state assoc :graph-uuid-to-download value)))}
-        (if (seq (:remote-graphs state))
-          (cons [:option {:key "select a remote graph" :value nil} "select a remote graph"]
-                (for [graph-uuid (:remote-graphs state)]
-                  [:option {:key graph-uuid :value graph-uuid} (str (subs graph-uuid 0 14) "...")]))
-          (list [:option {:key "refresh-first" :value nil} "refresh remote-graphs first"]))]
+       (shui/select
+        {:on-value-change (fn [v]
+                            (some->> (parse-uuid v)
+                                     str
+                                     (swap! debug-state assoc :graph-uuid-to-download)))}
+        (shui/select-trigger
+         {:class "!px-2 !py-0 !h-8"}
+         (shui/select-value
+          {:placeholder "Select a graph-uuid"}))
+        (shui/select-content
+         (shui/select-group
+          (for [{:keys [graph-uuid graph-status]} (:remote-graphs state)]
+            (shui/select-item {:value graph-uuid :disabled (some? graph-status)} graph-uuid)))))
        [:input.form-input.my-2
         {:on-change (fn [e] (swap! debug-state assoc :download-graph-to-repo (util/evalue e)))
          :on-focus (fn [e] (let [v (.-value (.-target e))]
@@ -141,4 +150,25 @@
                               (let [repo (state/get-current-repo)
                                     token (state/get-auth-id-token)
                                     ^js worker @db-browser/*worker]
-                                (.rtc-upload-graph worker repo token)))})]]))
+                                (.rtc-upload-graph worker repo token)))})]
+     [:div
+      (ui/button (str "delete graph")
+                 {:on-click (fn []
+                              (when-let [graph-uuid (:graph-uuid-to-delete state)]
+                                (let [token (state/get-auth-id-token)
+                                      ^object worker @db-browser/*worker]
+                                  (prn ::delete-graph graph-uuid)
+                                  (.rtc-delete-graph worker token graph-uuid))))})
+      (shui/select
+       {:on-value-change (fn [v]
+                           (some->> (parse-uuid v)
+                                    str
+                                    (swap! debug-state assoc :graph-uuid-to-delete)))}
+       (shui/select-trigger
+        {:class "!px-2 !py-0 !h-8"}
+        (shui/select-value
+         {:placeholder "Select a graph-uuid"}))
+       (shui/select-content
+        (shui/select-group
+         (for [{:keys [graph-uuid graph-status]} (:remote-graphs state)]
+           (shui/select-item {:value graph-uuid :disabled (some? graph-status)} graph-uuid)))))]]))

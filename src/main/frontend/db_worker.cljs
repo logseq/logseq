@@ -616,6 +616,10 @@
    [_this repo token]
    (rtc-core/<get-graphs repo token))
 
+  (rtc-delete-graph
+   [_this token graph-uuid]
+   (rtc-core/<delete-graph token graph-uuid))
+
   (rtc-get-block-content-versions
    [_this block-id]
    (rtc-core/<get-block-content-versions @rtc-core/*state block-id))
