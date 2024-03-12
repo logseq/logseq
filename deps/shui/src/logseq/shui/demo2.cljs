@@ -19,7 +19,7 @@
                             :X-RapidAPI-Host "movies-api14.p.rapidapi.com"}})
      (p/then #(.json %)))))
 
-(rum/defc page
+(rum/defc multi-select-demo
   []
 
   [:div.sm:p-10
@@ -80,7 +80,7 @@
                                           (-> (do-fetch! :search (str "query=" v))
                                             (p/then #(when-let [ret (bean/->clj %)]
                                                        (when-let [items (:contents ret)]
-                                                         (set-items! (map (fn [item] (assoc item :id (:_id item))) (take 8 items))))))
+                                                         (set-items! (map (fn [item] (assoc item :id (:_id item))) (take 12 items))))))
                                             (p/finally #(set-fetching? false))))))
 
               :item-render (fn [item {:keys [selected?]}]
@@ -320,6 +320,7 @@
                             (ui/popup-show! (.-target e)
                               (gen-content q)
                               {:id id
+                               :align "start"
                                :content-props
                                {:class "x-input-popup-content"
                                 :onPointerDownOutside
@@ -358,3 +359,7 @@
                       :content-props {:class "w-48"}})
         :on-context-menu #(ui/popup-show! %
                             [:h1.text-3xl.font-bold "hi x popup for custom context menu!"])}]])])
+
+(rum/defc page
+  []
+  (multi-select-demo))
