@@ -66,16 +66,17 @@
   (let [idx (.indexOf @*current-keys key)]
     (when (>= idx 0) (nth triggers idx))))
 
-(defn trigger!
+(defn- trigger!
   [key e]
   (let [{:keys [triggers _mode]} @*jump-data]
     (let [trigger (get-trigger triggers (string/trim key))]
-      (util/stop e)
-      (state/clear-selection!)
-      (exit!)
-      (if trigger
-        (.click trigger)
-        (notification/show! "Invalid jump" :error true)))))
+      (when (or trigger (>= (count (string/trim key)) 2))
+        (util/stop e)
+        (state/clear-selection!)
+        (exit!)
+        (if trigger
+          (.click trigger)
+          (notification/show! "Invalid jump" :error true))))))
 
 (defn jump-to
   []
@@ -112,7 +113,7 @@
                     (d/append! dom (-> (d/create-element :div)
                                        (d/set-attr! :class class)
                                        (d/set-text! (nth keys id))))))
-                triggers))
+                (take (count keys) triggers)))
               (.addEventListener js/window "keydown" key-down-handler)))))
 
       :else                             ; add block jump support
