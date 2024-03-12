@@ -140,12 +140,14 @@
                 (item-config
                  property
                  block
-                 (assoc opts :on-save
-                        (fn [value icon description]
-                          (<upsert-closed-value! property {:id          uuid
-                                                           :value       value
-                                                           :description description
-                                                           :icon        icon})))))))
+                 (merge
+                  parent-opts
+                  (assoc opts :on-save
+                         (fn [value icon description]
+                           (<upsert-closed-value! property {:id          uuid
+                                                            :value       value
+                                                            :description description
+                                                            :icon        icon}))))))))
           opts {:toggle-fn #(shui/popup-show! % content-fn {:as-menu? true})}]
 
       (choice-with-close
