@@ -3,7 +3,8 @@
   (:require [frontend.state :as state]
             [dommy.core :as d]
             [clojure.string :as string]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.handler.notification :as notification]))
 
 (defonce *current-keys (atom nil))
 (defonce *jump-data (atom {}))
@@ -62,26 +63,28 @@
 
 (defn get-trigger
   [triggers key]
-  (when-let [idx (.indexOf @*current-keys key)]
-    (nth triggers idx)))
+  (let [idx (.indexOf @*current-keys key)]
+    (when (>= idx 0) (nth triggers idx))))
 
 (defn trigger!
   [key e]
   (let [{:keys [triggers _mode]} @*jump-data]
-    (when-let [trigger (get-trigger triggers (string/trim key))]
+    (let [trigger (get-trigger triggers (string/trim key))]
       (util/stop e)
       (state/clear-selection!)
       (exit!)
-      (.click trigger))))
+      (if trigger
+        (.click trigger)
+        (notification/show! "Invalid jump" :error true)))))
 
 (defn jump-to
   []
   (let [selected-block-or-page (or (first (state/get-selection-blocks))
-                           ;; current edited block
-                           (some-> (:block-parent-id (first (state/get-editor-args)))
-                                   js/document.getElementById)
-                           ;; current page
-                           (d/sel1 js/document "#main-content-container .ls-page-properties"))]
+                                   ;; current edited block
+                                   (some-> (:block-parent-id (first (state/get-editor-args)))
+                                           js/document.getElementById)
+                                   ;; current page
+                                   (d/sel1 js/document "#main-content-container .ls-page-properties"))]
     (cond
       selected-block-or-page
       (when (empty? (d/sel js/document ".jtrigger-id"))
