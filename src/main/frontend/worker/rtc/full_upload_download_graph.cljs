@@ -154,7 +154,7 @@
                               :graph-uuid graph-uuid}))
            (<! (get-result-ch)))
          {:keys [status body] :as r} (<! (http/get url))
-         repo (str "logseq_db_rtc-" repo)]
+         repo (str "logseq_db_" repo)]
      (if (not= 200 status)
        (ex-info "<download-graph failed" r)
        (let [all-blocks (transit/read transit-r body)]

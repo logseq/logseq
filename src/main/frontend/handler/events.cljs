@@ -58,6 +58,7 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.file-based.nfs :as nfs-handler]
             [frontend.handler.code :as code-handler]
+            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.graph-picker :as graph-picker]
             [frontend.mobile.util :as mobile-util]
@@ -176,7 +177,8 @@
            (route-handler/redirect-to-home!))
          (srs/update-cards-due-count!)
          (state/pub-event! [:graph/ready graph])
-         (when-not db-based?
+         (if db-based?
+           (rtc-handler/<rtc-start! graph)
            (file-sync-restart!))
          (when-let [dir-name (and (not db-based?) (config/get-repo-dir graph))]
            (fs/watch-dir! dir-name)))))))
@@ -746,10 +748,11 @@
   (notification/show! "file sync graph count exceed limit" :warning false)
   (file-sync-stop!))
 
-(defmethod handle :graph/restored [[_ _graph]]
+(defmethod handle :graph/restored [[_ graph]]
   (mobile/init!)
+  (rtc-handler/<rtc-start! graph)
   (when-not (mobile-util/native-ios?)
-    (state/pub-event! [:graph/ready (state/get-current-repo)])))
+    (state/pub-event! [:graph/ready graph])))
 
 (defmethod handle :whiteboard-link [[_ shapes]]
   (route-handler/go-to-search! :whiteboard/link)
@@ -969,6 +972,14 @@
 
 (defmethod handle :rtc/sync-state [[_ state]]
   (swap! rtc-debug-ui/debug-state (fn [old] (merge old state))))
+
+(defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid]]
+  (->
+   (p/do!
+    (rtc-handler/<rtc-download-graph! graph-name graph-uuid))
+   (p/catch (fn [e]
+              (println "RTC download graph failed, error:")
+              (js/console.error e)))))
 
 ;; db-worker -> UI
 (defmethod handle :db/sync-changes [[_ data]]
