@@ -1123,18 +1123,19 @@
 (defn <start-rtc
   [repo conn token dev-mode?]
   (go
-    (let [state (<! (<init-state repo token true {:dev-mode? dev-mode?}))
-          state-for-asset-sync (asset-sync/init-state-from-rtc-state state)
-          _ (reset! asset-sync/*asset-sync-state state-for-asset-sync)
-          config (worker-state/get-config repo)]
-      (if-let [graph-uuid (op-mem-layer/get-graph-uuid repo)]
-        (let [c1 (<loop-for-rtc state graph-uuid repo conn (common-config/get-date-formatter config))
-              c2 (asset-sync/<loop-for-assets-sync state-for-asset-sync graph-uuid repo conn)]
-          (<! c1)
-          (<! c2))
-        (worker-util/post-message :notification [[:div
-                                                  [:p "RTC is not supported for this graph"]]
-                                                 :error])))))
+    (if-let [graph-uuid (op-mem-layer/get-graph-uuid repo)]
+      (let [state (<! (<init-state repo token true {:dev-mode? dev-mode?}))
+            state-for-asset-sync (asset-sync/init-state-from-rtc-state state)
+            _ (reset! asset-sync/*asset-sync-state state-for-asset-sync)
+            config (worker-state/get-config repo)
+            c1 (<loop-for-rtc state graph-uuid repo conn (common-config/get-date-formatter config))
+            c2 (asset-sync/<loop-for-assets-sync state-for-asset-sync graph-uuid repo conn)]
+        (<! c1)
+        (<! c2))
+      (worker-util/post-message :notification
+                                [[:div
+                                  [:p "RTC is not supported for this graph"]]
+                                 :error]))))
 
 (defn stop-rtc
   [state]
