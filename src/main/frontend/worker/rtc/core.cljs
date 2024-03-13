@@ -970,46 +970,47 @@
           (when (:ex-data resp) (handle-remote-genernal-exception resp state))
           (async/sub data-from-ws-pub "push-updates" push-data-from-ws-ch)
           (when loop-started-ch (async/close! loop-started-ch))
-          (<! (go-loop [push-client-ops-ch
-                        (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))]
-                (let [{:keys [push-data-from-ws client-op-update stop continue]}
-                      (async/alt!
-                        toggle-auto-push-client-ops-ch {:continue true}
-                        force-push-client-ops-ch {:client-op-update true}
-                        push-client-ops-ch ([v] (if (and @*auto-push-client-ops? (true? v))
-                                                  {:client-op-update true}
-                                                  {:continue true}))
-                        push-data-from-ws-ch ([v] {:push-data-from-ws v})
-                        stop-rtc-loop-chan {:stop true}
-                        :priority true)]
-                  (cond
-                    continue
-                    (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?)))
+          (<?
+           (go-try
+             (loop [push-client-ops-ch
+                    (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))]
+               (let [{:keys [push-data-from-ws client-op-update stop continue]}
+                     (async/alt!
+                       toggle-auto-push-client-ops-ch {:continue true}
+                       force-push-client-ops-ch {:client-op-update true}
+                       push-client-ops-ch ([v] (if (and @*auto-push-client-ops? (true? v))
+                                                 {:client-op-update true}
+                                                 {:continue true}))
+                       push-data-from-ws-ch ([v] {:push-data-from-ws v})
+                       stop-rtc-loop-chan {:stop true}
+                       :priority true)]
+                 (cond
+                   continue
+                   (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?)))
 
-                    push-data-from-ws
-                    (let [r (<! (<push-data-from-ws-handler state repo conn date-formatter push-data-from-ws))]
-                      (when (= r ::need-pull-remote-data)
-                        ;; trigger a force push, which can pull remote-diff-data from local-t to remote-t
-                        (async/put! force-push-client-ops-ch true))
-                      (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))))
+                   push-data-from-ws
+                   (let [r (<! (<push-data-from-ws-handler state repo conn date-formatter push-data-from-ws))]
+                     (when (= r ::need-pull-remote-data)
+                       ;; trigger a force push, which can pull remote-diff-data from local-t to remote-t
+                       (async/put! force-push-client-ops-ch true))
+                     (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))))
 
-                    client-op-update
-                    ;; FIXME: access token expired
-                    (let [_ (<! (<client-op-update-handler state token))]
-                      (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))))
+                   client-op-update
+                   ;; FIXME: access token expired
+                   (let [_ (<? (<client-op-update-handler state token))]
+                     (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))))
 
-                    stop
-                    (stop-rtc-helper state)
+                   stop
+                   (stop-rtc-helper state)
 
-                    :else
-                    nil))))
+                   :else
+                   nil)))))
           (async/unsub data-from-ws-pub "push-updates" push-data-from-ws-ch)
           (catch :default e
             (case (:type (ex-data e))
               ::break-rtc-loop (prn :break-rtc-loop)
               ;; else
-              (prn ::unknown-ex e)
-              )))))))
+              (prn ::unknown-ex e))))))))
 
 
 ;;;  APIs ================================================================
