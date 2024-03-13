@@ -111,6 +111,12 @@
     }
 }
 
+.closed-values-properties {
+    .select-item {
+        @apply flex items-center;
+    }
+}
+
 .block-main-container .ls-properties-area {
     margin-top: 0.25em;
 }
