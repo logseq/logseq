@@ -3,7 +3,7 @@
             [rum.core :as rum]
             [logseq.shui.ui :as ui]
             [logseq.shui.popup.core :refer [install-popups update-popup! get-popup]]
-            [logseq.shui.select.multi :refer [x-select]]
+            [logseq.shui.select.multi :refer [x-select-content]]
             [frontend.components.icon :refer [emojis-cp emojis icon-search]]
             [frontend.storage :as storage]
             [cljs-bean.core :as bean]
@@ -77,7 +77,7 @@
                     (ui/tabler-icon "x" {:size 12}))))
               (ui/button {:variant :link :size :sm} "+")])
            ;; content
-           (x-select items selected-items
+           (x-select-content items selected-items
              {;; test item render
               :open? open?
               :close! #(set-open! false)
@@ -165,7 +165,7 @@
                 (ui/badge {:variant :secondary :class class} (str "#" key " " value)))
               (ui/button {:variant :link :size :sm} "+")])
            ;; content
-           (x-select items selected-items
+           (x-select-content items selected-items
              {:close! #(set-open! false)
               :search-enabled? search?
               :search-key-render (fn [q {:keys [items]}]
@@ -218,7 +218,7 @@
                 (ui/badge {:variant :secondary :class class} (str "#" key " " value)))
               (ui/button {:variant :link :size :sm} "+")])
            ;; content
-           (x-select items selected-items
+           (x-select-content items selected-items
              {;; test item render
               :open? open?
               :close! #(set-open! false)
