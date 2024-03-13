@@ -4,6 +4,7 @@
             [cljs-bean.core :as bean]
             [frontend.context.i18n :refer [t]]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
@@ -902,11 +903,12 @@
 
            [:label.flex-1
             {:for k}
-            (ui/checkbox {:id        k
-                          :value     c?
-                          :on-change (fn [^js e]
-                                       (when-not downloading?
-                                         (state/set-unchecked-update (:id it) (not (util/echecked? e)))))})
+            (shui/checkbox
+              {:id k
+               :default-checked c?
+               :on-checked-change (fn [checked?]
+                                    (when-not downloading?
+                                      (state/set-unchecked-update (:id it) (not checked?))))})
             [:strong.px-3 (:title it)
              [:sup (str (:version it) " 👉 " (:latest-version it))]]]
 
