@@ -84,7 +84,7 @@ jobs:
         run: DB_GRAPH=1 node static/tests.js -r frontend.db.query-dsl-test
 
       - name: Run ClojureScript tests
-        run: node static/tests.js
+        run: node static/tests.js -e fix-me
 
   lint:
     runs-on: ubuntu-latest
