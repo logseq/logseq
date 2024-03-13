@@ -569,7 +569,8 @@
 
   (rtc-stop
    [this]
-   (async-util/c->p (rtc-core/<stop-rtc)))
+   (when-let [state @rtc-core/*state]
+     (rtc-core/stop-rtc state)))
 
   (rtc-toggle-sync
    [this repo]
