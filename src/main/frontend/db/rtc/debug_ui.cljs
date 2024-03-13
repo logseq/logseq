@@ -54,7 +54,9 @@
                                  (swap! debug-state assoc
                                         :remote-graphs
                                         (map
-                                         #(select-keys % [:graph-uuid :graph-status])
+                                         #(into {}
+                                                (filter second
+                                                 (select-keys % [:graph-uuid :graph-status :group])))
                                          graph-list))))))]
 
      [:pre.select-text
