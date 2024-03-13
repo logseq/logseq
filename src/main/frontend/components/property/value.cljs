@@ -105,6 +105,7 @@
        (ui/icon "calendar" {:size 16}))
       (shui/dropdown-menu-content
        {:align "start"
+        :on-click #(util/stop %)
         :on-interact-outside #(set-open! false)
         :onEscapeKeyDown #(set-open! false)}
        (shui/calendar
