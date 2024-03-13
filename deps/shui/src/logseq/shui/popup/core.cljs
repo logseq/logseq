@@ -60,7 +60,7 @@
     (swap! *popups #(->> % (medley/remove-nth index) (vec)))))
 
 (defn show!
-  [^js event content & {:keys [id as-menu? align root-props content-props] :as opts}]
+  [^js event content & {:keys [id as-menu? as-content? align root-props content-props] :as opts}]
   (let [position (cond
                    (vector? event) event
 
@@ -81,9 +81,10 @@
                    :else [0 0])]
     (upsert-popup!
       (merge opts
-        {:id       (or id (gen-id))
-         :open?    true :content content :position position
+        {:id (or id (gen-id))
+         :open? true :content content :position position
          :as-menu? as-menu?
+         :as-content? as-content?
          :root-props root-props
          :content-props (cond-> content-props
                           (not (nil? align))
@@ -100,7 +101,8 @@
     (hide! id)))
 
 (rum/defc x-popup
-  [{:keys [id open? content position as-menu? auto-side? root-props content-props] :as _props}]
+  [{:keys [id open? content position as-menu? as-content? auto-side? root-props content-props]
+    :as _props}]
   (rum/use-effect!
     (fn []
       (when (false? open?)
@@ -129,12 +131,17 @@
                                          (> height 0))
                                      height 1)
                            :width 1
-                           :top    y
-                           :left   x}} ""))
-        (popup-content
-          (merge {:onEscapeKeyDown      #(hide! id)
-                  :onPointerDownOutside #(hide! id)} content-props)
-          (if (fn? content) (content {:id id}) content))))))
+                           :top y
+                           :left x}} ""))
+        (let [content-props (merge {:onEscapeKeyDown #(hide! id)
+                                    :onPointerDownOutside #(hide! id)} content-props)
+              content (if (fn? content)
+                        (content (cond-> {:id id}
+                                   as-content?
+                                   (assoc :content-props content-props))) content)]
+          (if as-content?
+            content
+            (popup-content content-props content)))))))
 
 (rum/defc install-popups
   < rum/static

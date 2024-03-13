@@ -19,10 +19,6 @@
     max-height: var(--radix-dropdown-menu-content-available-height);
 }
 
-/* .property-value-content:hover { */
-/*     background: var(--ls-secondary-background-color); */
-/* } */
-
 .ls-block .ls-properties-area, .property-block-container {
     border-left: 1px solid;
     border-left-color: or(--lx-gray-04-alpha, --ls-guideline-color, #ddd) !important;
@@ -36,7 +32,9 @@
     margin-left: 0;
 }
 
-.ls-block .property-pair, .property-block .property-value, .property-template .property-pair {
+.ls-block .property-pair,
+.property-block .property-value,
+.property-template .property-pair {
     padding-left: 22px;
 }
 
@@ -106,6 +104,10 @@
 
     .property-key a:hover {
         color: var(--ls-link-text-hover-color);
+    }
+
+    .multi-values {
+        @apply cursor-pointer active:opacity-80;
     }
 }
 
