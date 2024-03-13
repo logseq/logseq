@@ -61,11 +61,13 @@
 
 (defn show!
   [^js event content & {:keys [id as-dropdown? as-content? align root-props content-props] :as opts}]
-  (let [position (cond
+  (let [*target (volatile! nil)
+        position (cond
                    (vector? event) event
 
                    (instance? js/MouseEvent (or (.-nativeEvent event) event))
-                   [(.-clientX event) (.-clientY event)]
+                   (do (vreset! *target (.-target (or (.-nativeEvent event) event)))
+                     [(.-clientX event) (.-clientY event)])
 
                    (instance? js/Element event)
                    (let [^js rect (.getBoundingClientRect event)
@@ -73,15 +75,16 @@
                          width (.-width rect)
                          height (.-height rect)
                          bottom (.-bottom rect)]
-                     [(+ left (case (keyword align)
-                                :start 0
-                                :end width
-                                (/ width 2)))
-                      (- bottom height) width height])
+                     (do (vreset! *target event)
+                       [(+ left (case (keyword align)
+                                  :start 0
+                                  :end width
+                                  (/ width 2)))
+                        (- bottom height) width height]))
                    :else [0 0])]
     (upsert-popup!
       (merge opts
-        {:id (or id (gen-id))
+        {:id (or id (gen-id)) :target (deref *target)
          :open? true :content content :position position
          :as-dropdown? as-dropdown?
          :as-content? as-content?
@@ -101,12 +104,15 @@
     (hide! id)))
 
 (rum/defc x-popup
-  [{:keys [id open? content position as-dropdown? as-content? auto-side? root-props content-props]
+  [{:keys [id open? content position as-dropdown? as-content?
+           auto-side? auto-focus? target root-props content-props]
     :as _props}]
   (rum/use-effect!
     (fn []
       (when (false? open?)
-        (js/setTimeout #(detach-popup! id) 128)))
+        (js/setTimeout #(detach-popup! id) 128)
+        (when (and auto-focus? target)
+          (js/setTimeout #(.focus target) 256))))
     [open?])
 
   (when-let [[x y _ height] position]

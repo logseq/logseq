@@ -769,7 +769,8 @@
                         (if config/publishing?
                           nil
                           (shui/popup-show! (rum/deref *el) content-fn
-                            {:as-dropdown? true :as-content? false :align "start"}))))
+                            {:as-dropdown? true :as-content? false
+                             :align "start" :auto-focus? true}))))
           :on-key-up (fn [^js e]
                        (case (.-key e)
                          (" " "Enter")
