@@ -22,7 +22,7 @@
             [frontend.util.fs :as fs-util]
             [frontend.handler.user :as user-handler]
             [logseq.shui.ui :as shui]
-            [frontend.persist-db.browser :as db-browser]))
+            [frontend.handler.db-based.rtc :as rtc-handler]))
 
 (rum/defc normalized-graph-label
   [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]
@@ -292,20 +292,6 @@
   (or (fs-util/include-reserved-chars? graph-name)
       (string/includes? graph-name "+")))
 
-(defn- rtc-create-graph!
-  [repo]
-  (let [token (state/get-auth-id-token)
-        ^js worker @db-browser/*worker]
-    (.rtc-upload-graph worker repo token)))
-
-(defn- rtc-start!
-  [repo]
-  (let [token (state/get-auth-id-token)
-        ^object worker @db-browser/*worker]
-    (.rtc-start worker repo token
-                (and config/dev?
-                     (state/sub [:ui/developer-mode?])))))
-
 (rum/defcs new-db-graph <
   (rum/local "" ::graph-name)
   (rum/local false ::cloud?)
@@ -318,8 +304,8 @@
                        (invalid-graph-name-warning)
                        (p/let [repo (repo-handler/new-db! @*graph-name)]
                          (when @*cloud?
-                           (p/let [_create-result (rtc-create-graph! repo)
-                                   _start-result (rtc-start! repo)]
+                           (p/let [_create-result (rtc-handler/<rtc-create-graph! repo)
+                                   _start-result (rtc-handler/<rtc-start! repo)]
                              ;; TODO: can't pr-str result
                              (state/close-modal!)))))))]
     [:div.new-graph.flex.flex-col.p-4.gap-4

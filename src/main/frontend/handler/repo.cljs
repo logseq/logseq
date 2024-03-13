@@ -106,9 +106,12 @@
   []
   (p/let [nfs-dbs (db-persist/get-all-graphs)
           nfs-dbs (map (fn [db]
-                         {:url db
-                          :root (config/get-local-dir db)
-                          :nfs? true}) nfs-dbs)
+                         (let [graph-name (:name db)]
+                           {:url graph-name
+                            :metadata (:metadata db)
+                            :root (config/get-local-dir graph-name)
+                            :nfs? true}))
+                       nfs-dbs)
           nfs-dbs (and (seq nfs-dbs)
                        (cond (util/electron?)
                              (ipc/ipc :inflateGraphsInfo nfs-dbs)
@@ -128,10 +131,11 @@
         :example? true}])))
 
 (defn combine-local-&-remote-graphs
-  [demo-repos remote-repos]
-  (when-let [repos' (seq (concat (map #(if-let [sync-meta (seq (:sync-meta %))]
-                                         (assoc % :GraphUUID (second sync-meta)) %)
-                                   demo-repos)
+  [local-repos remote-repos]
+  (when-let [repos' (seq (concat (map (fn [{:keys [sync-meta metadata] :as repo}]
+                                        (let [graph-id (or (:graph/uuid metadata) (second sync-meta))]
+                                          (if graph-id (assoc repo :GraphUUID graph-id) repo)))
+                                      local-repos)
                                  (some->> remote-repos
                                           (map #(assoc % :remote? true)))))]
     (let [repos' (group-by :GraphUUID repos')
