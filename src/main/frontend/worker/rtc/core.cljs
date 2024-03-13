@@ -851,7 +851,7 @@
 
 (defmulti handle-remote-genernal-exception
   "throw `ex-break-rtc-loop` when need to quit current rtc-loop"
-  (fn [resp & _] (comp :type :ex-data resp)))
+  (fn [resp & _] (:type (:ex-data resp))))
 
 (declare <remove-remote-graph-info stop-rtc stop-rtc-helper)
 (defmethod handle-remote-genernal-exception :graph-not-exist [_ state]
@@ -1006,7 +1006,10 @@
           (async/unsub data-from-ws-pub "push-updates" push-data-from-ws-ch)
           (catch :default e
             (case (:type (ex-data e))
-              ::break-rtc-loop (prn :break-rtc-loop))))))))
+              ::break-rtc-loop (prn :break-rtc-loop)
+              ;; else
+              (prn ::unknown-ex e)
+              )))))))
 
 
 ;;;  APIs ================================================================
