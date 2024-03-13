@@ -152,7 +152,7 @@
   [url]
   (when-let [graphs (seq (and url (combine-local-&-remote-graphs
                                     (state/get-repos)
-                                    (state/get-remote-graphs))))]
+                                    (state/get-remote-file-graphs))))]
     (first (filter #(when-let [url' (:url %)]
                       (= url url')) graphs))))
 
@@ -161,7 +161,9 @@
   (p/let [repos (get-repos)
           repos' (combine-local-&-remote-graphs
                   repos
-                  (state/get-remote-graphs))]
+                  (concat
+                   (state/get-rtc-graphs)
+                   (state/get-remote-file-graphs)))]
     (state/set-repos! repos')
     repos'))
 

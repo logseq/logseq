@@ -286,6 +286,7 @@
       :file-sync/graph-state                 {:current-graph-uuid nil}
       ;; graph-uuid -> ...
 
+      :rtc/graphs                            []
       ;; graph-url -> {:in-transaction? Boolean :txs []}
       :rtc/remote-batch-tx-state             {}
 
@@ -868,9 +869,13 @@ Similar to re-frame subscriptions"
   (or (:git/current-repo @state)
       "Logseq demo"))
 
-(defn get-remote-graphs
+(defn get-remote-file-graphs
   []
   (get-in @state [:file-sync/remote-graphs :graphs]))
+
+(defn get-rtc-graphs
+  []
+  (:rtc/graphs @state))
 
 (defn get-remote-graph-info-by-uuid
   [uuid]

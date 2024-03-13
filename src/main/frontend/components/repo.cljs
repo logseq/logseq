@@ -134,6 +134,7 @@
               (t :open-a-directory)
               :on-click #(state/pub-event! [:graph/setup-a-repo]))])]]
 
+        ;; TODO: support rtc
         (when (and (file-sync/enable-sync?) login?)
           [:div
            [:hr]
@@ -159,7 +160,7 @@
   (let [switch-repos (if-not (nil? current-repo)
                        (remove (fn [repo] (= current-repo (:url repo))) repos) repos) ; exclude current repo
         repo-links (mapv
-                    (fn [{:keys [url remote? GraphName GraphUUID] :as graph}]
+                    (fn [{:keys [url remote? rtc-graph? GraphName GraphUUID] :as graph}]
                       (let [local? (config/local-file-based-graph? url)
                             db-only? (config/db-based-graph? url)
                             repo-url (cond
@@ -180,8 +181,14 @@
                                                         (on-click e))
                                                       (if (gobj/get e "shiftKey")
                                                         (state/pub-event! [:graph/open-new-window url])
-                                                        (if (or local? db-only?)
+                                                        (cond
+                                                          (or local? db-only?)
                                                           (state/pub-event! [:graph/switch url])
+
+                                                          (and rtc-graph? remote?)
+                                                          (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID])
+
+                                                          :else
                                                           (state/pub-event! [:graph/pull-down-remote-graph graph]))))}})))
                     switch-repos)
         refresh-link (let [nfs-repo? (config/local-file-based-graph? current-repo)]
@@ -223,8 +230,9 @@
     (when (or login? current-repo)
       (let [repos (state/sub [:me :repos])
             remotes (state/sub [:file-sync/remote-graphs :graphs])
-            repos (if (and (seq remotes) login?)
-                    (repo-handler/combine-local-&-remote-graphs repos remotes) repos)
+            rtc-graphs (state/sub :rtc/graphs)
+            repos (if (and (or (seq remotes) (seq rtc-graphs)) login?)
+                    (repo-handler/combine-local-&-remote-graphs repos (concat remotes rtc-graphs)) repos)
             links (repos-dropdown-links repos current-repo multiple-windows? opts)
             render-content (fn [{:keys [toggle-fn]}]
                              (let [remote? (:remote? (first (filter #(= current-repo (:url %)) repos)))
@@ -261,7 +269,9 @@
                                                    (if remotes-loading?
                                                      (ui/loading "")
                                                      [:a.flex {:title "Refresh remote graphs"
-                                                               :on-click file-sync/load-session-graphs}
+                                                               :on-click (fn []
+                                                                           (file-sync/load-session-graphs)
+                                                                           (when config/dev? (rtc-handler/<get-remote-graphs)))}
                                                       (ui/icon "refresh")]))]))]
         (when (seq repos)
           (ui/dropdown-with-links render-content links links-header))))))

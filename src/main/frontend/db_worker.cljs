@@ -184,24 +184,25 @@
           acc
           (p/recur (conj acc (.-value elem))))))))
 
-(defn- <list-all-files
-  []
-  (let [dir? #(= (.-kind %) "directory")]
-    (p/let [^js root (.getDirectory js/navigator.storage)]
-      (p/loop [result []
-               dirs [root]]
-        (if (empty? dirs)
-          result
-          (p/let [dir (first dirs)
-                  result (conj result dir)
-                  values-iter (when (dir? dir) (.values dir))
-                  values (when values-iter (iter->vec values-iter))
-                  current-dir-dirs (filter dir? values)
-                  result (concat result values)
-                  dirs (concat
-                        current-dir-dirs
-                        (rest dirs))]
-            (p/recur result dirs)))))))
+(comment
+  (defn- <list-all-files
+    []
+    (let [dir? #(= (.-kind %) "directory")]
+      (p/let [^js root (.getDirectory js/navigator.storage)]
+        (p/loop [result []
+                 dirs [root]]
+          (if (empty? dirs)
+            result
+            (p/let [dir (first dirs)
+                    result (conj result dir)
+                    values-iter (when (dir? dir) (.values dir))
+                    values (when values-iter (iter->vec values-iter))
+                    current-dir-dirs (filter dir? values)
+                    result (concat result values)
+                    dirs (concat
+                          current-dir-dirs
+                          (rest dirs))]
+              (p/recur result dirs))))))))
 
 (defn- <list-all-dbs
   []
