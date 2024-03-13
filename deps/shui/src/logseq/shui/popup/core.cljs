@@ -60,7 +60,7 @@
     (swap! *popups #(->> % (medley/remove-nth index) (vec)))))
 
 (defn show!
-  [^js event content & {:keys [id as-menu? as-content? align root-props content-props] :as opts}]
+  [^js event content & {:keys [id as-dropdown? as-content? align root-props content-props] :as opts}]
   (let [position (cond
                    (vector? event) event
 
@@ -83,7 +83,7 @@
       (merge opts
         {:id (or id (gen-id))
          :open? true :content content :position position
-         :as-menu? as-menu?
+         :as-dropdown? as-dropdown?
          :as-content? as-content?
          :root-props root-props
          :content-props (cond-> content-props
@@ -101,7 +101,7 @@
     (hide! id)))
 
 (rum/defc x-popup
-  [{:keys [id open? content position as-menu? as-content? auto-side? root-props content-props]
+  [{:keys [id open? content position as-dropdown? as-content? auto-side? root-props content-props]
     :as _props}]
   (rum/use-effect!
     (fn []
@@ -110,9 +110,9 @@
     [open?])
 
   (when-let [[x y _ height] position]
-    (let [popup-root (if as-menu? dropdown-menu popover)
-          popup-trigger (if as-menu? dropdown-menu-trigger popover-trigger)
-          popup-content (if as-menu? dropdown-menu-content popover-content)
+    (let [popup-root (if as-dropdown? dropdown-menu popover)
+          popup-trigger (if as-dropdown? dropdown-menu-trigger popover-trigger)
+          popup-content (if as-dropdown? dropdown-menu-content popover-content)
           auto-side-fn (fn []
                          (let [vh js/window.innerHeight
                                [th bh] [y (- vh (+ y height))]]

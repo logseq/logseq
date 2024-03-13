@@ -148,7 +148,7 @@
                                                             :value       value
                                                             :description description
                                                             :icon        icon}))))))))
-          opts {:toggle-fn #(shui/popup-show! % content-fn {:as-menu? true})}]
+          opts {:toggle-fn #(shui/popup-show! % content-fn {:as-dropdown? true})}]
 
       (choice-with-close
        block
@@ -232,6 +232,6 @@
                                                                                                         :description description
                                                                                                         :icon        icon})]
                                                     (swap! *property-schema update :values (fnil conj []) closed-value))))))))))
-                              {:as-menu? true})))}
+                              {:as-dropdown? true})))}
         (ui/icon "plus" {:size 16})
         "Add choice"])]))
