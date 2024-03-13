@@ -52,7 +52,7 @@
                  (string/lower-case)
                  (string/includes? q)) items))))
 
-(rum/defc x-select
+(rum/defc x-select-content
   [items selected-items & {:keys [on-chosen item-render value-render
                                   head-render foot-render open? close!
                                   search-enabled? search-key on-search-key-change

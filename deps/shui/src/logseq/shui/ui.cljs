@@ -3,6 +3,7 @@
             [logseq.shui.icon.v2 :as icon-v2]
             [logseq.shui.toaster.core :as toaster-core]
             [logseq.shui.select.core :as select-core]
+            [logseq.shui.select.multi :as select-multi]
             [logseq.shui.dialog.core :as dialog-core]
             [logseq.shui.popup.core :as popup-core]
             [logseq.shui.form.core :as form-core]))
@@ -112,3 +113,5 @@
 (def popup-show! popup-core/show!)
 (def popup-hide! popup-core/hide!)
 (def popup-hide-all! popup-core/hide-all!)
+
+(def multi-select-content select-multi/x-select-content)

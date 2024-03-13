@@ -193,7 +193,11 @@
     (select/select (assoc opts
                           :selected-choices selected-choices
                           :items items'
-                          k f'))))
+                          k f'))
+    ;(shui/multi-select-content
+    ;  (map #(let [{:keys [value label]} %]
+    ;          {:id value :value label}) items') nil opts)
+    ))
 
 (defn select-page
   [property
@@ -393,7 +397,7 @@
                (reset! *values result))
              (assoc state ::values *values)))}
   [state block property
-   {:keys [multiple-choices? dropdown?] :as opts}
+   {:keys [multiple-choices? dropdown? content-props] :as select-opts}
    {:keys [*show-new-property-config?]}]
   (let [values (rum/react (::values state))]
     (when-not (= :loading values)
@@ -428,7 +432,7 @@
             on-chosen (fn [chosen]
                         (p/do!
                          (add-property-f (if (map? chosen) (:value chosen) chosen))
-                         (when-let [f (:on-chosen opts)] (f))))
+                         (when-let [f (:on-chosen select-opts)] (f))))
             selected-choices' (get-in block [:block/properties (:block/uuid property)])
             selected-choices (if (coll? selected-choices') selected-choices' [selected-choices'])]
         (select-aux block property
@@ -440,10 +444,11 @@
                       :show-new-when-not-exact-match? (not (or closed-values? (= :date type)))
                       :input-default-placeholder "Select"
                       :extract-chosen-fn :value
+                      :content-props content-props
                       :input-opts (fn [_]
                                     {:on-blur (fn []
                                                 (exit-edit-property)
-                                                (when-let [f (:on-chosen opts)] (f)))
+                                                (when-let [f (:on-chosen select-opts)] (f)))
                                      :on-click (fn []
                                                  (when *show-new-property-config?
                                                    (reset! *show-new-property-config? false)))
@@ -453,7 +458,7 @@
                                          "Escape"
                                          (do
                                            (exit-edit-property)
-                                           (when-let [f (:on-chosen opts)] (f)))
+                                           (when-let [f (:on-chosen select-opts)] (f)))
                                          nil))})}
                       closed-values?
                       (assoc :extract-fn :label)
@@ -564,20 +569,21 @@
 (rum/defc select-item
   [property type value {:keys [page-cp inline-text _icon?] :as opts}]
   (let [closed-values? (seq (get-in property [:block/schema :values]))]
-    (cond
-      (contains? #{:page :date} type)
-      (when-let [page (db/entity [:block/uuid value])]
-        (page-cp {:disable-preview? true
-                  :hide-close-button? true} page))
+    [:div.select-item
+     (cond
+       (contains? #{:page :date} type)
+       (when-let [page (db/entity [:block/uuid value])]
+         (page-cp {:disable-preview? true
+                   :hide-close-button? true} page))
 
-      closed-values?
-      (closed-value-item value opts)
+       closed-values?
+       (closed-value-item value opts)
 
-      (= type :number)
-      [:span.number (str value)]
+       (= type :number)
+       [:span.number (str value)]
 
-      :else
-      (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros))))))
+       :else
+       (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros))))]))
 
 (rum/defc single-value-select
   [block property value value-f select-opts {:keys [editing?] :as opts}]
@@ -711,12 +717,13 @@
 
                   (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros)))))]))]))))
 
-(rum/defc multiple-values < rum/reactive
+(rum/defc multiple-values
   [block property v {:keys [on-chosen dropdown? editing?]
                      :or {dropdown? true}
                      :as opts} schema]
   (let [type (get schema :type :default)
         date? (= type :date)
+        *el (rum/use-ref nil)
         items (if (coll? v) v (when v [v]))
         values-cp (fn [toggle-fn]
                     (if (seq items)
@@ -726,11 +733,12 @@
                        (when date?
                          [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
                       (when-not editing? [:div.opacity-50.pointer.text-sm "Empty"])))
-        select-cp (fn []
-                    (let [select-opts {:multiple-choices? true
-                                       :dropdown? editing?
-                                       :on-chosen (fn []
-                                                    (when on-chosen (on-chosen)))}]
+        select-cp (fn [select-opts]
+                    (let [select-opts (merge {:multiple-choices? true
+                                              :dropdown? editing?
+                                              :on-chosen (fn []
+                                                           (when on-chosen (on-chosen)))}
+                                        select-opts)]
                       [:div.property-select (cond-> {} editing? (assoc :class "h-6"))
                        (if (= :page type)
                          (property-value-select-page block property
@@ -738,23 +746,35 @@
                                                             :classes (:classes schema))
                                                      opts)
                          (select block property select-opts opts))]))]
+
+    (rum/use-effect!
+      (fn []
+        (when editing?
+          (prn "TODO: editing multiple select immediately show...")))
+      [editing?])
+
     (if (and dropdown? (not editing?))
-      (ui/dropdown
-       (fn [{:keys [toggle-fn]}]
-         [:a.control-link.jtrigger
-          {:on-click (fn [_e]
-                       (if config/publishing?
-                         nil
-                         (toggle-fn)))
-           :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2 pr-4"}
-          (values-cp toggle-fn)])
-       (fn [{:keys [_toggle-fn]}]
-         (select-cp))
-       {:modal-class (util/hiccup->class
-                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg.mt-2")
-        :trigger-class "w-full"
-        :initial-open? editing?})
-      (select-cp))))
+      (let [toggle-fn #(shui/popup-hide!)
+            content-fn (fn [{:keys [_id content-props]}]
+                         (select-cp {:content-props content-props}))]
+        ;;
+        [:div.multi-values.jtrigger
+         {:tab-index "0"
+          :ref *el
+          :on-click (fn [^js e]
+                      (when-not (.closest (.-target e) ".select-item")
+                        (if config/publishing?
+                          nil
+                          (shui/popup-show! (rum/deref *el) content-fn
+                            {:as-menu? true :as-content? false}))))
+          :on-key-up (fn [^js e]
+                       (case (.-key e)
+                         (" " "Enter")
+                         (some-> (rum/deref *el) (.click))
+                         :dune))
+          :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2 pr-4"}
+         (values-cp toggle-fn)])
+      (select-cp {:content-props nil}))))
 
 (rum/defc property-value < rum/reactive
   [block property v opts]
