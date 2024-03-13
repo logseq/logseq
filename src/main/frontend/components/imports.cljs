@@ -1,8 +1,6 @@
 (ns frontend.components.imports
   "Import data into Logseq."
-  (:require [cljs.core.async.interop :refer [p->c]]
-            [clojure.core.async :as async]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [cljs-time.core :as t]
             [cljs.pprint :as pprint]
             [frontend.components.onboarding.setups :as setups]
@@ -29,7 +27,6 @@
             [logseq.graph-parser.exporter :as gp-exporter]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.common.config :as common-config]
             [logseq.shui.ui :as shui]
             [lambdaisland.glogi :as log]
             [logseq.db.frontend.validate :as db-validate]))
@@ -231,8 +228,8 @@
 
 (defn- validate-imported-data
   [db import-state files]
-  (when-let [org-files (seq (filter #(= "org" (path/file-ext (:rpath %))) files))]
-    (log/info :org-files (mapv :rpath org-files))
+  (when-let [org-files (seq (filter #(= "org" (path/file-ext (:path %))) files))]
+    (log/info :org-files (mapv :path org-files))
     (notification/show! (str "Imported " (count org-files) " org file(s) as markdown. Support for org files will be added later.")
                         :info false))
   (when-let [ignored-props (seq @(:ignored-properties import-state))]
@@ -274,68 +271,52 @@
         (log/error :import-error ex-data)))
     (notification/show! msg :warning false)))
 
+(defn- copy-asset [repo repo-dir file]
+  (-> (.arrayBuffer (:file-object file))
+      (p/then (fn [buffer]
+                (let [content (js/Uint8Array. buffer)
+                      parent-dir (path/path-join repo-dir (path/dirname (:path file)))]
+                  (p/do!
+                   (fs/mkdir-if-not-exists parent-dir)
+                   (fs/write-file! repo repo-dir (:path file) content {:skip-transact? true})))))))
+
 (defn- import-file-graph
   [*files {:keys [graph-name tag-classes property-classes]} config-file]
   (state/set-state! :graph/importing :file-graph)
   (state/set-state! [:graph/importing-state :current-page] "Config files")
-  (async/go
-    (let [start-time (t/now)
-          _ (async/<! (p->c (repo-handler/new-db! graph-name {:file-graph-import? true})))
+  (p/let [start-time (t/now)
+          _ (repo-handler/new-db! graph-name {:file-graph-import? true})
           repo (state/get-current-repo)
           db-conn (db/get-db repo false)
-          <read-file (fn [file] (.text (:file-object file)))
-          config (async/<! (p->c (gp-exporter/import-config-file!
-                                  repo config-file <read-file
-                                  {:notify-user show-notification
-                                   :default-config config/config-default-content
-                                   :<save-file (fn [_ path content]
-                                                 (let [migrated-content (repo-handler/migrate-db-config content)]
-                                                   (db-editor-handler/save-file! path migrated-content)))})))
-          files (common-config/remove-hidden-files *files config :rpath)
-          logseq-file? #(string/starts-with? (:rpath %) "logseq/")
-          doc-files (->> files
-                         (remove logseq-file?)
-                         (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:rpath %)))))
-          asset-files (filter #(string/starts-with? (:rpath %) "assets/") files)
-          import-options (merge
-                          (gp-exporter/setup-import-options
-                           @db-conn
-                           config
-                           {:tag-classes (set (string/split tag-classes #",\s*"))
-                            :property-classes (set (string/split property-classes #",\s*"))}
-                           {:macros (:macros config)
-                            :notify-user show-notification})
-                          {:set-ui-state state/set-state!
-                           ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
-                           :import-file (fn import-file [conn m opts]
-                                          (let [tx-report
-                                                (gp-exporter/add-file-to-db-graph conn (:file/path m) (:file/content m) opts)]
-                                            (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report))))})
-          repo-dir (config/get-repo-dir repo)
-          <copy-asset (fn copy-asset [file]
-                        (-> (.arrayBuffer (:file-object file))
-                            (p/then (fn [buffer]
-                                      (let [content (js/Uint8Array. buffer)
-                                            parent-dir (path/path-join repo-dir (path/dirname (:rpath file)))]
-                                        (p/do!
-                                         (fs/mkdir-if-not-exists parent-dir)
-                                         (fs/write-file! repo repo-dir (:rpath file) content {:skip-transact? true})))))))]
-      (async/<! (p->c (gp-exporter/import-logseq-files (state/get-current-repo)
-                                                       (filter logseq-file? files)
-                                                       <read-file
-                                                       {:<save-file (fn [_ path content]
-                                                                      (db-editor-handler/save-file! path content))
-                                                        :notify-user show-notification})))
-      (state/set-state! [:graph/importing-state :current-page] "Asset files")
-      (async/<! (p->c (gp-exporter/import-from-asset-files! asset-files <copy-asset {:notify-user show-notification})))
-      (async/<! (p->c (gp-exporter/import-from-doc-files! db-conn doc-files <read-file import-options)))
-      (async/<! (p->c (gp-exporter/import-favorites-from-config-edn! db-conn repo config {})))
-      (async/<! (p->c (gp-exporter/import-class-properties db-conn repo)))
-      (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
-      (state/set-state! :graph/importing nil)
-      (state/set-state! :graph/importing-state nil)
-      (validate-imported-data @db-conn (:import-state import-options) files)
-      (finished-cb))))
+          options {;; user options
+                   :tag-classes (set (string/split tag-classes #",\s*"))
+                   :property-classes (set (string/split property-classes #",\s*"))
+                   ;; common options
+                   :notify-user show-notification
+                   :set-ui-state state/set-state!
+                   :<read-file (fn <read-file [file] (.text (:file-object file)))
+                   ;; config file options
+                   :default-config config/config-default-content
+                   :<save-config-file (fn save-config-file [_ path content]
+                                        (let [migrated-content (repo-handler/migrate-db-config content)]
+                                          (db-editor-handler/save-file! path migrated-content)))
+                   ;; logseq file options
+                   :<save-logseq-file (fn save-logseq-file [_ path content]
+                                        (db-editor-handler/save-file! path content))
+                   ;; asset file options
+                   :<copy-asset #(copy-asset repo (config/get-repo-dir repo) %)
+                   ;; doc file options
+                   ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
+                   :export-file (fn export-file [conn m opts]
+                                  (let [tx-report
+                                        (gp-exporter/add-file-to-db-graph conn (:file/path m) (:file/content m) opts)]
+                                    (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report))))}
+          {:keys [files import-state]} (gp-exporter/export-file-graph repo db-conn config-file *files options)]
+    (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
+    (state/set-state! :graph/importing nil)
+    (state/set-state! :graph/importing-state nil)
+    (validate-imported-data @db-conn import-state files)
+    (finished-cb)))
 
 (defn import-file-to-db-handler
   "Import from a graph folder as a DB-based graph.
@@ -347,11 +328,11 @@
         import-graph-fn (fn [user-inputs]
                           (let [files (->> file-objs
                                            (map #(hash-map :file-object %
-                                                           :rpath (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %))))
-                                           (remove #(and (not (string/starts-with? (:rpath %) "assets/"))
+                                                           :path (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %))))
+                                           (remove #(and (not (string/starts-with? (:path %) "assets/"))
                                                          ;; TODO: Update this when supporting more formats as this aggressively excludes most formats
                                                          (fs-util/ignored-path? original-graph-name (.-webkitRelativePath (:file-object %))))))]
-                            (if-let [config-file (first (filter #(= (:rpath %) "logseq/config.edn") files))]
+                            (if-let [config-file (first (filter #(= (:path %) "logseq/config.edn") files))]
                               (import-file-graph files user-inputs config-file)
                               (notification/show! "Import failed as the file 'logseq/config.edn' was not found for a Logseq graph."
                                                   :error))))]

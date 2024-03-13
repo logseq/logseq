@@ -1,10 +1,12 @@
 (ns logseq.graph-parser.exporter
-  "Exports a file graph to DB graph. Used by the File to DB graph importer"
+  "Exports a file graph to DB graph. Used by the File to DB graph importer and
+  by nbb-logseq CLIs"
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.edn :as edn]
             [datascript.core :as d]
             [logseq.graph-parser.extract :as extract]
+            [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
             [logseq.db.frontend.content :as db-content]
@@ -636,54 +638,44 @@
         result (d/transact! conn tx')]
     result))
 
-;; UI facing fns
-;; =============
+;; Higher level export fns
+;; =======================
 
-(defn setup-import-options
-  [db config user-options {:keys [macros notify-user]}]
-  (cond-> {:extract-options {:date-formatter (common-config/get-date-formatter config)
-                             :user-config config
-                             :filename-format (or (:file/name-format config) :legacy)}
-           :user-options user-options
-           :page-tags-uuid (:block/uuid (d/entity db [:block/name "pagetags"]))
-           :import-state (new-import-state)
-           :macros (or macros (:macros config))}
-    notify-user
-    (assoc :notify-user notify-user)))
-
-(defn- import-doc-file
-  [{:keys [rpath idx] :as file} conn <read-file
-   {:keys [notify-user set-ui-state import-file]
+(defn- export-doc-file
+  [{:keys [path idx] :as file} conn <read-file
+   {:keys [notify-user set-ui-state export-file]
     :or {set-ui-state (constantly nil)
-         import-file (fn import-file [conn m opts]
+         export-file (fn export-file [conn m opts]
                        (add-file-to-db-graph conn (:file/path m) (:file/content m) opts))}
-    :as import-options}]
-  ;; (prn :import-doc-file rpath idx)
+    :as options}]
+  ;; (prn :export-doc-file path idx)
   (-> (p/let [_ (set-ui-state [:graph/importing-state :current-idx] (inc idx))
-              _ (set-ui-state [:graph/importing-state :current-page] rpath)
+              _ (set-ui-state [:graph/importing-state :current-page] path)
               content (<read-file file)
-              m {:file/path rpath :file/content content}]
-        (import-file conn m (dissoc import-options :set-ui-state :import-file))
+              m {:file/path path :file/content content}]
+        (export-file conn m (dissoc options :set-ui-state :export-file))
         ;; returning val results in smoother ui updates
         m)
       (p/catch (fn [error]
-                 (notify-user {:msg (str "Import failed on " (pr-str rpath) " with error:\n" error)
+                 (notify-user {:msg (str "Import failed on " (pr-str path) " with error:\n" error)
                                :level :error
-                               :ex-data {:path rpath :error error}})))))
+                               :ex-data {:path path :error error}})))))
 
-(defn import-from-doc-files!
+(defn export-doc-files
+  "Exports all user created files i.e. under journals/ and pages/.
+   Recommended to use build-doc-options and pass that as options"
   [conn *doc-files <read-file {:keys [notify-user set-ui-state]
                                :or {set-ui-state (constantly nil) notify-user prn}
-                               :as import-options}]
+                               :as options}]
   (set-ui-state [:graph/importing-state :total] (count *doc-files))
   (let [doc-files (mapv #(assoc %1 :idx %2)
                         ;; Sort files to ensure reproducible import behavior
-                        (sort-by :rpath *doc-files)
+                        (sort-by :path *doc-files)
                         (range 0 (count *doc-files)))]
-    (-> (p/loop [_file-map (import-doc-file (get doc-files 0) conn <read-file import-options)
+    (-> (p/loop [_file-map (export-doc-file (get doc-files 0) conn <read-file options)
                  i 0]
           (when-not (>= i (dec (count doc-files)))
-            (p/recur (import-doc-file (get doc-files (inc i)) conn <read-file import-options)
+            (p/recur (export-doc-file (get doc-files (inc i)) conn <read-file options)
                      (inc i))))
         (p/catch (fn [e]
                    (notify-user {:msg (str "Import has unexpected error:\n" e)
@@ -694,11 +686,12 @@
                         :file/content content
                         :file/last-modified-at (js/Date.)}]))
 
-(defn import-logseq-files
+(defn- export-logseq-files
+  "Exports files under logseq/"
   [repo-or-conn logseq-files <read-file {:keys [<save-file notify-user]
                                          :or {<save-file default-save-file}}]
-  (let [custom-css (first (filter #(string/ends-with? (:rpath %) "logseq/custom.css") logseq-files))
-        custom-js (first (filter #(string/ends-with? (:rpath %) "logseq/custom.js") logseq-files))]
+  (let [custom-css (first (filter #(string/ends-with? (:path %) "logseq/custom.css") logseq-files))
+        custom-js (first (filter #(string/ends-with? (:path %) "logseq/custom.js") logseq-files))]
     (-> (p/do!
          (when custom-css
            (-> (<read-file custom-css)
@@ -710,7 +703,7 @@
                    (notify-user {:msg (str "Import unexpectedly failed while reading logseq files:\n" error)
                                  :level :error}))))))
 
-(defn import-config-file!
+(defn- export-config-file
   [repo-or-conn config-file <read-file {:keys [<save-file notify-user default-config]
                                         :or {default-config {}
                                              <save-file default-save-file}}]
@@ -725,7 +718,7 @@
                                :ex-data {:error err}})
                  (edn/read-string default-config)))))
 
-(defn import-class-properties
+(defn- export-class-properties
   [conn repo-or-conn]
   (let [user-classes (->> (d/q '[:find (pull ?b [:db/id :block/name])
                                  :where [?b :block/type "class"]] @conn)
@@ -754,20 +747,23 @@
                  class-to-prop-uuids)]
     (ldb/transact! repo-or-conn tx)))
 
-(defn import-from-asset-files!
-  [*asset-files <copy-asset-file {:keys [notify-user]}]
+(defn- export-asset-files
+  "Exports files under assets/"
+  [*asset-files <copy-asset-file {:keys [notify-user set-ui-state]
+                                  :or {set-ui-state (constantly nil)}}]
   (let [asset-files (mapv #(assoc %1 :idx %2)
                           ;; Sort files to ensure reproducible import behavior
-                          (sort-by :rpath *asset-files)
+                          (sort-by :path *asset-files)
                           (range 0 (count *asset-files)))
-        copy-asset (fn copy-asset [{:keys [rpath] :as file}]
+        copy-asset (fn copy-asset [{:keys [path] :as file}]
                      (p/catch
                       (<copy-asset-file file)
                       (fn [error]
-                        (notify-user {:msg (str "Import failed on " (pr-str rpath) " with error:\n" error)
+                        (notify-user {:msg (str "Import failed on " (pr-str path) " with error:\n" error)
                                       :level :error
-                                      :ex-data {:path rpath :error error}}))))]
+                                      :ex-data {:path path :error error}}))))]
     (when (seq asset-files)
+      (set-ui-state [:graph/importing-state :current-page] "Asset files")
       (-> (p/loop [_ (copy-asset (get asset-files 0))
                    i 0]
             (when-not (>= i (dec (count asset-files)))
@@ -793,7 +789,7 @@
                    favorited-ids)]
     (ldb/transact! repo-or-conn tx)))
 
-(defn import-favorites-from-config-edn!
+(defn- export-favorites-from-config-edn
   [conn repo config {:keys [log-fn] :or {log-fn prn}}]
   (when-let [favorites (seq (:favorites config))]
     (p/do!
@@ -806,3 +802,60 @@
        (let [page-entity (d/entity @conn [:block/name common-config/favorites-page-name])]
          (insert-favorites repo favorited-ids (:db/id page-entity)))
        (log-fn :no-favorites-found {:favorites favorites})))))
+
+(defn build-doc-options
+  "Builds options for use with export-doc-files"
+  [conn config options]
+(-> {:extract-options {:date-formatter (common-config/get-date-formatter config)
+                       :user-config config
+                       :filename-format (or (:file/name-format config) :legacy)
+                       :verbose (:verbose options)}
+     :user-options (select-keys options [:tag-classes :property-classes])
+     :page-tags-uuid (:block/uuid (d/entity @conn [:block/name "pagetags"]))
+     :import-state (new-import-state)
+     :macros (or (:macros options) (:macros config))}
+    (merge (select-keys options [:set-ui-state :export-file :notify-user]))))
+
+(defn export-file-graph
+  "Main fn which exports a file graph given its files and imports them
+   into a DB graph. Files is expected to be a seq of maps with a :path key.
+   The user experiences this as an import so all user-facing messages are
+   described as import. options map contains the following keys:
+   * :set-ui-state - fn which updates ui to indicate progress of import
+   * :notify-user - fn which notifies user of important messages with a map
+     containing keys :msg, :level and optionally :ex-data when there is an error
+   * :log-fn - fn which logs developer messages
+   * :rpath-key - keyword used to get relative path in file map. Default to :path
+   * :<read-file - fn which reads a file across multiple steps
+   * :default-config - default config if config is unable to be read
+   * :<save-config-file - fn which saves a config file
+   * :<save-logseq-file - fn which saves a logseq file
+   * :<copy-asset - fn which copies asset file
+   
+   Note: See export-doc-files for additional options that are only for it"
+  [repo-or-conn conn config-file *files {:keys [<read-file <copy-asset rpath-key log-fn]
+                                 :or {rpath-key :path log-fn println}
+                                 :as options}]
+  (p/let [config (export-config-file
+                  repo-or-conn config-file <read-file
+                  (-> (select-keys options [:notify-user :default-config :<save-config-file])
+                      (set/rename-keys {:<save-config-file :<save-file})))]
+    (let [files (common-config/remove-hidden-files *files config rpath-key)
+          logseq-file? #(string/starts-with? (get % rpath-key) "logseq/")
+          doc-files (->> files
+                         (remove logseq-file?)
+                         (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:path %)))))
+          asset-files (filter #(string/starts-with? (get % rpath-key) "assets/") files)
+          doc-options (build-doc-options conn config options)]
+      (log-fn "Importing" (count files) "files ...")
+      ;; These export* fns are all the major export/import steps
+      (p/do!
+       (export-logseq-files repo-or-conn (filter logseq-file? files) <read-file
+                            (-> (select-keys options [:notify-user :<save-logseq-file])
+                                (set/rename-keys {:<save-logseq-file :<save-file})))
+       (export-asset-files asset-files <copy-asset (select-keys options [:notify-user :set-ui-state]))
+       (export-doc-files conn doc-files <read-file doc-options)
+       (export-favorites-from-config-edn conn repo-or-conn config {})
+       (export-class-properties conn repo-or-conn)
+       {:import-state (:import-state doc-options)
+        :files files}))))
