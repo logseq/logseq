@@ -206,6 +206,37 @@
                         (rest dirs))]
             (p/recur result dirs)))))))
 
+(defn- <list-all-dbs
+  []
+  (let [dir? #(= (.-kind %) "directory")]
+    (p/let [^js root (.getDirectory js/navigator.storage)
+            values-iter (when (dir? root) (.values root))
+            values (when values-iter (iter->vec values-iter))
+            current-dir-dirs (filter dir? values)
+            db-dirs (filter (fn [file]
+                              (string/starts-with? (.-name file) ".logseq-pool-"))
+                            current-dir-dirs)]
+      (p/all (map (fn [dir]
+                    (p/let [graph-name (-> (.-name dir)
+                                           (string/replace-first ".logseq-pool-" "")
+                                         ;; TODO: DRY
+                                           (string/replace "+3A+" ":")
+                                           (string/replace "++" "/"))
+                            metadata-file-handle (.getFileHandle dir "metadata.edn" #js {:create true})
+                            metadata-file (.getFile metadata-file-handle)
+                            metadata (.text metadata-file)]
+                      {:name graph-name
+                       :metadata (edn/read-string metadata)})) db-dirs)))))
+
+(defn- <store-metadata
+  [graph metadata-str]
+  (p/let [^js root (.getDirectory js/navigator.storage)
+          dir-handle (.getDirectoryHandle root (str "." (get-pool-name graph)))
+          file-handle (.getFileHandle dir-handle "metadata.edn" #js {:create true})
+          writable (.createWritable file-handle)
+          _ (.write writable metadata-str)]
+    (.close writable)))
+
 (defn- <db-exists?
   [graph]
   (->
@@ -246,26 +277,13 @@
    (reset! worker-state/*rtc-ws-url rtc-ws-url)
    (init-sqlite-module!))
 
+  (storeMetadata
+   [_this graph metadata-str]
+   (<store-metadata graph metadata-str))
+
   (listDB
    [_this]
-   (p/let [all-files (<list-all-files)
-           dbs (->>
-                (keep (fn [file]
-                        (when (and
-                               (= (.-kind file) "directory")
-                               (string/starts-with? (.-name file) ".logseq-pool-"))
-                          (-> (.-name file)
-                              (string/replace-first ".logseq-pool-" "")
-                              ;; TODO: DRY
-                              (string/replace "+3A+" ":")
-                              (string/replace "++" "/"))))
-                      all-files)
-                distinct)]
-     ;; (prn :debug :all-files (map #(.-name %) all-files))
-     ;; (prn :debug :all-files-count (count (filter
-     ;;                                      #(= (.-kind %) "file")
-     ;;                                      all-files)))
-     ;; (prn :dbs dbs)
+   (p/let [dbs (<list-all-dbs)]
      (bean/->js dbs)))
 
   (createOrOpenDB
@@ -641,7 +659,7 @@
   (dangerousRemoveAllDbs
    [this repo]
    (p/let [dbs (.listDB this)]
-     (p/all (map #(.unsafeUnlinkDB this %) dbs)))))
+     (p/all (map #(.unsafeUnlinkDB this (:name %)) dbs)))))
 
 (defn init
   "web worker entry"

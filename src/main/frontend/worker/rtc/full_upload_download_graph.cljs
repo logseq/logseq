@@ -51,11 +51,18 @@
         (let [r (<! (get-result-ch))]
           (if-not (:graph-uuid r)
             (ex-info "upload graph failed" r)
-            (do (op-mem-layer/init-empty-ops-store! repo)
-                (op-mem-layer/update-graph-uuid! repo (:graph-uuid r))
-                (op-mem-layer/update-local-tx! repo (:t r))
-                (<! (op-mem-layer/<sync-to-idb-layer! repo))
-                r)))))))
+            (let [^js worker-obj (:worker/object @worker-state/*state)]
+              (d/transact! conn
+                           [{:db/ident :graph/uuid :graph/uuid (:graph-uuid r)}
+                            {:db/ident :graph/local-tx :graph/local-tx (:graph-uuid r)}])
+              (<! (p->c
+                   (p/do!
+                     (.storeMetadata worker-obj repo (pr-str {:graph/uuid (:graph-uuid r)})))))
+              (op-mem-layer/init-empty-ops-store! repo)
+              (op-mem-layer/update-graph-uuid! repo (:graph-uuid r))
+              (op-mem-layer/update-local-tx! repo (:t r))
+              (<! (op-mem-layer/<sync-to-idb-layer! repo))
+              r)))))))
 
 (def block-type-kw->str
   {:block-type/property     "property"
