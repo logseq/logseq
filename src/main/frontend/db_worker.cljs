@@ -618,8 +618,7 @@
 
   (rtc-push-pending-ops
    [_this]
-   (async-util/c->p
-    (async/put! (:force-push-client-ops-chan @rtc-core/*state) true)))
+   (async/put! (:force-push-client-ops-chan @rtc-core/*state) true))
 
   (rtc-get-graphs
    [_this repo token]
