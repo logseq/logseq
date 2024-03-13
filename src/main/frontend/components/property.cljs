@@ -186,6 +186,18 @@
                   :disabled    false}
                  (svg/info)))]))
 
+(defn trigger-as
+  ([as & props-or-children]
+   (let [[props children] [(first props-or-children) (rest props-or-children)]
+         props (cond->
+                 {:on-key-up #(case (.-key %)
+                               (" " "Enter")
+                               (some-> (.-target %) (.click))
+                               :dune)}
+                 (map? props)
+                 (merge props))]
+     [as props children])))
+
 (rum/defcs ^:large-vars/cleanup-todo property-config
   "All changes to a property must update the db and the *property-schema. Failure to do
    so can result in data loss"
@@ -594,42 +606,44 @@
                                   (shui/popup-hide! id)))))}))]
        [:button.flex
         (when-not config/publishing?
-          {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true})})
+          {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true :auto-focus? true})})
         (if icon
           (icon-component/icon icon)
           [:span.bullet-container.cursor (when collapsed? {:class "bullet-closed"})
            [:span.bullet]])])
 
      (if config/publishing?
-       [:a.property-k
+       [:a.property-k.flex.select-none.jtrigger.pl-2
         {:on-click #(route-handler/redirect-to-page! (:block/name property))}
-        [:div {:style {:padding-left 6}} (:block/original-name property)]]
+        (:block/original-name property)]
 
-       [:a.property-k.flex.select-none.jtrigger
-        {:tabIndex      0
-         :title         (str "Configure property: " (:block/original-name property))
-         :on-pointer-down (fn [^js e]
-                          (when (util/meta-key? e)
-                            (route-handler/redirect-to-page! (:block/name property))
-                            (.preventDefault e)))
-         :on-click      (fn [^js e]
-                          (shui/popup-show!
-                           (.-target e)
-                           (fn [{:keys [id]}]
-                             [:div.p-2
-                              [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
-                              (property-config block property
-                                               {:inline-text inline-text
-                                                :page-cp page-cp
-                                                :class-schema? class-schema?
-                                                :toggle-fn #(shui/popup-hide! id)})])
-                           {:content-props {:class "property-configure-popup-content"
-                                            :collisionPadding {:bottom 10 :top 10}
-                                            :avoidCollisions true
-                                            :align "start"}
-                            :auto-side? true
-                            :as-dropdown? true}))}
-        [:div {:style {:padding-left 6}} (:block/original-name property)]])]))
+       (trigger-as :a
+         {:tabIndex 0
+          :title (str "Configure property: " (:block/original-name property))
+          :class "property-k flex select-none jtrigger pl-2"
+          :on-pointer-down (fn [^js e]
+                             (when (util/meta-key? e)
+                               (route-handler/redirect-to-page! (:block/name property))
+                               (.preventDefault e)))
+          :on-click (fn [^js e]
+                      (shui/popup-show!
+                        (.-target e)
+                        (fn [{:keys [id]}]
+                          [:div.p-2
+                           [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
+                           (property-config block property
+                             {:inline-text inline-text
+                              :page-cp page-cp
+                              :class-schema? class-schema?
+                              :toggle-fn #(shui/popup-hide! id)})])
+                        {:content-props {:class "property-configure-popup-content"
+                                         :collisionPadding {:bottom 10 :top 10}
+                                         :avoidCollisions true
+                                         :align "start"}
+                         :auto-side? true
+                         :auto-focus? true
+                         :as-dropdown? true}))}
+         (:block/original-name property)))]))
 
 (defn- resolve-linked-block-if-exists
   "Properties will be updated for the linked page instead of the refed block.
@@ -779,12 +793,18 @@
                    (empty? class->properties)
                    (not (:page-configure? opts))
                    (not keyboard-triggered?))
-      [:div.ls-properties-area (cond-> (if in-block-container?
-                                         {:id id}
-                                         {:id id
-                                          :class (when class-schema?  "class-properties")})
-                                 (:selected? opts)
-                                 (update :class conj "select-none"))
+      [:div.ls-properties-area
+       (cond-> (if in-block-container?
+                 {:id id}
+                 {:id id
+                  :class (when class-schema? "class-properties")})
+         (:selected? opts)
+         (update :class conj "select-none")
+         true (assoc :tab-index 0
+                     :on-key-up #(when-let [block (and (= "Escape" (.-key %))
+                                                    (.closest (.-target %) "[blockid]"))]
+                                   (state/set-selection-blocks! [block])
+                                   (some-> js/document.activeElement (.blur)))))
        (properties-section block (if class-schema? properties own-properties) opts)
 
        (rum/with-key (new-property block id keyboard-triggered? opts) (str id "-add-property"))
@@ -794,8 +814,8 @@
            [:div.parent-properties.flex.flex-1.flex-col.gap-1
             (for [[class class-properties] class->properties]
               (let [id-properties (->> class-properties
-                                       remove-built-in-properties
-                                       (map (fn [id] [id (get block-properties id)])))]
+                                    remove-built-in-properties
+                                    (map (fn [id] [id (get block-properties id)])))]
                 (when (seq id-properties)
                   [:div
                    (when page-cp
