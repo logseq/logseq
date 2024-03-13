@@ -5,7 +5,7 @@
   (:require [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
-            [cljs.core.async :as async :refer [<! >! chan go go-loop]]
+            [cljs.core.async :as async :refer [<! >! chan go]]
             [cljs.core.async.interop :include-macros true :refer [<p!]]
             [clojure.set :as set]
             [clojure.string :as string]
