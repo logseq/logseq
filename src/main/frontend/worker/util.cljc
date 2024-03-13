@@ -2,12 +2,13 @@
   "Worker utils"
   #?(:cljs (:require-macros [frontend.worker.util]))
   #?(:cljs (:refer-clojure :exclude [format]))
-  #?(:cljs (:require [clojure.string :as string]
-            ["remove-accents" :as removeAccents]
-            [logseq.common.util :as common-util]
-            [clojure.core.async :as async]
-            [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
-            [logseq.db :as ldb])))
+  #?(:cljs (:require ["remove-accents" :as removeAccents]
+                     [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
+                     [clojure.core.async :as async]
+                     [clojure.string :as string]
+                     [logseq.common.util :as common-util]
+                     [logseq.db :as ldb]
+                     [logseq.db.sqlite.common-db :as sqlite-common-db])))
 
 ;; Copied from https://github.com/tonsky/datascript-todo
 #?(:clj
@@ -93,4 +94,9 @@
      (defn post-message
        [type data]
        (when (exists? js/self)
-         (.postMessage js/self (frontend.worker.util/profile "Worker write transit: " (ldb/write-transit-str [type data])))))))
+         (.postMessage js/self (frontend.worker.util/profile "Worker write transit: " (ldb/write-transit-str [type data])))))
+
+     (defn get-pool-name
+       [graph-name]
+       (str "logseq-pool-" (sqlite-common-db/sanitize-db-name graph-name)))
+     ))

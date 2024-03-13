@@ -6,11 +6,13 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs.core.async :as async :refer [<! >! chan go go-loop]]
+            [cljs.core.async.interop :include-macros true :refer [<p!]]
             [clojure.set :as set]
             [clojure.string :as string]
             [cognitect.transit :as transit]
             [datascript.core :as d]
             [frontend.worker.async-util :include-macros true :refer [<? go-try]]
+            [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.handler.page.rename :as worker-page-rename]
             [frontend.worker.rtc.asset-sync :as asset-sync]
@@ -851,10 +853,10 @@
   "throw `ex-break-rtc-loop` when need to quit current rtc-loop"
   (fn [resp & _] (comp :type :ex-data resp)))
 
-(declare remove-remote-graph-info stop-rtc stop-rtc-helper)
+(declare <remove-remote-graph-info stop-rtc stop-rtc-helper)
 (defmethod handle-remote-genernal-exception :graph-not-exist [_ state]
   (when-let [repo (some-> state :*repo deref)]
-    (remove-remote-graph-info repo)
+    (<remove-remote-graph-info repo)
     (stop-rtc-helper state)
     (stop-rtc state)
     (throw ex-break-rtc-loop)))
@@ -926,11 +928,13 @@
       (<! (async/timeout 2000))
       (pos? (op-mem-layer/get-unpushed-block-update-count repo)))))
 
-(defn- remove-remote-graph-info
+(defn- <remove-remote-graph-info
   "when remote-graph is deleted or not-found,
   remove remote-graph-info in client-side"
   [repo]
-  (op-mem-layer/remove-ops-store! repo))
+  (go
+    (op-mem-layer/remove-ops-store! repo)
+    (<p! (worker-db-metadata/<store repo (pr-str {})))))
 
 (defn- stop-rtc-helper
   [state]

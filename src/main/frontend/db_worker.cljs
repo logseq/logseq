@@ -10,6 +10,7 @@
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
             [frontend.worker.async-util :include-macros true :refer [<?] :as async-util]
+            [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.export :as worker-export]
             [frontend.worker.file :as file]
             [frontend.worker.handler.page :as worker-page]
@@ -36,15 +37,11 @@
 
 (defonce transit-w (transit/writer :json))
 
-(defn- get-pool-name
-  [graph-name]
-  (str "logseq-pool-" (sqlite-common-db/sanitize-db-name graph-name)))
-
 (defn- <get-opfs-pool
   [graph]
   (when-not @*publishing?
     (or (worker-state/get-opfs-pool graph)
-        (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (get-pool-name graph)
+        (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (worker-util/get-pool-name graph)
                                                                :initialCapacity 20})]
           (swap! *opfs-pools assoc graph pool)
           pool))))
@@ -228,20 +225,11 @@
                       {:name graph-name
                        :metadata (edn/read-string metadata)})) db-dirs)))))
 
-(defn- <store-metadata
-  [graph metadata-str]
-  (p/let [^js root (.getDirectory js/navigator.storage)
-          dir-handle (.getDirectoryHandle root (str "." (get-pool-name graph)))
-          file-handle (.getFileHandle dir-handle "metadata.edn" #js {:create true})
-          writable (.createWritable file-handle)
-          _ (.write writable metadata-str)]
-    (.close writable)))
-
 (defn- <db-exists?
   [graph]
   (->
    (p/let [^js root (.getDirectory js/navigator.storage)
-           _dir-handle (.getDirectoryHandle root (str "." (get-pool-name graph)))]
+           _dir-handle (.getDirectoryHandle root (str "." (worker-util/get-pool-name graph)))]
      true)
    (p/catch
     (fn [_e]                           ; not found
@@ -278,8 +266,8 @@
    (init-sqlite-module!))
 
   (storeMetadata
-   [_this graph metadata-str]
-   (<store-metadata graph metadata-str))
+   [_this repo metadata-str]
+   (worker-db-metadata/<store repo metadata-str))
 
   (listDB
    [_this]
