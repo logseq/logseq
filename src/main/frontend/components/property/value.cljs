@@ -89,9 +89,9 @@
         initial-month (when value'
                         (js/Date. (.getYear value') (.getMonth value')))]
     [:div.flex.flex-row.gap-1.items-center
-     (shui/dropdown-menu
+     (shui/popover
       {:open open?}
-      (shui/dropdown-menu-trigger
+      (shui/popover-trigger
        {:class "jtrigger flex flex-row items-center"
         :on-click (fn [e]
                     (if config/publishing?
@@ -103,9 +103,10 @@
                        (when (contains? #{" " "Enter"} (util/ekey e))
                          (set-open! true)))}
        (ui/icon "calendar" {:size 16}))
-      (shui/dropdown-menu-content
+      (shui/popover-content
        {:align "start"
         :on-click #(util/stop %)
+        :class "p-0"
         :on-interact-outside #(set-open! false)
         :onEscapeKeyDown #(set-open! false)}
        (shui/calendar
@@ -113,6 +114,7 @@
          :initial-focus true
          :selected initial-day
          :default-month initial-month
+         :class-names {:months ""}
          :on-select (fn [^js d]
                      ;; force local to UTC
                       (when d
