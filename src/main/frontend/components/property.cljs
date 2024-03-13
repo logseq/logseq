@@ -95,7 +95,7 @@
              (select/select opts)))]
 
     [:div.flex.flex-1.cursor-pointer
-     {:on-click #(shui/popup-show! (.-target %) content-fn {:as-menu? true})}
+     {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true})}
      (if (seq schema-classes)
        [:div.flex.flex-1.flex-row.items-center.flex-wrap.gap-2
         (for [class schema-classes]
@@ -567,7 +567,7 @@
                                                             (shui/popup-hide!))}
                                                [:span.w-full.text-red-rx-07.hover:text-red-rx-09
                                                 "Delete property"]))]
-                                           {:as-menu? true
+                                           {:as-dropdown? true
                                             :content-props {:class "w-48"}}))}
      (when block?
        [:a.block-control
@@ -594,7 +594,7 @@
                                   (shui/popup-hide! id)))))}))]
        [:button.flex
         (when-not config/publishing?
-          {:on-click #(shui/popup-show! (.-target %) content-fn {:as-menu? true})})
+          {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true})})
         (if icon
           (icon-component/icon icon)
           [:span.bullet-container.cursor (when collapsed? {:class "bullet-closed"})
@@ -628,7 +628,7 @@
                                             :avoidCollisions true
                                             :align "start"}
                             :auto-side? true
-                            :as-menu? true}))}
+                            :as-dropdown? true}))}
         [:div {:style {:padding-left 6}} (:block/original-name property)]])]))
 
 (defn- resolve-linked-block-if-exists

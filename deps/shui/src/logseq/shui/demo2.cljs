@@ -290,7 +290,7 @@
                          (set-emoji! t)
                          (ui/popup-hide-all!))})])
                  {:content-props {:class "w-72 p-0"}
-                  :as-menu? true})}
+                  :as-dropdown? true})}
              (if emoji [:strong.px-1.text-6xl [:em-emoji emoji]] "emoji :O")] "."])]
      [:<>
       (emoji-picker nil)
@@ -362,7 +362,7 @@
                                               (ui/toast! it)
                                               (ui/popup-hide-all!))}
                                 [:strong it]))))
-                     {:as-menu? true
+                     {:as-dropdown? true
                       :content-props {:class "w-48"}})
         :on-context-menu #(ui/popup-show! %
                             [:h1.text-3xl.font-bold "hi x popup for custom context menu!"])}]])])
