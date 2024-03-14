@@ -4,7 +4,6 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]))
 
 ;; Helper fns
