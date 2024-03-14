@@ -175,8 +175,7 @@
     page-or-block-attrs)))
 
 (def property-page
-  [:multi {:dispatch
-           (fn [m] (contains? db-property/built-in-properties-keys-str (:block/name m)))}
+  [:multi {:dispatch (fn [m] (contains? m :db/ident))}
    [true internal-property]
    [:malli.core/default user-property]])
 
