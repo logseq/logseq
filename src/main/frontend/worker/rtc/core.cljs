@@ -74,6 +74,7 @@
 "
   [:map {:closed true}
    [:*graph-uuid :any]
+   [:user-uuid :string]
    [:*repo :any]
    [:*db-conn :any]
    [:*token :any]
@@ -644,51 +645,53 @@
       (swap! *depend-on-block-uuid-set conj target-uuid))))
 
 (defmethod local-block-ops->remote-ops-aux :update-op
-  [_ & {:keys [conn block update-op left-uuid parent-uuid *remote-ops]}]
-  (let [block-uuid (:block/uuid block)
-        attr-map (:updated-attrs (second update-op))
-        attr-alias-map (when (contains? attr-map :alias)
-                         (remove-non-exist-block-uuids-in-add-retract-map conn (:alias attr-map)))
-        attr-tags-map (when (contains? attr-map :tags)
-                        (remove-non-exist-block-uuids-in-add-retract-map conn (:tags attr-map)))
-        attr-type-map (when (contains? attr-map :type)
-                        (let [{:keys [add retract]} (:type attr-map)
-                              current-type-value (set (:block/type block))
-                              add (set/intersection add current-type-value)
-                              retract (set/difference retract current-type-value)]
-                          (cond-> {}
-                            (seq add)     (assoc :add add)
-                            (seq retract) (assoc :retract retract))))
+  [_ & {:keys [conn user-uuid block update-op left-uuid parent-uuid *remote-ops]}]
+  (let [block-uuid          (:block/uuid block)
+        attr-map            (:updated-attrs (second update-op))
+        attr-alias-map      (when (contains? attr-map :alias)
+                              (remove-non-exist-block-uuids-in-add-retract-map conn (:alias attr-map)))
+        attr-tags-map       (when (contains? attr-map :tags)
+                              (remove-non-exist-block-uuids-in-add-retract-map conn (:tags attr-map)))
+        attr-type-map       (when (contains? attr-map :type)
+                              (let [{:keys [add retract]} (:type attr-map)
+                                    current-type-value    (set (:block/type block))
+                                    add                   (set/intersection add current-type-value)
+                                    retract               (set/difference retract current-type-value)]
+                                (cond-> {}
+                                  (seq add)     (assoc :add add)
+                                  (seq retract) (assoc :retract retract))))
         attr-properties-map (when (contains? attr-map :properties)
                               (let [{:keys [add retract]} (:properties attr-map)
-                                    properties (:block/properties block)
-                                    add* (into []
-                                               (update-vals (select-keys properties add)
-                                                            (partial transit/write transit-w)))]
+                                    properties            (:block/properties block)
+                                    add*                  (into []
+                                                                (update-vals (select-keys properties add)
+                                                                             (partial transit/write transit-w)))]
                                 (cond-> {}
-                                  (seq add*) (assoc :add add*)
+                                  (seq add*)    (assoc :add add*)
                                   (seq retract) (assoc :retract retract))))
-        target-uuid (or left-uuid parent-uuid)
-        pos (if (not= left-uuid parent-uuid) :sibling :child)]
+        target-uuid         (or left-uuid parent-uuid)
+        pos                 (if (not= left-uuid parent-uuid) :sibling :child)]
     (swap! *remote-ops conj
            [:update
             (cond-> {:block-uuid block-uuid}
-              (:block/journal-day block)      (assoc :journal-day (:block/journal-day block))
-              (:block/updated-at block)       (assoc :updated-at (:block/updated-at block))
-              (:block/created-at block)       (assoc :created-at (:block/created-at block))
-              (contains? attr-map :schema)    (assoc :schema
+              (:block/journal-day block)    (assoc :journal-day (:block/journal-day block))
+              (:block/updated-at block)     (assoc :updated-at (:block/updated-at block))
+              (:block/created-at block)     (assoc :created-at (:block/created-at block))
+              (= (:block/updated-at block)
+                 (:block/created-at block)) (assoc :created-by user-uuid)
+              (contains? attr-map :schema)  (assoc :schema
                                                      (transit/write transit-w (:block/schema block)))
-              attr-alias-map                  (assoc :alias attr-alias-map)
-              attr-type-map                   (assoc :type attr-type-map)
-              attr-tags-map                   (assoc :tags attr-tags-map)
-              attr-properties-map             (assoc :properties attr-properties-map)
+              attr-alias-map                (assoc :alias attr-alias-map)
+              attr-type-map                 (assoc :type attr-type-map)
+              attr-tags-map                 (assoc :tags attr-tags-map)
+              attr-properties-map           (assoc :properties attr-properties-map)
               (and (contains? attr-map :content)
                    (:block/raw-content block))
               (assoc :content (:block/raw-content block))
               (and (contains? attr-map :link)
                    (:block/uuid (:block/link block)))
               (assoc :link (:block/uuid (:block/link block)))
-              target-uuid                     (assoc :target-uuid target-uuid :pos pos))])))
+              target-uuid                   (assoc :target-uuid target-uuid :pos pos))])))
 
 (defmethod local-block-ops->remote-ops-aux :update-page-op
   [_ & {:keys [conn block-uuid *remote-ops]}]
@@ -712,7 +715,7 @@
       (swap! *remote-ops conj [:remove-page {:block-uuid block-uuid}]))))
 
 (defn- local-block-ops->remote-ops
-  [repo conn block-ops]
+  [repo conn user-uuid block-ops]
   (let [*depend-on-block-uuid-set (atom #{})
         *remote-ops (atom [])
         {move-op :move remove-op :remove update-op :update update-page-op :update-page remove-page-op :remove-page}
@@ -735,12 +738,14 @@
           (when update-op
             (local-block-ops->remote-ops-aux :update-op
                                              :repo repo
+                                             :user-uuid user-uuid
                                              :conn conn
                                              :block block
                                              :update-op update-op
                                              :parent-uuid parent-uuid
                                              :left-uuid left-uuid
-                                             :*remote-ops *remote-ops)))
+                                             :*remote-ops *remote-ops
+                                             :created-by user-uuid)))
         ;; remote-update-page-op
         (when update-page-op
           (local-block-ops->remote-ops-aux :update-page-op
@@ -768,7 +773,7 @@
      :depend-on-block-uuids @*depend-on-block-uuid-set}))
 
 (defn gen-block-uuid->remote-ops
-  [repo conn & {:keys [n] :or {n 50}}]
+  [repo conn user-uuid & {:keys [n] :or {n 50}}]
   (loop [current-handling-block-ops nil
          current-handling-block-uuid nil
          depend-on-block-uuid-coll nil
@@ -797,7 +802,7 @@
 
       (seq current-handling-block-ops)
       (let [{:keys [remote-ops depend-on-block-uuids]}
-            (local-block-ops->remote-ops repo conn current-handling-block-ops)]
+            (local-block-ops->remote-ops repo conn user-uuid current-handling-block-ops)]
         (recur nil nil
                (set/union (set depend-on-block-uuid-coll)
                           (op-mem-layer/intersection-block-uuids repo depend-on-block-uuids))
@@ -866,7 +871,8 @@
 (defn- <client-op-update-handler
   [state _token]
   {:pre [(some? @(:*graph-uuid state))
-         (some? @(:*repo state))]}
+         (some? @(:*repo state))
+         (some? (:user-uuid state))]}
   (go-try
     (let [repo @(:*repo state)
           conn @(:*db-conn state)
@@ -874,7 +880,8 @@
       (op-mem-layer/new-branch! repo)
       (try
         (let [ops-for-remote (rtc-const/to-ws-ops-decoder
-                              (sort-remote-ops (gen-block-uuid->remote-ops repo conn)))
+                              (sort-remote-ops
+                               (gen-block-uuid->remote-ops repo conn (:user-uuid state))))
               local-tx (op-mem-layer/get-local-tx repo)
               r (<? (ws/<send&receive state {:action "apply-ops" :graph-uuid @(:*graph-uuid state)
                                              :ops ops-for-remote :t-before (or local-tx 1)}))]
@@ -1053,23 +1060,26 @@
 (defn init-state
   [ws data-from-ws-chan repo token dev-mode?]
   ;; {:post [(m/validate state-schema %)]}
-  {:*rtc-state (atom :closed :validator rtc-state-validator)
-   :*graph-uuid (atom nil)
-   :*repo (atom repo)
-   :*db-conn (atom nil)
-   :*token (atom token)
-   :*date-formatter (atom nil)
-   :data-from-ws-chan data-from-ws-chan
-   :data-from-ws-pub (async/pub data-from-ws-chan :req-id)
-   :toggle-auto-push-client-ops-chan (chan (async/sliding-buffer 1))
-   :*auto-push-client-ops? (atom true :validator boolean?)
-   :*stop-rtc-loop-chan (atom nil)
-   :force-push-client-ops-chan (chan (async/sliding-buffer 1))
-   :*ws (atom ws)
-   ;; used to trigger state watch
-   :counter 0
-   :dev-mode? dev-mode?
-   :*block-update-log (atom {})})
+  (let [user-uuid (:sub (worker-util/parse-jwt token))]
+    (assert (some? user-uuid) token)
+    {:*rtc-state (atom :closed :validator rtc-state-validator)
+     :*graph-uuid (atom nil)
+     :user-uuid user-uuid
+     :*repo (atom repo)
+     :*db-conn (atom nil)
+     :*token (atom token)
+     :*date-formatter (atom nil)
+     :data-from-ws-chan data-from-ws-chan
+     :data-from-ws-pub (async/pub data-from-ws-chan :req-id)
+     :toggle-auto-push-client-ops-chan (chan (async/sliding-buffer 1))
+     :*auto-push-client-ops? (atom true :validator boolean?)
+     :*stop-rtc-loop-chan (atom nil)
+     :force-push-client-ops-chan (chan (async/sliding-buffer 1))
+     :*ws (atom ws)
+     ;; used to trigger state watch
+     :counter 0
+     :dev-mode? dev-mode?
+     :*block-update-log (atom {})}))
 
 (defn get-debug-state
   ([repo]
@@ -1084,7 +1094,8 @@
           :unpushed-block-update-count unpushed-block-update-count}
          state
          (merge
-          {:rtc-state @(:*rtc-state state)
+          {:user-uuid (:user-uuid state)
+           :rtc-state @(:*rtc-state state)
            :ws-state (some-> @(:*ws state) ws/get-state)
            :auto-push-updates? (when-let [a (:*auto-push-client-ops? state)]
                                  @a)})))))

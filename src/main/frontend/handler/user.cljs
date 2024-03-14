@@ -1,19 +1,19 @@
 (ns frontend.handler.user
   "Provides user related handler fns like login and logout"
   (:require-macros [frontend.handler.user])
-  (:require [frontend.config :as config]
-            [frontend.handler.config :as config-handler]
-            [frontend.state :as state]
-            [frontend.debug :as debug]
-            [clojure.string :as string]
-            [cljs-time.core :as t]
+  (:require [cljs-http.client :as http]
             [cljs-time.coerce :as tc]
-            [cljs-http.client :as http]
-            [cljs.core.async :as async :refer [go <!]]
-            [goog.crypt.Sha256]
-            [goog.crypt.Hmac]
+            [cljs-time.core :as t]
+            [cljs.core.async :as async :refer [<! go]]
+            [clojure.string :as string]
+            [frontend.config :as config]
+            [frontend.debug :as debug]
+            [frontend.handler.config :as config-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.state :as state]
             [goog.crypt :as crypt]
-            [frontend.handler.notification :as notification]))
+            [goog.crypt.Hmac]
+            [goog.crypt.Sha256]))
 
 (defn set-preferred-format!
   [format]
@@ -36,7 +36,7 @@
       (aset arr i (.charCodeAt username i)))
     (.decode (new js/TextDecoder "utf-8") arr)))
 
-(defn- parse-jwt [jwt]
+(defn parse-jwt [jwt]
   (some-> jwt
           (string/split ".")
           second
